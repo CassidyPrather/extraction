@@ -1,0 +1,7 @@
+[toolchain]
+# Pinned so every machine (and CI) builds with the same compiler and lints.
+# Bump deliberately: change this and `rust-version` in Cargo.toml together.
+channel = "1.99.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
