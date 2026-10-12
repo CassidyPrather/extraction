@@ -283,7 +283,7 @@ def main():
     by_cause = collections.Counter()
     for e in dmg:
         by_cause[e["cause"]] += e["amount"]
-    legend(img, "Damage taken", [(HEAT["damage"], f"{k}: {v:.0f} hp") for k, v in by_cause.most_common()]
+    legend(img, "Damage taken", [(HEAT["damage"], f"{k}: {v:.0f} hp") for k, v in by_cause.most_common() if v >= 0.5]
            or [(MUTED, "none")])
     img.save(os.path.join(out, "damage.png"))
 
@@ -323,7 +323,7 @@ def write_summary(out, runs, meta, mapname):
     for e in ends:
         kills.update(e.get("kills", {}))
     L += [f"- Robots wrecked: " + (", ".join(f"{k} {v}" for k, v in kills.items()) or "none")]
-    reasons = collections.Counter(e.get("extract_reason") or "-" for e in ends)
+    reasons = collections.Counter(e.get("extract_reason") or "never (died first)" for e in ends)
     L += [f"- Why bots headed out: " + ", ".join(f"{k} {v}" for k, v in reasons.most_common())]
 
     L += ["", "## By personality", "", "| Personality | Runs | Extracted | Died | Items (mean) | Raid time (mean) |",
@@ -344,7 +344,7 @@ def write_summary(out, runs, meta, mapname):
     for e in ends:
         for k, v in e.get("damage", {}).items():
             dmg[k] += v
-    L += ["", "Damage taken, all runs: " + (", ".join(f"{k} {v:.0f} hp" for k, v in dmg.most_common()) or "none")]
+    L += ["", "Damage taken, all runs: " + (", ".join(f"{k} {v:.0f} hp" for k, v in dmg.most_common() if v >= 0.5) or "none")]
 
     L += ["", "## Engagements", ""]
     eng = collections.Counter()
