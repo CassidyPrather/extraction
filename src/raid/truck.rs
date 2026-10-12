@@ -50,6 +50,8 @@ pub enum Pressable {
     BenchSelect,
     /// The bench's lever: run the selected recipe.
     BenchRun,
+    /// A camp kitchen station's tool or knob.
+    Cook,
 }
 
 /// The stash crate in the truck bed.

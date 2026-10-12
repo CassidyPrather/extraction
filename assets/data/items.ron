@@ -277,6 +277,34 @@
         (id: "canned_stew", dims: Some((0.09, 0.07, 0.09)), name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal"]),
         (id: "crackers", name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
 
+        // Cooked and prepared (made at the camp kitchen; see raid/kitchen.rs).
+        (id: "cook_flour", name: "Flour", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Flour", "prepared"]),
+        (id: "cook_dough", name: "Dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Dough", "prepared"]),
+        (id: "cook_risen_dough", name: "Risen dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RisenDough", "prepared"]),
+        (id: "cook_batter", name: "Batter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Batter", "prepared"]),
+        (id: "cook_butter", name: "Butter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Butter", "prepared"]),
+        (id: "cook_hot_water", name: "Hot water", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:HotWater", "prepared"]),
+        (id: "cook_chopped_carrot", name: "Chopped carrot", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedCarrot", "prepared"]),
+        (id: "cook_chopped_onion", name: "Chopped onion", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedOnion", "prepared"]),
+        (id: "cook_chopped_tomato", name: "Chopped tomato", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedTomato", "prepared"]),
+        (id: "cook_soaked_beans", name: "Soaked beans", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SoakedBeans", "prepared"]),
+        (id: "cook_tea", name: "Tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Tea", "cooked"]),
+        (id: "cook_milk_tea", name: "Milk tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:MilkTea", "cooked"]),
+        (id: "cook_salad", name: "Salad", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Salad", "cooked"]),
+        (id: "cook_boiled_egg", name: "Boiled egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:BoiledEgg", "cooked"]),
+        (id: "cook_steamed_rice", name: "Steamed rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SteamedRice", "cooked"]),
+        (id: "cook_soup", name: "Soup", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Soup", "cooked"]),
+        (id: "cook_custard", name: "Custard", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Custard", "cooked"]),
+        (id: "cook_rice_pudding", name: "Rice pudding", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RicePudding", "cooked"]),
+        (id: "cook_fried_egg", name: "Fried egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedEgg", "cooked"]),
+        (id: "cook_omelette", name: "Omelette", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Omelette", "cooked"]),
+        (id: "cook_pancake", name: "Pancake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Pancake", "cooked"]),
+        (id: "cook_fried_rice", name: "Fried rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedRice", "cooked"]),
+        (id: "cook_bread", name: "Bread", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Bread", "cooked"]),
+        (id: "cook_cake", name: "Cake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Cake", "cooked"]),
+        (id: "cook_mush", name: "Mush", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Mush", "waste"]),
+        (id: "cook_charcoal", name: "Something burnt", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Charcoal", "waste"]),
+
         // ---------------------------------------------------------------
         // Tools and maintenance
         // ---------------------------------------------------------------

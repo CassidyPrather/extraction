@@ -2,6 +2,7 @@
 
 pub mod bench;
 pub mod fog;
+pub mod kitchen;
 pub mod materials;
 pub mod memorial;
 pub mod props;
@@ -28,6 +29,7 @@ impl Plugin for RenderPlugin {
             memorial::MemorialBoardPlugin,
             screen::ScreenPlugin,
             bench::BenchVisualsPlugin,
+            kitchen::KitchenVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

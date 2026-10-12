@@ -9,6 +9,7 @@
 //! Stay too long and the Surge comes for everyone.
 
 pub mod bench;
+pub mod kitchen;
 pub mod truck;
 
 use bevy::prelude::*;
@@ -130,7 +131,11 @@ impl Plugin for RaidPlugin {
         .add_message::<RadioCall>()
         .add_message::<DepartRequest>()
         .add_message::<truck::DropEverything>()
-        .add_plugins((truck::TruckPlugin, bench::BenchPlugin))
+        .add_plugins((
+            truck::TruckPlugin,
+            bench::BenchPlugin,
+            kitchen::KitchenPlugin,
+        ))
         .add_systems(
             Update,
             (leave_base, radio_calls, tick_raid, depart, downed).chain(),
