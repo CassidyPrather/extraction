@@ -45,6 +45,10 @@ struct AudioRng(Rng);
 #[derive(Component)]
 struct RotorLoop;
 
+/// The Surge's roar, faded with how much Surge is in the air.
+#[derive(Component)]
+struct SurgeDrone;
+
 /// The ambient creek bed, moved along the bank to stay nearest the listener.
 #[derive(Component)]
 struct CreekLoop;
@@ -68,6 +72,7 @@ impl Plugin for AudioPlugin {
                     rotor_loops,
                     ambient_oneshots,
                     move_creek,
+                    surge_sounds,
                 ),
             );
     }
@@ -400,6 +405,17 @@ fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<
             ));
         }
     }
+    if let Some(sample) = bank.pick("anomaly/surge_drone", &mut rng.0) {
+        commands.spawn((
+            SurgeDrone,
+            SamplePlayer::new(sample).looping(),
+            PlaybackSettings::default(),
+            sample_effects![VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            }],
+        ));
+    }
     if let Some(sample) = bank.pick("ambience/creek", &mut rng.0) {
         commands.spawn((
             CreekLoop,
@@ -487,4 +503,60 @@ fn move_creek(
     if let (Some((_, q)), Ok(mut t)) = (best, creek.single_mut()) {
         t.translation = zone.on_ground(q[0], q[1]);
     }
+}
+
+/// The drone swells with the Surge; discharges crack overhead; the sirens
+/// at the Gate wail when the warning starts.
+fn surge_sounds(
+    mut commands: Commands,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    raid: Res<crate::raid::Raid>,
+    mut flashes: MessageReader<crate::world::sky::SurgeFlash>,
+    drones: Query<&SampleEffects, With<SurgeDrone>>,
+    mut volumes: Query<&mut VolumeNode>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    zone: Res<Zone>,
+    mut warned: Local<bool>,
+) {
+    let level = raid.surge_level();
+    for effects in &drones {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            let db = if level < 0.01 {
+                -80.0
+            } else {
+                -30.0 + 30.0 * level.sqrt()
+            };
+            v.volume = Volume::Decibels(db);
+        }
+    }
+    let ear = listener.iter().next().map(|g| g.translation());
+    for f in flashes.read() {
+        let at = ear.map(|e| e + f.dir * 120.0);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "anomaly/surge_crack",
+            at,
+            -2.0 + 6.0 * f.strength,
+            0.12,
+        );
+    }
+    let warning = raid.surge_in() <= crate::raid::SURGE_WARNING && raid.surge_in() > 0.0;
+    if warning && !*warned && raid.phase != crate::raid::Phase::AtBase {
+        let gate = zone
+            .marker(&extraction_core::map::MarkerKind::RobotGate)
+            .map(|m| zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * 12.0);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/siren",
+            gate,
+            10.0,
+            0.0,
+        );
+    }
+    *warned = warning;
 }

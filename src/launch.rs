@@ -51,6 +51,8 @@ pub struct LaunchOptions {
     pub save: Option<PathBuf>,
     /// Ignore any existing save and start over.
     pub new_game: bool,
+    /// Dev: start with the Surge this many seconds away (negative: raging).
+    pub surge_in: Option<f32>,
 }
 
 impl Default for LaunchOptions {
@@ -70,6 +72,7 @@ impl Default for LaunchOptions {
             window_size: (1600, 900),
             save: None,
             new_game: false,
+            surge_in: None,
         }
     }
 }
@@ -90,6 +93,7 @@ impl LaunchOptions {
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
+                "--surge-in" => o.surge_in = val().parse().ok(),
                 "--save" => o.save = Some(PathBuf::from(val())),
                 "--scenario" => {
                     o.scenario = Some(val());

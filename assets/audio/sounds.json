@@ -168,6 +168,40 @@
       }
     ]
   },
+  "anomaly/surge_crack": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/surge_crack_1.ogg",
+        "seconds": 3.5,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/surge_crack_2.ogg",
+        "seconds": 3.5,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/surge_crack_3.ogg",
+        "seconds": 3.5,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/surge_drone": {
+    "type": "bed",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/surge_drone.ogg",
+        "seconds": 32.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "footsteps/concrete": {
     "type": "oneshot",
     "channels": 1,

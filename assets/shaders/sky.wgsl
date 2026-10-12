@@ -60,10 +60,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Darker cloud bellies, lighter gaps.
     col = col * mix(1.08, 0.78, cloud) ;
 
-    // The sun, smeared through the deck.
+    // The sun, smeared through the deck (w: how much gets through).
     let s = max(dot(dir, normalize(sky.sun_dir.xyz)), 0.0);
-    col = col + vec3<f32>(0.35, 0.33, 0.28) * pow(s, 24.0) * (1.0 - cloud * 0.7) * 0.6;
-    col = col + vec3<f32>(0.08, 0.075, 0.06) * pow(s, 4.0);
+    let glow = sky.sun_dir.w;
+    col = col + vec3<f32>(0.35, 0.33, 0.28) * pow(s, 24.0) * (1.0 - cloud * 0.7) * 0.6 * glow;
+    col = col + vec3<f32>(0.08, 0.075, 0.06) * pow(s, 4.0) * glow;
 
     // Toward and below the horizon the sky is fog.
     let fog_t = 1.0 - smoothstep(-0.02, 0.18, up);

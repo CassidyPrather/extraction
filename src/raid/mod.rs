@@ -72,6 +72,32 @@ impl Raid {
     pub fn surge_in(&self) -> f32 {
         SURGE_AFTER - self.clock
     }
+
+    /// How much of the Surge is in the air, 0..=1, for sky, light and
+    /// sound: a creeping wrongness through the warning, all of it while it
+    /// rages, an aftertaste until the Zone resets.
+    pub fn surge_level(&self) -> f32 {
+        if self.phase == Phase::AtBase {
+            return 0.0;
+        }
+        let t = self.surge_in();
+        if t > SURGE_WARNING {
+            0.0
+        } else if t > 0.0 {
+            0.4 * (1.0 - t / SURGE_WARNING).powf(1.5)
+        } else if t > -SURGE_LENGTH {
+            1.0
+        } else {
+            let after = -SURGE_LENGTH - t;
+            0.12 + 0.88 * (-after / 30.0).exp()
+        }
+    }
+
+    /// The Surge is raging right now.
+    pub fn surging(&self) -> bool {
+        let t = self.surge_in();
+        self.phase != Phase::AtBase && t <= 0.0 && t > -SURGE_LENGTH
+    }
 }
 
 /// The local player used the radio (flat: U with the radio in hand; VR:
@@ -108,7 +134,15 @@ impl Plugin for RaidPlugin {
             Update,
             (leave_base, radio_calls, tick_raid, depart, downed).chain(),
         )
-        .add_systems(PostUpdate, drop_everything);
+        .add_systems(PostUpdate, drop_everything)
+        .add_systems(PostStartup, dev_surge_clock);
+    }
+}
+
+/// `--surge-in N`: wind the Zone clock for testing the Surge.
+fn dev_surge_clock(opts: Res<crate::launch::LaunchOptions>, mut raid: ResMut<Raid>) {
+    if let Some(n) = opts.surge_in {
+        raid.clock = SURGE_AFTER - n;
     }
 }
 
