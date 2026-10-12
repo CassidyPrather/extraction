@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Rebuild every procedural model: runs each script under art/guns,
-art/mags and art/robots in a fresh headless Blender.
+art/mags, art/robots, art/vehicles and art/items in a fresh headless
+Blender.
 
     python3 art/build.py              # everything
     python3 art/build.py ak74 drone   # only scripts whose name matches
 
 Needs Blender 4.2+ on PATH (or BLENDER=/path/to/blender). Each script
-writes its own .glb under assets/models/.
+writes its own .glb (some write several) under assets/models/.
 """
 
 import os
@@ -19,7 +20,7 @@ BLENDER = os.environ.get("BLENDER", "blender")
 
 
 def scripts():
-    for group in ("guns", "mags", "robots"):
+    for group in ("guns", "mags", "robots", "vehicles", "items"):
         d = os.path.join(ART, group)
         if not os.path.isdir(d):
             continue

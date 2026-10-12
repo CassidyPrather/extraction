@@ -2,17 +2,35 @@
 //! grappler's harpoon launcher, and the line from a grappler to whoever it
 //! has speared.
 
+use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
+use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
+use crate::render::materials::MaterialLibrary;
 use crate::robots::dirigible::{CargoPod, Dirigible, RADIUS};
 use crate::robots::grappler::{Grappler, Tethered};
+
+/// Models (see `art/robots/logistics.py`); without them, primitives.
+const POD_MODEL: &str = "models/robots/cargo_pod.glb";
+const HARPOON_MODEL: &str = "models/robots/harpoon.glb";
+
+/// A pod or grappler waiting for its model to load (or fail).
+#[derive(Component)]
+struct Undressed(&'static str);
 
 pub struct LogisticsVisualsPlugin;
 
 impl Plugin for LogisticsVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress_pods, dress_grapplers, cables, tether_lines));
+        app.add_systems(
+            Update,
+            (
+                (dress_pods, dress_grapplers, finish_dressing).chain(),
+                cables,
+                tether_lines,
+            ),
+        );
     }
 }
 
@@ -33,12 +51,84 @@ fn mat(
 fn dress_pods(
     mut commands: Commands,
     pods: Query<Entity, Added<CargoPod>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+) {
+    for e in &pods {
+        models.request(POD_MODEL, &server);
+        commands.entity(e).insert(Undressed(POD_MODEL));
+    }
+}
+
+fn dress_grapplers(
+    mut commands: Commands,
+    grapplers: Query<Entity, Added<Grappler>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+) {
+    for e in &grapplers {
+        models.request(HARPOON_MODEL, &server);
+        commands.entity(e).insert(Undressed(HARPOON_MODEL));
+    }
+}
+
+/// Hangs the loaded model's nodes on each waiting pod or grappler, or the
+/// primitive shapes if there's no model.
+fn finish_dressing(
+    mut commands: Commands,
+    waiting: Query<(Entity, &Undressed)>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+    gltfs: Res<Assets<Gltf>>,
+    nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for e in &pods {
-        let shell = mat(&mut materials, Color::srgb(0.84, 0.85, 0.86), 0.0, 0.35);
-        let dark = mat(&mut materials, Color::srgb(0.08, 0.08, 0.09), 0.7, 0.4);
+    for (e, u) in &waiting {
+        let model = match models.request(u.0, &server) {
+            None => None,
+            Some(h) => match Models::state(&h, &server, &gltfs) {
+                ModelState::Loading => continue,
+                ModelState::Failed => {
+                    warn!("{} failed to load; using primitives", u.0);
+                    None
+                }
+                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+            },
+        };
+        commands.entity(e).remove::<Undressed>();
+        let Some(model) = model else {
+            if u.0 == POD_MODEL {
+                pod_blockout(&mut commands, e, &mut meshes, &mut materials);
+            } else {
+                grappler_blockout(&mut commands, e, &mut meshes, &mut materials);
+            }
+            continue;
+        };
+        let mut mat = |name: Option<&str>| {
+            model_mats.get(name.unwrap_or("Dark"), &mut lib, &server, &mut materials)
+        };
+        for node in &model {
+            let holder = commands
+                .spawn((node.transform, Visibility::default(), ChildOf(e)))
+                .id();
+            spawn_primitives(&mut commands, holder, node, &mut mat);
+        }
+    }
+}
+
+fn pod_blockout(
+    commands: &mut Commands,
+    e: Entity,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    {
+        let shell = mat(materials, Color::srgb(0.84, 0.85, 0.86), 0.0, 0.35);
+        let dark = mat(materials, Color::srgb(0.08, 0.08, 0.09), 0.7, 0.4);
         let glow = materials.add(StandardMaterial {
             base_color: Color::srgb(0.1, 0.4, 0.5),
             emissive: LinearRgba::rgb(0.5, 3.0, 4.0),
@@ -142,14 +232,14 @@ fn cables(
     }
 }
 
-fn dress_grapplers(
-    mut commands: Commands,
-    grapplers: Query<Entity, Added<Grappler>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+fn grappler_blockout(
+    commands: &mut Commands,
+    e: Entity,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
 ) {
-    for e in &grapplers {
-        let dark = mat(&mut materials, Color::srgb(0.08, 0.08, 0.09), 0.7, 0.4);
+    {
+        let dark = mat(materials, Color::srgb(0.08, 0.08, 0.09), 0.7, 0.4);
         let warn = materials.add(StandardMaterial {
             base_color: Color::srgb(0.9, 0.6, 0.1),
             emissive: LinearRgba::rgb(3.0, 1.6, 0.2),

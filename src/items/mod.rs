@@ -202,11 +202,16 @@ fn placeholder_visuals(
             continue;
         }
         let def = catalog.get(item.kind());
-        if def.category == Category::Magazine {
-            if let Some(h) = models.request(&format!("models/mags/{}.glb", def.id), &server) {
-                commands.entity(e).insert(PendingItemModel(h));
-                continue;
-            }
+        // Magazines from `models/mags/`, everything else from `models/items/`
+        // (gadgets, tools, salvage, artifacts; see `art/items/`).
+        let path = if def.category == Category::Magazine {
+            format!("models/mags/{}.glb", def.id)
+        } else {
+            format!("models/items/{}.glb", def.id)
+        };
+        if let Some(h) = models.request(&path, &server) {
+            commands.entity(e).insert(PendingItemModel(h));
+            continue;
         }
         commands
             .entity(e)

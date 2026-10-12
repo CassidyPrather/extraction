@@ -1,11 +1,14 @@
 //! Visuals for the truck, the hands, the backpack and body rig, remains.
 
+use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
 
 use crate::interact::body::{Backpack, BodySlot};
 use crate::interact::{Grabbable, GripRole, Hand, Held};
+use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
 use crate::raid::Remains;
 use crate::raid::truck::{Pressable, Stash, TRUCK_PARTS, Truck, WHEELS};
+use crate::render::materials::MaterialLibrary;
 use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
 
 pub struct PropVisualsPlugin;
@@ -15,8 +18,7 @@ impl Plugin for PropVisualsPlugin {
         app.add_systems(
             Update,
             (
-                dress_truck,
-                dress_containers,
+                (dress_truck, dress_containers, finish_models).chain(),
                 dress_slots,
                 spawn_hand_visuals,
             ),
@@ -39,81 +41,27 @@ fn mat(
     })
 }
 
+/// The truck and stash crate models (see `art/vehicles/`); without them,
+/// boxes.
+const TRUCK_MODEL: &str = "models/vehicles/truck.glb";
+const STASH_MODEL: &str = "models/vehicles/stash_crate.glb";
+
+/// The truck or the stash crate, waiting for its model to load (or fail).
+#[derive(Component)]
+struct Undressed(&'static str);
+
 fn dress_truck(
     mut commands: Commands,
     trucks: Query<Entity, Added<Truck>>,
     pressables: Query<(Entity, &Pressable), Added<Pressable>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for truck in &trucks {
-        let paint = mat(&mut materials, Color::srgb(0.22, 0.26, 0.17), 0.65, 0.2);
-        let dark = mat(&mut materials, Color::srgb(0.06, 0.06, 0.06), 0.7, 0.4);
-        let planks = mat(&mut materials, Color::srgb(0.32, 0.25, 0.17), 0.85, 0.0);
-        let canvas = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.30, 0.31, 0.21),
-            perceptual_roughness: 0.95,
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        });
-        let glass = materials.add(StandardMaterial {
-            base_color: Color::srgba(0.1, 0.12, 0.13, 0.7),
-            perceptual_roughness: 0.05,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        });
-        let lamp = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.9, 0.85, 0.7),
-            emissive: LinearRgba::rgb(3.0, 2.6, 1.8),
-            ..default()
-        });
-        let slots = [paint.clone(), dark.clone(), planks, canvas];
-        for (size, centre, slot) in TRUCK_PARTS {
-            commands.spawn((
-                Mesh3d(meshes.add(Cuboid::from_size(*size))),
-                MeshMaterial3d(slots[*slot as usize].clone()),
-                Transform::from_translation(*centre),
-                ChildOf(truck),
-            ));
-        }
-        let wheel = meshes.add(
-            Cylinder::new(0.55, 0.38)
-                .mesh()
-                .resolution(24)
-                .build()
-                .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-        );
-        for w in WHEELS {
-            commands.spawn((
-                Mesh3d(wheel.clone()),
-                MeshMaterial3d(dark.clone()),
-                Transform::from_translation(*w),
-                ChildOf(truck),
-            ));
-        }
-        // Windscreen and headlamps.
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(1.9, 0.6, 0.04))),
-            MeshMaterial3d(glass),
-            Transform::from_xyz(0.0, 2.25, -3.92).with_rotation(Quat::from_rotation_x(-0.15)),
-            ChildOf(truck),
-        ));
-        for x in [-0.75, 0.75] {
-            commands.spawn((
-                Mesh3d(
-                    meshes.add(
-                        Cylinder::new(0.11, 0.08)
-                            .mesh()
-                            .build()
-                            .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-                    ),
-                ),
-                MeshMaterial3d(lamp.clone()),
-                Transform::from_xyz(x, 1.45, -4.97),
-                ChildOf(truck),
-            ));
-        }
+        models.request(TRUCK_MODEL, &server);
+        commands.entity(truck).insert(Undressed(TRUCK_MODEL));
         // A work lamp in the bed so you can see the stash at night.
         commands.spawn((
             PointLight {
@@ -138,38 +86,201 @@ fn dress_truck(
                 let rope = mat(&mut materials, Color::srgb(0.55, 0.47, 0.32), 0.9, 0.0);
                 commands.entity(e).insert((
                     Mesh3d(meshes.add(Cylinder::new(0.012, 0.5))),
+                    MeshMaterial3d(rope.clone()),
+                ));
+                // A wooden toggle to pull on.
+                commands.spawn((
+                    Mesh3d(meshes.add(Capsule3d::new(0.018, 0.07))),
                     MeshMaterial3d(rope),
+                    Transform::from_xyz(0.0, -0.26, 0.0)
+                        .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                    ChildOf(e),
                 ));
             }
         }
     }
 }
 
+/// Dresses the truck and the stash from their models once loaded: every
+/// node in place, and the truck's one modelled wheel copied to each wheel
+/// station (turned round on the left). The old boxes if there's no model.
+fn finish_models(
+    mut commands: Commands,
+    waiting: Query<(Entity, &Undressed)>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+    gltfs: Res<Assets<Gltf>>,
+    nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (truck, u) in &waiting {
+        let model = match models.request(u.0, &server) {
+            None => None,
+            Some(h) => match Models::state(&h, &server, &gltfs) {
+                ModelState::Loading => continue,
+                ModelState::Failed => {
+                    warn!("{} failed to load; using boxes", u.0);
+                    None
+                }
+                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+            },
+        };
+        commands.entity(truck).remove::<Undressed>();
+        let Some(model) = model else {
+            if u.0 == TRUCK_MODEL {
+                truck_blockout(&mut commands, truck, &mut meshes, &mut materials);
+            } else {
+                stash_blockout(&mut commands, truck, &mut meshes, &mut materials);
+            }
+            continue;
+        };
+        let mut mat = |name: Option<&str>| {
+            model_mats.get(name.unwrap_or("Paint"), &mut lib, &server, &mut materials)
+        };
+        for node in &model {
+            let at: Vec<Transform> = if node.name == "wheel" {
+                WHEELS
+                    .iter()
+                    .map(|w| {
+                        let turn = if w.x < 0.0 {
+                            Quat::from_rotation_y(std::f32::consts::PI)
+                        } else {
+                            Quat::IDENTITY
+                        };
+                        Transform::from_translation(*w)
+                            .with_rotation(turn * node.transform.rotation)
+                    })
+                    .collect()
+            } else {
+                vec![node.transform]
+            };
+            for t in at {
+                let holder = commands
+                    .spawn((t, Visibility::default(), ChildOf(truck)))
+                    .id();
+                spawn_primitives(&mut commands, holder, node, &mut mat);
+            }
+        }
+    }
+}
+
+/// The truck as boxes, for when there is no model.
+fn truck_blockout(
+    commands: &mut Commands,
+    truck: Entity,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let paint = mat(materials, Color::srgb(0.22, 0.26, 0.17), 0.65, 0.2);
+    let dark = mat(materials, Color::srgb(0.06, 0.06, 0.06), 0.7, 0.4);
+    let planks = mat(materials, Color::srgb(0.32, 0.25, 0.17), 0.85, 0.0);
+    let canvas = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.30, 0.31, 0.21),
+        perceptual_roughness: 0.95,
+        double_sided: true,
+        cull_mode: None,
+        ..default()
+    });
+    let glass = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.1, 0.12, 0.13, 0.7),
+        perceptual_roughness: 0.05,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+    let lamp = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.9, 0.85, 0.7),
+        emissive: LinearRgba::rgb(3.0, 2.6, 1.8),
+        ..default()
+    });
+    let slots = [paint.clone(), dark.clone(), planks, canvas];
+    for (size, centre, slot) in TRUCK_PARTS {
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::from_size(*size))),
+            MeshMaterial3d(slots[*slot as usize].clone()),
+            Transform::from_translation(*centre),
+            ChildOf(truck),
+        ));
+    }
+    let wheel = meshes.add(
+        Cylinder::new(0.55, 0.38)
+            .mesh()
+            .resolution(24)
+            .build()
+            .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+    );
+    for w in WHEELS {
+        commands.spawn((
+            Mesh3d(wheel.clone()),
+            MeshMaterial3d(dark.clone()),
+            Transform::from_translation(*w),
+            ChildOf(truck),
+        ));
+    }
+    // Windscreen and headlamps.
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.9, 0.6, 0.04))),
+        MeshMaterial3d(glass),
+        Transform::from_xyz(0.0, 2.25, -3.92).with_rotation(Quat::from_rotation_x(-0.15)),
+        ChildOf(truck),
+    ));
+    for x in [-0.75, 0.75] {
+        commands.spawn((
+            Mesh3d(
+                meshes.add(
+                    Cylinder::new(0.11, 0.08)
+                        .mesh()
+                        .build()
+                        .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                ),
+            ),
+            MeshMaterial3d(lamp.clone()),
+            Transform::from_xyz(x, 1.45, -4.97),
+            ChildOf(truck),
+        ));
+    }
+}
+
+/// The stash as boxes: an open-topped crate, floor and four walls.
+fn stash_blockout(
+    commands: &mut Commands,
+    e: Entity,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let wood = mat(materials, Color::srgb(0.36, 0.28, 0.18), 0.8, 0.0);
+    let (w, h, d) = (0.95, 0.65, 1.25);
+    for (size, at) in [
+        (Vec3::new(w, 0.03, d), Vec3::new(0.0, -h * 0.5, 0.0)),
+        (Vec3::new(0.03, h, d), Vec3::new(-w * 0.5, 0.0, 0.0)),
+        (Vec3::new(0.03, h, d), Vec3::new(w * 0.5, 0.0, 0.0)),
+        (Vec3::new(w, h, 0.03), Vec3::new(0.0, 0.0, -d * 0.5)),
+        (Vec3::new(w, h, 0.03), Vec3::new(0.0, 0.0, d * 0.5)),
+    ] {
+        commands.spawn((
+            Mesh3d(meshes.add(Cuboid::from_size(size))),
+            MeshMaterial3d(wood.clone()),
+            Transform::from_translation(at),
+            ChildOf(e),
+        ));
+    }
+}
+
 fn dress_containers(
     mut commands: Commands,
     bags: Query<(Entity, Has<Stash>, Has<Remains>), Added<Backpack>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (e, stash, remains) in &bags {
         if stash {
-            let wood = mat(&mut materials, Color::srgb(0.36, 0.28, 0.18), 0.8, 0.0);
-            // An open-topped crate: floor and four walls.
-            let (w, h, d) = (0.95, 0.65, 1.25);
-            for (size, at) in [
-                (Vec3::new(w, 0.03, d), Vec3::new(0.0, -h * 0.5, 0.0)),
-                (Vec3::new(0.03, h, d), Vec3::new(-w * 0.5, 0.0, 0.0)),
-                (Vec3::new(0.03, h, d), Vec3::new(w * 0.5, 0.0, 0.0)),
-                (Vec3::new(w, h, 0.03), Vec3::new(0.0, 0.0, -d * 0.5)),
-                (Vec3::new(w, h, 0.03), Vec3::new(0.0, 0.0, d * 0.5)),
-            ] {
-                commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::from_size(size))),
-                    MeshMaterial3d(wood.clone()),
-                    Transform::from_translation(at),
-                    ChildOf(e),
-                ));
-            }
+            models.request(STASH_MODEL, &server);
+            commands.entity(e).insert(Undressed(STASH_MODEL));
         } else if remains {
             let bag = mat(&mut materials, Color::srgb(0.12, 0.13, 0.12), 0.6, 0.0);
             commands.entity(e).insert((

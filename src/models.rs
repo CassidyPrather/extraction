@@ -194,6 +194,57 @@ impl ModelMaterials {
                 perceptual_roughness: 0.35,
                 ..default()
             }),
+            // The truck, gadgets and the rest.
+            // Army olive: the peeling-paint scan's relief and wear, its
+            // own green and rust left out.
+            "Paint" => derive(Mat::PaintedMetal, &|m| {
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.22, 0.25, 0.12);
+                m.metallic = 0.3;
+            }),
+            "Canvas" => lib.get(Mat::Canvas, server, materials),
+            "Planks" => lib.get(Mat::Planks, server, materials),
+            "Boards" => lib.get(Mat::WoodFloor, server, materials),
+            "Iron" => lib.get(Mat::DarkMetal, server, materials),
+            "Glass" => lib.get(Mat::Glass, server, materials),
+            "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),
+            "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
+            "Yellow" => flat(materials, Color::srgb(0.85, 0.58, 0.12), 0.0, 0.6),
+            "Red" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
+            "Pebble" => flat(materials, Color::srgb(0.42, 0.42, 0.44), 0.0, 0.45),
+            "Char" => flat(materials, Color::srgb(0.05, 0.045, 0.04), 0.0, 0.9),
+            "Ember" => glow(materials, Color::srgb(0.9, 0.35, 0.08), (6.0, 1.8, 0.25)),
+            "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
+            "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
+            "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
+            "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
+            "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
+            "Lens" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.05, 0.07, 0.1),
+                metallic: 0.3,
+                perceptual_roughness: 0.05,
+                reflectance: 0.9,
+                ..default()
+            }),
+            "Clear" => materials.add(StandardMaterial {
+                base_color: Color::srgba(0.85, 0.88, 0.85, 0.16),
+                perceptual_roughness: 0.15,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
+            "Lamp" => glow(materials, Color::srgb(0.9, 0.85, 0.7), (3.0, 2.6, 1.8)),
+            "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
+            "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
+            "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
+            "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
+            "Strange" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.45, 0.35, 0.7),
+                emissive: LinearRgba::rgb(0.6, 0.35, 1.2),
+                metallic: 0.6,
+                perceptual_roughness: 0.15,
+                clearcoat: 1.0,
+                ..default()
+            }),
             _ => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.3, 0.3, 0.3),
                 perceptual_roughness: 0.6,
@@ -203,6 +254,32 @@ impl ModelMaterials {
         self.cache.insert(name.to_owned(), h.clone());
         h
     }
+}
+
+fn flat(
+    materials: &mut Assets<StandardMaterial>,
+    c: Color,
+    metal: f32,
+    rough: f32,
+) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: c,
+        metallic: metal,
+        perceptual_roughness: rough,
+        ..default()
+    })
+}
+
+fn glow(
+    materials: &mut Assets<StandardMaterial>,
+    c: Color,
+    (r, g, b): (f32, f32, f32),
+) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: c,
+        emissive: LinearRgba::rgb(r, g, b),
+        ..default()
+    })
 }
 
 /// Spawns a node's primitives as children of `parent`, materials picked by
