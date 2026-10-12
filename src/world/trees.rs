@@ -58,13 +58,21 @@ pub struct Tree {
     pub variant: usize,
 }
 
-/// Logic: every tree gets a trunk collider (bullets stop, robots can't see
-/// through, nobody walks through).
+/// The trunks of one chunk of forest, as one compound collider (thousands
+/// of separate static bodies cost the physics step dearly).
+#[derive(Component, Debug)]
+pub struct TreeTrunks;
+
+/// Logic: every tree gets a trunk (bullets stop, robots can't see through,
+/// nobody walks through). The trees themselves are plain entities, anchors
+/// for their meshes; the trunks are gathered into one static compound
+/// collider per chunk.
 pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
     let started = std::time::Instant::now();
     let trees = scatter_trees(&zone);
+    let mut chunks: std::collections::HashMap<(i32, i32), Vec<(Position, Rotation, Collider)>> =
+        std::collections::HashMap::new();
     for t in &trees {
-        let radius = trunk_radius(t.species);
         commands.spawn((
             Tree {
                 species: t.species,
@@ -74,11 +82,32 @@ pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
                 .with_rotation(Quat::from_rotation_y(t.yaw))
                 .with_scale(Vec3::splat(t.scale)),
             Visibility::default(),
+        ));
+        let (cx, cz) = chunk_of(t.pos);
+        let origin = Vec3::new(cx as f32 * CHUNK, 0.0, cz as f32 * CHUNK);
+        let r = trunk_radius(t.species) * t.scale;
+        chunks.entry((cx, cz)).or_default().push((
+            Position(t.pos - origin),
+            Rotation::default(),
+            Collider::capsule_endpoints(
+                r,
+                Vec3::new(0.0, 0.5 * t.scale, 0.0),
+                Vec3::new(0.0, 4.0 * t.scale, 0.0),
+            ),
+        ));
+    }
+    let n = chunks.len();
+    for ((cx, cz), shapes) in chunks {
+        commands.spawn((
+            Name::new("Tree trunks"),
+            TreeTrunks,
+            Transform::from_xyz(cx as f32 * CHUNK, 0.0, cz as f32 * CHUNK),
             RigidBody::Static,
-            Collider::capsule_endpoints(radius, Vec3::new(0.0, 0.5, 0.0), Vec3::new(0.0, 4.0, 0.0)),
+            Collider::compound(shapes),
             CollisionLayers::new(Layer::World, LayerMask::ALL),
         ));
     }
+    info!("{n} trunk colliders");
     info!(
         "{} trees scattered in {:.0} ms",
         trees.len(),

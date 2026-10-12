@@ -623,15 +623,18 @@ fn walk(
             poses.0[i] = [hip, knee, foot];
         }
         // Leg colliders follow the lower segments (local to the root).
+        // Built from parts rather than a matrix, so the scale stays exactly
+        // one: a capsule scaled by 0.9999999 is rebuilt as a convex hull,
+        // every tick, for every leg.
         let inv = tf.compute_affine().inverse();
+        let inv_rot = tf.rotation.inverse();
         for c in children.iter() {
             if let Ok((leg, mut lt)) = legs.get_mut(c) {
                 let [_, knee, foot] = poses.0[leg.index];
                 let mid = (knee + foot) * 0.5;
                 let dir = (knee - foot).normalize_or(Vec3::Y);
-                let world = Transform::from_translation(mid)
-                    .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
-                *lt = Transform::from_matrix((inv * world.compute_affine()).into());
+                *lt = Transform::from_translation(inv.transform_point3(mid))
+                    .with_rotation(inv_rot * Quat::from_rotation_arc(Vec3::Y, dir));
             }
         }
     }

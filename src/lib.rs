@@ -15,6 +15,7 @@ pub mod interact;
 pub mod items;
 pub mod launch;
 pub mod models;
+mod perf;
 pub mod persist;
 pub mod player;
 pub mod raid;
@@ -160,8 +161,19 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     if log {
         app.add_plugins(bevy::log::LogPlugin::default());
     }
+    let threads = std::env::var("EXTRACTION_THREADS")
+        .ok()
+        .and_then(|n| n.parse().ok());
+    let pools = match threads {
+        Some(n) => bevy::app::TaskPoolPlugin {
+            task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
+        },
+        None => bevy::app::TaskPoolPlugin::default(),
+    };
     app.add_plugins((
-        MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO)),
+        MinimalPlugins
+            .set(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
+            .set(pools),
         TransformPlugin,
         bevy::asset::AssetPlugin {
             file_path: asset_root(),

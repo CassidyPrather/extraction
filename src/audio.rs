@@ -323,7 +323,7 @@ fn hit_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     parts: Query<(), With<RobotPart>>,
-    trees: Query<(), With<crate::world::trees::Tree>>,
+    trees: Query<(), With<crate::world::trees::TreeTrunks>>,
     structures: Query<(), With<crate::world::structures::Structure>>,
     items: Query<(), With<crate::items::Item>>,
 ) {
