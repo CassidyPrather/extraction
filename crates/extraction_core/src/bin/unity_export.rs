@@ -208,20 +208,32 @@ fn main() {
         .iter()
         .map(|w| {
             let line = geom::catmull_rom(&w.points, 2.0);
-            let mut last = f32::NAN;
-            let pts: Vec<Value> = line
+            // Where the grid has no water (the ends run off the map), carry
+            // the nearest level along.
+            let mut levels: Vec<Option<f32>> =
+                line.iter().map(|p| water_level_near(&hm, *p)).collect();
+            for i in 1..levels.len() {
+                levels[i] = levels[i].or(levels[i - 1]);
+            }
+            for i in (0..levels.len().saturating_sub(1)).rev() {
+                levels[i] = levels[i].or(levels[i + 1]);
+            }
+            let pts: Vec<[f32; 3]> = line
                 .iter()
-                .map(|p| {
-                    let level = water_level_near(&hm, *p).unwrap_or(last);
-                    last = level;
-                    v3(unity::to_unity([p[0], level, p[1]]))
+                .zip(&levels)
+                .map(|(p, l)| {
+                    let level = l.unwrap_or_else(|| hm.height(*p) + w.depth);
+                    unity::to_unity([p[0], level, p[1]])
                 })
                 .collect();
             json!({
                 "name": w.name,
                 "width_m": r3(w.width),
                 "depth_m": r3(w.depth),
-                "centreline": pts,
+                "centreline": pts.iter().map(|p| v3(*p)).collect::<Vec<_>>(),
+                // The same, flattened (x, y, z, x, y, z, ...) for Unity's
+                // JsonUtility, which can't read nested arrays.
+                "centreline_flat": pts.iter().flat_map(|p| p.map(r3)).collect::<Vec<_>>(),
                 "game_control_points": w.points.iter().map(|p| v2(*p)).collect::<Vec<_>>(),
             })
         })
