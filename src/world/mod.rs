@@ -4,11 +4,13 @@
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
 pub mod buildings;
+pub mod rain;
 pub mod sky;
 pub mod structures;
 pub mod terrain;
 pub mod trees;
 pub mod water;
+pub mod weather;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -101,7 +103,8 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, init_zone)
+        app.add_plugins(weather::WeatherPlugin)
+            .add_systems(PreStartup, init_zone)
             .add_systems(Update, buildings::swing_doors)
             .add_systems(
                 Startup,
@@ -158,6 +161,7 @@ impl Plugin for WorldVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             sky::SkyPlugin,
+            rain::RainPlugin,
             terrain::TerrainVisualsPlugin,
             water::WaterPlugin,
             trees::TreesPlugin,

@@ -45,6 +45,27 @@ struct AudioRng(Rng);
 #[derive(Component)]
 struct RotorLoop;
 
+/// The rain bed, as loud as the weather says.
+#[derive(Component)]
+struct RainLoop;
+
+fn rain_volume(
+    conditions: Res<crate::world::weather::Conditions>,
+    loops: Query<&SampleEffects, With<RainLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
+) {
+    for effects in &loops {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            let db = if conditions.rain < 0.01 {
+                -80.0
+            } else {
+                -30.0 + 18.0 * conditions.rain.sqrt()
+            };
+            v.volume = Volume::Decibels(db);
+        }
+    }
+}
+
 /// The Surge's roar, faded with how much Surge is in the air.
 #[derive(Component)]
 struct SurgeDrone;
@@ -75,6 +96,7 @@ impl Plugin for AudioPlugin {
                     surge_sounds,
                     anomaly_loops,
                     anomaly_sounds,
+                    rain_volume,
                 ),
             );
     }
@@ -394,10 +416,18 @@ fn rotor_loops(
 }
 
 fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<AudioRng>) {
-    for (set, db) in [
-        ("ambience/wind_conifers", -16.0),
-        ("ambience/rain_light", -22.0),
-    ] {
+    if let Some(sample) = bank.pick("ambience/rain_light", &mut rng.0) {
+        commands.spawn((
+            RainLoop,
+            SamplePlayer::new(sample).looping(),
+            PlaybackSettings::default(),
+            sample_effects![VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            }],
+        ));
+    }
+    for (set, db) in [("ambience/wind_conifers", -16.0)] {
         if let Some(sample) = bank.pick(set, &mut rng.0) {
             commands.spawn((
                 SamplePlayer::new(sample)

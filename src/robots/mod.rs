@@ -247,6 +247,7 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     cloaks: Res<crate::gadgets::Cloaks>,
+    conditions: Res<crate::world::weather::Conditions>,
 ) {
     let dt = time.delta_secs();
     let noises: Vec<Noise> = noises.read().cloned().collect();
@@ -288,7 +289,7 @@ pub(crate) fn perceive(
                 let head = pgt.translation() + Vec3::Y * 1.55;
                 let to = head - eye;
                 let dist = to.length();
-                if dist > senses.sight || dist < 0.01 {
+                if dist > conditions.sight(senses.sight) || dist < 0.01 {
                     continue;
                 }
                 let flat_fwd = forward;
@@ -322,8 +323,9 @@ pub(crate) fn perceive(
         }
         for n in &noises {
             let d = n.at.distance(gt.translation());
-            if d < n.radius * senses.hearing {
-                let loud = 1.0 - d / (n.radius * senses.hearing);
+            let reach = n.radius * senses.hearing * conditions.hearing();
+            if d < reach {
+                let loud = 1.0 - d / reach;
                 aware.suspicion = (aware.suspicion + 0.3 + loud * 0.5).min(1.0);
                 // Heard, not seen: they know roughly where, not exactly.
                 if !aware.can_see_target {

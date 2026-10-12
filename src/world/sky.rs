@@ -24,7 +24,7 @@ impl Plugin for SkyPlugin {
             })
             .add_message::<SurgeFlash>()
             .add_systems(Startup, spawn_sky)
-            .add_systems(Update, surge_atmosphere)
+            .add_systems(Update, (apply_weather, surge_atmosphere).chain())
             .add_systems(PostUpdate, follow_camera_with_dome);
     }
 }
@@ -251,4 +251,59 @@ struct SurgeFx {
     flash: f32,
     next_flash: f32,
     applied_calm: bool,
+}
+
+/// The cycle's weather sets the calm look: how far you see, how much ground
+/// fog, how strong the sun, how dark the sky.
+fn apply_weather(
+    conditions: Res<super::weather::Conditions>,
+    mut weather: ResMut<Weather>,
+    mut height_fog: ResMut<crate::render::fog::HeightFog>,
+    mut fogs: Query<&mut DistanceFog>,
+    mut suns: Query<&mut DirectionalLight, With<Sun>>,
+    mut sky_mats: ResMut<Assets<SkyMaterial>>,
+    domes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
+    mut clear: ResMut<ClearColor>,
+    mut ambient: ResMut<GlobalAmbientLight>,
+) {
+    // New cameras (the player's, a scope's) take the weather as they appear.
+    let fresh = fogs.iter_mut().any(|f| f.is_added());
+    if !conditions.is_changed() && !fresh {
+        return;
+    }
+    let base = Weather::default();
+    // Rain and murk darken the sky; clearing lifts it.
+    let k = match conditions.kind {
+        super::weather::WeatherKind::Downpour => 0.72,
+        super::weather::WeatherKind::PeaSouper => 0.95,
+        super::weather::WeatherKind::Clearing => 1.12,
+        super::weather::WeatherKind::Drizzle => 1.0,
+    };
+    let scale = |c: Color| {
+        let l = c.to_linear();
+        Color::linear_rgb(l.red * k, l.green * k, l.blue * k)
+    };
+    weather.horizon = scale(base.horizon);
+    weather.zenith = scale(base.zenith);
+    weather.visibility = conditions.visibility;
+    weather.sun_lux = conditions.sun;
+    if (height_fog.density - conditions.ground_fog).abs() > 1e-6 {
+        height_fog.density = conditions.ground_fog;
+    }
+    clear.0 = weather.horizon;
+    ambient.brightness = 1100.0 * k;
+    for mut fog in &mut fogs {
+        *fog = weather.fog();
+    }
+    for mut sun in &mut suns {
+        sun.illuminance = weather.sun_lux;
+    }
+    for m in &domes {
+        if let Some(mut mat) = sky_mats.get_mut(&m.0) {
+            let h = weather.horizon.to_linear();
+            let z = weather.zenith.to_linear();
+            mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
+            mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
+        }
+    }
 }

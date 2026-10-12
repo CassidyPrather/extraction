@@ -1,0 +1,68 @@
+// Rain: thousands of streaks in a box that wraps around the camera, all
+// moved here so the CPU never touches them. Each streak is a quad whose
+// four corners share a base point (position) and differ in uv: x picks the
+// side, y the end. Streaks face the camera about their own (wind-slanted)
+// axis.
+
+#import bevy_pbr::{
+    mesh_view_bindings::{view, globals},
+    view_transformations::position_world_to_clip,
+}
+
+struct RainParams {
+    // x: intensity 0..1, y: fall speed m/s, z: streak length m, w: box size m
+    params: vec4<f32>,
+    // xz: wind, m/s
+    wind: vec4<f32>,
+}
+
+@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> rain: RainParams;
+
+struct Vertex {
+    @location(0) position: vec3<f32>,
+    @location(2) uv: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) fade: f32,
+};
+
+@vertex
+fn vertex(v: Vertex) -> VertexOutput {
+    let box_size = rain.params.w;
+    let speed = rain.params.y;
+    let t = globals.time;
+    let cam = view.world_position.xyz;
+    let fall = vec3<f32>(rain.wind.x, -speed, rain.wind.z);
+    // Base point drifts with the fall, wrapped into the box round the camera.
+    var p = v.position + fall * t;
+    p = p - cam;
+    p = (fract(p / box_size + 0.5) - 0.5) * box_size;
+    let centre = cam + p;
+    let axis = normalize(-fall);
+    let to_cam = normalize(cam - centre);
+    let side = normalize(cross(axis, to_cam));
+    let width = 0.006;
+    let pos = centre + side * (v.uv.x - 0.5) * width + axis * v.uv.y * rain.params.z;
+    var out: VertexOutput;
+    out.clip_position = position_world_to_clip(pos);
+    out.uv = v.uv;
+    // Fade near the box edge (no popping) and right at the eye.
+    let d = length(p) / (box_size * 0.5);
+    out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * smoothstep(0.4, 1.5, length(p));
+    // Thin the field out with intensity: drop a fraction of streaks.
+    let keep = fract(sin(dot(v.position.xz, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    if (keep > rain.params.x) {
+        out.clip_position = vec4<f32>(0.0, 0.0, -10.0, 1.0);
+    }
+    return out;
+}
+
+@fragment
+fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    let edge = 1.0 - abs(in.uv.x - 0.5) * 2.0;
+    let a = 0.22 * in.fade * edge * (0.4 + 0.6 * in.uv.y);
+    return vec4<f32>(0.62, 0.66, 0.70, a);
+}

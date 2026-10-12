@@ -197,3 +197,52 @@ fn asset_root() -> String {
         .to_string_lossy()
         .into_owned()
 }
+
+#[cfg(test)]
+mod client_tests {
+    use super::*;
+
+    /// Builds the whole client (every visual, input and dev system) with
+    /// no window and no GPU, and runs a few frames: system parameter
+    /// conflicts and missing resources only show up when systems first
+    /// run, and the headless tests never run the client half.
+    #[test]
+    fn client_systems_initialise() {
+        use bevy::render::RenderPlugin;
+        use bevy::render::settings::WgpuSettings;
+        let mut app = App::new();
+        app.add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: None,
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: WgpuSettings {
+                        backends: None,
+                        ..default()
+                    }
+                    .into(),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: asset_root(),
+                    ..default()
+                })
+                .disable::<bevy::winit::WinitPlugin>(),
+        );
+        app.insert_resource(LaunchOptions {
+            flat: true,
+            ..default()
+        })
+        .insert_resource(Time::<Fixed>::from_hz(90.0))
+        .add_plugins(PhysicsPlugins::default())
+        .add_plugins((GamePlugin, ClientPlugin));
+        app.finish();
+        app.cleanup();
+        for _ in 0..20 {
+            app.update();
+        }
+    }
+}

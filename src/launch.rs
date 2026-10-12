@@ -57,6 +57,8 @@ pub struct LaunchOptions {
     /// Dev: put a gun, magazine or robot in front of the camera to look at
     /// (see `dev::gallery`).
     pub gallery: Option<String>,
+    /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
+    pub weather: Option<String>,
 }
 
 impl Default for LaunchOptions {
@@ -78,6 +80,7 @@ impl Default for LaunchOptions {
             new_game: false,
             surge_in: None,
             gallery: None,
+            weather: None,
         }
     }
 }
@@ -104,6 +107,7 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
+                "--weather" => o.weather = Some(val()),
                 "--save" => o.save = Some(PathBuf::from(val())),
                 "--scenario" => {
                     o.scenario = Some(val());

@@ -52,6 +52,12 @@ If the Surge is close when you're at base, pull the bell to sleep it out
 in the cab instead of starting a raid you can't finish. Durations are
 constants in `raid/mod.rs`, to tune.
 
+Each cycle also brings its own **weather** (`world/weather.rs`, a pure
+function of seed and cycle): drizzle (the reference look), a pea-souper,
+a downpour, or a clearing spell. Weather is gameplay: visibility caps
+how far robots see, and rain covers footsteps. It drives the sky, distance
+and ground fog, the sun, GPU-animated rain streaks and the rain bed.
+
 A new game starts with an empty stash except for a starter kit (a
 pistol, a spare magazine, a box of rounds, the radio, a light, a
 dressing, a tin of stew and a cleaning kit). `--new-game` starts over;
