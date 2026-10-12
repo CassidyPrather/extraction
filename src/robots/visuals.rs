@@ -732,15 +732,20 @@ struct WorkLight;
 
 fn pylon_work_lights(
     mut commands: Commands,
-    pylons: Query<(Entity, &super::pylon::Pylon, &super::Robot, Option<&Children>)>,
+    pylons: Query<(
+        Entity,
+        &super::pylon::Pylon,
+        &super::Robot,
+        Option<&Children>,
+    )>,
     mut lights: Query<(&mut PointLight, &mut Transform), With<WorkLight>>,
     time: Res<Time>,
 ) {
     use super::pylon::PylonState;
     let t = time.elapsed_secs();
     for (e, p, robot, children) in &pylons {
-        let working = !robot.wrecked
-            && matches!(p.state, PylonState::Building | PylonState::Packing);
+        let working =
+            !robot.wrecked && matches!(p.state, PylonState::Building | PylonState::Packing);
         let existing = children.and_then(|c| c.iter().find(|c| lights.contains(*c)));
         match (working, existing) {
             (true, None) => {
@@ -762,8 +767,8 @@ fn pylon_work_lights(
                     // Bursts of arc light, never steady.
                     let n = (t * 23.0 + e.index_u32() as f32).sin() * (t * 7.3).sin();
                     light.intensity = if n > 0.2 { 60_000.0 * n } else { 0.0 };
-                    lt.translation = Vec3::Y
-                        * (1.25 + super::pylon::MAST * p.progress.max(0.01) + 0.1);
+                    lt.translation =
+                        Vec3::Y * (1.25 + super::pylon::MAST * p.progress.max(0.01) + 0.1);
                 }
             }
             (false, Some(l)) => commands.entity(l).despawn(),
