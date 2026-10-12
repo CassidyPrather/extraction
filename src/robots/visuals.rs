@@ -25,6 +25,7 @@ impl Plugin for RobotVisualsPlugin {
             (
                 (request_models, dress_parts).chain(),
                 spin_rotors,
+                spin_propellers,
                 pose_leg_visuals,
                 dim_dead_eyes,
             ),
@@ -45,6 +46,12 @@ struct RobotMats {
 #[derive(Component)]
 struct RotorDisc {
     index: usize,
+}
+
+/// A dirigible's engine propeller, turning about its Z while the ship lives.
+#[derive(Component)]
+struct Propeller {
+    robot: Entity,
 }
 
 /// A drawn leg segment: which leg, upper (0) or lower (1). With a model,
@@ -229,6 +236,11 @@ fn dress_parts(
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
+            (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {
+                0 => "cell_0",
+                1 => "cell_1",
+                _ => "cell_2",
+            },
             _ => continue,
         };
         match (robot.kind, part.role) {
@@ -299,6 +311,28 @@ fn dress_parts(
                         ))
                         .id();
                     attach(&mut commands, seg, node, Transform::IDENTITY, e, &mut mat);
+                }
+            }
+            (RobotKind::Dirigible, PartRole::Core) => {
+                let Some(node) = ModelNode::find(model, node_name) else {
+                    continue;
+                };
+                attach(&mut commands, e, node, Transform::IDENTITY, e, &mut mat);
+                // The right engine's propeller, and a copy on the left.
+                let Some(prop) = ModelNode::find(model, "prop") else {
+                    continue;
+                };
+                let rel = prop.transform.translation - node.transform.translation;
+                for x in [rel.x, -rel.x] {
+                    let hub = commands
+                        .spawn((
+                            Propeller { robot: part.robot },
+                            Transform::from_xyz(x, rel.y, rel.z),
+                            Visibility::default(),
+                            ChildOf(e),
+                        ))
+                        .id();
+                    attach(&mut commands, hub, prop, Transform::IDENTITY, e, &mut mat);
                 }
             }
             _ => {
@@ -561,6 +595,18 @@ fn spin_rotors(
                     t.rotate_y(rate * dir * time.delta_secs());
                 }
             }
+        }
+    }
+}
+
+fn spin_propellers(
+    mut props: Query<(&Propeller, &mut Transform)>,
+    robots: Query<&Robot>,
+    time: Res<Time>,
+) {
+    for (p, mut t) in &mut props {
+        if robots.get(p.robot).is_ok_and(|r| !r.wrecked) {
+            t.rotate_local_z(14.0 * time.delta_secs());
         }
     }
 }
