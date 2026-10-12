@@ -18,9 +18,10 @@ impl Plugin for ScreenPlugin {
     }
 }
 
-/// Frames a panel's camera renders after its text changes (the font may
-/// still be loading, and the first frames lay the text out).
-const REFRESH_FRAMES: u8 = 30;
+/// Frames a new panel's camera renders (the font may still be loading),
+/// and frames after its text changes (laying out, then drawing).
+const FIRST_FRAMES: u8 = 30;
+const REFRESH_FRAMES: u8 = 3;
 /// An idle panel still renders one frame in this many, in case anything
 /// it shows changed without its text changing.
 const IDLE_EVERY: u32 = 30;
@@ -158,7 +159,7 @@ fn build_screens(
             .insert(ScreenView {
                 text,
                 camera,
-                refresh: REFRESH_FRAMES,
+                refresh: FIRST_FRAMES,
                 px: Vec2::new(w as f32, h as f32),
                 font: max_font,
             })
