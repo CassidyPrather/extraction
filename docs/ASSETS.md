@@ -153,13 +153,14 @@ switching to it.
 
 # Models
 
-The guns, their magazines and the robots are modelled by Blender Python
+The guns, their magazines, the robots, the truck and the small kit
+(gadgets, supplies, salvage, artifacts) are modelled by Blender Python
 scripts in `art/`. Nobody edits a `.blend` file: the scripts are the
 source, and the exported `.glb` files under `assets/models/` are committed
 next to them. Nothing external goes into them, so they need no credits.
 
 ```bash
-python3 art/build.py              # rebuild every model (~15 s)
+python3 art/build.py              # rebuild every model (~30 s)
 python3 art/build.py ak74 drone   # only scripts whose name matches
 blender -b --python art/preview.py -- assets/models/guns/ak74.glb /tmp/ak.png   # Cycles preview
 scripts/shot.sh target/shots/ak.png 40,19.2,262,0,0 20 --gallery ak74   # in the game
@@ -168,8 +169,15 @@ scripts/shot.sh target/shots/ak.png 40,19.2,262,0,0 20 --gallery ak74   # in the
 `build.py` runs each script in a fresh headless Blender (`blender` on
 PATH, or `BLENDER=/path/to/blender`; written against Blender 5.2). The
 `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]` option puts a gun (with its
-magazine seated), a magazine, `guns`, `drone` or `walker` in front of the
-`--camera`, held still. At the camera above, the ground is at y = 17.6.
+magazine seated), any other item by id, `guns`, `drone`, `walker`,
+`dirigible`, `grappler` or `pod` in front of the `--camera`, held still.
+At the camera above, the ground is at y = 17.6. The truck is parked at the
+south gate (truck space (x, y, z) is world (40 - x, 17.4 + y, 300 - z)):
+
+```bash
+scripts/shot.sh target/shots/truck.png 46.5,19.8,291,145,-8 20     # rear three-quarter
+scripts/shot.sh target/shots/bed.png 39.6,19.6,298.6,180,-12 20    # in the bed
+```
 
 | Script | Output | Tris |
 | --- | --- | --- |
@@ -180,6 +188,13 @@ magazine seated), a magazine, `guns`, `drone` or `walker` in front of the
 | `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 0.3k to 1.2k |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.2k |
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.3k |
+| `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 14.5k |
+| `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
+| `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 25.6k (wheel once) |
+| `art/items/attachments.py` | `models/items/<item id>.glb`: scope, side rail, weapon light, laser, artifact adapter | 0.3k to 3k |
+| `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
+| `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
+| `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
 
 ## Conventions
 
@@ -201,24 +216,47 @@ magazine seated), a magazine, `guns`, `drone` or `walker` in front of the
   magazine is moved from it to the model's (`seat_mag_visuals`). The
   PM's layout seat is 5 cm low and raked the wrong way, so this matters.
 - **Robot parts.** A robot model has one object per part kind (`core`,
-  `sensor`, `gun`/`turret`, `rotor`, `blades`, `leg_upper`, `leg_lower`).
+  `sensor`, `gun`/`turret`, `rotor`, `blades`, `leg_upper`, `leg_lower`;
+  the dirigible's `cell_0..2` for its gas cells, and a `prop` the game
+  copies onto both engines and spins).
   Each object's origin is that part's spawn offset, so it hangs straight on
   the part entity. The drone has one `rotor`, built at rotor 0. The game
   turns copies of it to face out at the other corners. Leg segments run
   along +Y from the near joint (0.8 m and 0.95 m). Their hinge axis is X,
   and `pose_leg_visuals` points it along the leg plane's normal.
+- **The truck** is built round its gameplay boxes (`TRUCK_PARTS` in
+  `src/raid/truck.rs`), which stay as they are: the bed floor's top is
+  `FLOOR`, the canvas walls sit just outside the side colliders, the
+  front board's inner face is behind the memorial board, and the rear
+  ladder's treads are the step boxes' tops. Its objects are static except
+  `wheel`, one road wheel built at the front right station; the game puts
+  a copy at each of `WHEELS` and turns the left ones round.
+- **Items.** `models/items/<item id>.glb` (magazines stay in
+  `models/mags/`) is in item space: origin at the centre of the item's
+  `dims` box from `items.ron` (a cube of side cbrt(bulk / 1000) without
+  dims), -Z forward. Models keep their sockets meaningful: lights and the
+  laser have an open cell bay where a power cell seats (z 0.02), the side
+  rail's top is where rail things clamp, the adapter's cradle holds an
+  artifact at y 0.03, the scope's optical axis is y = 0 (its eye point is
+  behind it), and the compass and map case leave room for the face,
+  needle and map sheet that `src/gadgets/visuals.rs` draws.
 - **Materials by name.** The model's materials are only placeholders. The
   game swaps them by name (`src/models.rs`) for the `MaterialLibrary`
   sets: `Blued` uses `gun_metal`, `Wood` uses `gun_wood`, `Polymer` uses
   `polymer_plum`, and `Shell` uses `robot_shell`. `Steel`, `Bakelite` and
   `Black` keep a scan's relief under a flat colour. `Dark`, `Eye` (the
   emissive accents, dimmed when the part dies) and `Rotor` are the robot
-  palette.
+  palette. The truck and the kit use `Paint` (olive over the peeling-paint
+  scan), `Canvas`, `Planks`, `Iron` (dark metal), `Glass`, `Rubber`,
+  `Lens`, `Clear`, `Copper`, `Olive`, `Cream`, `Paper`, `Rope`, `Red`,
+  `Yellow`, `Pebble`, `Char`, and the emissive `Lamp`, `LampRed`, `Glow`,
+  `Warn`, `Ember` and `Strange`.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.
 - **Fallbacks.** No file, or a failed load, gives the old blockout
-  (guns), placeholder box (magazines) or primitive shapes (robots). The
+  (guns, truck), placeholder box (magazines and other items) or primitive
+  shapes (robots, cargo pod, harpoon launcher). The
   headless sim never loads models: it all happens in `ClientPlugin`.
 
 ## The kit
