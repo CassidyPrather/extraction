@@ -146,8 +146,9 @@ fn spawn_building_loot(
                 catalog,
                 SpawnItem {
                     kind: drop.kind,
-                    transform: Transform::from_translation(spot.at + off)
-                        .with_rotation(Quat::from_rotation_y(rng.range(0.0, 6.28))),
+                    transform: Transform::from_translation(spot.at + off).with_rotation(
+                        Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU)),
+                    ),
                     condition: drop.condition,
                 },
             );

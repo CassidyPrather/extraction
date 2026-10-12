@@ -482,7 +482,12 @@ fn dress_blockout(
             if i == 2 {
                 // Tail fins.
                 ec.with_children(|c| {
-                    for a in [0.0f32, 1.5708, 3.1416, 4.7124] {
+                    for a in [
+                        0.0f32,
+                        std::f32::consts::FRAC_PI_2,
+                        std::f32::consts::PI,
+                        (3.0 * std::f32::consts::FRAC_PI_2),
+                    ] {
                         c.spawn((
                             Mesh3d(meshes.add(Cuboid::new(0.04, 0.9, 0.7))),
                             MeshMaterial3d(m.dark.clone()),
@@ -508,7 +513,7 @@ fn dress_blockout(
                                 Cylinder::new(0.35, 1.2)
                                     .mesh()
                                     .build()
-                                    .rotated_by(Quat::from_rotation_x(1.5708)),
+                                    .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
                             ),
                         ),
                         MeshMaterial3d(m.dark.clone()),
@@ -521,7 +526,7 @@ fn dress_blockout(
                                 Cylinder::new(0.55, 0.02)
                                     .mesh()
                                     .build()
-                                    .rotated_by(Quat::from_rotation_x(1.5708)),
+                                    .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
                             ),
                         ),
                         MeshMaterial3d(m.rotor.clone()),

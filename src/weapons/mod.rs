@@ -559,7 +559,8 @@ pub fn spawn_ejections(
                     Name::new("Case"),
                     Casing { life: 40.0 },
                     Visibility::default(),
-                    Transform::from_translation(ej.at).with_rotation(Quat::from_rotation_z(1.57)),
+                    Transform::from_translation(ej.at)
+                        .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                     RigidBody::Dynamic,
                     Collider::cylinder(0.005, 0.022),
                     Mass(0.005),

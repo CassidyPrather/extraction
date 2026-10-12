@@ -163,7 +163,7 @@ fn dress_grapplers(
                         Cylinder::new(0.06, 0.5)
                             .mesh()
                             .build()
-                            .rotated_by(Quat::from_rotation_x(1.5708)),
+                            .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
                     ),
                 ),
                 MeshMaterial3d(dark.clone()),
@@ -175,7 +175,7 @@ fn dress_grapplers(
                         Cylinder::new(0.13, 0.1)
                             .mesh()
                             .build()
-                            .rotated_by(Quat::from_rotation_z(1.5708)),
+                            .rotated_by(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                     ),
                 ),
                 MeshMaterial3d(dark),

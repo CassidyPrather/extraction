@@ -346,7 +346,7 @@ fn animate_motes(
         let local = match m.kind {
             AnomalyKind::Lift => {
                 let speed = 0.5 + fr(1.7) * 0.7;
-                let a = s * 6.283 + t * speed;
+                let a = s * std::f32::consts::TAU + t * speed;
                 let r = m.radius * (0.15 + 0.75 * fr(7.1));
                 let h =
                     0.2 + 2.6 * (0.5 + 0.5 * (t * 0.35 + s * 11.0).sin()) * (0.4 + 0.6 * fr(3.3));
@@ -354,7 +354,7 @@ fn animate_motes(
             }
             AnomalyKind::Burner => {
                 let life = (t * (0.3 + 0.25 * fr(2.9)) + fr(5.3)).fract();
-                let a = s * 6.283;
+                let a = s * std::f32::consts::TAU;
                 let r = m.radius * 0.8 * fr(4.7).sqrt();
                 let wob =
                     Vec3::new((t * 2.0 + s).sin(), 0.0, (t * 1.7 + s * 2.0).cos()) * 0.12 * life;
@@ -363,8 +363,8 @@ fn animate_motes(
             AnomalyKind::Snare => {
                 // Sparks blink in and out around the core.
                 let phase = (t * (3.0 + 4.0 * fr(1.3)) + s).fract();
-                let a = s * 6.283 + t * 0.4;
-                let b = fr(8.9) * 3.14 - 1.57;
+                let a = s * std::f32::consts::TAU + t * 0.4;
+                let b = fr(8.9) * std::f32::consts::PI - std::f32::consts::FRAC_PI_2;
                 let r = m.radius * 0.35 * (0.6 + 0.4 * phase);
                 Vec3::new(
                     a.cos() * b.cos() * r,
