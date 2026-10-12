@@ -284,7 +284,8 @@ impl Region {
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
     match id {
-        "quarantine_gate" => [20.0, 4.0, 3.0],
+        "quarantine_gate" => [12.0, 4.0, 3.0],
+        "guard_booth" => [2.6, 2.7, 2.6],
         "sawmill" => [24.0, 7.0, 12.0],
         "cabin_log" => [7.0, 4.5, 6.0],
         "log_pile" => [2.5, 1.6, 7.0],

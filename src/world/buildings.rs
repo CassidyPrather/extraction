@@ -537,6 +537,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "radio_mast" => radio_mast(&mut b),
         "ranger_tower" => ranger_tower(&mut b),
         "quarantine_gate" => quarantine_gate(&mut b),
+        "guard_booth" => guard_booth(&mut b),
         "robot_gate" => robot_gate(&mut b),
         "boxcar" => boxcar(&mut b),
         "log_pile" => log_pile(&mut b),
@@ -1044,32 +1045,31 @@ fn quarantine_gate(b: &mut Builder) {
         Mat::PaintedMetal,
         false,
     );
-    // The guard booth, off the road to the right.
-    let (pieces, doors) = (b.geo.pieces.len(), b.geo.doors.len());
+}
+
+/// The guard booth by the quarantine gate (its own placement, so it sits
+/// on its own level pad rather than half buried in the gate's slope).
+fn guard_booth(b: &mut Builder) {
+    // On a plinth with steps up to the door (front, -Z): the road's
+    // grading leaves the ground here sloping.
+    let f = 0.6;
+    b.plinth(2.2, 2.2, f, Mat::Concrete, Mat::WoodFloor);
     b.shell(
         2.2,
         2.2,
-        0.0,
+        f,
         2.4,
         0.08,
         Mat::PaintedMetal,
-        [&[window(1.1)], &[window(1.1)], &[door(1.1)], &[window(1.1)]],
+        [&[door(1.1)], &[window(1.1)], &[window(1.1)], &[window(1.1)]],
     );
+    b.front_steps(0.0, -1.1, f, Mat::Concrete);
     b.bx(
         Vec3::new(2.6, 0.15, 2.6),
-        Vec3::new(0.0, 2.5, 0.0),
+        Vec3::new(0.0, f + 2.5, 0.0),
         Mat::Corrugated,
     );
-    b.counter(Vec3::new(0.0, 0.0, -0.6), 0.0, 1.6, Some("ammo_common"));
-    for p in &mut b.geo.pieces[pieces..] {
-        p.at.translation.x += 7.8;
-    }
-    for d in &mut b.geo.doors[doors..] {
-        d.hinge.x += 7.8;
-    }
-    for l in b.geo.loot.iter_mut() {
-        l.at.x += 7.8;
-    }
+    b.counter(Vec3::new(0.0, f, 0.6), 0.0, 1.6, Some("ammo_common"));
 }
 
 fn robot_gate(b: &mut Builder) {

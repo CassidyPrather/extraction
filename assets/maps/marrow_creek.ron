@@ -193,6 +193,7 @@
     placements: [
         // South gate: the fence and the truck pull-in.
         (prefab: "quarantine_gate", at: (40.0, 285.0), rot: 0.0),
+        (prefab: "guard_booth", at: (47.8, 285.0), rot: 180.0),
 
         // Logging camp.
         (prefab: "sawmill", at: (-165.0, 165.0), rot: 90.0),

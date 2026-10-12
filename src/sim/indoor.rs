@@ -469,7 +469,6 @@ mod tests {
     /// Every outside door of every building on the map lets a bot in, as
     /// far as the room behind it.
     #[test]
-    #[ignore = "slow: walks into every building (run with --ignored)"]
     fn every_door_lets_a_bot_in() {
         let opts = LaunchOptions {
             robots: false,
@@ -542,12 +541,12 @@ mod tests {
                 }
             }
         }
-        // Most doors, anyway: report the rest.
-        eprintln!(
+        assert!(tried > 0, "no doors tried");
+        assert!(
+            failed.is_empty(),
             "{} of {tried} doors failed:\n{}",
             failed.len(),
             failed.join("\n")
         );
-        assert!(failed.len() * 10 <= tried, "too many doors failed");
     }
 }
