@@ -91,6 +91,7 @@ impl Plugin for AudioPlugin {
                     hit_sounds,
                     hand_sounds,
                     rotor_loops,
+                    gadget_loops,
                     ambient_oneshots,
                     move_creek,
                     surge_sounds,
@@ -738,5 +739,84 @@ fn anomaly_sounds(
             2.0,
             0.1,
         );
+    }
+}
+
+/// A gadget's running sound: the camera drone's rotors, a zipline trolley.
+#[derive(Component)]
+struct GadgetLoop;
+
+/// The camera drone whines while its rotors turn (a robot drone's rotor,
+/// pitched up and quieter); a zipline hums under your hand, rising with
+/// speed.
+fn gadget_loops(
+    mut commands: Commands,
+    drones: Query<(
+        Entity,
+        &crate::gadgets::camera_drone::CameraDrone,
+        Option<&Children>,
+    )>,
+    grips: Query<(
+        Entity,
+        &crate::gadgets::climbing::RopeGrip,
+        Option<&Children>,
+    )>,
+    ropes: Query<&crate::gadgets::climbing::Rope>,
+    loops: Query<Entity, With<GadgetLoop>>,
+    mut settings: Query<&mut PlaybackSettings, With<GadgetLoop>>,
+    all_children: Query<&Children>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::gadgets::camera_drone::Flight;
+    let mut want: Vec<(Entity, &str, f32, f64)> = Vec::new();
+    for (e, d, _) in &drones {
+        if d.flight != Flight::Idle {
+            want.push((e, "machines/drone_rotor", -16.0, 1.9));
+        }
+    }
+    for (e, g, _) in &grips {
+        if ropes.get(g.rope).is_ok_and(|r| r.zip) && g.speed > 0.3 {
+            let pitch = 0.6 + (g.speed / crate::gadgets::climbing::ZIP_SPEED) as f64 * 0.9;
+            want.push((e, "machines/hum", -10.0, pitch));
+        }
+    }
+    // Stop the ones that aren't wanted any more.
+    for l in &loops {
+        let parent_wanted = want
+            .iter()
+            .any(|(e, ..)| all_children.get(*e).is_ok_and(|c| c.iter().any(|c| c == l)));
+        if !parent_wanted {
+            commands.entity(l).despawn();
+        }
+    }
+    for (e, set, db, speed) in want {
+        let existing = all_children
+            .get(e)
+            .ok()
+            .and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match existing {
+            Some(l) => {
+                if let Ok(mut s) = settings.get_mut(l) {
+                    if (s.speed - speed).abs() > 0.02 {
+                        s.speed = speed;
+                    }
+                }
+            }
+            None => {
+                if let Some(sample) = bank.pick(set, &mut rng.0) {
+                    commands.spawn((
+                        GadgetLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(db)),
+                        PlaybackSettings { speed, ..default() },
+                        Transform::default(),
+                        sample_effects![SpatialBasicNode::default()],
+                        ChildOf(e),
+                    ));
+                }
+            }
+        }
     }
 }

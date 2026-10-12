@@ -42,6 +42,10 @@ Comfort: `--smooth-turn` (or `--snap-turn`), `--vignette 0..1` (default
 The game saves itself (the stash, what you carry, and the Zone as you left
 it) to the same folder; `--new-game` starts over.
 
+Two Zones so far: **Marrow Creek** (the default), a foggy river valley,
+and **Kettle Pass** (`--map kettle_pass`), a mining valley that climbs to a
+high pass. Each keeps its own save.
+
 ## Development
 
 Needs the Rust toolchain pinned in `rust-toolchain.toml`. On Linux also

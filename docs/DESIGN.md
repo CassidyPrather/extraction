@@ -300,6 +300,15 @@ top-down preview renderer draws the layout for design review. Prefabs are
 modelled by Blender Python scripts in `art/`, exported as glTF with
 collision and socket markers as custom properties. Enemy spawns, jobs and
 specific loot roll from pools; the places themselves are designed.
+Two maps so far. **Marrow Creek**: a river valley, the creek its spine,
+three ways across it and every rendezvous on the far side. **Kettle
+Pass**: a valley that climbs 30 m from the south gate to a saddle
+between two summits; the pass road switchbacks up the middle in plain
+view, and cutting across means climbing. Its rendezvous are the pass
+itself, the mine yard in the west and the hunting lodge on the east
+shoulder; its artifacts grow in the quarry pit and on the mine's spoil
+heap. Each map keeps its own save (stash included) for now.
+
 Risk pays: each region's loot spots roll `0.8 + 0.2 × danger` times
 (fractions are a chance of one more), unless the map sets `loot` for the
 region. The village by the insertion point is set to 0.6 — picked over —
@@ -371,7 +380,8 @@ catch for agent-written code. Revisit if that research changes.
    harpoon launcher, gadgets and artifacts; map simulation with telemetry
    and heatmaps (see `SIMULATION.md`); forest and building batching for VR;
    the lead-lined case, the camera drone, the climbing and zipline kits.
-   Still open: acting on what the sims found (drones decide every death;
-   the north and east of the map go unvisited), a second map,
-   playtesting in a headset.
+   A second map, Kettle Pass. Loot that rewards risk, after the sims
+   showed the far side of Marrow Creek going unvisited (it no longer
+   does). Still open: drones decide every death in the sims and artifact
+   hunters rarely come back; playtesting in a headset.
 7. *(stop)* — VRChat port and multiplayer are later phases.

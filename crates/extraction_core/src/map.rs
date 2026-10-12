@@ -347,11 +347,38 @@ impl MapDef {
 
 /// The first map, shipped in the binary for tests and the headless sims.
 pub const MARROW_CREEK: &str = include_str!("../../../assets/maps/marrow_creek.ron");
+/// The second map.
+pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron");
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    #[test]
+    fn kettle_pass_parses_and_builds() {
+        let map = MapDef::from_ron(KETTLE_PASS).expect("map parses");
+        assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
+        let hm = Heightmap::build(&map);
+        assert!(
+            hm.water_level([40.0, 130.0]).is_some(),
+            "the beck under the bridge"
+        );
+        assert!(hm.water_level([-42.0, 125.0]).is_none(), "the Row is dry");
+        // It climbs: the pass is well above the gate.
+        let gate = hm.height([120.0, 270.0]);
+        let pass = hm.height([10.0, -250.0]);
+        assert!(pass - gate > 15.0, "gate {gate:.1}, pass {pass:.1}");
+        for m in map.markers.iter().filter(|m| {
+            matches!(
+                m.kind,
+                MarkerKind::Insertion | MarkerKind::Rendezvous | MarkerKind::Offering
+            )
+        }) {
+            assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
+            assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
+        }
+    }
 
     #[test]
     fn risk_pays_in_loot() {
