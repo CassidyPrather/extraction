@@ -149,6 +149,18 @@ fn gallery(
                         .insert(Transform::from_translation(at).with_rotation(look));
                 }
             }
+            "pylon" => {
+                // Fully up, as if its builders had just finished.
+                let at = eye + flat * dist.unwrap_or(9.0);
+                let at = zone.on_ground(at.x, at.z);
+                let p = crate::robots::pylon::spawn_pylon(&mut commands, at, 999.0, at);
+                commands.entity(p).insert(crate::robots::pylon::Pylon {
+                    progress: 1.0,
+                    state: crate::robots::pylon::PylonState::Running { left: 999.0 },
+                    report_cooldown: 0.0,
+                    age: 0.0,
+                });
+            }
             "dirigible" | "grappler" | "pod" => {
                 let at = eye + fwd * dist.unwrap_or(30.0);
                 match subject.as_str() {

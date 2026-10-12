@@ -28,6 +28,7 @@ impl Plugin for RobotVisualsPlugin {
                 spin_propellers,
                 pose_leg_visuals,
                 dim_dead_eyes,
+                dress_pylon_masts,
             ),
         );
     }
@@ -113,6 +114,7 @@ fn model_path(kind: RobotKind) -> &'static str {
         RobotKind::Drone => "models/robots/drone.glb",
         RobotKind::Walker => "models/robots/walker.glb",
         RobotKind::Dirigible => "models/robots/dirigible.glb",
+        RobotKind::Pylon => "models/robots/pylon.glb",
     }
 }
 
@@ -389,6 +391,37 @@ fn dress_blockout(
 ) {
     let mut ec = commands.entity(e);
     match (kind, part.role) {
+        (RobotKind::Pylon, PartRole::Core) => {
+            // A squat white cabinet, a glowing seam round its lid.
+            ec.insert((
+                Mesh3d(meshes.add(Cuboid::new(1.0, 1.2, 1.0))),
+                MeshMaterial3d(m.shell.clone()),
+            ));
+            ec.with_child((
+                Mesh3d(meshes.add(Cuboid::new(1.02, 0.04, 1.02))),
+                MeshMaterial3d(m.eye.clone()),
+                Transform::from_xyz(0.0, 0.45, 0.0),
+            ));
+        }
+        (RobotKind::Pylon, PartRole::Sensor) => {
+            // The dish: a shallow disc on a yoke, its eye in the middle.
+            ec.insert((
+                Mesh3d(
+                    meshes.add(
+                        Cylinder::new(0.45, 0.08)
+                            .mesh()
+                            .build()
+                            .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    ),
+                ),
+                MeshMaterial3d(m.shell.clone()),
+            ));
+            ec.with_child((
+                Mesh3d(meshes.add(Sphere::new(0.07))),
+                MeshMaterial3d(m.eye.clone()),
+                Transform::from_xyz(0.0, 0.0, -0.06),
+            ));
+        }
         (RobotKind::Drone, PartRole::Core) => {
             // A flattened, pebble-like shell with four arms.
             ec.insert((
@@ -669,5 +702,24 @@ fn dim_dead_eyes(
                 .entity(e)
                 .insert(MeshMaterial3d(m.eye_dead.clone()));
         }
+    }
+}
+
+/// A pylon's mast: a dark lattice box, scaled with the pylon's progress.
+fn dress_pylon_masts(
+    mut commands: Commands,
+    // Not `Added`: the robot materials may not exist yet when it's spawned.
+    masts: Query<Entity, (With<super::pylon::PylonMast>, Without<Mesh3d>)>,
+    mats: Option<Res<RobotMats>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    let Some(m) = mats else {
+        return;
+    };
+    for e in &masts {
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(Cuboid::new(0.25, 1.0, 0.25))),
+            MeshMaterial3d(m.dark.clone()),
+        ));
     }
 }

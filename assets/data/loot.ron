@@ -106,6 +106,13 @@
             Item(id: "robot_cell", weight: 0.8, condition: (0.1, 0.8)),
             Item(id: "robot_ammo_belt", weight: 1.0),
         ]),
+        "pylon_wreck": (rolls: (3, 5), entries: [
+            Item(id: "electronics", weight: 3.0),
+            Item(id: "sensor_eye", weight: 1.5, condition: (0.3, 1.0)),
+            Item(id: "robot_cell", weight: 1.5, condition: (0.3, 1.0)),
+            Item(id: "scrap_metal", weight: 2.0),
+            Item(id: "power_cell", weight: 1.0),
+        ]),
         "walker_wreck": (rolls: (2, 3), entries: [
             Item(id: "servo", weight: 3.0, condition: (0.2, 0.9)),
             Item(id: "sensor_eye", weight: 1.0, condition: (0.2, 0.9)),

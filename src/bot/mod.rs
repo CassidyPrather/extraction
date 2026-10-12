@@ -565,6 +565,9 @@ fn run_tasks(
                     crate::robots::RobotKind::Dirigible => {
                         crate::robots::dirigible::spawn_dirigible(&mut commands, at, job);
                     }
+                    crate::robots::RobotKind::Pylon => {
+                        crate::robots::pylon::spawn_pylon(&mut commands, at, 300.0, exit);
+                    }
                 }
                 bot.note(format!("spawned a {kind:?}"));
                 bot.next();

@@ -14,6 +14,7 @@ pub mod dirigible;
 pub mod doors;
 pub mod drone;
 pub mod grappler;
+pub mod pylon;
 pub mod visuals;
 pub mod walker;
 
@@ -33,6 +34,8 @@ pub enum RobotKind {
     Walker,
     /// The airship that carries cargo pods.
     Dirigible,
+    /// A relay pylon walkers put up at a work site (see `pylon`).
+    Pylon,
 }
 
 #[derive(Component, Debug)]
@@ -152,6 +155,8 @@ pub enum JobKind {
     Watch,
     /// The memorial convoy: fetch a body (remains) and take it out.
     Collect,
+    /// Put up a relay pylon at a work site, run it, take it down.
+    Construct,
 }
 
 pub struct RobotsPlugin;
@@ -168,6 +173,7 @@ impl Plugin for RobotsPlugin {
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
                 doors::DoorsPlugin,
+                pylon::PylonPlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -397,6 +403,7 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
         RobotKind::Drone => "drone_wreck",
         RobotKind::Walker => "walker_wreck",
         RobotKind::Dirigible => "dirigible_wreck",
+        RobotKind::Pylon => "pylon_wreck",
     }
 }
 

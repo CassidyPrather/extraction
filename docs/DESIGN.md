@@ -153,8 +153,14 @@ flown in) to do them, then leave:
   follows); puncture two of its three gas cells and it sinks to a wreck
   full of salvage, dropping the pod where it hangs. Grapplers don't shoot:
   they spear you with a tether that slows you and drags you toward them.
-- *Construction*: walkers assemble a relay pylon at a site, operate it a while,
-  pack it up again.
+- *Construction* (built): a pylon kit appears at a work site and two
+  walkers walk out from the Gate to it. They put up a relay pylon (a mast
+  climbs out of the cabinet over forty seconds, a sensor dish on top), run
+  it a few minutes and pack it up again. While it runs it's a sentry: it
+  sees 85 m all round from the top of its mast, and what it sees it
+  reports (a response team follows). Shoot the dish and it's blind; wreck
+  the cabinet and it spills salvage (electronics, cells, a sensor) — with
+  its builders standing next to it. `--gallery pylon` shows one.
 - *Response*: a team is sent to the last known position of a disturbance.
   They are *late* — it takes them time to get there — so noise has a cost
   you pay a few minutes later.

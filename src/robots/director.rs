@@ -86,6 +86,7 @@ fn run_director(
     mut director: ResMut<Director>,
     zone: Res<Zone>,
     robots: Query<&Robot>,
+    pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
 ) {
     if !director.enabled {
@@ -197,6 +198,19 @@ fn run_director(
                 exit,
             },
         );
+    } else if !sites.is_empty()
+        && director.rng.chance(0.5)
+        && pylons.is_empty()
+        && active + 3 <= director.max_active
+    {
+        // Construction: a pylon kit at a site, two walkers to put it up.
+        let s = sites[director.rng.below(sites.len())];
+        let site = zone.on_ground(s[0], s[1]);
+        let run = director.rng.range(150.0, 260.0);
+        let duration = super::pylon::BUILD_TIME + run + super::pylon::PACK_TIME;
+        info!("director: construction at {s:?}");
+        super::pylon::spawn_pylon(&mut commands, site, duration, exit);
+        super::pylon::send_builders(&mut commands, &zone, site, duration, exit);
     } else if !sites.is_empty() {
         let s = sites[director.rng.below(sites.len())];
         info!("director: walker to work site {s:?}");
