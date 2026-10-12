@@ -94,6 +94,7 @@ impl Plugin for AudioPlugin {
                     gadget_loops,
                     door_sounds,
                     walker_steps,
+                    pylon_sounds,
                     radio_sounds,
                     drop_sounds,
                     indoor_ambience,
@@ -1018,5 +1019,34 @@ fn drop_sounds(
         };
         let db = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
         play(&mut commands, &bank, &mut rng.0, set, Some(i.at), db, 0.1);
+    }
+}
+
+/// A pylon going up or coming down: servos and clanks from its mast.
+fn pylon_sounds(
+    mut commands: Commands,
+    pylons: Query<(&crate::robots::pylon::Pylon, &GlobalTransform)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
+) {
+    use crate::robots::pylon::PylonState;
+    *timer -= time.delta_secs();
+    if *timer > 0.0 {
+        return;
+    }
+    *timer = 0.9;
+    for (p, gt) in &pylons {
+        if !matches!(p.state, PylonState::Building | PylonState::Packing) {
+            continue;
+        }
+        let at = gt.translation() + Vec3::Y * (1.2 + crate::robots::pylon::MAST * p.progress);
+        let set = if rng.0.f32() < 0.6 {
+            "machines/servo"
+        } else {
+            "machines/clank"
+        };
+        play(&mut commands, &bank, &mut rng.0, set, Some(at), -4.0, 0.2);
     }
 }

@@ -29,6 +29,7 @@ impl Plugin for RobotVisualsPlugin {
                 pose_leg_visuals,
                 dim_dead_eyes,
                 dress_pylon_masts,
+                pylon_work_lights,
             ),
         );
     }
@@ -721,5 +722,52 @@ fn dress_pylon_masts(
             Mesh3d(meshes.add(Cuboid::new(0.25, 1.0, 0.25))),
             MeshMaterial3d(m.dark.clone()),
         ));
+    }
+}
+
+/// A pylon going up (or coming down) throws a flickering work light from
+/// the top of its mast, like welding.
+#[derive(Component)]
+struct WorkLight;
+
+fn pylon_work_lights(
+    mut commands: Commands,
+    pylons: Query<(Entity, &super::pylon::Pylon, &super::Robot, Option<&Children>)>,
+    mut lights: Query<(&mut PointLight, &mut Transform), With<WorkLight>>,
+    time: Res<Time>,
+) {
+    use super::pylon::PylonState;
+    let t = time.elapsed_secs();
+    for (e, p, robot, children) in &pylons {
+        let working = !robot.wrecked
+            && matches!(p.state, PylonState::Building | PylonState::Packing);
+        let existing = children.and_then(|c| c.iter().find(|c| lights.contains(*c)));
+        match (working, existing) {
+            (true, None) => {
+                commands.spawn((
+                    WorkLight,
+                    PointLight {
+                        color: Color::srgb(0.75, 0.85, 1.0),
+                        intensity: 0.0,
+                        range: 10.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::default(),
+                    ChildOf(e),
+                ));
+            }
+            (true, Some(l)) => {
+                if let Ok((mut light, mut lt)) = lights.get_mut(l) {
+                    // Bursts of arc light, never steady.
+                    let n = (t * 23.0 + e.index_u32() as f32).sin() * (t * 7.3).sin();
+                    light.intensity = if n > 0.2 { 60_000.0 * n } else { 0.0 };
+                    lt.translation = Vec3::Y
+                        * (1.25 + super::pylon::MAST * p.progress.max(0.01) + 0.1);
+                }
+            }
+            (false, Some(l)) => commands.entity(l).despawn(),
+            (false, None) => {}
+        }
     }
 }
