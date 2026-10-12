@@ -33,18 +33,7 @@ fn main() -> AppExit {
     let exit = extraction::run(opts);
     // The truck drove to another valley: open the game again there.
     if let Some(map) = extraction::take_restart() {
-        let mut args: Vec<String> = Vec::new();
-        let mut it = std::env::args().skip(1);
-        while let Some(a) = it.next() {
-            match a.as_str() {
-                "--map" => {
-                    it.next();
-                }
-                "--new-game" => {}
-                _ => args.push(a),
-            }
-        }
-        args.extend(["--map".to_owned(), map]);
+        let args = extraction::relaunch_args(std::env::args().skip(1), &map);
         if let Ok(exe) = std::env::current_exe() {
             if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {
                 eprintln!("couldn't reopen the game: {e}");

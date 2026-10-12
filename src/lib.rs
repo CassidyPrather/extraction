@@ -162,6 +162,44 @@ pub fn take_restart() -> Option<String> {
     RESTART_INTO.lock().unwrap().take()
 }
 
+/// The arguments to open the game again in `map`: this session's, less any
+/// `--map` (and `--new-game`, which would throw the career away).
+pub fn relaunch_args(args: impl IntoIterator<Item = String>, map: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--map" => {
+                it.next();
+            }
+            "--new-game" => {}
+            _ => out.push(a),
+        }
+    }
+    out.extend(["--map".to_owned(), map.to_owned()]);
+    out
+}
+
+#[cfg(test)]
+mod relaunch_tests {
+    #[test]
+    fn relaunching_keeps_the_options_and_swaps_the_valley() {
+        let args = [
+            "--flat",
+            "--map",
+            "marrow_creek",
+            "--new-game",
+            "--vignette",
+            "0.3",
+        ]
+        .map(String::from);
+        assert_eq!(
+            super::relaunch_args(args, "kettle_pass"),
+            ["--flat", "--vignette", "0.3", "--map", "kettle_pass"].map(String::from)
+        );
+    }
+}
+
 /// The headless app, ready to run or to step by hand in tests.
 pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     use bevy::app::ScheduleRunnerPlugin;
