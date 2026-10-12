@@ -67,15 +67,32 @@ without them (procedural stand-ins). Every asset is credited in
 ### Layout
 
 - `crates/extraction_core` — engine-free rules: items, inventory, firearm
-  mechanisms, loot, maps and terrain, the cooking graph. Fast unit tests.
+  mechanisms, loot, maps and terrain, navigation, anomaly layouts, the
+  bench's recipes, the save format, the cooking graph. Fast unit tests.
 - `src/` — the Bevy game. `GamePlugin` is the logic and runs headless;
   `ClientPlugin` is everything you see and touch.
-  - `rig/` — the head-and-two-hands abstraction and its drivers (flat, XR, bot)
+  - `rig/` — the head-and-two-hands abstraction, its drivers (flat, XR,
+    bot) and comfort settings
   - `interact/` — grabbing, holding, sockets, the body rig and backpack
   - `weapons/` — guns, ballistics, flat-mode handling macros
-  - `world/` — map loading, terrain, sky and fog, water, forests
+  - `gadgets/` — mounts and attachments, power cells, optics, EMP, cover,
+    the cloak
+  - `robots/` — drones, walkers, grapplers, the dirigible, the convoy's
+    collector, perception and the director
+  - `anomaly/` — anomalies, artifacts and attention, offerings
+  - `raid/` — the truck, the raid clock and the Surge, the bench, the camp
+    kitchen
+  - `persist.rs` — saving and loading the Zone and the stash
+  - `world/` — map loading, terrain, sky, fog, weather and rain, water,
+    forests, buildings
+  - `render/` — materials, height fog, in-world text panels, props
+  - `models.rs` — glTF models built by the Blender scripts in `art/`
   - `bot/` — bot brains and the scenario tests
-- `assets/` — data (`data/items.ron`, `data/loot.ron`), maps, shaders.
+- `assets/` — data (`data/items.ron`, `data/loot.ron`), maps, shaders,
+  models, sounds.
+- `art/` — Blender Python scripts for every model (`python3 art/build.py`).
+- `scripts/` — asset fetching, sound synthesis, map previews and the
+  hand-drawn map, screenshots.
 
 ## License
 

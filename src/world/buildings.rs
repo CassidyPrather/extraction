@@ -1300,19 +1300,32 @@ pub fn building_visuals(
         let Some(geo) = prefab(&b.prefab) else {
             continue;
         };
+        // One mesh per material per building: a house is a handful of
+        // draws, not fifty.
+        let mut merged: Vec<(Mat, Mesh)> = Vec::new();
         for piece in &geo.pieces {
-            let mesh = match piece.shape {
+            let mut mesh = match piece.shape {
                 Shape::Box(s) => crate::render::materials::metric_box(s),
                 Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
                 Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
             };
-            let mat = library.get(piece.mat, &server, &mut materials);
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(mat),
-                piece.at,
-                ChildOf(e),
-            ));
+            let _ = mesh.generate_tangents();
+            let mesh = mesh.transformed_by(piece.at);
+            let fits = match merged.iter_mut().find(|(m, _)| *m == piece.mat) {
+                Some((_, into)) => into.merge(&mesh).is_ok(),
+                None => {
+                    merged.push((piece.mat, mesh.clone()));
+                    true
+                }
+            };
+            if !fits {
+                let mat = library.get(piece.mat, &server, &mut materials);
+                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
+            }
+        }
+        for (m, mesh) in merged {
+            let mat = library.get(m, &server, &mut materials);
+            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
         }
         for l in &geo.lights {
             commands.spawn((

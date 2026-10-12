@@ -312,12 +312,20 @@ catch for agent-written code. Revisit if that research changes.
 
 ## Roadmap
 
-1. **Foundation** — workspace, CI, rig + drivers, headless runner, screenshots.
-2. **World and core loop** — map, terrain, fog and lighting, locomotion,
-   grabbing, backpack and pockets, weight, raid lifecycle, truck.
-3. **Weapons** — the four guns, ballistics, durability, maintenance, rails.
-4. **Robots** — drone, orb walker, grappler, dirigible; parts damage, IK, jobs.
-5. **Economy and systems** — sinks, artifacts and attention, gadgets, food,
-   death convoy, the Surge.
-6. **Polish** — art pass, recorded audio, simulation tooling, VR comfort.
+1. **Foundation** — done: workspace, CI, rig + drivers, headless runner,
+   screenshots, client smoke test.
+2. **World and core loop** — done: map, terrain, layered fog and weather,
+   locomotion, grabbing, backpack and pockets, weight, raid lifecycle,
+   truck, saves.
+3. **Weapons** — done: the four guns (modelled), ballistics, durability,
+   maintenance, attachments and optics.
+4. **Robots** — done: drone, walker, grappler, dirigible, collector; parts
+   damage, IK, jobs (survey, watch, response, logistics, collection).
+5. **Economy and systems** — done: sinks (bench, offerings, convoy, fuel,
+   decay of cells), artifacts and attention, anomalies, gadgets, cooking,
+   the Surge.
+6. **Polish** — in progress: models for the truck, airship and gadgets;
+   map simulation telemetry; performance for VR (forest chunking done);
+   more maps. Still open: a lead-lined case, the camera drone and climbing
+   kits, a second map, playtesting in a headset.
 7. *(stop)* — VRChat port and multiplayer are later phases.
