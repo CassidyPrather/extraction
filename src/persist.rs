@@ -283,7 +283,7 @@ fn seat_magazine(world: &mut World, gun_e: Entity, mag_e: Entity) {
 }
 
 /// Puts an item into the first free mount of `owner` that takes it.
-fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
+pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
     let catalog = world.resource::<Catalog>().clone();
     let Some(mount) = world
         .get::<Item>(item)

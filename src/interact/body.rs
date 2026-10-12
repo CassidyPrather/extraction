@@ -328,16 +328,20 @@ fn sync_backpack_visibility(
 /// featherstone takes some off).
 fn carried_mass(
     mut players: Query<(Entity, &mut Body)>,
-    carried: Query<(&Item, &crate::anomaly::artifacts::CarriedBy)>,
+    carried: Query<(
+        &Item,
+        &crate::anomaly::artifacts::CarriedBy,
+        Has<crate::anomaly::artifacts::Shielded>,
+    )>,
     bags: Query<&Backpack>,
     catalog: Res<Catalog>,
 ) {
     for (player, mut body) in &mut players {
         let mut kg = 0.0;
-        for (item, by) in &carried {
+        for (item, by, shielded) in &carried {
             if by.0 == player {
                 let def = catalog.get(item.kind());
-                kg += def.mass - def.lift_kg;
+                kg += def.mass - if shielded { 0.0 } else { def.lift_kg };
             }
         }
         for bag in &bags {

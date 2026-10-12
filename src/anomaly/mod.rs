@@ -430,7 +430,7 @@ fn snares(
 /// Attention per player: the artifacts they carry, and the noise they make.
 fn measure_attention(
     mut players: Query<(Entity, &mut Attention)>,
-    carried: Query<(&Item, &artifacts::CarriedBy)>,
+    carried: Query<(&Item, &artifacts::CarriedBy), Without<artifacts::Shielded>>,
     catalog: Res<Catalog>,
     mut noises: MessageReader<Noise>,
     time: Res<Time>,
@@ -634,6 +634,62 @@ mod tests {
             highest = highest.max(y);
         }
         assert!(highest > 1.3, "the tin rose (to {highest:.2} m)");
+    }
+
+    #[test]
+    fn a_lead_case_hides_an_artifact() {
+        let mut app = app(true);
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .unwrap();
+        let case = drop_item(&mut app, "lead_case", Vec3::ZERO);
+        let stone = drop_item(&mut app, "art_featherstone", Vec3::ZERO);
+        app.update();
+        crate::persist::seat_in_mount(app.world_mut(), case, stone);
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(case);
+        app.world_mut().entity_mut(case).insert((
+            crate::interact::body::InBackpack { bag: pack },
+            ChildOf(pack),
+            RigidBodyDisabled,
+            ColliderDisabled,
+        ));
+        app.world_mut().resource_mut::<Raid>().phase = crate::raid::Phase::Out;
+        for _ in 0..5 {
+            app.update();
+        }
+        assert!(
+            app.world().get::<artifacts::Shielded>(stone).is_some(),
+            "the stone is sealed in"
+        );
+        assert!(
+            app.world().get::<artifacts::CarriedBy>(stone).is_some(),
+            "and still carried"
+        );
+        let att = app.world().get::<Attention>(player).unwrap().clone();
+        assert!(
+            att.carried.abs() < 1e-6,
+            "no attention, got {}",
+            att.carried
+        );
+        let kg = app.world().get::<Body>(player).unwrap().carried_kg;
+        assert!(
+            kg > 2.5,
+            "the case is heavy and the stone lifts nothing ({kg})"
+        );
     }
 
     #[test]

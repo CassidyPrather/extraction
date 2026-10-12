@@ -25,6 +25,11 @@ use crate::player::Player;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CarriedBy(pub Entity);
 
+/// An artifact sealed in a lead-lined case: it draws no attention, and
+/// does nothing for whoever carries it (no aegis, no hearth, no lift).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Shielded;
+
 /// Artifact effects active on a player.
 #[derive(Component, Debug, Default, Clone)]
 pub struct ArtifactEffects {
@@ -49,7 +54,7 @@ impl Plugin for ArtifactPlugin {
         })
         .add_systems(
             FixedUpdate,
-            (track_carriers, artifact_effects, featherstones)
+            (track_carriers, shielding, artifact_effects, featherstones)
                 .chain()
                 .before(crate::interact::body::CarriedMassSystems),
         );
@@ -127,9 +132,28 @@ pub fn track_carriers(
     }
 }
 
+/// Marks what sits in a lead-lined case.
+fn shielding(
+    mut commands: Commands,
+    items: Query<(Entity, Option<&InSocket>, Has<Shielded>), With<Item>>,
+    socket_owners: Query<&SocketOwner>,
+    cases: Query<(), With<crate::gadgets::LeadCase>>,
+) {
+    for (e, sock, shielded) in &items {
+        let sealed = sock
+            .and_then(|s| socket_owners.get(s.socket).ok())
+            .is_some_and(|o| cases.contains(o.0));
+        if sealed && !shielded {
+            commands.entity(e).insert(Shielded);
+        } else if !sealed && shielded {
+            commands.entity(e).remove::<Shielded>();
+        }
+    }
+}
+
 fn artifact_effects(
     mut players: Query<(Entity, &mut ArtifactEffects)>,
-    carried: Query<(Entity, &Item, &CarriedBy, Option<&Held>)>,
+    carried: Query<(Entity, &Item, &CarriedBy, Option<&Held>), Without<Shielded>>,
     catalog: Res<Catalog>,
     time: Res<Time>,
 ) {

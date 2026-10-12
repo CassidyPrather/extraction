@@ -129,6 +129,10 @@ fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
     v
 }
 
+/// A lead-lined case: an artifact seated in it is [`Shielded`](crate::anomaly::artifacts::Shielded).
+#[derive(Component, Debug)]
+pub struct LeadCase;
+
 fn spawn_mount(
     commands: &mut Commands,
     owner: Entity,
@@ -207,6 +211,16 @@ fn item_mounts(
                 _ => (6.0, DeviceKind::Light),
             };
             commands.entity(e).insert(Device { watts, kind });
+        }
+        "lead_case" => {
+            spawn_mount(
+                &mut commands,
+                e,
+                Mount::Cradle,
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                Transform::IDENTITY,
+            );
+            commands.entity(e).insert(LeadCase);
         }
         "artifact_adapter" => spawn_mount(
             &mut commands,

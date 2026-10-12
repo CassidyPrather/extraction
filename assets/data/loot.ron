@@ -87,6 +87,7 @@
             Item(id: "cloak_generator", weight: 0.1),
             Item(id: "zipline_kit", weight: 0.2),
             Item(id: "artifact_adapter", weight: 0.15),
+            Item(id: "lead_case", weight: 0.3),
         ]),
         "house": (rolls: (1, 3), entries: [
             Table(name: "kitchen", weight: 4.0),
