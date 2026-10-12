@@ -70,7 +70,7 @@ fn hear_reports(
     }
 }
 
-fn gate(zone: &Zone) -> Vec3 {
+pub fn gate(zone: &Zone) -> Vec3 {
     let m = zone
         .marker(&MarkerKind::RobotGate)
         .map(|m| m.at)

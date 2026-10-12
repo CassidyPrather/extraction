@@ -141,6 +141,19 @@ pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
 }
 
 pub fn spawn_walker(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> Entity {
+    spawn_walker_with(commands, zone, at, job, true, 130.0)
+}
+
+/// A walker body: `armed` gives it the turret; `core_hp` is how much it
+/// takes to bring down (the convoy collector is sturdier and unarmed).
+pub fn spawn_walker_with(
+    commands: &mut Commands,
+    zone: &Zone,
+    at: Vec3,
+    job: Job,
+    armed: bool,
+    core_hp: f32,
+) -> Entity {
     let ground = zone.ground(at.x, at.z);
     let pos = Vec3::new(at.x, ground + BODY_HEIGHT, at.z);
     let feet = std::array::from_fn(|i| {
@@ -194,7 +207,7 @@ pub fn spawn_walker(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) ->
             part_bundle(
                 robot,
                 PartRole::Core,
-                130.0,
+                core_hp,
                 Collider::sphere(0.4),
                 Transform::IDENTITY,
             ),
@@ -209,17 +222,19 @@ pub fn spawn_walker(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) ->
                 Transform::from_xyz(0.0, 0.12, -0.36),
             ),
         ));
-        c.spawn((
-            Name::new("Walker turret"),
-            WalkerTurret,
-            part_bundle(
-                robot,
-                PartRole::Weapon,
-                45.0,
-                Collider::cuboid(0.16, 0.12, 0.4),
-                Transform::from_xyz(0.0, 0.46, 0.0),
-            ),
-        ));
+        if armed {
+            c.spawn((
+                Name::new("Walker turret"),
+                WalkerTurret,
+                part_bundle(
+                    robot,
+                    PartRole::Weapon,
+                    45.0,
+                    Collider::cuboid(0.16, 0.12, 0.4),
+                    Transform::from_xyz(0.0, 0.46, 0.0),
+                ),
+            ));
+        }
         for i in 0..LEGS {
             c.spawn((
                 Name::new(format!("Walker leg {i}")),
@@ -276,6 +291,7 @@ fn walker_brain(
     targets: Query<&GlobalTransform>,
     nav: Res<Nav>,
     time: Res<Time>,
+    mut convoy: MessageWriter<super::collector::ConvoyEvent>,
 ) {
     let dt = time.delta_secs();
     for (e, mut w, mut brain, job, aware, t, robot) in &mut walkers {
@@ -285,12 +301,16 @@ fn walker_brain(
             continue;
         }
         let pos = t.translation;
-        if aware.can_see_target
+        // The collector has one job and is not to be distracted from it.
+        let single_minded = job.kind == super::JobKind::Collect;
+        if !single_minded
+            && aware.can_see_target
             && aware.suspicion > 0.55
             && !matches!(*brain, Brain::Engage | Brain::Down)
         {
             *brain = Brain::Engage;
-        } else if aware.suspicion > 0.35
+        } else if !single_minded
+            && aware.suspicion > 0.35
             && matches!(*brain, Brain::Transit { .. } | Brain::Working { .. })
         {
             if let Some(at) = aware.last_known {
@@ -311,6 +331,9 @@ fn walker_brain(
             Brain::Working { left, .. } => {
                 *left -= dt;
                 if *left <= 0.0 {
+                    if single_minded {
+                        convoy.write(super::collector::ConvoyEvent::Loaded { robot: e });
+                    }
                     *brain = Brain::Leave { to: job.exit };
                 }
                 None
@@ -349,8 +372,18 @@ fn walker_brain(
             }
             Brain::Leave { to } => {
                 let to = *to;
-                if Vec2::new(pos.x - to.x, pos.z - to.z).length() < 5.0 {
-                    commands.entity(e).despawn();
+                // The Gate itself is blocked on the nav grid, so "there" is
+                // close, or at the end of the path to the nearest open cell.
+                let d = Vec2::new(pos.x - to.x, pos.z - to.z).length();
+                let arrived = d < 5.0 || (d < 14.0 && w.goal == Some(to) && w.path.is_empty());
+                if arrived {
+                    if single_minded {
+                        // The convoy system records what it carried out, then
+                        // despawns it.
+                        convoy.write(super::collector::ConvoyEvent::Delivered { robot: e });
+                    } else {
+                        commands.entity(e).despawn();
+                    }
                     continue;
                 }
                 Some(to)

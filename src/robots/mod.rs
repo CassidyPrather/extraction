@@ -8,6 +8,7 @@
 //! their current **job**, and arrive and leave diegetically through the
 //! Gate (see [`director`]).
 
+pub mod collector;
 pub mod director;
 pub mod drone;
 pub mod visuals;
@@ -136,6 +137,8 @@ pub enum JobKind {
     Response,
     /// Loiter on a route between points.
     Watch,
+    /// The memorial convoy: fetch a body (remains) and take it out.
+    Collect,
 }
 
 pub struct RobotsPlugin;
@@ -148,6 +151,7 @@ impl Plugin for RobotsPlugin {
                 drone::DronePlugin,
                 walker::WalkerPlugin,
                 director::DirectorPlugin,
+                collector::CollectorPlugin,
             ))
             .add_systems(
                 FixedUpdate,

@@ -2,6 +2,7 @@
 
 pub mod fog;
 pub mod materials;
+pub mod memorial;
 pub mod props;
 pub mod terrain_material;
 pub mod water_material;
@@ -22,6 +23,7 @@ impl Plugin for RenderPlugin {
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
             fog::HeightFogPlugin,
+            memorial::MemorialBoardPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

@@ -23,7 +23,7 @@ use crate::world::{Layer, Zone};
 /// (forward is -Z).
 const BED_MIN: Vec3 = Vec3::new(-1.1, 0.9, -1.8);
 const BED_MAX: Vec3 = Vec3::new(1.1, 3.1, 1.8);
-const FLOOR: f32 = 1.1;
+pub const FLOOR: f32 = 1.1;
 
 #[derive(Component, Debug)]
 pub struct Truck {
