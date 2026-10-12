@@ -244,5 +244,31 @@ mod client_tests {
         for _ in 0..20 {
             app.update();
         }
+        // A rough census of what the renderer has to deal with.
+        let w = app.world_mut();
+        let meshes = w.query::<&Mesh3d>().iter(w).count();
+        let points = w.query::<&PointLight>().iter(w).count();
+        let spots = w.query::<&SpotLight>().iter(w).count();
+        let entities = w.entities().len();
+        eprintln!(
+            "census: {entities} entities, {meshes} meshes, {points} point lights, {spots} spot lights"
+        );
+        // Meshes by their top-level ancestor's name.
+        let mut by: std::collections::HashMap<String, usize> = default();
+        let tops: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
+        for e in tops {
+            let mut cur = e;
+            while let Some(p) = w.get::<ChildOf>(cur) {
+                cur = p.parent();
+            }
+            let name = w
+                .get::<Name>(cur)
+                .map(|n| n.as_str().split(' ').next().unwrap_or("").to_string())
+                .unwrap_or_else(|| "(unnamed)".into());
+            *by.entry(name).or_default() += 1;
+        }
+        let mut v: Vec<_> = by.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1));
+        eprintln!("census by root: {:?}", &v[..v.len().min(12)]);
     }
 }

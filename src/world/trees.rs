@@ -20,7 +20,8 @@ pub struct TreesPlugin;
 
 impl Plugin for TreesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, spawn_forests);
+        app.add_plugins(MaterialPlugin::<FarCrownMaterial>::default())
+            .add_systems(PostUpdate, (spawn_forests, stream_near_detail).chain());
     }
 }
 
@@ -139,22 +140,33 @@ pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
     );
 }
 
-/// Client: tree meshes onto the logic trees. Near trees wear alpha-tested
-/// foliage cards around a shrunken solid core; far ones swap to the solid
-/// crown alone.
+/// Client: how the forest is drawn, built for thousands of trees at VR
+/// frame rates.
+///
+/// - Trunks and the far (solid) crowns are merged into one mesh per
+///   [`CHUNK`]-metre square of map (per bark material), so the whole
+///   forest is a few hundred draws and entities instead of tens of
+///   thousands. The far crowns' material dissolves them near the camera
+///   (`shaders/near_fade.wgsl`), where the detailed ones take over.
+/// - Near detail — the alpha-tested foliage cards, and the spruces' dark
+///   core — is streamed: spawned on trees within [`NEAR_SPAWN`] of the
+///   camera and dropped again past [`NEAR_DROP`]. Bevy's visibility range
+///   cross-fades them against the far crowns between 62 and 74 m.
 fn spawn_forests(
     mut commands: Commands,
-    trees: Query<(Entity, &Tree), Added<Tree>>,
+    trees: Query<(Entity, &Tree, &Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut fade_materials: ResMut<Assets<FarCrownMaterial>>,
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
-    mut cache: Local<Option<TreeAssets>>,
+    mut done: Local<bool>,
 ) {
-    if trees.is_empty() {
+    if *done || trees.is_empty() {
         return;
     }
-    let assets = cache.get_or_insert_with(|| {
+    *done = true;
+    let assets = {
         use crate::render::materials::Mat;
         let foliage_dir =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/textures/foliage");
@@ -164,14 +176,6 @@ fn spawn_forests(
             base_color: Color::WHITE,
             perceptual_roughness: 0.95,
             reflectance: 0.2,
-            ..default()
-        });
-        let foliage = materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 0.85,
-            reflectance: 0.25,
-            double_sided: true,
-            cull_mode: None,
             ..default()
         });
         let core = materials.add(StandardMaterial {
@@ -250,81 +254,239 @@ fn spawn_forests(
                 handles.insert(
                     (s, v),
                     VariantAssets {
-                        trunk: meshes.add(m.trunk),
+                        crown: m.crown.as_ref().map(|c| meshes.add(c.clone())),
+                        trunk_cpu: m.trunk,
+                        crown_cpu: m.crown,
                         bark: b.clone(),
-                        crown: m.crown.map(|c| meshes.add(c)),
                         cards: m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat)),
                     },
                 );
             }
         }
         TreeAssets {
-            foliage,
+            foliage: fade_materials.add(FarCrownMaterial {
+                base: StandardMaterial {
+                    base_color: Color::WHITE,
+                    perceptual_roughness: 0.85,
+                    reflectance: 0.25,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                },
+                extension: NearFade {
+                    fade: Vec4::new(62.0, 74.0, 0.0, 0.0),
+                },
+            }),
             core,
             handles,
         }
-    });
-    // Cards out to ~70 m, then the solid crowns take over.
-    let near = bevy::camera::visibility::VisibilityRange {
+    };
+    // Group trees into chunks; merge each chunk's trunks (per bark) and crowns.
+    let mut chunks: std::collections::HashMap<(i32, i32), Vec<(Entity, Tree, Transform)>> =
+        std::collections::HashMap::new();
+    for (e, tree, t) in &trees {
+        let key = chunk_of(t.translation);
+        chunks.entry(key).or_default().push((e, *tree, *t));
+    }
+    let mut grid = ForestGrid::default();
+    let mut chunk_count = 0;
+    for (key, members) in &chunks {
+        let mut trunks: Vec<(Handle<StandardMaterial>, Mesh)> = Vec::new();
+        let mut crowns: Option<Mesh> = None;
+        for (e, tree, t) in members {
+            let v = &assets.handles[&(tree.species, tree.variant)];
+            let trunk = v.trunk_cpu.clone().transformed_by(*t);
+            match trunks.iter_mut().find(|(m, _)| *m == v.bark) {
+                Some((_, mesh)) => {
+                    let _ = mesh.merge(&trunk);
+                }
+                None => trunks.push((v.bark.clone(), trunk)),
+            }
+            if let Some(c) = &v.crown_cpu {
+                let c = c.clone().transformed_by(*t);
+                match &mut crowns {
+                    Some(m) => {
+                        let _ = m.merge(&c);
+                    }
+                    None => crowns = Some(c),
+                }
+            }
+            grid.cells
+                .entry(*key)
+                .or_default()
+                .push((*e, *tree, t.translation));
+        }
+        let parent = commands
+            .spawn((
+                Name::new("Forest chunk"),
+                Transform::IDENTITY,
+                Visibility::default(),
+            ))
+            .id();
+        for (bark, mesh) in trunks {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(bark),
+                ChildOf(parent),
+            ));
+        }
+        if let Some(c) = crowns {
+            commands.spawn((
+                Mesh3d(meshes.add(c)),
+                MeshMaterial3d(assets.foliage.clone()),
+                bevy::light::NotShadowCaster,
+                ChildOf(parent),
+            ));
+        }
+        chunk_count += 1;
+    }
+    info!(
+        "forest: {} trees in {chunk_count} chunks",
+        trees.iter().count()
+    );
+    commands.insert_resource(grid);
+    commands.insert_resource(ForestAssets(assets));
+}
+
+/// Chunk size for merged forest meshes, metres.
+pub const CHUNK: f32 = 48.0;
+/// Near detail appears within this distance of the camera...
+pub const NEAR_SPAWN: f32 = 80.0;
+/// ...and is dropped beyond this one.
+pub const NEAR_DROP: f32 = 95.0;
+
+fn chunk_of(p: Vec3) -> (i32, i32) {
+    ((p.x / CHUNK).floor() as i32, (p.z / CHUNK).floor() as i32)
+}
+
+/// Trees by chunk, for streaming near detail.
+#[derive(Resource, Default)]
+struct ForestGrid {
+    cells: std::collections::HashMap<(i32, i32), Vec<(Entity, Tree, Vec3)>>,
+}
+
+#[derive(Resource)]
+struct ForestAssets(TreeAssets);
+
+/// On a tree whose near detail is spawned: the detail entities.
+#[derive(Component)]
+struct NearDetail(Vec<Entity>);
+
+/// Spawns and drops foliage cards round the camera.
+fn stream_near_detail(
+    mut commands: Commands,
+    grid: Option<Res<ForestGrid>>,
+    assets: Option<Res<ForestAssets>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    detailed: Query<(Entity, &NearDetail, &GlobalTransform)>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
+) {
+    let (Some(grid), Some(assets)) = (grid, assets) else {
+        return;
+    };
+    *timer -= time.delta_secs();
+    if *timer > 0.0 {
+        return;
+    }
+    *timer = 0.25;
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
+    if eyes.is_empty() {
+        return;
+    }
+    let near = |p: Vec3, r: f32| eyes.iter().any(|e| e.distance(p) < r);
+    // Drop what's now far.
+    for (e, detail, gt) in &detailed {
+        if !near(gt.translation(), NEAR_DROP) {
+            for c in &detail.0 {
+                commands.entity(*c).despawn();
+            }
+            commands.entity(e).remove::<NearDetail>();
+        }
+    }
+    // Add what's now near.
+    let assets = &assets.0;
+    let reach = (NEAR_SPAWN / CHUNK).ceil() as i32 + 1;
+    let fade = bevy::camera::visibility::VisibilityRange {
         start_margin: 0.0..0.0,
         end_margin: 62.0..74.0,
         use_aabb: false,
     };
-    let far = bevy::camera::visibility::VisibilityRange {
-        start_margin: 62.0..74.0,
-        end_margin: 5000.0..5001.0,
-        use_aabb: false,
-    };
-    for (e, tree) in &trees {
-        let v = &assets.handles[&(tree.species, tree.variant)];
-        commands
-            .entity(e)
-            .insert((Mesh3d(v.trunk.clone()), MeshMaterial3d(v.bark.clone())));
-        match (&v.crown, &v.cards) {
-            (Some(crown), Some((cards, card_mat))) => {
-                commands.entity(e).with_children(|c| {
-                    c.spawn((
-                        Mesh3d(cards.clone()),
-                        MeshMaterial3d(card_mat.clone()),
-                        near.clone(),
-                    ));
-                    // Spruces need a dark core to read as dense; pine clusters
-                    // and birches are airy enough without one.
-                    if tree.species == TreeSpecies::Spruce {
-                        c.spawn((
-                            Mesh3d(crown.clone()),
-                            MeshMaterial3d(assets.core.clone()),
-                            Transform::from_scale(Vec3::new(0.62, 0.96, 0.62)),
-                            near.clone(),
-                        ));
+    let mut seen = std::collections::HashSet::new();
+    for eye in &eyes {
+        let (cx, cz) = chunk_of(*eye);
+        for dz in -reach..=reach {
+            for dx in -reach..=reach {
+                let Some(cell) = grid.cells.get(&(cx + dx, cz + dz)) else {
+                    continue;
+                };
+                for (e, tree, p) in cell {
+                    if !seen.insert(*e) || detailed.contains(*e) || !near(*p, NEAR_SPAWN) {
+                        continue;
                     }
-                    c.spawn((
-                        Mesh3d(crown.clone()),
-                        MeshMaterial3d(assets.foliage.clone()),
-                        far.clone(),
-                    ));
-                });
+                    let v = &assets.handles[&(tree.species, tree.variant)];
+                    let mut kids = Vec::new();
+                    if let Some((cards, card_mat)) = &v.cards {
+                        kids.push(
+                            commands
+                                .spawn((
+                                    Mesh3d(cards.clone()),
+                                    MeshMaterial3d(card_mat.clone()),
+                                    fade.clone(),
+                                    ChildOf(*e),
+                                ))
+                                .id(),
+                        );
+                        // Spruces need a dark core to read as dense.
+                        if tree.species == TreeSpecies::Spruce {
+                            if let Some(crown) = &v.crown {
+                                kids.push(
+                                    commands
+                                        .spawn((
+                                            Mesh3d(crown.clone()),
+                                            MeshMaterial3d(assets.core.clone()),
+                                            Transform::from_scale(Vec3::new(0.62, 0.96, 0.62)),
+                                            fade.clone(),
+                                            ChildOf(*e),
+                                        ))
+                                        .id(),
+                                );
+                            }
+                        }
+                    }
+                    commands.entity(*e).insert(NearDetail(kids));
+                }
             }
-            (Some(crown), None) => {
-                commands.entity(e).with_child((
-                    Mesh3d(crown.clone()),
-                    MeshMaterial3d(assets.foliage.clone()),
-                ));
-            }
-            _ => {}
         }
     }
 }
 
+/// The far crowns' material: standard PBR that dissolves near the camera.
+pub type FarCrownMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, NearFade>;
+
+#[derive(Asset, bevy::render::render_resource::AsBindGroup, Reflect, Debug, Clone)]
+pub struct NearFade {
+    /// x..y: fully gone at x metres, fully there at y.
+    #[uniform(100)]
+    pub fade: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for NearFade {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "shaders/near_fade.wgsl".into()
+    }
+}
+
 struct VariantAssets {
-    trunk: Handle<Mesh>,
+    trunk_cpu: Mesh,
+    crown_cpu: Option<Mesh>,
     bark: Handle<StandardMaterial>,
     crown: Option<Handle<Mesh>>,
     cards: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
 }
 
 struct TreeAssets {
-    foliage: Handle<StandardMaterial>,
+    foliage: Handle<FarCrownMaterial>,
     core: Handle<StandardMaterial>,
     handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
 }
