@@ -1,5 +1,6 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod fog;
 pub mod materials;
 pub mod props;
 pub mod terrain_material;
@@ -20,6 +21,7 @@ impl Plugin for RenderPlugin {
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
+            fog::HeightFogPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
