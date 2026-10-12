@@ -27,6 +27,8 @@ impl Plugin for GadgetVisualsPlugin {
                 optic_zoom,
                 add_lenses,
                 lenses,
+                dress_cover,
+                cloak_bubbles,
             ),
         );
     }
@@ -532,5 +534,98 @@ fn lenses(
                 }
             }
         }
+    }
+}
+
+fn dress_cover(
+    mut commands: Commands,
+    walls: Query<Entity, Added<super::CoverWall>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut library: ResMut<crate::render::materials::MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    for e in &walls {
+        let plate = library.get(
+            crate::render::materials::Mat::PaintedMetal,
+            &server,
+            &mut materials,
+        );
+        let dark = library.get(
+            crate::render::materials::Mat::DarkMetal,
+            &server,
+            &mut materials,
+        );
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::new(
+                    1.2, 1.05, 0.05,
+                )))),
+                MeshMaterial3d(plate),
+            ));
+            // A vision slit and two legs behind.
+            c.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.25, 0.04, 0.06))),
+                MeshMaterial3d(dark.clone()),
+                Transform::from_xyz(0.0, 0.3, 0.0),
+            ));
+            for x in [-0.45, 0.45] {
+                c.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.03, 0.03, 0.7))),
+                    MeshMaterial3d(dark.clone()),
+                    Transform::from_xyz(x, -0.25, 0.3).with_rotation(Quat::from_rotation_x(0.6)),
+                ));
+            }
+        });
+    }
+}
+
+#[derive(Component)]
+struct Bubble;
+
+/// A faint, shimmering shell round a running cloak.
+fn cloak_bubbles(
+    mut commands: Commands,
+    cloaks: Res<super::Cloaks>,
+    mut bubbles: Query<(Entity, &mut Transform), With<Bubble>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut assets: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    time: Res<Time>,
+) {
+    let (mesh, mat) = assets
+        .get_or_insert_with(|| {
+            (
+                meshes.add(Sphere::new(1.0).mesh().ico(4).unwrap()),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.6, 0.75, 0.9, 0.06),
+                    emissive: LinearRgba::rgb(0.05, 0.08, 0.12),
+                    alpha_mode: AlphaMode::Blend,
+                    double_sided: true,
+                    cull_mode: None,
+                    perceptual_roughness: 0.1,
+                    ..default()
+                }),
+            )
+        })
+        .clone();
+    let mut existing: Vec<(Entity, Mut<Transform>)> = bubbles.iter_mut().collect();
+    let wobble = 1.0 + 0.01 * (time.elapsed_secs() * 7.0).sin();
+    for (i, (c, r)) in cloaks.0.iter().enumerate() {
+        let t = Transform::from_translation(*c).with_scale(Vec3::splat(r * wobble));
+        if let Some((_, et)) = existing.get_mut(i) {
+            **et = t;
+        } else {
+            commands.spawn((
+                Bubble,
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                t,
+                bevy::light::NotShadowCaster,
+            ));
+        }
+    }
+    for (e, _) in existing.into_iter().skip(cloaks.0.len()) {
+        commands.entity(e).despawn();
     }
 }

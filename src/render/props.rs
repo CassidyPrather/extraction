@@ -129,7 +129,11 @@ fn dress_truck(
     }
     for (e, p) in &pressables {
         match p {
-            Pressable::Door | Pressable::BenchSelect | Pressable::BenchRun | Pressable::Cook => {}
+            Pressable::Door
+            | Pressable::BenchSelect
+            | Pressable::BenchRun
+            | Pressable::Cook
+            | Pressable::FoldCover => {}
             Pressable::BellPull => {
                 let rope = mat(&mut materials, Color::srgb(0.55, 0.47, 0.32), 0.9, 0.0);
                 commands.entity(e).insert((

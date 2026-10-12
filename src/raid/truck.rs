@@ -52,6 +52,8 @@ pub enum Pressable {
     BenchRun,
     /// A camp kitchen station's tool or knob.
     Cook,
+    /// Fold a deployed cover back up into an item.
+    FoldCover,
 }
 
 /// The stash crate in the truck bed.

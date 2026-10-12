@@ -622,6 +622,27 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         }
     }
     let _ = player;
+    // Deployed cover is saved folded, where it stood.
+    let walls: Vec<Vec3> = world
+        .query_filtered::<&GlobalTransform, With<crate::gadgets::CoverWall>>()
+        .iter(world)
+        .map(|g| g.translation())
+        .collect();
+    for at in walls {
+        save.zone.items.push(PlacedItem {
+            at: at.to_array(),
+            rot: [0.0, 0.0, 0.0, 1.0],
+            item: SavedItem {
+                id: "deployable_cover".into(),
+                condition: 1.0,
+                rounds: 0,
+                charge_wh: 0.0,
+                local: [0.0; 3],
+                gun: None,
+                inserted: Vec::new(),
+            },
+        });
+    }
     save.zone.remains = remains.into_values().collect();
     save.loadout = loadout;
     save

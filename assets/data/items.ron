@@ -211,13 +211,13 @@
             tags: ["electronics", "polymer"],
         ),
         (
-            id: "cloak_generator", name: "Cloak generator",
+            id: "cloak_generator", dims: Some((0.25, 0.3, 0.25)), name: "Cloak generator",
             description: "Deploy it and robots stop seeing what's inside the bubble. Drinks power.",
             category: Gadget, size: Large, mass: 3.5, bulk: 6.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "deployable_cover", name: "Deployable cover",
+            id: "deployable_cover", dims: Some((0.6, 0.12, 0.5)), name: "Deployable cover",
             description: "A folding ballistic panel on legs.",
             category: Gadget, size: Large, mass: 6.0, bulk: 8.0,
             tags: ["metal"],

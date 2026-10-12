@@ -246,6 +246,7 @@ pub(crate) fn perceive(
     mut noises: MessageReader<Noise>,
     spatial: SpatialQuery,
     time: Res<Time>,
+    cloaks: Res<crate::gadgets::Cloaks>,
 ) {
     let dt = time.delta_secs();
     let noises: Vec<Noise> = noises.read().cloned().collect();
@@ -280,6 +281,10 @@ pub(crate) fn perceive(
         aware.can_see_target = false;
         if has_eyes {
             for (pe, pgt, _) in &players {
+                // Inside a running cloak, nothing sees you.
+                if cloaks.hides(pgt.translation()) {
+                    continue;
+                }
                 let head = pgt.translation() + Vec3::Y * 1.55;
                 let to = head - eye;
                 let dist = to.length();

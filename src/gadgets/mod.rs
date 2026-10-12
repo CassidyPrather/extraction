@@ -42,6 +42,8 @@ pub struct Device {
 pub enum DeviceKind {
     Light,
     Laser,
+    /// Set down and switched on, it hides everyone inside its bubble.
+    Cloak,
 }
 
 /// Switched on *and* has power this tick.
@@ -72,16 +74,41 @@ pub struct EmpBlast {
 pub const EMP_RADIUS: f32 = 9.0;
 pub const EMP_STUN: f32 = 12.0;
 
+/// Where running cloaks are this tick: (centre, radius).
+#[derive(Resource, Default, Debug)]
+pub struct Cloaks(pub Vec<(Vec3, f32)>);
+
+impl Cloaks {
+    pub fn hides(&self, p: Vec3) -> bool {
+        self.0.iter().any(|(c, r)| c.distance(p) < *r)
+    }
+}
+
+/// A deployed cover panel (a wall; fold it back up with a grab).
+#[derive(Component)]
+pub struct CoverWall;
+
+pub const CLOAK_RADIUS: f32 = 3.0;
+
 pub struct GadgetsPlugin;
 
 impl Plugin for GadgetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<EmpBlast>()
+            .init_resource::<Cloaks>()
             .add_observer(gun_mounts)
             .add_observer(item_mounts)
             .add_systems(
                 FixedUpdate,
-                (track_mounts, power_devices, arm_and_switch, fuses, recover)
+                (
+                    track_mounts,
+                    power_devices,
+                    arm_and_switch,
+                    fuses,
+                    recover,
+                    cloaks,
+                    covers,
+                )
                     .chain()
                     .after(crate::interact::InteractSystems::Follow),
             );
@@ -164,7 +191,7 @@ fn item_mounts(
             Transform::from_xyz(0.0, 0.006, 0.0),
             Transform::from_xyz(0.0, 0.016, 0.0),
         ),
-        "flashlight" | "weapon_light" | "laser_module" => {
+        "flashlight" | "weapon_light" | "laser_module" | "cloak_generator" => {
             let id = catalog.get(item.kind()).id.as_str();
             spawn_mount(
                 &mut commands,
@@ -173,14 +200,13 @@ fn item_mounts(
                 Transform::from_xyz(0.0, 0.0, 0.02),
                 Transform::IDENTITY,
             );
-            commands.entity(e).insert(Device {
-                watts: if id == "laser_module" { 0.6 } else { 6.0 },
-                kind: if id == "laser_module" {
-                    DeviceKind::Laser
-                } else {
-                    DeviceKind::Light
-                },
-            });
+            let (watts, kind) = match id {
+                "laser_module" => (0.6, DeviceKind::Laser),
+                // A cell runs it for about forty minutes.
+                "cloak_generator" => (15.0, DeviceKind::Cloak),
+                _ => (6.0, DeviceKind::Light),
+            };
+            commands.entity(e).insert(Device { watts, kind });
         }
         "artifact_adapter" => spawn_mount(
             &mut commands,
@@ -302,6 +328,7 @@ fn arm_and_switch(
     guns: Query<(), With<Gun>>,
     mounted: Query<(Entity, &MountedOn, Has<LightOn>), With<Device>>,
     armed: Query<(), With<Armed>>,
+    on: Query<(), With<LightOn>>,
     catalog: Res<Catalog>,
     mut raid: ResMut<crate::raid::Raid>,
 ) {
@@ -334,11 +361,109 @@ fn arm_and_switch(
                 commands.entity(u.item).insert(Armed::Fuse(3.5));
                 raid.say("You pull the pin. Three. Two...");
             }
+            "cloak_generator" => {
+                if on.contains(u.item) {
+                    commands.entity(u.item).remove::<LightOn>();
+                } else {
+                    commands.entity(u.item).insert(LightOn);
+                    raid.say("The generator whines up. Set it down and stay close.");
+                }
+            }
             "emp_trap" => {
                 commands.entity(u.item).insert(Armed::Trap { radius: 4.0 });
                 raid.say("The trap clicks and starts to hum. Put it down somewhere.");
             }
             _ => {}
+        }
+    }
+}
+
+/// Running cloaks: switched on, powered, and set down loose.
+fn cloaks(
+    devices: Query<(
+        &Device,
+        &GlobalTransform,
+        Has<Powered>,
+        Has<Held>,
+        Has<InSocket>,
+        Has<crate::interact::body::InBackpack>,
+    )>,
+    mut cloaks: ResMut<Cloaks>,
+) {
+    cloaks.0.clear();
+    for (d, gt, powered, held, socketed, stowed) in &devices {
+        if d.kind == DeviceKind::Cloak && powered && !held && !socketed && !stowed {
+            cloaks.0.push((gt.translation(), CLOAK_RADIUS));
+        }
+    }
+}
+
+/// Deploying cover: the folded panel becomes a wall where you stand,
+/// facing the way you face; grabbing the wall folds it back up.
+fn covers(
+    mut commands: Commands,
+    mut uses: MessageReader<UseItem>,
+    mut presses: MessageReader<crate::interact::InteractEvent>,
+    items: Query<&Item>,
+    walls: Query<&GlobalTransform, With<CoverWall>>,
+    players: Query<&GlobalTransform>,
+    mut hands: Query<&mut crate::interact::Hand>,
+    catalog: Res<Catalog>,
+    zone: Res<crate::world::Zone>,
+) {
+    use avian3d::prelude::*;
+    for u in uses.read() {
+        let Ok(item) = items.get(u.item) else {
+            continue;
+        };
+        if catalog.get(item.kind()).id != "deployable_cover" {
+            continue;
+        }
+        let Ok(p) = players.get(u.player) else {
+            continue;
+        };
+        let fwd = p.forward().as_vec3();
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let at = p.translation() + flat * 1.0;
+        let ground = zone.ground(at.x, at.z);
+        for mut h in &mut hands {
+            if h.holding == Some(u.item) {
+                h.holding = None;
+            }
+        }
+        commands.entity(u.item).despawn();
+        commands.spawn((
+            Name::new("Cover"),
+            CoverWall,
+            crate::raid::truck::Pressable::FoldCover,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            Collider::cuboid(1.2, 1.05, 0.06),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_xyz(at.x, ground + 0.55, at.z).looking_to(-flat, Vec3::Y),
+            Visibility::default(),
+        ));
+    }
+    for ev in presses.read() {
+        let crate::interact::InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        let Ok(gt) = walls.get(*item) else {
+            continue;
+        };
+        let at = gt.translation();
+        commands.entity(*item).despawn();
+        if let Some(kind) = catalog.kind("deployable_cover") {
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at),
+                    condition: 1.0,
+                },
+            );
         }
     }
 }
@@ -561,5 +686,67 @@ mod tests {
             .translation()
             .y;
         assert!(y1 < y0 - 0.5, "and falls ({y0:.1} -> {y1:.1})");
+    }
+    #[test]
+    fn a_running_cloak_hides_you_from_a_drone() {
+        let mut app = app();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let at = zone.on_ground(40.0, 255.0);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at;
+        let drone = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let site = at + Vec3::new(0.0, 6.0, -15.0);
+            let d = crate::robots::drone::spawn_drone(
+                &mut c,
+                site,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site,
+                    duration: 999.0,
+                    exit: site,
+                },
+            );
+            q.apply(app.world_mut());
+            d
+        };
+        let sees = |app: &mut App| {
+            app.world()
+                .get::<crate::robots::Awareness>(drone)
+                .is_some_and(|a| a.can_see_target)
+        };
+        let mut seen = false;
+        for _ in 0..90 * 3 {
+            app.update();
+            seen |= sees(&mut app);
+        }
+        assert!(seen, "in the open, the drone sees you");
+        let cloak = spawn(&mut app, "cloak_generator", at + Vec3::new(0.5, 0.3, 0.0));
+        let cell = spawn(&mut app, "power_cell", at);
+        app.update();
+        seat(&mut app, cell, cloak, Mount::Cell);
+        app.world_mut().entity_mut(cloak).insert(LightOn);
+        for _ in 0..30 {
+            app.update();
+        }
+        assert!(
+            !app.world().resource::<Cloaks>().0.is_empty(),
+            "the cloak is running"
+        );
+        let mut seen_after = false;
+        for _ in 0..90 * 2 {
+            app.update();
+            seen_after |= sees(&mut app);
+        }
+        assert!(!seen_after, "inside the bubble, it doesn't");
     }
 }
