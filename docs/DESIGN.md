@@ -235,8 +235,14 @@ let go, as with magazines. Use on a gun switches everything on it.
   up, hand over hand (or push the stick); at the top you haul yourself
   over. Let go and you fall. Pick the hook back up to coil the line.
 
-Still to do: the zipline kit; the door wedge (robots don't go indoors
-yet, so it has nothing to stop).
+- **Zipline kit**: stand somewhere high, look where you want to go and
+  use it. The cable shoots out and, if it bites 8 to 60 m off and
+  downhill (no steeper than 45°), runs there from a post at your feet.
+  Grab it and you ride, gathering speed to 9 m/s, and drop off the end.
+  Pick the kit up off its post to reel the cable in.
+
+Still to do: the door wedge (robots don't go indoors yet, so it has
+nothing to stop).
 
 ### IFF, PvP, and networking
 
@@ -364,7 +370,8 @@ catch for agent-written code. Revisit if that research changes.
 6. **Polish** — in progress. Done: models for the truck, airship, pod,
    harpoon launcher, gadgets and artifacts; map simulation with telemetry
    and heatmaps (see `SIMULATION.md`); forest and building batching for VR;
-   the lead-lined case, the camera drone and the climbing kit. Still open: acting on what the sims found (drones
-   decide every death; the north and east of the map go unvisited),
-   the zipline kit, a second map, playtesting in a headset.
+   the lead-lined case, the camera drone, the climbing and zipline kits.
+   Still open: acting on what the sims found (drones decide every death;
+   the north and east of the map go unvisited), a second map,
+   playtesting in a headset.
 7. *(stop)* — VRChat port and multiplayer are later phases.

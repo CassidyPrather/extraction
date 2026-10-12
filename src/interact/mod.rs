@@ -415,6 +415,7 @@ fn apply_hand_actions(
                         rope: item,
                         at: rope.nearest(hand_world.translation),
                         since: time.elapsed_secs(),
+                        speed: 0.0,
                     });
                 events.write(InteractEvent::Grabbed { item, side });
             }

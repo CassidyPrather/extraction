@@ -218,6 +218,9 @@ fn item_mounts(
             };
             commands.entity(e).insert(Device { watts, kind });
         }
+        "zipline_kit" => {
+            commands.entity(e).insert(climbing::Zipline::Packed);
+        }
         "climbing_kit" => {
             commands.entity(e).insert(climbing::Grapnel::Coiled);
         }

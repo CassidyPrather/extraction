@@ -4,6 +4,12 @@
 //! hand: grab the rope and pull down to go up (or push the stick: flat
 //! mode and comfort). Reach the top and you haul yourself over. Let go of
 //! the rope and you fall. Pick the hook back up to coil the line.
+//!
+//! The zipline kit is the same rope, run downhill: stand somewhere high,
+//! look where you want to go and use it. If the cable finds something to
+//! bite on (8 to 60 m off, and below you), it runs from a post at your
+//! feet to there. Grab it and you ride it down, faster and faster; you
+//! drop off the end. Pick the kit back up from its post to reel it in.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -21,6 +27,10 @@ pub const CLIMB_SPEED: f32 = 1.4;
 const MAX_PULL: f32 = 4.0;
 /// The hook only catches this high above the ground.
 const MIN_HEIGHT: f32 = 2.2;
+/// Top speed on a zipline, m/s.
+pub const ZIP_SPEED: f32 = 9.0;
+/// How far a zipline cable can reach, and how near is worth it.
+pub const ZIP_RANGE: (f32, f32) = (8.0, 60.0);
 /// Farthest the hook looks for an edge to hang the rope from.
 const LEDGE_SEARCH: f32 = 10.0;
 
@@ -46,6 +56,8 @@ pub struct Rope {
     pub top: Vec3,
     pub bottom: Vec3,
     pub kit: Entity,
+    /// A zipline: you ride it down rather than climb it.
+    pub zip: bool,
 }
 
 impl Rope {
@@ -63,6 +75,19 @@ pub struct RopeGrip {
     pub rope: Entity,
     pub at: Vec3,
     pub since: f32,
+    /// Riding a zipline: how fast, m/s.
+    pub speed: f32,
+}
+
+/// The zipline kit: packed, or rigged with its cable.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub enum Zipline {
+    Packed,
+    /// `set` once you've let go of it and it's sat on its post.
+    Rigged {
+        cable: Entity,
+        set: bool,
+    },
 }
 
 /// A body hanging on a rope: no walking, no gravity.
@@ -78,6 +103,9 @@ impl Plugin for ClimbingPlugin {
             (
                 ready_hooks,
                 hooks.after(crate::interact::InteractSystems::Follow),
+                (rig_ziplines, pack_ziplines)
+                    .chain()
+                    .after(crate::interact::InteractSystems::Follow),
                 climb
                     .after(crate::interact::InteractSystems::Grab)
                     .before(crate::player::move_bodies),
@@ -188,6 +216,7 @@ fn hooks(
                             top,
                             bottom,
                             kit: e,
+                            zip: false,
                         },
                         crate::interact::Grabbable {
                             points: vec![crate::interact::GrabPoint::free()],
@@ -214,6 +243,128 @@ fn hooks(
                 *g = Grapnel::Hooked { rope };
                 raid.say("The hook bites. The rope hangs ready.");
             }
+        }
+    }
+}
+
+/// Use a held zipline kit: the cable shoots where you're looking and, if
+/// it bites somewhere sensible, runs there from a post at your feet.
+#[allow(clippy::too_many_arguments)]
+fn rig_ziplines(
+    mut commands: Commands,
+    mut uses: MessageReader<UseItem>,
+    mut kits: Query<&mut Zipline>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    feet: Query<&GlobalTransform, With<Player>>,
+    spatial: SpatialQuery,
+    zone: Res<Zone>,
+    mut raid: ResMut<crate::raid::Raid>,
+) {
+    for u in uses.read() {
+        let Ok(mut z) = kits.get_mut(u.item) else {
+            continue;
+        };
+        if *z != Zipline::Packed {
+            continue;
+        }
+        let Some((head, _)) = heads.iter().find(|(_, p)| p.parent() == u.player) else {
+            continue;
+        };
+        let Ok(body) = feet.get(u.player) else {
+            continue;
+        };
+        let own = SpatialQueryFilter::from_mask([Layer::World]);
+        let Some(hit) =
+            spatial.cast_ray(head.translation(), head.forward(), ZIP_RANGE.1, true, &own)
+        else {
+            raid.say("The cable falls short. Nothing out there to bite on.");
+            continue;
+        };
+        let end = head.translation() + head.forward().as_vec3() * (hit.distance - 0.2);
+        let base = body.translation();
+        let start = Vec3::new(
+            base.x,
+            base.y.max(zone.ground(base.x, base.z)) + 2.0,
+            base.z,
+        );
+        let run = end - start;
+        let flat = Vec2::new(run.x, run.z).length();
+        if flat < ZIP_RANGE.0 {
+            raid.say(format!("Only {flat:.0} m: too close to be worth a cable."));
+            debug!("zipline: start {start:.1}, end {end:.1}");
+            continue;
+        }
+        if run.y > -1.0 || -run.y > flat {
+            raid.say("The cable has to run downhill, and not too steeply.");
+            continue;
+        }
+        let cable = commands
+            .spawn((
+                Name::new("Zipline"),
+                Rope {
+                    anchor: start,
+                    top: start,
+                    bottom: end,
+                    kit: u.item,
+                    zip: true,
+                },
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Transform::from_translation((start + end) * 0.5),
+                Visibility::default(),
+                RigidBody::Static,
+            ))
+            .with_child((
+                Collider::capsule(0.06, (run.length() - 0.2).max(0.1)),
+                CollisionLayers::new(Layer::Item, [Layer::Hand]),
+                Sensor,
+                Transform::from_rotation(Quat::from_rotation_arc(Vec3::Y, run.normalize())),
+            ))
+            .id();
+        // Let go of the kit and it sits on its post at the top.
+        commands.entity(u.item).insert(ZipPost(start));
+        *z = Zipline::Rigged { cable, set: false };
+        raid.say(format!(
+            "The cable whips out and bites, {:.0} m off. Grab it and ride.",
+            run.length()
+        ));
+    }
+}
+
+/// A rigged kit's post: it sits there until someone takes it.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ZipPost(pub Vec3);
+
+/// A rigged kit stays on its post; picked up, it reels the cable in.
+fn pack_ziplines(
+    mut commands: Commands,
+    mut kits: Query<(
+        Entity,
+        &mut Zipline,
+        Option<&ZipPost>,
+        &mut Position,
+        &mut LinearVelocity,
+        Has<Held>,
+        Has<InSocket>,
+        Has<InBackpack>,
+    )>,
+    ropes: Query<(), With<Rope>>,
+) {
+    for (e, mut z, post, mut pos, mut vel, held, socketed, stowed) in &mut kits {
+        let Zipline::Rigged { cable, set } = *z else {
+            continue;
+        };
+        if (held && set) || socketed || stowed || !ropes.contains(cable) {
+            commands.entity(cable).try_despawn();
+            commands.entity(e).remove::<ZipPost>();
+            *z = Zipline::Packed;
+        } else if !held {
+            if let Some(p) = post {
+                pos.0 = p.0 - Vec3::Y * 0.1;
+                vel.0 = Vec3::ZERO;
+            }
+            *z = Zipline::Rigged { cable, set: true };
         }
     }
 }
@@ -312,6 +463,26 @@ fn climb(
         let Ok(rope) = ropes.get(grip.rope) else {
             continue;
         };
+        if rope.zip {
+            // Downhill under gravity, against a little drag, to the end.
+            let run = rope.bottom - rope.top;
+            let slope = (-run.y / run.length().max(1e-3)).max(0.0);
+            grip.speed = (grip.speed + (9.81 * slope - 0.04 * grip.speed * grip.speed) * dt)
+                .clamp(0.0, ZIP_SPEED);
+            grip.at = rope.nearest(grip.at + run.normalize_or_zero() * grip.speed * dt);
+            if grip.at.distance(rope.bottom) < 1.2 {
+                // Off the end.
+                for c in children.iter() {
+                    commands.entity(c).remove::<RopeGrip>();
+                }
+                commands.entity(player).remove::<Climbing>();
+                continue;
+            }
+            let pull = (grip.at - hand.world.translation) / dt;
+            body.velocity = pull.clamp_length_max(ZIP_SPEED * 1.5);
+            body.airborne = 0.0;
+            continue;
+        }
         let stick = input.locomotion.y;
         if stick.abs() > 0.2 {
             grip.at = rope.nearest(grip.at + Vec3::Y * stick * CLIMB_SPEED * dt);
@@ -345,6 +516,7 @@ mod tests {
             top: Vec3::new(0.0, 5.0, 0.0),
             bottom: Vec3::ZERO,
             kit: Entity::PLACEHOLDER,
+            zip: false,
         };
         assert_eq!(
             r.nearest(Vec3::new(1.0, 2.0, 0.0)),
@@ -483,5 +655,73 @@ mod tests {
         }
         let y = app.world().get::<Transform>(player).unwrap().translation.y;
         assert!(y > roof.y - 0.5, "and stays up there ({y:.2})");
+
+        // Now rig a zipline off the roof, out over the street, and ride it.
+        let zip = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("zipline_kit").unwrap(),
+                    transform: Transform::from_translation(roof + Vec3::Y * 0.3),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        let start = app.world().get::<Transform>(player).unwrap().translation;
+        {
+            // Face out the front, looking down at the street 30 m off.
+            let yaw = out.x.atan2(out.z) + std::f32::consts::PI;
+            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+            t.rotation = Quat::from_rotation_y(yaw);
+        }
+        let drop = start.y + 1.6 - zone.ground(start.x + out.x * 30.0, start.z + out.z * 30.0);
+        let pitch = -(drop / 30.0).atan();
+        app.world_mut()
+            .get_mut::<RigInput>(player)
+            .unwrap()
+            .locomotion = Vec2::ZERO;
+        app.world_mut().get_mut::<RigInput>(player).unwrap().head =
+            Transform::from_xyz(0.0, 1.6, 0.0).with_rotation(Quat::from_rotation_x(pitch));
+        for _ in 0..3 {
+            app.update();
+        }
+        app.world_mut().write_message(UseItem { player, item: zip });
+        for _ in 0..5 {
+            app.update();
+        }
+        let Zipline::Rigged { cable, .. } = *app.world().get::<Zipline>(zip).unwrap() else {
+            panic!(
+                "the zipline rigged: {:?}",
+                app.world().resource::<crate::raid::Raid>().log.last()
+            );
+        };
+        app.world_mut()
+            .write_message(crate::interact::HandAction::Grab {
+                player,
+                side: crate::rig::Side::Right,
+                item: cable,
+                point: None,
+            });
+        let mut rode = false;
+        for _ in 0..90 * 15 {
+            app.update();
+            let p = app.world().get::<Transform>(player).unwrap().translation;
+            if Vec2::new(p.x - start.x, p.z - start.z).length() > 15.0 {
+                rode = true;
+            }
+            if rode && app.world().get::<Climbing>(player).is_none() {
+                break;
+            }
+        }
+        let p = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(rode, "rode the line out ({p:.1} from {start:.1})");
+        for _ in 0..90 * 2 {
+            app.update();
+        }
+        let health = app.world().get::<crate::health::Health>(player).unwrap();
+        assert!(health.hp > 50.0, "and landed in one piece ({})", health.hp);
     }
 }
