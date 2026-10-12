@@ -63,7 +63,28 @@ def main():
     ap.add_argument("--paths")
     ap.add_argument("--title")
     args = ap.parse_args()
+    heat = None
+    if args.heat:
+        meta = json.load(open(os.path.join(args.dump, "map.json")))
+        heat = np.fromfile(args.heat, dtype="<f4").reshape(meta["n"], meta["n"])
+    img, _, _ = render(args.dump, args.px, heat=heat, title=args.title)
+    img.save(args.out)
+    print(args.out)
 
+
+def render(dump, px_size=1400, heat=None, title=None, dim=0.0):
+    """The preview as a PIL RGB image, plus the map metadata and a function
+    from map (x, z) to image pixels. `heat` is an optional n x n array
+    (heightmap grid) drawn as a heatmap; `dim` darkens the base map (0..1)
+    so overlays read."""
+
+    class Args:
+        pass
+
+    args = Args()
+    args.dump = dump
+    args.px = px_size
+    args.title = title
     meta = json.load(open(os.path.join(args.dump, "map.json")))
     n = meta["n"]
     h = load(args.dump, "height.f32", n)
@@ -107,8 +128,8 @@ def main():
     )
     rgb[cont] *= 0.75
 
-    if args.heat:
-        heat = np.fromfile(args.heat, dtype="<f4").reshape(n, n)
+    rgb *= 1.0 - dim
+    if heat is not None:
         hv = heat / max(heat.max(), 1e-6)
         hc = np.stack([np.clip(hv * 3, 0, 1), np.clip(hv * 3 - 1, 0, 1), np.clip(hv * 3 - 2, 0, 1)], -1) * 255
         ha = np.clip(hv * 1.5, 0, 0.85)[..., None]
@@ -176,8 +197,7 @@ def main():
     d.line([(12, y0), (12 + bar, y0)], fill=(255, 255, 255), width=3)
     d.text((12, y0 - 18), "100 m", fill=(255, 255, 255), font=f_small)
     d.text((args.px - 30, 10), "N↑", fill=(255, 255, 255), font=f_big)
-    img.convert("RGB").save(args.out)
-    print(args.out)
+    return img.convert("RGB"), meta, px
 
 
 if __name__ == "__main__":

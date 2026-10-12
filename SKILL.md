@@ -23,6 +23,8 @@ Read `docs/DESIGN.md` first: it records the design decisions and roadmap.
   driving, ballistics, flat macros (`GunMacro` component, also used by bots).
 - `src/world` — map, heightfield collider, terrain/sky/water/trees visuals.
 - `src/bot` — bot brain (`Task` list) and `scenarios.rs` integration tests.
+- `src/sim` — map simulation: the raider brain, indoor nav, telemetry
+  (`docs/SIMULATION.md`).
 
 ## Rules of the house
 
@@ -41,6 +43,7 @@ cargo test --workspace
 cargo run -- --headless --scenario all       # must print OK
 scripts/shot.sh target/shots/x.png 40,30,250,10,-8 20   # look at it
 scripts/map-preview.sh                       # map design review
+scripts/sim.sh marrow_creek 8                # 8 bot raids -> target/sim/<map>/report/
 ```
 
 Screenshots render with lavapipe under Xvfb (`mesa-vulkan-drivers`): ~2 s
