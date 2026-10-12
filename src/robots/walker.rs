@@ -277,6 +277,7 @@ fn walker_parts_destroyed(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walker_brain(
     mut commands: Commands,
     mut walkers: Query<(
@@ -287,14 +288,22 @@ fn walker_brain(
         &Awareness,
         &Transform,
         &Robot,
+        Option<&mut super::doors::Battering>,
     )>,
     targets: Query<&GlobalTransform>,
     nav: Res<Nav>,
     time: Res<Time>,
     mut convoy: MessageWriter<super::collector::ConvoyEvent>,
+    entrances: Res<super::doors::Entrances>,
+    mut doors: Query<(
+        &mut crate::world::buildings::Door,
+        Has<super::doors::Wedged>,
+    )>,
+    mut noise: MessageWriter<super::Noise>,
+    mut raid: ResMut<crate::raid::Raid>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut w, mut brain, job, aware, t, robot) in &mut walkers {
+    for (e, mut w, mut brain, job, aware, t, robot, mut battering) in &mut walkers {
         if robot.wrecked {
             *brain = Brain::Down;
             w.goal = None;
@@ -317,6 +326,8 @@ fn walker_brain(
                 *brain = Brain::Investigate { at, left: 30.0 };
             }
         }
+        // Where the one it's after is hiding, if that's indoors.
+        let mut indoors: Option<Vec3> = None;
         let goal = match &mut *brain {
             Brain::Transit { to } => {
                 let to = *to;
@@ -344,6 +355,7 @@ fn walker_brain(
                 if *left <= 0.0 {
                     *brain = Brain::Leave { to: job.exit };
                 }
+                indoors = Some(at);
                 (Vec2::new(pos.x - at.x, pos.z - at.z).length() > 4.0).then_some(at)
             }
             Brain::Engage => {
@@ -353,6 +365,9 @@ fn walker_brain(
                     .map(|g| g.translation());
                 match target {
                     Some(tp) if aware.unseen < 10.0 => {
+                        if !aware.can_see_target {
+                            indoors = Some(tp);
+                        }
                         // Close to firing range and hold; advance if sight is lost.
                         let d = tp.distance(pos);
                         if !aware.can_see_target || d > 35.0 {
@@ -389,6 +404,52 @@ fn walker_brain(
                 Some(to)
             }
             Brain::Down => None,
+        };
+        // Hiding indoors? Then the door: open it, or tear it down.
+        let door = indoors
+            .and_then(|at| entrances.building_at(at))
+            .and_then(|b| {
+                entrances.approach(b, pos, |d| {
+                    super::doors::is_open(doors.get(d).ok().map(|(d, _)| d))
+                })
+            });
+        let goal = match door {
+            Some((ent, open)) => {
+                let stand = ent.mid + ent.out * 1.8;
+                let close = Vec2::new(pos.x - stand.x, pos.z - stand.z).length() < 2.2;
+                if close && !open {
+                    if let Ok((mut d, wedged)) = doors.get_mut(ent.door) {
+                        if !wedged {
+                            d.open = true;
+                        } else {
+                            let b = match battering.as_deref_mut() {
+                                Some(b) => b,
+                                None => {
+                                    commands.entity(e).insert(super::doors::Battering(0.0));
+                                    continue;
+                                }
+                            };
+                            let before = b.0;
+                            b.0 += dt;
+                            // Every blow is loud.
+                            if (before / 1.5).floor() != (b.0 / 1.5).floor() {
+                                noise.write(super::Noise {
+                                    at: ent.mid,
+                                    radius: 30.0,
+                                    source: None,
+                                });
+                            }
+                            if b.0 >= super::doors::BATTER_TIME {
+                                commands.entity(ent.door).despawn();
+                                commands.entity(e).remove::<super::doors::Battering>();
+                                raid.say("Somewhere close, a door gives way with a crash.");
+                            }
+                        }
+                    }
+                }
+                if close { None } else { Some(stand) }
+            }
+            None => goal,
         };
         w.repath -= dt;
         if goal != w.goal || (goal.is_some() && w.repath <= 0.0 && w.path.is_empty()) {

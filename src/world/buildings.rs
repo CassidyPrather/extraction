@@ -1269,17 +1269,27 @@ pub struct DoorLeaf(pub DoorDef);
 /// Pressing a door toggles it; it swings over a second.
 pub fn swing_doors(
     mut events: MessageReader<crate::interact::InteractEvent>,
-    mut doors: Query<(&mut Door, &mut Transform, &DoorLeaf)>,
+    mut doors: Query<(
+        &mut Door,
+        &mut Transform,
+        &DoorLeaf,
+        Has<crate::robots::doors::Wedged>,
+    )>,
     time: Res<Time>,
+    mut raid: ResMut<crate::raid::Raid>,
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((mut d, _, _)) = doors.get_mut(*item) {
-                d.open = !d.open;
+            if let Ok((mut d, _, _, wedged)) = doors.get_mut(*item) {
+                if wedged {
+                    raid.say("It won't budge: there's a wedge under it.");
+                } else {
+                    d.open = !d.open;
+                }
             }
         }
     }
-    for (mut d, mut t, leaf) in &mut doors {
+    for (mut d, mut t, leaf, _) in &mut doors {
         let target = if d.open { 1.0 } else { 0.0 };
         d.angle += (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
         t.rotation = Quat::from_rotation_y(leaf.0.yaw + d.angle * 1.75);

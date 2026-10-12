@@ -187,6 +187,8 @@ fn drone_brain(
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut commands: Commands,
+    entrances: Res<super::doors::Entrances>,
+    door_states: Query<&crate::world::buildings::Door>,
 ) {
     let dt = time.delta_secs();
     for (e, mut d, mut brain, job, aware, t, robot) in &mut drones {
@@ -197,6 +199,16 @@ fn drone_brain(
         let pos = t.translation;
         let ground = zone.ground(pos.x, pos.z);
         let cruise = |p: Vec3, h: f32| Vec3::new(p.x, zone.ground(p.x, p.z).max(ground) + h, p.z);
+        // Someone indoors: hover outside a doorway, low, and look in
+        // (further back from one that's shut, waiting for it to open).
+        let peek = |at: Vec3| {
+            let b = entrances.building_at(at)?;
+            let (ent, open) = entrances.approach(b, pos, |door| {
+                super::doors::is_open(door_states.get(door).ok())
+            })?;
+            let p = ent.mid + ent.out * if open { 3.5 } else { 7.0 };
+            Some(Vec3::new(p.x, zone.ground(p.x, p.z) + 2.7, p.z))
+        };
         d.phase += dt * 0.35;
         // Alarm overrides the job.
         if aware.can_see_target
@@ -236,10 +248,12 @@ fn drone_brain(
                 }
             }
             Brain::Investigate { at, left } => {
-                d.goal = cruise(
-                    *at + Vec3::new(d.phase.cos() * 8.0, 0.0, d.phase.sin() * 8.0),
-                    9.0,
-                );
+                d.goal = peek(*at).unwrap_or_else(|| {
+                    cruise(
+                        *at + Vec3::new(d.phase.cos() * 8.0, 0.0, d.phase.sin() * 8.0),
+                        9.0,
+                    )
+                });
                 *left -= dt;
                 if *left <= 0.0 {
                     *brain = Brain::Leave { to: job.exit };
@@ -259,6 +273,10 @@ fn drone_brain(
                         at: aware.last_known.unwrap_or(target),
                         left: 20.0,
                     };
+                    continue;
+                }
+                if let Some(g) = peek(target) {
+                    d.goal = g;
                     continue;
                 }
                 // Stand off and circle: hard to hit, keeps a firing line.

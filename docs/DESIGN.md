@@ -151,6 +151,14 @@ flown in) to do them, then leave:
   you pay a few minutes later.
 - *Collection*: the memorial convoy (below).
 
+**Buildings are not a refuge.** A robot hunting someone indoors goes to
+the building's doors (`robots/doors.rs`). A drone hovers low outside a
+doorway that stands open and looks in (it hangs back from a shut one,
+waiting); a walker walks up to a shut door and opens it. A **door wedge**
+set down against the foot of a closed door jams it — for you too, until
+you pick the wedge up — and a walker that finds one batters the door for
+twelve loud seconds before tearing it off its hinges.
+
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover
@@ -240,9 +248,7 @@ let go, as with magazines. Use on a gun switches everything on it.
   downhill (no steeper than 45°), runs there from a post at your feet.
   Grab it and you ride, gathering speed to 9 m/s, and drop off the end.
   Pick the kit up off its post to reel the cable in.
-
-Still to do: the door wedge (robots don't go indoors yet, so it has
-nothing to stop).
+- **Door wedge**: see robots and doors, above.
 
 ### IFF, PvP, and networking
 

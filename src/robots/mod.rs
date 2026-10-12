@@ -11,6 +11,7 @@
 pub mod collector;
 pub mod director;
 pub mod dirigible;
+pub mod doors;
 pub mod drone;
 pub mod grappler;
 pub mod visuals;
@@ -166,6 +167,7 @@ impl Plugin for RobotsPlugin {
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
+                doors::DoorsPlugin,
             ))
             .add_systems(
                 FixedUpdate,
