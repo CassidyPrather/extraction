@@ -3,7 +3,7 @@
 //! ```text
 //! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
-//!            [--bot] [--size WxH]
+//!            [--bot] [--size WxH] [--save PATH] [--new-game]
 //! ```
 //!
 //! `--screenshot` renders `--frames` frames, saves the window to `PATH` and
@@ -46,6 +46,11 @@ pub struct LaunchOptions {
     /// Let the director send robots in (off for scenarios unless they ask).
     pub robots: bool,
     pub window_size: (u32, u32),
+    /// Save file override (by default: the data dir, and only for a normal
+    /// game; see `persist`).
+    pub save: Option<PathBuf>,
+    /// Ignore any existing save and start over.
+    pub new_game: bool,
 }
 
 impl Default for LaunchOptions {
@@ -63,6 +68,8 @@ impl Default for LaunchOptions {
             headless: false,
             robots: true,
             window_size: (1600, 900),
+            save: None,
+            new_game: false,
         }
     }
 }
@@ -82,6 +89,8 @@ impl LaunchOptions {
                 "--bot" => o.bot = true,
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,
+                "--new-game" => o.new_game = true,
+                "--save" => o.save = Some(PathBuf::from(val())),
                 "--scenario" => {
                     o.scenario = Some(val());
                     o.robots = false;

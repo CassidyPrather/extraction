@@ -36,12 +36,27 @@ the map. Crossing is the raid; it is not tedium because:
 
 ### Map reset — the Surge
 
-The Zone has a persistent state between raids (looted containers stay looted,
-robot structures stay built, your stashed caches stay where you hid them).
-Every few raids a **Surge** rolls through and resets it: loot respawns, the
-robots redeploy, weather changes. A raid also has a soft clock — the Surge
-warning (sirens, sky, radio chatter) gives you time to get out; being caught
-in it is usually lethal. The cycle length and raid clock are data, to tune.
+The Zone has a persistent state between raids and between sessions
+(looted containers stay looted, the cache you hid stays where you hid it,
+your remains lie where you fell). It is saved to
+`<data dir>/extraction/<map>.ron` when a raid ends, every minute, and on
+quit (`src/persist.rs`, format in `extraction_core::save`).
+
+The **Zone clock** runs only while you are out, and carries over from
+raid to raid. Every 60 minutes of Zone time — two or three raids — the
+**Surge** comes: five minutes of warning (sky, radio), then two minutes
+that kill anyone in the open and wear down anyone under a roof. The next
+time you're back at the truck after it, the Zone resets: loose items and
+remains are swept away and the loot is rolled afresh for the new cycle.
+If the Surge is close when you're at base, pull the bell to sleep it out
+in the cab instead of starting a raid you can't finish. Durations are
+constants in `raid/mod.rs`, to tune.
+
+A new game starts with an empty stash except for a starter kit (a
+pistol, a spare magazine, a box of rounds, the radio, a light, a
+dressing, a tin of stew and a cleaning kit). `--new-game` starts over;
+`--save PATH` saves elsewhere. Scenarios, screenshots and test scenes
+never save.
 
 ### No cash, and the resource sinks
 

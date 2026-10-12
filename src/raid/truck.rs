@@ -206,7 +206,7 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
 }
 
 /// The local player starts in the truck bed.
-fn start_in_truck(
+pub(crate) fn start_in_truck(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut players: Query<&mut Transform, With<LocalPlayer>>,
@@ -279,6 +279,7 @@ fn finish_raid(
         (With<LocalPlayer>, With<Player>),
     >,
     mut drop: MessageWriter<crate::raid::truck::DropEverything>,
+    mut save: MessageWriter<crate::persist::SaveNow>,
 ) {
     let dt = time.delta_secs();
     let (done, died) = match &mut raid.phase {
@@ -313,7 +314,7 @@ fn finish_raid(
         body.velocity = Vec3::ZERO;
     }
     raid.phase = Phase::AtBase;
-    raid.clock = 0.0;
+    save.write(crate::persist::SaveNow);
     raid.say(if died {
         "You wake in the back of the truck. Your kit is gone."
     } else {

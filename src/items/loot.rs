@@ -15,22 +15,61 @@ pub struct Loot(pub std::sync::Arc<LootTables>);
 
 pub struct LootPlugin;
 
+/// The Startup systems that roll the Zone's loot (the save loader runs
+/// before them, and they stand down when it restores a Zone instead).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct LootSpawnSystems;
+
 impl Plugin for LootPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Startup,
             (
-                load_tables,
-                spawn_marker_loot,
-                spawn_building_loot,
-                spawn_dev_cache,
+                load_tables.before(LootSpawnSystems),
+                (spawn_zone_loot, spawn_dev_cache)
+                    .chain()
+                    .in_set(LootSpawnSystems),
             )
-                .chain()
                 .after(crate::world::buildings::spawn_buildings),
         );
     }
 }
 
+/// The loot seed for a Surge cycle: each reset rolls a different Zone.
+fn cycle_seed(opts: &LaunchOptions, cycle: u32) -> u64 {
+    opts.seed ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+}
+
+fn spawn_zone_loot(world: &mut World) {
+    if world
+        .get_resource::<crate::persist::Restore>()
+        .is_some_and(|r| r.zone)
+    {
+        return;
+    }
+    roll_zone_loot(world);
+}
+
+/// Rolls every loot marker and building loot spot for the current cycle.
+pub fn roll_zone_loot(world: &mut World) {
+    let opts = world.resource::<LaunchOptions>().clone();
+    let cycle = world.resource::<crate::raid::Raid>().cycle;
+    let seed = cycle_seed(&opts, cycle);
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let zone = world.resource::<Zone>();
+        let loot = world.resource::<Loot>();
+        let catalog = world.resource::<Catalog>();
+        let spots = world.get_resource::<crate::world::buildings::BuildingLoot>();
+        let mut commands =
+            Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
+        spawn_marker_loot(&mut commands, zone, loot, catalog, seed);
+        if let Some(spots) = spots {
+            spawn_building_loot(&mut commands, spots, loot, catalog, seed);
+        }
+    }
+    queue.apply(world);
+}
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/data/loot.ron");
     let text = std::fs::read_to_string(path).unwrap_or_else(|_| BUILTIN_LOOT.to_owned());
@@ -42,13 +81,13 @@ fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
 }
 
 fn spawn_marker_loot(
-    mut commands: Commands,
-    zone: Res<Zone>,
-    loot: Res<Loot>,
-    catalog: Res<Catalog>,
-    opts: Res<LaunchOptions>,
+    commands: &mut Commands,
+    zone: &Zone,
+    loot: &Loot,
+    catalog: &Catalog,
+    seed: u64,
 ) {
-    let mut rng = Rng::new(opts.seed ^ 0x100);
+    let mut rng = Rng::new(seed ^ 0x100);
     for m in &zone.map.markers {
         let MarkerKind::Loot { table } = &m.kind else {
             continue;
@@ -56,7 +95,7 @@ fn spawn_marker_loot(
         let base = zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * (m.y + 0.1);
         for (i, drop) in loot
             .0
-            .roll(table, &catalog, &mut rng)
+            .roll(table, catalog, &mut rng)
             .into_iter()
             .enumerate()
         {
@@ -66,8 +105,8 @@ fn spawn_marker_loot(
                 (i as f32 * 0.37).cos() * 0.25,
             );
             let e = spawn_item(
-                &mut commands,
-                &catalog,
+                commands,
+                catalog,
                 SpawnItem {
                     kind: drop.kind,
                     transform: Transform::from_translation(base + offset),
@@ -81,21 +120,18 @@ fn spawn_marker_loot(
 
 /// Rolls every building loot spot (shelves, tables, crates).
 fn spawn_building_loot(
-    mut commands: Commands,
-    spots: Option<Res<crate::world::buildings::BuildingLoot>>,
-    loot: Res<Loot>,
-    catalog: Res<Catalog>,
-    opts: Res<LaunchOptions>,
+    commands: &mut Commands,
+    spots: &crate::world::buildings::BuildingLoot,
+    loot: &Loot,
+    catalog: &Catalog,
+    seed: u64,
 ) {
-    let Some(spots) = spots else {
-        return;
-    };
-    let mut rng = Rng::new(opts.seed ^ 0xB11D);
+    let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
     for spot in &spots.0 {
         for (i, drop) in loot
             .0
-            .roll(spot.table, &catalog, &mut rng)
+            .roll(spot.table, catalog, &mut rng)
             .into_iter()
             .enumerate()
         {
@@ -105,8 +141,8 @@ fn spawn_building_loot(
                 (i as f32 * 1.7).cos() * 0.12,
             );
             spawn_item(
-                &mut commands,
-                &catalog,
+                commands,
+                catalog,
                 SpawnItem {
                     kind: drop.kind,
                     transform: Transform::from_translation(spot.at + off)
@@ -124,18 +160,21 @@ fn spawn_building_loot(
 }
 
 /// Every gun, loaded magazines, ammunition and the maintenance kit on the
-/// ground by the insertion point. A testing convenience while the truck
-/// and its stash don't exist yet.
+/// ground by the insertion point: a testing convenience for sessions that
+/// don't save (scenarios, screenshots, `--scene`). A saved game starts with
+/// a kit in the truck's stash instead.
 fn spawn_dev_cache(
     mut commands: Commands,
     zone: Res<Zone>,
     catalog: Res<Catalog>,
-    opts: Res<LaunchOptions>,
+    slot: Res<crate::persist::SaveSlot>,
 ) {
+    if slot.0.is_some() {
+        return;
+    }
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
-    let _ = opts;
     let origin = Vec2::new(ins.at[0] + 2.5, ins.at[1] - 3.0);
     let list: &[(&str, u32)] = &[
         ("pm_pistol", 0),

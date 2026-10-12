@@ -14,4 +14,5 @@ pub mod loot;
 pub mod map;
 pub mod nav;
 pub mod noise;
+pub mod save;
 pub mod terrain;

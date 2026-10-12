@@ -18,8 +18,13 @@ use crate::player::Player;
 use crate::rig::LocalPlayer;
 use crate::world::Zone;
 
-/// Seconds from leaving the truck until the Surge.
-pub const SURGE_AFTER: f32 = 45.0 * 60.0;
+/// Seconds of Zone time (it only runs while you're out) between Surges:
+/// two or three raids' worth.
+pub const SURGE_AFTER: f32 = 60.0 * 60.0;
+/// How long the Surge itself rages.
+pub const SURGE_LENGTH: f32 = 120.0;
+/// At base with less than this to go, pulling the bell sleeps it out.
+pub const SLEEP_WINDOW: f32 = 15.0 * 60.0;
 /// Seconds of warning before it.
 pub const SURGE_WARNING: f32 = 5.0 * 60.0;
 /// Seconds for the truck to drive round to a rendezvous.
@@ -49,6 +54,8 @@ pub struct Raid {
     /// Seconds since stepping out of the truck.
     pub clock: f32,
     pub raids: u32,
+    /// Surge cycles survived by this Zone (each one re-rolls the loot).
+    pub cycle: u32,
     pub extractions: u32,
     pub deaths: u32,
     /// Messages for the HUD / radio chatter: (text, seconds left to show).
@@ -88,6 +95,7 @@ impl Plugin for RaidPlugin {
             phase: Phase::AtBase,
             clock: 0.0,
             raids: 0,
+            cycle: 0,
             extractions: 0,
             deaths: 0,
             log: Vec::new(),
@@ -118,9 +126,11 @@ fn leave_base(
     };
     if p.translation().distance(t.translation()) > 14.0 {
         raid.phase = Phase::Out;
-        raid.clock = 0.0;
         raid.raids += 1;
-        raid.say("Out of the truck. The clock is running.");
+        let mins = (raid.surge_in() / 60.0).max(0.0).ceil();
+        raid.say(format!(
+            "Out of the truck. The Surge is due in about {mins:.0} minutes."
+        ));
     }
 }
 
@@ -179,7 +189,8 @@ fn tick_raid(
     mut raid: ResMut<Raid>,
     time: Res<Time>,
     zone: Res<Zone>,
-    mut healths: Query<&mut Health, With<LocalPlayer>>,
+    mut healths: Query<(&mut Health, &GlobalTransform), With<LocalPlayer>>,
+    spatial: avian3d::prelude::SpatialQuery,
 ) {
     let dt = time.delta_secs();
     for l in &mut raid.log {
@@ -226,10 +237,26 @@ fn tick_raid(
     if before > 60.0 && after <= 60.0 {
         raid.say("One minute. Get out, or get under something.");
     }
-    if after <= 0.0 {
-        for mut h in &mut healths {
-            // The Surge is not survivable in the open.
-            h.hp -= 15.0 * dt;
+    if before > 0.0 && after <= 0.0 {
+        raid.say("The Surge is here.");
+    }
+    if before > -SURGE_LENGTH && after <= -SURGE_LENGTH {
+        raid.say("It's passing. The air tastes of pennies.");
+    }
+    if after <= 0.0 && after > -SURGE_LENGTH {
+        for (mut h, gt) in &mut healths {
+            // Not survivable in the open; under a roof, barely.
+            let head = gt.translation() + Vec3::Y * 1.7;
+            let roof = spatial
+                .cast_ray(
+                    head,
+                    Dir3::Y,
+                    25.0,
+                    true,
+                    &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
+                )
+                .is_some();
+            h.hp -= if roof { 0.6 } else { 15.0 } * dt;
         }
     }
 }
@@ -252,10 +279,25 @@ fn depart(
         if !in_bed {
             continue;
         }
-        if let Phase::TruckWaiting { .. } = raid.phase {
-            raid.extractions += 1;
-            raid.say("Truck: \"Hold on to something.\" You're out.");
-            raid.phase = Phase::Extracting { left: 4.0 };
+        match raid.phase {
+            Phase::TruckWaiting { .. } => {
+                raid.extractions += 1;
+                raid.say("Truck: \"Hold on to something.\" You're out.");
+                raid.phase = Phase::Extracting { left: 4.0 };
+            }
+            Phase::AtBase if raid.surge_in() < SLEEP_WINDOW => {
+                // Sleep it out in the cab: the Surge comes and goes, and
+                // `persist` resets the Zone.
+                raid.say("You bed down in the cab and wait for the Surge to pass.");
+                raid.clock = SURGE_AFTER + SURGE_LENGTH;
+            }
+            Phase::AtBase => {
+                let mins = raid.surge_in() / 60.0;
+                raid.say(format!(
+                    "Driver: \"Surge isn't due for {mins:.0} minutes. Go on, get out there.\""
+                ));
+            }
+            _ => {}
         }
     }
 }

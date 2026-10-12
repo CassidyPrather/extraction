@@ -12,6 +12,7 @@ pub mod hud;
 pub mod interact;
 pub mod items;
 pub mod launch;
+pub mod persist;
 pub mod player;
 pub mod raid;
 pub mod render;
@@ -50,6 +51,7 @@ impl Plugin for GamePlugin {
             robots::RobotsPlugin,
             health::HealthPlugin,
             raid::RaidPlugin,
+            persist::PersistPlugin,
         ));
     }
 }
