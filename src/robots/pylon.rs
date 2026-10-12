@@ -132,7 +132,7 @@ pub fn spawn_pylon(commands: &mut Commands, site: Vec3, run_for: f32, exit: Vec3
                 robot,
                 PartRole::Sensor,
                 45.0,
-                Collider::cuboid(0.9, 0.5, 0.3),
+                Collider::cuboid(0.66, 0.36, 0.66),
                 Transform::from_xyz(0.0, CABINET.y + 0.3, 0.0),
             ),
         ));
