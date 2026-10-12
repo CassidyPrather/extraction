@@ -3,7 +3,7 @@
 //! ```text
 //! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
-//!            [--bot] [--size WxH]
+//!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //! ```
 //!
 //! `--screenshot` renders `--frames` frames, saves the window to `PATH` and
@@ -46,6 +46,9 @@ pub struct LaunchOptions {
     /// Let the director send robots in (off for scenarios unless they ask).
     pub robots: bool,
     pub window_size: (u32, u32),
+    /// Dev: put a gun, magazine or robot in front of the camera to look at
+    /// (see `dev::gallery`).
+    pub gallery: Option<String>,
 }
 
 impl Default for LaunchOptions {
@@ -63,6 +66,7 @@ impl Default for LaunchOptions {
             headless: false,
             robots: true,
             window_size: (1600, 900),
+            gallery: None,
         }
     }
 }
@@ -100,6 +104,10 @@ impl LaunchOptions {
                     o.flat = true;
                 }
                 "--frames" => o.frames = val().parse().unwrap_or(90),
+                "--gallery" => {
+                    o.gallery = Some(val());
+                    o.robots = false;
+                }
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {

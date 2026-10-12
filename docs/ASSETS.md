@@ -150,3 +150,93 @@ switching to it.
 2. Run the script and check the result in-game, for example
    `./scripts/shot.sh target/shots/x.png -30,24,200,270,-5 15`.
 3. Add the `CREDITS.md` row. `--credits` prints rows for all sources.
+
+# Models
+
+The guns, their magazines and the robots are modelled by Blender Python
+scripts in `art/`. Nobody edits a `.blend` file: the scripts are the
+source, and the exported `.glb` files under `assets/models/` are committed
+next to them. Nothing external goes into them, so they need no credits.
+
+```bash
+python3 art/build.py              # rebuild every model (~15 s)
+python3 art/build.py ak74 drone   # only scripts whose name matches
+blender -b --python art/preview.py -- assets/models/guns/ak74.glb /tmp/ak.png   # Cycles preview
+scripts/shot.sh target/shots/ak.png 40,19.2,262,0,0 20 --gallery ak74   # in the game
+```
+
+`build.py` runs each script in a fresh headless Blender (`blender` on
+PATH, or `BLENDER=/path/to/blender`; written against Blender 5.2). The
+`--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]` option puts a gun (with its
+magazine seated), a magazine, `guns`, `drone` or `walker` in front of the
+`--camera`, held still. At the camera above, the ground is at y = 17.6.
+
+| Script | Output | Tris |
+| --- | --- | --- |
+| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 6.8k |
+| `art/guns/ak74.py` | `models/guns/ak74.glb` | 10.2k |
+| `art/guns/mosin.py` | `models/guns/mosin.glb` | 9.8k |
+| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 6.5k |
+| `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 0.3k to 1.2k |
+| `art/robots/drone.py` | `models/robots/drone.glb` | 7.2k |
+| `art/robots/walker.py` | `models/robots/walker.glb` | 14.3k |
+
+## Conventions
+
+- **Game space.** `art/common.py` builds everything in game coordinates
+  (metres, +X right, +Y up, -Z forward) and converts to Blender's Z-up
+  only when it makes the object, so the exporter's Y-up conversion lands
+  it back where it started. The numbers in a gun script read the same as
+  `src/weapons/layout.rs`, and a robot script's read the same as the spawn
+  code in `src/robots/`.
+- **One object per motion.** A gun's top-level objects are named for the
+  layout's `Moves`: `static*`, `bolt*` (slides with the bolt), `turnbolt*`
+  (turns about its origin's Z axis, then slides), `barrels*` (tips about
+  the layout's hinge), `trigger*`, `selector*` (turns about X). Each
+  object's origin is the point it moves from. The Mosin's bolt is coaxial
+  with the bore, so its origin is on the bore axis.
+- **Named points.** Empties named `pt_*` mark the layout's points for
+  reference. The empty `magwell` is where the model really seats a
+  magazine. The layout's seat stays the gameplay one, and the drawn
+  magazine is moved from it to the model's (`seat_mag_visuals`). The
+  PM's layout seat is 5 cm low and raked the wrong way, so this matters.
+- **Robot parts.** A robot model has one object per part kind (`core`,
+  `sensor`, `gun`/`turret`, `rotor`, `blades`, `leg_upper`, `leg_lower`).
+  Each object's origin is that part's spawn offset, so it hangs straight on
+  the part entity. The drone has one `rotor`, built at rotor 0. The game
+  turns copies of it to face out at the other corners. Leg segments run
+  along +Y from the near joint (0.8 m and 0.95 m). Their hinge axis is X,
+  and `pose_leg_visuals` points it along the leg plane's normal.
+- **Materials by name.** The model's materials are only placeholders. The
+  game swaps them by name (`src/models.rs`) for the `MaterialLibrary`
+  sets: `Blued` uses `gun_metal`, `Wood` uses `gun_wood`, `Polymer` uses
+  `polymer_plum`, and `Shell` uses `robot_shell`. `Steel`, `Bakelite` and
+  `Black` keep a scan's relief under a flat colour. `Dark`, `Eye` (the
+  emissive accents, dimmed when the part dies) and `Rotor` are the robot
+  palette.
+- **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
+  along the gun on sides and tops, so the tiling scans keep one texel
+  density and the wood grain follows the stock.
+- **Fallbacks.** No file, or a failed load, gives the old blockout
+  (guns), placeholder box (magazines) or primitive shapes (robots). The
+  headless sim never loads models: it all happens in `ClientPlugin`.
+
+## The kit
+
+`art/common.py` has a `Part`, which is one exported object, built from:
+
+- `prism`: a profile extruded along an axis. Its outline edges are
+  rounded by `bevel` (a "rounded slab", built directly, because Blender's
+  bevel clamps to nothing on finely filleted outlines). A `width(a, b)`
+  function can thicken it per point, for stocks and grips.
+- `lathe`, `cyl`, `tube`: revolved profiles about the bore. They take a
+  partial `sweep` for panels.
+- `sweep`: a section along a path, for trigger guards and loops.
+- `box` and `sphere`.
+- `cut`: an exact boolean, applied when the object is made.
+
+The 2D helpers are `fillet` (round a polygon's corners), `catmull` and
+`arc`. `make` applies the cuts, UVs, sharp edges and weighted normals.
+`join` merges Parts into one object. Keep cuts on their own Part and
+join afterwards: the exact solver drops open pieces, such as a swept
+trigger guard, from the mesh it cuts.
