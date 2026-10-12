@@ -2830,6 +2830,7 @@ dependencies = [
  "bevy_seedling",
  "extraction_core",
  "fastrand",
+ "openxr",
  "ron 0.10.1",
  "serde",
 ]

@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD
 
 on:
   push:
@@ -7,185 +7,113 @@ on:
     branches: [ main ]
   release:
     types: [ published ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  # mold is configured in .cargo/config.toml for local Linux builds; CI uses
+  # the default linker so the runner needs nothing extra.
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: cc
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
 
 jobs:
-  lint-and-test:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history and tags for version detection
+          fetch-depth: 0
 
-      - name: Install native audio dependencies
-        # macroquad's `audio` feature pulls in quad-alsa-sys, which links
-        # -lasound. The runner image ships libasound.so.2 but not the .so
-        # symlink the linker needs, so native builds fail without this.
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: System dependencies
+        # Bevy needs udev, ALSA, X11/Wayland headers to link; the headless
+        # scenarios need none of the runtime libraries.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
 
-      - name: Install Rust toolchain
-        # No args: installs the version, components and targets pinned in
-        # rust-toolchain.toml, so CI and local builds use the same compiler
+      - name: Rust toolchain
         run: rustup toolchain install
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
+      - name: Formatting
         run: cargo fmt --all --check
 
-      - name: Lint with clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Clippy (default lints, warnings allowed)
+        # Deliberately not -D warnings: see docs/DESIGN.md, "Lints".
+        run: cargo clippy --workspace --all-targets
 
-      - name: Lint with clippy (wasm)
-        # No --all-targets: benches and tests only build natively
-        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+      - name: Unit tests
+        run: cargo test --workspace
 
-      - name: Run tests
-        run: cargo test --all-features
+      - name: Bot scenarios (headless integration tests)
+        run: cargo run --release -- --headless --scenario all
 
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
-
-      - name: Security audit
-        run: |
-          # Just warnings for now...
-          cargo audit || true
-
-  build-web:
-    needs: lint-and-test
-    runs-on: ubuntu-latest
+  package:
+    needs: check
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     permissions:
-      contents: write  # Required for attaching the web zip to releases
-    env:
-      # Optimized-wasm ceiling. Tune per toy; the point is noticing when the payload jumps.
-      MAX_WASM_BYTES: 1500000
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history and tags for version detection
-
-      - name: Install Rust toolchain
-        # No args: installs the version, components and targets pinned in
-        # rust-toolchain.toml, so CI and local builds use the same compiler
-        run: rustup toolchain install
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-opt
-        run: sudo apt-get update && sudo apt-get install -y binaryen
-
-      - name: Build web bundle
-        run: ./scripts/build-web.sh
-
-      - name: Enforce size budget
-        run: |
-          # Keep the wasm filename in sync with the [[bin]] name in Cargo.toml
-          actual=$(wc -c < dist/web/game-template.wasm)
-          echo "wasm size: ${actual} bytes (budget: ${MAX_WASM_BYTES})"
-          if [ "${actual}" -gt "${MAX_WASM_BYTES}" ]; then
-            echo "::error::wasm payload ${actual} bytes exceeds budget ${MAX_WASM_BYTES}"
-            exit 1
-          fi
-
-      - name: Upload bundle artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-bundle
-          path: dist/web
-
-      - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/web
-
-      - name: Attach web bundle to release
-        if: github.event_name == 'release'
-        run: |
-          cd dist/web && zip -r ../game-template-web.zip .
-
-      - name: Upload web bundle to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/game-template-web.zip
-          fail_on_unmatched_files: true
-
-  deploy-pages:
-    # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
-    # After that, every push to main redeploys.
-    needs: build-web
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  build-and-publish:
-    needs: lint-and-test
-    if: github.event_name == 'release'
-    permissions:
-      contents: write  # Required for uploading release assets
+      contents: write
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history and tags for version detection
+          fetch-depth: 0
 
-      - name: Install native audio dependencies
-        # Linux only: quad-alsa-sys needs the libasound .so symlink to link.
-        # macOS and Windows get their audio backend from the system SDK.
+      - name: System dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
 
-      - name: Install Rust toolchain
-        # Pinned in rust-toolchain.toml; the matrix target goes on top of it
+      - name: Rust toolchain
         shell: bash
         run: |
           rustup toolchain install
           rustup target add ${{ matrix.target }}
 
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package binary
+      - name: Fetch CC0 assets
         shell: bash
         run: |
-          # Keep this in sync with the [[bin]] name in Cargo.toml
-          BIN="game-template"
-          TARGET="${{ matrix.target }}"
-          mkdir -p dist
+          if [ -f scripts/fetch_assets.py ]; then python3 scripts/fetch_assets.py || echo "asset fetch failed; packaging without"; fi
+          if [ -f scripts/fetch_audio.py ]; then python3 scripts/fetch_audio.py || echo "audio fetch failed; packaging without"; fi
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          BIN="extraction"
+          OUT="dist/extraction-${{ matrix.target }}"
+          mkdir -p "$OUT"
+          cp -r assets "$OUT/assets"
+          rm -rf "$OUT/assets/.cache"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            7z a "dist/${BIN}-${TARGET}.zip" "./target/${TARGET}/release/${BIN}.exe"
+            cp "target/${{ matrix.target }}/release/${BIN}.exe" "$OUT/"
+            7z a "dist/extraction-${{ matrix.target }}.zip" "./$OUT/*"
           else
-            tar -czf "dist/${BIN}-${TARGET}.tar.gz" -C "target/${TARGET}/release" "${BIN}"
+            cp "target/${{ matrix.target }}/release/${BIN}" "$OUT/"
+            tar -czf "dist/extraction-${{ matrix.target }}.tar.gz" -C dist "extraction-${{ matrix.target }}"
           fi
 
-      - name: Upload artifacts to GitHub Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extraction-${{ matrix.target }}
+          path: dist/extraction-${{ matrix.target }}.*
+
+      - name: Attach to release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist/extraction-${{ matrix.target }}.*
           fail_on_unmatched_files: true

@@ -64,10 +64,7 @@ pub fn catmull_rom(points: &[P2], step: f32) -> Vec<P2> {
                     + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2
                     + (-a + 3.0 * b - 3.0 * c + d) * t3)
             };
-            out.push([
-                f(p0[0], p1[0], p2[0], p3[0]),
-                f(p0[1], p1[1], p2[1], p3[1]),
-            ]);
+            out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
         }
     }
     out.push(points[n - 1]);
@@ -114,7 +111,11 @@ pub fn polyline_at(line: &[P2], s: f32) -> (P2, P2) {
         let l = dist(w[0], w[1]);
         if remaining <= l || l == 0.0 {
             let t = if l > 0.0 { remaining / l } else { 0.0 };
-            let dir = if l > 0.0 { scale(sub(w[1], w[0]), 1.0 / l) } else { [1.0, 0.0] };
+            let dir = if l > 0.0 {
+                scale(sub(w[1], w[0]), 1.0 / l)
+            } else {
+                [1.0, 0.0]
+            };
             return (lerp(w[0], w[1], t), dir);
         }
         remaining -= l;

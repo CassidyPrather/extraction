@@ -8,11 +8,11 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=game-template",
-                    "--package=game-template"
+                    "--bin=extraction",
+                    "--package=extraction"
                 ],
                 "filter": {
-                    "name": "game-template",
+                    "name": "extraction",
                     "kind": "bin"
                 }
             },
@@ -28,10 +28,10 @@
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=game-template"
+                    "--package=extraction"
                 ],
                 "filter": {
-                    "name": "game_template",
+                    "name": "extraction",
                     "kind": "lib"
                 }
             },

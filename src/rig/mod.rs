@@ -8,6 +8,8 @@
 //! feet and carries the body's yaw.
 
 pub mod flat;
+#[cfg(feature = "xr")]
+pub mod xr;
 
 use bevy::prelude::*;
 
@@ -87,6 +89,11 @@ impl RigInput {
     }
 }
 
+/// Drivers write [`RigInput`] in `PreUpdate`, in this set, so the fixed
+/// tick that follows sees this frame's poses.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RigDriverSystems;
+
 /// Marks the entity that is the rig's head (the camera, for local players).
 #[derive(Component)]
 pub struct RigHead;
@@ -101,7 +108,8 @@ pub struct RigHand {
 #[derive(Component)]
 pub struct LocalPlayer;
 
-/// Which driver feeds the local rig.
+/// Which driver feeds the local rig. Starts `Flat`; the XR driver switches
+/// it to `Xr` when a headset session actually starts.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RigDriver {
     Flat,
@@ -114,8 +122,17 @@ pub struct RigPlugin;
 impl Plugin for RigPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<RigInput>()
-            .add_systems(PostUpdate, apply_rig_poses.before(TransformSystems::Propagate));
+            .insert_resource(RigDriver::Flat)
+            .add_systems(
+                PostUpdate,
+                apply_rig_poses.before(TransformSystems::Propagate),
+            );
     }
+}
+
+/// Run condition: the flat driver is in charge.
+pub fn flat_driving(driver: Res<RigDriver>) -> bool {
+    *driver == RigDriver::Flat
 }
 
 /// Copies rig input poses onto the head and hand entities.

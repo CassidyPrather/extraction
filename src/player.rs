@@ -71,9 +71,16 @@ fn spawn_local_player(mut commands: Commands, zone: Res<Zone>, opts: Res<LaunchO
         None => {
             let m = zone.marker(&MarkerKind::Insertion);
             let at = m.map(|m| m.at).unwrap_or([0.0, 0.0]);
-            (zone.on_ground(at[0], at[1]), m.map(|m| m.rot).unwrap_or(0.0))
+            (
+                zone.on_ground(at[0], at[1]),
+                m.map(|m| m.rot).unwrap_or(0.0),
+            )
         }
     };
+    info!(
+        "spawning local player at {pos} (ground {:.2})",
+        zone.ground(pos.x, pos.z)
+    );
     spawn_player(&mut commands, pos + Vec3::Y * 0.05, yaw, true);
 }
 
@@ -87,7 +94,9 @@ pub fn spawn_player(commands: &mut Commands, feet: Vec3, yaw_deg: f32, local: bo
             stamina: 1.0,
             ..default()
         },
-        Transform::from_translation(feet).with_rotation(Quat::from_rotation_y(-yaw_deg.to_radians())),
+        crate::weapons::flat::GunMacro::default(),
+        Transform::from_translation(feet)
+            .with_rotation(Quat::from_rotation_y(-yaw_deg.to_radians())),
         Visibility::default(),
     ));
     if local {
@@ -112,6 +121,7 @@ pub fn spawn_player(commands: &mut Commands, feet: Vec3, yaw_deg: f32, local: bo
             c.spawn((
                 Name::new(format!("{side:?} hand")),
                 RigHand { side },
+                crate::interact::Hand::default(),
                 Transform::default(),
                 Visibility::default(),
             ));
@@ -144,7 +154,8 @@ fn move_bodies(
         let head_fwd = (root.rotation * input.head.rotation) * Vec3::NEG_Z;
         let fwd = Vec3::new(head_fwd.x, 0.0, head_fwd.z).normalize_or(Vec3::NEG_Z);
         let right = Vec3::new(-fwd.z, 0.0, fwd.x);
-        let want_sprint = input.sprint && enc.can_sprint && body.stamina > 0.05 && input.locomotion.y > 0.3;
+        let want_sprint =
+            input.sprint && enc.can_sprint && body.stamina > 0.05 && input.locomotion.y > 0.3;
         let speed = if input.crouch {
             CROUCH_SPEED
         } else if want_sprint {
@@ -262,7 +273,14 @@ fn try_step(
     // Room above?
     if ms
         .spatial_query
-        .cast_shape(shape, raised - Vec3::Y * STEP_HEIGHT, Quat::IDENTITY, Dir3::Y, &ShapeCastConfig::from_max_distance(STEP_HEIGHT), filter)
+        .cast_shape(
+            shape,
+            raised - Vec3::Y * STEP_HEIGHT,
+            Quat::IDENTITY,
+            Dir3::Y,
+            &ShapeCastConfig::from_max_distance(STEP_HEIGHT),
+            filter,
+        )
         .is_some()
     {
         return None;
@@ -270,7 +288,14 @@ fn try_step(
     let dir = Dir3::new(delta).ok()?;
     if ms
         .spatial_query
-        .cast_shape(shape, raised, Quat::IDENTITY, dir, &ShapeCastConfig::from_max_distance(delta.length()), filter)
+        .cast_shape(
+            shape,
+            raised,
+            Quat::IDENTITY,
+            dir,
+            &ShapeCastConfig::from_max_distance(delta.length()),
+            filter,
+        )
         .is_some()
     {
         return None;

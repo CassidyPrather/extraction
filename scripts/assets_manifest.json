@@ -1,0 +1,861 @@
+{
+  "_about": "Inputs for scripts/fetch_assets.py. 'sources' lists every downloaded file; the script fills in url/sha256/author on first fetch and verifies them afterwards. The other sections are recipes that turn sources into KTX2 under assets/textures/. See docs/ASSETS.md.",
+  "sources": {
+    "ph:grass_ground": {
+      "provider": "polyhaven",
+      "id": "grass_ground",
+      "res": "2k",
+      "author": "Charlotte Baglioni",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/grass_ground",
+      "files": {
+        "grass_ground_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_diff_2k.jpg",
+          "sha256": "4272bddc71a7fa659d1deeb13a9df8c42e68a5ac8cde7523187e4a081e028258",
+          "bytes": 3787330
+        },
+        "grass_ground_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_nor_gl_2k.jpg",
+          "sha256": "effa95c06af273c974476d9a74a234668a1c9292f60fffb4fa40348d638ee7f3",
+          "bytes": 5968024
+        },
+        "grass_ground_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_ground/grass_ground_arm_2k.jpg",
+          "sha256": "79554d3cb2c1cbf4351960e16bc6bba004fa3112d256ff1b500ac994694b5673",
+          "bytes": 3850286
+        }
+      }
+    },
+    "ph:forest_leaves_02": {
+      "provider": "polyhaven",
+      "id": "forest_leaves_02",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/forest_leaves_02",
+      "files": {
+        "forest_leaves_02_diffuse_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_02/forest_leaves_02_diffuse_2k.jpg",
+          "sha256": "9c38b2b151a0415457a6914966422cfca5a546c94674442e5395e0b1e908a196",
+          "bytes": 1668009
+        },
+        "forest_leaves_02_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_02/forest_leaves_02_nor_gl_2k.jpg",
+          "sha256": "af0346114834c347a8d6a138f6ea16a97b0bec8d6e4db32c24f1c7e482163235",
+          "bytes": 2323898
+        },
+        "forest_leaves_02_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_leaves_02/forest_leaves_02_arm_2k.jpg",
+          "sha256": "d8423b522d86285e26036d27fc51f4db7b8c6716b1558deb4575b288e14c28b7",
+          "bytes": 1066850
+        }
+      }
+    },
+    "ph:mud_forest": {
+      "provider": "polyhaven",
+      "id": "mud_forest",
+      "res": "2k",
+      "author": "eye-candy.xyz",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/mud_forest",
+      "files": {
+        "mud_forest_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_diff_2k.jpg",
+          "sha256": "6726cf9ad9b1be9bf284c629dd95d732527b18fc92be06ae9093a96a68f77628",
+          "bytes": 3683329
+        },
+        "mud_forest_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_nor_gl_2k.jpg",
+          "sha256": "8d0ad08c4d0df9aabd2fc42ef34e0d34010d9a63eb472eed214be6fad5bc2d4e",
+          "bytes": 5909919
+        },
+        "mud_forest_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_arm_2k.jpg",
+          "sha256": "909f709f75601721689f019afe2e1127d7a2fadb90711bba70fd365037003f94",
+          "bytes": 3326167
+        }
+      }
+    },
+    "acg:Rock045": {
+      "provider": "ambientcg",
+      "id": "Rock045",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Rock045",
+      "files": {
+        "Rock045_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Rock045_2K-JPG.zip",
+          "sha256": "95f8f208d4426ab7885a896a6004a85ce83dac3e098b9790a3cd7422f2d3d021",
+          "bytes": 31785743
+        }
+      }
+    },
+    "ph:rocks_ground_09": {
+      "provider": "polyhaven",
+      "id": "rocks_ground_09",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/rocks_ground_09",
+      "files": {
+        "rocks_ground_09_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocks_ground_09/rocks_ground_09_diff_2k.jpg",
+          "sha256": "cf93419edfeb18b8d1d82b033d8dd5010d5b7dceb996d9871471fefeea3cca87",
+          "bytes": 3545539
+        },
+        "rocks_ground_09_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocks_ground_09/rocks_ground_09_nor_gl_2k.jpg",
+          "sha256": "34fb9d9aca12ac7cdca6d4ddc491c7fe17b82bf641c7be129a922677d5dc51e8",
+          "bytes": 5003330
+        },
+        "rocks_ground_09_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rocks_ground_09/rocks_ground_09_arm_2k.jpg",
+          "sha256": "a4d2377653213195ea15ef50524780cd573c7eade6997afb23211ae53fbe9421",
+          "bytes": 842148
+        }
+      }
+    },
+    "acg:Asphalt021": {
+      "provider": "ambientcg",
+      "id": "Asphalt021",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Asphalt021",
+      "files": {
+        "Asphalt021_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Asphalt021_2K-JPG.zip",
+          "sha256": "ed83369cd47d726a482d4d242444d3522d4ffe29e6fae12fee2652b9fd537395",
+          "bytes": 34257594
+        }
+      }
+    },
+    "ph:dry_mud_field_001": {
+      "provider": "polyhaven",
+      "id": "dry_mud_field_001",
+      "res": "2k",
+      "author": "Rob Tuytel, Rico Cilliers",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/dry_mud_field_001",
+      "files": {
+        "dry_mud_field_001_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dry_mud_field_001/dry_mud_field_001_diff_2k.jpg",
+          "sha256": "5e4cf51f8ce858a04e19228dc6e1f4956a47e0ee92efa684bd0079e326715b4c",
+          "bytes": 1375586
+        },
+        "dry_mud_field_001_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dry_mud_field_001/dry_mud_field_001_nor_gl_2k.jpg",
+          "sha256": "2aa8f6415e900a1b5c5e0b8b75eed0f51013902d5511220dcc6e9b45e70239a4",
+          "bytes": 2344766
+        },
+        "dry_mud_field_001_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dry_mud_field_001/dry_mud_field_001_arm_2k.jpg",
+          "sha256": "d6ae57ea39da3de05597f7f7864fbc36e2d24fe6368ddca4d375cb34e26b8f72",
+          "bytes": 913301
+        }
+      }
+    },
+    "acg:Bark014": {
+      "provider": "ambientcg",
+      "id": "Bark014",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Bark014",
+      "files": {
+        "Bark014_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Bark014_2K-JPG.zip",
+          "sha256": "2ae21b265b55512521b0c1f161ebaa5bbc9867d8e47327974027d38fb711d7eb",
+          "bytes": 29750598
+        }
+      }
+    },
+    "ph:pine_bark": {
+      "provider": "polyhaven",
+      "id": "pine_bark",
+      "res": "2k",
+      "author": "Dimitrios Savva",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/pine_bark",
+      "files": {
+        "pine_bark_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/pine_bark/pine_bark_diff_2k.jpg",
+          "sha256": "741f333ab9f8a0996d8a53905b5ac792fab77d7ccb8cac5fbaed8c99b9f6abd5",
+          "bytes": 3167561
+        },
+        "pine_bark_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/pine_bark/pine_bark_nor_gl_2k.jpg",
+          "sha256": "e91d024441a698523472ef2001be2eade2f73005d798466c7acd3ec5d585667f",
+          "bytes": 4637035
+        },
+        "pine_bark_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/pine_bark/pine_bark_arm_2k.jpg",
+          "sha256": "34b678403ce3d069d590c407b2bef54ab5b0da1a55a8a7b64f420861b3986e2b",
+          "bytes": 3084928
+        }
+      }
+    },
+    "ph:distressed_painted_planks": {
+      "provider": "polyhaven",
+      "id": "distressed_painted_planks",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/distressed_painted_planks",
+      "files": {
+        "distressed_painted_planks_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/distressed_painted_planks/distressed_painted_planks_diff_2k.jpg",
+          "sha256": "d774c704ab449a860ae6620c4472fd75a01d48ac93a5bdd79d414b16e56bca30",
+          "bytes": 1422193
+        },
+        "distressed_painted_planks_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/distressed_painted_planks/distressed_painted_planks_nor_gl_2k.jpg",
+          "sha256": "e5ec24e42ca30f7b66d23d74b409ce0a66998bffd17929f1d751af7e47d275ef",
+          "bytes": 1705372
+        },
+        "distressed_painted_planks_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/distressed_painted_planks/distressed_painted_planks_arm_2k.jpg",
+          "sha256": "66b615472647f5d92971ba484bb2b89fcd7650dff6e8b581cf90febc51c5c734",
+          "bytes": 1449641
+        }
+      }
+    },
+    "ph:beam_wall_01": {
+      "provider": "polyhaven",
+      "id": "beam_wall_01",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/beam_wall_01",
+      "files": {
+        "beam_wall_01_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/beam_wall_01/beam_wall_01_diff_2k.jpg",
+          "sha256": "ca14a426e17388aed0ee2132f0c8a15638aa1cdb815075df98cb42d60b4f4d10",
+          "bytes": 858270
+        },
+        "beam_wall_01_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/beam_wall_01/beam_wall_01_nor_gl_2k.jpg",
+          "sha256": "41ecf4bc653f50bcb7432e9878dff5b3a48844fe9950a5dc2edabb8714b30bd5",
+          "bytes": 487608
+        },
+        "beam_wall_01_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/beam_wall_01/beam_wall_01_arm_2k.jpg",
+          "sha256": "896ced779f3c45dd7ed4d6b688bb861f7707f7f22b55a74a4e34e79a66027abb",
+          "bytes": 393337
+        }
+      }
+    },
+    "acg:Bricks097": {
+      "provider": "ambientcg",
+      "id": "Bricks097",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Bricks097",
+      "files": {
+        "Bricks097_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Bricks097_2K-JPG.zip",
+          "sha256": "0c4ea4f9ba8373ba9a6f12b0f92a2b1859686e8c670f44616b38be095f65b71f",
+          "bytes": 15930202
+        }
+      }
+    },
+    "ph:concrete_wall_007": {
+      "provider": "polyhaven",
+      "id": "concrete_wall_007",
+      "res": "2k",
+      "author": "Dario Barresi, Rico Cilliers, Charlotte Baglioni",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/concrete_wall_007",
+      "files": {
+        "concrete_wall_007_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_007/concrete_wall_007_diff_2k.jpg",
+          "sha256": "6399f39d4937d07b41a10f592eef5b4c955810545b889c0ba808fae77e394de4",
+          "bytes": 2926629
+        },
+        "concrete_wall_007_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_007/concrete_wall_007_nor_gl_2k.jpg",
+          "sha256": "5ac45b016bcb9bac58c82b5c81bd4b2d49e14cb704795e6cc6b0e82a2db42969",
+          "bytes": 2572385
+        },
+        "concrete_wall_007_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_007/concrete_wall_007_arm_2k.jpg",
+          "sha256": "e821fb48a8a1f31fbee196ef8c7a6a67957fd71f77422391d59b7ae436660341",
+          "bytes": 2760239
+        }
+      }
+    },
+    "ph:rusty_metal_04": {
+      "provider": "polyhaven",
+      "id": "rusty_metal_04",
+      "res": "2k",
+      "author": "Amal Kumar",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/rusty_metal_04",
+      "files": {
+        "rusty_metal_04_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_metal_04/rusty_metal_04_diff_2k.jpg",
+          "sha256": "dc17baa7c113af0a8db59a7166dbebd1d8bc842e69b1f07b89d9e90531ebbd22",
+          "bytes": 3463347
+        },
+        "rusty_metal_04_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_metal_04/rusty_metal_04_nor_gl_2k.jpg",
+          "sha256": "b230568d198778afbf3d104d2951e2e2306ddb276bc1ed2f441b9040c58af537",
+          "bytes": 3582694
+        },
+        "rusty_metal_04_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_metal_04/rusty_metal_04_arm_2k.jpg",
+          "sha256": "ac62465ccd41994d31fc5b6f0c1651a1e9cdd2d80ec32e3bb0cc3b4fe22f3caa",
+          "bytes": 2940102
+        }
+      }
+    },
+    "acg:PaintedMetal006": {
+      "provider": "ambientcg",
+      "id": "PaintedMetal006",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/PaintedMetal006",
+      "files": {
+        "PaintedMetal006_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=PaintedMetal006_2K-JPG.zip",
+          "sha256": "15ab5881fae2def178657d8f861650d33cbcdd6ac82a4dcf05ae8d9c47386a71",
+          "bytes": 35149748
+        }
+      }
+    },
+    "ph:rusty_corrugated_iron": {
+      "provider": "polyhaven",
+      "id": "rusty_corrugated_iron",
+      "res": "2k",
+      "author": "Charlotte Baglioni",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/rusty_corrugated_iron",
+      "files": {
+        "rusty_corrugated_iron_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_corrugated_iron/rusty_corrugated_iron_diff_2k.jpg",
+          "sha256": "fe43b2ea9e4a13974e5fbbba677ae2a09b8883066dab7106e2cc090b2835b433",
+          "bytes": 2552964
+        },
+        "rusty_corrugated_iron_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_corrugated_iron/rusty_corrugated_iron_nor_gl_2k.jpg",
+          "sha256": "3bcffce440cf608f086ac0a00874da4927a5d5fdbd9a05bebaa768b9c5f6095c",
+          "bytes": 2841262
+        },
+        "rusty_corrugated_iron_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rusty_corrugated_iron/rusty_corrugated_iron_arm_2k.jpg",
+          "sha256": "8b2a4b024bbd9e433ce1ba0e1631dde5e6f00434d55ae5fd3df15a56894b12c2",
+          "bytes": 1677217
+        }
+      }
+    },
+    "ph:grey_roof_tiles": {
+      "provider": "polyhaven",
+      "id": "grey_roof_tiles",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/grey_roof_tiles",
+      "files": {
+        "grey_roof_tiles_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_roof_tiles/grey_roof_tiles_diff_2k.jpg",
+          "sha256": "f0ccddb07c8b21cd7825fd2c4cdf04cff23ec9fc52a92578122036ccf22a8a90",
+          "bytes": 2039152
+        },
+        "grey_roof_tiles_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_roof_tiles/grey_roof_tiles_nor_gl_2k.jpg",
+          "sha256": "e91134466a2aec440eae42ccef20f7055d87bf8caac208555eb1f069578eb29a",
+          "bytes": 1504796
+        },
+        "grey_roof_tiles_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_roof_tiles/grey_roof_tiles_arm_2k.jpg",
+          "sha256": "b13bc276160a321102626406b8404966aac81dacf3d6ecb775b1bd91bd4887a8",
+          "bytes": 519862
+        }
+      }
+    },
+    "ph:old_wood_floor": {
+      "provider": "polyhaven",
+      "id": "old_wood_floor",
+      "res": "2k",
+      "author": "Guillaume Monsergent",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/old_wood_floor",
+      "files": {
+        "old_wood_floor_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/old_wood_floor/old_wood_floor_diff_2k.jpg",
+          "sha256": "5f07d01e98599d2cd90355145ef71733afda8f3756c94e0d0de26aa92f826400",
+          "bytes": 3116403
+        },
+        "old_wood_floor_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/old_wood_floor/old_wood_floor_nor_gl_2k.jpg",
+          "sha256": "17765f0cfc94a8e38cba2e8de29de25f0b0bd7dd6e940b385ea15989751fbfe3",
+          "bytes": 2927156
+        },
+        "old_wood_floor_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/old_wood_floor/old_wood_floor_arm_2k.jpg",
+          "sha256": "001022a3a6727e62a81c694eda15d64f690631f2dbc48251f3a3cb4814cff68e",
+          "bytes": 2766097
+        }
+      }
+    },
+    "acg:PaintedPlaster014": {
+      "provider": "ambientcg",
+      "id": "PaintedPlaster014",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/PaintedPlaster014",
+      "files": {
+        "PaintedPlaster014_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=PaintedPlaster014_2K-JPG.zip",
+          "sha256": "dba0fdf3c11f71230e4f3e337d2144c80c5885f9b444f121aa3b9a1beb57ab64",
+          "bytes": 30821899
+        }
+      }
+    },
+    "acg:Metal029": {
+      "provider": "ambientcg",
+      "id": "Metal029",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Metal029",
+      "files": {
+        "Metal029_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Metal029_2K-JPG.zip",
+          "sha256": "b692870dce0ae0c7c19fc37e9593a5529f47ef819ae99c2f9a4713ebeaffa3e6",
+          "bytes": 24923190
+        }
+      }
+    },
+    "ph:lacquered_cherry_wood": {
+      "provider": "polyhaven",
+      "id": "lacquered_cherry_wood",
+      "res": "2k",
+      "author": "Jenelle van Heerden, Rico Cilliers",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/lacquered_cherry_wood",
+      "files": {
+        "lacquered_cherry_wood_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/lacquered_cherry_wood/lacquered_cherry_wood_diff_2k.jpg",
+          "sha256": "15728956eae2ae99a4d23e69f94f9690a063477e253c92d04c7109b7702332b8",
+          "bytes": 2694321
+        },
+        "lacquered_cherry_wood_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/lacquered_cherry_wood/lacquered_cherry_wood_nor_gl_2k.jpg",
+          "sha256": "82464d2d317e36ef59c1d1007c5c104868b83a869318dc0a1f0f3d21f65332a5",
+          "bytes": 667293
+        },
+        "lacquered_cherry_wood_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/lacquered_cherry_wood/lacquered_cherry_wood_arm_2k.jpg",
+          "sha256": "e6110a56a9df252e1d3593862185cff1afd0071ba8014509a6f9c9fa8e056a0b",
+          "bytes": 2878924
+        }
+      }
+    },
+    "acg:Plastic003": {
+      "provider": "ambientcg",
+      "id": "Plastic003",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Plastic003",
+      "files": {
+        "Plastic003_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Plastic003_2K-JPG.zip",
+          "sha256": "8b5d3f67377969ca9a6efb568e165482e73407a66c67cd12386d041c363cbaf9",
+          "bytes": 17699829
+        }
+      }
+    },
+    "acg:Fabric066": {
+      "provider": "ambientcg",
+      "id": "Fabric066",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Fabric066",
+      "files": {
+        "Fabric066_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Fabric066_2K-JPG.zip",
+          "sha256": "7af520fce64a91a7c0eeb89a6b4e02d0c57da8c886a44ec2b5d8624eb4688be6",
+          "bytes": 35769326
+        }
+      }
+    },
+    "ph:fir_tree_01_twig": {
+      "provider": "polyhaven",
+      "id": "fir_tree_01",
+      "res": "2k",
+      "maps": {
+        "albedo": "twig_diff",
+        "alpha": "twig_alpha",
+        "normal": "twig_nor_gl",
+        "arm": "twig_arm"
+      },
+      "author": "Rob Tuytel, Rico Cilliers",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/fir_tree_01",
+      "files": {
+        "fir_tree_01_twig_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fir_tree_01/fir_tree_01_twig_diff_2k.jpg",
+          "sha256": "5504646d484a08649a9cd14402860063e69fd10072238f5afe72214e6bf478be",
+          "bytes": 1141996
+        },
+        "fir_tree_01_twig_alpha_2k.png": {
+          "role": "alpha",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/2k/fir_tree_01/fir_tree_01_twig_alpha_2k.png",
+          "sha256": "6eecd1cf1e059488be2a41d15bb3c8cb3d844765ed11be8087e6e02acd58b181",
+          "bytes": 996187
+        },
+        "fir_tree_01_twig_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fir_tree_01/fir_tree_01_twig_nor_gl_2k.jpg",
+          "sha256": "874596561e6fa69ae6fc381e77180298441bd469b3918bb493436ea829ccd815",
+          "bytes": 1611490
+        },
+        "fir_tree_01_twig_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fir_tree_01/fir_tree_01_twig_arm_2k.jpg",
+          "sha256": "16f785953e0c72931c478801064b8e552675e76c62a2880bedc7e8e90593ca14",
+          "bytes": 1271524
+        }
+      }
+    },
+    "ph:fern_02": {
+      "provider": "polyhaven",
+      "id": "fern_02",
+      "res": "2k",
+      "maps": {
+        "albedo": "Diffuse",
+        "alpha": "Alpha",
+        "normal": "nor_gl",
+        "arm": "arm"
+      },
+      "author": "Rob Tuytel, Rico Cilliers",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/fern_02",
+      "files": {
+        "fern_02_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_diff_2k.jpg",
+          "sha256": "9ee18172170728050871772e2cd6d8d37b52f9138e61b49b04486623f9caf84b",
+          "bytes": 993703
+        },
+        "fern_02_alpha_2k.png": {
+          "role": "alpha",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/2k/fern_02/fern_02_alpha_2k.png",
+          "sha256": "f51eb9b8f9f4b25a882f8fe12d1ef53ba69448bac7e71396ec1f05b684e9ea75",
+          "bytes": 230089
+        },
+        "fern_02_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_nor_gl_2k.jpg",
+          "sha256": "dfe1ac4a428d21f7c134411500177d66b8dd800c8fec6f0040c50f44414a777b",
+          "bytes": 1365615
+        },
+        "fern_02_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/2k/fern_02/fern_02_arm_2k.jpg",
+          "sha256": "1eaf9bd29e2d83a77ca5d89bdddebcd9216b8b4ba244644580fe5b89bbe713f1",
+          "bytes": 850856
+        }
+      }
+    },
+    "acg:LeafSet014": {
+      "provider": "ambientcg",
+      "id": "LeafSet014",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/LeafSet014",
+      "files": {
+        "LeafSet014_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=LeafSet014_2K-JPG.zip",
+          "sha256": "8065d616032cc3a2dfa7ff40ba716e483b7fc854ae8c8f03fa95ada2cb7fccc6",
+          "bytes": 11343601
+        }
+      }
+    },
+    "acg:LeafSet007": {
+      "provider": "ambientcg",
+      "id": "LeafSet007",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/LeafSet007",
+      "files": {
+        "LeafSet007_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=LeafSet007_2K-JPG.zip",
+          "sha256": "73f2c7db18fe444fd5050576f4b98403365907547679254304dda2518a629e2f",
+          "bytes": 12554933
+        }
+      }
+    },
+    "ph:overcast_soil": {
+      "provider": "polyhaven",
+      "id": "overcast_soil",
+      "kind": "hdri",
+      "res": "2k",
+      "author": "Sergej Majboroda",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/overcast_soil",
+      "files": {
+        "overcast_soil_2k.hdr": {
+          "role": "hdri",
+          "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/overcast_soil_2k.hdr",
+          "sha256": "fca17ff8eb5836bf954deaf3d5b8feb7b42b4aedd614fe88fc4996be6bae21a9",
+          "bytes": 6502864
+        }
+      }
+    }
+  },
+  "terrain": {
+    "_about": "Layer order is fixed by assets/shaders/terrain.wgsl and src/render/terrain_material.rs. 'repeat' tiles the source NxN inside the layer so its real-world scale matches the shader's tiling (3 m, rock 5 m). Grading keys as in 'materials'.",
+    "size": 1024,
+    "layers": [
+      {
+        "name": "grass",
+        "source": "ph:grass_ground",
+        "note": "2.5 m scan of tired olive-brown meadow grass",
+        "tint": [
+          0.9,
+          1.0,
+          0.85
+        ],
+        "brightness": 0.85
+      },
+      {
+        "name": "forest_floor",
+        "source": "ph:forest_leaves_02",
+        "note": "3 m: moss, needles, sticks, leaf litter",
+        "saturation": 0.8,
+        "brightness": 0.6
+      },
+      {
+        "name": "mud",
+        "source": "ph:mud_forest",
+        "note": "2.3 m dark wet forest mud",
+        "brightness": 1.4
+      },
+      {
+        "name": "rock",
+        "source": "acg:Rock045",
+        "repeat": 2,
+        "note": "2.4 m grey lichen cliff, repeated 2x2 -> 4.8 m"
+      },
+      {
+        "name": "gravel",
+        "source": "ph:rocks_ground_09",
+        "note": "3 m crushed grey aggregate"
+      },
+      {
+        "name": "asphalt",
+        "source": "acg:Asphalt021",
+        "note": "1.85 m old asphalt with alligator cracking"
+      },
+      {
+        "name": "dirt_road",
+        "source": "ph:dry_mud_field_001",
+        "note": "3 m compacted dirt track"
+      }
+    ]
+  },
+  "materials": {
+    "_about": "Single 2D KTX2 sets under assets/textures/materials/<name>/. Optional grading: 'recolor' (target mean sRGB colour, keeps the source's luminance detail), 'saturation', 'tint' (linear RGB multiplier), 'brightness'; ARM overrides: 'roughness' {scale, offset, min, max}, 'metallic' (constant).",
+    "size": 1024,
+    "sets": {
+      "bark_spruce": {
+        "source": "acg:Bark014",
+        "note": "fir/spruce bark, reddish-brown scales"
+      },
+      "bark_birch": {
+        "generate": "birch_bark",
+        "seed": 11,
+        "note": "procedural: white bark, dark lenticels, black fissure patches; trunk axis = texture V"
+      },
+      "bark_pine": {
+        "source": "ph:pine_bark",
+        "note": "pine bark with orange plates"
+      },
+      "weathered_planks": {
+        "source": "ph:distressed_painted_planks",
+        "note": "grey painted planks, flaking"
+      },
+      "log_wall": {
+        "source": "ph:beam_wall_01",
+        "note": "weathered horizontal log wall with moss"
+      },
+      "red_brick": {
+        "source": "acg:Bricks097",
+        "note": "old dirty factory brick"
+      },
+      "concrete_wet": {
+        "source": "ph:concrete_wall_007",
+        "brightness": 0.85,
+        "note": "old weathered cast concrete wall, slightly darkened"
+      },
+      "rusty_metal": {
+        "source": "ph:rusty_metal_04"
+      },
+      "painted_metal_peeling": {
+        "source": "acg:PaintedMetal006",
+        "saturation": 0.75,
+        "note": "green paint peeling off rusty steel"
+      },
+      "corrugated_iron": {
+        "source": "ph:rusty_corrugated_iron",
+        "brightness": 1.5,
+        "saturation": 0.85
+      },
+      "roof_tiles_or_shingles": {
+        "source": "ph:grey_roof_tiles",
+        "note": "grey mossy damp roof tiles"
+      },
+      "wood_floor_old": {
+        "source": "ph:old_wood_floor"
+      },
+      "plaster_wall_dirty": {
+        "source": "acg:PaintedPlaster014",
+        "note": "white plaster broken off over brick"
+      },
+      "gun_metal": {
+        "source": "acg:Metal029",
+        "recolor": [
+          58,
+          60,
+          64
+        ],
+        "metallic": 0.85,
+        "roughness": {
+          "scale": 0.8,
+          "offset": 0.05,
+          "min": 0.3,
+          "max": 0.65
+        },
+        "note": "black powder-coat scan recoloured to blued/parkerized steel; worn edges belong in a curvature mask, not here"
+      },
+      "gun_wood": {
+        "source": "ph:lacquered_cherry_wood",
+        "note": "dark lacquered wood for stocks",
+        "brightness": 2.2
+      },
+      "polymer_plum": {
+        "source": "acg:Plastic003",
+        "recolor": [
+          96,
+          42,
+          46
+        ],
+        "roughness": {
+          "scale": 1.0,
+          "offset": 0.05,
+          "min": 0.35,
+          "max": 0.75
+        },
+        "note": "brown plastic scan recoloured to AK 'plum' polymer"
+      },
+      "robot_shell": {
+        "generate": "robot_shell",
+        "seed": 5,
+        "note": "procedural: off-white painted ceramic-like panels with seams"
+      },
+      "fabric_canvas": {
+        "source": "acg:Fabric066",
+        "recolor": [
+          86,
+          84,
+          56
+        ],
+        "note": "canvas weave recoloured olive drab"
+      }
+    }
+  },
+  "foliage": {
+    "_about": "Alpha-tested cards (RGBA albedo, alpha in A; cut-off 0.5) under assets/textures/foliage/<name>/. Mips keep alpha coverage constant so cards do not thin out with distance.",
+    "size": 1024,
+    "cards": {
+      "spruce_branch": {
+        "source": "ph:fir_tree_01_twig",
+        "note": "Poly Haven fir_tree_01 twig atlas: several fir sprigs plus bark strips (left column) and a stem (bottom)"
+      },
+      "birch_leaves": {
+        "generate": "birch_cluster",
+        "seed": 3,
+        "leaf_sources": [
+          "acg:LeafSet014",
+          "acg:LeafSet007"
+        ],
+        "note": "composited: drooping twigs drawn procedurally, leaves cut from ambientCG LeafSet014 (green) and LeafSet007 (autumn yellow)"
+      },
+      "fern": {
+        "source": "ph:fern_02",
+        "note": "Poly Haven fern_02 frond atlas (5 fronds)"
+      }
+    }
+  },
+  "sky": {
+    "overcast_soil": {
+      "source": "ph:overcast_soil",
+      "out": "sky/overcast_soil_2k.hdr",
+      "note": "low-contrast overcast over flat ploughed fields, tree lines on the horizon"
+    }
+  }
+}

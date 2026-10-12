@@ -368,7 +368,11 @@ impl Heightmap {
                         n += 1;
                     }
                 }
-                if n > 0 { sum / n as f32 } else { raw[i as usize] }
+                if n > 0 {
+                    sum / n as f32
+                } else {
+                    raw[i as usize]
+                }
             })
             .collect();
         // Decks run straight between their abutments.

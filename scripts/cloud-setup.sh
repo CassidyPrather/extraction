@@ -1,6 +1,6 @@
 #!/bin/bash
 # Provisions a machine for this template: Rust (+ wasm target, rustfmt, clippy),
-# ALSA headers, wasm-opt, Xvfb, Blender, and GIMP. Built for the Setup script
+# ALSA headers, wasm-opt, Xvfb, ffmpeg, Blender, GIMP, and KTX-Software. Built for the Setup script
 # field of a Claude Code cloud environment (claude.ai/code -> environment menu
 # -> Edit -> Setup script), but it works on any Debian/Ubuntu box. Paste this
 # whole file there, or just the one-liner:
@@ -18,6 +18,9 @@
 # prefix the one-liner, e.g. `curl ... | BLENDER_VERSION=apt bash`):
 #   BLENDER_VERSION  latest (default) | an exact release like 5.2.2 | apt | skip
 #   GIMP_VERSION     latest (default) | an exact release like 3.2.6 | apt | skip
+#   KTX_VERSION      4.4.2 (default, hash-pinned) | another KTX-Software release
+#                    (unverified) | skip. Provides `ktx`, which
+#                    scripts/fetch_assets.py uses to zstd-compress KTX2 textures.
 #   RUST_TOOLCHAIN   toolchain to install as the default (stable); repos with a
 #                    rust-toolchain.toml also get their pinned toolchain
 #
@@ -29,6 +32,7 @@ set -uo pipefail
 
 BLENDER_VERSION="${BLENDER_VERSION:-latest}"
 GIMP_VERSION="${GIMP_VERSION:-latest}"
+KTX_VERSION="${KTX_VERSION:-4.4.2}"
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
 
 # Cloud setup scripts run as root. Elsewhere, run as yourself: apt goes
@@ -81,6 +85,11 @@ install_system_packages() {
         libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
         libsm6 libice6 libgl1 libegl1 libglu1-mesa \
         || warn "apt-get install of the base packages failed"
+    # Audio pipeline (scripts/fetch_audio.py): ffmpeg decodes, filters,
+    # meters loudness and encodes Ogg Vorbis; numpy does the splitting and
+    # mastering; Pillow draws the --inspect plots.
+    apt_install ffmpeg python3-numpy python3-pil ||
+        warn "apt-get install of the audio tools (ffmpeg, numpy, pillow) failed"
 }
 
 install_rust() {
@@ -226,12 +235,46 @@ install_gimp() {
     apt_install gimp || warn "GIMP install failed"
 }
 
+# KTX-Software's Linux tarball from its GitHub release into
+# /opt/ktx-software-<version>, with `ktx` linked onto PATH. The release has no
+# checksum file, so the default version's sha256 is pinned here.
+KTX_PINNED_VERSION="4.4.2"
+KTX_PINNED_SHA256="a8781bad05f9624edbf910b7f258cd0a4ba7d3e63b49ecc0a0ab440bf6a0a245"
+install_ktx() {
+    log "KTX-Software ($KTX_VERSION)"
+    [ "$KTX_VERSION" = "skip" ] && return
+    [ "$(uname -m)" = "x86_64" ] || { warn "no KTX-Software Linux build for $(uname -m)"; return; }
+    local dir="/opt/ktx-software-$KTX_VERSION"
+    if [ -x "$dir/bin/ktx" ]; then
+        echo "KTX-Software $KTX_VERSION already installed"
+    else
+        local tmp tarball="KTX-Software-$KTX_VERSION-Linux-x86_64.tar.bz2"
+        tmp="$(mktemp -d)"
+        echo "Downloading $tarball"
+        if fetch "https://github.com/KhronosGroup/KTX-Software/releases/download/v$KTX_VERSION/$tarball" "$tmp/$tarball" &&
+            { [ "$KTX_VERSION" != "$KTX_PINNED_VERSION" ] ||
+                echo "$KTX_PINNED_SHA256  $tmp/$tarball" | sha256sum -c - >/dev/null; } &&
+            $SUDO mkdir -p "$dir" &&
+            $SUDO tar -xjf "$tmp/$tarball" -C "$dir" --strip-components=1; then
+            :
+        else
+            warn "KTX-Software $KTX_VERSION install failed"
+            $SUDO rm -rf "$dir"
+        fi
+        rm -rf "$tmp"
+    fi
+    # The binary finds libktx through its own rpath ($ORIGIN/../lib).
+    [ -x "$dir/bin/ktx" ] && link_bin "$dir/bin/ktx" ktx
+}
+
 report() {
     log "Installed"
     command -v rustc >/dev/null && rustc --version
     command -v wasm-opt >/dev/null && wasm-opt --version
+    command -v ffmpeg >/dev/null && ffmpeg -hide_banner -version | head -n 1
     command -v blender >/dev/null && blender --background --factory-startup --version 2>/dev/null | head -n 1
     command -v gimp >/dev/null && gimp --version 2>/dev/null | tail -n 1
+    command -v ktx >/dev/null && ktx --version
     if [ "${#FAILED[@]}" -gt 0 ]; then
         printf '\nSome steps failed; the session will still start:\n' >&2
         printf '  - %s\n' "${FAILED[@]}" >&2
@@ -242,5 +285,6 @@ install_system_packages
 install_rust
 install_blender
 install_gimp
+install_ktx
 report
 exit 0

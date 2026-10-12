@@ -1,110 +1,72 @@
-# Game Template
+# Extraction
 
-Cassidy's opinionated template for small Rust web toys. Enter at your own peril.
+A VR extraction shooter in the spirit of Into the Radius: scavenge a
+quarantined, fog-bound valley, keep out of the robots' way, and get across
+it to the truck. Nothing can be bought; everything is found.
 
-Rust + [macroquad](https://macroquad.rs/), compiled to wasm, deployed as a
-static page. Based on [rust-template](https://github.com/CassidyPrather/rust-template)
-Native desktop builds work too.
+Rust + [Bevy](https://bevy.org/) 0.19, OpenXR via
+[bevy_mod_openxr](https://github.com/awtterpip/bevy_oxr), physics by
+[Avian](https://github.com/Jondolf/avian). Runs in a headset when an OpenXR
+runtime is present (SteamVR, Meta Link, WMR, Monado), flat on a monitor
+otherwise.
 
-Sound is wired up and works in the browser, which is fiddlier than it sounds:
-it needs macroquad's `audio` feature, quad-snd's `audio.js` plugin in `web/`,
-and something to do about browsers refusing to make noise before the user
-clicks. The effects themselves are synthesised in `src/synth.rs` rather than
-loaded, so there are no audio assets to ship or credit. `M` mutes.
+Design decisions and the roadmap: [docs/DESIGN.md](docs/DESIGN.md).
+
+## Playing
+
+```bash
+cargo run --release            # VR if a runtime is up, otherwise flat
+cargo run --release -- --flat  # always flat
+```
+
+Flat controls: WASD move, mouse look (click to capture, Esc to release),
+Shift sprint, Space jump, C crouch. E grab what the crosshair is on, F put
+the second hand on the gun, Q drop (hold to throw), G stow, Tab open the
+backpack, 1-0 draw from a body slot. LMB fire, RMB aim, R reload, V rack /
+work the bolt / break the shotgun, X selector, B magazine release, C combine
+the two held items (load a magazine from a box, clean a gun).
+
+VR: grip grabs, trigger fires; A/X magazine release (breaks a shotgun),
+B/Y slide stop; left stick walks (click to sprint), right stick snap-turns
+and (down) crouches, right stick click works the selector. Reach for a
+slide, charging handle or bolt with your free hand to work it; reach over a
+shoulder for the backpack and let go of it in front of you to open it.
 
 ## Development
 
-Requires [Rust](https://rustup.rs/); `rust-toolchain.toml` pins the version
-(1.99.0), and rustup installs it on first build. Native builds on Linux also
-need ALSA's development files (`libasound2-dev` on Debian/Ubuntu,
-`alsa-lib-devel` on Fedora) — without them the link step fails with `unable to
-find library -lasound`. The wasm build needs none of this; the browser handles audio.
+Needs the Rust toolchain pinned in `rust-toolchain.toml`. On Linux also
+`libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev`, and optionally
+`mold` + `clang` (configured in `.cargo/config.toml`; delete that block if
+you don't have them). `scripts/cloud-setup.sh` installs everything.
 
-Build: `cargo build`
+```bash
+cargo build                                        # first build is long (Bevy)
+cargo test --workspace                             # unit tests (core rules are instant)
+cargo run -- --headless --scenario all             # bot-driven integration tests
+cargo run -- --scenario pistol_drill               # ...watch one in a window
+scripts/map-preview.sh                             # top-down map design preview
+scripts/shot.sh out.png X,Y,Z,YAW,PITCH 20         # headless screenshot (Xvfb + software Vulkan)
+cargo clippy --workspace --all-targets             # default lints; warnings don't fail CI
+```
 
-Run (native): `cargo run`
+Assets: CC0 textures and sounds are fetched and processed by
+`scripts/fetch_assets.py` and `scripts/fetch_audio.py`; the game runs
+without them (procedural stand-ins). Every asset is credited in
+[CREDITS.md](CREDITS.md).
 
-Lint: `cargo clippy --all-targets --all-features -- -D warnings`
+### Layout
 
-Lint (wasm): `cargo clippy --target wasm32-unknown-unknown -- -D warnings`
+- `crates/extraction_core` — engine-free rules: items, inventory, firearm
+  mechanisms, loot, maps and terrain, the cooking graph. Fast unit tests.
+- `src/` — the Bevy game. `GamePlugin` is the logic and runs headless;
+  `ClientPlugin` is everything you see and touch.
+  - `rig/` — the head-and-two-hands abstraction and its drivers (flat, XR, bot)
+  - `interact/` — grabbing, holding, sockets, the body rig and backpack
+  - `weapons/` — guns, ballistics, flat-mode handling macros
+  - `world/` — map loading, terrain, sky and fog, water, forests
+  - `bot/` — bot brains and the scenario tests
+- `assets/` — data (`data/items.ron`, `data/loot.ron`), maps, shaders.
 
-Format: `cargo fmt`
+## License
 
-Test: `cargo test`
-
-Web build: `./scripts/build-web.sh` (needs
-`rustup target add wasm32-unknown-unknown`; uses `wasm-opt` from
-[binaryen](https://github.com/WebAssembly/binaryen) if installed)
-
-Serve the result: `python3 -m http.server --directory dist/web 8080`
-
-Machine setup: `./scripts/cloud-setup.sh` installs all of the above, plus
-Blender and GIMP for making assets. It is built to be a Claude Code cloud
-environment's setup script; see [docs/CLOUD_SETUP.md](docs/CLOUD_SETUP.md).
-
-### Advanced
-
-Benchmark: `cargo bench --bench sim_bench -- --quick`
-
-Security audit: `cargo audit` (requires `cargo install cargo-audit`)
-
-Pre-commit hook: `git config core.hooksPath .githooks` (runs `cargo fmt`)
-
-## Template Setup
-
-1. **Create a new repository** from this template on GitHub (click "Use this
-   template")
-
-2. **Clone your new repository** and navigate to it
-
-3. **Update project metadata** in `Cargo.toml`:
-   - Change `name` to your toy's name (kebab-case, e.g. `orbit-fidget`)
-   - Update the `[lib]` name to match (snake_case, e.g. `orbit_fidget`)
-   - Update the `[[bin]]` name to match (kebab-case)
-   - Update `description`, `repository`, and `keywords`
-   - Update dependencies as required
-
-4. **Update the binary name everywhere it is hardcoded**:
-   - `web/index.html`: the `.wasm` filename it loads
-   - `scripts/build-web.sh`: `BIN=`
-   - `.github/workflows/ci-cd.yml`: `BIN=` in the package step
-
-5. **Update `.vscode/launch.json`** (if using VS Code):
-   - Replace the old crate name in the `cargo` sections
-
-6. **Tune `MAX_WASM_BYTES`** in `.github/workflows/ci-cd.yml` — the default
-   budget is sized for a toy, not for your sprite atlas
-
-7. **Update the README**:
-   - Replace the title and description
-   - Remove or customize this Template Setup section
-
-8. **Verify everything works**:
-   ```bash
-   cargo fmt --check
-   cargo clippy --all-targets --all-features -- -D warnings
-   cargo test
-   ./scripts/build-web.sh
-   ```
-
-### Replacing the demo
-
-The fidget exists so the template ships exercised, not because it is precious.
-Its full blast radius, in gutting order:
-
-1. `src/sim.rs` — replace wholesale. Keep the shape: seed and `InputFrame` in,
-   fixed ticks, `particles()`/`cues()` and an interpolation alpha out.
-   Turn-based toys can swap the accumulator for one-command-per-advance; the
-   determinism contract does not care.
-2. `src/synth.rs` — replace the sound recipes; keep the header tests, which
-   exist because the browser hangs instead of erroring on a bad header.
-3. `src/main.rs` and `src/audio.rs` — `gather_input`, `draw`, and the
-   cue-to-sound mapping are demo-specific. `window_conf`, the main loop, the
-   `View` letterboxing, and the mute/resume plumbing are genre-agnostic.
-4. `benches/sim_bench.rs` — rewrite against your sim's hot path.
-
-Nothing else references the demo. Keep new logic in the sim like the old logic
-was: modules that import macroquad panic under `cargo test` (see SKILL.md).
-
-See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) for generated tips: Frameworks, asset
-sources, shader references, and so on and so forth.
+AGPL-3.0-or-later. Third-party assets are listed in [CREDITS.md](CREDITS.md).

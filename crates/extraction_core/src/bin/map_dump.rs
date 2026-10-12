@@ -65,7 +65,13 @@ fn main() {
     j += &map
         .forests
         .iter()
-        .map(|f| format!("{{\"name\":\"{}\",\"polygon\":[{}]}}", esc(&f.name), pts(&f.polygon)))
+        .map(|f| {
+            format!(
+                "{{\"name\":\"{}\",\"polygon\":[{}]}}",
+                esc(&f.name),
+                pts(&f.polygon)
+            )
+        })
         .collect::<Vec<_>>()
         .join(",");
     j += "],\"placements\":[";

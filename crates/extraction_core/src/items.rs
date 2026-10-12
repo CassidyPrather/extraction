@@ -86,6 +86,24 @@ pub struct ItemDef {
     /// Free-form tags for loot tables and recipes (`"electronics"`, `"metal"`).
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Physical box size in metres: x width, y height, z length (z runs
+    /// along a gun's barrel). Derived from bulk when absent.
+    #[serde(default)]
+    pub dims: Option<[f32; 3]>,
+}
+
+impl ItemDef {
+    /// The physical box size, from `dims` or a cube of the item's bulk.
+    pub fn size_m(&self) -> [f32; 3] {
+        self.dims.unwrap_or_else(|| {
+            let side = (self.bulk.max(0.01) / 1000.0).cbrt();
+            [side, side, side]
+        })
+    }
+
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t == tag)
+    }
 }
 
 /// A detachable box magazine (or a stripper clip, which is a magazine you
@@ -259,7 +277,11 @@ mod tests {
             if mag.stripper {
                 // Clips name the gun they feed by id.
                 let gun = cat.get(cat.expect(&mag.fits)).firearm.as_ref().unwrap();
-                assert_eq!(gun.cartridge, mag.cartridge, "{} cartridge mismatch", def.id);
+                assert_eq!(
+                    gun.cartridge, mag.cartridge,
+                    "{} cartridge mismatch",
+                    def.id
+                );
                 continue;
             }
             let gun = cat
@@ -267,7 +289,11 @@ mod tests {
                 .filter_map(|(_, d)| d.firearm.as_ref())
                 .find(|f| f.magazine_family.as_deref() == Some(mag.fits.as_str()));
             let gun = gun.unwrap_or_else(|| panic!("{} fits no gun", def.id));
-            assert_eq!(gun.cartridge, mag.cartridge, "{} cartridge mismatch", def.id);
+            assert_eq!(
+                gun.cartridge, mag.cartridge,
+                "{} cartridge mismatch",
+                def.id
+            );
         }
     }
 
@@ -277,9 +303,8 @@ mod tests {
         for (_, def) in cat.iter() {
             let Some(gun) = &def.firearm else { continue };
             assert!(
-                cat.iter()
-                    .any(|(_, d)| d.category == Category::Ammo
-                        && d.cartridge.as_deref() == Some(gun.cartridge.as_str())),
+                cat.iter().any(|(_, d)| d.category == Category::Ammo
+                    && d.cartridge.as_deref() == Some(gun.cartridge.as_str())),
                 "nothing feeds {}",
                 def.id
             );
@@ -291,7 +316,10 @@ mod tests {
         let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         for (_, def) in cat.iter() {
             if def.size == SizeClass::Bulky {
-                assert!(matches!(def.category, Category::Firearm | Category::RobotPart));
+                assert!(matches!(
+                    def.category,
+                    Category::Firearm | Category::RobotPart
+                ));
             }
         }
     }

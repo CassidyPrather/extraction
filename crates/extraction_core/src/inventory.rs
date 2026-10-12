@@ -164,7 +164,12 @@ impl<T: Clone> Loadout<T> {
     }
 
     /// Puts `item` in slot `index`.
-    pub fn stow_slot(&mut self, index: usize, item: T, size: SizeClass) -> Result<(), (T, StowError)> {
+    pub fn stow_slot(
+        &mut self,
+        index: usize,
+        item: T,
+        size: SizeClass,
+    ) -> Result<(), (T, StowError)> {
         let Some(slot) = self.slots.get_mut(index) else {
             return Err((item, StowError::WrongSize));
         };
@@ -202,7 +207,10 @@ impl Loadout<ItemKind> {
     }
 
     pub fn backpack_used(&self, catalog: &ItemCatalog) -> f32 {
-        self.backpack_items.iter().map(|k| catalog.get(*k).bulk).sum()
+        self.backpack_items
+            .iter()
+            .map(|k| catalog.get(*k).bulk)
+            .sum()
     }
 
     pub fn attention(&self, catalog: &ItemCatalog) -> f32 {

@@ -1,0 +1,2805 @@
+{
+  "_comment": "Sources and mastering sets for scripts/fetch_audio.py; docs/AUDIO.md documents every field. fs_* sources are Freesound HQ previews (Ogg Vorbis ~192 kbps; originals need an API key + OAuth login), all CC0. sha256 is pinned on first fetch. Sets build assets/audio/<category>/<name>_<n>.ogg.",
+  "sources": {
+    "fs_119910": {
+      "url": "https://cdn.freesound.org/previews/119/119910_1990698-hq.ogg",
+      "page": "https://freesound.org/s/119910/",
+      "title": "Fluorescent Lightbulb Hum.aif",
+      "author": "ftpalad",
+      "license": "CC0-1.0",
+      "sha256": "fe8580c0401464c331a6db76e8bbee847c1313aae41f113fdc8cb7c35cc555aa"
+    },
+    "fs_127140": {
+      "url": "https://cdn.freesound.org/previews/127/127140_181941-hq.ogg",
+      "page": "https://freesound.org/s/127140/",
+      "title": "thunder001.aiff",
+      "author": "klangfabrik",
+      "license": "CC0-1.0",
+      "sha256": "8a1e8dcbc86a66458ce045f1503e240c6690df5170c5a4beba83f3700d94415e"
+    },
+    "fs_133978": {
+      "url": "https://cdn.freesound.org/previews/133/133978_823769-hq.ogg",
+      "page": "https://freesound.org/s/133978/",
+      "title": "Item Falling (Plastic).mp3",
+      "author": "EchoCinematics",
+      "license": "CC0-1.0",
+      "sha256": "b3182e6cca7a0afeb202cea235e74e0e50c1958bd7098aaa931b748fc2b28a44"
+    },
+    "fs_136399": {
+      "url": "https://cdn.freesound.org/previews/136/136399_1661766-hq.ogg",
+      "page": "https://freesound.org/s/136399/",
+      "title": "Rifle Gun Shot AK47. close recording in a shooting range.",
+      "author": "felix.blume",
+      "license": "CC0-1.0",
+      "sha256": "26a3df447a87e18d78ef547ee616fa5e57b33bd558cbb73f889bdf160a391e31"
+    },
+    "fs_142892": {
+      "url": "https://cdn.freesound.org/previews/142/142892_2578302-hq.ogg",
+      "page": "https://freesound.org/s/142892/",
+      "title": "AK47 chambering.aif",
+      "author": "ceremonialchapstick",
+      "license": "CC0-1.0",
+      "sha256": "fc4103973030e5d7b2d7b7f023fc3a408042f7705aef9824ad5d97083bffe824"
+    },
+    "fs_148827": {
+      "url": "https://cdn.freesound.org/previews/148/148827_2676248-hq.ogg",
+      "page": "https://freesound.org/s/148827/",
+      "title": ".22 ricochet.mp3",
+      "author": "cedarstudios",
+      "license": "CC0-1.0",
+      "sha256": "200b3c9f684edf123c72f2b16ecc782710576841f3345481174169308ed2f16d"
+    },
+    "fs_148834": {
+      "url": "https://cdn.freesound.org/previews/148/148834_2676248-hq.ogg",
+      "page": "https://freesound.org/s/148834/",
+      "title": ".38 targetside metal.mp3",
+      "author": "cedarstudios",
+      "license": "CC0-1.0",
+      "sha256": "1b9ff76abc13b997cf995895c0d7c8d733ab45570fd59603b5fc89288a0dfa4c"
+    },
+    "fs_148837": {
+      "url": "https://cdn.freesound.org/previews/148/148837_2676248-hq.ogg",
+      "page": "https://freesound.org/s/148837/",
+      "title": ".45 targetside metal.mp3",
+      "author": "cedarstudios",
+      "license": "CC0-1.0",
+      "sha256": "6ea0d88acea37e217ca9d701d8ed0fa2781085f6c93b493fd7974653428739e7"
+    },
+    "fs_148838": {
+      "url": "https://cdn.freesound.org/previews/148/148838_2676248-hq.ogg",
+      "page": "https://freesound.org/s/148838/",
+      "title": "9mm target side metal.mp3",
+      "author": "cedarstudios",
+      "license": "CC0-1.0",
+      "sha256": "3eb70968efc9e4e55dafda430c53bbb526e19668a8526d7724d41ddc8625a2c9"
+    },
+    "fs_148840": {
+      "url": "https://cdn.freesound.org/previews/148/148840_2676248-hq.ogg",
+      "page": "https://freesound.org/s/148840/",
+      "title": "ricochet.mp3",
+      "author": "cedarstudios",
+      "license": "CC0-1.0",
+      "sha256": "43b25d5c852fa34d4a3a9b89eb787c114b13050c739129d1646431ff3d3fa8bd"
+    },
+    "fs_159703": {
+      "url": "https://cdn.freesound.org/previews/159/159703_2886479-hq.ogg",
+      "page": "https://freesound.org/s/159703/",
+      "title": "Bryco Arms Model 38 - 1 shot",
+      "author": "AnthonyChan0",
+      "license": "CC0-1.0",
+      "sha256": "fbd0799b0f417bc4a13d3b860efec755d2ec7e354f308ffbea52758d81e8c14f"
+    },
+    "fs_159706": {
+      "url": "https://cdn.freesound.org/previews/159/159706_2886479-hq.ogg",
+      "page": "https://freesound.org/s/159706/",
+      "title": "Mossberg 500A - 1  shot and echo",
+      "author": "AnthonyChan0",
+      "license": "CC0-1.0",
+      "sha256": "013b07ca88739d78115d8f67ff91682436434fc61bbe87b4caa6f3f529083328"
+    },
+    "fs_159707": {
+      "url": "https://cdn.freesound.org/previews/159/159707_2886479-hq.ogg",
+      "page": "https://freesound.org/s/159707/",
+      "title": "Mossberg 500A - 1 shot and echo alt",
+      "author": "AnthonyChan0",
+      "license": "CC0-1.0",
+      "sha256": "80136e1c9c1062a65aff9127d8ade26ad1c12308ac824c64d262471521698144"
+    },
+    "fs_171701": {
+      "url": "https://cdn.freesound.org/previews/171/171701_968159-hq.ogg",
+      "page": "https://freesound.org/s/171701/",
+      "title": "Remington 700 Bolt Forward.mp3",
+      "author": "Pjkasinski3",
+      "license": "CC0-1.0",
+      "sha256": "42c1a62ad77f24cd12f1b653020b836b5d0fd0f7a7f10e535f0d0f2bc268ce80"
+    },
+    "fs_171702": {
+      "url": "https://cdn.freesound.org/previews/171/171702_968159-hq.ogg",
+      "page": "https://freesound.org/s/171702/",
+      "title": "Remington 700 Bolt Back.mp3",
+      "author": "Pjkasinski3",
+      "license": "CC0-1.0",
+      "sha256": "fc318dcf0314a74aa580fc525a735d01f0b34f579fd25316c0ed5d9d0392778d"
+    },
+    "fs_179365": {
+      "url": "https://cdn.freesound.org/previews/179/179365_544580-hq.ogg",
+      "page": "https://freesound.org/s/179365/",
+      "title": "Small Rock and Stone Hits.wav",
+      "author": "lolamadeus",
+      "license": "CC0-1.0",
+      "sha256": "8f79dc369931788eb27c6acbc8310fbe1a999307ca912bef38a10dfc496ac831"
+    },
+    "fs_181115": {
+      "url": "https://cdn.freesound.org/previews/181/181115_1591616-hq.ogg",
+      "page": "https://freesound.org/s/181115/",
+      "title": "Metal Cup Drop",
+      "author": "AlecCorday",
+      "license": "CC0-1.0",
+      "sha256": "7f9bfa3bac082c9406fcfdb0134a5b96189bd4e8b168b7539fa1b01c7b8a6f03"
+    },
+    "fs_182090": {
+      "url": "https://cdn.freesound.org/previews/182/182090_71257-hq.ogg",
+      "page": "https://freesound.org/s/182090/",
+      "title": "U.S. National Park Service - American Crow.flac",
+      "author": "qubodup",
+      "license": "CC0-1.0",
+      "sha256": "ab8cc530fa650fddd937ad43823c214df29ec85ce66fe82b6105999cd9a4cb30"
+    },
+    "fs_188242": {
+      "url": "https://cdn.freesound.org/previews/188/188242_71257-hq.ogg",
+      "page": "https://freesound.org/s/188242/",
+      "title": "Toy Drone Engine Close",
+      "author": "qubodup",
+      "license": "CC0-1.0",
+      "sha256": "382ec130114c4257a63f32183c63141fb450cc67dbf8454c5131de924129c8e1"
+    },
+    "fs_188821": {
+      "url": "https://cdn.freesound.org/previews/188/188821_2737063-hq.ogg",
+      "page": "https://freesound.org/s/188821/",
+      "title": "Servo noises",
+      "author": "peridactyloptrix",
+      "license": "CC0-1.0",
+      "sha256": "76489b9fd1d38d93271c623ac2e2a65c3665d478f36f08503535ac0ff01e1dfe"
+    },
+    "fs_196125": {
+      "url": "https://cdn.freesound.org/previews/196/196125_770707-hq.ogg",
+      "page": "https://freesound.org/s/196125/",
+      "title": "distant thunders meadow",
+      "author": "Yuval",
+      "license": "CC0-1.0",
+      "sha256": "c8281cfea53e228ec6456a784f6bef1817a8b8d62bd2f2a2afc93628e7e3bf6d"
+    },
+    "fs_200273": {
+      "url": "https://cdn.freesound.org/previews/200/200273_2322692-hq.ogg",
+      "page": "https://freesound.org/s/200273/",
+      "title": "Rain light 2 (rural)",
+      "author": "jmbphilmes",
+      "license": "CC0-1.0",
+      "sha256": "de245848efb46dd4b5c6a19ff20def6e2bcf78071966fb10faed10a9c8a1c95b"
+    },
+    "fs_202989": {
+      "url": "https://cdn.freesound.org/previews/202/202989_1667744-hq.ogg",
+      "page": "https://freesound.org/s/202989/",
+      "title": "Wind_pine.wav",
+      "author": "sinewave1kHz",
+      "license": "CC0-1.0",
+      "sha256": "b23d29cf7f4561b7600b0bfcede0c0f2bea8b586f7f9b848a7f0301f539d8cd8"
+    },
+    "fs_210102": {
+      "url": "https://cdn.freesound.org/previews/210/210102_3278936-hq.ogg",
+      "page": "https://freesound.org/s/210102/",
+      "title": "Brass bullet shell casing drop onto concrete, multiple takes",
+      "author": "GrayJoy",
+      "license": "CC0-1.0",
+      "sha256": "a703d1dc578b55f6f1648d623c7e280e862056b642b07540cf0ad0f93a26b191"
+    },
+    "fs_212698": {
+      "url": "https://cdn.freesound.org/previews/212/212698_2585359-hq.ogg",
+      "page": "https://freesound.org/s/212698/",
+      "title": "Breaking a glass bottle",
+      "author": "dasebr",
+      "license": "CC0-1.0",
+      "sha256": "bc903d61777e88316ef21b308cae4978ffbafb0656e5f3d131f0bb29f1bb632c"
+    },
+    "fs_216878": {
+      "url": "https://cdn.freesound.org/previews/216/216878_4049088-hq.ogg",
+      "page": "https://freesound.org/s/216878/",
+      "title": "Squeaky door opened quickly.wav",
+      "author": "CastIronCarousel",
+      "license": "CC0-1.0",
+      "sha256": "68fdc4e16489cbc6b0dfe4ff69894d757181190d56a51f2d8b8decf3b7e42161"
+    },
+    "fs_219499": {
+      "url": "https://cdn.freesound.org/previews/219/219499_4056007-hq.ogg",
+      "page": "https://freesound.org/s/219499/",
+      "title": "Door - Creak.wav",
+      "author": "JarredGibb",
+      "license": "CC0-1.0",
+      "sha256": "28ebb1a2a7128c043cda306eb0c7450023e321e677b3fe97ad8626eefbf665f2"
+    },
+    "fs_221528": {
+      "url": "https://cdn.freesound.org/previews/221/221528_1038806-hq.ogg",
+      "page": "https://freesound.org/s/221528/",
+      "title": "Glass Break",
+      "author": "unfa",
+      "license": "CC0-1.0",
+      "sha256": "5335c238731731b8efcb5b2bd81071432786c93fded88db6f8bc4090feb74f76"
+    },
+    "fs_249911": {
+      "url": "https://cdn.freesound.org/previews/249/249911_389377-hq.ogg",
+      "page": "https://freesound.org/s/249911/",
+      "title": "footsteps in a water puddle",
+      "author": "launemax",
+      "license": "CC0-1.0",
+      "sha256": "03d14bcd7774f2126c0b46b999790e218ad9d23498f866ec83ac7b9d81bc1d83"
+    },
+    "fs_259553": {
+      "url": "https://cdn.freesound.org/previews/259/259553_2316086-hq.ogg",
+      "page": "https://freesound.org/s/259553/",
+      "title": "small metal object fall ",
+      "author": "nicktermer",
+      "license": "CC0-1.0",
+      "sha256": "0e1e71def5e23a5bd9f551b6bb9ec8801e6d551267b666be242dfbc1b8746a4a"
+    },
+    "fs_264889": {
+      "url": "https://cdn.freesound.org/previews/264/264889_2291325-hq.ogg",
+      "page": "https://freesound.org/s/264889/",
+      "title": "SFX Metal Shed Door - Hits, Clangs, Rattle",
+      "author": "EpicWizard",
+      "license": "CC0-1.0",
+      "sha256": "30f7c1914f9c531ce0096db26fa21d5fd8529181c3657ce41042dc20b4965200"
+    },
+    "fs_267549": {
+      "url": "https://cdn.freesound.org/previews/267/267549_2792951-hq.ogg",
+      "page": "https://freesound.org/s/267549/",
+      "title": "Thunder4",
+      "author": "Yoyodaman234",
+      "license": "CC0-1.0",
+      "sha256": "2fbd91de27e4ce9fff11e7e7df7b8dcc4965b42a95faecdb98a4eb80ca6354ea"
+    },
+    "fs_272253": {
+      "url": "https://cdn.freesound.org/previews/272/272253_4181170-hq.ogg",
+      "page": "https://freesound.org/s/272253/",
+      "title": "concrete_17a_boots_walk.wav",
+      "author": "sturmankin",
+      "license": "CC0-1.0",
+      "sha256": "189a82bce0cf46dbaac4019b8ae1a1ebd2efc119b83b741885eae8f7aebea9ec"
+    },
+    "fs_318964": {
+      "url": "https://cdn.freesound.org/previews/318/318964_5421667-hq.ogg",
+      "page": "https://freesound.org/s/318964/",
+      "title": "Bouncing Shell Casings (Various Sizes)",
+      "author": "GryffDavid",
+      "license": "CC0-1.0",
+      "sha256": "138039765bf1fb45e8f24e3f6f6cbf898e710b0eca2f047372114e12d77380c5"
+    },
+    "fs_319214": {
+      "url": "https://cdn.freesound.org/previews/319/319214_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319214/",
+      "title": "Sticks in dirt 2.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "afe33d6b637787fad3d378cbb599a06184bd26158253de71a3b3c0b5a8038f64"
+    },
+    "fs_319222": {
+      "url": "https://cdn.freesound.org/previews/319/319222_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319222/",
+      "title": "Single Rock hit Dirt.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "361db5c2f3ccee0a1bd3ac2b21bbb0e34edb56207f49c48dbc7b78d5d807f744"
+    },
+    "fs_319226": {
+      "url": "https://cdn.freesound.org/previews/319/319226_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319226/",
+      "title": "Single rock hitting wood.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "f8352b27ec25d65a7056bcbaa5c61bd27bf490122d80c92a2c660ed910cc2a67"
+    },
+    "fs_319227": {
+      "url": "https://cdn.freesound.org/previews/319/319227_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319227/",
+      "title": "Single Rock hitting wood 4.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "69b6e8641249c0b1342df23e68f925e44899015bec1edd9255c5603ea93e9b6b"
+    },
+    "fs_319228": {
+      "url": "https://cdn.freesound.org/previews/319/319228_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319228/",
+      "title": "Single Rock hitting wood 2.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "309ad3640f0c662989fcfac2773e38f5718b869ba4ee8e374f7dd0dc9409f4fc"
+    },
+    "fs_319229": {
+      "url": "https://cdn.freesound.org/previews/319/319229_3443504-hq.ogg",
+      "page": "https://freesound.org/s/319229/",
+      "title": "Single Rock hit dirt 2.wav",
+      "author": "worthahep88",
+      "license": "CC0-1.0",
+      "sha256": "9b9615593ef4e31b18222ff2b0f156c310bd98e507121e36f01d302c203d62b8"
+    },
+    "fs_321294": {
+      "url": "https://cdn.freesound.org/previews/321/321294_2146894-hq.ogg",
+      "page": "https://freesound.org/s/321294/",
+      "title": "plastic_boxes_fall_01.wav",
+      "author": "goldendiaphragm",
+      "license": "CC0-1.0",
+      "sha256": "f09e07783663fac46f2f0dc9c7b00e9285a7134ed34b2044098a59d76fb738ba"
+    },
+    "fs_321478": {
+      "url": "https://cdn.freesound.org/previews/321/321478_5485024-hq.ogg",
+      "page": "https://freesound.org/s/321478/",
+      "title": "Concrete Hit 2",
+      "author": "dslrguide",
+      "license": "CC0-1.0",
+      "sha256": "9b4fb3e82a2a2c8012689ffc1dc6a20032fae2394871891a3ca9380c3fdcaf57"
+    },
+    "fs_322021": {
+      "url": "https://cdn.freesound.org/previews/322/322021_813260-hq.ogg",
+      "page": "https://freesound.org/s/322021/",
+      "title": "Servo motor",
+      "author": "Burningmonkey",
+      "license": "CC0-1.0",
+      "sha256": "3b7f70ef5963d136f7e138b15be70aa588b9b22b055a31f2f7aedc5eb9e06699"
+    },
+    "fs_336640": {
+      "url": "https://cdn.freesound.org/previews/336/336640_3281519-hq.ogg",
+      "page": "https://freesound.org/s/336640/",
+      "title": "Alarm, Air Raid Siren, Test, Devonport, Sony PCM M-10.wav",
+      "author": "audiojacked",
+      "license": "CC0-1.0",
+      "sha256": "ab6ebf0ec3fb6117f212ad3bd910d6d861063e408976bd29f927a027cd8c670c"
+    },
+    "fs_339358": {
+      "url": "https://cdn.freesound.org/previews/339/339358_4067257-hq.ogg",
+      "page": "https://freesound.org/s/339358/",
+      "title": "drop04.wav",
+      "author": "newagesoup",
+      "license": "CC0-1.0",
+      "sha256": "5ba56edf681450bc07a31e8b1d1d44107d0024cfb4ca381aeda8c3ee68e905da"
+    },
+    "fs_339359": {
+      "url": "https://cdn.freesound.org/previews/339/339359_4067257-hq.ogg",
+      "page": "https://freesound.org/s/339359/",
+      "title": "drop03.wav",
+      "author": "newagesoup",
+      "license": "CC0-1.0",
+      "sha256": "f82d7f833489d733837270554df93c8d1c79f770a81dc6fca27018712a5d977f"
+    },
+    "fs_339363": {
+      "url": "https://cdn.freesound.org/previews/339/339363_4067257-hq.ogg",
+      "page": "https://freesound.org/s/339363/",
+      "title": "drop07.wav",
+      "author": "newagesoup",
+      "license": "CC0-1.0",
+      "sha256": "6e262ce0d2df9ecf999ea61b3b02c93939cc78996407f220fcfd324872f3162c"
+    },
+    "fs_344360": {
+      "url": "https://cdn.freesound.org/previews/344/344360_6128004-hq.ogg",
+      "page": "https://freesound.org/s/344360/",
+      "title": "Door Open Close",
+      "author": "amholma",
+      "license": "CC0-1.0",
+      "sha256": "efe10f44be158d666834778f695b223cd862ade187553b2950d275ba6ee9e3d8"
+    },
+    "fs_352436": {
+      "url": "https://cdn.freesound.org/previews/352/352436_2247456-hq.ogg",
+      "page": "https://freesound.org/s/352436/",
+      "title": "Forest, Winter, Light Wind",
+      "author": "Kinoton",
+      "license": "CC0-1.0",
+      "sha256": "863e15b809b7cea57e79a24b848e820e009901327aa37d4908f5221e69ef0953"
+    },
+    "fs_370345": {
+      "url": "https://cdn.freesound.org/previews/370/370345_2558531-hq.ogg",
+      "page": "https://freesound.org/s/370345/",
+      "title": "Mosin Nagant Bolt Action Cycle",
+      "author": "Zott820",
+      "license": "CC0-1.0",
+      "sha256": "84ee982321cb9144ab6ed6bfbd4bb4bd56f44cf315e15eb15abb2d34d7fe87c2"
+    },
+    "fs_371094": {
+      "url": "https://cdn.freesound.org/previews/371/371094_6901532-hq.ogg",
+      "page": "https://freesound.org/s/371094/",
+      "title": "Glass Break 1.wav",
+      "author": "mccormick_iain",
+      "license": "CC0-1.0",
+      "sha256": "5760e92ab3902aa07d7efdbcb6d3818f7392ecd424d7ba7756d813b69565384b"
+    },
+    "fs_372612": {
+      "url": "https://cdn.freesound.org/previews/372/372612_123355-hq.ogg",
+      "page": "https://freesound.org/s/372612/",
+      "title": "Dutch forrest ambience",
+      "author": "hz37",
+      "license": "CC0-1.0",
+      "sha256": "51ea4d79d2083436723d72d958b4f8f4b23f7c44d4578675b8ac9f1d07c5f2e1"
+    },
+    "fs_377786": {
+      "url": "https://cdn.freesound.org/previews/377/377786_4817223-hq.ogg",
+      "page": "https://freesound.org/s/377786/",
+      "title": "gun_.22mm_7.5mm_9mm_close_single_shots_m10.wav",
+      "author": "johanwestling",
+      "license": "CC0-1.0",
+      "sha256": "b4e26d37790f7990cf692bf74ea6260d49f8489d1f0b5e548e5b21bea60c61c8"
+    },
+    "fs_377787": {
+      "url": "https://cdn.freesound.org/previews/377/377787_4817223-hq.ogg",
+      "page": "https://freesound.org/s/377787/",
+      "title": "gun_9mm_5m_left_side_m10.wav",
+      "author": "johanwestling",
+      "license": "CC0-1.0",
+      "sha256": "c4e57023d97e83d02e4414008115894d42b4458c380b412a245f809269122bf1"
+    },
+    "fs_377788": {
+      "url": "https://cdn.freesound.org/previews/377/377788_4817223-hq.ogg",
+      "page": "https://freesound.org/s/377788/",
+      "title": "gun_9mm_25m_180_off_axis_debris_m10.wav",
+      "author": "johanwestling",
+      "license": "CC0-1.0",
+      "sha256": "845900db43adc52a894e25a2fed9f800192414dce8b2b7bdbae3a5ca1440baab"
+    },
+    "fs_383852": {
+      "url": "https://cdn.freesound.org/previews/383/383852_2278166-hq.ogg",
+      "page": "https://freesound.org/s/383852/",
+      "title": "Mini Quadcopter Flying Loop",
+      "author": "simeonradivoev",
+      "license": "CC0-1.0",
+      "sha256": "1f4ffdc805f93720cbb387b3d21ed2117834eb5495d4bb8a0de4c44ca79c7626"
+    },
+    "fs_38693": {
+      "url": "https://cdn.freesound.org/previews/38/38693_57789-hq.ogg",
+      "page": "https://freesound.org/s/38693/",
+      "title": "am band static.wav",
+      "author": "cognito perceptu",
+      "license": "CC0-1.0",
+      "sha256": "95ba5762f504085d5fe3ce3d1bbcb6ed6024af089a03e487590eeaeefe489524"
+    },
+    "fs_402791": {
+      "url": "https://cdn.freesound.org/previews/402/402791_7111288-hq.ogg",
+      "page": "https://freesound.org/s/402791/",
+      "title": "AK47 and various other gunshots at indoor shooting range",
+      "author": "acidsnowflake",
+      "license": "CC0-1.0",
+      "sha256": "91e2264c2ca48ce684b78005b73a5800563226efd7e78c5d86ba2554bd365ff1"
+    },
+    "fs_404687": {
+      "url": "https://cdn.freesound.org/previews/404/404687_7707368-hq.ogg",
+      "page": "https://freesound.org/s/404687/",
+      "title": "Hooded crow.wav",
+      "author": "straget",
+      "license": "CC0-1.0",
+      "sha256": "fd3b4df7332653982ddc253e8945f99a0962aa6606be501f58415cd1f7fa740b"
+    },
+    "fs_410551": {
+      "url": "https://cdn.freesound.org/previews/410/410551_7707368-hq.ogg",
+      "page": "https://freesound.org/s/410551/",
+      "title": "Shotgun kaliber 20 compressed the spike by 12 dB wav",
+      "author": "straget",
+      "license": "CC0-1.0",
+      "sha256": "25ac41e339b970729e030d4c783e3eda76bcbaf4af1077d884e0d3b5518caca2"
+    },
+    "fs_410552": {
+      "url": "https://cdn.freesound.org/previews/410/410552_7707368-hq.ogg",
+      "page": "https://freesound.org/s/410552/",
+      "title": "Rifle kaliber 6.5-55 compressed the spike by 12 dB.wav",
+      "author": "straget",
+      "license": "CC0-1.0",
+      "sha256": "0538bca20fa0e2ac0f1b9a2175d6fecabdc303be98b3916ac34cd21d8c5d2a8f"
+    },
+    "fs_412171": {
+      "url": "https://cdn.freesound.org/previews/412/412171_7383104-hq.ogg",
+      "page": "https://freesound.org/s/412171/",
+      "title": "Air Raid Siren Alarm",
+      "author": "Poligonstudio",
+      "license": "CC0-1.0",
+      "sha256": "341d9865a676be24a6625a293153e3ec9e5c73910e01ac92141cb92f2f90e669"
+    },
+    "fs_426767": {
+      "url": "https://cdn.freesound.org/previews/426/426767_7905750-hq.ogg",
+      "page": "https://freesound.org/s/426767/",
+      "title": "Apartment Room Tone.wav",
+      "author": "cMilan",
+      "license": "CC0-1.0",
+      "sha256": "9f4c485958835fac33d5c18ed5b1159360b77d63f857aec67e214d305c1eab1a"
+    },
+    "fs_427595": {
+      "url": "https://cdn.freesound.org/previews/427/427595_3094998-hq.ogg",
+      "page": "https://freesound.org/s/427595/",
+      "title": "20 gauge shotgun gunshot",
+      "author": "michorvath",
+      "license": "CC0-1.0",
+      "sha256": "1bf004c04aab545520b3e73f7c3ca6cba10bd488ddfbc28dbc451e46db9280fd"
+    },
+    "fs_431019": {
+      "url": "https://cdn.freesound.org/previews/431/431019_5635287-hq.ogg",
+      "page": "https://freesound.org/s/431019/",
+      "title": "Stone hit",
+      "author": "CamoMano",
+      "license": "CC0-1.0",
+      "sha256": "67cce9c1441b288fb18887e4f64bfe174ef4769a3522f79e93a3259f96d6e39b"
+    },
+    "fs_431827": {
+      "url": "https://cdn.freesound.org/previews/431/431827_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431827/",
+      "title": "Very distant shot2.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "73f9598134f5829526fe49ab526bbbe28dc0b854e57ab55904dea81cb076767b"
+    },
+    "fs_431828": {
+      "url": "https://cdn.freesound.org/previews/431/431828_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431828/",
+      "title": "Very distant shot.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "22433408d9534dafe8e6e06180c51d747cd5412d57b47cb35506752bf7c45f5a"
+    },
+    "fs_431831": {
+      "url": "https://cdn.freesound.org/previews/431/431831_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431831/",
+      "title": "Sauer 404 close shot 3.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "4ca2f7d44b5b8144dfc089ac8fb3f822eb6137ddcdb65edef8a781f3df6c3bff"
+    },
+    "fs_431832": {
+      "url": "https://cdn.freesound.org/previews/431/431832_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431832/",
+      "title": "Sauer 404 close shot 2.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "77a95f8fdc7d41448faaf71e335a5cbe05e793ac0f773f90060f7b1b2ad1d9c4"
+    },
+    "fs_431833": {
+      "url": "https://cdn.freesound.org/previews/431/431833_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431833/",
+      "title": "Sauer 404 four shots close w: extra shooter.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "d9e16c97dc57781729a4c581a8059940fa694f610ed5050bbbb1a6b52e7c284e"
+    },
+    "fs_431834": {
+      "url": "https://cdn.freesound.org/previews/431/431834_6138164-hq.ogg",
+      "page": "https://freesound.org/s/431834/",
+      "title": "Sauer 404 close shot.wav",
+      "author": "moosegravy",
+      "license": "CC0-1.0",
+      "sha256": "6e2693d17cfb999aca7a195244cee253b19cb7ae33fdf598495885fd1a396cd4"
+    },
+    "fs_433589": {
+      "url": "https://cdn.freesound.org/previews/433/433589_5618682-hq.ogg",
+      "page": "https://freesound.org/s/433589/",
+      "title": "Stream River Water Up Close",
+      "author": "jackthemurray",
+      "license": "CC0-1.0",
+      "sha256": "8ecf2093028ad519aafbe39830591f61288957267f9f1fe61054943c1d357812"
+    },
+    "fs_446019": {
+      "url": "https://cdn.freesound.org/previews/446/446019_7241289-hq.ogg",
+      "page": "https://freesound.org/s/446019/",
+      "title": "Gentle Stream Natural Stream Sound",
+      "author": "BurghRecords",
+      "license": "CC0-1.0",
+      "sha256": "f534a3bb1dd414dcd7bb8be8f6ae13a99614201021143dce3ad85245b47fe90d"
+    },
+    "fs_456195": {
+      "url": "https://cdn.freesound.org/previews/456/456195_5772061-hq.ogg",
+      "page": "https://freesound.org/s/456195/",
+      "title": "Handgun / Pistol Removing Mag and Inserting Mag Foley",
+      "author": "e9118586020",
+      "license": "CC0-1.0",
+      "sha256": "355024ca3135620b2a58c8891d9bdb1acf4db6396ae7dbc642dafc9b58410a0d"
+    },
+    "fs_459970": {
+      "url": "https://cdn.freesound.org/previews/459/459970_6253486-hq.ogg",
+      "page": "https://freesound.org/s/459970/",
+      "title": "Footsteps on hollow wood",
+      "author": "florianreichelt",
+      "license": "CC0-1.0",
+      "sha256": "e23b568cfba33b5b78615e0bc22d46f077dae49d9ffc06730b7f02b2fe3c547f"
+    },
+    "fs_465451": {
+      "url": "https://cdn.freesound.org/previews/465/465451_4596196-hq.ogg",
+      "page": "https://freesound.org/s/465451/",
+      "title": "foley_Cardboard Box Drop.wav",
+      "author": "ittou",
+      "license": "CC0-1.0",
+      "sha256": "21c5a839666950b2f3a136aea1a8b327689724dabaac69bdbe12befc4a5f852f"
+    },
+    "fs_47646": {
+      "url": "https://cdn.freesound.org/previews/47/47646_545448-hq.ogg",
+      "page": "https://freesound.org/s/47646/",
+      "title": "End radio transmission",
+      "author": "ReadeOnly",
+      "license": "CC0-1.0",
+      "sha256": "ee40d52afb6545be601345535681c693f6428073604d36bd61d0a51f96843a7e"
+    },
+    "fs_478238": {
+      "url": "https://cdn.freesound.org/previews/478/478238_9395330-hq.ogg",
+      "page": "https://freesound.org/s/478238/",
+      "title": "Planks Clattering",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "62cfa654457721cb47dc3cb443bc671a82d8213b70cdd94da325c743cf861dad"
+    },
+    "fs_50750": {
+      "url": "https://cdn.freesound.org/previews/50/50750_179538-hq.ogg",
+      "page": "https://freesound.org/s/50750/",
+      "title": "Radio Noise.wav",
+      "author": "RutgerMuller",
+      "license": "CC0-1.0",
+      "sha256": "6c0b604d600b71cfe98c6b9a14068f67b7eee333050a6562c0a86f13309733bd"
+    },
+    "fs_508248": {
+      "url": "https://cdn.freesound.org/previews/508/508248_8644110-hq.ogg",
+      "page": "https://freesound.org/s/508248/",
+      "title": "Russian Mosin-Nagant Loaded With Stripper Clip.wav",
+      "author": "shelbyshark",
+      "license": "CC0-1.0",
+      "sha256": "6941a397c73bc5e9817d1c9ab5457863f46dad7d0a0eb5e41920c6d07cb3236d"
+    },
+    "fs_508746": {
+      "url": "https://cdn.freesound.org/previews/508/508746_1934171-hq.ogg",
+      "page": "https://freesound.org/s/508746/",
+      "title": "Pump Action Shotgun Reload",
+      "author": "AugustSandberg",
+      "license": "CC0-1.0",
+      "sha256": "c8713b4c0488a849499e25be627b33b2b177952c3a804c55da0bb1931c4540e4"
+    },
+    "fs_512780": {
+      "url": "https://cdn.freesound.org/previews/512/512780_7108319-hq.ogg",
+      "page": "https://freesound.org/s/512780/",
+      "title": "CrowOrRaven2.wav",
+      "author": "iwanPlays",
+      "license": "CC0-1.0",
+      "sha256": "edaa5f635856cb482d9d81f1e50e560cdb430e1b469e151227c259ad0168c36b"
+    },
+    "fs_512781": {
+      "url": "https://cdn.freesound.org/previews/512/512781_7108319-hq.ogg",
+      "page": "https://freesound.org/s/512781/",
+      "title": "CrowOrRaven1.wav",
+      "author": "iwanPlays",
+      "license": "CC0-1.0",
+      "sha256": "2d7a82e381cbb5cb0202a573b3abcf9dde2200555787979fe91dbba791a0e5eb"
+    },
+    "fs_519477": {
+      "url": "https://cdn.freesound.org/previews/519/519477_9250976-hq.ogg",
+      "page": "https://freesound.org/s/519477/",
+      "title": "Object_Zip_Backpack.wav",
+      "author": "Nox_Sound",
+      "license": "CC0-1.0",
+      "sha256": "060772a0e38eaca2f41a6040e4d636a1fe1805b1e624ec442cf1f99c1730f71e"
+    },
+    "fs_519591": {
+      "url": "https://cdn.freesound.org/previews/519/519591_7143328-hq.ogg",
+      "page": "https://freesound.org/s/519591/",
+      "title": "Common Raven - Yellowstone National Park",
+      "author": "Nivatius",
+      "license": "CC0-1.0",
+      "sha256": "341f223c407244b68f3c25e349d351976c0d845203894440078f6feb72fe741b"
+    },
+    "fs_520514": {
+      "url": "https://cdn.freesound.org/previews/520/520514_3268195-hq.ogg",
+      "page": "https://freesound.org/s/520514/",
+      "title": "Small servo (arduino)",
+      "author": "gpag1",
+      "license": "CC0-1.0",
+      "sha256": "21e9a40ebc671d1a209cdea15c3e6ebded5947740a2550105a2badd173e92bce"
+    },
+    "fs_521587": {
+      "url": "https://cdn.freesound.org/previews/521/521587_9395330-hq.ogg",
+      "page": "https://freesound.org/s/521587/",
+      "title": "Hiking Boot Footsteps on Grass",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "cad6078e8ca16a0d33f063f6a0437d0293476c9ddf6690c1b9740ef2c2550f39"
+    },
+    "fs_521588": {
+      "url": "https://cdn.freesound.org/previews/521/521588_9395330-hq.ogg",
+      "page": "https://freesound.org/s/521588/",
+      "title": "Hiking Boot Footsteps on Gravel",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "063b71bb10b71f7b5d794817c8e1962798c24b5214b6a02b270490f9e52839b6"
+    },
+    "fs_521589": {
+      "url": "https://cdn.freesound.org/previews/521/521589_9395330-hq.ogg",
+      "page": "https://freesound.org/s/521589/",
+      "title": "Hiking Boot Footsteps on Wooden Planks",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "a6f8f8e65e6b82cfb2fb439475d78bb2f97db28e289abb51fdb72c4d8be76226"
+    },
+    "fs_521590": {
+      "url": "https://cdn.freesound.org/previews/521/521590_9395330-hq.ogg",
+      "page": "https://freesound.org/s/521590/",
+      "title": "Hiking Boot Footsteps on Stone",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "b0185b24490d7d59f7241bcc4e1cc581257c4f0781366d53585c71ab4d8751ec"
+    },
+    "fs_522164": {
+      "url": "https://cdn.freesound.org/previews/522/522164_11537497-hq.ogg",
+      "page": "https://freesound.org/s/522164/",
+      "title": "Radio Buzz / Squelch 1",
+      "author": "magnuswaker",
+      "license": "CC0-1.0",
+      "sha256": "6e50f3f0191d773f6302d3d500abe45ca638812c2ee611c072174834752bf094"
+    },
+    "fs_523403": {
+      "url": "https://cdn.freesound.org/previews/523/523403_8956746-hq.ogg",
+      "page": "https://freesound.org/s/523403/",
+      "title": "22 caliber with ricochet.wav",
+      "author": "C-V",
+      "license": "CC0-1.0",
+      "sha256": "3dbe502e9d591ef1755f85cdb6ac2bf220c8f46e3bb70967160724d5bdbf16cf"
+    },
+    "fs_524205": {
+      "url": "https://cdn.freesound.org/previews/524/524205_9561949-hq.ogg",
+      "page": "https://freesound.org/s/524205/",
+      "title": "Radio Sign Off / Squelch",
+      "author": "JovianSounds",
+      "license": "CC0-1.0",
+      "sha256": "3e9bf7dfce302a139b7d89ee4f91266c3c84c1ae06ffcec7450ad116e7c51a6e"
+    },
+    "fs_536233": {
+      "url": "https://cdn.freesound.org/previews/536/536233_4921277-hq.ogg",
+      "page": "https://freesound.org/s/536233/",
+      "title": "Zipper Regular Pull 02",
+      "author": "Rudmer_Rotteveel",
+      "license": "CC0-1.0",
+      "sha256": "686c15f92e8c26048dab01b51c8139b4e7bba6260c23e785d2b07b2af3dc60d8"
+    },
+    "fs_536234": {
+      "url": "https://cdn.freesound.org/previews/536/536234_4921277-hq.ogg",
+      "page": "https://freesound.org/s/536234/",
+      "title": "Zipper Regular Pull 01",
+      "author": "Rudmer_Rotteveel",
+      "license": "CC0-1.0",
+      "sha256": "94b5221fde6b291e46dcc97f1d5aa3d2bfbb63ba8af75662cb0e7c7f17c2d2eb"
+    },
+    "fs_547383": {
+      "url": "https://cdn.freesound.org/previews/547/547383_11790336-hq.ogg",
+      "page": "https://freesound.org/s/547383/",
+      "title": "Wood Dropping",
+      "author": "diakunik",
+      "license": "CC0-1.0",
+      "sha256": "a334ac1d1864e02560afe412e8d2f18db95a474736b498ec71c055e88988248a"
+    },
+    "fs_548384": {
+      "url": "https://cdn.freesound.org/previews/548/548384_9250976-hq.ogg",
+      "page": "https://freesound.org/s/548384/",
+      "title": "Footsteps_Mountain_Boots_Mud_Mono.wav",
+      "author": "Nox_Sound",
+      "license": "CC0-1.0",
+      "sha256": "2b177b3fe187a10fda617138cf7528ad3f4a4b969c894cf71786afa431ccafb1"
+    },
+    "fs_556002": {
+      "url": "https://cdn.freesound.org/previews/556/556002_9250976-hq.ogg",
+      "page": "https://freesound.org/s/556002/",
+      "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+      "author": "Nox_Sound",
+      "license": "CC0-1.0",
+      "sha256": "af2145d67b8427b4cc394a69ba54fe15cf8dd3bd638d6fcf9f310c2e0b6eb766"
+    },
+    "fs_556042": {
+      "url": "https://cdn.freesound.org/previews/556/556042_9250976-hq.ogg",
+      "page": "https://freesound.org/s/556042/",
+      "title": "Footsteps_Mountain_Boots_Grass_Mono.wav",
+      "author": "Nox_Sound",
+      "license": "CC0-1.0",
+      "sha256": "5aa062bc0c8a09910afca154b295bd3482114c5a739535d0819255c1722ef352"
+    },
+    "fs_570374": {
+      "url": "https://cdn.freesound.org/previews/570/570374_8682843-hq.ogg",
+      "page": "https://freesound.org/s/570374/",
+      "title": "Velcro.wav",
+      "author": "paulprit",
+      "license": "CC0-1.0",
+      "sha256": "e5ffb63f6b9f2f0e69a278996b4da8f7f0ef54868aedb05b35c7cbcfd86e6ec7"
+    },
+    "fs_571958": {
+      "url": "https://cdn.freesound.org/previews/571/571958_9961300-hq.ogg",
+      "page": "https://freesound.org/s/571958/",
+      "title": "Footsteps_Leaves+Dirt_1",
+      "author": "Joao_Janz",
+      "license": "CC0-1.0",
+      "sha256": "37e18c884f68ede4155c8ede30240890d51e9ec9c8152d8f33b53f37703eb11d"
+    },
+    "fs_571960": {
+      "url": "https://cdn.freesound.org/previews/571/571960_9961300-hq.ogg",
+      "page": "https://freesound.org/s/571960/",
+      "title": "Footsteps_Leaves_1",
+      "author": "Joao_Janz",
+      "license": "CC0-1.0",
+      "sha256": "afbbd10a64cf9425eee05ce934ba1eec08bdbc1b88159d545092f9626b2a7c6f"
+    },
+    "fs_581124": {
+      "url": "https://cdn.freesound.org/previews/581/581124_9395330-hq.ogg",
+      "page": "https://freesound.org/s/581124/",
+      "title": "Distant Thunder 3",
+      "author": "Fission9",
+      "license": "CC0-1.0",
+      "sha256": "22672aa62ae3da98ad334dcc5136c3ee2e7244e9d03068343619a7aa4c0ee436"
+    },
+    "fs_589843": {
+      "url": "https://cdn.freesound.org/previews/589/589843_3670066-hq.ogg",
+      "page": "https://freesound.org/s/589843/",
+      "title": "Taurus G2c Safety Switch",
+      "author": "NoonerBear",
+      "license": "CC0-1.0",
+      "sha256": "ffdefe64808d9fb17a15b569219fdbb8d26c99c441c4467ce40b23488ea55ef4"
+    },
+    "fs_589849": {
+      "url": "https://cdn.freesound.org/previews/589/589849_3670066-hq.ogg",
+      "page": "https://freesound.org/s/589849/",
+      "title": "Taurus G2c Slide Racking",
+      "author": "NoonerBear",
+      "license": "CC0-1.0",
+      "sha256": "8b20286bdb98e867aa8c96c29137e98010b23087e565849f84319b3e8e87c974"
+    },
+    "fs_637564": {
+      "url": "https://cdn.freesound.org/previews/637/637564_612689-hq.ogg",
+      "page": "https://freesound.org/s/637564/",
+      "title": "forest boreal rain light hit plants softly1.flac",
+      "author": "kyles",
+      "license": "CC0-1.0",
+      "sha256": "cedcf51908b7db040ac6076c3805f3c33f4c45628a50610e099b908774d750c3"
+    },
+    "fs_637565": {
+      "url": "https://cdn.freesound.org/previews/637/637565_612689-hq.ogg",
+      "page": "https://freesound.org/s/637565/",
+      "title": "forest boreal steady light wind breeze through trees +bird, crickets, cicadas, occasional distant truck (engine brake middle).flac",
+      "author": "kyles",
+      "license": "CC0-1.0",
+      "sha256": "f3553faace0155ec31375e6d8da00cb0d1be322ff4b657a94032ae760348dc80"
+    },
+    "fs_641306": {
+      "url": "https://cdn.freesound.org/previews/641/641306_6970169-hq.ogg",
+      "page": "https://freesound.org/s/641306/",
+      "title": "House Room Tone",
+      "author": "aleclubin",
+      "license": "CC0-1.0",
+      "sha256": "55844d970cbe44be43553a33b58223f55b5c762f71a56a4190cbcbae180f884f"
+    },
+    "fs_698697": {
+      "url": "https://cdn.freesound.org/previews/698/698697_9616576-hq.ogg",
+      "page": "https://freesound.org/s/698697/",
+      "title": "Footsteps on Metal",
+      "author": "IENBA",
+      "license": "CC0-1.0",
+      "sha256": "0977a615f000c3ebf42a432d306ef1db66e41176fd435c4a3b332d9e059c43ff"
+    },
+    "fs_698984": {
+      "url": "https://cdn.freesound.org/previews/698/698984_15072041-hq.ogg",
+      "page": "https://freesound.org/s/698984/",
+      "title": "Izhmash Saiga MK Ver. 030",
+      "author": "areniporgen",
+      "license": "CC0-1.0",
+      "sha256": "1730270e83ceb09eaf2843d8d7ec577e4c52dd72e62dce2510178533398ca84e"
+    },
+    "fs_733736": {
+      "url": "https://cdn.freesound.org/previews/733/733736_12024110-hq.ogg",
+      "page": "https://freesound.org/s/733736/",
+      "title": "50Hz  electrical mains hum",
+      "author": "chungus43A",
+      "license": "CC0-1.0",
+      "sha256": "71ba0a5888918db2662d8abc531211414ae7e0d152c768e0084fe9986fab334f"
+    },
+    "fs_741047": {
+      "url": "https://cdn.freesound.org/previews/741/741047_14631530-hq.ogg",
+      "page": "https://freesound.org/s/741047/",
+      "title": "Diablo 12g pistol 6 inch, closing breech quickly 1",
+      "author": "FOSSarts",
+      "license": "CC0-1.0",
+      "sha256": "35eb0815dda34664f2f933ef562d63a2f6096f2e2527a0e5e94e8ab0f7dab831"
+    },
+    "fs_741062": {
+      "url": "https://cdn.freesound.org/previews/741/741062_14631530-hq.ogg",
+      "page": "https://freesound.org/s/741062/",
+      "title": "Diablo 12g pistol 6 inch, open and close breech 1",
+      "author": "FOSSarts",
+      "license": "CC0-1.0",
+      "sha256": "9de0050896fee4d96c99618853d6244e714c76dd5bd461b0332ab0636d97d178"
+    },
+    "fs_741066": {
+      "url": "https://cdn.freesound.org/previews/741/741066_14631530-hq.ogg",
+      "page": "https://freesound.org/s/741066/",
+      "title": "Diablo 12g pistol 6 inch, open and close breech 4",
+      "author": "FOSSarts",
+      "license": "CC0-1.0",
+      "sha256": "eebb19f41e0b3e1a8689603901d3686c9bb0840dbd4d987f1af458e0409a38c7"
+    },
+    "fs_741072": {
+      "url": "https://cdn.freesound.org/previews/741/741072_14631530-hq.ogg",
+      "page": "https://freesound.org/s/741072/",
+      "title": "Diablo 12g pistol 6 inch, open breech, close breech quickly 1",
+      "author": "FOSSarts",
+      "license": "CC0-1.0",
+      "sha256": "0952fcfbfbde3475772b69c9f5c4c3964166a7d45bc5944c4aaa98afc13ed254"
+    },
+    "fs_741073": {
+      "url": "https://cdn.freesound.org/previews/741/741073_14631530-hq.ogg",
+      "page": "https://freesound.org/s/741073/",
+      "title": "Diablo 12g pistol 6 inch, open breech, close breech quickly 2",
+      "author": "FOSSarts",
+      "license": "CC0-1.0",
+      "sha256": "ba34bb8b7d8b3f6c74fd4bc1d1fd8930e71f9004b9f09f9ebcde8a5b0efedbe1"
+    },
+    "fs_760245": {
+      "url": "https://cdn.freesound.org/previews/760/760245_16236894-hq.ogg",
+      "page": "https://freesound.org/s/760245/",
+      "title": "Walkie-talkie end of transmission",
+      "author": "LukaCafuka",
+      "license": "CC0-1.0",
+      "sha256": "c1198be3b265bf3b1c34a24ad3ef60ecfaa3a7d51c2b108a2fd0156fcc79a375"
+    },
+    "fs_770097": {
+      "url": "https://cdn.freesound.org/previews/770/770097_13973196-hq.ogg",
+      "page": "https://freesound.org/s/770097/",
+      "title": "Footsteps Mud - Walk & run",
+      "author": "Vrymaa",
+      "license": "CC0-1.0",
+      "sha256": "574c5e63f0140d7ba883a9ed86acf67623b25b7971007a27aa7054ef58566428"
+    },
+    "fs_773854": {
+      "url": "https://cdn.freesound.org/previews/773/773854_15468302-hq.ogg",
+      "page": "https://freesound.org/s/773854/",
+      "title": "7.62x39 casing drop",
+      "author": "MrGungus",
+      "license": "CC0-1.0",
+      "sha256": "f3ce84222b31186e1b1bae4eb2195b1874f7a7bc00708dc0f736d627518851d5"
+    },
+    "fs_773857": {
+      "url": "https://cdn.freesound.org/previews/773/773857_15468302-hq.ogg",
+      "page": "https://freesound.org/s/773857/",
+      "title": ".357 magnum casing drop",
+      "author": "MrGungus",
+      "license": "CC0-1.0",
+      "sha256": "9007860ca0d6777b5799fbf5eee11dd4d6abac551214f9ac15d331d42bb45cff"
+    },
+    "fs_773859": {
+      "url": "https://cdn.freesound.org/previews/773/773859_15468302-hq.ogg",
+      "page": "https://freesound.org/s/773859/",
+      "title": ".223 Remington casing drop",
+      "author": "MrGungus",
+      "license": "CC0-1.0",
+      "sha256": "89e77d4c45cc7d12cb6109931699b64a9d44b429f3660640cdb5786a29e9e2b5"
+    },
+    "fs_803265": {
+      "url": "https://cdn.freesound.org/previews/803/803265_16571147-hq.ogg",
+      "page": "https://freesound.org/s/803265/",
+      "title": "Pocket Pistol safety switch",
+      "author": "mahecic",
+      "license": "CC0-1.0",
+      "sha256": "c437d6f707a2d9f4a472d5360511ff6efa4d595a59789f3bed02e95affd08a89"
+    },
+    "fs_834029": {
+      "url": "https://cdn.freesound.org/previews/834/834029_9616576-hq.ogg",
+      "page": "https://freesound.org/s/834029/",
+      "title": "Footsteps On Metal",
+      "author": "IENBA",
+      "license": "CC0-1.0",
+      "sha256": "8d994d6e9f7af132e6b6d772e1232b4a13bd9ad3a8ecdc8ea51772c8b282f6ed"
+    },
+    "fs_842728": {
+      "url": "https://cdn.freesound.org/previews/842/842728_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842728/",
+      "title": "Glock17_Magazine.1",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "e7c02adb6e5af66094d6263c4760f30231c933f4ea22f99a855a45e3bfc62b11"
+    },
+    "fs_842729": {
+      "url": "https://cdn.freesound.org/previews/842/842729_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842729/",
+      "title": "Glock17_Magazine",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "61dfc4a0876020c0fac90acf0a5fd63b53b4c298a4bece674937cf35912e680a"
+    },
+    "fs_842731": {
+      "url": "https://cdn.freesound.org/previews/842/842731_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842731/",
+      "title": "Glock17_Slide",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "cc6ffdea57964885f1a6fc64243545e3908817d04d2268354707bafd413a9518"
+    },
+    "fs_842732": {
+      "url": "https://cdn.freesound.org/previews/842/842732_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842732/",
+      "title": "Glock17_Trigger",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "7cd4e025b12a0d727e05b46d902eb08ef7c8f7b9a1a83ad27112ac08019e7574"
+    },
+    "fs_842737": {
+      "url": "https://cdn.freesound.org/previews/842/842737_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842737/",
+      "title": "Remington870_Safety",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "eab3f39e49510958b4c3f34f6b26be0857305a7e45af81c8f135d1b8ad8e0e4f"
+    },
+    "fs_842738": {
+      "url": "https://cdn.freesound.org/previews/842/842738_15508415-hq.ogg",
+      "page": "https://freesound.org/s/842738/",
+      "title": "Remington870_Trigger",
+      "author": "Stoniac",
+      "license": "CC0-1.0",
+      "sha256": "b3919ebbfe9a065f6319f636044700b87bd7703bde64deff9384240a8faa37f0"
+    },
+    "fs_861370": {
+      "url": "https://cdn.freesound.org/previews/861/861370_8154783-hq.ogg",
+      "page": "https://freesound.org/s/861370/",
+      "title": "Splashing Stomps Impacts Shallow Water",
+      "author": "ChristopherJngs",
+      "license": "CC0-1.0",
+      "sha256": "f79d2f9f0c9e93812169154df46dbafecb4def61f6b25a51a2593200f6339aaf"
+    },
+    "fs_94127": {
+      "url": "https://cdn.freesound.org/previews/94/94127_1554918-hq.ogg",
+      "page": "https://freesound.org/s/94127/",
+      "title": "Clank1.wav",
+      "author": "BMacZero",
+      "license": "CC0-1.0",
+      "sha256": "61044a48914aaaf15cdf5044a4b74748cc857a8caf930f1943243469d2406059"
+    },
+    "kenney_impact": {
+      "url": "https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip",
+      "page": "https://kenney.nl/assets/impact-sounds",
+      "title": "Impact Sounds 1.0",
+      "author": "Kenney (kenney.nl)",
+      "license": "CC0-1.0",
+      "sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8"
+    },
+    "kenney_rpg": {
+      "url": "https://kenney.nl/media/pages/assets/rpg-audio/8e99002d76-1677590336/kenney_rpg-audio.zip",
+      "page": "https://kenney.nl/assets/rpg-audio",
+      "title": "RPG Audio",
+      "author": "Kenney (kenney.nl)",
+      "license": "CC0-1.0",
+      "sha256": "6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b"
+    }
+  },
+  "sets": [
+    {
+      "category": "footsteps",
+      "name": "grass",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_556042",
+          "end": 20
+        },
+        {
+          "source": "fs_521587"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "gravel",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_556002",
+          "end": 12
+        },
+        {
+          "source": "fs_521588"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "mud",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_548384"
+        },
+        {
+          "source": "fs_770097"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "concrete",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_272253"
+        },
+        {
+          "source": "fs_521590"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "wood",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_521589"
+        },
+        {
+          "source": "fs_459970"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "metal",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_834029"
+        },
+        {
+          "source": "fs_698697"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "water",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_861370"
+        },
+        {
+          "source": "fs_249911"
+        }
+      ]
+    },
+    {
+      "category": "footsteps",
+      "name": "leaves",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.15,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_571960"
+        },
+        {
+          "source": "fs_571958"
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "pistol_shot",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 30,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.6,
+        "tail_db": 50,
+        "rel_db": -35
+      },
+      "fade_out": 0.3,
+      "inputs": [
+        {
+          "source": "fs_377787"
+        },
+        {
+          "source": "fs_377786",
+          "start": 92.5
+        },
+        {
+          "source": "fs_159703"
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "rifle_shot",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 30,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.6,
+        "tail_db": 50,
+        "rel_db": -35
+      },
+      "fade_out": 0.3,
+      "inputs": [
+        {
+          "source": "fs_698984"
+        },
+        {
+          "source": "fs_402791",
+          "pick": [
+            1,
+            2,
+            3,
+            10
+          ]
+        },
+        {
+          "source": "fs_136399",
+          "highpass": 90,
+          "take": 2,
+          "split": {
+            "rel_db": -10
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "bolt_rifle_shot",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 30,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.6,
+        "tail_db": 50,
+        "rel_db": -35
+      },
+      "fade_out": 0.3,
+      "inputs": [
+        {
+          "source": "fs_431834",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_431833",
+          "pick": [
+            0,
+            1,
+            2,
+            4
+          ]
+        },
+        {
+          "source": "fs_410552",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_431832",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_431831",
+          "pick": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "shotgun_shot",
+      "type": "oneshot",
+      "count": 4,
+      "highpass": 30,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.6,
+        "tail_db": 50,
+        "rel_db": -35
+      },
+      "fade_out": 0.3,
+      "inputs": [
+        {
+          "source": "fs_159707",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_427595",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_410551",
+          "pick": [
+            0
+          ]
+        },
+        {
+          "source": "fs_159706",
+          "pick": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "distant_shot",
+      "type": "oneshot",
+      "count": 6,
+      "channels": 2,
+      "highpass": 30,
+      "split": {
+        "max_len": 4.0,
+        "min_gap": 0.8,
+        "tail_db": 40,
+        "rel_db": -30
+      },
+      "fade_out": 0.5,
+      "inputs": [
+        {
+          "source": "fs_431828",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                1.35,
+                4.2
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_431827",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                0.15,
+                2.3
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_377788",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                1.25,
+                4.6
+              ],
+              [
+                8.25,
+                11.6
+              ],
+              [
+                13.5,
+                16.8
+              ],
+              [
+                19.4,
+                22.8
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "mag_insert",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_842729",
+          "pick": [
+            12,
+            16,
+            20,
+            22,
+            25,
+            31
+          ]
+        },
+        {
+          "source": "fs_456195",
+          "pick": [
+            4,
+            10,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "mag_release",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_842729",
+          "pick": [
+            0,
+            17,
+            30,
+            32,
+            34
+          ]
+        },
+        {
+          "source": "fs_842728",
+          "pick": [
+            1,
+            11,
+            14,
+            19
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "slide_rack",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 1.2,
+        "min_gap": 0.35,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_842731",
+          "pick": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "source": "fs_589849",
+          "take": 4
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "charging_handle",
+      "type": "oneshot",
+      "count": 5,
+      "highpass": 80,
+      "split": {
+        "max_len": 1.2,
+        "min_gap": 0.35,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_142892"
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "bolt_open",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_171702"
+        },
+        {
+          "source": "fs_370345",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                0.0,
+                0.7
+              ],
+              [
+                5.66,
+                6.33
+              ],
+              [
+                7.52,
+                8.19
+              ],
+              [
+                9.3,
+                10.02
+              ],
+              [
+                11.0,
+                11.9
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "bolt_close",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_171701"
+        },
+        {
+          "source": "fs_370345",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                0.72,
+                1.4
+              ],
+              [
+                6.33,
+                7.05
+              ],
+              [
+                8.2,
+                8.92
+              ],
+              [
+                10.02,
+                10.65
+              ],
+              [
+                12.1,
+                12.95
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "stripper_clip",
+      "type": "oneshot",
+      "count": 1,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_508248",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                12.3,
+                15.0
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "shotgun_open",
+      "type": "oneshot",
+      "count": 3,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_741062",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                1.85,
+                2.6
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741066",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                0.55,
+                1.4
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741073",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                1.6,
+                2.4
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "shotgun_close",
+      "type": "oneshot",
+      "count": 5,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_741062",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                3.95,
+                4.5
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741066",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                2.78,
+                3.3
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741072",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                2.3,
+                2.75
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741073",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                3.95,
+                4.4
+              ]
+            ]
+          }
+        },
+        {
+          "source": "fs_741047",
+          "pick": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "shell_insert",
+      "type": "oneshot",
+      "count": 5,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_508746",
+          "pick": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "dry_fire",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_842732",
+          "pick": [
+            3,
+            5,
+            9,
+            13
+          ]
+        },
+        {
+          "source": "fs_842738",
+          "pick": [
+            4,
+            5,
+            10,
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "safety",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.9,
+        "min_gap": 0.08,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_842737"
+        },
+        {
+          "source": "fs_589843"
+        },
+        {
+          "source": "fs_803265"
+        }
+      ]
+    },
+    {
+      "category": "guns",
+      "name": "casing",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 150,
+      "split": {
+        "max_len": 1.2,
+        "min_gap": 0.4,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_318964"
+        },
+        {
+          "source": "fs_210102"
+        },
+        {
+          "source": "fs_773854"
+        },
+        {
+          "source": "fs_773859"
+        },
+        {
+          "source": "fs_773857"
+        }
+      ]
+    },
+    {
+      "category": "impacts",
+      "name": "metal",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 1.0,
+        "min_gap": 0.3,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_148838"
+        },
+        {
+          "source": "fs_148837"
+        },
+        {
+          "source": "fs_148834"
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_light_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_light_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_light_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "impacts",
+      "name": "wood",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.2,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_319226"
+        },
+        {
+          "source": "fs_319228"
+        },
+        {
+          "source": "fs_319227"
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_heavy_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_heavy_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_heavy_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "impacts",
+      "name": "dirt",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 60,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.2,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_319229"
+        },
+        {
+          "source": "fs_319222"
+        },
+        {
+          "source": "fs_319214"
+        }
+      ]
+    },
+    {
+      "category": "impacts",
+      "name": "concrete",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "split": {
+        "max_len": 0.8,
+        "min_gap": 0.2,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_431019"
+        },
+        {
+          "source": "fs_179365"
+        },
+        {
+          "source": "fs_321478"
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMining_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMining_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMining_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "impacts",
+      "name": "ricochet",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 100,
+      "split": {
+        "max_len": 1.5,
+        "min_gap": 0.3,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_148840",
+          "split": {
+            "min_gap": 0.06,
+            "rel_db": -20
+          }
+        },
+        {
+          "source": "fs_148827"
+        },
+        {
+          "source": "fs_523403"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "drop_metal",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 60,
+      "split": {
+        "max_len": 1.5,
+        "min_gap": 0.4,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_medium_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_medium_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_medium_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_181115"
+        },
+        {
+          "source": "fs_259553"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "drop_wood",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 50,
+      "split": {
+        "max_len": 1.5,
+        "min_gap": 0.4,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_547383"
+        },
+        {
+          "source": "fs_478238"
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_medium_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_medium_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactWood_medium_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "drop_plastic",
+      "type": "oneshot",
+      "count": 4,
+      "highpass": 60,
+      "split": {
+        "max_len": 1.5,
+        "min_gap": 0.4,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_321294"
+        },
+        {
+          "source": "fs_133978"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "drop_cardboard",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 50,
+      "split": {
+        "max_len": 1.2,
+        "min_gap": 0.4,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_465451"
+        },
+        {
+          "source": "fs_339359"
+        },
+        {
+          "source": "fs_339358"
+        },
+        {
+          "source": "fs_339363"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "zip",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 100,
+      "split": {
+        "max_len": 2.0,
+        "min_gap": 0.3,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_519477"
+        },
+        {
+          "source": "fs_536233"
+        },
+        {
+          "source": "fs_536234"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "cloth",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 80,
+      "inputs": [
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/cloth1.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/cloth2.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/cloth3.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/cloth4.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/clothBelt.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/clothBelt2.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "velcro",
+      "type": "oneshot",
+      "count": 3,
+      "highpass": 80,
+      "split": {
+        "max_len": 2.0,
+        "min_gap": 0.3,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_570374"
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "door_creak",
+      "type": "oneshot",
+      "count": 4,
+      "highpass": 60,
+      "fade_out": 0.1,
+      "inputs": [
+        {
+          "source": "fs_219499",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_216878",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/creak1.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/creak2.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "door_open",
+      "type": "oneshot",
+      "count": 3,
+      "highpass": 50,
+      "inputs": [
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorOpen_1.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorOpen_2.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_344360",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                0.9,
+                2.4
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "door_close",
+      "type": "oneshot",
+      "count": 5,
+      "highpass": 40,
+      "inputs": [
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorClose_1.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorClose_2.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorClose_3.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_rpg",
+          "member": "Audio/doorClose_4.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_344360",
+          "split": {
+            "mode": "segments",
+            "segments": [
+              [
+                4.3,
+                5.6
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "category": "physical",
+      "name": "glass_break",
+      "type": "oneshot",
+      "count": 3,
+      "highpass": 80,
+      "fade_out": 0.15,
+      "inputs": [
+        {
+          "source": "fs_221528",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_212698",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_371094",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "wind_conifers",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_202989",
+          "start": 10,
+          "length": 45
+        },
+        {
+          "source": "fs_637565",
+          "start": 20,
+          "length": 45
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "rain_light",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_637564",
+          "start": 10,
+          "length": 45
+        },
+        {
+          "source": "fs_200273",
+          "start": 10,
+          "length": 45
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "creek",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_433589",
+          "start": 5,
+          "length": 40
+        },
+        {
+          "source": "fs_446019",
+          "start": 5,
+          "length": 40
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "rural",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_352436",
+          "start": 4,
+          "length": 45
+        },
+        {
+          "source": "fs_372612",
+          "start": 10,
+          "length": 45
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "room_tone",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_641306",
+          "start": 10,
+          "length": 30
+        },
+        {
+          "source": "fs_426767",
+          "start": 2,
+          "length": 15
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "thunder_distant",
+      "type": "oneshot",
+      "count": 6,
+      "channels": 2,
+      "highpass": 20,
+      "normalize": {
+        "lufs": -20.0,
+        "peak": -1.0
+      },
+      "split": {
+        "max_len": 12.0,
+        "min_gap": 2.0,
+        "tail_db": 30,
+        "rel_db": -25,
+        "min_len": 2.0
+      },
+      "fade_in": 0.05,
+      "fade_out": 1.5,
+      "inputs": [
+        {
+          "source": "fs_196125"
+        },
+        {
+          "source": "fs_581124"
+        },
+        {
+          "source": "fs_267549"
+        },
+        {
+          "source": "fs_127140"
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "crow",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 150,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.4,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_404687"
+        },
+        {
+          "source": "fs_512781"
+        },
+        {
+          "source": "fs_512780"
+        },
+        {
+          "source": "fs_182090"
+        },
+        {
+          "source": "fs_519591"
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "servo",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 80,
+      "split": {
+        "max_len": 2.5,
+        "min_gap": 0.3,
+        "tail_db": 40
+      },
+      "inputs": [
+        {
+          "source": "fs_188821"
+        },
+        {
+          "source": "fs_520514"
+        },
+        {
+          "source": "fs_322021"
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "clank",
+      "type": "oneshot",
+      "count": 8,
+      "highpass": 50,
+      "split": {
+        "max_len": 1.5,
+        "min_gap": 0.3,
+        "tail_db": 45
+      },
+      "inputs": [
+        {
+          "source": "fs_264889"
+        },
+        {
+          "source": "fs_94127",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_heavy_000.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_heavy_001.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "kenney_impact",
+          "member": "Audio/impactMetal_heavy_002.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "drone_rotor",
+      "type": "loop",
+      "channels": 1,
+      "xfade": 0.5,
+      "tonal": true,
+      "highpass": 60,
+      "normalize": {
+        "lufs": -18.0,
+        "peak": -1.0
+      },
+      "inputs": [
+        {
+          "source": "fs_188242",
+          "start": 51.6,
+          "length": 4.0
+        },
+        {
+          "source": "fs_383852",
+          "start": 0.05,
+          "length": 2.4
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "hum",
+      "type": "loop",
+      "channels": 1,
+      "xfade": 0.5,
+      "tonal": true,
+      "highpass": null,
+      "normalize": {
+        "lufs": -20.0,
+        "peak": -1.0
+      },
+      "inputs": [
+        {
+          "source": "fs_733736",
+          "start": 0.5,
+          "length": 4
+        },
+        {
+          "source": "fs_119910",
+          "start": 5,
+          "length": 15
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "radio_static",
+      "type": "loop",
+      "channels": 1,
+      "xfade": 0.5,
+      "highpass": 150,
+      "normalize": {
+        "lufs": -20.0,
+        "peak": -1.0
+      },
+      "inputs": [
+        {
+          "source": "fs_50750",
+          "start": 5,
+          "length": 12
+        },
+        {
+          "source": "fs_38693",
+          "start": 3,
+          "length": 12
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "radio_squelch",
+      "type": "oneshot",
+      "count": 4,
+      "highpass": 200,
+      "inputs": [
+        {
+          "source": "fs_524205",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_760245",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_522164",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "fs_47646",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "machines",
+      "name": "siren",
+      "type": "bed",
+      "channels": 2,
+      "highpass": 60,
+      "fade_out": 3.0,
+      "inputs": [
+        {
+          "source": "fs_336640",
+          "start": 0,
+          "length": 60
+        },
+        {
+          "source": "fs_412171",
+          "start": 0,
+          "length": 60
+        }
+      ]
+    }
+  ]
+}

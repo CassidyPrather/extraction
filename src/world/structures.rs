@@ -86,8 +86,9 @@ pub fn blockout_visuals(
         .clone();
     for (e, s) in &added {
         let size = footprint(&s.prefab);
-        commands
-            .entity(e)
-            .insert((Mesh3d(meshes.add(Cuboid::from_size(size))), MeshMaterial3d(mat.clone())));
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(Cuboid::from_size(size))),
+            MeshMaterial3d(mat.clone()),
+        ));
     }
 }

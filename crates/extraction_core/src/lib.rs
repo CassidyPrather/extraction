@@ -6,10 +6,12 @@
 //! simulations, the client, and (eventually) a server or a VRChat port.
 
 pub mod cooking;
-pub mod geom;
-pub mod map;
-pub mod noise;
-pub mod terrain;
 pub mod firearm;
+pub mod geom;
 pub mod inventory;
 pub mod items;
+pub mod loot;
+pub mod map;
+pub mod nav;
+pub mod noise;
+pub mod terrain;

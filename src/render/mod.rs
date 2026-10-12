@@ -3,9 +3,9 @@
 pub mod terrain_material;
 pub mod water_material;
 
+use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::prelude::*;
-use bevy::camera::Hdr;
 
 use crate::launch::LaunchOptions;
 use crate::rig::{LocalPlayer, RigHead};
@@ -19,7 +19,7 @@ impl Plugin for RenderPlugin {
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
         ))
-        .add_systems(PostStartup, attach_flat_camera);
+        .add_systems(Update, attach_flat_camera);
     }
 }
 
@@ -32,11 +32,16 @@ fn attach_flat_camera(
     locals: Query<(), With<LocalPlayer>>,
     weather: Res<Weather>,
     opts: Res<LaunchOptions>,
-    xr: Option<Res<crate::XrActive>>,
+    driver: Res<crate::rig::RigDriver>,
+    mut frames: Local<u32>,
+    mut done: Local<bool>,
 ) {
-    if xr.is_some() {
+    // Give an XR session a moment to come up before deciding we're flat.
+    *frames += 1;
+    if *done || *driver == crate::rig::RigDriver::Xr || *frames < 3 {
         return;
     }
+    *done = true;
     // A camera override (screenshots, flyovers) gets a free camera instead.
     if let Some((pos, yaw, pitch)) = opts.camera {
         let ground = zone.ground(pos.x, pos.z);

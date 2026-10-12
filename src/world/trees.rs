@@ -20,7 +20,7 @@ pub struct TreesPlugin;
 
 impl Plugin for TreesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_forests);
+        app.add_systems(PostUpdate, spawn_forests);
     }
 }
 
@@ -74,9 +74,12 @@ pub fn scatter_trees(zone: &Zone) -> Vec<TreeInstance> {
                 if zone.hm.wetness(p) > 0.7 || zone.hm.slope_deg(p) > 38.0 {
                     continue;
                 }
-                if zone.hm.road_lines.iter().any(|rl| {
-                    geom::polyline_closest(&rl.points, p).0 < rl.width * 0.5 + 2.5
-                }) {
+                if zone
+                    .hm
+                    .road_lines
+                    .iter()
+                    .any(|rl| geom::polyline_closest(&rl.points, p).0 < rl.width * 0.5 + 2.5)
+                {
                     continue;
                 }
                 if clear.iter().any(|(c, r)| geom::dist(*c, p) < *r) {
@@ -101,75 +104,103 @@ pub fn scatter_trees(zone: &Zone) -> Vec<TreeInstance> {
     out
 }
 
-#[derive(Component)]
-pub struct Tree;
+/// A tree in the world: logic side (collider). Meshes attach client-side.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Tree {
+    pub species: TreeSpecies,
+    pub variant: usize,
+}
 
-fn spawn_forests(
-    mut commands: Commands,
-    zone: Res<Zone>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+/// Logic: every tree gets a trunk collider (bullets stop, robots can't see
+/// through, nobody walks through).
+pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
     let started = std::time::Instant::now();
     let trees = scatter_trees(&zone);
-    let bark = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        perceptual_roughness: 0.95,
-        reflectance: 0.2,
-        ..default()
-    });
-    let foliage = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
-        perceptual_roughness: 0.85,
-        reflectance: 0.25,
-        double_sided: true,
-        cull_mode: None,
-        ..default()
-    });
-    let species = [
-        TreeSpecies::Spruce,
-        TreeSpecies::Pine,
-        TreeSpecies::Birch,
-        TreeSpecies::Snag,
-    ];
-    let mut handles = std::collections::HashMap::new();
-    for s in species {
-        for v in 0..VARIANTS {
-            let (trunk, crown) = build_tree(s, 1000 + v as u64 * 17 + s as u64 * 101);
-            handles.insert(
-                (s, v),
-                (meshes.add(trunk), crown.map(|c| meshes.add(c))),
-            );
-        }
-    }
     for t in &trees {
-        let (trunk, crown) = &handles[&(t.species, t.variant)];
-        let radius = trunk_radius(t.species) * t.scale;
-        let height = 4.0 * t.scale;
-        let mut e = commands.spawn((
-            Tree,
-            Mesh3d(trunk.clone()),
-            MeshMaterial3d(bark.clone()),
+        let radius = trunk_radius(t.species);
+        commands.spawn((
+            Tree {
+                species: t.species,
+                variant: t.variant,
+            },
             Transform::from_translation(t.pos)
                 .with_rotation(Quat::from_rotation_y(t.yaw))
                 .with_scale(Vec3::splat(t.scale)),
+            Visibility::default(),
             RigidBody::Static,
-            Collider::capsule_endpoints(
-                radius / t.scale,
-                Vec3::new(0.0, 0.5, 0.0),
-                Vec3::new(0.0, height / t.scale, 0.0),
-            ),
+            Collider::capsule_endpoints(radius, Vec3::new(0.0, 0.5, 0.0), Vec3::new(0.0, 4.0, 0.0)),
             CollisionLayers::new(Layer::World, LayerMask::ALL),
         ));
-        if let Some(crown) = crown {
-            e.with_child((Mesh3d(crown.clone()), MeshMaterial3d(foliage.clone())));
-        }
     }
     info!(
         "{} trees scattered in {:.0} ms",
         trees.len(),
         started.elapsed().as_secs_f32() * 1000.0
     );
+}
+
+/// Client: tree meshes onto the logic trees.
+fn spawn_forests(
+    mut commands: Commands,
+    trees: Query<(Entity, &Tree), Added<Tree>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cache: Local<Option<TreeAssets>>,
+) {
+    if trees.is_empty() {
+        return;
+    }
+    let assets = cache.get_or_insert_with(|| {
+        let bark = materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.95,
+            reflectance: 0.2,
+            ..default()
+        });
+        let foliage = materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 0.85,
+            reflectance: 0.25,
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        });
+        let mut handles = std::collections::HashMap::new();
+        for s in [
+            TreeSpecies::Spruce,
+            TreeSpecies::Pine,
+            TreeSpecies::Birch,
+            TreeSpecies::Snag,
+        ] {
+            for v in 0..VARIANTS {
+                let (trunk, crown) = build_tree(s, 1000 + v as u64 * 17 + s as u64 * 101);
+                handles.insert((s, v), (meshes.add(trunk), crown.map(|c| meshes.add(c))));
+            }
+        }
+        TreeAssets {
+            bark,
+            foliage,
+            handles,
+        }
+    });
+    for (e, tree) in &trees {
+        let (trunk, crown) = &assets.handles[&(tree.species, tree.variant)];
+        commands
+            .entity(e)
+            .insert((Mesh3d(trunk.clone()), MeshMaterial3d(assets.bark.clone())));
+        if let Some(crown) = crown {
+            commands.entity(e).with_child((
+                Mesh3d(crown.clone()),
+                MeshMaterial3d(assets.foliage.clone()),
+            ));
+        }
+    }
+}
+
+struct TreeAssets {
+    bark: Handle<StandardMaterial>,
+    foliage: Handle<StandardMaterial>,
+    handles: std::collections::HashMap<(TreeSpecies, usize), (Handle<Mesh>, Option<Handle<Mesh>>)>,
 }
 
 fn trunk_radius(s: TreeSpecies) -> f32 {
@@ -229,7 +260,13 @@ impl MeshBuilder {
     }
 
     /// A lumpy blob: an icosphere-ish UV sphere displaced by noise.
-    fn blob(&mut self, centre: Vec3, radius: Vec3, seed: u32, color: impl Fn(Vec3, f32) -> [f32; 4]) {
+    fn blob(
+        &mut self,
+        centre: Vec3,
+        radius: Vec3,
+        seed: u32,
+        color: impl Fn(Vec3, f32) -> [f32; 4],
+    ) {
         let (rings, segs) = (7, 10);
         let base = self.pos.len() as u32;
         for i in 0..=rings {
@@ -267,11 +304,14 @@ impl MeshBuilder {
     }
 
     fn build(self) -> Mesh {
-        Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
-            .with_inserted_indices(Indices::U32(self.idx))
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+        .with_inserted_indices(Indices::U32(self.idx))
     }
 }
 
@@ -322,11 +362,13 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                     let p = dir * rr + Vec3::Y * (y - droop * (rr / r));
                     let tip = rr / r;
                     let shade = 0.75 + 0.35 * tip + 0.15 * t;
-                    let c = lin(0.075 * shade, 0.11 * shade, 0.085 * shade);
+                    let c = lin(0.11 * shade, 0.155 * shade, 0.115 * shade);
                     crown.vertex(p, (dir + Vec3::Y * 0.8).normalize(), c);
                 }
                 for s in 0..(sides * 2) as u32 {
-                    crown.idx.extend_from_slice(&[top, base + 2 + s, base + 1 + s]);
+                    crown
+                        .idx
+                        .extend_from_slice(&[top, base + 2 + s, base + 1 + s]);
                 }
             }
         }
@@ -336,7 +378,10 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
             let rings: Vec<(Vec3, f32)> = (0..=8)
                 .map(|k| {
                     let t = k as f32 / 8.0;
-                    (Vec3::new(0.0, t * h, 0.0) + lean * t * t, 0.24 * (1.0 - t * 0.8))
+                    (
+                        Vec3::new(0.0, t * h, 0.0) + lean * t * t,
+                        0.24 * (1.0 - t * 0.8),
+                    )
                 })
                 .collect();
             trunk.tube(&rings, 7, |p, _| {
@@ -355,10 +400,14 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                 let y = crown_base + t * (h - crown_base);
                 let off = Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(0.6, 1.8) * (1.0 - t * 0.6);
                 let c = Vec3::new(0.0, y, 0.0) + lean * (y / h).powi(2) + off;
-                let rad = Vec3::new(rng.range(1.6, 2.4), rng.range(0.9, 1.3), rng.range(1.6, 2.4)) * (1.0 - t * 0.4);
+                let rad = Vec3::new(
+                    rng.range(1.5, 2.2),
+                    rng.range(1.3, 1.9),
+                    rng.range(1.5, 2.2),
+                ) * (1.0 - t * 0.35);
                 crown.blob(c, rad, rng.next_u64() as u32, |_, l| {
                     let s = 0.7 + 0.5 * l;
-                    lin(0.085 * s, 0.12 * s, 0.07 * s)
+                    lin(0.12 * s, 0.16 * s, 0.09 * s)
                 });
             }
         }
@@ -368,7 +417,10 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
             let rings: Vec<(Vec3, f32)> = (0..=8)
                 .map(|k| {
                     let t = k as f32 / 8.0;
-                    (Vec3::new(0.0, t * h, 0.0) + lean * t * t, 0.15 * (1.0 - t * 0.85))
+                    (
+                        Vec3::new(0.0, t * h, 0.0) + lean * t * t,
+                        0.15 * (1.0 - t * 0.85),
+                    )
                 })
                 .collect();
             let s = seed as u32;
@@ -376,7 +428,11 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                 // White bark with dark horizontal lenticels, darker at the foot.
                 let dash = extraction_core::noise::perlin(a * 2.0, p.y * 6.0, s).abs();
                 let foot = (1.0 - p.y / 2.5).clamp(0.0, 1.0);
-                let v = if dash > 0.55 { 0.18 } else { 0.78 - 0.45 * foot };
+                let v = if dash > 0.55 {
+                    0.18
+                } else {
+                    0.78 - 0.45 * foot
+                };
                 lin(v, v * 0.98, v * 0.94)
             });
             let crown_base = h * 0.45;
@@ -393,8 +449,8 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                 let yellow = (turned + rng.range(-0.2, 0.2)).clamp(0.0, 1.0);
                 crown.blob(c, rad, rng.next_u64() as u32, move |_, l| {
                     let s = 0.65 + 0.5 * l;
-                    let g = Vec3::new(0.16, 0.20, 0.07);
-                    let y = Vec3::new(0.52, 0.40, 0.08);
+                    let g = Vec3::new(0.22, 0.28, 0.10);
+                    let y = Vec3::new(0.62, 0.48, 0.12);
                     let c = g.lerp(y, yellow) * s;
                     lin(c.x, c.y, c.z)
                 });
@@ -420,7 +476,9 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                 let dir = Vec3::new(a.cos(), rng.range(-0.1, 0.5), a.sin()).normalize();
                 let start = Vec3::new(0.0, y, 0.0) + lean * (y / h);
                 let len = rng.range(0.6, 2.2);
-                trunk.tube(&[(start, 0.06), (start + dir * len, 0.02)], 4, |_, _| lin(0.33, 0.32, 0.30));
+                trunk.tube(&[(start, 0.06), (start + dir * len, 0.02)], 4, |_, _| {
+                    lin(0.33, 0.32, 0.30)
+                });
             }
         }
     }

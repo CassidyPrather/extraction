@@ -39,6 +39,12 @@ pub struct LaunchOptions {
     pub camera: Option<(Vec3, f32, f32)>,
     /// The local player is driven by the bot brain.
     pub bot: bool,
+    /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
+    pub scenario: Option<String>,
+    /// No window, no rendering; time runs as fast as the CPU allows.
+    pub headless: bool,
+    /// Let the director send robots in (off for scenarios unless they ask).
+    pub robots: bool,
     pub window_size: (u32, u32),
 }
 
@@ -53,6 +59,9 @@ impl Default for LaunchOptions {
             frames: 90,
             camera: None,
             bot: false,
+            scenario: None,
+            headless: false,
+            robots: true,
             window_size: (1600, 900),
         }
     }
@@ -71,6 +80,12 @@ impl LaunchOptions {
             match a.as_str() {
                 "--flat" => o.flat = true,
                 "--bot" => o.bot = true,
+                "--headless" => o.headless = true,
+                "--no-robots" => o.robots = false,
+                "--scenario" => {
+                    o.scenario = Some(val());
+                    o.robots = false;
+                }
                 "--map" => o.map = val(),
                 "--seed" => o.seed = val().parse().unwrap_or(1),
                 "--scene" => {

@@ -1,0 +1,396 @@
+//! Scripted bot runs that double as integration tests.
+//!
+//! `extraction --scenario pistol_drill [--headless]` runs one; `all` runs
+//! them one after another in the same world. The process exits non-zero if
+//! any expectation failed, so CI can run them.
+
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use extraction_core::map::MarkerKind;
+
+use super::{Bot, Expect, Task};
+use crate::launch::LaunchOptions;
+use crate::rig::{LocalPlayer, Side};
+use crate::weapons::flat::MacroKind;
+use crate::world::{Layer, Zone};
+
+/// A steel plate on a post, for shooting at. Counts its hits.
+#[derive(Component, Default)]
+pub struct Target {
+    pub hits: u32,
+}
+
+pub const NAMES: &[&str] = &[
+    "pistol_drill",
+    "rifle_drill",
+    "bolt_drill",
+    "shotgun_drill",
+    "pack_mule",
+    "drone_duel",
+    "walker_hunt",
+];
+
+/// Targets sit north of the insertion point at these distances.
+const TARGET_DISTANCES: [f32; 3] = [10.0, 25.0, 50.0];
+
+fn origin(zone: &Zone) -> Vec2 {
+    let m = zone
+        .marker(&MarkerKind::Insertion)
+        .map(|m| m.at)
+        .unwrap_or([0.0, 0.0]);
+    Vec2::new(m[0], m[1])
+}
+
+pub fn target_point(zone: &Zone, i: usize) -> Vec3 {
+    let o = origin(zone);
+    let x = o.x + 6.0 + i as f32 * 1.5;
+    let z = o.y - TARGET_DISTANCES[i];
+    Vec3::new(x, zone.ground(x, z) + 1.3, z)
+}
+
+pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
+    let t0 = target_point(zone, 0);
+    let t1 = target_point(zone, 1);
+    use Task::*;
+    let s = |x: &str| x.to_string();
+    Some(match name {
+        "pistol_drill" => vec![
+            Log(s("pistol drill: load two magazines, shoot one dry, reload")),
+            PickUp {
+                id: s("pm_pistol"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("pm_mag"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            PickUp {
+                id: s("pm_mag"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Expect(super::Expect::Holding(Side::Right, s("pm_pistol"))),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(8, 8)),
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 8 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(5)),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(8, 8)),
+            Stow(Side::Right),
+            Expect(super::Expect::CarryingAtLeast(0.9)),
+        ],
+        "rifle_drill" => vec![
+            Log(s("rifle drill: two-handed AK, full auto burst")),
+            PickUp {
+                id: s("ak74"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ak_mag"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(30, 30)),
+            Support,
+            Gun(MacroKind::Mode),
+            Fire { at: t1, shots: 10 },
+            Expect(super::Expect::GunRounds(17, 23)),
+            Expect(super::Expect::Hits(4)),
+            Release(Side::Left),
+            Stow(Side::Right),
+        ],
+        "bolt_drill" => vec![
+            Log(s(
+                "bolt drill: thumb five rounds into a Mosin, work the bolt",
+            )),
+            PickUp {
+                id: s("mosin"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_762r"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(5, 5)),
+            Fire { at: t1, shots: 1 },
+            Gun(MacroKind::Rack),
+            Fire { at: t1, shots: 1 },
+            Expect(super::Expect::GunRounds(3, 3)),
+            Expect(super::Expect::Hits(1)),
+            Stow(Side::Right),
+        ],
+        "shotgun_drill" => vec![
+            Log(s("shotgun drill: break, load two, fire two")),
+            PickUp {
+                id: s("toz_double"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_12ga"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(2, 2)),
+            Fire { at: t0, shots: 2 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(6)),
+        ],
+        "pack_mule" => vec![
+            Log(s("pack mule: stow everything that fits")),
+            PickUp {
+                id: s("canned_stew"),
+                side: Side::Right,
+            },
+            Stow(Side::Right),
+            PickUp {
+                id: s("cleaning_kit"),
+                side: Side::Right,
+            },
+            Stow(Side::Right),
+            PickUp {
+                id: s("flashlight"),
+                side: Side::Right,
+            },
+            Stow(Side::Right),
+            PickUp {
+                id: s("art_featherstone"),
+                side: Side::Right,
+            },
+            Stow(Side::Right),
+            // The kit is Medium: no slot takes it, so it goes in the pack.
+            Expect(super::Expect::PackItems(1, 4)),
+            Expect(super::Expect::CarryingAtLeast(2.0)),
+        ],
+        "drone_duel" => {
+            let o = origin(zone);
+            vec![
+                Log(s(
+                    "drone duel: an AK against a drone that's already seen you",
+                )),
+                PickUp {
+                    id: s("ak74"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Gun(MacroKind::Mode),
+                Gun(MacroKind::Mode),
+                Support,
+                Spawn {
+                    kind: crate::robots::RobotKind::Drone,
+                    at: Vec3::new(o.x, zone.ground(o.x, o.y - 40.0) + 12.0, o.y - 40.0),
+                },
+                Wait(3.0),
+                Engage { shots: 29 },
+                Gun(MacroKind::Reload),
+                Engage { shots: 30 },
+                Wait(4.0),
+                Expect(super::Expect::Wrecked(1)),
+            ]
+        }
+        "walker_hunt" => {
+            let o = origin(zone);
+            vec![
+                Log(s(
+                    "walker hunt: a Mosin against a walker coming up the road",
+                )),
+                PickUp {
+                    id: s("mosin"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ammo_762r"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Spawn {
+                    kind: crate::robots::RobotKind::Walker,
+                    at: Vec3::new(o.x, 0.0, o.y - 30.0),
+                },
+                Wait(2.0),
+                Engage { shots: 1 },
+                Gun(MacroKind::Rack),
+                Engage { shots: 1 },
+                Gun(MacroKind::Rack),
+                Engage { shots: 1 },
+                Gun(MacroKind::Rack),
+                Engage { shots: 1 },
+                Gun(MacroKind::Rack),
+                Engage { shots: 1 },
+                Wait(5.0),
+                Expect(super::Expect::Wrecked(1)),
+            ]
+        }
+        _ => return None,
+    })
+}
+
+pub struct ScenarioPlugin;
+
+impl Plugin for ScenarioPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, spawn_targets)
+            .add_systems(PostStartup, attach_scenario)
+            .add_systems(Update, (finish_scenario, count_target_hits));
+    }
+}
+
+fn spawn_targets(mut commands: Commands, zone: Res<Zone>) {
+    for i in 0..TARGET_DISTANCES.len() {
+        let p = target_point(&zone, i);
+        commands.spawn((
+            Name::new(format!("Target {}m", TARGET_DISTANCES[i])),
+            Target::default(),
+            Transform::from_translation(p),
+            RigidBody::Static,
+            Collider::cuboid(0.45, 0.6, 0.03),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+        ));
+        let ground = zone.ground(p.x, p.z);
+        commands.spawn((
+            Name::new("Target post"),
+            Transform::from_xyz(p.x, (ground + p.y - 0.3) * 0.5, p.z),
+            RigidBody::Static,
+            Collider::cuboid(0.06, (p.y - 0.3 - ground).max(0.1), 0.06),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+        ));
+    }
+}
+
+fn count_target_hits(
+    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+    mut targets: Query<&mut Target>,
+) {
+    for hit in hits.read() {
+        if let Ok(mut t) = targets.get_mut(hit.entity) {
+            t.hits += 1;
+        }
+    }
+}
+
+fn attach_scenario(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Res<Zone>,
+    players: Query<Entity, With<LocalPlayer>>,
+) {
+    let Some(name) = &opts.scenario else {
+        return;
+    };
+    let list: Vec<&str> = if name == "all" {
+        NAMES.to_vec()
+    } else {
+        vec![name.as_str()]
+    };
+    let mut all = Vec::new();
+    for n in list {
+        match tasks(n, &zone) {
+            Some(t) => all.extend(t),
+            None => {
+                error!("unknown scenario `{n}`; known: {NAMES:?}");
+                commands.queue(|w: &mut World| {
+                    w.write_message(AppExit::error());
+                });
+                return;
+            }
+        }
+    }
+    for p in &players {
+        commands.entity(p).insert(Bot::new(all.clone()));
+    }
+}
+
+fn finish_scenario(
+    bots: Query<(&Bot, &Transform), With<LocalPlayer>>,
+    opts: Res<LaunchOptions>,
+    mut exit: MessageWriter<AppExit>,
+    mut done: Local<bool>,
+    mut frames: Local<u32>,
+    time: Res<Time>,
+    robots: Query<(
+        &crate::robots::Robot,
+        &GlobalTransform,
+        &crate::robots::Brain,
+        &crate::robots::Awareness,
+        &Children,
+    )>,
+    parts: Query<&crate::robots::RobotPart>,
+) {
+    if opts.scenario.is_none() || *done {
+        return;
+    }
+    let Some((bot, t)) = bots.iter().next() else {
+        return;
+    };
+    *frames += 1;
+    if *frames % 180 == 0 {
+        for (r, gt, brain, aware, children) in &robots {
+            let hp: Vec<String> = children
+                .iter()
+                .filter_map(|c| parts.get(c).ok())
+                .map(|p| format!("{:?}:{:.0}", p.role, p.hp))
+                .collect();
+            info!(
+                "robot {:?} at {:.1?} wrecked={} brain={:?} sees={} susp={:.2} hp=[{}] bot_hits={}",
+                r.kind,
+                gt.translation(),
+                r.wrecked,
+                brain,
+                aware.can_see_target,
+                aware.suspicion,
+                hp.join(" "),
+                bot.hits
+            );
+        }
+    }
+    if *frames % 900 == 0 {
+        info!(
+            "scenario heartbeat: frame {} t={:.1}s at {:.1?} task {:?}",
+            *frames,
+            time.elapsed_secs(),
+            t.translation,
+            bot.tasks.front()
+        );
+    }
+    if !bot.done() {
+        return;
+    }
+    *done = true;
+    let ok = bot.failed == 0;
+    println!(
+        "scenario {}: {} passed, {} failed -> {}",
+        opts.scenario.as_deref().unwrap_or(""),
+        bot.passed,
+        bot.failed,
+        if ok { "OK" } else { "FAILED" }
+    );
+    for line in &bot.log {
+        println!("  {line}");
+    }
+    // Leave the screenshot tool to quit when it's done, if it's running.
+    if opts.screenshot.is_none() {
+        exit.write(if ok {
+            AppExit::Success
+        } else {
+            AppExit::error()
+        });
+    }
+    let _ = Expect::Hits(0);
+}

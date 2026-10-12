@@ -42,7 +42,7 @@ path = "src/main.rs"
 [features]
 default = ["xr"]
 # OpenXR support. The game still runs flat when no XR runtime is present.
-xr = ["dep:bevy_mod_openxr", "dep:bevy_mod_xr"]
+xr = ["dep:bevy_mod_openxr", "dep:bevy_mod_xr", "dep:openxr"]
 
 [dependencies]
 extraction_core = { path = "crates/extraction_core" }
@@ -62,6 +62,7 @@ avian3d = "0.7"
 bevy_seedling = "0.8"
 bevy_mod_openxr = { version = "0.6", optional = true }
 bevy_mod_xr = { version = "0.6", optional = true }
+openxr = { version = "0.21", optional = true }
 serde = { version = "1", features = ["derive"] }
 ron = "0.10"
 fastrand = "2"
@@ -73,9 +74,13 @@ workspace = true
 # are optimised so the game is playable in debug builds.
 [profile.dev]
 opt-level = 1
+# Line tables keep backtraces useful at a fraction of full debug info's size
+# (full debug info for Bevy runs to tens of GB).
+debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3
+debug = false
 
 [profile.release]
 lto = "thin"

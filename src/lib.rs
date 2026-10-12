@@ -4,11 +4,19 @@
 //! happens and runs headless; [`ClientPlugin`] is everything you see, hear
 //! and touch. See `docs/DESIGN.md`.
 
+pub mod bot;
 pub mod dev;
+pub mod health;
+pub mod hud;
+pub mod interact;
+pub mod items;
 pub mod launch;
 pub mod player;
+pub mod raid;
 pub mod render;
 pub mod rig;
+pub mod robots;
+pub mod weapons;
 pub mod world;
 
 use avian3d::prelude::*;
@@ -31,6 +39,16 @@ impl Plugin for GamePlugin {
             world::WorldPlugin,
             rig::RigPlugin,
             player::PlayerPlugin,
+            items::ItemsPlugin,
+            interact::InteractPlugin,
+            weapons::WeaponsPlugin,
+            weapons::WeaponEffectsPlugin,
+            weapons::flat::CombinePlugin,
+            bot::BotPlugin,
+            bot::scenarios::ScenarioPlugin,
+            robots::RobotsPlugin,
+            health::HealthPlugin,
+            raid::RaidPlugin,
         ));
     }
 }
@@ -45,13 +63,22 @@ impl Plugin for ClientPlugin {
             world::WorldVisualsPlugin,
             rig::flat::FlatDriverPlugin,
             dev::DevPlugin,
+            items::ItemVisualsPlugin,
+            weapons::visuals::GunVisualsPlugin,
+            interact::flat::FlatInteractPlugin,
+            weapons::flat::FlatGunPlugin,
+            hud::HudPlugin,
+            robots::visuals::RobotVisualsPlugin,
         ))
         .add_systems(Update, world::structures::blockout_visuals);
     }
 }
 
-/// Builds and runs the client.
+/// Builds and runs the client (or, with `--headless`, the bare simulation).
 pub fn run(opts: LaunchOptions) -> AppExit {
+    if opts.headless {
+        return run_headless(opts);
+    }
     let mut app = App::new();
     let window = Window {
         title: "Extraction".into(),
@@ -71,6 +98,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     #[cfg(feature = "xr")]
     if !opts.flat {
         app.add_plugins(bevy_mod_openxr::add_xr_plugins(defaults));
+        app.add_plugins(rig::xr::XrDriverPlugin);
         app.insert_resource(XrActive);
     } else {
         app.add_plugins(defaults);
@@ -83,6 +111,38 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
     app.run()
+}
+
+/// The game with no window and no renderer, stepping one fixed tick per
+/// update as fast as it can: for scenarios and map simulations.
+pub fn run_headless(opts: LaunchOptions) -> AppExit {
+    headless_app(opts, true).run()
+}
+
+/// The headless app, ready to run or to step by hand in tests.
+pub fn headless_app(opts: LaunchOptions, log: bool) -> App {
+    use bevy::app::ScheduleRunnerPlugin;
+    use bevy::time::TimeUpdateStrategy;
+    let mut app = App::new();
+    if log {
+        app.add_plugins(bevy::log::LogPlugin::default());
+    }
+    app.add_plugins((
+        MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO)),
+        TransformPlugin,
+        bevy::asset::AssetPlugin {
+            file_path: asset_root(),
+            ..default()
+        },
+        bevy::mesh::MeshPlugin,
+        bevy::scene::ScenePlugin,
+    ))
+    .insert_resource(TimeUpdateStrategy::FixedTimesteps(1))
+    .insert_resource(opts)
+    .insert_resource(Time::<Fixed>::from_hz(90.0))
+    .add_plugins(PhysicsPlugins::default())
+    .add_plugins(GamePlugin);
+    app
 }
 
 /// `assets/` next to the crate when run from a checkout, or next to the

@@ -100,8 +100,14 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, init_zone)
-            .add_systems(Startup, (spawn_terrain_collider, structures::spawn_structures));
+        app.add_systems(PreStartup, init_zone).add_systems(
+            Startup,
+            (
+                spawn_terrain_collider,
+                structures::spawn_structures,
+                trees::spawn_tree_colliders,
+            ),
+        );
     }
 }
 
@@ -122,10 +128,11 @@ fn init_zone(mut commands: Commands, opts: Res<LaunchOptions>) {
 fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     let hm = &zone.hm;
     let n = hm.n;
-    // Avian/parry heightfields: rows run along X, columns along Z, centred
-    // on the entity. Outer vec is Z, inner is X; see `terrain_collider_matches_heightmap`.
+    // Parry stores heights as a column-major Z-by-X matrix; through
+    // Avian's row-major `Vec<Vec<_>>` that means the outer index is X and
+    // the inner is Z. See `terrain_collider_matches_heightmap`.
     let heights: Vec<Vec<f32>> = (0..n)
-        .map(|j| (0..n).map(|i| hm.heights[hm.idx(i, j)]).collect())
+        .map(|i| (0..n).map(|j| hm.heights[hm.idx(i, j)]).collect())
         .collect();
     let extent = (n - 1) as f32 * hm.cell;
     let centre = hm.origin + extent * 0.5;
@@ -150,5 +157,54 @@ impl Plugin for WorldVisualsPlugin {
             water::WaterPlugin,
             trees::TreesPlugin,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The heightfield collider must agree with the heightmap it was built
+    /// from (parry's row/column convention is easy to get transposed).
+    #[test]
+    fn terrain_collider_matches_heightmap() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
+        let spatial = state.get(app.world()).expect("spatial query");
+        for (x, z) in [
+            (40.0, 262.0),
+            (-100.0, -200.0),
+            (165.0, -60.0),
+            (0.0, 0.0),
+            (-250.0, 100.0),
+            (200.0, -190.0),
+            (-60.0, 220.0),
+        ] {
+            let hit = spatial
+                .cast_ray(
+                    Vec3::new(x, 200.0, z),
+                    Dir3::NEG_Y,
+                    500.0,
+                    true,
+                    &SpatialQueryFilter::default(),
+                )
+                .expect("ray hits terrain");
+            let y = 200.0 - hit.distance;
+            let expect = zone.ground(x, z);
+            assert!(
+                (y - expect).abs() < 0.15,
+                "at ({x}, {z}) collider {y:.2} vs heightmap {expect:.2}"
+            );
+        }
     }
 }

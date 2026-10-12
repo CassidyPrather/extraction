@@ -19,7 +19,7 @@ impl Plugin for SkyPlugin {
             .insert_resource(ClearColor(Weather::default().horizon))
             .insert_resource(GlobalAmbientLight {
                 color: Color::srgb(0.62, 0.68, 0.76),
-                brightness: 700.0,
+                brightness: 1100.0,
                 ..default()
             })
             .add_systems(Startup, spawn_sky)
@@ -43,10 +43,10 @@ impl Default for Weather {
         Self {
             horizon: Color::srgb(0.50, 0.53, 0.55),
             zenith: Color::srgb(0.34, 0.37, 0.41),
-            visibility: 230.0,
+            visibility: 320.0,
             // Low in the south-west, behind the cloud.
             sun_dir: Vec3::new(0.45, -0.38, 0.62).normalize(),
-            sun_lux: 2800.0,
+            sun_lux: 1600.0,
         }
     }
 }

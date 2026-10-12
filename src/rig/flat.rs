@@ -16,8 +16,13 @@ pub struct FlatDriverPlugin;
 
 impl Plugin for FlatDriverPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FlatLook>()
-            .add_systems(PreUpdate, (grab_cursor, drive_flat_rig).chain());
+        app.init_resource::<FlatLook>().add_systems(
+            PreUpdate,
+            (grab_cursor, drive_flat_rig)
+                .chain()
+                .in_set(super::RigDriverSystems)
+                .run_if(super::flat_driving),
+        );
     }
 }
 
@@ -60,7 +65,10 @@ fn grab_cursor(
 }
 
 fn drive_flat_rig(
-    mut players: Query<(&mut RigInput, &mut Transform), With<LocalPlayer>>,
+    mut players: Query<
+        (&mut RigInput, &mut Transform),
+        (With<LocalPlayer>, Without<crate::bot::Bot>),
+    >,
     mut look: ResMut<FlatLook>,
     motion: Res<AccumulatedMouseMotion>,
     keys: Res<ButtonInput<KeyCode>>,

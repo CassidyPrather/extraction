@@ -117,7 +117,9 @@ pub struct Magazine {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// A shot left barrel `barrel`.
-    Fired { barrel: u32 },
+    Fired {
+        barrel: u32,
+    },
     /// The hammer fell on nothing (or on a dud).
     DryFire,
     /// The primer was struck and nothing happened.
@@ -216,7 +218,11 @@ impl Firearm {
     }
 
     pub fn fire_mode(&self) -> FireMode {
-        self.def.modes.get(self.mode).copied().unwrap_or(FireMode::Semi)
+        self.def
+            .modes
+            .get(self.mode)
+            .copied()
+            .unwrap_or(FireMode::Semi)
     }
 
     /// Steps the selector to the next position (wrapping) and reports it.
@@ -238,7 +244,9 @@ impl Firearm {
 
     /// Rounds available to feed, wherever they are.
     pub fn rounds_in_feed(&self) -> u32 {
-        self.magazine.as_ref().map_or(self.internal_rounds, |m| m.rounds)
+        self.magazine
+            .as_ref()
+            .map_or(self.internal_rounds, |m| m.rounds)
     }
 
     /// Total live rounds in the gun, chambers included.
@@ -610,7 +618,9 @@ impl Firearm {
     /// Repair with spare parts: restores condition, never above `cap` (worn
     /// guns can only be brought back so far).
     pub fn repair(&mut self, amount: f32, cap: f32) {
-        self.condition = (self.condition + amount).min(cap.clamp(0.0, 1.0)).max(self.condition);
+        self.condition = (self.condition + amount)
+            .min(cap.clamp(0.0, 1.0))
+            .max(self.condition);
     }
 
     /// Spread in radians for the next shot.
@@ -814,7 +824,10 @@ mod tests {
     #[test]
     fn bolt_action_cycle() {
         let mut gun = Firearm::new(mosin(), 1.0);
-        assert!(gun.set_bolt_travel(1.0).is_empty(), "handle must lift first");
+        assert!(
+            gun.set_bolt_travel(1.0).is_empty(),
+            "handle must lift first"
+        );
         gun.set_handle_lift(1.0);
         gun.set_bolt_travel(1.0);
         assert_eq!(gun.strip_clip(5), 5);

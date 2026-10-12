@@ -6,7 +6,9 @@
 //! from CC0 scans. Until they exist (a fresh checkout, CI) the shader paints
 //! procedural stand-ins so the game still looks like a place.
 
-use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode, ImageFilterMode};
+use bevy::image::{
+    ImageAddressMode, ImageFilterMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor,
+};
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderType};
@@ -78,7 +80,9 @@ fn arrays_present() -> bool {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
     ["albedo", "normal", "arm"].iter().all(|m| {
         root.join(format!("{ARRAY_DIR}/{m}.ktx2")).exists()
-            || std::path::Path::new("assets").join(format!("{ARRAY_DIR}/{m}.ktx2")).exists()
+            || std::path::Path::new("assets")
+                .join(format!("{ARRAY_DIR}/{m}.ktx2"))
+                .exists()
     })
 }
 
@@ -96,7 +100,9 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
         })
     };
     if !textured {
-        info!("terrain textures not fetched; using procedural ground (run scripts/fetch_assets.py)");
+        info!(
+            "terrain textures not fetched; using procedural ground (run scripts/fetch_assets.py)"
+        );
     }
     ExtendedMaterial {
         base: StandardMaterial {

@@ -278,9 +278,9 @@ impl MapDef {
     }
 
     pub fn markers_of<'a>(&'a self, kind: &'a MarkerKind) -> impl Iterator<Item = &'a Marker> {
-        self.markers.iter().filter(move |m| {
-            std::mem::discriminant(&m.kind) == std::mem::discriminant(kind)
-        })
+        self.markers
+            .iter()
+            .filter(move |m| std::mem::discriminant(&m.kind) == std::mem::discriminant(kind))
     }
 
     /// Which region a point is in, if any (first match wins).
@@ -306,12 +306,17 @@ mod tests {
         assert!(map.markers_of(&MarkerKind::Rendezvous).count() >= 2);
         let hm = Heightmap::build(&map);
         // The creek has water, and the village bridge leaves it alone.
-        assert!(hm.water_level([11.0, 10.0]).is_some(), "creek under the bridge");
+        assert!(
+            hm.water_level([11.0, 10.0]).is_some(),
+            "creek under the bridge"
+        );
         assert!(hm.water_level([5.0, 70.0]).is_none(), "village is dry");
         // Every insertion and rendezvous is on walkable ground.
-        for m in map.markers.iter().filter(|m| {
-            matches!(m.kind, MarkerKind::Insertion | MarkerKind::Rendezvous)
-        }) {
+        for m in map
+            .markers
+            .iter()
+            .filter(|m| matches!(m.kind, MarkerKind::Insertion | MarkerKind::Rendezvous))
+        {
             assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
             assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
         }

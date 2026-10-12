@@ -1,0 +1,357 @@
+//! A thief's body: the torso that follows the head, the chest rig and belt
+//! sockets on it, and the backpack.
+//!
+//! The backpack works like Into the Radius: it lives on your back; reach
+//! over a shoulder and pull it round, let go in front of you and it hangs
+//! there open; drop things into it (no collision inside, no tetris); grab
+//! it and let go behind you to put it back on.
+
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use extraction_core::inventory::{self, DEFAULT_SLOTS, SlotKind};
+use extraction_core::items::{ItemCatalog, ItemKind, SizeClass};
+
+use super::{
+    GrabPoint, Grabbable, Held, InteractEvent, Socket, SocketKind, SocketOwner, Supported,
+};
+use crate::items::{Catalog, Item};
+use crate::player::{Body, Player};
+use crate::rig::RigInput;
+use crate::world::Layer;
+
+/// Inner half-size of the backpack's stowing volume, metres.
+pub const BACKPACK_HALF_EXTENTS: Vec3 = Vec3::new(0.17, 0.24, 0.1);
+
+/// Chest-height anchor that follows the head's position and, lazily, its yaw.
+#[derive(Component)]
+pub struct Torso {
+    pub yaw: f32,
+}
+
+/// Index of a body socket in the default slot layout (1-9 keys in flat mode).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BodySlot(pub usize);
+
+/// A container you drop things into: the backpack, or the truck's stash.
+#[derive(Component, Debug)]
+pub struct Backpack {
+    pub owner: Entity,
+    pub open: bool,
+    pub model: inventory::Backpack,
+    pub contents: Vec<Entity>,
+    /// Worn (counts toward carried weight, opens with Tab) or not (a crate).
+    pub carried: bool,
+    /// Inner half-size of the stowing volume.
+    pub half: Vec3,
+}
+
+impl Backpack {
+    pub fn used(&self, catalog: &ItemCatalog, kinds: &[ItemKind]) -> f32 {
+        kinds.iter().map(|k| catalog.get(*k).bulk).sum()
+    }
+
+    pub fn fits(&self, used: f32, size: SizeClass, bulk: f32) -> bool {
+        self.model.check(used, size, bulk).is_ok()
+    }
+}
+
+/// On an item inside a backpack.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct InBackpack {
+    pub bag: Entity,
+}
+
+/// Request to open or close the local backpack (flat mode's Tab).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ToggleBackpack {
+    pub player: Entity,
+}
+
+/// Where the closed backpack rides, relative to the torso.
+const BACK: Vec3 = Vec3::new(0.0, -0.12, 0.2);
+/// Where flat mode hangs the open backpack, relative to the torso.
+const FRONT: Vec3 = Vec3::new(0.0, -0.22, -0.48);
+
+pub struct BodyPlugin;
+
+impl Plugin for BodyPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_message::<ToggleBackpack>()
+            .add_observer(build_body)
+            .add_systems(
+                Update,
+                (
+                    follow_head,
+                    toggle_backpacks,
+                    backpack_released,
+                    sync_backpack_visibility,
+                ),
+            )
+            .add_systems(FixedUpdate, carried_mass);
+    }
+}
+
+/// When a player appears, give them a torso, a rig, and a backpack.
+fn build_body(add: On<Add, Player>, mut commands: Commands) {
+    let player = add.entity;
+    let torso = commands
+        .spawn((
+            Name::new("Torso"),
+            Torso { yaw: 0.0 },
+            Transform::from_xyz(0.0, 1.3, 0.0),
+            Visibility::default(),
+            ChildOf(player),
+        ))
+        .id();
+    for (i, slot) in DEFAULT_SLOTS.iter().enumerate() {
+        let (pos, seat, radius) = slot_layout(*slot, i);
+        commands.spawn((
+            Name::new(format!("{slot:?} slot")),
+            BodySlot(i),
+            Socket {
+                kind: SocketKind::Body(*slot),
+                occupant: None,
+                radius,
+                seat,
+            },
+            SocketOwner(player),
+            Transform::from_translation(pos),
+            Visibility::default(),
+            ChildOf(torso),
+        ));
+    }
+    commands.spawn((
+        Name::new("Backpack"),
+        Backpack {
+            owner: player,
+            open: false,
+            model: inventory::Backpack::default(),
+            contents: Vec::new(),
+            carried: true,
+            half: BACKPACK_HALF_EXTENTS,
+        },
+        Grabbable {
+            points: vec![GrabPoint::free()],
+        },
+        Transform::from_translation(BACK),
+        Visibility::default(),
+        RigidBody::Dynamic,
+        RigidBodyDisabled,
+        ColliderDisabled,
+        Collider::cuboid(0.36, 0.5, 0.22),
+        CollisionLayers::new(Layer::Item, [Layer::World]),
+        ChildOf(torso),
+    ));
+}
+
+/// Where each slot sits on the torso (origin mid-chest), how its occupant
+/// is seated, and its snap radius.
+fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
+    use std::f32::consts::FRAC_PI_2;
+    match slot {
+        SlotKind::Sling => {
+            // Diagonally across the back, muzzle up over a shoulder.
+            let side = if index == 0 { -1.0 } else { 1.0 };
+            (
+                Vec3::new(0.12 * side, -0.05, 0.16),
+                Transform::from_rotation(
+                    Quat::from_rotation_z(0.5 * side) * Quat::from_rotation_x(FRAC_PI_2),
+                ),
+                0.25,
+            )
+        }
+        SlotKind::Holster => (
+            Vec3::new(0.22, -0.42, 0.02),
+            Transform::from_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+            0.16,
+        ),
+        SlotKind::Pouch => {
+            let k = index.saturating_sub(3) as f32;
+            (
+                Vec3::new(-0.14 + k * 0.09, -0.16, -0.13),
+                Transform::IDENTITY,
+                0.08,
+            )
+        }
+        SlotKind::Pocket => {
+            let side = if index % 2 == 0 { -1.0 } else { 1.0 };
+            (
+                Vec3::new(0.17 * side, -0.45, -0.08),
+                Transform::IDENTITY,
+                0.09,
+            )
+        }
+        SlotKind::Mount => (Vec3::new(-0.13, 0.06, -0.12), Transform::IDENTITY, 0.08),
+    }
+}
+
+/// The torso trails the head: always under it, turning when the head has
+/// looked far enough away or the player is walking.
+fn follow_head(
+    players: Query<(&RigInput, &Children), With<Player>>,
+    mut torsos: Query<(&mut Torso, &mut Transform)>,
+    time: Res<Time>,
+) {
+    for (input, children) in &players {
+        for c in children.iter() {
+            let Ok((mut torso, mut t)) = torsos.get_mut(c) else {
+                continue;
+            };
+            let head = input.head;
+            let fwd = head.rotation * Vec3::NEG_Z;
+            let head_yaw = (-fwd.x).atan2(-fwd.z);
+            let mut diff = head_yaw - torso.yaw;
+            while diff > std::f32::consts::PI {
+                diff -= std::f32::consts::TAU;
+            }
+            while diff < -std::f32::consts::PI {
+                diff += std::f32::consts::TAU;
+            }
+            let walking = input.locomotion.length() > 0.1;
+            let rate = if walking || diff.abs() > 0.8 {
+                6.0
+            } else {
+                0.8
+            };
+            torso.yaw += diff * (rate * time.delta_secs()).min(1.0);
+            t.translation = Vec3::new(
+                head.translation.x,
+                head.translation.y - 0.38,
+                head.translation.z,
+            );
+            t.rotation = Quat::from_rotation_y(torso.yaw);
+        }
+    }
+}
+
+/// Puts an item inside a bag at a local position.
+pub fn stow_in_backpack(
+    commands: &mut Commands,
+    item: Entity,
+    bag_e: Entity,
+    bag: &mut Backpack,
+    local: Vec3,
+) {
+    bag.contents.push(item);
+    let local = local.clamp(-bag.half, bag.half);
+    commands.entity(item).remove::<(Held, Supported)>().insert((
+        InBackpack { bag: bag_e },
+        ChildOf(bag_e),
+        Transform::from_translation(local),
+        RigidBodyDisabled,
+        ColliderDisabled,
+        if bag.open {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        },
+    ));
+}
+
+fn toggle_backpacks(
+    mut requests: MessageReader<ToggleBackpack>,
+    mut bags: Query<(&mut Backpack, &mut Transform)>,
+) {
+    for req in requests.read() {
+        for (mut bag, mut t) in &mut bags {
+            if bag.owner != req.player || !bag.carried {
+                continue;
+            }
+            bag.open = !bag.open;
+            *t = if bag.open {
+                Transform::from_translation(FRONT)
+                    .with_rotation(Quat::from_rotation_y(std::f32::consts::PI))
+            } else {
+                Transform::from_translation(BACK)
+            };
+        }
+    }
+}
+
+/// A backpack let go of in VR: behind the shoulders puts it on (closed),
+/// anywhere else leaves it hanging open in front of you.
+fn backpack_released(
+    mut commands: Commands,
+    mut events: MessageReader<InteractEvent>,
+    mut bags: Query<(&mut Backpack, &GlobalTransform)>,
+    torsos: Query<(Entity, &GlobalTransform, &ChildOf), With<Torso>>,
+) {
+    for ev in events.read() {
+        let InteractEvent::Released { item, .. } = ev else {
+            continue;
+        };
+        let Ok((mut bag, gt)) = bags.get_mut(*item) else {
+            continue;
+        };
+        let Some((torso_e, torso_gt, _)) = torsos.iter().find(|(_, _, p)| p.parent() == bag.owner)
+        else {
+            continue;
+        };
+        let local = torso_gt.affine().inverse() * gt.affine();
+        let local = Transform::from_matrix(local.into());
+        let behind = local.translation.distance(BACK) < 0.35 || local.translation.z > 0.05;
+        bag.open = !behind;
+        let t = if behind {
+            Transform::from_translation(BACK)
+        } else {
+            local
+        };
+        commands
+            .entity(*item)
+            .insert((ChildOf(torso_e), t, RigidBodyDisabled, ColliderDisabled));
+    }
+}
+
+fn sync_backpack_visibility(
+    bags: Query<&Backpack, Changed<Backpack>>,
+    mut vis: Query<&mut Visibility, With<InBackpack>>,
+) {
+    for bag in &bags {
+        for item in &bag.contents {
+            if let Ok(mut v) = vis.get_mut(*item) {
+                *v = if bag.open {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                };
+            }
+        }
+    }
+}
+
+/// Sums what each player carries into their body's encumbrance.
+fn carried_mass(
+    mut players: Query<(Entity, &mut Body)>,
+    held: Query<(&Held, &Item)>,
+    sockets: Query<(&Socket, &SocketOwner)>,
+    bags: Query<&Backpack>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+) {
+    for (player, mut body) in &mut players {
+        let mut kg = 0.0;
+        for (h, item) in &held {
+            if h.player == player {
+                kg += catalog.get(item.kind()).mass;
+            }
+        }
+        for (socket, owner) in &sockets {
+            if owner.0 == player {
+                if let Some(Ok(item)) = socket.occupant.map(|e| items.get(e)) {
+                    kg += catalog.get(item.kind()).mass;
+                }
+            }
+        }
+        for bag in &bags {
+            if bag.owner == player && bag.carried {
+                kg += bag.model.mass;
+                for e in &bag.contents {
+                    if let Ok(item) = items.get(*e) {
+                        kg += catalog.get(item.kind()).mass;
+                    }
+                }
+            }
+        }
+        body.carried_kg = kg;
+    }
+}
