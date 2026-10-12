@@ -105,6 +105,7 @@ fn model_path(kind: RobotKind) -> &'static str {
     match kind {
         RobotKind::Drone => "models/robots/drone.glb",
         RobotKind::Walker => "models/robots/walker.glb",
+        RobotKind::Dirigible => "models/robots/dirigible.glb",
     }
 }
 
@@ -466,6 +467,73 @@ fn dress_blockout(
                     Visibility::default(),
                 ));
             }
+        }
+        (RobotKind::Dirigible, PartRole::GasCell(i)) => {
+            // Overlapping ellipsoids read as one long envelope.
+            ec.insert((
+                Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(32, 16))),
+                MeshMaterial3d(m.shell.clone()),
+            ));
+            let len = if i == 1 { 3.4 } else { 3.0 };
+            ec.insert(
+                Transform::from_xyz(0.0, 0.0, (i as f32 - 1.0) * 4.8)
+                    .with_scale(Vec3::new(2.6, 2.6, len)),
+            );
+            if i == 2 {
+                // Tail fins.
+                ec.with_children(|c| {
+                    for a in [0.0f32, 1.5708, 3.1416, 4.7124] {
+                        c.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.04, 0.9, 0.7))),
+                            MeshMaterial3d(m.dark.clone()),
+                            Transform::from_rotation(Quat::from_rotation_z(a)).with_translation(
+                                Quat::from_rotation_z(a) * Vec3::Y * 1.05 + Vec3::Z * 0.75,
+                            ),
+                        ));
+                    }
+                });
+            }
+        }
+        (RobotKind::Dirigible, PartRole::Core) => {
+            // The gondola, its engine pods and a red running light.
+            ec.insert((
+                Mesh3d(meshes.add(Cuboid::new(1.4, 1.1, 4.0))),
+                MeshMaterial3d(m.shell.clone()),
+            ));
+            ec.with_children(|c| {
+                for x in [-1.3f32, 1.3] {
+                    c.spawn((
+                        Mesh3d(
+                            meshes.add(
+                                Cylinder::new(0.35, 1.2)
+                                    .mesh()
+                                    .build()
+                                    .rotated_by(Quat::from_rotation_x(1.5708)),
+                            ),
+                        ),
+                        MeshMaterial3d(m.dark.clone()),
+                        Transform::from_xyz(x, 0.2, 0.8),
+                    ));
+                    c.spawn((
+                        RotorDisc { index: 0 },
+                        Mesh3d(
+                            meshes.add(
+                                Cylinder::new(0.55, 0.02)
+                                    .mesh()
+                                    .build()
+                                    .rotated_by(Quat::from_rotation_x(1.5708)),
+                            ),
+                        ),
+                        MeshMaterial3d(m.rotor.clone()),
+                        Transform::from_xyz(x, 0.2, 1.45),
+                    ));
+                }
+                c.spawn((
+                    Mesh3d(meshes.add(Sphere::new(0.08))),
+                    MeshMaterial3d(m.eye.clone()),
+                    Transform::from_xyz(0.0, -0.6, 1.8),
+                ));
+            });
         }
         _ => {}
     }

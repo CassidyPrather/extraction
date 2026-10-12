@@ -494,6 +494,9 @@ fn run_tasks(
                     crate::robots::RobotKind::Walker => {
                         crate::robots::walker::spawn_walker(&mut commands, &zone, at, job);
                     }
+                    crate::robots::RobotKind::Dirigible => {
+                        crate::robots::dirigible::spawn_dirigible(&mut commands, at, job);
+                    }
                 }
                 bot.note(format!("spawned a {kind:?}"));
                 bot.next();

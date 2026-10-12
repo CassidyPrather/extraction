@@ -30,6 +30,8 @@ pub struct Director {
     /// Seconds before another response may be queued.
     pub response_cooldown: f32,
     pub max_active: usize,
+    /// Seconds until the next logistics run (dirigible and grapplers).
+    pub next_logistics: f32,
 }
 
 pub struct DirectorPlugin;
@@ -51,6 +53,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         responses: Vec::new(),
         response_cooldown: 0.0,
         max_active: 6,
+        next_logistics: 150.0,
     });
 }
 
@@ -117,6 +120,55 @@ fn run_director(
                 exit,
             },
         );
+    }
+    // Logistics: a dirigible brings a cargo pod to a work site and
+    // grapplers walk out to guard it, one run at a time.
+    director.next_logistics -= dt;
+    let airborne = robots
+        .iter()
+        .any(|r| r.kind == super::RobotKind::Dirigible && !r.wrecked);
+    if director.next_logistics <= 0.0 && !airborne && active + 3 <= director.max_active {
+        director.next_logistics = director.rng.range(360.0, 600.0);
+        let sites: Vec<[f32; 2]> = zone
+            .map
+            .markers_of(&MarkerKind::WorkSite)
+            .map(|m| m.at)
+            .collect();
+        if !sites.is_empty() {
+            let s = sites[director.rng.below(sites.len())];
+            let site = zone.on_ground(s[0], s[1]);
+            // In over the map edge beyond the Gate, out the same way.
+            let out = Vec3::new(exit.x, 0.0, exit.z).normalize_or(Vec3::NEG_Z);
+            let edge = out * (zone.map.size * 0.5 + 60.0);
+            let start = Vec3::new(edge.x, exit.y + 45.0, edge.z);
+            let duration = director.rng.range(150.0, 240.0);
+            info!("director: logistics run to {s:?}");
+            super::dirigible::spawn_dirigible(
+                &mut commands,
+                start,
+                Job {
+                    kind: JobKind::Watch,
+                    site,
+                    duration,
+                    exit: start,
+                },
+            );
+            for k in 0..2 {
+                let a = k as f32 * std::f32::consts::PI + 0.7;
+                let post = zone.on_ground(site.x + a.cos() * 7.0, site.z + a.sin() * 7.0);
+                super::grappler::spawn_grappler(
+                    &mut commands,
+                    &zone,
+                    exit,
+                    Job {
+                        kind: JobKind::Watch,
+                        site: post,
+                        duration: duration + 60.0,
+                        exit,
+                    },
+                );
+            }
+        }
     }
     if director.next_job > 0.0 || active >= director.max_active {
         return;

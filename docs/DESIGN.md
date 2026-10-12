@@ -127,8 +127,15 @@ diegetically (out of the robot Gate at the map edge, dropped by dirigible, or
 flown in) to do them, then leave:
 
 - *Survey*: drones fly to a POI, scan it, fly out.
-- *Logistics*: a dirigible ferries a cargo pod between robot structures;
-  grappler bots anchor and reel it.
+- *Logistics* (built): every six to ten minutes a dirigible comes in over
+  the map edge, crosses to a work site and lowers a cargo pod full of
+  robot stock on a cable, while two grapplers walk out from the Gate to
+  stand guard. A few minutes later the pod is reeled back up — with
+  whatever you didn't take — and the airship leaves. The dirigible is
+  unarmed but sees a long way and reports what it sees (a response team
+  follows); puncture two of its three gas cells and it sinks to a wreck
+  full of salvage, dropping the pod where it hangs. Grapplers don't shoot:
+  they spear you with a tether that slows you and drags you toward them.
 - *Construction*: walkers assemble a relay pylon at a site, operate it a while,
   pack it up again.
 - *Response*: a team is sent to the last known position of a disturbance.

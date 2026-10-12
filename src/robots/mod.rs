@@ -10,7 +10,9 @@
 
 pub mod collector;
 pub mod director;
+pub mod dirigible;
 pub mod drone;
+pub mod grappler;
 pub mod visuals;
 pub mod walker;
 
@@ -25,8 +27,11 @@ use crate::world::Layer;
 pub enum RobotKind {
     /// Quadcopter with a gun pod.
     Drone,
-    /// A sensor orb carried on ball-jointed legs.
+    /// A sensor orb carried on ball-jointed legs (also the grappler and
+    /// the convoy's collector, by their components).
     Walker,
+    /// The airship that carries cargo pods.
+    Dirigible,
 }
 
 #[derive(Component, Debug)]
@@ -51,6 +56,8 @@ pub enum PartRole {
     Weapon,
     Rotor(u8),
     Leg(u8),
+    /// One of a dirigible's gas cells.
+    GasCell(u8),
 }
 
 #[derive(Component, Debug)]
@@ -157,6 +164,8 @@ impl Plugin for RobotsPlugin {
                 walker::WalkerPlugin,
                 director::DirectorPlugin,
                 collector::CollectorPlugin,
+                dirigible::DirigiblePlugin,
+                grappler::GrapplerPlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -378,6 +387,7 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
     match kind {
         RobotKind::Drone => "drone_wreck",
         RobotKind::Walker => "walker_wreck",
+        RobotKind::Dirigible => "dirigible_wreck",
     }
 }
 

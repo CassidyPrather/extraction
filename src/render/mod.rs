@@ -3,6 +3,7 @@
 pub mod bench;
 pub mod fog;
 pub mod kitchen;
+pub mod logistics;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -32,6 +33,7 @@ impl Plugin for RenderPlugin {
             bench::BenchVisualsPlugin,
             kitchen::KitchenVisualsPlugin,
             offering::OfferingVisualsPlugin,
+            logistics::LogisticsVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

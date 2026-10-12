@@ -136,6 +136,29 @@ fn gallery(
                         .with_rotation(facing),
                 );
             }
+            "dirigible" | "grappler" | "pod" => {
+                let at = eye + fwd * dist.unwrap_or(30.0);
+                match subject.as_str() {
+                    "dirigible" => {
+                        crate::robots::dirigible::spawn_dirigible(&mut commands, at, job(at));
+                    }
+                    "grappler" => {
+                        let at = eye + flat * dist.unwrap_or(3.5);
+                        crate::robots::grappler::spawn_grappler(&mut commands, &zone, at, job(at));
+                    }
+                    _ => {
+                        let at = eye + flat * dist.unwrap_or(4.0);
+                        let at = Vec3::new(at.x, zone.ground(at.x, at.z) + 0.45, at.z);
+                        commands.spawn((
+                            crate::robots::dirigible::CargoPod {
+                                carrier: Entity::PLACEHOLDER,
+                            },
+                            Transform::from_translation(at).with_rotation(facing),
+                            Visibility::default(),
+                        ));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()

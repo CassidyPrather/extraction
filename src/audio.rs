@@ -623,7 +623,33 @@ fn anomaly_sounds(
     mut glances: MessageReader<crate::health::Glanced>,
     mut emps: MessageReader<crate::gadgets::EmpBlast>,
     mut offerings: MessageReader<crate::anomaly::offering::OfferingTaken>,
+    mut harpoons: MessageReader<crate::robots::grappler::Harpoon>,
+    positions: Query<&GlobalTransform>,
 ) {
+    for h in harpoons.read() {
+        let at = positions.get(h.from).ok().map(|g| g.translation());
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/clank",
+            at,
+            4.0,
+            0.1,
+        );
+        if h.hit {
+            let at = positions.get(h.to).ok().map(|g| g.translation());
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "impacts/metal",
+                at,
+                0.0,
+                0.1,
+            );
+        }
+    }
     for o in offerings.read() {
         let speed = if o.boon == crate::anomaly::offering::Boon::Nothing {
             1.3

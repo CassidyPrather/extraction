@@ -574,6 +574,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(b) = bag {
+            // A cargo pod's contents go with the dirigible, saved or not.
+            if world.get::<crate::robots::dirigible::CargoPod>(b).is_some() {
+                continue;
+            }
             let Some(saved) = snapshot_item(world, e, t.translation) else {
                 continue;
             };
