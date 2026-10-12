@@ -91,6 +91,7 @@ impl Heightmap {
         };
         hm.shape(map);
         hm.plateaus(map);
+        hm.pads(map);
         hm.rim(map);
         // Water levels come from the land before roads cut and fill it, so
         // a ford's raised bed doesn't raise the creek.
@@ -295,6 +296,48 @@ impl Heightmap {
                     1.0 - geom::smoothstep(0.0, blend.max(0.01), d)
                 };
                 hm.heights[k] += (height - hm.heights[k]) * t;
+            });
+        }
+    }
+
+    /// Levels the ground under every building to its average height, with
+    /// a few metres of blend, so floors meet the ground.
+    fn pads(&mut self, map: &MapDef) {
+        for p in &map.placements {
+            if p.absolute || !crate::map::prefab_wants_pad(&p.prefab) {
+                continue;
+            }
+            let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+            let (half_w, half_d) = (w * 0.5 + 0.8, d * 0.5 + 0.8);
+            let yaw = -p.rot.to_radians();
+            let (s, c) = yaw.sin_cos();
+            // Local (x, z) of a world point, in the building's frame.
+            let local = |q: P2| {
+                let dx = q[0] - p.at[0];
+                let dz = q[1] - p.at[1];
+                [dx * c - dz * s, dx * s + dz * c]
+            };
+            let reach = half_w.max(half_d) + 6.0;
+            let lo = [p.at[0] - reach, p.at[1] - reach];
+            let hi = [p.at[0] + reach, p.at[1] + reach];
+            let (mut sum, mut n) = (0.0, 0);
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let l = local(q);
+                if l[0].abs() <= half_w && l[1].abs() <= half_d {
+                    sum += hm.heights[k];
+                    n += 1;
+                }
+            });
+            if n == 0 {
+                continue;
+            }
+            let target = sum / n as f32;
+            let blend = 5.0;
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let l = local(q);
+                let out = ((l[0].abs() - half_w).max(0.0)).hypot((l[1].abs() - half_d).max(0.0));
+                let t = 1.0 - geom::smoothstep(0.0, blend, out);
+                hm.heights[k] += (target - hm.heights[k]) * t;
             });
         }
     }

@@ -4,3 +4,9 @@
 
 # Python bytecode from scripts/
 __pycache__/
+
+# Built by scripts/fetch_assets.py (deterministic, hash-pinned); ~190 MB.
+/assets/textures/terrain/
+/assets/textures/materials/
+/assets/textures/foliage/
+/assets/textures/sky/

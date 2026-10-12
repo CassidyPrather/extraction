@@ -11,29 +11,7 @@ use super::{Layer, Zone};
 
 /// Rough footprint (width x depth x height) of each prefab, metres.
 pub fn footprint(prefab: &str) -> Vec3 {
-    match prefab {
-        "quarantine_gate" => Vec3::new(14.0, 4.0, 0.6),
-        "sawmill" => Vec3::new(24.0, 7.0, 12.0),
-        "cabin_log" => Vec3::new(7.0, 4.5, 6.0),
-        "log_pile" => Vec3::new(8.0, 1.6, 3.0),
-        "farmhouse" => Vec3::new(10.0, 7.0, 8.0),
-        "barn" => Vec3::new(16.0, 9.0, 12.0),
-        "shed" => Vec3::new(4.0, 3.0, 3.0),
-        "house_plank" => Vec3::new(8.0, 6.0, 7.0),
-        "house_brick" => Vec3::new(10.0, 7.5, 8.0),
-        "shop" => Vec3::new(9.0, 5.0, 7.0),
-        "pump_station" => Vec3::new(14.0, 7.0, 10.0),
-        "footbridge" => Vec3::new(1.6, 1.2, 24.0),
-        "anomaly_core" => Vec3::new(3.0, 3.0, 3.0),
-        "bus_depot" => Vec3::new(30.0, 8.0, 18.0),
-        "radio_mast" => Vec3::new(2.0, 45.0, 2.0),
-        "mast_hut" => Vec3::new(5.0, 3.0, 4.0),
-        "rail_shed" => Vec3::new(20.0, 9.0, 12.0),
-        "boxcar" => Vec3::new(3.0, 4.2, 14.0),
-        "ranger_tower" => Vec3::new(4.0, 14.0, 4.0),
-        "robot_gate" => Vec3::new(18.0, 12.0, 6.0),
-        _ => Vec3::new(4.0, 3.0, 4.0),
-    }
+    Vec3::from_array(extraction_core::map::prefab_footprint(prefab))
 }
 
 /// Radius around a placement kept free of trees.
@@ -49,6 +27,10 @@ pub struct Structure {
 
 pub fn spawn_structures(mut commands: Commands, zone: Res<Zone>) {
     for p in &zone.map.placements {
+        // Generated buildings handle themselves; the rest are blockouts.
+        if super::buildings::prefab(&p.prefab).is_some() {
+            continue;
+        }
         let size = footprint(&p.prefab);
         let ground = zone.ground(p.at[0], p.at[1]);
         let y = if p.absolute { p.y } else { ground + p.y };

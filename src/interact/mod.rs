@@ -887,6 +887,9 @@ fn follow_hands(
         let heft = (mass / if two_handed { 2.5 } else { 1.0 }).max(0.2);
         let max_lin = 14.0 / heft.sqrt();
         let max_ang = if two_handed { 30.0 } else { 22.0 } / heft.sqrt();
+        if !target.translation.is_finite() || !target.rotation.is_finite() {
+            continue;
+        }
         let dv = (target.translation - pos.0) / dt;
         lin.0 = dv.clamp_length_max(max_lin);
         let dq = target.rotation * rot.0.inverse();
@@ -894,6 +897,11 @@ fn follow_hands(
         if angle > std::f32::consts::PI {
             angle -= std::f32::consts::TAU;
         }
-        ang.0 = (axis * angle / dt).clamp_length_max(max_ang);
+        let w = axis * angle / dt;
+        ang.0 = if w.is_finite() {
+            w.clamp_length_max(max_ang)
+        } else {
+            Vec3::ZERO
+        };
     }
 }

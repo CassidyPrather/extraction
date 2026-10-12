@@ -190,7 +190,7 @@ Grounded, gloomy temperate: wet spruce and birch forest, overcast sky, low
 sun that never quite breaks through, rain-darkened concrete and rusted steel,
 and fog in layers — distance fog, ground-hugging height fog, and volumetric
 light shafts for flashlights. PBR throughout: CC0 scanned materials from
-Poly Haven and ambientCG, fetched by `scripts/fetch-assets.py` (credited in
+Poly Haven and ambientCG, fetched by `scripts/fetch_assets.py` (credited in
 `CREDITS.md`), and custom shaders where scans don't cut it (wetness, moss
 blending on terrain, fog). Robots are the exception to grime: sleek, pale,
 panelled sci-fi forms with a few emissive accents, so they read instantly

@@ -330,7 +330,7 @@ fn fly_drones(
         let face_flat = Vec3::new(face.x, 0.0, face.z);
         let yaw_err = if face_flat.length() > 0.5 {
             let f = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
-            f.cross(face_flat.normalize()).y.asin()
+            f.cross(face_flat.normalize()).y.clamp(-1.0, 1.0).asin()
         } else {
             0.0
         };

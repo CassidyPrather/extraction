@@ -72,11 +72,13 @@ impl Plugin for ClientPlugin {
             robots::visuals::RobotVisualsPlugin,
             render::props::PropVisualsPlugin,
         ))
+        .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
             (
                 world::structures::blockout_visuals,
                 world::structures::fence_visuals,
+                world::buildings::building_visuals,
             ),
         );
     }

@@ -44,6 +44,8 @@ impl Truck {
 pub enum Pressable {
     /// Tell the driver to go.
     BellPull,
+    /// Swing a door open or shut.
+    Door,
 }
 
 /// The stash crate in the truck bed.
@@ -241,7 +243,7 @@ fn press_things(
                 Ok(Pressable::BellPull) => {
                     depart.write(DepartRequest { player: *player });
                 }
-                Err(_) => {}
+                Ok(Pressable::Door) | Err(_) => {}
             }
         }
     }

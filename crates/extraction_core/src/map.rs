@@ -271,6 +271,42 @@ pub struct Region {
     pub danger: u8,
 }
 
+/// Width (x), height, depth (z) of each prefab, metres, unrotated.
+pub fn prefab_footprint(id: &str) -> [f32; 3] {
+    match id {
+        "quarantine_gate" => [20.0, 4.0, 3.0],
+        "sawmill" => [24.0, 7.0, 12.0],
+        "cabin_log" => [7.0, 4.5, 6.0],
+        "log_pile" => [2.5, 1.6, 7.0],
+        "farmhouse" => [10.0, 7.0, 8.0],
+        "barn" => [12.0, 9.0, 16.0],
+        "shed" => [4.0, 3.0, 3.0],
+        "house_plank" => [8.0, 6.0, 7.0],
+        "house_brick" => [10.0, 7.5, 8.0],
+        "shop" => [9.0, 5.0, 7.0],
+        "pump_station" => [14.0, 7.0, 10.0],
+        "footbridge" => [1.6, 1.2, 24.0],
+        "anomaly_core" => [10.0, 4.0, 10.0],
+        "bus_depot" => [30.0, 8.0, 18.0],
+        "radio_mast" => [2.0, 45.0, 2.0],
+        "mast_hut" => [5.0, 3.0, 4.0],
+        "rail_shed" => [20.0, 9.0, 12.0],
+        "boxcar" => [3.0, 4.2, 14.0],
+        "ranger_tower" => [6.0, 12.0, 5.0],
+        "robot_gate" => [17.6, 14.0, 4.0],
+        _ => [4.0, 3.0, 4.0],
+    }
+}
+
+/// Whether a prefab wants the ground levelled under it (buildings do;
+/// bridges, gates over roads and the anomaly don't).
+pub fn prefab_wants_pad(id: &str) -> bool {
+    !matches!(
+        id,
+        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar"
+    )
+}
+
 impl MapDef {
     pub fn from_ron(text: &str) -> Result<Self, String> {
         ron::from_str(text).map_err(|e| e.to_string())

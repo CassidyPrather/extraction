@@ -19,7 +19,14 @@ impl Plugin for LootPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Startup,
-            (load_tables, spawn_marker_loot, spawn_dev_cache).chain(),
+            (
+                load_tables,
+                spawn_marker_loot,
+                spawn_building_loot,
+                spawn_dev_cache,
+            )
+                .chain()
+                .after(crate::world::buildings::spawn_buildings),
         );
     }
 }
@@ -70,6 +77,50 @@ fn spawn_marker_loot(
             let _ = e;
         }
     }
+}
+
+/// Rolls every building loot spot (shelves, tables, crates).
+fn spawn_building_loot(
+    mut commands: Commands,
+    spots: Option<Res<crate::world::buildings::BuildingLoot>>,
+    loot: Res<Loot>,
+    catalog: Res<Catalog>,
+    opts: Res<LaunchOptions>,
+) {
+    let Some(spots) = spots else {
+        return;
+    };
+    let mut rng = Rng::new(opts.seed ^ 0xB11D);
+    let mut n = 0;
+    for spot in &spots.0 {
+        for (i, drop) in loot
+            .0
+            .roll(spot.table, &catalog, &mut rng)
+            .into_iter()
+            .enumerate()
+        {
+            let off = Vec3::new(
+                (i as f32 * 1.7).sin() * 0.18,
+                0.04 + i as f32 * 0.06,
+                (i as f32 * 1.7).cos() * 0.12,
+            );
+            spawn_item(
+                &mut commands,
+                &catalog,
+                SpawnItem {
+                    kind: drop.kind,
+                    transform: Transform::from_translation(spot.at + off)
+                        .with_rotation(Quat::from_rotation_y(rng.range(0.0, 6.28))),
+                    condition: drop.condition,
+                },
+            );
+            n += 1;
+        }
+    }
+    info!(
+        "{n} items rolled into {} building loot spots",
+        spots.0.len()
+    );
 }
 
 /// Every gun, loaded magazines, ammunition and the maintenance kit on the

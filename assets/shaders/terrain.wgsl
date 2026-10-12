@@ -263,7 +263,8 @@ fn fragment(
 
     // Tangent frame for an XZ projection: T = +X, B = +Z.
     let t = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geo * n_geo.x);
-    let b = cross(t, n_geo);
+    // OpenGL-convention normal maps: green points up the image (-V).
+    let b = cross(n_geo, t);
     let n = normalize(t * tn.x + b * tn.y + n_geo * tn.z);
 
     pbr_input.material.base_color = vec4<f32>(albedo, 1.0);
