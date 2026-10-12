@@ -412,6 +412,11 @@ fn pose_hands(
             .get(parent.parent())
             .map(|i| i.hand(v.side).grip)
             .unwrap_or(0.0);
+        // The index finger has a mind of its own: it follows the trigger.
+        let trigger = inputs
+            .get(parent.parent())
+            .map(|i| i.hand(v.side).trigger)
+            .unwrap_or(0.0);
         if let Some(item) = hand.holding {
             if let Ok((h, igt, g)) = held.get(item) {
                 if let Some(p) = g.points.get(h.point).filter(|p| p.role != GripRole::Free) {
@@ -424,12 +429,24 @@ fn pose_hands(
             grip = 1.0;
         }
         *t = pose;
+        // Holding something, the index finger lies along it until you
+        // squeeze; empty-handed, it curls with the trigger too.
+        let index_curl = if hand.holding.is_some() {
+            0.25 + 0.75 * trigger
+        } else {
+            grip.max(trigger)
+        };
         for c in children.iter() {
             if let Ok((f, mut ft)) = fingers.get_mut(c) {
-                let curl = grip * if f.index == 4 { 0.9 } else { 1.4 };
+                // Fingers are numbered from the index side; 4 is the thumb.
+                let amount = match (f.index, v.side) {
+                    (0, Side::Right) | (3, Side::Left) => index_curl,
+                    _ => grip,
+                };
+                let curl = amount * if f.index == 4 { 0.9 } else { 1.4 };
                 let x = ft.translation.x;
                 let base_z = if f.index == 4 { 0.0 } else { -0.06 };
-                ft.translation = Vec3::new(x, -0.02 * grip, base_z + 0.025 * grip);
+                ft.translation = Vec3::new(x, -0.02 * amount, base_z + 0.025 * amount);
                 ft.rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 - curl);
             }
         }
