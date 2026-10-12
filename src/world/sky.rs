@@ -124,10 +124,12 @@ fn spawn_sky(
             ..default()
         },
         Transform::IDENTITY.looking_to(weather.sun_dir, Vec3::Y),
+        // Cascades are per view: in a headset, two eyes each. Two cascades
+        // out to 90 m (past that the fog has the shadows anyway).
         CascadeShadowConfigBuilder {
-            num_cascades: 3,
-            first_cascade_far_bound: 12.0,
-            maximum_distance: 140.0,
+            num_cascades: 2,
+            first_cascade_far_bound: 15.0,
+            maximum_distance: 90.0,
             ..default()
         }
         .build(),
@@ -295,8 +297,17 @@ fn apply_weather(
     for mut fog in &mut fogs {
         *fog = weather.fog();
     }
+    // Under a thick sky the sun casts nothing worth drawing (and the
+    // shadow passes are the dearest thing in a headset frame).
+    let shadows = !matches!(
+        conditions.kind,
+        super::weather::WeatherKind::PeaSouper | super::weather::WeatherKind::Downpour
+    );
     for mut sun in &mut suns {
         sun.illuminance = weather.sun_lux;
+        if sun.shadow_maps_enabled != shadows {
+            sun.shadow_maps_enabled = shadows;
+        }
     }
     for m in &domes {
         if let Some(mut mat) = sky_mats.get_mut(&m.0) {
