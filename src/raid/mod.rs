@@ -182,11 +182,18 @@ fn rendezvous(zone: &Zone) -> Vec<(String, [f32; 2])> {
 }
 
 /// The radio calls the truck to the rendezvous nearest the caller.
+/// Rendezvous index meaning "back at the base": the short exfil.
+pub const SHORT_EXFIL: usize = usize::MAX;
+
 fn radio_calls(
+    mut commands: Commands,
     mut calls: MessageReader<RadioCall>,
     mut raid: ResMut<Raid>,
     zone: Res<Zone>,
     players: Query<&GlobalTransform>,
+    mut stashes: Query<&mut crate::interact::body::Backpack, With<truck::Stash>>,
+    items: Query<&crate::items::Item>,
+    catalog: Res<crate::items::Catalog>,
 ) {
     for call in calls.read() {
         match raid.phase {
@@ -195,6 +202,37 @@ fn radio_calls(
                     continue;
                 };
                 let here = [p.translation().x, p.translation().z];
+                // Near the gate you came in by, the truck can come straight
+                // back for you, if there's fuel in the stash to burn.
+                let at_short = zone
+                    .map
+                    .markers_of(&MarkerKind::ShortExfil)
+                    .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
+                if at_short {
+                    let mut paid = false;
+                    for mut stash in &mut stashes {
+                        let can = stash.contents.iter().copied().find(|e| {
+                            items
+                                .get(*e)
+                                .is_ok_and(|i| catalog.get(i.kind()).has_tag("fuel"))
+                        });
+                        if let Some(can) = can {
+                            stash.contents.retain(|e| *e != can);
+                            commands.entity(can).despawn();
+                            paid = true;
+                            break;
+                        }
+                    }
+                    if paid {
+                        raid.say("Truck: \"Burning a can for you. Get in the back.\"");
+                        raid.phase = Phase::TruckWaiting {
+                            rv: SHORT_EXFIL,
+                            left: TRUCK_WAIT,
+                        };
+                        continue;
+                    }
+                    raid.say("Truck: \"No fuel in the stores for the short run. Head for an RV.\"");
+                }
                 let rvs = rendezvous(&zone);
                 let Some((i, (name, _))) = rvs.iter().enumerate().min_by(|a, b| {
                     extraction_core::geom::dist(a.1.1, here)
@@ -217,7 +255,7 @@ fn radio_calls(
                 let name = rendezvous(&zone)
                     .get(rv)
                     .map(|r| r.0.clone())
-                    .unwrap_or_default();
+                    .unwrap_or_else(|| "gate".into());
                 raid.say(format!("Truck: \"I'm at the {name}. Get in the back.\""));
             }
             _ => {}
@@ -440,5 +478,74 @@ pub(crate) fn drop_everything(world: &mut World) {
                 ));
         }
         info!("left {} items in remains at {:.0}", items.len(), req.at);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_short_exfil_burns_a_can_of_fuel() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<truck::Stash>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let kind = catalog.kind("fuel_can").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let can = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::IDENTITY,
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(stash)
+            .unwrap()
+            .contents
+            .push(can);
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let zone = app.world().resource::<Zone>().clone();
+        let m = zone.marker(&MarkerKind::ShortExfil).unwrap().at;
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = zone.on_ground(m[0], m[1] - 20.0);
+        app.update();
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.world_mut().write_message(RadioCall { player });
+        app.update();
+        assert!(matches!(
+            app.world().resource::<Raid>().phase,
+            Phase::TruckWaiting {
+                rv: SHORT_EXFIL,
+                ..
+            }
+        ));
+        assert!(app.world().get_entity(can).is_err(), "the can was burnt");
     }
 }

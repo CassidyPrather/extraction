@@ -262,6 +262,8 @@ fn press_things(
 fn drive_truck(raid: Res<Raid>, zone: Res<Zone>, mut trucks: Query<(&mut Truck, &mut Transform)>) {
     for (mut truck, mut t) in &mut trucks {
         match raid.phase {
+            // The short exfil: it never left.
+            Phase::TruckWaiting { rv, .. } if rv == super::SHORT_EXFIL => {}
             Phase::TruckWaiting { rv, .. } if truck.at_base => {
                 *t = rv_pose(&zone, rv);
                 truck.at_base = false;
