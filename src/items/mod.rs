@@ -1,6 +1,7 @@
 //! Items in the world: the catalog as a resource, spawning physical items,
 //! and their placeholder visuals.
 
+pub mod impacts;
 pub mod loot;
 pub mod usage;
 
@@ -44,8 +45,11 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Catalog::load())
-            .add_plugins((loot::LootPlugin, usage::UsagePlugin));
+        app.insert_resource(Catalog::load()).add_plugins((
+            loot::LootPlugin,
+            usage::UsagePlugin,
+            impacts::ImpactPlugin,
+        ));
     }
 }
 

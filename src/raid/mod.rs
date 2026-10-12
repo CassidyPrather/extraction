@@ -341,8 +341,8 @@ fn tick_raid(
     }
 }
 
-/// Leaving: allowed from the truck bed when the truck is at a rendezvous
-/// (or back at base, for a short exfil that costs fuel — later).
+/// The bell in the truck bed: leave from a rendezvous; at base, sleep out
+/// the Surge, or drive to the valley on the route card.
 fn depart(
     mut requests: MessageReader<DepartRequest>,
     mut raid: ResMut<Raid>,

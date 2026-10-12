@@ -166,6 +166,13 @@ flown in) to do them, then leave:
   you pay a few minutes later.
 - *Collection*: the memorial convoy (below).
 
+**Robots hear things land.** A loose item that hits something makes a
+noise that carries with how hard and how heavy (metal rings, cloth
+thuds): drop a pan beside a drone and it knows; throw a tin can down the
+street and a walker goes to look where it landed, not where you are
+(`items/impacts.rs`). Only gunfire and what the dirigible and pylons see
+get a response team sent; a clatter just gets looked at.
+
 **Buildings are not a refuge.** A robot hunting someone indoors goes to
 the building's doors (`robots/doors.rs`). A drone hovers low outside a
 doorway that stands open and looks in (it hangs back from a shut one,

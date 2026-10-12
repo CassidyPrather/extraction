@@ -7,7 +7,9 @@
 //! - **Response**: loud noise (gunfire) is reported; after a delay a drone
 //!   is dispatched to where it was heard. Noise has a cost, paid later.
 //!
-//! Attention from carried artifacts (later) feeds the same queue.
+//! - **Logistics** and **Construction**: see `dirigible` and `pylon`.
+//!
+//! Attention from carried artifacts feeds the same queue (`anomaly`).
 
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;

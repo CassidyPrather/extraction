@@ -1001,62 +1001,22 @@ fn radio_sounds(
 }
 
 /// Things you drop land with a sound that depends on what they're made of,
-/// louder the harder they hit.
-#[allow(clippy::type_complexity)]
+/// louder the harder they hit (`items::impacts`).
 fn drop_sounds(
     mut commands: Commands,
-    items: Query<
-        (
-            Entity,
-            &crate::items::Item,
-            &avian3d::prelude::LinearVelocity,
-            &GlobalTransform,
-        ),
-        (
-            Without<crate::interact::Held>,
-            Without<crate::interact::InSocket>,
-            Without<crate::interact::body::InBackpack>,
-            Without<avian3d::prelude::Sleeping>,
-        ),
-    >,
-    catalog: Res<crate::items::Catalog>,
-    mut last: Local<std::collections::HashMap<Entity, Vec3>>,
+    mut impacts: MessageReader<crate::items::impacts::ItemImpact>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
-    let mut now = std::collections::HashMap::with_capacity(last.len());
-    for (e, item, vel, gt) in &items {
-        let v = vel.0;
-        if let Some(prev) = last.get(&e) {
-            // Falling, then suddenly not: it hit something.
-            let hit = -prev.y;
-            if hit > 1.4 && v.y > prev.y + 0.8 * hit {
-                let def = catalog.get(item.kind());
-                let set = if def.has_tag("metal") {
-                    "physical/drop_metal"
-                } else if def.has_tag("wood") {
-                    "physical/drop_wood"
-                } else if def.has_tag("polymer")
-                    || def.has_tag("electronics")
-                    || def.has_tag("glass")
-                {
-                    "physical/drop_plastic"
-                } else {
-                    "physical/drop_cardboard"
-                };
-                let db = (-18.0 + 4.0 * hit + 3.0 * def.mass.max(0.05).log2()).min(0.0);
-                play(
-                    &mut commands,
-                    &bank,
-                    &mut rng.0,
-                    set,
-                    Some(gt.translation()),
-                    db,
-                    0.1,
-                );
-            }
-        }
-        now.insert(e, v);
+    use crate::items::impacts::Material;
+    for i in impacts.read() {
+        let set = match i.material {
+            Material::Metal => "physical/drop_metal",
+            Material::Wood => "physical/drop_wood",
+            Material::Plastic => "physical/drop_plastic",
+            Material::Soft => "physical/drop_cardboard",
+        };
+        let db = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
+        play(&mut commands, &bank, &mut rng.0, set, Some(i.at), db, 0.1);
     }
-    *last = now;
 }
