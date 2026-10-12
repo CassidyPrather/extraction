@@ -1,0 +1,127 @@
+//! Command-line launch options.
+//!
+//! ```text
+//! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
+//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
+//!            [--bot] [--size WxH]
+//! ```
+//!
+//! `--screenshot` renders `--frames` frames, saves the window to `PATH` and
+//! quits: the tool for checking how things look on a machine with no
+//! screen (it runs fine under `xvfb-run` with a software Vulkan driver).
+
+use bevy::prelude::*;
+use std::path::PathBuf;
+
+/// Which scene to boot into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SceneChoice {
+    /// The Zone, at the insertion point.
+    #[default]
+    Raid,
+    /// A flat test range with targets and every gun on a table.
+    Range,
+    /// The truck: base of operations.
+    Truck,
+}
+
+#[derive(Resource, Clone, Debug)]
+pub struct LaunchOptions {
+    /// Skip OpenXR even if it is compiled in.
+    pub flat: bool,
+    pub map: String,
+    pub seed: u64,
+    pub scene: SceneChoice,
+    pub screenshot: Option<PathBuf>,
+    /// Frames to run before taking the screenshot.
+    pub frames: u32,
+    /// Camera override: position and yaw/pitch in degrees.
+    pub camera: Option<(Vec3, f32, f32)>,
+    /// The local player is driven by the bot brain.
+    pub bot: bool,
+    pub window_size: (u32, u32),
+}
+
+impl Default for LaunchOptions {
+    fn default() -> Self {
+        Self {
+            flat: false,
+            map: "marrow_creek".into(),
+            seed: 1,
+            scene: SceneChoice::Raid,
+            screenshot: None,
+            frames: 90,
+            camera: None,
+            bot: false,
+            window_size: (1600, 900),
+        }
+    }
+}
+
+impl LaunchOptions {
+    pub fn from_args() -> Self {
+        Self::parse(std::env::args().skip(1))
+    }
+
+    pub fn parse(args: impl IntoIterator<Item = String>) -> Self {
+        let mut o = Self::default();
+        let mut args = args.into_iter();
+        while let Some(a) = args.next() {
+            let mut val = || args.next().unwrap_or_default();
+            match a.as_str() {
+                "--flat" => o.flat = true,
+                "--bot" => o.bot = true,
+                "--map" => o.map = val(),
+                "--seed" => o.seed = val().parse().unwrap_or(1),
+                "--scene" => {
+                    o.scene = match val().as_str() {
+                        "range" => SceneChoice::Range,
+                        "truck" => SceneChoice::Truck,
+                        _ => SceneChoice::Raid,
+                    }
+                }
+                "--screenshot" => {
+                    o.screenshot = Some(PathBuf::from(val()));
+                    o.flat = true;
+                }
+                "--frames" => o.frames = val().parse().unwrap_or(90),
+                "--camera" => {
+                    let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
+                    if v.len() >= 3 {
+                        o.camera = Some((
+                            Vec3::new(v[0], v[1], v[2]),
+                            v.get(3).copied().unwrap_or(0.0),
+                            v.get(4).copied().unwrap_or(0.0),
+                        ));
+                    }
+                }
+                "--size" => {
+                    let v: Vec<u32> = val().split('x').filter_map(|s| s.parse().ok()).collect();
+                    if v.len() == 2 {
+                        o.window_size = (v[0], v[1]);
+                    }
+                }
+                other => eprintln!("ignoring unknown argument {other}"),
+            }
+        }
+        o
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_screenshot_and_camera() {
+        let o = LaunchOptions::parse(
+            "--screenshot out.png --frames 30 --camera 1,2,3,90,-10 --seed 9"
+                .split(' ')
+                .map(String::from),
+        );
+        assert!(o.flat, "screenshots force flat mode");
+        assert_eq!(o.frames, 30);
+        assert_eq!(o.seed, 9);
+        assert_eq!(o.camera, Some((Vec3::new(1.0, 2.0, 3.0), 90.0, -10.0)));
+    }
+}
