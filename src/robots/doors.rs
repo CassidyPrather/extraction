@@ -92,6 +92,13 @@ pub struct Wedging(pub Entity);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Battering(pub f32);
 
+/// A walker's blow on a wedged door (for sound); `broke` on the last.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct DoorBlow {
+    pub at: Vec3,
+    pub broke: bool,
+}
+
 /// How long a walker takes to tear a wedged door off.
 pub const BATTER_TIME: f32 = 12.0;
 
@@ -99,10 +106,12 @@ pub struct DoorsPlugin;
 
 impl Plugin for DoorsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Entrances>().add_systems(
-            FixedUpdate,
-            (index_entrances, wedges).after(crate::interact::InteractSystems::Follow),
-        );
+        app.init_resource::<Entrances>()
+            .add_message::<DoorBlow>()
+            .add_systems(
+                FixedUpdate,
+                (index_entrances, wedges).after(crate::interact::InteractSystems::Follow),
+            );
     }
 }
 

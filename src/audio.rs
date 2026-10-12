@@ -92,6 +92,11 @@ impl Plugin for AudioPlugin {
                     hand_sounds,
                     rotor_loops,
                     gadget_loops,
+                    door_sounds,
+                    walker_steps,
+                    radio_sounds,
+                    drop_sounds,
+                    indoor_ambience,
                     ambient_oneshots,
                     move_creek,
                     surge_sounds,
@@ -428,15 +433,27 @@ fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<
             }],
         ));
     }
-    for (set, db) in [("ambience/wind_conifers", -16.0)] {
-        if let Some(sample) = bank.pick(set, &mut rng.0) {
-            commands.spawn((
-                SamplePlayer::new(sample)
-                    .looping()
-                    .with_volume(Volume::Decibels(db)),
-                PlaybackSettings::default(),
-            ));
-        }
+    if let Some(sample) = bank.pick("ambience/wind_conifers", &mut rng.0) {
+        commands.spawn((
+            WindLoop,
+            SamplePlayer::new(sample).looping(),
+            PlaybackSettings::default(),
+            sample_effects![VolumeNode {
+                volume: Volume::Decibels(WIND_DB),
+                ..default()
+            }],
+        ));
+    }
+    if let Some(sample) = bank.pick("ambience/room_tone", &mut rng.0) {
+        commands.spawn((
+            RoomLoop,
+            SamplePlayer::new(sample).looping(),
+            PlaybackSettings::default(),
+            sample_effects![VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            }],
+        ));
     }
     if let Some(sample) = bank.pick("anomaly/surge_drone", &mut rng.0) {
         commands.spawn((
@@ -819,4 +836,227 @@ fn gadget_loops(
             }
         }
     }
+}
+
+/// Doors creak open and bang shut, whoever moves them; a walker battering
+/// a wedged one is heard a long way off.
+fn door_sounds(
+    mut commands: Commands,
+    doors: Query<(Entity, &crate::world::buildings::Door, &GlobalTransform)>,
+    mut was_open: Local<std::collections::HashMap<Entity, bool>>,
+    mut blows: MessageReader<crate::robots::doors::DoorBlow>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, door, gt) in &doors {
+        let before = was_open.insert(e, door.open);
+        if before.is_some_and(|b| b != door.open) {
+            let (set, db) = if door.open {
+                ("physical/door_open", -8.0)
+            } else {
+                ("physical/door_close", -6.0)
+            };
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(gt.translation()),
+                db,
+                0.08,
+            );
+        }
+    }
+    for b in blows.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/wood",
+            Some(b.at),
+            2.0,
+            0.15,
+        );
+        if b.broke {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/door_close",
+                Some(b.at),
+                4.0,
+                0.2,
+            );
+        }
+    }
+}
+
+/// The wind in the trees, and the hush of a room: which you hear depends
+/// on whether you're under a roof.
+#[derive(Component)]
+struct WindLoop;
+#[derive(Component)]
+struct RoomLoop;
+
+const WIND_DB: f32 = -16.0;
+
+fn indoor_ambience(
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    wind: Query<&SampleEffects, With<WindLoop>>,
+    room: Query<&SampleEffects, With<RoomLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
+    time: Res<Time>,
+    mut inside: Local<f32>,
+) {
+    let indoors = entrances.is_some_and(|e| {
+        cams.iter()
+            .next()
+            .is_some_and(|c| e.building_at(c.translation()).is_some())
+    });
+    // Ease over about a second as you step through a door.
+    let target = if indoors { 1.0 } else { 0.0 };
+    *inside += (target - *inside).clamp(-time.delta_secs(), time.delta_secs());
+    let k = *inside;
+    for effects in &wind {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = Volume::Decibels(WIND_DB - 14.0 * k);
+        }
+    }
+    for effects in &room {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = if k < 0.01 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(-30.0 + 12.0 * k)
+            };
+        }
+    }
+}
+
+/// A walker's foot coming down: a heavy metal footfall, and now and then
+/// the whine of its servos.
+fn walker_steps(
+    mut commands: Commands,
+    mut steps: MessageReader<crate::robots::walker::WalkerStep>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for s in steps.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "footsteps/metal",
+            Some(s.at),
+            2.0,
+            0.12,
+        );
+        if rng.0.f32() < 0.35 {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "machines/servo",
+                Some(s.at),
+                -6.0,
+                0.15,
+            );
+        }
+    }
+}
+
+/// Keying the radio: a squelch, a breath of static.
+fn radio_sounds(
+    mut commands: Commands,
+    mut calls: MessageReader<crate::raid::RadioCall>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in calls.read() {
+        let at = positions
+            .get(c.player)
+            .ok()
+            .map(|g| g.translation() + Vec3::Y * 1.3);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/radio_squelch",
+            at,
+            -6.0,
+            0.05,
+        );
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/radio_static",
+            at,
+            -16.0,
+            0.05,
+        );
+    }
+}
+
+/// Things you drop land with a sound that depends on what they're made of,
+/// louder the harder they hit.
+#[allow(clippy::type_complexity)]
+fn drop_sounds(
+    mut commands: Commands,
+    items: Query<
+        (
+            Entity,
+            &crate::items::Item,
+            &avian3d::prelude::LinearVelocity,
+            &GlobalTransform,
+        ),
+        (
+            Without<crate::interact::Held>,
+            Without<crate::interact::InSocket>,
+            Without<crate::interact::body::InBackpack>,
+            Without<avian3d::prelude::Sleeping>,
+        ),
+    >,
+    catalog: Res<crate::items::Catalog>,
+    mut last: Local<std::collections::HashMap<Entity, Vec3>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    let mut now = std::collections::HashMap::with_capacity(last.len());
+    for (e, item, vel, gt) in &items {
+        let v = vel.0;
+        if let Some(prev) = last.get(&e) {
+            // Falling, then suddenly not: it hit something.
+            let hit = -prev.y;
+            if hit > 1.4 && v.y > prev.y + 0.8 * hit {
+                let def = catalog.get(item.kind());
+                let set = if def.has_tag("metal") {
+                    "physical/drop_metal"
+                } else if def.has_tag("wood") {
+                    "physical/drop_wood"
+                } else if def.has_tag("polymer")
+                    || def.has_tag("electronics")
+                    || def.has_tag("glass")
+                {
+                    "physical/drop_plastic"
+                } else {
+                    "physical/drop_cardboard"
+                };
+                let db = (-18.0 + 4.0 * hit + 3.0 * def.mass.max(0.05).log2()).min(0.0);
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    set,
+                    Some(gt.translation()),
+                    db,
+                    0.1,
+                );
+            }
+        }
+        now.insert(e, v);
+    }
+    *last = now;
 }

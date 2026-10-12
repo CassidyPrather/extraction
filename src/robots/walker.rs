@@ -71,20 +71,27 @@ pub struct WalkerTurret;
 #[derive(Component, Default, Debug)]
 pub struct LegPoses(pub [[Vec3; 3]; LEGS]);
 
+/// A walker's foot came down (for sound).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct WalkerStep {
+    pub at: Vec3,
+}
+
 pub struct WalkerPlugin;
 
 impl Plugin for WalkerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Startup,
-            build_nav.after(crate::world::trees::spawn_tree_colliders),
-        )
-        .add_systems(
-            FixedUpdate,
-            (walker_parts_destroyed, walker_brain, walk, walker_guns)
-                .chain()
-                .before(PhysicsSystems::First),
-        );
+        app.add_message::<WalkerStep>()
+            .add_systems(
+                Startup,
+                build_nav.after(crate::world::trees::spawn_tree_colliders),
+            )
+            .add_systems(
+                FixedUpdate,
+                (walker_parts_destroyed, walker_brain, walk, walker_guns)
+                    .chain()
+                    .before(PhysicsSystems::First),
+            );
     }
 }
 
@@ -301,6 +308,7 @@ fn walker_brain(
     )>,
     mut noise: MessageWriter<super::Noise>,
     mut raid: ResMut<crate::raid::Raid>,
+    mut blows: MessageWriter<super::doors::DoorBlow>,
 ) {
     let dt = time.delta_secs();
     for (e, mut w, mut brain, job, aware, t, robot, mut battering) in &mut walkers {
@@ -438,8 +446,16 @@ fn walker_brain(
                                     radius: 30.0,
                                     source: None,
                                 });
+                                blows.write(super::doors::DoorBlow {
+                                    at: ent.mid,
+                                    broke: false,
+                                });
                             }
                             if b.0 >= super::doors::BATTER_TIME {
+                                blows.write(super::doors::DoorBlow {
+                                    at: ent.mid,
+                                    broke: true,
+                                });
                                 commands.entity(ent.door).despawn();
                                 commands.entity(e).remove::<super::doors::Battering>();
                                 raid.say("Somewhere close, a door gives way with a crash.");
@@ -483,6 +499,7 @@ fn walk(
     targets: Query<&GlobalTransform>,
     zone: Res<Zone>,
     time: Res<Time>,
+    mut steps: MessageWriter<WalkerStep>,
 ) {
     let dt = time.delta_secs();
     for (mut w, mut t, mut poses, aware, children, robot, stunned) in &mut walkers {
@@ -571,6 +588,7 @@ fn walk(
                     + Vec3::Y * (STEP_HEIGHT * (std::f32::consts::PI * nt).sin());
                 if nt >= 1.0 {
                     foot.planted = foot.to;
+                    steps.write(WalkerStep { at: foot.to });
                 }
             } else if f.planted.distance(ideal) > STEP_TRIGGER
                 && i % 2 == w.phase
