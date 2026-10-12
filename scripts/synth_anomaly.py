@@ -163,6 +163,19 @@ def lift_pop(seed=14, seconds=2.5):
     return np.stack(out)
 
 
+def bowl(seed=15, seconds=7.0):
+    """A struck singing bowl, far too deep: the offering's answer."""
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        x = np.zeros_like(t)
+        for k, (f, a, d) in enumerate([(92, 1.0, 0.5), (251, 0.6, 0.8), (473, 0.35, 1.2), (761, 0.2, 1.8)]):
+            beat = 1 + 0.004 * np.sin(2 * np.pi * (0.7 + 0.3 * ch) * t)
+            x += a * np.sin(2 * np.pi * f * beat * t + k) * np.exp(-t * d)
+        out.append(x * (1 - np.exp(-t * 60)))
+    return np.stack(out)
+
+
 def loopset(entries, name, data, kind="loop"):
     path, secs = write(name, data)
     entries[f"anomaly/{name}"] = {
@@ -178,6 +191,7 @@ def main():
     loopset(entries, "burner_roar", burner_roar())
     loopset(entries, "snare_buzz", snare_buzz())
     loopset(entries, "lift_pop", lift_pop(), kind="oneshot")
+    loopset(entries, "offering", bowl(), kind="oneshot")
     path, secs = write("surge_drone", surge_drone())
     entries["anomaly/surge_drone"] = {
         "type": "bed", "channels": 2, "loop": True,

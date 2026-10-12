@@ -622,7 +622,23 @@ fn anomaly_sounds(
     mut events: MessageReader<crate::anomaly::AnomalyEvent>,
     mut glances: MessageReader<crate::health::Glanced>,
     mut emps: MessageReader<crate::gadgets::EmpBlast>,
+    mut offerings: MessageReader<crate::anomaly::offering::OfferingTaken>,
 ) {
+    for o in offerings.read() {
+        let speed = if o.boon == crate::anomaly::offering::Boon::Nothing {
+            1.3
+        } else {
+            1.0
+        };
+        if let Some(sample) = bank.pick("anomaly/offering", &mut rng.0) {
+            commands.spawn((
+                SamplePlayer::new(sample).with_volume(Volume::Decibels(4.0)),
+                PlaybackSettings::default().with_speed(speed),
+                Transform::from_translation(o.at),
+                sample_effects![SpatialBasicNode::default()],
+            ));
+        }
+    }
     use crate::anomaly::AnomalyAct;
     for ev in events.read() {
         let (set, db, speed) = match ev.what {

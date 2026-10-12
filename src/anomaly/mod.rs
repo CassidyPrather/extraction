@@ -12,6 +12,7 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod offering;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -101,7 +102,7 @@ impl Plugin for AnomalyPlugin {
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
             })
-            .add_plugins(artifacts::ArtifactPlugin)
+            .add_plugins((artifacts::ArtifactPlugin, offering::OfferingPlugin))
             .add_systems(Startup, spawn_cycle_anomalies)
             .add_systems(
                 FixedUpdate,

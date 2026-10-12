@@ -204,6 +204,18 @@
       }
     ]
   },
+  "anomaly/offering": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/offering.ogg",
+        "seconds": 7.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "anomaly/snare_buzz": {
     "type": "loop",
     "channels": 2,

@@ -5,6 +5,7 @@ pub mod fog;
 pub mod kitchen;
 pub mod materials;
 pub mod memorial;
+pub mod offering;
 pub mod props;
 pub mod screen;
 pub mod terrain_material;
@@ -30,6 +31,7 @@ impl Plugin for RenderPlugin {
             screen::ScreenPlugin,
             bench::BenchVisualsPlugin,
             kitchen::KitchenVisualsPlugin,
+            offering::OfferingVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

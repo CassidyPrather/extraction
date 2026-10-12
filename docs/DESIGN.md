@@ -144,6 +144,25 @@ running, so you can suit up again from the truck and race to intercept the
 convoy before it leaves the map. Everything the convoy delivers is gone for
 good and counted on a memorial board in the truck.
 
+### Offerings
+
+The well in the village and the stone ring on the eastern hill take what
+you leave in them (`anomaly/offering.rs`). Leave it, step back, and it's
+gone; each place answers once a raid. Food buys **calm** (the director's
+attention account is wiped and pending response teams are called off),
+curios buy **information** (a voice gives the distance, bearing and place
+of the nearest artifact this cycle), and an artifact buys **time** (the
+Surge holds off ten minutes). Anything else is simply taken. Curios exist
+for this: it's what an old wristwatch is *for* in a world with no shops.
+
+### Cooking
+
+A camp kitchen stands beside the truck at base (`raid/kitchen.rs`), built
+on the cooking graph lifted from the prototypes: a board, a bowl, a pot, a
+pan, a tin oven and a crock. Food items carry their graph food in a
+`food:` tag; every food the graph can make exists as an item. Purely for
+the ritual of it: there is no hunger.
+
 ### Weapons: real guns first
 
 Recognisable, historically-documented service weapons first, because the
