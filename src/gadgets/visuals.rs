@@ -25,6 +25,8 @@ impl Plugin for GadgetVisualsPlugin {
                 compass_needles,
                 emp_flashes,
                 optic_zoom,
+                add_lenses,
+                lenses,
             ),
         );
     }
@@ -312,7 +314,10 @@ fn emp_flashes(
 /// of the camera, narrow the field of view by its magnification.
 fn optic_zoom(
     optics: Query<(&Optic, &GlobalTransform)>,
-    mut cams: Query<(&GlobalTransform, &mut Projection), With<Camera3d>>,
+    mut cams: Query<
+        (&GlobalTransform, &mut Projection),
+        (With<Camera3d>, Without<crate::render::OffscreenCamera>),
+    >,
     driver: Res<crate::rig::RigDriver>,
     time: Res<Time>,
 ) {
@@ -340,5 +345,192 @@ fn optic_zoom(
         }
         let want = 75f32.to_radians() / mag;
         p.fov += (want - p.fov) * (time.delta_secs() * 12.0).min(1.0);
+    }
+}
+
+/// A picture-in-picture lens: a narrow camera at the objective renders
+/// into a texture shown on the eyepiece, only while an eye is right at it.
+/// This is how magnification works in a headset (zooming the whole view
+/// would make people sick); flat mode zooms the camera instead.
+#[derive(Component)]
+struct Lens {
+    camera: Entity,
+    glass: Handle<StandardMaterial>,
+    image: Handle<Image>,
+    reticle: Entity,
+    /// Scopes have a reticle; binoculars don't.
+    scope: bool,
+}
+
+/// A PU-style reticle: a post from below with a pointed tip at the centre,
+/// and a thin horizontal line either side.
+fn reticle_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 256u32;
+    let mut data = vec![0u8; (n * n * 4) as usize];
+    let c = n as f32 / 2.0;
+    for y in 0..n {
+        for x in 0..n {
+            let (fx, fy) = (x as f32 + 0.5 - c, y as f32 + 0.5 - c);
+            // Post: from the bottom edge up to the centre, tapering to a tip.
+            let half = if fy > 8.0 {
+                3.0
+            } else if fy > 0.0 {
+                3.0 * fy / 8.0
+            } else {
+                -1.0
+            };
+            let post = fx.abs() <= half;
+            let line = fy.abs() <= 0.8 && fx.abs() > 18.0;
+            if post || line {
+                let i = ((y * n + x) * 4) as usize;
+                data[i + 3] = 255;
+            }
+        }
+    }
+    images.add(Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// Apparent size of the lens at the eye, degrees.
+const LENS_ANGLE: f32 = 26.0;
+
+fn add_lenses(
+    mut commands: Commands,
+    optics: Query<(Entity, &Optic), Added<Optic>>,
+    weather: Res<crate::world::sky::Weather>,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+    for (e, o) in &optics {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: 384,
+                height: 384,
+                ..default()
+            },
+            TextureDimension::D2,
+            // One Rgba16Float pixel: eight bytes.
+            &[0u8; 8],
+            TextureFormat::Rgba16Float,
+            bevy::asset::RenderAssetUsages::default(),
+        );
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
+        let handle = images.add(image);
+        let objective = Vec3::new(o.eye.x, o.eye.y, -o.eye.z.abs());
+        let camera = commands
+            .spawn((
+                crate::render::OffscreenCamera,
+                Camera3d::default(),
+                Camera {
+                    order: -5,
+                    is_active: false,
+                    ..default()
+                },
+                bevy::camera::RenderTarget::Image(handle.clone().into()),
+                bevy::camera::Hdr,
+                Projection::Perspective(PerspectiveProjection {
+                    fov: (LENS_ANGLE / o.magnification).to_radians(),
+                    near: 0.05,
+                    far: 2000.0,
+                    ..default()
+                }),
+                // Linear HDR into the texture: the player's own camera
+                // tonemaps it once, along with everything else.
+                bevy::core_pipeline::tonemapping::Tonemapping::None,
+                bevy::camera::Exposure { ev100: 10.6 },
+                weather.fog(),
+                Msaa::Off,
+                Transform::from_translation(objective),
+                ChildOf(e),
+            ))
+            .id();
+        let glass = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.02, 0.025, 0.03),
+            perceptual_roughness: 0.05,
+            reflectance: 0.6,
+            ..default()
+        });
+        let reticle = commands
+            .spawn((
+                Mesh3d(meshes.add(Circle::new(0.017))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    base_color_texture: Some(reticle_texture(&mut images)),
+                    alpha_mode: AlphaMode::Mask(0.5),
+                    unlit: true,
+                    ..default()
+                })),
+                Transform::from_translation(o.eye + Vec3::Z * 0.0015),
+                Visibility::Hidden,
+                NotShadowCaster,
+                ChildOf(e),
+            ))
+            .id();
+        // The eyepiece faces the eye (+Z).
+        commands.entity(e).with_child((
+            Lens {
+                camera,
+                glass: glass.clone(),
+                image: handle,
+                reticle,
+                scope: o.magnification < 5.0,
+            },
+            Mesh3d(meshes.add(Circle::new(0.017))),
+            MeshMaterial3d(glass),
+            Transform::from_translation(o.eye + Vec3::Z * 0.001),
+            NotShadowCaster,
+        ));
+    }
+}
+
+fn lenses(
+    lenses: Query<(&Lens, &GlobalTransform)>,
+    mut cams: Query<&mut Camera>,
+    mut vis: Query<&mut Visibility>,
+    eyes: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (lens, gt) in &lenses {
+        let at = gt.translation();
+        let looking = eyes.iter().any(|eye| {
+            let rel = at - eye.translation();
+            rel.length() < 0.16 && rel.normalize_or_zero().dot(*eye.forward()) > 0.9
+        });
+        if let Ok(mut cam) = cams.get_mut(lens.camera) {
+            if cam.is_active != looking {
+                cam.is_active = looking;
+                if let Ok(mut v) = vis.get_mut(lens.reticle) {
+                    *v = if looking && lens.scope {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    };
+                }
+                if let Some(mut m) = materials.get_mut(&lens.glass) {
+                    if looking {
+                        m.base_color = Color::WHITE;
+                        m.unlit = true;
+                        m.base_color_texture = Some(lens.image.clone());
+                    } else {
+                        m.base_color = Color::srgb(0.02, 0.025, 0.03);
+                        m.unlit = false;
+                        m.base_color_texture = None;
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
 pub mod bench;
+pub mod comfort;
 pub mod fog;
 pub mod kitchen;
 pub mod logistics;
@@ -34,10 +35,16 @@ impl Plugin for RenderPlugin {
             kitchen::KitchenVisualsPlugin,
             offering::OfferingVisualsPlugin,
             logistics::LogisticsVisualsPlugin,
+            comfort::ComfortPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
 }
+
+/// A camera that renders into a texture (scope lenses): not the player's
+/// view, so systems looking for "the camera" skip it.
+#[derive(Component)]
+pub struct OffscreenCamera;
 
 /// In flat mode the local player's head is a camera. (The XR driver adds
 /// its own per-eye cameras instead.)

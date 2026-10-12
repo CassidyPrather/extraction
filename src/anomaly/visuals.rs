@@ -313,7 +313,7 @@ fn dress_anomalies(
 fn eye_position(
     heads: &Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: &Query<(), With<LocalPlayer>>,
-    cams: &Query<&GlobalTransform, With<Camera3d>>,
+    cams: &Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
 ) -> Option<Vec3> {
     cams.iter().next().map(|g| g.translation()).or_else(|| {
         heads
@@ -328,7 +328,7 @@ fn animate_motes(
     anomalies: Query<&GlobalTransform, With<Anomaly>>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
-    cams: Query<&GlobalTransform, With<Camera3d>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
     let t = time.elapsed_secs();
@@ -567,7 +567,7 @@ fn glass_eye(
     eyes: Query<&GlobalTransform>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
-    cams: Query<&GlobalTransform, With<Camera3d>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut ghosts: Query<&mut Visibility, With<XrayGhost>>,
     mut was_on: Local<bool>,
 ) {

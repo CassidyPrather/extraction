@@ -347,6 +347,8 @@ fn drive_xr_rig(
     controllers: Query<(&ControllerSpace, &Transform), Without<LocalPlayer>>,
     mut players: Query<(&mut RigInput, &mut Transform), With<LocalPlayer>>,
     mut turn: Local<TurnState>,
+    comfort: Res<super::comfort::Comfort>,
+    time: Res<Time>,
 ) {
     let Some(a) = actions else {
         return;
@@ -417,10 +419,20 @@ fn drive_xr_rig(
     if right_stick.x.abs() < 0.3 && right_stick.y > -0.3 {
         turn.armed = true;
     }
-    if turn.armed && right_stick.x.abs() > 0.7 {
+    // Turn around the head, not the playspace origin: snaps, or smoothly.
+    let angle = if comfort.smooth_turn {
+        if right_stick.x.abs() > 0.25 {
+            -right_stick.x * comfort.turn_speed.to_radians() * time.delta_secs()
+        } else {
+            0.0
+        }
+    } else if turn.armed && right_stick.x.abs() > 0.7 {
         turn.armed = false;
-        // Snap 30 degrees around the head, not the playspace origin.
-        let angle = -right_stick.x.signum() * 30f32.to_radians();
+        -right_stick.x.signum() * comfort.snap_angle.to_radians()
+    } else {
+        0.0
+    };
+    if angle != 0.0 {
         let head_world = root.transform_point(input.head.translation);
         let rot = Quat::from_rotation_y(angle);
         root.translation = head_world + rot * (root.translation - head_world);

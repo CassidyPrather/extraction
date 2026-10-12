@@ -31,6 +31,16 @@ B/Y slide stop; left stick walks (click to sprint), right stick snap-turns
 and (down) crouches, right stick click works the selector. Reach for a
 slide, charging handle or bolt with your free hand to work it; reach over a
 shoulder for the backpack and let go of it in front of you to open it.
+Look at your left wrist for the Surge clock, your load and the radio. Hold
+a scope or binoculars to your eye to look through them.
+
+Comfort: `--smooth-turn` (or `--snap-turn`), `--vignette 0..1` (default
+0.6; darkens the edges while the stick moves you), or put them in
+`~/.local/share/extraction/settings.ron` (Windows: `%APPDATA%\extraction`):
+`(smooth_turn: true, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6)`.
+
+The game saves itself (the stash, what you carry, and the Zone as you left
+it) to the same folder; `--new-game` starts over.
 
 ## Development
 

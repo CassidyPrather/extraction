@@ -98,6 +98,11 @@ impl LaunchOptions {
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
+                // Comfort settings; read by `rig::comfort`.
+                "--smooth-turn" | "--snap-turn" => {}
+                "--vignette" => {
+                    let _ = val();
+                }
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--save" => o.save = Some(PathBuf::from(val())),
                 "--scenario" => {

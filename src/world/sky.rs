@@ -146,7 +146,7 @@ fn inward_sphere(radius: f32) -> Mesh {
 }
 
 fn follow_camera_with_dome(
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut domes: Query<&mut Transform, With<SkyDome>>,
 ) {
     let Some(cam) = cameras.iter().next() else {

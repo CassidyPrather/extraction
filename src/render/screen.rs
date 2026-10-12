@@ -34,8 +34,10 @@ fn build_screens(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (e, screen) in &screens {
-        let w = (screen.size.x * PX_PER_M).round().max(16.0) as u32;
-        let h = (screen.size.y * PX_PER_M).round().max(16.0) as u32;
+        // Small panels (a wrist readout) still need enough pixels for text.
+        let ppm = PX_PER_M.max(420.0 / screen.size.x.max(1e-3));
+        let w = (screen.size.x * ppm).round().max(16.0) as u32;
+        let h = (screen.size.y * ppm).round().max(16.0) as u32;
         let (bg, fg, emissive, font) = match screen.style {
             ScreenStyle::Lcd => (
                 Color::srgb(0.03, 0.025, 0.01),

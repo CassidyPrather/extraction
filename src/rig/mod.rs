@@ -7,6 +7,7 @@
 //! Poses are in *playspace*: relative to the player root, which sits at the
 //! feet and carries the body's yaw.
 
+pub mod comfort;
 pub mod flat;
 #[cfg(feature = "xr")]
 pub mod xr;
@@ -121,8 +122,10 @@ pub struct RigPlugin;
 
 impl Plugin for RigPlugin {
     fn build(&self, app: &mut App) {
+        let args: Vec<String> = std::env::args().collect();
         app.register_type::<RigInput>()
             .insert_resource(RigDriver::Flat)
+            .insert_resource(comfort::Comfort::load(&args))
             .add_systems(
                 PostUpdate,
                 apply_rig_poses.before(TransformSystems::Propagate),

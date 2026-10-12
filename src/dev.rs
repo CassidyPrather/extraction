@@ -136,6 +136,19 @@ fn gallery(
                         .with_rotation(facing),
                 );
             }
+            "scopeview" => {
+                // The scope held to the eye: its eyepiece just in front of
+                // the camera, looking where the camera looks.
+                let look =
+                    Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+                let eye_piece = Vec3::new(0.0, 0.0, 0.2);
+                let at = eye + look * (Vec3::NEG_Z * 0.07 - eye_piece);
+                if let Some(e) = spawn_static(&mut commands, "pu_scope", at) {
+                    commands
+                        .entity(e)
+                        .insert(Transform::from_translation(at).with_rotation(look));
+                }
+            }
             "dirigible" | "grappler" | "pod" => {
                 let at = eye + fwd * dist.unwrap_or(30.0);
                 match subject.as_str() {
