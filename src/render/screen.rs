@@ -24,6 +24,26 @@ const PX_PER_M: f32 = 1000.0;
 #[derive(Component)]
 struct ScreenView {
     text: Entity,
+    /// Panel pixels and the style's largest font.
+    px: Vec2,
+    font: f32,
+}
+
+/// The largest font (px) up to `max` at which `text` fits a `px` panel
+/// without wrapping: bounded by line count and by the longest line.
+fn fit_font(text: &str, px: Vec2, max: f32) -> f32 {
+    let lines = text.lines().count().max(1) as f32;
+    let widest = text
+        .lines()
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(1)
+        .max(1) as f32;
+    // Rough metrics for the default font: line height ~1.2em, glyphs
+    // ~0.6em wide (it is monospaced); padding is 0.8em a side.
+    let by_height = px.y / (lines * 1.2 + 1.6);
+    let by_width = px.x / (widest * 0.64 + 1.6);
+    max.min(by_height).min(by_width).max(6.0)
 }
 
 fn build_screens(
@@ -52,6 +72,8 @@ fn build_screens(
                 h as f32 / 14.0,
             ),
         };
+        let max_font = font;
+        let font = fit_font(&screen.text, Vec2::new(w as f32, h as f32), max_font);
         let mut image = Image::new_fill(
             Extent3d {
                 width: w,
@@ -114,22 +136,33 @@ fn build_screens(
             perceptual_roughness: if emissive { 0.15 } else { 0.95 },
             ..default()
         });
-        commands.entity(e).insert(ScreenView { text }).with_child((
-            Mesh3d(meshes.add(Rectangle::new(screen.size.x, screen.size.y))),
-            MeshMaterial3d(material),
-            NotShadowCaster,
-        ));
+        commands
+            .entity(e)
+            .insert(ScreenView {
+                text,
+                px: Vec2::new(w as f32, h as f32),
+                font: max_font,
+            })
+            .with_child((
+                Mesh3d(meshes.add(Rectangle::new(screen.size.x, screen.size.y))),
+                MeshMaterial3d(material),
+                NotShadowCaster,
+            ));
     }
 }
 
 fn update_screens(
     screens: Query<(&ScreenText, &ScreenView), Changed<ScreenText>>,
-    mut texts: Query<&mut Text>,
+    mut texts: Query<(&mut Text, &mut TextFont)>,
 ) {
     for (screen, view) in &screens {
-        if let Ok(mut t) = texts.get_mut(view.text) {
+        if let Ok((mut t, mut f)) = texts.get_mut(view.text) {
             if t.0 != screen.text {
                 t.0 = screen.text.clone();
+                let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
+                if f.font_size != size {
+                    f.font_size = size;
+                }
             }
         }
     }

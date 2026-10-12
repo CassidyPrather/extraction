@@ -19,6 +19,16 @@ impl Plugin for MemorialBoardPlugin {
 #[derive(Component)]
 struct Board;
 
+/// What the driver tells everyone, once.
+const DRIVERS_NOTE: &str = "Read this.\n\
+- Kit's in the crate. Take what\n  you'll carry; leave the rest.\n\
+- Radio me from the far side and\n  I'll drive round to an RV. Two\n  minutes. I wait five.\n\
+- A can of fuel in the crate and\n  I'll come back to the gate.\n\
+- Watch on your wrist: the Surge.\n  Be out or under a roof.\n\
+- Bench strips robot parts and\n  packs rounds. Lever runs it.\n\
+- Go down and they send the\n  collector for you. Beat it.\n\
+- Pull the cord when you're in.";
+
 #[derive(Component)]
 struct Tally;
 
@@ -47,6 +57,20 @@ fn hang_board(
             )))),
             MeshMaterial3d(wood),
             Transform::from_xyz(-0.4, FLOOR + 1.35, -1.76),
+            Visibility::default(),
+            ChildOf(truck),
+        ));
+        // The driver's note, pinned on the left canvas wall by the stash.
+        commands.spawn((
+            Name::new("Driver's note"),
+            crate::raid::bench::ScreenText {
+                text: DRIVERS_NOTE.into(),
+                size: Vec2::new(0.36, 0.5),
+                style: crate::raid::bench::ScreenStyle::Paper,
+            },
+            Transform::from_xyz(-1.12, FLOOR + 1.35, -0.2).with_rotation(
+                Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) * Quat::from_rotation_z(-0.04),
+            ),
             Visibility::default(),
             ChildOf(truck),
         ));
