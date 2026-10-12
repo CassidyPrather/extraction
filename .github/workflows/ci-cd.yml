@@ -12,10 +12,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # mold is configured in .cargo/config.toml for local Linux builds; CI uses
-  # the default linker so the runner needs nothing extra.
-  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: cc
-  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
+  # .cargo/config.toml links with clang + mold on Linux; the runners
+  # install both (below) so CI builds the same way as local ones.
 
 jobs:
   check:
@@ -30,7 +28,7 @@ jobs:
         # scenarios need none of the runtime libraries.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev clang mold
 
       - name: Rust toolchain
         run: rustup toolchain install
@@ -72,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev clang mold
 
       - name: Rust toolchain
         shell: bash
