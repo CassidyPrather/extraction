@@ -1,5 +1,12 @@
 # Porting to VRChat
 
+> **Status: parked.** Written early, while the groundwork was cheap to lay.
+> The port is weeks away: the game stays in Bevy until the single-player
+> design has settled through real playtesting. When it's time, this file is
+> the handoff for whoever works on a machine with Unity and a GPU: read it,
+> run `unity-export` on each map, and start with the prototypes listed under
+> the top risks (pickups and manual gun handling first).
+
 Phase 2 of the plan: the game as a VRChat world (Unity + VRChat SDK3
 Worlds + UdonSharp). This file is the plan. It records what the platform
 allows today, maps each system in this game to its VRChat equivalent, and
