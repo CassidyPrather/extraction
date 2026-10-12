@@ -36,6 +36,11 @@ pub struct Robot {
     pub wrecked: bool,
 }
 
+/// Knocked out by an EMP for this many seconds: no senses, no rotors, no
+/// legs. (`gadgets` adds and times it out.)
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Stunned(pub f32);
+
 /// What a part does for its robot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PartRole {
@@ -218,7 +223,14 @@ fn gunshot_noise(
 /// trees) to the player's head, inside the cone and within range; fog
 /// shortens everyone's range equally.
 pub(crate) fn perceive(
-    mut robots: Query<(Entity, &Robot, &Senses, &GlobalTransform, &mut Awareness)>,
+    mut robots: Query<(
+        Entity,
+        &Robot,
+        &Senses,
+        &GlobalTransform,
+        &mut Awareness,
+        Has<Stunned>,
+    )>,
     players: Query<(Entity, &GlobalTransform, &crate::player::Body), With<Player>>,
     sensors: Query<&RobotPart>,
     parts_of: Query<&Children>,
@@ -228,8 +240,13 @@ pub(crate) fn perceive(
 ) {
     let dt = time.delta_secs();
     let noises: Vec<Noise> = noises.read().cloned().collect();
-    for (robot_e, robot, senses, gt, mut aware) in &mut robots {
+    for (robot_e, robot, senses, gt, mut aware, stunned) in &mut robots {
         if robot.wrecked {
+            continue;
+        }
+        if stunned {
+            // Senseless: it can't see you, so it can't shoot you.
+            aware.can_see_target = false;
             continue;
         }
         // Blind if every sensor part is gone.

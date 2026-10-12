@@ -86,7 +86,7 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
     let fits = |out: &[AnomalySpec], p: [f32; 2], r: f32| {
         out.iter().all(|a| geom::dist(a.at, p) > a.radius + r + 2.5)
     };
-    let mut place =
+    let place =
         |rng: &mut Rng, out: &mut Vec<AnomalySpec>, centre: [f32; 2], spread: f32, chance: f32| {
             for _ in 0..30 {
                 let a = rng.range(0.0, std::f32::consts::TAU);

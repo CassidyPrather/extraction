@@ -195,6 +195,16 @@ fn spawn_dev_cache(
         ("flashlight", 0),
         ("canned_stew", 0),
         ("art_featherstone", 0),
+        ("side_rail", 0),
+        ("weapon_light", 0),
+        ("laser_module", 0),
+        ("pu_scope", 0),
+        ("power_cell", 0),
+        ("power_cell", 0),
+        ("emp_grenade", 0),
+        ("compass", 0),
+        ("map_case", 0),
+        ("binoculars", 0),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {

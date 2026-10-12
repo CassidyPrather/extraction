@@ -127,33 +127,33 @@
         // Rail attachments
         // ---------------------------------------------------------------
         (
-            id: "weapon_light", name: "Weapon light",
+            id: "weapon_light", dims: Some((0.03, 0.03, 0.09)), name: "Weapon light",
             description: "Clamps to a rail. Takes one cell.",
-            category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0,
+            category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0, mount: Some(Rail),
             tags: ["electronics", "metal"],
         ),
         (
-            id: "laser_module", name: "Laser module",
+            id: "laser_module", dims: Some((0.025, 0.025, 0.06)), name: "Laser module",
             description: "A red dot on the world, wherever your muzzle points.",
-            category: Attachment, size: Small, mass: 0.08, bulk: 0.08,
+            category: Attachment, size: Small, mass: 0.08, bulk: 0.08, mount: Some(Rail),
             tags: ["electronics"],
         ),
         (
-            id: "pu_scope", name: "3.5x scope",
+            id: "pu_scope", dims: Some((0.035, 0.045, 0.27)), name: "3.5x scope",
             description: "Old-pattern fixed-power sniper scope with a side mount.",
-            category: Attachment, size: Medium, mass: 0.27, bulk: 0.4,
+            category: Attachment, size: Medium, mass: 0.27, bulk: 0.4, mount: Some(Dovetail),
             tags: ["glass", "metal"],
         ),
         (
-            id: "side_rail", name: "Side-mount rail",
+            id: "side_rail", dims: Some((0.02, 0.012, 0.1)), name: "Side-mount rail",
             description: "Bolts onto a dovetail and gives you a short rail.",
-            category: Attachment, size: Small, mass: 0.15, bulk: 0.1,
+            category: Attachment, size: Small, mass: 0.15, bulk: 0.1, mount: Some(Dovetail),
             tags: ["metal"],
         ),
         (
-            id: "artifact_adapter", name: "Artifact adapter",
+            id: "artifact_adapter", dims: Some((0.04, 0.04, 0.09)), name: "Artifact adapter",
             description: "A cradle of copper coil and bad ideas. Holds an artifact against a muzzle.",
-            category: Attachment, size: Small, mass: 0.35, bulk: 0.2,
+            category: Attachment, size: Small, mass: 0.35, bulk: 0.2, mount: Some(Muzzle),
             tags: ["electronics", "metal"],
         ),
 
@@ -168,16 +168,16 @@
         (
             id: "power_cell", dims: Some((0.02, 0.06, 0.02)), name: "Power cell",
             description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
-            category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0,
+            category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0, mount: Some(Cell),
             tags: ["electronics"],
         ),
         (
-            id: "compass", name: "Compass",
+            id: "compass", dims: Some((0.05, 0.03, 0.05)), name: "Compass",
             category: Gadget, size: Tiny, mass: 0.06, bulk: 0.03,
             tags: ["metal", "glass"],
         ),
         (
-            id: "map_case", name: "Map case",
+            id: "map_case", dims: Some((0.3, 0.008, 0.3)), name: "Map case",
             description: "Your hand-drawn map of the valley, in a scuffed plastic sleeve.",
             category: Gadget, size: Small, mass: 0.1, bulk: 0.2,
         ),

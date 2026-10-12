@@ -159,6 +159,33 @@ non-firearm pass replaces models and numbers, not systems. Starting set:
 Robot weapons can be carried home but are awkward to hold and their ammo
 must be broken down at the bench and re-packed into compatible rounds.
 
+### Gadgets and attachments
+
+Things go where they physically fit (`gadgets/mod.rs`): the AK and the
+Mosin have a receiver dovetail that takes the 3.5x scope or a side-mount
+rail; the rail takes a weapon light or a laser; lights and lasers each
+take a power cell; every gun but the double has a muzzle for the artifact
+adapter, whose cradle takes any artifact. Bring a part to its mount and
+let go, as with magazines. Use on a gun switches everything on it.
+
+- **Power**: cells drain while a device is on (a light is 6 W, so a cell
+  is about an hour and a half of torch); a carried hearth powers them for
+  nothing. Cells come from decanting robot cells at the bench.
+- **Optics**: the scope moves the sight line to its eyepiece and
+  magnifies when your eye is on it (flat mode zooms the camera; the
+  headset version needs a picture-in-picture lens, still to do).
+- **Artifact adapter**: featherstone rounds fly flat, hearth rounds hit
+  half again as hard, aegis rounds knock robots senseless for two
+  seconds, glass-eye rounds bend toward robots.
+- **EMP**: arm a grenade (3.5 s fuse) or a trap (bites the first robot
+  within 4 m once it's set down). Robots within 9 m lose senses, rotors
+  and legs for 12 s: drones drop, walkers sag.
+- **Compass and map case**: the needle finds north (-Z); the map is a
+  hand-drawn sheet generated from the map file (`scripts/field-map.sh`).
+
+Still to do: binocular and scope lenses in VR, the camera drone, the
+cloak, deployable cover, climbing and zipline kits.
+
 ### IFF, PvP, and networking
 
 Out of scope until the single-player game is excellent. The architecture

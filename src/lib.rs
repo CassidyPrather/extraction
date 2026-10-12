@@ -8,13 +8,14 @@ pub mod anomaly;
 pub mod audio;
 pub mod bot;
 pub mod dev;
+pub mod gadgets;
 pub mod health;
 pub mod hud;
 pub mod interact;
 pub mod items;
 pub mod launch;
-pub mod persist;
 pub mod models;
+pub mod persist;
 pub mod player;
 pub mod raid;
 pub mod render;
@@ -53,8 +54,11 @@ impl Plugin for GamePlugin {
             robots::RobotsPlugin,
             health::HealthPlugin,
             raid::RaidPlugin,
-            persist::PersistPlugin,
-            anomaly::AnomalyPlugin,
+            (
+                persist::PersistPlugin,
+                anomaly::AnomalyPlugin,
+                gadgets::GadgetsPlugin,
+            ),
         ));
     }
 }
@@ -77,6 +81,7 @@ impl Plugin for ClientPlugin {
             robots::visuals::RobotVisualsPlugin,
             render::props::PropVisualsPlugin,
             anomaly::visuals::AnomalyVisualsPlugin,
+            gadgets::visuals::GadgetVisualsPlugin,
             models::ModelsPlugin,
         ))
         .init_resource::<render::materials::MaterialLibrary>()

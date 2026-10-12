@@ -115,8 +115,9 @@ pub enum SocketKind {
     Body(SlotKind),
     /// A gun's magazine well; takes magazines of this family.
     MagWell(String),
-    /// A rail; takes attachments.
-    Rail,
+    /// An attachment point or insert (dovetail, rail, muzzle, battery
+    /// compartment, artifact cradle); takes items that fit that mount.
+    Mount(extraction_core::items::Mount),
 }
 
 #[derive(Component, Clone, Debug)]
@@ -537,6 +538,7 @@ fn apply_hand_actions(
                     .map(|i| catalog.get(i.kind()).size)
                     .unwrap_or(SizeClass::Medium);
                 let is_gun = it.is_some_and(|i| catalog.get(i.kind()).firearm.is_some());
+                let mount = it.and_then(|i| catalog.get(i.kind()).fits_mount());
                 let family = it.and_then(|i| {
                     catalog
                         .get(i.kind())
@@ -549,7 +551,7 @@ fn apply_hand_actions(
                 let mut target = None;
                 for (se, sgt, socket, owner) in &sockets {
                     if socket.occupant.is_some()
-                        || !accepts_item(&socket.kind, size, family.as_deref(), is_gun)
+                        || !accepts_item(&socket.kind, size, family.as_deref(), is_gun, mount)
                     {
                         continue;
                     }
@@ -624,7 +626,7 @@ fn apply_hand_actions(
                     .filter(|(_, _, s, o)| {
                         o.is_some_and(|o| o.0 == player)
                             && s.occupant.is_none()
-                            && accepts_item(&s.kind, def.size, None, def.firearm.is_some())
+                            && accepts_item(&s.kind, def.size, None, def.firearm.is_some(), None)
                     })
                     .map(|(e, _, s, _)| (slot_rank(&s.kind), e))
                     .collect();
@@ -730,7 +732,7 @@ fn slot_rank(kind: &SocketKind) -> u8 {
 /// Whether a socket takes an item of this size (and magazine family).
 /// Holsters are for pistols only.
 pub fn accepts(kind: &SocketKind, size: SizeClass, mag_family: Option<&str>) -> bool {
-    accepts_item(kind, size, mag_family, true)
+    accepts_item(kind, size, mag_family, true, None)
 }
 
 pub fn accepts_item(
@@ -738,12 +740,13 @@ pub fn accepts_item(
     size: SizeClass,
     mag_family: Option<&str>,
     is_gun: bool,
+    mount: Option<extraction_core::items::Mount>,
 ) -> bool {
     match kind {
         SocketKind::Body(SlotKind::Holster) => size == SizeClass::Medium && is_gun,
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
-        SocketKind::Rail => false,
+        SocketKind::Mount(m) => mount == Some(*m),
     }
 }
 

@@ -33,6 +33,43 @@ pub struct Projectile {
     pub shooter: Option<Entity>,
     pub gun: Entity,
     pub life: f32,
+    pub mods: ShotMods,
+}
+
+/// What an artifact in the gun's adapter does to its shots.
+#[derive(Clone, Copy, Debug)]
+pub struct ShotMods {
+    /// Gravity and drag scale (featherstone: 0, the round flies flat).
+    pub fall: f32,
+    /// Hearth: hotter rounds.
+    pub damage: f32,
+    /// Aegis: robots hit lose their senses for this long.
+    pub stun: f32,
+    /// Glass eye: the round bends toward robots ahead of it.
+    pub seek: bool,
+}
+
+impl Default for ShotMods {
+    fn default() -> Self {
+        Self {
+            fall: 1.0,
+            damage: 1.0,
+            stun: 0.0,
+            seek: false,
+        }
+    }
+}
+
+fn shot_mods(id: &str) -> ShotMods {
+    let mut m = ShotMods::default();
+    match id {
+        "art_featherstone" => m.fall = 0.0,
+        "art_hearth" => m.damage = 1.5,
+        "art_aegis" => m.stun = 2.0,
+        "art_glasseye" => m.seek = true,
+        _ => {}
+    }
+    m
 }
 
 /// A projectile struck something.
@@ -77,8 +114,21 @@ impl Plugin for BallisticsPlugin {
     }
 }
 
-fn fire_shots(mut commands: Commands, mut shots: MessageReader<Shot>, mut guns: Query<Forces>) {
+fn fire_shots(
+    mut commands: Commands,
+    mut shots: MessageReader<Shot>,
+    mut guns: Query<Forces>,
+    mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
+    catalog: Res<crate::items::Catalog>,
+) {
     for shot in shots.read() {
+        // An artifact in an adapter on this gun.
+        let mods = mounted
+            .iter()
+            .filter(|(m, _)| m.0 == shot.gun)
+            .map(|(_, it)| shot_mods(&catalog.get(it.kind()).id))
+            .find(|m| m.fall != 1.0 || m.damage != 1.0 || m.stun > 0.0 || m.seek)
+            .unwrap_or_default();
         let mut rng = Rng::new(shot.seed);
         let dir = shot.direction.normalize_or(Vec3::NEG_Z);
         let side = dir.any_orthonormal_vector();
@@ -96,6 +146,7 @@ fn fire_shots(mut commands: Commands, mut shots: MessageReader<Shot>, mut guns: 
                     shooter: shot.shooter,
                     gun: shot.gun,
                     life: 3.0,
+                    mods,
                 },
                 Transform::from_translation(shot.origin),
             ));
@@ -127,6 +178,7 @@ fn fly_projectiles(
     time: Res<Time>,
     mut hits: MessageWriter<Hit>,
     parents: Query<&ChildOf>,
+    parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
 ) {
     let dt = time.delta_secs();
     let filter =
@@ -167,15 +219,39 @@ fn fly_projectiles(
                 point,
                 normal: hit.normal,
                 velocity: p.velocity,
-                damage: p.damage,
+                damage: p.damage * p.mods.damage,
                 shooter: p.shooter,
             });
+            if p.mods.stun > 0.0 {
+                if let Ok((part, _)) = parts.get(hit.entity) {
+                    commands
+                        .entity(part.robot)
+                        .insert(crate::robots::Stunned(p.mods.stun));
+                }
+            }
             commands.entity(e).despawn();
             continue;
         }
         t.translation += step;
-        p.velocity += GRAVITY * dt;
-        p.velocity *= 1.0 - DRAG * dt;
+        let fall = p.mods.fall;
+        p.velocity += GRAVITY * dt * fall;
+        p.velocity *= 1.0 - DRAG * dt * fall;
+        if p.mods.seek {
+            // Bend toward the nearest robot part within a narrow cone.
+            let dir = p.velocity.normalize_or_zero();
+            let target = parts
+                .iter()
+                .map(|(_, g)| g.translation() - t.translation)
+                .filter(|v| v.length() < 120.0 && v.normalize_or_zero().dot(dir) > 0.985)
+                .min_by(|a, b| a.length().total_cmp(&b.length()));
+            if let Some(v) = target {
+                let speed = p.velocity.length();
+                let turned = dir
+                    .lerp(v.normalize(), (6.0 * dt).min(1.0))
+                    .normalize_or(dir);
+                p.velocity = turned * speed;
+            }
+        }
         if p.life <= 0.0 {
             commands.entity(e).despawn();
         }

@@ -167,15 +167,19 @@ fn fresh_save(map: &str) -> SaveGame {
     };
     let mut pistol = item("pm_pistol", 0, [0.2, -0.2, -0.4]);
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
+    let mut torch = item("flashlight", 0, [0.0, -0.2, 0.2]);
+    torch.inserted.push(item("power_cell", 0, [0.0; 3]));
     s.stash = vec![
         pistol,
+        torch,
         item("pm_mag", 8, [0.25, -0.2, -0.2]),
         item("ammo_9x18", 16, [-0.2, -0.2, -0.4]),
         item("radio", 0, [-0.2, -0.2, 0.0]),
-        item("flashlight", 0, [0.0, -0.2, 0.2]),
         item("field_dressing", 0, [0.2, -0.2, 0.3]),
         item("canned_stew", 0, [-0.25, -0.2, 0.4]),
         item("cleaning_kit", 0, [0.0, -0.2, -0.1]),
+        item("map_case", 0, [-0.3, -0.25, -0.3]),
+        item("compass", 0, [0.3, -0.25, 0.0]),
     ];
     s
 }
@@ -227,7 +231,11 @@ fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<E
         let Some(m) = restore_item(world, inner, Transform::IDENTITY) else {
             continue;
         };
-        seat_magazine(world, e, m);
+        if world.get::<Mag>(m).is_some() {
+            seat_magazine(world, e, m);
+        } else {
+            seat_in_mount(world, e, m);
+        }
     }
     Some(e)
 }
@@ -272,6 +280,27 @@ fn seat_magazine(world: &mut World, gun_e: Entity, mag_e: Entity) {
             ChildOf(well),
             Transform::from_xyz(0.0, -mag.height * 0.5, 0.0),
         ));
+}
+
+/// Puts an item into the first free mount of `owner` that takes it.
+fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
+    let catalog = world.resource::<Catalog>().clone();
+    let Some(mount) = world
+        .get::<Item>(item)
+        .and_then(|i| catalog.get(i.kind()).fits_mount())
+    else {
+        return;
+    };
+    let slot = world.get::<Children>(owner).and_then(|c| {
+        c.iter().find(|s| {
+            world
+                .get::<Socket>(*s)
+                .is_some_and(|s| s.occupant.is_none() && s.kind == SocketKind::Mount(mount))
+        })
+    });
+    if let Some(slot) = slot {
+        put_in_slot(world, item, slot);
+    }
 }
 
 fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
@@ -461,6 +490,20 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
                 if let Some(mag) = &f.magazine {
                     inner.rounds = mag.rounds;
                 }
+                saved.inserted.push(inner);
+            }
+        }
+    }
+    // Whatever sits in its mounts (scopes, rails, lights, cells, artifacts).
+    if let Some(children) = world.get::<Children>(e) {
+        for c in children.iter() {
+            let Some(s) = world.get::<Socket>(c) else {
+                continue;
+            };
+            if !matches!(s.kind, SocketKind::Mount(_)) {
+                continue;
+            }
+            if let Some(inner) = s.occupant.and_then(|o| snapshot_item(world, o, Vec3::ZERO)) {
                 saved.inserted.push(inner);
             }
         }

@@ -416,6 +416,7 @@ fn walk(
         &Awareness,
         &Children,
         &Robot,
+        Has<super::Stunned>,
     )>,
     mut legs: Query<(&WalkerLeg, &mut Transform), Without<Walker>>,
     targets: Query<&GlobalTransform>,
@@ -423,7 +424,7 @@ fn walk(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (mut w, mut t, mut poses, aware, children, robot) in &mut walkers {
+    for (mut w, mut t, mut poses, aware, children, robot, stunned) in &mut walkers {
         let pos = t.translation;
         // Steering.
         let mut desired = Vec3::ZERO;
@@ -436,7 +437,8 @@ fn walk(
             }
         }
         let alive_legs = w.feet.iter().filter(|f| f.alive).count();
-        if w.collapsed || robot.wrecked {
+        let down = w.collapsed || robot.wrecked || stunned;
+        if down {
             desired = Vec3::ZERO;
         } else if alive_legs < LEGS {
             desired *= 0.45; // limping
@@ -471,7 +473,7 @@ fn walk(
             .sum::<f32>()
             / alive_legs.max(1) as f32;
         let ground = zone.ground(next.x, next.z);
-        let base = if w.collapsed {
+        let base = if down {
             ground + 0.4
         } else {
             feet_h.max(ground - 0.2) + BODY_HEIGHT

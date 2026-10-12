@@ -279,19 +279,29 @@ fn drone_brain(
 
 /// Position -> acceleration -> attitude -> per-rotor thrust.
 fn fly_drones(
-    mut drones: Query<(&mut Drone, &Robot, &Transform, &Awareness, Forces)>,
+    mut drones: Query<(
+        &mut Drone,
+        &Robot,
+        &Transform,
+        &Awareness,
+        Has<super::Stunned>,
+        Forces,
+    )>,
     targets: Query<&GlobalTransform>,
     zone: Res<Zone>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let g = Vec3::new(0.0, -9.81, 0.0);
-    for (mut d, robot, t, aware, mut forces) in &mut drones {
+    for (mut d, robot, t, aware, stunned, mut forces) in &mut drones {
         let pos = t.translation;
         let lin = LinearVelocity(forces.linear_velocity());
         let ang = AngularVelocity(forces.angular_velocity());
         let near_ground = pos.y - zone.ground(pos.x, pos.z) < 0.6;
-        if robot.wrecked || d.rotor_alive.iter().filter(|a| **a).count() < 4 && near_ground {
+        if robot.wrecked
+            || stunned
+            || d.rotor_alive.iter().filter(|a| **a).count() < 4 && near_ground
+        {
             d.thrust = [0.0; 4];
             if near_ground {
                 d.grounded += dt;

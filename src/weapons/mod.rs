@@ -83,7 +83,12 @@ pub struct AimHint {
 fn update_aim_hints(
     mut players: Query<(&mut AimHint, &Children)>,
     hands: Query<(&crate::rig::RigHand, &Hand)>,
-    guns: Query<&Gun>,
+    guns: Query<(Entity, &Gun, &GlobalTransform)>,
+    optics: Query<(
+        &crate::gadgets::MountedOn,
+        &crate::gadgets::Optic,
+        &GlobalTransform,
+    )>,
 ) {
     for (mut hint, children) in &mut players {
         let gun = children.iter().find_map(|c| {
@@ -95,12 +100,21 @@ fn update_aim_hints(
                 .and_then(|e| guns.get(e).ok())
         });
         *hint = match gun {
-            Some(g) => {
+            Some((ge, g, ggt)) => {
                 let grip_inv = g.layout.grip.compute_affine().inverse();
+                // A mounted scope moves the sight line up to its eyepiece.
+                let sight = optics
+                    .iter()
+                    .find(|(m, _, _)| m.0 == ge)
+                    .map(|(_, o, ogt)| {
+                        let eye = ogt.compute_transform() * Transform::from_translation(o.eye);
+                        Transform::from_matrix(
+                            (ggt.affine().inverse() * eye.compute_affine()).into(),
+                        )
+                    })
+                    .unwrap_or(g.layout.sight);
                 AimHint {
-                    sight: Transform::from_matrix(
-                        (grip_inv * g.layout.sight.compute_affine()).into(),
-                    ),
+                    sight: Transform::from_matrix((grip_inv * sight.compute_affine()).into()),
                     support: g.layout.support.map(|s| grip_inv.transform_point3(s)),
                 }
             }

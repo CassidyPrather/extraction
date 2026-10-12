@@ -621,6 +621,7 @@ fn anomaly_sounds(
     mut rng: ResMut<AudioRng>,
     mut events: MessageReader<crate::anomaly::AnomalyEvent>,
     mut glances: MessageReader<crate::health::Glanced>,
+    mut emps: MessageReader<crate::gadgets::EmpBlast>,
 ) {
     use crate::anomaly::AnomalyAct;
     for ev in events.read() {
@@ -639,6 +640,21 @@ fn anomaly_sounds(
             Transform::from_translation(ev.at),
             sample_effects![SpatialBasicNode::default()],
         ));
+    }
+    for b in emps.read() {
+        for (set, db, speed) in [
+            ("anomaly/surge_crack", 6.0, 0.7),
+            ("anomaly/lift_pop", 2.0, 1.4),
+        ] {
+            if let Some(sample) = bank.pick(set, &mut rng.0) {
+                commands.spawn((
+                    SamplePlayer::new(sample).with_volume(Volume::Decibels(db)),
+                    PlaybackSettings::default().with_speed(speed),
+                    Transform::from_translation(b.at),
+                    sample_effects![SpatialBasicNode::default()],
+                ));
+            }
+        }
     }
     for g in glances.read() {
         play(

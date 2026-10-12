@@ -15,6 +15,21 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ItemKind(pub u16);
 
+/// Where an attachment or insert goes: the kind of socket that takes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Mount {
+    /// A receiver's side dovetail: scopes, the side-mount rail.
+    Dovetail,
+    /// A short accessory rail: lights, lasers.
+    Rail,
+    /// Over the muzzle: the artifact adapter.
+    Muzzle,
+    /// A battery compartment: power cells.
+    Cell,
+    /// The artifact adapter's cradle: artifacts.
+    Cradle,
+}
+
 /// How big a thing is, for pockets and slings. Bulk (a continuous volume) is
 /// what the backpack counts; size class is what a fixed slot accepts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -70,6 +85,9 @@ pub struct ItemDef {
     /// Kilograms it takes *off* your carried load (the featherstone).
     #[serde(default)]
     pub lift_kg: f32,
+    /// The socket kind it fits, if it's an attachment or insert.
+    #[serde(default)]
+    pub mount: Option<Mount>,
     /// Cartridge this item *is*, if it is ammunition (a single round, or a
     /// box of them; see `rounds`).
     #[serde(default)]
@@ -102,6 +120,12 @@ impl ItemDef {
             let side = (self.bulk.max(0.01) / 1000.0).cbrt();
             [side, side, side]
         })
+    }
+
+    /// The mount it fits (artifacts all fit a cradle).
+    pub fn fits_mount(&self) -> Option<Mount> {
+        self.mount
+            .or((self.category == Category::Artifact).then_some(Mount::Cradle))
     }
 
     pub fn has_tag(&self, tag: &str) -> bool {
