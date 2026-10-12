@@ -1,5 +1,6 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod props;
 pub mod terrain_material;
 pub mod water_material;
 

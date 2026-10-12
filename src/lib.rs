@@ -4,6 +4,7 @@
 //! happens and runs headless; [`ClientPlugin`] is everything you see, hear
 //! and touch. See `docs/DESIGN.md`.
 
+pub mod audio;
 pub mod bot;
 pub mod dev;
 pub mod health;
@@ -69,8 +70,15 @@ impl Plugin for ClientPlugin {
             weapons::flat::FlatGunPlugin,
             hud::HudPlugin,
             robots::visuals::RobotVisualsPlugin,
+            render::props::PropVisualsPlugin,
         ))
-        .add_systems(Update, world::structures::blockout_visuals);
+        .add_systems(
+            Update,
+            (
+                world::structures::blockout_visuals,
+                world::structures::fence_visuals,
+            ),
+        );
     }
 }
 
@@ -106,6 +114,12 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     #[cfg(not(feature = "xr"))]
     app.add_plugins(defaults);
 
+    // A missing audio device or a flaky asset shouldn't take the game down:
+    // system errors become warnings.
+    app.set_error_handler(bevy::ecs::error::warn);
+    if opts.screenshot.is_none() {
+        app.add_plugins(audio::AudioPlugin);
+    }
     app.insert_resource(opts)
         .insert_resource(Time::<Fixed>::from_hz(90.0))
         .add_plugins(PhysicsPlugins::default())

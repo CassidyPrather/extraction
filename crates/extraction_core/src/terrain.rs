@@ -505,6 +505,7 @@ mod tests {
                 width: 20.0,
                 height: 10.0,
             },
+            fence_inset: 0.0,
             features: vec![],
             roads: vec![],
             water: vec![],

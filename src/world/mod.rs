@@ -105,6 +105,7 @@ impl Plugin for WorldPlugin {
             (
                 spawn_terrain_collider,
                 structures::spawn_structures,
+                structures::spawn_boundary,
                 trees::spawn_tree_colliders,
             ),
         );

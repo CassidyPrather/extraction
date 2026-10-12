@@ -235,6 +235,9 @@ fn fragment(
         var l: Layer;
         if (i == 3u) {
             l = sample_rock_triplanar(wp, n_geo);
+            // Wet, dark, and mossy where it faces up.
+            let moss = smoothstep(0.55, 0.85, n_geo.y) * smoothstep(0.35, 0.6, fbm(wp.xz * 0.4));
+            l.albedo = mix(l.albedo * 0.55, vec3<f32>(0.10, 0.13, 0.06), moss * 0.7);
         } else {
             l = sample_layer(i, wp.xz);
         }

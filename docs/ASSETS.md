@@ -121,8 +121,13 @@ uncompressed size, about 39 MB per terrain array.
 `--format bc7` encodes UASTC from the same mip chain, then transcodes it to
 BC7 + zstd. The files are about 2.8× smaller on disk, and GPU memory drops
 4×. BC7 works on desktop and PC-VR GPUs, but standalone Quest has no BC
-support. The build is slower, about 9 s per texture. The terrain arrays
-load in the game in both formats.
+support. The build is slower, about 9 s per texture.
+
+The RGBA8 output is the default and is the one tested in the game. The BC7
+output has not been confirmed to work. Under the headless software renderer
+(lavapipe), the BC7 terrain arrays rendered no frame within the 15-minute
+`shot.sh` timeout, and no error was logged. Check it on a real GPU before
+switching to it.
 
 ## Known issues
 

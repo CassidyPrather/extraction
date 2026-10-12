@@ -26,6 +26,9 @@ pub struct MapDef {
     /// The raised rim that keeps the playable area in.
     #[serde(default)]
     pub rim: RimDef,
+    /// Distance from the map edge to the quarantine fence (0: no fence).
+    #[serde(default)]
+    pub fence_inset: f32,
     #[serde(default)]
     pub features: Vec<TerrainFeature>,
     #[serde(default)]

@@ -126,6 +126,8 @@ fn update_hud(
     mags: Query<&Mag>,
     bags: Query<&Backpack>,
     catalog: Res<Catalog>,
+    raid: Res<crate::raid::Raid>,
+    healths: Query<&crate::health::Health>,
 ) {
     if let Ok(mut t) = target_text.single_mut() {
         t.0 = target
@@ -178,6 +180,29 @@ fn update_hud(
         },
         body.stamina * 100.0
     ));
-    lines.push("WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | C combine".into());
+    if let Ok(h) = healths.get(player) {
+        let bleed = if h.bleeding > 0.05 {
+            format!(" bleeding {:.1}/s", h.bleeding)
+        } else {
+            String::new()
+        };
+        lines.push(format!("health {:.0}/{:.0}{bleed}", h.hp.max(0.0), h.max));
+    }
+    let phase = match &raid.phase {
+        crate::raid::Phase::AtBase => "at the truck".to_string(),
+        crate::raid::Phase::Out => format!(
+            "in the Zone, {:.0} min to the Surge",
+            raid.surge_in() / 60.0
+        ),
+        crate::raid::Phase::TruckCalled { eta, .. } => format!("truck coming, {eta:.0} s"),
+        crate::raid::Phase::TruckWaiting { left, .. } => format!("truck waiting, {left:.0} s"),
+        crate::raid::Phase::Extracting { .. } => "extracting".into(),
+        crate::raid::Phase::Down { .. } => "down".into(),
+    };
+    lines.push(format!("raid: {phase}"));
+    for (msg, _) in raid.log.iter().rev().take(3) {
+        lines.push(format!("> {msg}"));
+    }
+    lines.push("WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | C combine | U use (radio, bandage) | E on the bell pull to leave".into());
     text.0 = lines.join("\n");
 }

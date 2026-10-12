@@ -23,7 +23,9 @@
     cell: 1.0,
     base_height: 20.0,
     noise: (seed: 7, amplitude: 4.0, scale: 140.0, octaves: 5, detail: 0.3),
-    rim: (width: 45.0, height: 26.0),
+    rim: (width: 70.0, height: 11.0),
+    // The quarantine fence runs this far in from the map edge.
+    fence_inset: 38.0,
 
     features: [
         // The valley falls gently from north-west to south-east.
@@ -131,6 +133,19 @@
     ],
 
     forests: [
+        // The boundary woods, thick beyond and around the fence.
+        (name: "South boundary", seed: 11, density: 1.7, undergrowth: 0.6,
+         mix: [(Spruce, 0.6), (Pine, 0.25), (Birch, 0.15)],
+         polygon: [(-320.0, 320.0), (320.0, 320.0), (320.0, 262.0), (-320.0, 262.0)]),
+        (name: "North boundary", seed: 12, density: 1.7, undergrowth: 0.6,
+         mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
+         polygon: [(-320.0, -262.0), (320.0, -262.0), (320.0, -320.0), (-320.0, -320.0)]),
+        (name: "West boundary", seed: 13, density: 1.7, undergrowth: 0.6,
+         mix: [(Spruce, 0.7), (Pine, 0.2), (Snag, 0.1)],
+         polygon: [(-320.0, 262.0), (-262.0, 262.0), (-262.0, -262.0), (-320.0, -262.0)]),
+        (name: "East boundary", seed: 14, density: 1.7, undergrowth: 0.6,
+         mix: [(Spruce, 0.55), (Birch, 0.3), (Pine, 0.15)],
+         polygon: [(262.0, 262.0), (320.0, 262.0), (320.0, -262.0), (262.0, -262.0)]),
         (
             name: "Western spruce", seed: 1, density: 1.6, undergrowth: 0.6,
             mix: [(Spruce, 0.7), (Pine, 0.2), (Birch, 0.08), (Snag, 0.02)],
