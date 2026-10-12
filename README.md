@@ -31,7 +31,9 @@ B/Y slide stop; left stick walks (click to sprint), right stick snap-turns
 and (down) crouches, right stick click works the selector. Reach for a
 slide, charging handle or bolt with your free hand to work it; reach over a
 shoulder for the backpack and let go of it in front of you to open it.
-Look at your left wrist for the Surge clock, your load and the radio. Hold
+Look at your left wrist for the Surge clock, your load and the radio.
+The controllers kick when you fire, click as you work the action, thunk
+as a magazine seats, and shake when you're hit. Hold
 a scope or binoculars to your eye to look through them.
 
 Comfort: `--smooth-turn` (or `--snap-turn`), `--vignette 0..1` (default

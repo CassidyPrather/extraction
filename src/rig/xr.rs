@@ -44,6 +44,7 @@ impl Plugin for XrDriverPlugin {
                     .before(OxrActionSetSyncSet)
                     .run_if(openxr_session_running),
             )
+            .add_systems(PostUpdate, play_haptics.run_if(openxr_session_running))
             .add_systems(
                 PreUpdate,
                 drive_xr_rig
@@ -65,6 +66,7 @@ struct Actions {
     secondary: openxr::Action<bool>,
     stick: openxr::Action<openxr::Vector2f>,
     stick_click: openxr::Action<bool>,
+    haptic: openxr::Action<openxr::Haptic>,
     left: openxr::Path,
     right: openxr::Path,
 }
@@ -90,6 +92,7 @@ fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
             secondary: set.create_action("secondary", "Secondary button", &both)?,
             stick: set.create_action("stick", "Thumbstick", &both)?,
             stick_click: set.create_action("stick_click", "Thumbstick click", &both)?,
+            haptic: set.create_action("haptic", "Vibration", &both)?,
             set,
             left,
             right,
@@ -123,6 +126,7 @@ fn suggest_bindings(
     let secondary = a.secondary.as_raw();
     let stick = a.stick.as_raw();
     let click = a.stick_click.as_raw();
+    let haptic = a.haptic.as_raw();
     for profile in [
         "/interaction_profiles/oculus/touch_controller",
         "/interaction_profiles/meta/touch_controller_plus",
@@ -132,6 +136,14 @@ fn suggest_bindings(
     ] {
         bind(profile, pose_l, &["/user/hand/left/input/grip/pose"]);
         bind(profile, pose_r, &["/user/hand/right/input/grip/pose"]);
+        bind(
+            profile,
+            haptic,
+            &[
+                "/user/hand/left/output/haptic",
+                "/user/hand/right/output/haptic",
+            ],
+        );
         let touchlike = profile.contains("touch") || profile.contains("index");
         if profile.contains("vive") {
             bind(
@@ -441,5 +453,29 @@ fn drive_xr_rig(
     if turn.armed && right_stick.y < -0.7 {
         turn.armed = false;
         input.crouch = !input.crouch;
+    }
+}
+
+/// Game haptics onto the controllers.
+fn play_haptics(
+    actions: Option<Res<Actions>>,
+    session: Res<OxrSession>,
+    mut pulses: MessageReader<super::haptics::Haptic>,
+) {
+    let Some(a) = actions else {
+        return;
+    };
+    for p in pulses.read() {
+        let path = match p.side {
+            Side::Left => a.left,
+            Side::Right => a.right,
+        };
+        let vib = openxr::HapticVibration::new()
+            .amplitude(p.amplitude.clamp(0.0, 1.0))
+            .duration(openxr::Duration::from_nanos((p.seconds * 1e9) as i64))
+            .frequency(openxr::FREQUENCY_UNSPECIFIED);
+        if let Err(e) = a.haptic.apply_feedback(&session, path, &vib) {
+            debug!("haptics: {e}");
+        }
     }
 }

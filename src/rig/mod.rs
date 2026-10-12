@@ -9,6 +9,7 @@
 
 pub mod comfort;
 pub mod flat;
+pub mod haptics;
 #[cfg(feature = "xr")]
 pub mod xr;
 
@@ -124,6 +125,7 @@ impl Plugin for RigPlugin {
     fn build(&self, app: &mut App) {
         let args: Vec<String> = std::env::args().collect();
         app.register_type::<RigInput>()
+            .add_plugins(haptics::HapticsPlugin)
             .insert_resource(RigDriver::Flat)
             .insert_resource(comfort::Comfort::load(&args))
             .add_systems(
