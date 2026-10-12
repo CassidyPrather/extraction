@@ -139,19 +139,28 @@ pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
     );
 }
 
-/// Client: tree meshes onto the logic trees.
+/// Client: tree meshes onto the logic trees. Near trees wear alpha-tested
+/// foliage cards around a shrunken solid core; far ones swap to the solid
+/// crown alone.
 fn spawn_forests(
     mut commands: Commands,
     trees: Query<(Entity, &Tree), Added<Tree>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut library: ResMut<crate::render::materials::MaterialLibrary>,
+    server: Res<AssetServer>,
     mut cache: Local<Option<TreeAssets>>,
 ) {
     if trees.is_empty() {
         return;
     }
     let assets = cache.get_or_insert_with(|| {
-        let bark = materials.add(StandardMaterial {
+        use crate::render::materials::Mat;
+        let foliage_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/textures/foliage");
+        let textured = foliage_dir.join("spruce_branch/albedo.ktx2").exists()
+            && foliage_dir.join("birch_leaves/albedo.ktx2").exists();
+        let flat_bark = materials.add(StandardMaterial {
             base_color: Color::WHITE,
             perceptual_roughness: 0.95,
             reflectance: 0.2,
@@ -165,6 +174,65 @@ fn spawn_forests(
             cull_mode: None,
             ..default()
         });
+        let core = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.55, 0.6, 0.55),
+            perceptual_roughness: 0.9,
+            reflectance: 0.15,
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        });
+        let card = |name: &str, tint: Color, materials: &mut Assets<StandardMaterial>| {
+            let tex: Handle<Image> = server
+                .load_builder()
+                .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
+                    s.is_srgb = true;
+                })
+                .load(format!("textures/foliage/{name}/albedo.ktx2"));
+            materials.add(StandardMaterial {
+                base_color: tint,
+                base_color_texture: Some(tex),
+                alpha_mode: AlphaMode::Mask(0.45),
+                perceptual_roughness: 0.8,
+                reflectance: 0.2,
+                double_sided: true,
+                cull_mode: None,
+                diffuse_transmission: 0.25,
+                ..default()
+            })
+        };
+        let (needles, leaves) = if textured {
+            (
+                Some(card(
+                    "spruce_branch",
+                    Color::srgb(0.85, 0.88, 0.82),
+                    &mut materials,
+                )),
+                Some(card(
+                    "birch_leaves",
+                    Color::srgb(0.62, 0.66, 0.55),
+                    &mut materials,
+                )),
+            )
+        } else {
+            (None, None)
+        };
+        let bark = |s: TreeSpecies,
+                    library: &mut crate::render::materials::MaterialLibrary,
+                    materials: &mut Assets<StandardMaterial>| {
+            if !textured {
+                return flat_bark.clone();
+            }
+            library.get(
+                match s {
+                    TreeSpecies::Spruce | TreeSpecies::Snag => Mat::BarkSpruce,
+                    TreeSpecies::Pine => Mat::BarkPine,
+                    TreeSpecies::Birch => Mat::BarkBirch,
+                },
+                &server,
+                materials,
+            )
+        };
         let mut handles = std::collections::HashMap::new();
         for s in [
             TreeSpecies::Spruce,
@@ -172,35 +240,93 @@ fn spawn_forests(
             TreeSpecies::Birch,
             TreeSpecies::Snag,
         ] {
+            let b = bark(s, &mut library, &mut materials);
             for v in 0..VARIANTS {
-                let (trunk, crown) = build_tree(s, 1000 + v as u64 * 17 + s as u64 * 101);
-                handles.insert((s, v), (meshes.add(trunk), crown.map(|c| meshes.add(c))));
+                let m = build_tree(s, 1000 + v as u64 * 17 + s as u64 * 101, textured);
+                let card_mat = match s {
+                    TreeSpecies::Birch => leaves.clone(),
+                    _ => needles.clone(),
+                };
+                handles.insert(
+                    (s, v),
+                    VariantAssets {
+                        trunk: meshes.add(m.trunk),
+                        bark: b.clone(),
+                        crown: m.crown.map(|c| meshes.add(c)),
+                        cards: m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat)),
+                    },
+                );
             }
         }
         TreeAssets {
-            bark,
             foliage,
+            core,
             handles,
         }
     });
+    // Cards out to ~70 m, then the solid crowns take over.
+    let near = bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: 62.0..74.0,
+        use_aabb: false,
+    };
+    let far = bevy::camera::visibility::VisibilityRange {
+        start_margin: 62.0..74.0,
+        end_margin: 5000.0..5001.0,
+        use_aabb: false,
+    };
     for (e, tree) in &trees {
-        let (trunk, crown) = &assets.handles[&(tree.species, tree.variant)];
+        let v = &assets.handles[&(tree.species, tree.variant)];
         commands
             .entity(e)
-            .insert((Mesh3d(trunk.clone()), MeshMaterial3d(assets.bark.clone())));
-        if let Some(crown) = crown {
-            commands.entity(e).with_child((
-                Mesh3d(crown.clone()),
-                MeshMaterial3d(assets.foliage.clone()),
-            ));
+            .insert((Mesh3d(v.trunk.clone()), MeshMaterial3d(v.bark.clone())));
+        match (&v.crown, &v.cards) {
+            (Some(crown), Some((cards, card_mat))) => {
+                commands.entity(e).with_children(|c| {
+                    c.spawn((
+                        Mesh3d(cards.clone()),
+                        MeshMaterial3d(card_mat.clone()),
+                        near.clone(),
+                    ));
+                    // Spruces need a dark core to read as dense; pine clusters
+                    // and birches are airy enough without one.
+                    if tree.species == TreeSpecies::Spruce {
+                        c.spawn((
+                            Mesh3d(crown.clone()),
+                            MeshMaterial3d(assets.core.clone()),
+                            Transform::from_scale(Vec3::new(0.62, 0.96, 0.62)),
+                            near.clone(),
+                        ));
+                    }
+                    c.spawn((
+                        Mesh3d(crown.clone()),
+                        MeshMaterial3d(assets.foliage.clone()),
+                        far.clone(),
+                    ));
+                });
+            }
+            (Some(crown), None) => {
+                commands.entity(e).with_child((
+                    Mesh3d(crown.clone()),
+                    MeshMaterial3d(assets.foliage.clone()),
+                ));
+            }
+            _ => {}
         }
     }
 }
 
-struct TreeAssets {
+struct VariantAssets {
+    trunk: Handle<Mesh>,
     bark: Handle<StandardMaterial>,
+    crown: Option<Handle<Mesh>>,
+    cards: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+}
+
+struct TreeAssets {
     foliage: Handle<StandardMaterial>,
-    handles: std::collections::HashMap<(TreeSpecies, usize), (Handle<Mesh>, Option<Handle<Mesh>>)>,
+    core: Handle<StandardMaterial>,
+    handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
 }
 
 fn trunk_radius(s: TreeSpecies) -> f32 {
@@ -212,39 +338,105 @@ fn trunk_radius(s: TreeSpecies) -> f32 {
     }
 }
 
-/// Accumulates triangles with per-vertex colour.
+/// Accumulates triangles with per-vertex colour and UVs.
 #[derive(Default)]
 struct MeshBuilder {
     pos: Vec<[f32; 3]>,
     nrm: Vec<[f32; 3]>,
     col: Vec<[f32; 4]>,
+    uv: Vec<[f32; 2]>,
     idx: Vec<u32>,
 }
 
+/// Sprig regions of the spruce atlas (u0, v0, u1, v1), stem at the bottom.
+const SPRIGS: [[f32; 4]; 4] = [
+    [0.15, 0.40, 0.43, 0.83],
+    [0.42, 0.45, 0.66, 0.85],
+    [0.07, 0.04, 0.28, 0.32],
+    [0.32, 0.03, 0.49, 0.31],
+];
+/// The hanging birch branch, stem at the top.
+const BIRCH_LEAVES: [f32; 4] = [0.21, 0.0, 0.81, 1.0];
+
 impl MeshBuilder {
     fn vertex(&mut self, p: Vec3, n: Vec3, c: [f32; 4]) -> u32 {
+        self.vertex_uv(p, n, c, [0.0, 0.0])
+    }
+
+    fn vertex_uv(&mut self, p: Vec3, n: Vec3, c: [f32; 4], uv: [f32; 2]) -> u32 {
         self.pos.push(p.to_array());
         self.nrm.push(n.normalize_or_zero().to_array());
         self.col.push(c);
+        self.uv.push(uv);
         (self.pos.len() - 1) as u32
+    }
+
+    /// A textured card from `base` to `base + along`, `width` wide across
+    /// `across`. The atlas rect's bottom edge (v1) sits at the base, unless
+    /// `hanging`, when the top edge does. Normals bend outward from `centre`
+    /// so a card crown lights like a volume, not a pile of planes.
+    fn card(
+        &mut self,
+        base: Vec3,
+        along: Vec3,
+        across: Vec3,
+        width: f32,
+        rect: [f32; 4],
+        centre: Vec3,
+        hanging: bool,
+    ) {
+        let side = across.normalize_or(Vec3::X) * width * 0.5;
+        let tip = base + along;
+        let [u0, v0, u1, v1] = rect;
+        let (vb, vt) = if hanging { (v0, v1) } else { (v1, v0) };
+        let n = |p: Vec3| ((p - centre).normalize_or(Vec3::Y) + Vec3::Y * 0.6).normalize();
+        let c = [1.0, 1.0, 1.0, 1.0];
+        let i0 = self.vertex_uv(base - side, n(base - side), c, [u0, vb]);
+        let i1 = self.vertex_uv(base + side, n(base + side), c, [u1, vb]);
+        let i2 = self.vertex_uv(tip + side, n(tip + side), c, [u1, vt]);
+        let i3 = self.vertex_uv(tip - side, n(tip - side), c, [u0, vt]);
+        self.idx.extend_from_slice(&[i0, i1, i2, i0, i2, i3]);
+    }
+
+    /// Two cards crossed along the same spine.
+    fn cross_cards(
+        &mut self,
+        base: Vec3,
+        along: Vec3,
+        width: f32,
+        rect: [f32; 4],
+        centre: Vec3,
+        hanging: bool,
+    ) {
+        let a = along.normalize_or(Vec3::Y);
+        let h = a.cross(Vec3::Y).normalize_or(Vec3::X);
+        let v = a.cross(h).normalize_or(Vec3::Z);
+        self.card(base, along, h, width, rect, centre, hanging);
+        self.card(base, along, v, width * 0.8, rect, centre, hanging);
     }
 
     /// A tapered tube along a polyline of (centre, radius) rings.
     fn tube(&mut self, rings: &[(Vec3, f32)], sides: usize, color: impl Fn(Vec3, f32) -> [f32; 4]) {
         let base = self.pos.len() as u32;
+        let mut along = 0.0;
+        // Bark wraps once round the base girth, so it doesn't pinch at the top.
+        let girth = rings.first().map_or(0.2, |r| r.1) * std::f32::consts::TAU;
         for (k, (c, r)) in rings.iter().enumerate() {
             let dir = if k + 1 < rings.len() {
                 (rings[k + 1].0 - *c).normalize_or_zero()
             } else {
                 (*c - rings[k.saturating_sub(1)].0).normalize_or_zero()
             };
+            if k > 0 {
+                along += c.distance(rings[k - 1].0);
+            }
             let side = dir.any_orthonormal_vector();
             let up = dir.cross(side);
             for s in 0..=sides {
                 let a = s as f32 / sides as f32 * std::f32::consts::TAU;
                 let n = side * a.cos() + up * a.sin();
                 let p = *c + n * *r;
-                self.vertex(p, n, color(p, a));
+                self.vertex_uv(p, n, color(p, a), [s as f32 / sides as f32 * girth, along]);
             }
         }
         let ring = (sides + 1) as u32;
@@ -304,14 +496,22 @@ impl MeshBuilder {
     }
 
     fn build(self) -> Mesh {
-        Mesh::new(
+        self.build_with(true)
+    }
+
+    fn build_with(self, colours: bool) -> Mesh {
+        let mut m = Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::RENDER_WORLD,
         )
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
-        .with_inserted_indices(Indices::U32(self.idx))
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
+        .with_inserted_indices(Indices::U32(self.idx));
+        if colours {
+            m.insert_attribute(Mesh::ATTRIBUTE_COLOR, self.col);
+        }
+        m
     }
 }
 
@@ -320,12 +520,24 @@ fn lin(r: f32, g: f32, b: f32) -> [f32; 4] {
     [c.red, c.green, c.blue, 1.0]
 }
 
-/// Builds (trunk, crown) meshes for a species variant in local space, base
-/// at the origin, before instance scaling.
-fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
+/// One species variant's meshes, local space, base at the origin.
+pub struct TreeMeshes {
+    pub trunk: Mesh,
+    /// The solid crown: the far LOD, and (shrunk) the near LOD's core.
+    pub crown: Option<Mesh>,
+    /// Alpha-tested foliage cards: the near LOD.
+    pub cards: Option<Mesh>,
+}
+
+/// Builds a species variant. `textured` drops the trunk's vertex colours
+/// so scanned bark shows through.
+fn build_tree(species: TreeSpecies, seed: u64, textured: bool) -> TreeMeshes {
     let mut rng = Rng::new(seed);
+    let mut crng = Rng::new(seed ^ 0xCA2D);
     let mut trunk = MeshBuilder::default();
     let mut crown = MeshBuilder::default();
+    let mut cards = MeshBuilder::default();
+    let tau = std::f32::consts::TAU;
     match species {
         TreeSpecies::Spruce => {
             let h = rng.range(15.0, 22.0);
@@ -371,6 +583,49 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                         .extend_from_slice(&[top, base + 2 + s, base + 1 + s]);
                 }
             }
+            // Cards: drooping sprig plates and upright fins, whorl by whorl.
+            let wc = 22;
+            for w in 0..wc {
+                let t = w as f32 / (wc - 1) as f32;
+                let y = first + t * (h - first - 0.7);
+                let r = rmax * (1.0 - t).powf(0.85) + 0.4;
+                let k = (8.0 - t * 4.0) as usize;
+                let phase = crng.range(0.0, tau);
+                let centre = Vec3::new(0.0, y, 0.0);
+                for i in 0..k {
+                    let a = phase + i as f32 / k as f32 * tau + crng.range(-0.25, 0.25);
+                    let out = Vec3::new(a.cos(), 0.0, a.sin());
+                    let len = r * crng.range(0.85, 1.1);
+                    let along = out * len + Vec3::Y * (-0.3 * len + 0.15);
+                    let base = centre + out * 0.12;
+                    cards.card(
+                        base,
+                        along,
+                        out.cross(Vec3::Y),
+                        len * 0.8,
+                        SPRIGS[crng.below(2)],
+                        centre,
+                        false,
+                    );
+                    cards.card(
+                        base + Vec3::Y * 0.05,
+                        along * 0.85,
+                        Vec3::Y,
+                        len * 0.4,
+                        SPRIGS[2 + crng.below(2)],
+                        centre,
+                        false,
+                    );
+                }
+            }
+            cards.cross_cards(
+                Vec3::new(0.0, h - 1.6, 0.0),
+                Vec3::Y * 2.0,
+                1.0,
+                SPRIGS[0],
+                Vec3::new(0.0, h - 1.0, 0.0),
+                false,
+            );
         }
         TreeSpecies::Pine => {
             let h = rng.range(17.0, 24.0);
@@ -409,6 +664,24 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                     let s = 0.7 + 0.5 * l;
                     lin(0.12 * s, 0.16 * s, 0.09 * s)
                 });
+                // A limb out to the cluster, and needle cards round it.
+                let on_trunk = Vec3::new(0.0, c.y - 0.6, 0.0) + lean * (c.y / h).powi(2);
+                trunk.tube(&[(on_trunk, 0.07), (c, 0.03)], 5, |_, _| {
+                    lin(0.5, 0.32, 0.2)
+                });
+                for _ in 0..22 {
+                    let a = crng.range(0.0, tau);
+                    let dir = Vec3::new(a.cos(), crng.range(-0.3, 0.8), a.sin()).normalize();
+                    let len = rad.x * crng.range(0.9, 1.3);
+                    cards.cross_cards(
+                        c - dir * len * 0.3,
+                        dir * len,
+                        len * 0.8,
+                        SPRIGS[crng.below(4)],
+                        c,
+                        false,
+                    );
+                }
             }
         }
         TreeSpecies::Birch => {
@@ -437,8 +710,8 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
             });
             let crown_base = h * 0.45;
             let blobs = 6 + rng.below(4);
-            // Autumn: most birches have turned, some are still hanging on.
-            let turned = rng.range(0.3, 1.0);
+            // Late summer: a few birches are starting to turn.
+            let turned = rng.range(0.0, 0.4);
             for b in 0..blobs {
                 let t = b as f32 / blobs as f32;
                 let a = rng.range(0.0, std::f32::consts::TAU);
@@ -447,6 +720,22 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
                 let c = Vec3::new(0.0, y, 0.0) + lean * (y / h).powi(2) + off;
                 let rad = Vec3::splat(rng.range(1.0, 1.7)) * Vec3::new(1.0, 0.8, 1.0);
                 let yellow = (turned + rng.range(-0.2, 0.2)).clamp(0.0, 1.0);
+                // A branch out to the cluster, with leaves hanging off it.
+                let on_trunk = Vec3::new(0.0, c.y - 0.8, 0.0) + lean * (c.y / h).powi(2);
+                trunk.tube(&[(on_trunk, 0.05), (c + Vec3::Y * 0.5, 0.02)], 5, |_, _| {
+                    lin(0.7, 0.68, 0.64)
+                });
+                for _ in 0..6 {
+                    let a = crng.range(0.0, tau);
+                    let out = Vec3::new(a.cos(), 0.0, a.sin());
+                    let base = c
+                        + out * rad.x * crng.range(0.2, 0.8)
+                        + Vec3::Y * rad.y * crng.range(0.0, 0.7);
+                    let along = (out * 0.35 - Vec3::Y) * crng.range(1.2, 1.9);
+                    let across = Vec3::new(-out.z, 0.0, out.x);
+                    cards.card(base, along, across, 1.3, BIRCH_LEAVES, c, true);
+                    cards.card(base, along, out, 1.0, BIRCH_LEAVES, c, true);
+                }
                 crown.blob(c, rad, rng.next_u64() as u32, move |_, l| {
                     let s = 0.65 + 0.5 * l;
                     let g = Vec3::new(0.22, 0.28, 0.10);
@@ -482,6 +771,9 @@ fn build_tree(species: TreeSpecies, seed: u64) -> (Mesh, Option<Mesh>) {
             }
         }
     }
-    let crown = (!crown.pos.is_empty()).then(|| crown.build());
-    (trunk.build(), crown)
+    TreeMeshes {
+        trunk: trunk.build_with(!textured),
+        crown: (!crown.pos.is_empty()).then(|| crown.build()),
+        cards: (!cards.pos.is_empty()).then(|| cards.build_with(false)),
+    }
 }
