@@ -14,9 +14,16 @@ pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (build_screens, update_screens).chain());
+        app.add_systems(Update, (build_screens, update_screens, idle_screens).chain());
     }
 }
+
+/// Frames a panel's camera renders after its text changes (the font may
+/// still be loading, and the first frames lay the text out).
+const REFRESH_FRAMES: u8 = 30;
+/// An idle panel still renders one frame in this many, in case anything
+/// it shows changed without its text changing.
+const IDLE_EVERY: u32 = 30;
 
 /// Pixels per metre on a panel.
 const PX_PER_M: f32 = 1000.0;
@@ -24,6 +31,10 @@ const PX_PER_M: f32 = 1000.0;
 #[derive(Component)]
 struct ScreenView {
     text: Entity,
+    camera: Entity,
+    /// Frames left to render: a panel's texture keeps its last picture,
+    /// so its camera only runs for a moment after the text changes.
+    refresh: u8,
     /// Panel pixels and the style's largest font.
     px: Vec2,
     font: f32,
@@ -146,6 +157,8 @@ fn build_screens(
             .entity(e)
             .insert(ScreenView {
                 text,
+                camera,
+                refresh: REFRESH_FRAMES,
                 px: Vec2::new(w as f32, h as f32),
                 font: max_font,
             })
@@ -158,12 +171,13 @@ fn build_screens(
 }
 
 fn update_screens(
-    screens: Query<(&ScreenText, &ScreenView), Changed<ScreenText>>,
+    mut screens: Query<(&ScreenText, &mut ScreenView), Changed<ScreenText>>,
     mut texts: Query<(&mut Text, &mut TextFont)>,
 ) {
-    for (screen, view) in &screens {
+    for (screen, mut view) in &mut screens {
         if let Ok((mut t, mut f)) = texts.get_mut(view.text) {
             if t.0 != screen.text {
+                view.refresh = REFRESH_FRAMES;
                 t.0 = screen.text.clone();
                 let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
                 if f.font_size != size {
@@ -171,5 +185,27 @@ fn update_screens(
                 }
             }
         }
+    }
+}
+
+/// Panels whose text hasn't changed stop rendering: their texture keeps
+/// the last picture. (Ten-odd UI passes a frame saved, twice over in a
+/// headset.)
+fn idle_screens(
+    mut screens: Query<(Entity, &mut ScreenView)>,
+    mut cams: Query<&mut Camera>,
+    mut frame: Local<u32>,
+) {
+    *frame = frame.wrapping_add(1);
+    for (e, mut view) in &mut screens {
+        // Staggered, so the idle refreshes don't all land on one frame.
+        let tick = (*frame).wrapping_add(e.index_u32()) % IDLE_EVERY == 0;
+        let on = view.refresh > 0 || tick;
+        if let Ok(mut cam) = cams.get_mut(view.camera) {
+            if cam.is_active != on {
+                cam.is_active = on;
+            }
+        }
+        view.refresh = view.refresh.saturating_sub(1);
     }
 }
