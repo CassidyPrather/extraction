@@ -9,6 +9,7 @@ pub mod anomaly;
 pub mod cooking;
 pub mod fabrication;
 pub mod firearm;
+pub mod forest;
 pub mod geom;
 pub mod inventory;
 pub mod items;

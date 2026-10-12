@@ -8,13 +8,12 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
-use extraction_core::geom;
 use extraction_core::map::TreeSpecies;
 use extraction_core::noise::Rng;
 
 use super::{Layer, Zone};
 
-const VARIANTS: usize = 3;
+const VARIANTS: usize = extraction_core::forest::TREE_VARIANTS;
 
 pub struct TreesPlugin;
 
@@ -37,72 +36,19 @@ pub struct TreeInstance {
 }
 
 /// Scatters trees through every forest polygon. Deterministic per map.
+/// The scattering itself lives in `extraction_core::forest`, shared with
+/// the Unity exporter.
 pub fn scatter_trees(zone: &Zone) -> Vec<TreeInstance> {
-    let mut out = Vec::new();
-    let map = &zone.map;
-    // Keep clear of structures and markers.
-    let clear: Vec<([f32; 2], f32)> = map
-        .placements
-        .iter()
-        .map(|p| (p.at, super::structures::clearance(&p.prefab)))
-        .chain(map.markers.iter().map(|m| (m.at, 8.0)))
-        .collect();
-    for forest in &map.forests {
-        let mut rng = Rng::new(0x7EE5 ^ u64::from(forest.seed));
-        let spacing = (100.0 / forest.density.max(0.01)).sqrt();
-        let (lo, hi) = geom::bounds(&forest.polygon);
-        let weights: Vec<f32> = forest.mix.iter().map(|(_, w)| *w).collect();
-        let mut z = lo[1];
-        while z < hi[1] {
-            let mut x = lo[0];
-            while x < hi[0] {
-                let p = [
-                    x + rng.range(-0.45, 0.45) * spacing,
-                    z + rng.range(-0.45, 0.45) * spacing,
-                ];
-                x += spacing;
-                if !geom::point_in_polygon(&forest.polygon, p) {
-                    continue;
-                }
-                // Thin out toward the forest edge for a ragged treeline.
-                let edge = geom::polygon_edge_distance(&forest.polygon, p);
-                if edge < 12.0 && rng.f32() > edge / 12.0 {
-                    continue;
-                }
-                if zone.hm.road_at(p).weight > 0 || zone.hm.water_level(p).is_some() {
-                    continue;
-                }
-                if zone.hm.wetness(p) > 0.7 || zone.hm.slope_deg(p) > 38.0 {
-                    continue;
-                }
-                if zone
-                    .hm
-                    .road_lines
-                    .iter()
-                    .any(|rl| geom::polyline_closest(&rl.points, p).0 < rl.width * 0.5 + 2.5)
-                {
-                    continue;
-                }
-                if clear.iter().any(|(c, r)| geom::dist(*c, p) < *r) {
-                    continue;
-                }
-                let Some(k) = rng.weighted(&weights) else {
-                    continue;
-                };
-                let species = forest.mix[k].0;
-                let y = zone.ground(p[0], p[1]);
-                out.push(TreeInstance {
-                    species,
-                    variant: rng.below(VARIANTS),
-                    pos: Vec3::new(p[0], y - 0.15, p[1]),
-                    yaw: rng.range(0.0, std::f32::consts::TAU),
-                    scale: rng.range(0.8, 1.2),
-                });
-            }
-            z += spacing;
-        }
-    }
-    out
+    extraction_core::forest::scatter_trees(&zone.map, &zone.hm)
+        .into_iter()
+        .map(|t| TreeInstance {
+            species: t.species,
+            variant: t.variant,
+            pos: Vec3::from_array(t.pos),
+            yaw: t.yaw,
+            scale: t.scale,
+        })
+        .collect()
 }
 
 /// A tree in the world: logic side (collider). Meshes attach client-side.

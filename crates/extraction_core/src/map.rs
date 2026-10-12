@@ -308,6 +308,12 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
     }
 }
 
+/// Radius around a placement kept free of trees.
+pub fn prefab_clearance(id: &str) -> f32 {
+    let [w, _, d] = prefab_footprint(id);
+    (w.max(d) * 0.5 + 4.0).max(6.0)
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't).
 pub fn prefab_wants_pad(id: &str) -> bool {
