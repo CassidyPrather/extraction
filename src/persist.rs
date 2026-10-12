@@ -533,9 +533,8 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             let Some(saved) = snapshot_item(world, e, t.translation) else {
                 continue;
             };
-            if world.get::<Stash>(b).is_some() {
-                save.stash.push(saved);
-            } else if world.get::<Remains>(b).is_some() {
+            let worn = world.get::<Backpack>(b).is_some_and(|bp| bp.carried);
+            if world.get::<Remains>(b).is_some() {
                 let at = world
                     .get::<GlobalTransform>(b)
                     .map_or(Vec3::ZERO, |g| g.translation());
@@ -547,8 +546,11 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                     })
                     .items
                     .push(saved);
-            } else {
+            } else if worn {
                 loadout.backpack.push(saved);
+            } else {
+                // The stash, the bench tray: the truck's, all of it.
+                save.stash.push(saved);
             }
             continue;
         }

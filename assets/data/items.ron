@@ -311,7 +311,7 @@
         // ---------------------------------------------------------------
         // Materials (bench inputs)
         // ---------------------------------------------------------------
-        (id: "scrap_metal", name: "Scrap metal", category: Material, size: Small, mass: 0.8, bulk: 0.5, tags: ["metal"]),
+        (id: "scrap_metal", name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
         (id: "electronics", name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
         (id: "polymer", name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
         (id: "powder", name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),

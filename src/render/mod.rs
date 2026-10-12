@@ -1,9 +1,11 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod bench;
 pub mod fog;
 pub mod materials;
 pub mod memorial;
 pub mod props;
+pub mod screen;
 pub mod terrain_material;
 pub mod water_material;
 
@@ -24,6 +26,8 @@ impl Plugin for RenderPlugin {
             water_material::WaterMaterialPlugin,
             fog::HeightFogPlugin,
             memorial::MemorialBoardPlugin,
+            screen::ScreenPlugin,
+            bench::BenchVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

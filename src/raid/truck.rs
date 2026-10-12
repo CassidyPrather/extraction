@@ -46,6 +46,10 @@ pub enum Pressable {
     BellPull,
     /// Swing a door open or shut.
     Door,
+    /// The bench's selector knob: next recipe.
+    BenchSelect,
+    /// The bench's lever: run the selected recipe.
+    BenchRun,
 }
 
 /// The stash crate in the truck bed.
@@ -210,10 +214,10 @@ pub(crate) fn start_in_truck(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut players: Query<&mut Transform, With<LocalPlayer>>,
-    mut stashes: Query<&mut Backpack, With<Stash>>,
+    mut stashes: Query<&mut Backpack, Or<(With<Stash>, With<super::bench::Tray>)>>,
     locals: Query<Entity, With<LocalPlayer>>,
 ) {
-    // The stash belongs to whoever is playing.
+    // The stash (and the bench tray) belong to whoever is playing.
     if let Some(p) = locals.iter().next() {
         for mut s in &mut stashes {
             s.owner = p;
@@ -243,7 +247,7 @@ fn press_things(
                 Ok(Pressable::BellPull) => {
                     depart.write(DepartRequest { player: *player });
                 }
-                Ok(Pressable::Door) | Err(_) => {}
+                _ => {}
             }
         }
     }

@@ -22,6 +22,9 @@ struct Board;
 #[derive(Component)]
 struct Tally;
 
+#[derive(Component)]
+struct MemorialNote;
+
 const SIZE: Vec2 = Vec2::new(1.0, 0.7);
 const MAX_ROWS: usize = 5;
 const GROUPS_PER_ROW: usize = 10;
@@ -47,6 +50,20 @@ fn hang_board(
             Visibility::default(),
             ChildOf(truck),
         ));
+        // A pencilled list pinned beside it: the last things taken.
+        commands.spawn((
+            Name::new("Memorial note"),
+            MemorialNote,
+            crate::raid::bench::ScreenText {
+                text: String::new(),
+                size: Vec2::new(0.24, 0.34),
+                style: crate::raid::bench::ScreenStyle::Paper,
+            },
+            Transform::from_xyz(0.28, FLOOR + 1.3, -1.765)
+                .with_rotation(Quat::from_rotation_z(0.03)),
+            Visibility::default(),
+            ChildOf(truck),
+        ));
     }
 }
 
@@ -59,6 +76,7 @@ fn chalk_tallies(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut assets: Local<Option<(Handle<Mesh>, Handle<Mesh>, [Handle<StandardMaterial>; 3])>>,
+    mut notes: Query<&mut crate::raid::bench::ScreenText, With<MemorialNote>>,
 ) {
     if !memorial.is_changed() && added.is_empty() {
         return;
@@ -88,6 +106,14 @@ fn chalk_tallies(
         })
         .clone();
     let m = &memorial.0;
+    for mut note in &mut notes {
+        let mut lines = vec!["Taken:".to_string()];
+        lines.extend(m.lost.iter().rev().take(9).map(|n| format!("- {n}")));
+        if m.lost.is_empty() {
+            lines.push("(nothing yet)".into());
+        }
+        note.text = lines.join("\n");
+    }
     let left = -SIZE.x * 0.5 + 0.06;
     let top = SIZE.y * 0.5 - 0.05;
     let z = 0.018;
