@@ -122,7 +122,8 @@ pub fn layout(id: &str) -> Option<GunLayout> {
 fn pm() -> GunLayout {
     use Mat::*;
     use Moves::*;
-    let rake = Quat::from_rotation_x(0.28);
+    // The grip's bottom sits back toward the shooter (+Z).
+    let rake = Quat::from_rotation_x(-0.28);
     GunLayout {
         grip: Transform::IDENTITY,
         support: None,
@@ -130,7 +131,11 @@ fn pm() -> GunLayout {
         port: Vec3::new(0.012, 0.068, -0.045),
         eject: Vec3::new(1.0, 0.6, 0.15),
         sight: at(0.0, 0.079, 0.03),
-        magwell: Some(Transform::from_xyz(0.0, -0.005, 0.004).with_rotation(rake)),
+        // The well's mouth, at the top of the grip; magazines hang from it,
+        // raked back with the grip.
+        magwell: Some(
+            Transform::from_xyz(0.0, 0.0475, -0.002).with_rotation(Quat::from_rotation_x(-0.216)),
+        ),
         handle: Some(HandleLayout {
             kind: HandleKind::Slide,
             grab: Vec3::new(0.0, 0.064, 0.018),
