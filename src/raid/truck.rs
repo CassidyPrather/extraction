@@ -56,6 +56,8 @@ pub enum Pressable {
     FoldCover,
     /// The route card: which valley the truck drives to next.
     Destination,
+    /// A comfort board card (turning, vignette).
+    Setting,
 }
 
 /// The stash crate in the truck bed.

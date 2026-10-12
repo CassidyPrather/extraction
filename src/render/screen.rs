@@ -14,7 +14,10 @@ pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (build_screens, update_screens, idle_screens).chain());
+        app.add_systems(
+            Update,
+            (build_screens, update_screens, idle_screens).chain(),
+        );
     }
 }
 

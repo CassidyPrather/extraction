@@ -36,8 +36,10 @@ The controllers kick when you fire, click as you work the action, thunk
 as a magazine seats, and shake when you're hit. Hold
 a scope or binoculars to your eye to look through them.
 
-Comfort: `--smooth-turn` (or `--snap-turn`), `--vignette 0..1` (default
-0.6; darkens the edges while the stick moves you), or put them in
+Comfort: press the cards on the truck bed's left wall (turning: snap 30°
+or 45°, smooth 90-180°/s; vignette: off to 90%, darkening the edges
+while the stick moves you). Or `--smooth-turn` (or `--snap-turn`),
+`--vignette 0..1`, or put them in
 `~/.local/share/extraction/settings.ron` (Windows: `%APPDATA%\extraction`):
 `(smooth_turn: true, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6)`.
 

@@ -9,6 +9,7 @@
 //! Stay too long and the Surge comes for everyone.
 
 pub mod bench;
+pub mod comfort_board;
 pub mod kitchen;
 pub mod route;
 pub mod truck;
@@ -137,6 +138,7 @@ impl Plugin for RaidPlugin {
             bench::BenchPlugin,
             kitchen::KitchenPlugin,
             route::RoutePlugin,
+            comfort_board::ComfortBoardPlugin,
         ))
         .add_systems(
             Update,

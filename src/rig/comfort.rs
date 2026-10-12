@@ -35,6 +35,76 @@ impl Default for Comfort {
 }
 
 impl Comfort {
+    /// Keep the settings for next time.
+    pub fn save(&self) {
+        let path = crate::persist::data_dir().join("settings.ron");
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        match ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()) {
+            Ok(text) => {
+                if let Err(e) = std::fs::write(&path, text) {
+                    warn!("{}: {e}", path.display());
+                }
+            }
+            Err(e) => warn!("settings: {e}"),
+        }
+    }
+
+    /// The turning presets the comfort board steps through.
+    pub const TURNING: [(bool, f32); 5] = [
+        (false, 30.0),
+        (false, 45.0),
+        (true, 90.0),
+        (true, 120.0),
+        (true, 180.0),
+    ];
+    pub const VIGNETTES: [f32; 4] = [0.0, 0.3, 0.6, 0.9];
+
+    pub fn turning_label(&self) -> String {
+        if self.smooth_turn {
+            format!("TURNING\nsmooth, {:.0}°/s", self.turn_speed)
+        } else {
+            format!("TURNING\nsnap, {:.0}°", self.snap_angle)
+        }
+    }
+
+    pub fn vignette_label(&self) -> String {
+        if self.vignette <= 0.01 {
+            "VIGNETTE\noff".into()
+        } else {
+            format!("VIGNETTE\n{:.0}%", self.vignette * 100.0)
+        }
+    }
+
+    /// Step to the next turning preset.
+    pub fn next_turning(&mut self) {
+        let now = Self::TURNING.iter().position(|(smooth, v)| {
+            *smooth == self.smooth_turn
+                && (if *smooth {
+                    self.turn_speed
+                } else {
+                    self.snap_angle
+                } - v)
+                    .abs()
+                    < 0.5
+        });
+        let (smooth, v) = Self::TURNING[now.map_or(0, |i| (i + 1) % Self::TURNING.len())];
+        self.smooth_turn = smooth;
+        if smooth {
+            self.turn_speed = v;
+        } else {
+            self.snap_angle = v;
+        }
+    }
+
+    pub fn next_vignette(&mut self) {
+        let now = Self::VIGNETTES
+            .iter()
+            .position(|v| (v - self.vignette).abs() < 0.05);
+        self.vignette = Self::VIGNETTES[now.map_or(0, |i| (i + 1) % Self::VIGNETTES.len())];
+    }
+
     pub fn load(args: &[String]) -> Self {
         let path = crate::persist::data_dir().join("settings.ron");
         let mut c: Comfort = std::fs::read_to_string(&path)
@@ -59,5 +129,31 @@ impl Comfort {
             }
         }
         c
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_board_steps_through_the_presets_and_round() {
+        let mut c = Comfort::default();
+        assert_eq!(c.turning_label(), "TURNING\nsnap, 30°");
+        for _ in 0..2 {
+            c.next_turning();
+        }
+        assert!(c.smooth_turn && (c.turn_speed - 90.0).abs() < 0.1);
+        for _ in 0..3 {
+            c.next_turning();
+        }
+        assert!(
+            !c.smooth_turn && (c.snap_angle - 30.0).abs() < 0.1,
+            "round again"
+        );
+        c.next_vignette();
+        assert!((c.vignette - 0.9).abs() < 1e-3);
+        c.next_vignette();
+        assert_eq!(c.vignette_label(), "VIGNETTE\noff");
     }
 }
