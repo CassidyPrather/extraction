@@ -1,57 +1,88 @@
-[package]
-name = "game-template"
-version = "0.1.0"
+[workspace]
+members = [".", "crates/extraction_core"]
+resolver = "3"
+
+[workspace.package]
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.95"
 authors = ["Cassidy Prather <pratherea@gmail.com>"]
-description = "Cassidy's opinionated Rust game/toy template"
-readme = "README.md"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/CassidyPrather/game-template"
-keywords = ["game", "gamedev", "macroquad", "wasm", "template"]
-categories = ["games", "wasm"]
+repository = "https://github.com/CassidyPrather/extraction"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+# Deliberately relaxed (see docs/DESIGN.md, "Lints"): default clippy warnings
+# only, and the two that fight Bevy's system-parameter style are off.
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[package]
+name = "extraction"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A VR extraction shooter: scavenge the quarantined Zone, dodge the robots, get out."
+readme = "README.md"
 publish = false
+default-run = "extraction"
 
 [lib]
-name = "game_template"
+name = "extraction"
 path = "src/lib.rs"
 
 [[bin]]
-name = "game-template"
+name = "extraction"
 path = "src/main.rs"
 
-[[bench]]
-name = "sim_bench"
-harness = false
+[features]
+default = ["xr"]
+# OpenXR support. The game still runs flat when no XR runtime is present.
+xr = ["dep:bevy_mod_openxr", "dep:bevy_mod_xr"]
 
 [dependencies]
-# `audio` is off in macroquad's default features; the web build also needs
-# quad-snd's audio.js plugin in web/ (see CREDITS.md). It costs ~300 bytes of
-# wasm: on the web quad-snd is a few extern declarations and the browser does
-# the decoding, so the heavy native decoders never reach this target.
-macroquad = { version = "0.4", features = ["audio"] }
+extraction_core = { path = "crates/extraction_core" }
+bevy = { version = "0.19", default-features = false, features = [
+    "3d",
+    "ui",
+    "default_platform",
+    "png",
+    "jpeg",
+    "ktx2",
+    "zstd_rust",
+    "tonemapping_luts",
+    "bevy_gizmos",
+    "serialize",
+] }
+avian3d = "0.7"
+bevy_seedling = "0.8"
+bevy_mod_openxr = { version = "0.6", optional = true }
+bevy_mod_xr = { version = "0.6", optional = true }
+serde = { version = "1", features = ["derive"] }
+ron = "0.10"
 fastrand = "2"
 
-[dev-dependencies]
-criterion = "0.7"
+[lints]
+workspace = true
 
-[lints.rust]
-unsafe_code = "forbid"
+# Bevy's recommended dev setup: our code stays quick to compile, dependencies
+# are optimised so the game is playable in debug builds.
+[profile.dev]
+opt-level = 1
 
-[lints.clippy]
-# Turn everything up. I'm not a coward!
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
-cargo = { level = "warn", priority = -1 }
-# Targeted allows (each one earns its place, like the ruff ignores did)
-multiple_crate_versions = "allow" # Transitive deps disagree; not actionable here
-missing_errors_doc = "allow" # Undocumented stuff is fine (the D10 of clippy)
-missing_panics_doc = "allow" # Ditto
-cast_precision_loss = "allow" # usize -> f32 in render math; the counts are tiny
-cast_possible_truncation = "allow" # f32 -> i32 for pixel/window sizes is the point
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
-# Smaller, faster binaries at the cost of compile time
 lto = "thin"
-strip = "symbols"
+codegen-units = 4
+
+# For profiling and the headless map simulations: release speed, quick-ish link.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16

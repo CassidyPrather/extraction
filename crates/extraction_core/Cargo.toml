@@ -1,0 +1,20 @@
+[package]
+name = "extraction_core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Engine-free rules for the extraction game: items, inventory, firearms, economy, cooking."
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+ron = "0.10"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "map-dump"
+path = "src/bin/map_dump.rs"

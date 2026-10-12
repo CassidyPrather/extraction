@@ -1,0 +1,377 @@
+// The item catalog. Every physical thing in the game is one of these.
+//
+// mass: kilograms. bulk: litres of backpack. size: which body slots take it
+// (Tiny: pockets; Small: pouches; Medium: holster; Large: backpack only;
+// Bulky: slings only). attention: per second while carried.
+//
+// Ids are stable: saves and map files refer to them. Rename the `name`, not
+// the `id`.
+(
+    items: [
+        // ---------------------------------------------------------------
+        // Firearms
+        // ---------------------------------------------------------------
+        (
+            id: "pm_pistol",
+            name: "PM pistol",
+            description: "A compact Soviet service pistol. Double-action first shot, slide locks on empty. Heavy trigger, honest gun.",
+            category: Firearm, size: Medium, mass: 0.73, bulk: 0.6,
+            firearm: Some((
+                action: SemiAuto, cartridge: "9x18", magazine_family: Some("pm"),
+                modes: [Safe, Semi], last_round_hold_open: true, double_action: true,
+                muzzle_velocity: 315.0, damage: 34.0, spread_moa: 10.0, recoil: 1.0,
+                wear_per_shot: 0.0006,
+            )),
+            tags: ["metal"],
+        ),
+        (
+            id: "ak74",
+            name: "AK-74 rifle",
+            description: "Stamped receiver, side-folding charging handle, the selector you push with your trigger finger. Safe, auto, semi — in that order.",
+            category: Firearm, size: Bulky, mass: 3.3, bulk: 6.0,
+            firearm: Some((
+                action: SemiAuto, cartridge: "5.45x39", magazine_family: Some("ak545"),
+                modes: [Safe, Auto, Semi], rpm: 650.0,
+                muzzle_velocity: 900.0, damage: 48.0, spread_moa: 4.0, recoil: 2.2,
+                wear_per_shot: 0.0004,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "mosin",
+            name: "Mosin bolt rifle",
+            description: "A five-shot turn-bolt older than anyone who has carried it. Lift, pull, push, drop. Hits like a door.",
+            category: Firearm, size: Bulky, mass: 4.0, bulk: 7.5,
+            firearm: Some((
+                action: BoltAction, cartridge: "7.62x54R", internal_capacity: 5,
+                modes: [Semi],
+                muzzle_velocity: 865.0, damage: 110.0, spread_moa: 1.5, recoil: 4.5,
+                wear_per_shot: 0.0003,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "toz_double",
+            name: "Double-barrel shotgun",
+            description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
+            category: Firearm, size: Bulky, mass: 3.2, bulk: 6.5,
+            firearm: Some((
+                action: BreakAction, cartridge: "12ga", barrels: 2,
+                modes: [Semi],
+                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 150.0, recoil: 5.0,
+                wear_per_shot: 0.0005,
+            )),
+            tags: ["metal", "wood"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Magazines and clips
+        // ---------------------------------------------------------------
+        (
+            id: "pm_mag", name: "PM magazine",
+            category: Magazine, size: Small, mass: 0.09, bulk: 0.1,
+            magazine: Some((fits: "pm", cartridge: "9x18", capacity: 8)),
+            tags: ["metal"],
+        ),
+        (
+            id: "ak_mag", name: "AK-74 magazine",
+            description: "Thirty rounds, plum-coloured polymer.",
+            category: Magazine, size: Small, mass: 0.23, bulk: 0.35,
+            magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 30)),
+            tags: ["polymer"],
+        ),
+        (
+            id: "mosin_clip", name: "Stripper clip (7.62x54R)",
+            category: Magazine, size: Tiny, mass: 0.01, bulk: 0.02,
+            magazine: Some((fits: "mosin", cartridge: "7.62x54R", capacity: 5, stripper: true)),
+            tags: ["metal"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Ammunition (boxes; rounds come out one at a time)
+        // ---------------------------------------------------------------
+        (
+            id: "ammo_9x18", name: "9x18 rounds (box)",
+            category: Ammo, size: Small, mass: 0.17, bulk: 0.12, cartridge: Some("9x18"), rounds: 16,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545", name: "5.45x39 rounds (box)",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762r", name: "7.62x54R rounds (box)",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_12ga", name: "12 gauge buckshot (box)",
+            category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10,
+            tags: ["brass", "powder", "polymer"],
+        ),
+        (
+            id: "robot_ammo_belt", name: "Robot ammunition belt",
+            description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",
+            category: Ammo, size: Small, mass: 0.6, bulk: 0.5, cartridge: Some("robot_6mm"), rounds: 40,
+            tags: ["powder", "metal", "polymer"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Rail attachments
+        // ---------------------------------------------------------------
+        (
+            id: "weapon_light", name: "Weapon light",
+            description: "Clamps to a rail. Takes one cell.",
+            category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "laser_module", name: "Laser module",
+            description: "A red dot on the world, wherever your muzzle points.",
+            category: Attachment, size: Small, mass: 0.08, bulk: 0.08,
+            tags: ["electronics"],
+        ),
+        (
+            id: "pu_scope", name: "3.5x scope",
+            description: "Old-pattern fixed-power sniper scope with a side mount.",
+            category: Attachment, size: Medium, mass: 0.27, bulk: 0.4,
+            tags: ["glass", "metal"],
+        ),
+        (
+            id: "side_rail", name: "Side-mount rail",
+            description: "Bolts onto a dovetail and gives you a short rail.",
+            category: Attachment, size: Small, mass: 0.15, bulk: 0.1,
+            tags: ["metal"],
+        ),
+        (
+            id: "artifact_adapter", name: "Artifact adapter",
+            description: "A cradle of copper coil and bad ideas. Holds an artifact against a muzzle.",
+            category: Attachment, size: Small, mass: 0.35, bulk: 0.2,
+            tags: ["electronics", "metal"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Gadgets
+        // ---------------------------------------------------------------
+        (
+            id: "flashlight", name: "Flashlight",
+            category: Gadget, size: Medium, mass: 0.2, bulk: 0.2,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "power_cell", name: "Power cell",
+            description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
+            category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0,
+            tags: ["electronics"],
+        ),
+        (
+            id: "compass", name: "Compass",
+            category: Gadget, size: Tiny, mass: 0.06, bulk: 0.03,
+            tags: ["metal", "glass"],
+        ),
+        (
+            id: "map_case", name: "Map case",
+            description: "Your hand-drawn map of the valley, in a scuffed plastic sleeve.",
+            category: Gadget, size: Small, mass: 0.1, bulk: 0.2,
+        ),
+        (
+            id: "radio", name: "Field radio",
+            description: "Calls the truck. Picks up the robots' chatter, if you know where to listen.",
+            category: Gadget, size: Small, mass: 0.45, bulk: 0.4,
+            tags: ["electronics"],
+        ),
+        (
+            id: "binoculars", name: "Binoculars",
+            category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
+            tags: ["glass", "metal"],
+        ),
+        (
+            id: "emp_grenade", name: "EMP grenade",
+            description: "Pull, throw, count. Robots nearby forget how to stand for a while.",
+            category: Gadget, size: Small, mass: 0.4, bulk: 0.3,
+            tags: ["electronics"],
+        ),
+        (
+            id: "emp_trap", name: "EMP trap",
+            description: "A puck you leave on the ground. The first robot to step near it regrets it.",
+            category: Gadget, size: Small, mass: 0.7, bulk: 0.5,
+            tags: ["electronics"],
+        ),
+        (
+            id: "camera_drone", name: "Camera drone",
+            description: "A palm-sized quadcopter and its wrist screen.",
+            category: Gadget, size: Medium, mass: 0.5, bulk: 1.2,
+            tags: ["electronics", "polymer"],
+        ),
+        (
+            id: "cloak_generator", name: "Cloak generator",
+            description: "Deploy it and robots stop seeing what's inside the bubble. Drinks power.",
+            category: Gadget, size: Large, mass: 3.5, bulk: 6.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "deployable_cover", name: "Deployable cover",
+            description: "A folding ballistic panel on legs.",
+            category: Gadget, size: Large, mass: 6.0, bulk: 8.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "climbing_kit", name: "Climbing kit",
+            description: "Rope, a grapnel and a harness.",
+            category: Gadget, size: Large, mass: 2.4, bulk: 4.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "zipline_kit", name: "Zipline kit",
+            description: "Two anchors, a trolley, sixty metres of cable.",
+            category: Gadget, size: Large, mass: 3.0, bulk: 4.5,
+            tags: ["metal"],
+        ),
+        (
+            id: "matches", name: "Matches",
+            category: Gadget, size: Tiny, mass: 0.02, bulk: 0.02,
+        ),
+        (
+            id: "door_wedge", name: "Door wedge",
+            description: "Jams a door shut. Robots have to go around, or through.",
+            category: Gadget, size: Small, mass: 0.25, bulk: 0.15,
+            tags: ["polymer"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Medical
+        // ---------------------------------------------------------------
+        (
+            id: "field_dressing", name: "Field dressing",
+            category: Medical, size: Small, mass: 0.08, bulk: 0.1,
+        ),
+        (
+            id: "regen_injector", name: "Regen injector",
+            description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
+            category: Medical, size: Small, mass: 0.1, bulk: 0.08,
+        ),
+
+        // ---------------------------------------------------------------
+        // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
+        // ---------------------------------------------------------------
+        (id: "water_bottle", name: "Water bottle", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
+        (id: "condensed_milk", name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
+        (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
+        (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
+        (id: "onion", name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
+        (id: "canned_tomato", name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal"]),
+        (id: "flour_sack", name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
+        (id: "rice_bag", name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
+        (id: "canned_beans", name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal"]),
+        (id: "sugar_cubes", name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
+        (id: "tea_tin", name: "Tea tin", category: Food, size: Small, mass: 0.12, bulk: 0.2, tags: ["food:TeaLeaf", "metal"]),
+        (id: "spice_jar", name: "Spice jar", category: Food, size: Tiny, mass: 0.06, bulk: 0.05, tags: ["food:Spice", "glass"]),
+        (id: "salt_packet", name: "Salt", category: Food, size: Tiny, mass: 0.05, bulk: 0.04, tags: ["food:Salt"]),
+        (id: "canned_stew", name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal"]),
+        (id: "crackers", name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
+
+        // ---------------------------------------------------------------
+        // Tools and maintenance
+        // ---------------------------------------------------------------
+        (
+            id: "cleaning_kit", name: "Cleaning kit",
+            description: "Rod, brushes, patches. Takes the fouling out of a gun.",
+            category: Tool, size: Medium, mass: 0.35, bulk: 0.4,
+            tags: ["metal"],
+        ),
+        (
+            id: "gun_oil", name: "Gun oil",
+            category: Tool, size: Small, mass: 0.15, bulk: 0.12,
+        ),
+        (
+            id: "spare_parts", name: "Firearm spare parts",
+            description: "Springs, pins, an extractor. Brings a worn gun back toward its best.",
+            category: Tool, size: Small, mass: 0.3, bulk: 0.2,
+            tags: ["metal"],
+        ),
+        (
+            id: "multitool", name: "Multitool",
+            category: Tool, size: Small, mass: 0.25, bulk: 0.1,
+            tags: ["metal"],
+        ),
+        (
+            id: "fuel_can", name: "Fuel can",
+            description: "Ten litres of diesel. The truck will take you places for this.",
+            category: Tool, size: Large, mass: 9.5, bulk: 12.0,
+            tags: ["fuel"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Materials (bench inputs)
+        // ---------------------------------------------------------------
+        (id: "scrap_metal", name: "Scrap metal", category: Material, size: Small, mass: 0.8, bulk: 0.5, tags: ["metal"]),
+        (id: "electronics", name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
+        (id: "polymer", name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
+        (id: "powder", name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
+        (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
+
+        // ---------------------------------------------------------------
+        // Robot parts
+        // ---------------------------------------------------------------
+        (
+            id: "rotor_assembly", name: "Rotor assembly",
+            description: "A drone's motor, still spinning down.",
+            category: RobotPart, size: Small, mass: 0.4, bulk: 0.6,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "servo", name: "Servo actuator",
+            category: RobotPart, size: Small, mass: 0.6, bulk: 0.4,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "sensor_eye", name: "Sensor eye",
+            description: "The lens still tracks movement for a few seconds after you pull it.",
+            category: RobotPart, size: Small, mass: 0.3, bulk: 0.25,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "robot_cell", name: "Robot power cell",
+            category: RobotPart, size: Small, mass: 0.9, bulk: 0.5, battery_wh: 120.0,
+            tags: ["electronics"],
+        ),
+        (
+            id: "robot_gunpod", name: "Robot gun pod",
+            description: "You can carry it. You can even pull the trigger, with both hands and a prayer.",
+            category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
+            tags: ["metal", "electronics"],
+        ),
+
+        // ---------------------------------------------------------------
+        // Artifacts. Every one draws attention while carried.
+        // ---------------------------------------------------------------
+        (
+            id: "art_featherstone", name: "Featherstone",
+            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
+            category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6,
+        ),
+        (
+            id: "art_hearth", name: "Hearth",
+            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down.",
+            category: Artifact, size: Small, mass: 0.8, bulk: 0.3, attention: 1.2,
+        ),
+        (
+            id: "art_glasseye", name: "Glass eye",
+            description: "Hold it to your eye and the walls go thin.",
+            category: Artifact, size: Tiny, mass: 0.1, bulk: 0.04, attention: 0.9,
+        ),
+        (
+            id: "art_aegis", name: "Aegis knot",
+            description: "A tangle of something like copper. While you carry it, the first hit always glances.",
+            category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
+        ),
+
+        // ---------------------------------------------------------------
+        // Curios: no use but to keep, or to offer.
+        // ---------------------------------------------------------------
+        (id: "wristwatch", name: "Stopped wristwatch", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
+        (id: "old_photo", name: "Faded photograph", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
+        (id: "chess_piece", name: "Wooden chess knight", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+    ],
+)
