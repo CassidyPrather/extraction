@@ -124,30 +124,46 @@ fn placeholder_color(cat: Category) -> Color {
 #[derive(Component)]
 pub struct CustomVisual;
 
+/// The drawn model of an item (from `assets/models/mags/`), a child of the
+/// item entity, so visuals can shift it (a seated magazine lines up with its
+/// gun's model) without moving the item itself.
+#[derive(Component)]
+pub struct ItemModelRoot;
+
+/// An item whose model file is still loading.
+#[derive(Component)]
+struct PendingItemModel(Handle<bevy::gltf::Gltf>);
+
 pub struct ItemVisualsPlugin;
 
 impl Plugin for ItemVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, placeholder_visuals);
+        app.add_systems(
+            PostUpdate,
+            (placeholder_visuals, finish_item_models)
+                .chain()
+                .before(TransformSystems::Propagate),
+        );
     }
 }
 
-fn placeholder_visuals(
-    mut commands: Commands,
-    added: Query<(Entity, &Item), (Added<Item>, Without<CustomVisual>, Without<Mesh3d>)>,
-    custom: Query<(), With<CustomVisual>>,
-    catalog: Res<Catalog>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut cache: Local<std::collections::HashMap<ItemKind, (Handle<Mesh>, Handle<StandardMaterial>)>>,
-) {
-    for (e, item) in &added {
-        if custom.contains(e) {
-            continue;
-        }
-        let def = catalog.get(item.kind());
-        let (mesh, mat) = cache
-            .entry(item.kind())
+/// Placeholder boxes, one mesh and material per item kind.
+#[derive(Default)]
+struct PlaceholderCache(
+    std::collections::HashMap<ItemKind, (Handle<Mesh>, Handle<StandardMaterial>)>,
+);
+
+impl PlaceholderCache {
+    fn get(
+        &mut self,
+        def: &ItemDef,
+        kind: ItemKind,
+        meshes: &mut Assets<Mesh>,
+        materials: &mut Assets<StandardMaterial>,
+    ) -> (Mesh3d, MeshMaterial3d<StandardMaterial>) {
+        let (mesh, mat) = self
+            .0
+            .entry(kind)
             .or_insert_with(|| {
                 let [x, y, z] = def.size_m();
                 let emissive = if def.category == Category::Artifact {
@@ -166,8 +182,86 @@ fn placeholder_visuals(
                 )
             })
             .clone();
+        (Mesh3d(mesh), MeshMaterial3d(mat))
+    }
+}
+
+fn placeholder_visuals(
+    mut commands: Commands,
+    added: Query<(Entity, &Item), (Added<Item>, Without<CustomVisual>, Without<Mesh3d>)>,
+    custom: Query<(), With<CustomVisual>>,
+    catalog: Res<Catalog>,
+    server: Res<AssetServer>,
+    mut models: ResMut<crate::models::Models>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cache: Local<PlaceholderCache>,
+) {
+    for (e, item) in &added {
+        if custom.contains(e) {
+            continue;
+        }
+        let def = catalog.get(item.kind());
+        if def.category == Category::Magazine {
+            if let Some(h) = models.request(&format!("models/mags/{}.glb", def.id), &server) {
+                commands.entity(e).insert(PendingItemModel(h));
+                continue;
+            }
+        }
         commands
             .entity(e)
-            .insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+            .insert(cache.get(def, item.kind(), &mut meshes, &mut materials));
+    }
+}
+
+/// Swaps a loaded model in for a pending item (or the box, if it failed).
+fn finish_item_models(
+    mut commands: Commands,
+    pending: Query<(Entity, &Item, &PendingItemModel)>,
+    catalog: Res<Catalog>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    nodes: Res<Assets<bevy::gltf::GltfNode>>,
+    gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
+    mut model_mats: ResMut<crate::models::ModelMaterials>,
+    mut lib: ResMut<crate::render::materials::MaterialLibrary>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut cache: Local<PlaceholderCache>,
+) {
+    use crate::models::{ModelState, Models, model_nodes, spawn_primitives};
+    for (e, item, p) in &pending {
+        let gltf = match Models::state(&p.0, &server, &gltfs) {
+            ModelState::Loading => continue,
+            ModelState::Failed => {
+                let def = catalog.get(item.kind());
+                commands
+                    .entity(e)
+                    .remove::<PendingItemModel>()
+                    .insert(cache.get(def, item.kind(), &mut meshes, &mut materials));
+                continue;
+            }
+            ModelState::Ready(g) => g,
+        };
+        commands.entity(e).remove::<PendingItemModel>();
+        let root = commands
+            .spawn((
+                ItemModelRoot,
+                Transform::IDENTITY,
+                Visibility::default(),
+                ChildOf(e),
+            ))
+            .id();
+        for node in model_nodes(gltf, &nodes, &gltf_meshes) {
+            if node.primitives.is_empty() {
+                continue;
+            }
+            let n = commands
+                .spawn((node.transform, Visibility::default(), ChildOf(root)))
+                .id();
+            spawn_primitives(&mut commands, n, &node, |name| {
+                model_mats.get(name.unwrap_or("Blued"), &mut lib, &server, &mut materials)
+            });
+        }
     }
 }

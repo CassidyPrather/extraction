@@ -1,0 +1,185 @@
+"""Makarov PM: blowback 9x18 pistol. Writes assets/models/guns/pm_pistol.glb.
+
+Gun space as in src/weapons/layout.rs (`pm()`): origin at the palm on the
+grip, -Z down the bore (bore axis y = 0.062), +Y up, metres.
+"""
+
+import math
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from common import (Part, RX, RY, T, catmull, empty, export, fillet, join, main_guard, make, report,
+                    section_rect)
+
+main_guard()
+
+BORE_Y = 0.062
+SLIDE_Z0, SLIDE_Z1 = -0.132, 0.026  # muzzle end, rear
+SLIDE_Y0, SLIDE_Y1 = 0.048, 0.077
+SLIDE_HW = 0.014
+
+# --- Slide (moves with the bolt) ---------------------------------------------
+slide = Part("bolt_slide", origin=(0.0, BORE_Y, 0.0))
+sec = fillet(
+    [(-SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y1), (-SLIDE_HW, SLIDE_Y1)],
+    [0.0008, 0.0008, 0.0105, 0.0105], 5)
+slide.prism(sec, SLIDE_Z0, SLIDE_Z1, "Blued", axis="z", bevel=0.0022, segs=2)
+# Rear sight: a block with a square notch, dovetailed into the slide.
+slide.prism(fillet([(0.012, 0.0755), (0.024, 0.0755), (0.0235, 0.0815), (0.0145, 0.0815)], 0.0008, 2),
+            -0.007, 0.007, "Blued", axis="x", bevel=0.0005, segs=1)
+# Front sight: a ramped blade.
+slide.prism(fillet([(-0.1295, 0.0755), (-0.117, 0.0755), (-0.1215, 0.0805), (-0.1275, 0.0805)],
+                   0.0006, 2), -0.0016, 0.0016, "Blued", axis="x", bevel=0.0004, segs=1)
+
+cut = Part("cut")
+# Muzzle opening around the barrel.
+cut.cyl(0.0069, SLIDE_Z0 - 0.01, SLIDE_Z0 + 0.03, "Blued", segs=20, xf=T(0, BORE_Y, 0))
+# Ejection port, right side.
+cut.box((0.02, 0.016, 0.027), (0.016, 0.0705, -0.044), "Blued", bevel=0.0015, segs=1)
+# Rear sight notch.
+cut.box((0.0028, 0.004, 0.02), (0.0, 0.0818, 0.018), "Blued")
+# Grasping serrations, both sides, slightly raked.
+for i in range(11):
+    z = -0.001 + i * 0.0022
+    for sx in (-1, 1):
+        cut.box((0.0024, 0.019, 0.0011), (sx * SLIDE_HW, 0.0585, z), "Blued",
+                xf=RX(-0.12, about=(0, 0.0585, z)))
+slide.cut(cut)
+
+# --- Barrel (static; shows at the muzzle and through the port) ---------------
+static = Part("static_frame")
+static.tube(0.0064, 0.00465, -0.1305, -0.028, "Blued", segs=20, xf=T(0, BORE_Y, 0), chamfer=0.0007)
+# Chamber hood, filling the port.
+static.box((0.0125, 0.010, 0.026), (0.0, 0.0655, -0.042), "Blued", bevel=0.0015)
+
+# --- Frame --------------------------------------------------------------------
+frame_prof = [
+    (0.024, 0.0485),   # rear top, under the slide
+    (-0.118, 0.0485),  # front top
+    (-0.121, 0.044),
+    (-0.117, 0.0375),
+    (-0.100, 0.0345),
+    (-0.083, 0.0345),  # guard front attaches here
+    (-0.022, 0.0345),  # top of the trigger opening
+    (-0.019, 0.032),   # front strap begins
+    (-0.0045, -0.046),  # front strap bottom
+    (-0.002, -0.0505),
+    (0.036, -0.0505),
+    (0.038, -0.046),   # back strap bottom
+    (0.022, 0.026),    # back strap top
+    (0.027, 0.040),    # tang under the hammer
+    (0.027, 0.0485),
+]
+frame_prof = fillet(frame_prof, [0.001, 0.002, 0.004, 0.003, 0.004, 0.0, 0.0, 0.004, 0.006, 0.002,
+                                 0.002, 0.003, 0.006, 0.003, 0.001], 4)
+static.prism(frame_prof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0018, segs=2)
+
+# Wraparound bakelite grip: sides and back strap, inset from the frame edges.
+grip_prof = catmull([
+    (-0.0135, 0.027), (-0.0105, 0.004), (-0.0065, -0.024), (-0.003, -0.0465),
+    (0.018, -0.047), (0.0392, -0.0465), (0.0322, -0.012), (0.0255, 0.018), (0.0235, 0.029),
+    (0.005, 0.0305),
+], samples=4)
+
+
+def grip_width(z, y):
+    # A slight palm swell in the middle of the grip.
+    swell = 0.0011 * math.exp(-((y + 0.008) / 0.03) ** 2)
+    return (-0.0152 - swell, 0.0152 + swell)
+
+
+static.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.0035, segs=3, width=grip_width)
+# The star medallion near the top of each panel.
+for sx in (-1, 1):
+    static.sphere(0.0048, (sx * 0.0156, 0.017, 0.007), "Bakelite", segs=16, rings=8,
+                  scale=(0.25, 1, 1))
+
+
+def grip_span(y):
+    """Front and back of the grip outline at height y."""
+    zs = []
+    n = len(grip_prof)
+    for i in range(n):
+        (z0, y0), (z1, y1) = grip_prof[i], grip_prof[(i + 1) % n]
+        if (y0 - y) * (y1 - y) <= 0 and y0 != y1:
+            zs.append(z0 + (z1 - z0) * (y - y0) / (y1 - y0))
+    return min(zs), max(zs)
+
+
+# Raised ribs standing in for the checkering, inside a smooth border.
+for i in range(13):
+    y = -0.039 + i * 0.0042
+    zf, zb = grip_span(y)
+    zf, zb = zf + 0.0065, zb - 0.0065
+    if y > 0.009:  # leave room for the medallion
+        zf = max(zf, 0.0135)
+    if zb - zf < 0.004:
+        continue
+    lo, hi = grip_width(0, y)
+    for sx, w in ((-1, lo), (1, hi)):
+        static.box((0.0012, 0.0011, zb - zf), (w + sx * 0.0003, y, (zf + zb) / 2), "Bakelite",
+                   bevel=0.0004, segs=1)
+
+# Trigger guard: a large rounded loop (it hinges down for stripping).
+guard_path = catmull([
+    (-0.084, 0.0355), (-0.0885, 0.026), (-0.086, 0.0135), (-0.0765, 0.0055), (-0.060, 0.0025),
+    (-0.036, 0.003), (-0.022, 0.0065), (-0.0135, 0.0125),
+], samples=4, closed=False)
+static.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012), "Blued")
+
+# Hammer: a rounded spur behind the slide.
+hammer = fillet([(0.0205, 0.0485), (0.0295, 0.0495), (0.0365, 0.0585), (0.0372, 0.0675),
+                 (0.0335, 0.0725), (0.0285, 0.0705), (0.0245, 0.0615), (0.0215, 0.055)],
+                [0, 0.002, 0.003, 0.003, 0.003, 0.002, 0.002, 0], 3)
+hammer_p = Part("hammer")
+hammer_p.prism(hammer, -0.0034, 0.0034, "Blued", axis="x", bevel=0.0007, segs=1)
+# Spur grooves, cut across the back of the spur.
+spur_cut = Part("cut")
+for i in range(4):
+    y = 0.0605 + i * 0.0027
+    spur_cut.box((0.01, 0.0012, 0.004), (0.0, y, 0.0372 - i * 0.0004), "Blued",
+                 xf=RX(0.45, about=(0, y, 0.0372)))
+hammer_p.cut(spur_cut)
+
+# Slide stop lever, left side above the trigger.
+static.prism(fillet([(-0.060, 0.041), (-0.034, 0.041), (-0.034, 0.047), (-0.058, 0.0465)], 0.0012, 2),
+             -0.0122, -0.0108, "Blued", axis="x", bevel=0.0003, segs=1)
+# Heel magazine catch.
+static.box((0.010, 0.006, 0.006), (0.0, -0.047, 0.0405), "Blued", bevel=0.0012)
+# Lanyard loop on the left of the butt.
+loop = [(0.031 + 0.0045 * math.cos(a), -0.044 + 0.0045 * math.sin(a))
+        for a in [2 * math.pi * i / 12 for i in range(12)]]
+static.sweep(loop, [(x, n) for x, n in section_rect(0.0016, 0.0016, 0.0004)], "Steel",
+             closed=True, xf=T(-0.0158, 0, 0))
+
+# --- Trigger --------------------------------------------------------------------
+trig = Part("trigger", origin=(0.0, 0.03, -0.035))
+trig_path = catmull([(-0.0345, 0.0345), (-0.0385, 0.027), (-0.0395, 0.0195), (-0.0365, 0.0125),
+                     (-0.0325, 0.0095)], samples=3, closed=False)
+trig.sweep(trig_path, section_rect(0.0045, 0.0032, 0.0012), "Blued")
+
+# --- Safety / decocker (left rear of the slide, rotates about X) ---------------
+PIVOT = (-0.0157, 0.0648, 0.007)
+safety = Part("selector_safety", origin=PIVOT)
+safety.cyl(0.0042, -0.0016, 0.0016, "Blued", segs=16, xf=T(*PIVOT) @ RY(math.pi / 2),
+           chamfer=0.0006)
+safety.prism(fillet([(0.006, 0.0615), (0.0215, 0.064), (0.0225, 0.0705), (0.007, 0.0685)],
+                    [0.002, 0.0015, 0.0015, 0.002], 2),
+             -0.0172, -0.0148, "Blued", axis="x", bevel=0.0005, segs=1)
+for i in range(3):
+    safety.box((0.0012, 0.0055, 0.0008), (-0.0176, 0.0665, 0.0165 + i * 0.0018), "Blued")
+
+# --- Build ------------------------------------------------------------------------
+for p in (slide, trig, safety):
+    make(p)
+join("static_frame", static, hammer_p)
+
+# Named points (the layout's, for reference) and the modelled magazine seat.
+empty("pt_muzzle", (0.0, BORE_Y, -0.13))
+empty("pt_sight", (0.0, 0.079, 0.03))
+empty("pt_port", (0.012, 0.068, -0.045))
+empty("magwell", (0.0, 0.0475, -0.002), RX(-0.216))
+
+report()
+export("assets/models/guns/pm_pistol.glb")

@@ -14,6 +14,7 @@ pub mod interact;
 pub mod items;
 pub mod launch;
 pub mod persist;
+pub mod models;
 pub mod player;
 pub mod raid;
 pub mod render;
@@ -76,6 +77,7 @@ impl Plugin for ClientPlugin {
             robots::visuals::RobotVisualsPlugin,
             render::props::PropVisualsPlugin,
             anomaly::visuals::AnomalyVisualsPlugin,
+            models::ModelsPlugin,
         ))
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
@@ -167,6 +169,11 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     .add_plugins(PhysicsPlugins::default())
     .add_plugins(GamePlugin);
     app
+}
+
+/// The asset root as a path, for checking whether an optional file exists.
+pub(crate) fn asset_root_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(asset_root())
 }
 
 /// `assets/` next to the crate when run from a checkout, or next to the

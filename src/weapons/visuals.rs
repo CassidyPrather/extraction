@@ -1,12 +1,24 @@
-//! Gun visuals: the layout's parts as meshes, with the moving ones (slide,
-//! bolt, barrels, trigger, selector) animated from the mechanism.
+//! Gun visuals: the modelled gun from `assets/models/guns/<id>.glb` (see
+//! `art/guns/`), or the layout's blockout parts when there is no model,
+//! with the moving parts (slide, bolt, barrels, trigger, selector) animated
+//! from the mechanism.
+//!
+//! A model's top-level objects are named for how they move (`static*`,
+//! `bolt*`, `turnbolt*`, `barrels*`, `trigger*`, `selector*`); each one's
+//! origin is where it moves from. An empty named `magwell` is where the
+//! model's magazine really seats, which magazines are drawn at (the
+//! layout's seat stays the gameplay one).
 
+use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
 use extraction_core::firearm::FireMode;
 
-use super::Gun;
 use super::layout::{Mat, Moves, Shape};
-use crate::items::Item;
+use super::{Gun, Mag};
+use crate::interact::{InSocket, SocketOwner};
+use crate::items::{Catalog, Item, ItemModelRoot};
+use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
+use crate::render::materials::MaterialLibrary;
 
 pub struct GunVisualsPlugin;
 
@@ -14,7 +26,12 @@ impl Plugin for GunVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PostUpdate,
-            (build_gun_meshes, animate_parts)
+            (
+                build_gun_meshes,
+                finish_gun_models,
+                animate_parts,
+                seat_mag_visuals,
+            )
                 .chain()
                 .before(TransformSystems::Propagate),
         )
@@ -27,7 +44,21 @@ impl Plugin for GunVisualsPlugin {
 pub struct GunPart {
     pub moves: Moves,
     pub rest: Transform,
+    /// For a turn-bolt: a point on the axis it turns about (x, y used).
+    pub pivot: Vec3,
 }
+
+/// A gun whose model file is still loading.
+#[derive(Component)]
+struct PendingGunModel(Handle<Gltf>);
+
+/// Where the gun's model seats a magazine (its `magwell` empty), in gun
+/// space.
+#[derive(Component, Clone, Copy)]
+pub struct ModelMagSeat(pub Transform);
+
+/// The blockout's turn-bolt axis (its bolt is drawn above the bore).
+const BLOCKOUT_BOLT_AXIS: Vec3 = Vec3::new(0.0, 0.064, 0.0);
 
 #[derive(Default)]
 struct Palette {
@@ -51,40 +82,147 @@ fn material(mat: Mat) -> StandardMaterial {
     }
 }
 
+fn moves_for(name: &str) -> Option<Moves> {
+    // `turnbolt` before `bolt`: neither is a prefix of the other, but keep
+    // the more specific names first anyway.
+    [
+        ("turnbolt", Moves::TurnBolt),
+        ("bolt", Moves::WithBolt),
+        ("barrels", Moves::Barrels),
+        ("trigger", Moves::Trigger),
+        ("selector", Moves::Selector),
+        ("static", Moves::Static),
+    ]
+    .into_iter()
+    .find(|(p, _)| name.starts_with(p))
+    .map(|(_, m)| m)
+}
+
 fn build_gun_meshes(
     mut commands: Commands,
-    guns: Query<(Entity, &Gun), (Added<Gun>, With<Item>)>,
+    guns: Query<(Entity, &Gun, &Item), Added<Gun>>,
+    catalog: Res<Catalog>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut palette: Local<Palette>,
 ) {
-    for (e, gun) in &guns {
-        for part in &gun.layout.parts {
-            let mesh = match part.shape {
-                Shape::Box(s) => meshes.add(Cuboid::from_size(s)),
-                Shape::Cylinder(r, l) => meshes.add(
-                    Cylinder::new(r, l)
-                        .mesh()
-                        .resolution(14)
-                        .build()
-                        .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-                ),
+    for (e, gun, item) in &guns {
+        let id = &catalog.get(item.kind()).id;
+        if let Some(h) = models.request(&format!("models/guns/{id}.glb"), &server) {
+            commands.entity(e).insert(PendingGunModel(h));
+            continue;
+        }
+        build_blockout(
+            &mut commands,
+            e,
+            gun,
+            &mut meshes,
+            &mut materials,
+            &mut palette,
+        );
+    }
+}
+
+fn build_blockout(
+    commands: &mut Commands,
+    e: Entity,
+    gun: &Gun,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    palette: &mut Palette,
+) {
+    for part in &gun.layout.parts {
+        let mesh = match part.shape {
+            Shape::Box(s) => meshes.add(Cuboid::from_size(s)),
+            Shape::Cylinder(r, l) => meshes.add(
+                Cylinder::new(r, l)
+                    .mesh()
+                    .resolution(14)
+                    .build()
+                    .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            ),
+        };
+        let mat = palette
+            .mats
+            .entry(part.mat as u8)
+            .or_insert_with(|| materials.add(material(part.mat)))
+            .clone();
+        commands.spawn((
+            GunPart {
+                moves: part.moves,
+                rest: part.at,
+                pivot: BLOCKOUT_BOLT_AXIS,
+            },
+            Mesh3d(mesh),
+            MeshMaterial3d(mat),
+            part.at,
+            ChildOf(e),
+        ));
+    }
+}
+
+fn finish_gun_models(
+    mut commands: Commands,
+    pending: Query<(Entity, &Gun, &PendingGunModel)>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<Gltf>>,
+    nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut palette: Local<Palette>,
+) {
+    for (e, gun, p) in &pending {
+        let gltf = match Models::state(&p.0, &server, &gltfs) {
+            ModelState::Loading => continue,
+            ModelState::Failed => {
+                warn!("gun model failed to load; drawing the blockout");
+                commands.entity(e).remove::<PendingGunModel>();
+                build_blockout(
+                    &mut commands,
+                    e,
+                    gun,
+                    &mut meshes,
+                    &mut materials,
+                    &mut palette,
+                );
+                continue;
+            }
+            ModelState::Ready(g) => g,
+        };
+        commands.entity(e).remove::<PendingGunModel>();
+        for node in model_nodes(gltf, &nodes, &gltf_meshes) {
+            if node.name == "magwell" {
+                commands.entity(e).insert(ModelMagSeat(node.transform));
+                continue;
+            }
+            let Some(moves) = moves_for(&node.name) else {
+                continue;
             };
-            let mat = palette
-                .mats
-                .entry(part.mat as u8)
-                .or_insert_with(|| materials.add(material(part.mat)))
-                .clone();
-            commands.spawn((
-                GunPart {
-                    moves: part.moves,
-                    rest: part.at,
-                },
-                Mesh3d(mesh),
-                MeshMaterial3d(mat),
-                part.at,
-                ChildOf(e),
-            ));
+            if node.primitives.is_empty() {
+                continue;
+            }
+            let part = commands
+                .spawn((
+                    Name::new(node.name.clone()),
+                    GunPart {
+                        moves,
+                        rest: node.transform,
+                        // Model objects sit with their origin on their axis.
+                        pivot: node.transform.translation,
+                    },
+                    node.transform,
+                    Visibility::default(),
+                    ChildOf(e),
+                ))
+                .id();
+            spawn_primitives(&mut commands, part, &node, |name| {
+                model_mats.get(name.unwrap_or("Blued"), &mut lib, &server, &mut materials)
+            });
         }
     }
 }
@@ -105,12 +243,12 @@ fn animate_parts(guns: Query<(&Gun, &Children)>, mut parts: Query<(&GunPart, &mu
                     r
                 }
                 Moves::TurnBolt => {
-                    // Rotate the handle up around the bore, then slide back.
-                    let bore = Vec3::new(0.0, 0.064, 0.0);
+                    // Rotate the handle up around the bolt's axis, then slide back.
+                    let axis = Vec3::new(part.pivot.x, part.pivot.y, 0.0);
                     let turn = Quat::from_rotation_z(f.handle_lift * std::f32::consts::FRAC_PI_2);
                     let mut r = part.rest;
-                    let rel = r.translation - bore;
-                    r.translation = bore + turn * Vec3::new(rel.x, rel.y, 0.0) + Vec3::Z * rel.z;
+                    let rel = r.translation - axis;
+                    r.translation = axis + turn * Vec3::new(rel.x, rel.y, 0.0) + Vec3::Z * rel.z;
                     r.rotation = turn * r.rotation;
                     r.translation.z += f.bolt_travel * travel;
                     r
@@ -140,6 +278,40 @@ fn animate_parts(guns: Query<(&Gun, &Children)>, mut parts: Query<(&GunPart, &mu
                     r
                 }
             };
+        }
+    }
+}
+
+/// A seated magazine is placed by the layout's seat (gameplay); its drawn
+/// model goes where the gun model's own `magwell` says, so the two line up
+/// whatever the layout's numbers are.
+fn seat_mag_visuals(
+    mags: Query<(&Mag, Option<&InSocket>, &Children)>,
+    sockets: Query<&SocketOwner>,
+    guns: Query<(&Gun, Option<&ModelMagSeat>)>,
+    mut roots: Query<&mut Transform, With<ItemModelRoot>>,
+) {
+    for (mag, in_socket, children) in &mags {
+        let fix = in_socket
+            .and_then(|s| sockets.get(s.socket).ok())
+            .and_then(|owner| guns.get(owner.0).ok())
+            .and_then(|(gun, seat)| Some((gun.layout.magwell?, seat?.0)))
+            .map(|(layout, model)| {
+                // Mag space -> gun space is layout * hang; we want model * hang.
+                let hang = Transform::from_xyz(0.0, -mag.height * 0.5, 0.0);
+                let actual = layout.mul_transform(hang);
+                let wanted = model.mul_transform(hang);
+                Transform::from_matrix(Mat4::from(
+                    actual.compute_affine().inverse() * wanted.compute_affine(),
+                ))
+            })
+            .unwrap_or_default();
+        for c in children.iter() {
+            if let Ok(mut t) = roots.get_mut(c) {
+                if *t != fix {
+                    *t = fix;
+                }
+            }
         }
     }
 }

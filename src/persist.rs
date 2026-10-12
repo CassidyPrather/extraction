@@ -90,6 +90,7 @@ fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
             || opts.screenshot.is_some()
             || opts.camera.is_some()
             || opts.headless
+            || opts.gallery.is_some()
             || opts.scene != crate::launch::SceneChoice::Raid =>
         {
             None

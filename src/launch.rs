@@ -3,7 +3,8 @@
 //! ```text
 //! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
-//!            [--bot] [--size WxH] [--save PATH] [--new-game]
+//!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
+//!            [--save PATH] [--new-game] [--surge-in SECONDS]
 //! ```
 //!
 //! `--screenshot` renders `--frames` frames, saves the window to `PATH` and
@@ -53,6 +54,9 @@ pub struct LaunchOptions {
     pub new_game: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
+    /// Dev: put a gun, magazine or robot in front of the camera to look at
+    /// (see `dev::gallery`).
+    pub gallery: Option<String>,
 }
 
 impl Default for LaunchOptions {
@@ -73,6 +77,7 @@ impl Default for LaunchOptions {
             save: None,
             new_game: false,
             surge_in: None,
+            gallery: None,
         }
     }
 }
@@ -113,6 +118,10 @@ impl LaunchOptions {
                     o.flat = true;
                 }
                 "--frames" => o.frames = val().parse().unwrap_or(90),
+                "--gallery" => {
+                    o.gallery = Some(val());
+                    o.robots = false;
+                }
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {
