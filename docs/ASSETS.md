@@ -172,11 +172,13 @@ PATH, or `BLENDER=/path/to/blender`; written against Blender 5.2). The
 magazine seated), any other item by id, `guns`, `drone`, `walker`,
 `dirigible`, `grappler` or `pod` in front of the `--camera`, held still.
 At the camera above, the ground is at y = 17.6. The truck is parked at the
-south gate (truck space (x, y, z) is world (40 - x, 17.4 + y, 300 - z)):
+south gate: truck space (x, y, z) is world (40 - x, 23.7 + y, 300 - z),
+standing level on a slope.
 
 ```bash
-scripts/shot.sh target/shots/truck.png 46.5,19.8,291,145,-8 20     # rear three-quarter
-scripts/shot.sh target/shots/bed.png 39.6,19.6,298.6,180,-12 20    # in the bed
+scripts/shot.sh target/shots/truck.png 44.5,25.3,292.5,-147,-4 16   # rear three-quarter
+scripts/shot.sh target/shots/cab.png 37,26.8,306.8,45,-12 16        # front three-quarter
+scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 ```
 
 | Script | Output | Tris |
@@ -190,7 +192,8 @@ scripts/shot.sh target/shots/bed.png 39.6,19.6,298.6,180,-12 20    # in the bed
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.3k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 14.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
-| `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 25.6k (wheel once) |
+| `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 24.6k (wheel once) |
+| `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
 | `art/items/attachments.py` | `models/items/<item id>.glb`: scope, side rail, weapon light, laser, artifact adapter | 0.3k to 3k |
 | `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
