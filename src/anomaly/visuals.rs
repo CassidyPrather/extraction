@@ -561,15 +561,18 @@ fn xray_parts(
     }
 }
 
-/// Holding the glass eye up to your face shows the ghosts.
+/// Holding the glass eye up to your face shows every ghost; robots the
+/// camera drone has spotted show theirs anyway.
+#[allow(clippy::too_many_arguments)]
 fn glass_eye(
     players: Query<&ArtifactEffects, With<LocalPlayer>>,
     eyes: Query<&GlobalTransform>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
-    mut ghosts: Query<&mut Visibility, With<XrayGhost>>,
-    mut was_on: Local<bool>,
+    mut ghosts: Query<(&mut Visibility, &ChildOf), With<XrayGhost>>,
+    parents: Query<&ChildOf, Without<XrayGhost>>,
+    spotted: Query<(), With<crate::gadgets::camera_drone::Spotted>>,
 ) {
     let head = eye_position(&heads, &locals, &cams);
     let on = players
@@ -582,15 +585,27 @@ fn glass_eye(
             };
             eg.translation().distance(h) < 0.22
         });
-    if on == *was_on {
-        return;
-    }
-    *was_on = on;
-    for mut v in &mut ghosts {
-        *v = if on {
+    for (mut v, parent) in &mut ghosts {
+        // Up from the part to its robot.
+        let mut e = parent.parent();
+        let mut marked = false;
+        for _ in 0..4 {
+            if spotted.contains(e) {
+                marked = true;
+                break;
+            }
+            match parents.get(e) {
+                Ok(p) => e = p.parent(),
+                Err(_) => break,
+            }
+        }
+        let want = if on || marked {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
+        if *v != want {
+            *v = want;
+        }
     }
 }

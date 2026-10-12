@@ -13,7 +13,12 @@
 //! - **EMP**: arm a grenade and throw it, or arm a trap and leave it.
 //!   Robots in the blast lose their senses, rotors and legs for a while.
 //! - **Optics** ([`Optic`]): the scope and binoculars magnify (client side).
+//! - **Camera drone** ([`camera_drone`]): flies a circle and spots robots.
+//! - **Lead-lined case** ([`LeadCase`]): hides an artifact from the Zone.
+//! - **Climbing kit** ([`climbing`]): a grapnel and a rope to climb.
 
+pub mod camera_drone;
+pub mod climbing;
 pub mod visuals;
 
 use bevy::prelude::*;
@@ -94,7 +99,8 @@ pub struct GadgetsPlugin;
 
 impl Plugin for GadgetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<EmpBlast>()
+        app.add_plugins((camera_drone::CameraDronePlugin, climbing::ClimbingPlugin))
+            .add_message::<EmpBlast>()
             .init_resource::<Cloaks>()
             .add_observer(gun_mounts)
             .add_observer(item_mounts)
@@ -211,6 +217,14 @@ fn item_mounts(
                 _ => (6.0, DeviceKind::Light),
             };
             commands.entity(e).insert(Device { watts, kind });
+        }
+        "climbing_kit" => {
+            commands.entity(e).insert(climbing::Grapnel::Coiled);
+        }
+        "camera_drone" => {
+            commands
+                .entity(e)
+                .insert(camera_drone::CameraDrone::default());
         }
         "lead_case" => {
             spawn_mount(

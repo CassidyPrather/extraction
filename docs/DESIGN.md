@@ -124,7 +124,9 @@ every 90 attention-seconds buys a response team sent to where you *are*
 (not where you were heard), and while you carry artifacts, anomalies
 **bloom** across your path ahead of you (temporary, at most three). There
 is no number on screen: the flat HUD describes the feeling ("your teeth
-ache"). A lead-lined case to damp it is still to come.
+ache"). A **lead-lined case** (2.4 kg, found among gadgets) seals one
+artifact away: sealed, it draws no attention and does nothing for you —
+no aegis, no hearth, no lift. Carry it shut and open it when it counts.
 
 ### Robots have jobs
 
@@ -204,8 +206,8 @@ let go, as with magazines. Use on a gun switches everything on it.
   is about an hour and a half of torch); a carried hearth powers them for
   nothing. Cells come from decanting robot cells at the bench.
 - **Optics**: the scope moves the sight line to its eyepiece and
-  magnifies when your eye is on it (flat mode zooms the camera; the
-  headset version needs a picture-in-picture lens, still to do).
+  magnifies when your eye is on it: in the headset, a picture-in-picture
+  lens (with a PU reticle in the scope); flat mode zooms the camera.
 - **Artifact adapter**: featherstone rounds fly flat, hearth rounds hit
   half again as hard, aegis rounds knock robots senseless for two
   seconds, glass-eye rounds bend toward robots.
@@ -215,8 +217,26 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Compass and map case**: the needle finds north (-Z); the map is a
   hand-drawn sheet generated from the map file (`scripts/field-map.sh`).
 
-Still to do: binocular and scope lenses in VR, the camera drone, the
-cloak, deployable cover, climbing and zipline kits.
+- **Cloak and cover**: a cloak generator, switched on and set down,
+  hides everyone within 3 m from robot eyes (15 W: a cell runs it for
+  about forty minutes); deployable cover unfolds into a wall where you
+  stand and folds back up with a grab.
+- **Camera drone**: use it to spin it up and let go. It climbs to about
+  22 m and circles where it left your hand; every robot it has a clear
+  line to (90 m, less in fog and rain) is *spotted* — drawn through
+  walls, as the glass eye draws them, for 40 s after it last saw them.
+  Its feed shows on a screen above your left wrist. Use it again to
+  call it home, or let the battery do it: 90 s of flight, then it comes
+  back, drops at your feet, and recharges itself over a few minutes.
+- **Lead-lined case**: see artifacts, above.
+- **Climbing kit**: use it to shake out the line, then throw the hook up
+  onto a roof. If it lands at least 2.2 m up it bites, and the rope drops
+  from the nearest edge on your side. Grab the rope and pull down to go
+  up, hand over hand (or push the stick); at the top you haul yourself
+  over. Let go and you fall. Pick the hook back up to coil the line.
+
+Still to do: the zipline kit; the door wedge (robots don't go indoors
+yet, so it has nothing to stop).
 
 ### IFF, PvP, and networking
 
@@ -274,6 +294,11 @@ top-down preview renderer draws the layout for design review. Prefabs are
 modelled by Blender Python scripts in `art/`, exported as glTF with
 collision and socket markers as custom properties. Enemy spawns, jobs and
 specific loot roll from pools; the places themselves are designed.
+Risk pays: each region's loot spots roll `0.8 + 0.2 × danger` times
+(fractions are a chance of one more), unless the map sets `loot` for the
+region. The village by the insertion point is set to 0.6 — picked over —
+after the sims showed bots filling their packs there and never going
+further.
 
 ### Simulation
 
@@ -336,8 +361,10 @@ catch for agent-written code. Revisit if that research changes.
 5. **Economy and systems** — done: sinks (bench, offerings, convoy, fuel,
    decay of cells), artifacts and attention, anomalies, gadgets, cooking,
    the Surge.
-6. **Polish** — in progress: models for the truck, airship and gadgets;
-   map simulation telemetry; performance for VR (forest chunking done);
-   more maps. Still open: a lead-lined case, the camera drone and climbing
-   kits, a second map, playtesting in a headset.
+6. **Polish** — in progress. Done: models for the truck, airship, pod,
+   harpoon launcher, gadgets and artifacts; map simulation with telemetry
+   and heatmaps (see `SIMULATION.md`); forest and building batching for VR;
+   the lead-lined case, the camera drone and the climbing kit. Still open: acting on what the sims found (drones
+   decide every death; the north and east of the map go unvisited),
+   the zipline kit, a second map, playtesting in a headset.
 7. *(stop)* — VRChat port and multiplayer are later phases.

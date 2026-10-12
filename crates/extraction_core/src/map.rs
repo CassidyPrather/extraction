@@ -269,6 +269,16 @@ pub struct Region {
     /// 0 calm .. 3 deadly.
     #[serde(default)]
     pub danger: u8,
+    /// How many loot rolls each spot here gets (fractions are a chance of
+    /// one more). By default it follows danger: risk pays.
+    #[serde(default)]
+    pub loot: Option<f32>,
+}
+
+impl Region {
+    pub fn richness(&self) -> f32 {
+        self.loot.unwrap_or(0.8 + 0.2 * self.danger as f32)
+    }
 }
 
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
@@ -323,6 +333,11 @@ impl MapDef {
     }
 
     /// Which region a point is in, if any (first match wins).
+    /// Loot rolls per spot at `p` (1 outside any region).
+    pub fn richness_at(&self, p: P2) -> f32 {
+        self.region_at(p).map_or(1.0, Region::richness)
+    }
+
     pub fn region_at(&self, p: P2) -> Option<&Region> {
         self.regions
             .iter()
@@ -337,6 +352,16 @@ pub const MARROW_CREEK: &str = include_str!("../../../assets/maps/marrow_creek.r
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    #[test]
+    fn risk_pays_in_loot() {
+        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        let village = map.richness_at([5.0, 70.0]);
+        let hollow = map.richness_at([150.0, -40.0]);
+        let rail = map.richness_at([185.0, -215.0]);
+        assert!(village < 1.0, "the village is picked over ({village})");
+        assert!(rail > 1.0 && hollow > rail, "{rail} {hollow}");
+    }
 
     #[test]
     fn marrow_creek_parses_and_builds() {

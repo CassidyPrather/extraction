@@ -136,8 +136,18 @@ fn capsule() -> Collider {
     Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS)
 }
 
-fn move_bodies(
-    mut bodies: Query<(Entity, &RigInput, &mut Body, &mut Transform, &Children), With<Player>>,
+pub fn move_bodies(
+    mut bodies: Query<
+        (
+            Entity,
+            &RigInput,
+            &mut Body,
+            &mut Transform,
+            &Children,
+            Has<crate::gadgets::climbing::Climbing>,
+        ),
+        With<Player>,
+    >,
     colliders: Query<Entity, With<BodyCollider>>,
     move_and_slide: MoveAndSlide,
     time: Res<Time>,
@@ -146,7 +156,7 @@ fn move_bodies(
     let dt = time.delta_secs();
     let shape = capsule();
     let config = MoveAndSlideConfig::default();
-    for (entity, input, mut body, mut root, children) in &mut bodies {
+    for (entity, input, mut body, mut root, children, climbing) in &mut bodies {
         let own: Vec<Entity> = children.iter().filter(|c| colliders.contains(*c)).collect();
         let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
             .with_excluded_entities(own.iter().copied().chain([entity]));
@@ -165,11 +175,20 @@ fn move_bodies(
         } else {
             WALK_SPEED
         } * enc.speed;
-        let target = (fwd * input.locomotion.y + right * input.locomotion.x) * speed;
+        let target = if climbing {
+            // On a rope the stick climbs (see `gadgets::climbing`).
+            Vec3::ZERO
+        } else {
+            (fwd * input.locomotion.y + right * input.locomotion.x) * speed
+        };
         // Responsive but not instant: a little weight to starting and stopping.
         let accel = if body.grounded { 12.0 } else { 2.0 };
         let horiz = Vec3::new(body.velocity.x, 0.0, body.velocity.z);
-        let horiz = horiz.lerp(target, (accel * dt).min(1.0));
+        let horiz = if climbing {
+            horiz
+        } else {
+            horiz.lerp(target, (accel * dt).min(1.0))
+        };
         body.velocity.x = horiz.x;
         body.velocity.z = horiz.z;
 
@@ -179,12 +198,16 @@ fn move_bodies(
             body.stamina = (body.stamina + dt / 8.0 * enc.stamina_regen).min(1.0);
         }
 
-        if input.jump && (body.grounded || body.airborne < 0.15) {
-            body.velocity.y = JUMP_SPEED;
-            body.grounded = false;
-            body.airborne = 1.0;
+        if climbing {
+            // The rope holds you up; `climb` set the velocity.
+        } else {
+            if input.jump && (body.grounded || body.airborne < 0.15) {
+                body.velocity.y = JUMP_SPEED;
+                body.grounded = false;
+                body.airborne = 1.0;
+            }
+            body.velocity.y -= GRAVITY * dt;
         }
-        body.velocity.y -= GRAVITY * dt;
 
         root.rotate_y(input.turn);
 
@@ -222,7 +245,7 @@ fn move_bodies(
         }
 
         // Stick to the ground going down slopes and stairs.
-        if !grounded && body.grounded && body.velocity.y <= 0.0 {
+        if !climbing && !grounded && body.grounded && body.velocity.y <= 0.0 {
             if let Some(hit) = move_and_slide.spatial_query.cast_shape(
                 &shape,
                 new_centre,

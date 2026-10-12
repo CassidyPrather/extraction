@@ -211,8 +211,8 @@
             tags: ["electronics"],
         ),
         (
-            id: "camera_drone", name: "Camera drone",
-            description: "A palm-sized quadcopter and its wrist screen.",
+            id: "camera_drone", dims: Some((0.2, 0.06, 0.2)), name: "Camera drone",
+            description: "A palm-sized quadcopter. Spin it up and let go: it circles where you released it and marks the robots it sees. Its feed shows on your wrist.",
             category: Gadget, size: Medium, mass: 0.5, bulk: 1.2,
             tags: ["electronics", "polymer"],
         ),

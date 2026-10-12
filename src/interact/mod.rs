@@ -395,9 +395,29 @@ fn apply_hand_actions(
     catalog: Res<Catalog>,
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
     fixed: Query<(), With<crate::raid::truck::Stash>>,
+    ropes: Query<&crate::gadgets::climbing::Rope>,
+    time: Res<Time>,
 ) {
     for action in actions.read() {
         match *action {
+            HandAction::Grab {
+                player, side, item, ..
+            } if ropes.contains(item) => {
+                // A rope stays put: the hand takes hold of it instead.
+                let (Some((hand_e, hand_world)), Ok(rope)) =
+                    (hand_of(&players, &hands, player, side), ropes.get(item))
+                else {
+                    continue;
+                };
+                commands
+                    .entity(hand_e)
+                    .insert(crate::gadgets::climbing::RopeGrip {
+                        rope: item,
+                        at: rope.nearest(hand_world.translation),
+                        since: time.elapsed_secs(),
+                    });
+                events.write(InteractEvent::Grabbed { item, side });
+            }
             HandAction::Grab {
                 player,
                 side,
@@ -499,6 +519,9 @@ fn apply_hand_actions(
                 let Some((hand_e, hand_world)) = hand_of(&players, &hands, player, side) else {
                     continue;
                 };
+                commands
+                    .entity(hand_e)
+                    .remove::<crate::gadgets::climbing::RopeGrip>();
                 let Ok((_, _, mut hand)) = hands.get_mut(hand_e) else {
                     continue;
                 };
@@ -838,14 +861,17 @@ fn hand_of(
 
 /// Drives held items toward their hands with velocities, so they still
 /// collide. Heavy things and one-handed long guns are slower to swing.
+/// How far a held item can lag its hand before it's put back in it.
+const LEASH: f32 = 0.6;
+
 fn follow_hands(
     hands: Query<&Hand>,
     mut held: Query<(
         &Held,
         Option<&Supported>,
         &Grabbable,
-        &Position,
-        &Rotation,
+        &mut Position,
+        &mut Rotation,
         &mut LinearVelocity,
         &mut AngularVelocity,
         Option<&Mass>,
@@ -853,7 +879,7 @@ fn follow_hands(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (h, support, grabbable, pos, rot, mut lin, mut ang, mass) in &mut held {
+    for (h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass) in &mut held {
         let Ok(hand) = hands.get(h.hand) else {
             continue;
         };
@@ -892,6 +918,11 @@ fn follow_hands(
         let max_ang = if two_handed { 30.0 } else { 22.0 } / heft.sqrt();
         if !target.translation.is_finite() || !target.rotation.is_finite() {
             continue;
+        }
+        // Snagged on a door frame and left behind: back into the hand.
+        if pos.0.distance(target.translation) > LEASH {
+            pos.0 = target.translation;
+            rot.0 = target.rotation;
         }
         let dv = (target.translation - pos.0) / dt;
         lin.0 = dv.clamp_length_max(max_lin);

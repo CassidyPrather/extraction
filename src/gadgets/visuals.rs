@@ -29,6 +29,10 @@ impl Plugin for GadgetVisualsPlugin {
                 lenses,
                 dress_cover,
                 cloak_bubbles,
+                add_drone_feeds,
+                add_wrist_feed,
+                drone_feeds,
+                dress_ropes,
             ),
         );
     }
@@ -627,5 +631,193 @@ fn cloak_bubbles(
     }
     for (e, _) in existing.into_iter().skip(cloaks.0.len()) {
         commands.entity(e).despawn();
+    }
+}
+
+/// The camera drone's camera, rendering into `image` while it flies.
+#[derive(Component)]
+struct DroneFeed {
+    camera: Entity,
+    image: Handle<Image>,
+}
+
+/// The screen above the left wrist that shows a flying drone's feed.
+#[derive(Component)]
+struct WristFeed(Handle<StandardMaterial>);
+
+fn add_drone_feeds(
+    mut commands: Commands,
+    drones: Query<Entity, Added<super::camera_drone::CameraDrone>>,
+    weather: Res<crate::world::sky::Weather>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+    for e in &drones {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: 320,
+                height: 240,
+                ..default()
+            },
+            TextureDimension::D2,
+            &[0u8; 8],
+            TextureFormat::Rgba16Float,
+            bevy::asset::RenderAssetUsages::default(),
+        );
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
+        let image = images.add(image);
+        let camera = commands
+            .spawn((
+                Name::new("Camera drone feed"),
+                crate::render::OffscreenCamera,
+                Camera3d::default(),
+                Camera {
+                    order: -6,
+                    is_active: false,
+                    ..default()
+                },
+                bevy::camera::RenderTarget::Image(image.clone().into()),
+                bevy::camera::Hdr,
+                Projection::Perspective(PerspectiveProjection {
+                    fov: 55f32.to_radians(),
+                    near: 0.1,
+                    far: 1500.0,
+                    ..default()
+                }),
+                bevy::core_pipeline::tonemapping::Tonemapping::None,
+                bevy::camera::Exposure { ev100: 10.6 },
+                weather.fog(),
+                Msaa::Off,
+                Transform::default(),
+            ))
+            .id();
+        commands.entity(e).insert(DroneFeed { camera, image });
+    }
+}
+
+/// The feed screen rides above the wrist panel, hidden until a drone flies.
+fn add_wrist_feed(
+    mut commands: Commands,
+    hands: Query<(Entity, &crate::rig::RigHand, &ChildOf), Added<crate::rig::RigHand>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, hand, parent) in &hands {
+        if hand.side != crate::rig::Side::Left || !locals.contains(parent.parent()) {
+            continue;
+        }
+        let m = materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            unlit: true,
+            ..default()
+        });
+        commands.entity(e).with_child((
+            WristFeed(m.clone()),
+            Mesh3d(meshes.add(Rectangle::new(0.096, 0.072))),
+            MeshMaterial3d(m),
+            Transform::from_xyz(0.0, 0.075, 0.1).with_rotation(Quat::from_rotation_x(-1.2)),
+            Visibility::Hidden,
+            NotShadowCaster,
+        ));
+    }
+}
+
+fn drone_feeds(
+    drones: Query<(
+        &super::camera_drone::CameraDrone,
+        &GlobalTransform,
+        &DroneFeed,
+    )>,
+    mut cams: Query<(&mut Camera, &mut Transform)>,
+    mut screens: Query<(&WristFeed, &mut Visibility)>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let mut showing = None;
+    for (d, gt, feed) in &drones {
+        let on = d.airborne() && d.owner.is_some_and(|o| locals.contains(o));
+        let Ok((mut cam, mut t)) = cams.get_mut(feed.camera) else {
+            continue;
+        };
+        if cam.is_active != on {
+            cam.is_active = on;
+        }
+        if on {
+            let at = gt.translation() - Vec3::Y * 0.1;
+            // Down at the middle of its circle (straight down: north up).
+            let look = d.home - at;
+            let up = if look.normalize_or_zero().y < -0.98 {
+                Vec3::NEG_Z
+            } else {
+                Vec3::Y
+            };
+            *t = Transform::from_translation(at).looking_at(d.home, up);
+            showing = Some(feed.image.clone());
+        }
+    }
+    for (screen, mut vis) in &mut screens {
+        let want = if showing.is_some() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
+        if let Some(img) = &showing {
+            if let Some(m) = materials.get(&screen.0) {
+                if m.base_color_texture.as_ref() != Some(img) {
+                    if let Some(mut m) = materials.get_mut(&screen.0) {
+                        m.base_color_texture = Some(img.clone());
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A rope: down from the edge, and back over it to the hook.
+fn dress_ropes(
+    mut commands: Commands,
+    ropes: Query<(Entity, &super::climbing::Rope), Added<super::climbing::Rope>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut mat: Local<Option<Handle<StandardMaterial>>>,
+) {
+    for (e, rope) in &ropes {
+        let m = mat
+            .get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.55, 0.45, 0.3),
+                    perceptual_roughness: 0.95,
+                    ..default()
+                })
+            })
+            .clone();
+        let mid = (rope.top + rope.bottom) * 0.5;
+        let span = |a: Vec3, b: Vec3| {
+            let d = b - a;
+            Transform::from_translation((a + b) * 0.5 - mid)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, d.normalize_or(Vec3::Y)))
+        };
+        let hang = rope.top - rope.bottom;
+        let over = rope.anchor - rope.top;
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                Mesh3d(meshes.add(Cylinder::new(0.011, hang.length()))),
+                MeshMaterial3d(m.clone()),
+                span(rope.bottom, rope.top),
+            ));
+            if over.length() > 0.05 {
+                c.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.011, over.length()))),
+                    MeshMaterial3d(m.clone()),
+                    span(rope.top, rope.anchor),
+                ));
+            }
+        });
     }
 }

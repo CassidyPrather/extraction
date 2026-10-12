@@ -65,7 +65,7 @@ pub fn roll_zone_loot(world: &mut World) {
             Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
         spawn_marker_loot(&mut commands, zone, loot, catalog, seed);
         if let Some(spots) = spots {
-            spawn_building_loot(&mut commands, spots, loot, catalog, seed);
+            spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
         }
     }
     queue.apply(world);
@@ -94,12 +94,11 @@ fn spawn_marker_loot(
             continue;
         };
         let base = zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * (m.y + 0.1);
-        for (i, drop) in loot
-            .0
-            .roll(table, catalog, &mut rng)
-            .into_iter()
-            .enumerate()
-        {
+        let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng);
+        let drops: Vec<_> = (0..rolls)
+            .flat_map(|_| loot.0.roll(table, catalog, &mut rng))
+            .collect();
+        for (i, drop) in drops.into_iter().enumerate() {
             let offset = Vec3::new(
                 (i as f32 * 0.37).sin() * 0.25,
                 0.05 * i as f32,
@@ -119,9 +118,17 @@ fn spawn_marker_loot(
     }
 }
 
+/// Loot rolls for a spot of this richness: the whole part, and the
+/// fraction as a chance of one more.
+fn rolls_for(richness: f32, rng: &mut Rng) -> usize {
+    let whole = richness.max(0.0).floor();
+    whole as usize + usize::from(rng.range(0.0, 1.0) < richness - whole)
+}
+
 /// Rolls every building loot spot (shelves, tables, crates).
 fn spawn_building_loot(
     commands: &mut Commands,
+    zone: &Zone,
     spots: &crate::world::buildings::BuildingLoot,
     loot: &Loot,
     catalog: &Catalog,
@@ -130,12 +137,11 @@ fn spawn_building_loot(
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
     for spot in &spots.0 {
-        for (i, drop) in loot
-            .0
-            .roll(spot.table, catalog, &mut rng)
-            .into_iter()
-            .enumerate()
-        {
+        let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
+        let drops: Vec<_> = (0..rolls)
+            .flat_map(|_| loot.0.roll(spot.table, catalog, &mut rng))
+            .collect();
+        for (i, drop) in drops.into_iter().enumerate() {
             let off = Vec3::new(
                 (i as f32 * 1.7).sin() * 0.18,
                 0.04 + i as f32 * 0.06,

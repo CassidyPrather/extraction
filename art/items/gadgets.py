@@ -223,6 +223,53 @@ def map_case():
     return [p]
 
 
+# --- Camera drone -----------------------------------------------------------------------------
+
+def camera_drone():
+    p = Part("body")
+    # A flat body, the camera ball under its nose (-Z), four arms out to
+    # guarded rotors. 0.2 x 0.06 x 0.2 box, origin at its centre.
+    p.box((0.06, 0.022, 0.09), (0.0, 0.0, 0.0), "Paint", bevel=0.006, segs=2)
+    p.box((0.05, 0.008, 0.06), (0.0, 0.014, 0.01), "Black", bevel=0.003, segs=1)
+    p.sphere(0.012, (0.0, -0.014, -0.038), "Black", segs=14, rings=8)
+    p.cyl(0.006, 0.0, 0.004, "Lens", segs=12, xf=T(0.0, -0.016, -0.049))
+    p.box((0.004, 0.004, 0.004), (0.0, 0.013, 0.042), "LampRed")
+    for k in range(4):
+        a = math.pi / 4 + k * math.pi / 2
+        x, z = math.cos(a) * 0.07, math.sin(a) * 0.07
+        # Arm.
+        p.box((0.012, 0.008, 0.07), (0.0, 0.0, 0.0), "Black", bevel=0.002, segs=1,
+              xf=T(x / 2, 0.0, z / 2) @ RY(-a + math.pi / 2))
+        # Motor, rotor and guard.
+        p.cyl(0.008, -0.006, 0.012, "Steel", segs=12, xf=T(x, 0, z) @ UP)
+        p.box((0.075, 0.0015, 0.008), (0.0, 0.0, 0.0), "Black", xf=T(x, 0.014, z) @ RY(a))
+        p.tube(0.043, 0.04, 0.004, 0.016, "Paint", segs=28, xf=T(x, 0, z) @ UP)
+    # Skids.
+    for sx in (-1, 1):
+        p.box((0.004, 0.018, 0.004), (sx * 0.022, -0.018, 0.0), "Black")
+        p.box((0.004, 0.004, 0.07), (sx * 0.022, -0.028, 0.0), "Black")
+    return [p]
+
+
+# --- Lead-lined case --------------------------------------------------------------------------
+
+def lead_case():
+    # 0.11 x 0.07 x 0.11: a squat dull box, a lid with a seal line and two
+    # latches. The artifact cradle is at its centre.
+    p = Part("body")
+    p.box((0.11, 0.045, 0.11), (0.0, -0.0125, 0.0), "Iron", bevel=0.006, segs=2)
+    p.box((0.112, 0.022, 0.112), (0.0, 0.024, 0.0), "Iron", bevel=0.006, segs=2)
+    p.box((0.113, 0.003, 0.113), (0.0, 0.0115, 0.0), "Black")
+    for sx in (-1, 1):
+        p.box((0.018, 0.026, 0.008), (sx * 0.03, 0.008, 0.057), "Steel", bevel=0.002, segs=1)
+    p.box((0.05, 0.002, 0.03), (0.0, 0.0355, 0.0), "Yellow")
+    return [p]
+
+
+for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case)):
+    if wanted(item_id):
+        item(item_id, fn)
+
 for item_id, fn in (("flashlight", flashlight), ("power_cell", power_cell),
                     ("compass", compass), ("radio", radio), ("binoculars", binoculars),
                     ("emp_grenade", emp_grenade), ("emp_trap", emp_trap),
