@@ -4,6 +4,7 @@
 //! happens and runs headless; [`ClientPlugin`] is everything you see, hear
 //! and touch. See `docs/DESIGN.md`.
 
+pub mod anomaly;
 pub mod audio;
 pub mod bot;
 pub mod dev;
@@ -52,6 +53,7 @@ impl Plugin for GamePlugin {
             health::HealthPlugin,
             raid::RaidPlugin,
             persist::PersistPlugin,
+            anomaly::AnomalyPlugin,
         ));
     }
 }
@@ -73,6 +75,7 @@ impl Plugin for ClientPlugin {
             hud::HudPlugin,
             robots::visuals::RobotVisualsPlugin,
             render::props::PropVisualsPlugin,
+            anomaly::visuals::AnomalyVisualsPlugin,
         ))
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
@@ -138,9 +141,12 @@ pub fn run_headless(opts: LaunchOptions) -> AppExit {
 }
 
 /// The headless app, ready to run or to step by hand in tests.
-pub fn headless_app(opts: LaunchOptions, log: bool) -> App {
+pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     use bevy::app::ScheduleRunnerPlugin;
     use bevy::time::TimeUpdateStrategy;
+    // Headless runs (sims, tests) never touch the player's save unless
+    // given one explicitly.
+    opts.headless = true;
     let mut app = App::new();
     if log {
         app.add_plugins(bevy::log::LogPlugin::default());

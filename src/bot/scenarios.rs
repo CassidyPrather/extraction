@@ -159,14 +159,16 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 side: Side::Right,
             },
             Stow(Side::Right),
+            // The kit is Medium: no slot takes it, so it goes in the pack.
+            Expect(super::Expect::PackItems(1, 4)),
+            Expect(super::Expect::CarryingAtLeast(2.0)),
+            // A featherstone in the pack carries itself and then some.
             PickUp {
                 id: s("art_featherstone"),
                 side: Side::Right,
             },
             Stow(Side::Right),
-            // The kit is Medium: no slot takes it, so it goes in the pack.
-            Expect(super::Expect::PackItems(1, 4)),
-            Expect(super::Expect::CarryingAtLeast(2.0)),
+            Expect(super::Expect::CarryingAtMost(0.5)),
         ],
         "drone_duel" => {
             let o = origin(zone);

@@ -665,6 +665,7 @@ pub fn reset_zone(world: &mut World) {
         raid.say("The Surge has passed. The Zone is different now.");
         raid.cycle
     };
+    crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
     world.write_message(SaveNow);

@@ -108,8 +108,76 @@ def surge_crack(seed, seconds=3.5):
     return np.stack(out)
 
 
+def lift_hum(seed=11, seconds=16.0):
+    """A slow, breathing whoosh with a low pressure throb."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        n = rng.normal(size=t.size)
+        air = lowpass(n, 900) - lowpass(n, 120)
+        breath = 0.55 + 0.45 * np.sin(2 * np.pi * t / 4.0 + ch * 0.7) ** 2
+        throb = 0.4 * np.sin(2 * np.pi * 29 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * t / 2.0))
+        out.append(loop_crossfade(air * breath * 3.0 + throb, 1.0))
+    return np.stack(out)
+
+
+def burner_roar(seed=12, seconds=12.0):
+    """A low furnace roar with pops."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        n = rng.normal(size=t.size)
+        roar = lowpass(n, 350) * (0.8 + 0.2 * np.sin(2 * np.pi * 0.3 * t + ch))
+        pops = (rng.random(t.size) < 0.0006) * rng.normal(size=t.size) * 4
+        pops = pops - lowpass(pops, 1500)
+        out.append(loop_crossfade(roar * 4.0 + pops, 1.0))
+    return np.stack(out)
+
+
+def snare_buzz(seed=13, seconds=10.0):
+    """Mains-hum buzz with dry crackles, like a fault in a substation."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        hum = sum(np.sin(2 * np.pi * 50 * k * t) / k for k in (1, 2, 3, 5, 7)) * 0.3
+        hum *= 0.7 + 0.3 * np.sin(2 * np.pi * 0.21 * t + ch)
+        crack = (rng.random(t.size) < 0.002) * rng.normal(size=t.size) * 5
+        crack = crack - lowpass(crack, 2500)
+        out.append(loop_crossfade(hum + crack, 0.5))
+    return np.stack(out)
+
+
+def lift_pop(seed=14, seconds=2.5):
+    """A deep whump as a lift throws everything out."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        f = 120 * np.exp(-t * 3) + 30
+        thump = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 3.5)
+        gust = lowpass(rng.normal(size=t.size), 600) * np.exp(-t * 2.2) * 5
+        out.append(thump + gust)
+    return np.stack(out)
+
+
+def loopset(entries, name, data, kind="loop"):
+    path, secs = write(name, data)
+    entries[f"anomaly/{name}"] = {
+        "type": kind, "channels": 2, "loop": kind == "loop",
+        "files": [{"file": str(path.relative_to(ROOT / "assets")), "seconds": round(secs, 3),
+                   "source": "synth:scripts/synth_anomaly.py"}],
+    }
+
+
 def main():
     entries = {}
+    loopset(entries, "lift_hum", lift_hum())
+    loopset(entries, "burner_roar", burner_roar())
+    loopset(entries, "snare_buzz", snare_buzz())
+    loopset(entries, "lift_pop", lift_pop(), kind="oneshot")
     path, secs = write("surge_drone", surge_drone())
     entries["anomaly/surge_drone"] = {
         "type": "bed", "channels": 2, "loop": True,

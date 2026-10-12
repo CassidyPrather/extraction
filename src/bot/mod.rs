@@ -82,6 +82,8 @@ pub enum Expect {
     Hits(u32),
     /// Carried mass at least this, kg.
     CarryingAtLeast(f32),
+    /// Carried mass is at most this, kg.
+    CarryingAtMost(f32),
     /// Items in the backpack, inclusive range.
     PackItems(usize, usize),
     /// The bot is within this distance of a point.
@@ -557,6 +559,10 @@ fn run_tasks(
                     Expect::CarryingAtLeast(kg) => (
                         body.carried_kg >= *kg,
                         format!("carrying >= {kg} kg (got {:.2})", body.carried_kg),
+                    ),
+                    Expect::CarryingAtMost(kg) => (
+                        body.carried_kg <= *kg,
+                        format!("carrying <= {kg} kg (got {:.2})", body.carried_kg),
                     ),
                     Expect::PackItems(lo, hi) => {
                         let n = bags

@@ -87,9 +87,13 @@ impl Plugin for BodyPlugin {
                     sync_backpack_visibility,
                 ),
             )
-            .add_systems(FixedUpdate, carried_mass);
+            .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems));
     }
 }
+
+/// Where carried weight is summed (artifact tracking runs before it).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CarriedMassSystems;
 
 /// When a player appears, give them a torso, a rig, and a backpack.
 fn build_body(add: On<Add, Player>, mut commands: Commands) {
@@ -320,38 +324,27 @@ fn sync_backpack_visibility(
 }
 
 /// Sums what each player carries into their body's encumbrance.
+/// Sums what each player carries into `Body::carried_kg` (the
+/// featherstone takes some off).
 fn carried_mass(
     mut players: Query<(Entity, &mut Body)>,
-    held: Query<(&Held, &Item)>,
-    sockets: Query<(&Socket, &SocketOwner)>,
+    carried: Query<(&Item, &crate::anomaly::artifacts::CarriedBy)>,
     bags: Query<&Backpack>,
-    items: Query<&Item>,
     catalog: Res<Catalog>,
 ) {
     for (player, mut body) in &mut players {
         let mut kg = 0.0;
-        for (h, item) in &held {
-            if h.player == player {
-                kg += catalog.get(item.kind()).mass;
-            }
-        }
-        for (socket, owner) in &sockets {
-            if owner.0 == player {
-                if let Some(Ok(item)) = socket.occupant.map(|e| items.get(e)) {
-                    kg += catalog.get(item.kind()).mass;
-                }
+        for (item, by) in &carried {
+            if by.0 == player {
+                let def = catalog.get(item.kind());
+                kg += def.mass - def.lift_kg;
             }
         }
         for bag in &bags {
             if bag.owner == player && bag.carried {
                 kg += bag.model.mass;
-                for e in &bag.contents {
-                    if let Ok(item) = items.get(*e) {
-                        kg += catalog.get(item.kind()).mass;
-                    }
-                }
             }
         }
-        body.carried_kg = kg;
+        body.carried_kg = kg.max(0.0);
     }
 }

@@ -5,6 +5,7 @@
 //! here so it can be unit-tested in milliseconds and reused by the headless
 //! simulations, the client, and (eventually) a server or a VRChat port.
 
+pub mod anomaly;
 pub mod cooking;
 pub mod firearm;
 pub mod geom;

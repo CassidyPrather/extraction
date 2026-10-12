@@ -67,6 +67,9 @@ pub struct ItemDef {
     /// Attention emitted while carried (artifacts, mostly). Per second.
     #[serde(default)]
     pub attention: f32,
+    /// Kilograms it takes *off* your carried load (the featherstone).
+    #[serde(default)]
+    pub lift_kg: f32,
     /// Cartridge this item *is*, if it is ammunition (a single round, or a
     /// box of them; see `rounds`).
     #[serde(default)]

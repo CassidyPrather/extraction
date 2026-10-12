@@ -355,7 +355,7 @@
         (
             id: "art_featherstone", name: "Featherstone",
             description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
-            category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6,
+            category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
         (
             id: "art_hearth", name: "Hearth",

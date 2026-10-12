@@ -41,6 +41,8 @@ pub struct Body {
     pub carried_kg: f32,
     /// Distance walked since the last footstep, for footstep sounds.
     pub stride: f32,
+    /// Downward speed at the last landing, m/s (health reads and clears it).
+    pub impact: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -238,6 +240,9 @@ fn move_bodies(
         }
 
         if grounded {
+            if !body.grounded {
+                body.impact = body.impact.max(-body.velocity.y);
+            }
             body.airborne = 0.0;
             velocity.y = velocity.y.max(-0.5);
         } else {

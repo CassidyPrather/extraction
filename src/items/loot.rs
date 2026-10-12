@@ -69,6 +69,7 @@ pub fn roll_zone_loot(world: &mut World) {
         }
     }
     queue.apply(world);
+    crate::anomaly::roll_artifacts(world);
 }
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/data/loot.ron");

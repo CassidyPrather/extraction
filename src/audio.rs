@@ -73,6 +73,8 @@ impl Plugin for AudioPlugin {
                     ambient_oneshots,
                     move_creek,
                     surge_sounds,
+                    anomaly_loops,
+                    anomaly_sounds,
                 ),
             );
     }
@@ -559,4 +561,94 @@ fn surge_sounds(
         );
     }
     *warned = warning;
+}
+
+/// A spatial loop on a nearby anomaly.
+#[derive(Component)]
+struct AnomalyLoop;
+
+/// Anomalies hum, roar and buzz when you're near enough to hear them (loops
+/// are only kept on the close ones).
+fn anomaly_loops(
+    mut commands: Commands,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    anomalies: Query<(
+        Entity,
+        &crate::anomaly::Anomaly,
+        &GlobalTransform,
+        Option<&Children>,
+    )>,
+    loops: Query<Entity, With<AnomalyLoop>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+) {
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    for (e, a, gt, children) in &anomalies {
+        let d = gt.translation().distance(ear);
+        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match existing {
+            None if d < 40.0 => {
+                let (set, db) = match a.kind {
+                    extraction_core::anomaly::AnomalyKind::Lift => ("anomaly/lift_hum", -2.0),
+                    extraction_core::anomaly::AnomalyKind::Burner => ("anomaly/burner_roar", 0.0),
+                    extraction_core::anomaly::AnomalyKind::Snare => ("anomaly/snare_buzz", -6.0),
+                };
+                if let Some(sample) = bank.pick(set, &mut rng.0) {
+                    commands.entity(e).with_child((
+                        AnomalyLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(db)),
+                        PlaybackSettings::default().with_speed(0.9 + rng.0.f32() as f64 * 0.2),
+                        Transform::from_xyz(0.0, 1.0, 0.0),
+                        sample_effects![SpatialBasicNode::default()],
+                    ));
+                }
+            }
+            Some(l) if d > 50.0 => {
+                commands.entity(l).despawn();
+            }
+            _ => {}
+        }
+    }
+}
+
+fn anomaly_sounds(
+    mut commands: Commands,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut events: MessageReader<crate::anomaly::AnomalyEvent>,
+    mut glances: MessageReader<crate::health::Glanced>,
+) {
+    use crate::anomaly::AnomalyAct;
+    for ev in events.read() {
+        let (set, db, speed) = match ev.what {
+            AnomalyAct::Discharge => ("anomaly/surge_crack", 2.0, 1.7),
+            AnomalyAct::Pop => ("anomaly/lift_pop", 4.0, 1.0),
+            AnomalyAct::Bloom => ("anomaly/surge_crack", -4.0, 0.6),
+            AnomalyAct::Flare => continue,
+        };
+        let Some(sample) = bank.pick(set, &mut rng.0) else {
+            continue;
+        };
+        commands.spawn((
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(db)),
+            PlaybackSettings::default().with_speed(speed),
+            Transform::from_translation(ev.at),
+            sample_effects![SpatialBasicNode::default()],
+        ));
+    }
+    for g in glances.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/ricochet",
+            Some(g.at),
+            2.0,
+            0.1,
+        );
+    }
 }

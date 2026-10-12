@@ -87,14 +87,38 @@ parts, and artifacts. They leave the world through sinks:
   shoulder slings carry them, which caps you at two long guns.
 - **Attention** is the artifact cost (below).
 
-### Artifacts and attention
+### Anomalies, artifacts and attention
 
-Carried artifacts emit **attention**. The Zone director reads the total
-attention near a player and spends it: anomalous hazards bloom along your
-path, response teams get dispatched to your position, the dirigibles reroute.
-Gunshots add short-lived attention too. Artifacts are the high-value loot
-*because* they make the raid harder the moment you pick them up. Container
-gadgets (a lead-lined case) can damp attention at a weight cost.
+**Anomalies** are laid out fresh each Surge cycle (a pure function of map,
+seed and cycle, in `extraction_core::anomaly`): five to eight in each
+artifact field, a few loose elsewhere, never on roads, water or in
+buildings. They affect anything physical, so the classic test is to throw
+something in first:
+
+| Anomaly | What it does | Grows |
+| - | - | - |
+| **Lift** | Loose things float and circle; the longer something's in it, the sooner it pops and flings everything out. You get light on your feet, then thrown. | Featherstone |
+| **Burner** | Heat with no fire: burns whoever stands in it, cooks robot parts. Glows orange through the fog. | Hearth |
+| **Snare** | A knot of static: discharges into whatever touches it (robots too, through the same hit path as bullets), then recharges for a few seconds. | Aegis knot |
+
+About a third of field anomalies hold an artifact at their heart each
+cycle (rarely a glass eye instead). Artifacts are items: they persist in
+saves like anything else and reset with the Surge.
+
+**Artifacts** do odd, useful things while carried (`anomaly::artifacts`):
+the featherstone takes 6 kg off your load (loose, it hovers at chest
+height); the aegis knot turns the first hit and needs 90 s to re-knot; the
+glass eye, held to your eye, shows robots through walls; the hearth will
+power gadgets (with the gadget pass).
+
+**Attention** is what they cost. Each carried artifact emits attention per
+second (data: `attention` in `items.ron`), and your gunfire adds a
+decaying share. The director turns attention into budget and spends it:
+every 90 attention-seconds buys a response team sent to where you *are*
+(not where you were heard), and while you carry artifacts, anomalies
+**bloom** across your path ahead of you (temporary, at most three). There
+is no number on screen: the flat HUD describes the feeling ("your teeth
+ache"). A lead-lined case to damp it is still to come.
 
 ### Robots have jobs
 
