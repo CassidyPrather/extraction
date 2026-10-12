@@ -20,8 +20,8 @@ use crate::world::Zone;
 
 const LEGS: usize = 4;
 const BODY_HEIGHT: f32 = 1.15;
-const UPPER: f32 = 0.8;
-const LOWER: f32 = 0.95;
+pub const UPPER: f32 = 0.8;
+pub const LOWER: f32 = 0.95;
 const HIP_RADIUS: f32 = 0.32;
 const FOOT_RADIUS: f32 = 1.05;
 const STEP_TRIGGER: f32 = 0.42;
