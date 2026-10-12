@@ -13,13 +13,14 @@ pub mod hud;
 pub mod interact;
 pub mod items;
 pub mod launch;
-pub mod persist;
 pub mod models;
+pub mod persist;
 pub mod player;
 pub mod raid;
 pub mod render;
 pub mod rig;
 pub mod robots;
+pub mod sim;
 pub mod weapons;
 pub mod world;
 
@@ -55,7 +56,8 @@ impl Plugin for GamePlugin {
             raid::RaidPlugin,
             persist::PersistPlugin,
             anomaly::AnomalyPlugin,
-        ));
+        ))
+        .add_plugins(sim::SimPlugin);
     }
 }
 
