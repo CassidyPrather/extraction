@@ -384,4 +384,6 @@ catch for agent-written code. Revisit if that research changes.
    showed the far side of Marrow Creek going unvisited (it no longer
    does). Still open: drones decide every death in the sims and artifact
    hunters rarely come back; playtesting in a headset.
-7. *(stop)* — VRChat port and multiplayer are later phases.
+7. *(stop)* — VRChat port and multiplayer are later phases. The port's
+   plan, and what of this game survives it, is in `VRCHAT_PORT.md`; the
+   map already exports to Unity (`unity/README.md`).
