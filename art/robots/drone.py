@@ -110,7 +110,7 @@ for k in range(3):
               xf=at @ RY(a))
 # A glow strip on the outside of the duct, facing away from the body.
 rotor.lathe([(0.1705, -0.004), (0.1735, -0.004), (0.1735, 0.004), (0.1705, 0.004)], "Eye",
-            segs=10, xf=at @ RY(DIAG - math.radians(15)) @ UP, closed=True, start=0.0, sweep=30.0)
+            segs=10, xf=at @ UP, closed=True, start=-60.0, sweep=30.0)  # centred on +x+z
 
 # --- Propeller --------------------------------------------------------------------------
 BLADES = (ARM, 0.07, ARM)
