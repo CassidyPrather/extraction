@@ -291,28 +291,46 @@ fn try_step(
         return None;
     }
     let dir = Dir3::new(delta).ok()?;
-    if ms
-        .spatial_query
-        .cast_shape(
-            shape,
-            raised,
-            Quat::IDENTITY,
-            dir,
-            &ShapeCastConfig::from_max_distance(delta.length()),
-            filter,
-        )
-        .is_some()
-    {
+    let clear = |d: f32| {
+        ms.spatial_query
+            .cast_shape(
+                shape,
+                raised,
+                Quat::IDENTITY,
+                dir,
+                &ShapeCastConfig::from_max_distance(d),
+                filter,
+            )
+            .is_none()
+    };
+    if !clear(delta.length()) {
         return None;
     }
+    let down = |from: Vec3| {
+        ms.spatial_query.cast_shape(
+            shape,
+            from,
+            Quat::IDENTITY,
+            Dir3::NEG_Y,
+            &ShapeCastConfig::from_max_distance(STEP_HEIGHT + 0.05),
+            filter,
+        )
+    };
+    // Up against a step, a tick's stride is a few millimetres (the blocked
+    // move bled the speed off): never enough to carry the capsule over the
+    // edge. So look a capsule radius ahead: level ground there, higher
+    // than here, is a step, and the capsule steps up onto it.
+    let reach = delta.length().max(CAPSULE_RADIUS);
+    if clear(reach) {
+        let ahead = raised + dir * reach;
+        if let Some(top) = down(ahead) {
+            let top_y = ahead.y - (top.distance - 0.01).max(0.0);
+            if top.normal1.y > 0.65 && top_y > raised.y - STEP_HEIGHT + 0.03 {
+                return Some(Vec3::new(ahead.x, top_y, ahead.z));
+            }
+        }
+    }
     let moved = raised + delta;
-    let hit = ms.spatial_query.cast_shape(
-        shape,
-        moved,
-        Quat::IDENTITY,
-        Dir3::NEG_Y,
-        &ShapeCastConfig::from_max_distance(STEP_HEIGHT + 0.05),
-        filter,
-    )?;
+    let hit = down(moved)?;
     (hit.normal1.y > 0.65).then(|| moved - Vec3::Y * (hit.distance - 0.01).max(0.0))
 }
