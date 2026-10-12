@@ -95,6 +95,9 @@ without them (procedural stand-ins). Every asset is credited in
 - `assets/` — data (`data/items.ron`, `data/loot.ron`), maps, shaders,
   models, sounds.
 - `art/` — Blender Python scripts for every model (`python3 art/build.py`).
+- `unity/` — groundwork for the VRChat port: the map importer for Unity
+  (fed by `cargo run -p extraction_core --bin unity-export`). The plan is
+  [docs/VRCHAT_PORT.md](docs/VRCHAT_PORT.md).
 - `scripts/` — asset fetching, sound synthesis, map previews and the
   hand-drawn map, screenshots.
 

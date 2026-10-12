@@ -11,6 +11,9 @@ publish = false
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 ron = "0.10"
+# Only the unity-export tool uses these; both are already in the workspace.
+serde_json = "1"
+png = "0.18"
 
 [lints]
 workspace = true
@@ -18,3 +21,7 @@ workspace = true
 [[bin]]
 name = "map-dump"
 path = "src/bin/map_dump.rs"
+
+[[bin]]
+name = "unity-export"
+path = "src/bin/unity_export.rs"

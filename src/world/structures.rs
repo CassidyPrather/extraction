@@ -14,12 +14,6 @@ pub fn footprint(prefab: &str) -> Vec3 {
     Vec3::from_array(extraction_core::map::prefab_footprint(prefab))
 }
 
-/// Radius around a placement kept free of trees.
-pub fn clearance(prefab: &str) -> f32 {
-    let f = footprint(prefab);
-    (f.x.max(f.z) * 0.5 + 4.0).max(6.0)
-}
-
 #[derive(Component)]
 pub struct Structure {
     pub prefab: String,

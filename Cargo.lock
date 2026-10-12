@@ -2840,8 +2840,10 @@ dependencies = [
 name = "extraction_core"
 version = "0.1.0"
 dependencies = [
+ "png",
  "ron 0.10.1",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
