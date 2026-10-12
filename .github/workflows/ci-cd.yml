@@ -2,7 +2,8 @@ name: CI/CD
 
 on:
   push:
-    branches: [ main ]
+    # Development branches get the same checks as main.
+    branches: [ main, 'claude/**' ]
   pull_request:
     branches: [ main ]
   release:
