@@ -38,9 +38,18 @@ the map. Crossing is the raid; it is not tedium because:
 
 The Zone has a persistent state between raids and between sessions
 (looted containers stay looted, the cache you hid stays where you hid it,
-your remains lie where you fell). It is saved to
-`<data dir>/extraction/<map>.ron` when a raid ends, every minute, and on
-quit (`src/persist.rs`, format in `extraction_core::save`).
+your remains lie where you fell). The whole career is one file,
+`<data dir>/extraction/career.ron`: the stash, what you carry, your record
+and the memorial are shared, and each valley keeps its own Zone. It's
+saved when a raid ends, every minute, and on quit (`src/persist.rs`,
+format in `extraction_core::save`); saves from before the career file
+(one per map) are brought in automatically.
+
+**Changing valleys**: a route card on the truck bed's right wall names
+the next drive; press it to pick another valley. Ring the bell at base
+with another valley on the card and the truck drives there through the
+night: the career is saved, and the game opens again in the new valley.
+The game always opens wherever the truck was headed (`--map` overrides).
 
 The **Zone clock** runs only while you are out, and carries over from
 raid to raid. Every 60 minutes of Zone time — two or three raids — the
@@ -313,7 +322,8 @@ between two summits; the pass road switchbacks up the middle in plain
 view, and cutting across means climbing. Its rendezvous are the pass
 itself, the mine yard in the west and the hunting lodge on the east
 shoulder; its artifacts grow in the quarry pit and on the mine's spoil
-heap. Each map keeps its own save (stash included) for now.
+heap. Each map keeps its own Zone; the stash and kit travel with you
+(see "Changing valleys" above).
 
 Risk pays: each region's loot spots roll `0.8 + 0.2 × danger` times
 (fractions are a chance of one more), unless the map sets `loot` for the

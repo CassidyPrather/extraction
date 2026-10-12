@@ -105,6 +105,78 @@ pub struct SavedGun {
     pub fouling: f32,
 }
 
+/// A whole career in one file: what you own and carry, your record and
+/// the memorial (all shared), where the truck is headed next, and the
+/// state of every valley you've raided (each its own persistent Zone).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Career {
+    pub version: u32,
+    /// The valley the truck drives to next (and the game opens in).
+    pub map: String,
+    pub stats: Stats,
+    pub stash: Vec<SavedItem>,
+    pub loadout: LoadoutSave,
+    pub memorial: Memorial,
+    pub zones: Vec<ZoneSave>,
+}
+
+impl Career {
+    /// A career built around one game's save (a new career, or an old
+    /// one-file-per-map save being brought in).
+    pub fn from_game(save: &SaveGame) -> Self {
+        let mut c = Career {
+            version: SAVE_VERSION,
+            ..Default::default()
+        };
+        c.store(save);
+        c
+    }
+
+    /// The game for one valley: the shared parts, and that valley's Zone
+    /// (unrolled, if it's never been visited).
+    pub fn game(&self, map: &str) -> SaveGame {
+        let mut save = SaveGame::new(map);
+        save.stats = self.stats.clone();
+        save.stash = self.stash.clone();
+        save.loadout = self.loadout.clone();
+        save.memorial = self.memorial.clone();
+        if let Some(z) = self.zones.iter().find(|z| z.map == map) {
+            save.zone = z.clone();
+        }
+        save
+    }
+
+    /// Take in a game's state: the shared parts, and its valley's Zone.
+    pub fn store(&mut self, save: &SaveGame) {
+        self.stats = save.stats.clone();
+        self.stash = save.stash.clone();
+        self.loadout = save.loadout.clone();
+        self.memorial = save.memorial.clone();
+        if self.map.is_empty() {
+            self.map = save.zone.map.clone();
+        }
+        match self.zones.iter_mut().find(|z| z.map == save.zone.map) {
+            Some(z) => *z = save.zone.clone(),
+            None => self.zones.push(save.zone.clone()),
+        }
+    }
+
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new().depth_limit(6))
+    }
+
+    pub fn from_ron(text: &str) -> Result<Self, String> {
+        let c: Career = ron::from_str(text).map_err(|e| e.to_string())?;
+        if c.version > SAVE_VERSION {
+            return Err(format!(
+                "save version {} is newer than this build ({SAVE_VERSION})",
+                c.version
+            ));
+        }
+        Ok(c)
+    }
+}
+
 impl SaveGame {
     pub fn new(map: &str) -> Self {
         Self {
@@ -202,5 +274,30 @@ mod tests {
         let mut s = SaveGame::new("x");
         s.version = SAVE_VERSION + 1;
         assert!(SaveGame::from_ron(&s.to_ron().unwrap()).is_err());
+    }
+
+    #[test]
+    fn a_career_keeps_each_valley_and_shares_the_rest() {
+        let mut marrow = SaveGame::new("marrow_creek");
+        marrow.zone.rolled = true;
+        marrow.zone.cycle = 3;
+        marrow.stats.raids = 5;
+        let mut career = Career::from_game(&marrow);
+        assert_eq!(career.map, "marrow_creek");
+        // Off to the other valley: a fresh Zone, the same stash and record.
+        let mut kettle = career.game("kettle_pass");
+        assert!(!kettle.zone.rolled);
+        assert_eq!(kettle.stats.raids, 5);
+        kettle.zone.rolled = true;
+        kettle.stats.raids = 6;
+        career.store(&kettle);
+        assert_eq!(career.zones.len(), 2);
+        // Back again: Marrow Creek as it was left, the record as it is now.
+        let back = career.game("marrow_creek");
+        assert_eq!(back.zone.cycle, 3);
+        assert_eq!(back.stats.raids, 6);
+        let text = career.to_ron().unwrap();
+        let again = Career::from_ron(&text).unwrap();
+        assert_eq!(again.zones.len(), 2);
     }
 }

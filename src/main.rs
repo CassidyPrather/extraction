@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 fn main() -> AppExit {
-    let opts = extraction::LaunchOptions::from_args();
+    let mut opts = extraction::LaunchOptions::from_args();
     // `--scenario all` runs each scenario in its own fresh process, so each
     // starts from an untouched world.
     if opts.scenario.as_deref() == Some("all") {
@@ -12,7 +12,46 @@ fn main() -> AppExit {
     if let Some(n) = opts.sim {
         return run_sim_batch(&opts, n);
     }
-    extraction::run(opts)
+    // A saved career opens wherever the truck was headed.
+    if !opts.map_explicit && !opts.new_game {
+        if let Some(map) = extraction::persist::career_destination(&opts) {
+            if std::path::Path::new("assets/maps")
+                .join(format!("{map}.ron"))
+                .exists()
+                || std::env::current_exe()
+                    .ok()
+                    .and_then(|e| {
+                        e.parent()
+                            .map(|d| d.join("assets/maps").join(format!("{map}.ron")))
+                    })
+                    .is_some_and(|p| p.exists())
+            {
+                opts.map = map;
+            }
+        }
+    }
+    let exit = extraction::run(opts);
+    // The truck drove to another valley: open the game again there.
+    if let Some(map) = extraction::take_restart() {
+        let mut args: Vec<String> = Vec::new();
+        let mut it = std::env::args().skip(1);
+        while let Some(a) = it.next() {
+            match a.as_str() {
+                "--map" => {
+                    it.next();
+                }
+                "--new-game" => {}
+                _ => args.push(a),
+            }
+        }
+        args.extend(["--map".to_owned(), map]);
+        if let Ok(exe) = std::env::current_exe() {
+            if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {
+                eprintln!("couldn't reopen the game: {e}");
+            }
+        }
+    }
+    exit
 }
 
 /// `--sim N`: N bot raids, each in a fresh process (`--sim-run`), a few at

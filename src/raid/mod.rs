@@ -10,6 +10,7 @@
 
 pub mod bench;
 pub mod kitchen;
+pub mod route;
 pub mod truck;
 
 use bevy::prelude::*;
@@ -135,6 +136,7 @@ impl Plugin for RaidPlugin {
             truck::TruckPlugin,
             bench::BenchPlugin,
             kitchen::KitchenPlugin,
+            route::RoutePlugin,
         ))
         .add_systems(
             Update,
@@ -346,6 +348,9 @@ fn depart(
     mut raid: ResMut<Raid>,
     players: Query<&GlobalTransform, With<Player>>,
     trucks: Query<(&GlobalTransform, &truck::Truck)>,
+    dest: Option<Res<route::Destination>>,
+    opts: Res<crate::launch::LaunchOptions>,
+    mut relocate: MessageWriter<route::Relocate>,
 ) {
     for req in requests.read() {
         let Ok(p) = players.get(req.player) else {
@@ -362,6 +367,17 @@ fn depart(
                 raid.extractions += 1;
                 raid.say("Truck: \"Hold on to something.\" You're out.");
                 raid.phase = Phase::Extracting { left: 4.0 };
+            }
+            // Another valley on the card: drive there through the night.
+            Phase::AtBase if dest.as_ref().is_some_and(|d| d.id() != opts.map) => {
+                let d = dest.as_ref().unwrap();
+                raid.say(format!(
+                    "Driver: \"{}, then. Long drive. Get some sleep.\"",
+                    d.name()
+                ));
+                relocate.write(route::Relocate {
+                    to: d.id().to_owned(),
+                });
             }
             Phase::AtBase if raid.surge_in() < SLEEP_WINDOW => {
                 // Sleep it out in the cab: the Surge comes and goes, and

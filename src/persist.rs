@@ -12,7 +12,7 @@ use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 use extraction_core::firearm::Magazine;
 use extraction_core::save::{
-    LoadoutSave, PlacedItem, RemainsSave, SAVE_VERSION, SaveGame, SavedGun, SavedItem,
+    Career, LoadoutSave, PlacedItem, RemainsSave, SAVE_VERSION, SaveGame, SavedGun, SavedItem,
 };
 use std::path::PathBuf;
 
@@ -63,7 +63,7 @@ impl Plugin for PersistPlugin {
                 apply_restore.after(crate::raid::truck::start_in_truck),
             )
             .add_systems(Update, (autosave, surge_reset_at_base))
-            .add_systems(Last, save_on_request_or_exit);
+            .add_systems(Last, (relocate, save_on_request_or_exit).chain());
     }
 }
 
@@ -83,8 +83,11 @@ pub fn data_dir() -> PathBuf {
     base.join("extraction")
 }
 
-fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
-    let slot = match &opts.save {
+/// Where this session's career is saved: `--save PATH`, or `career.ron` in
+/// the data folder for a normal game (tests, scenarios and screenshots
+/// don't save).
+pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
+    match &opts.save {
         Some(p) => Some(p.clone()),
         None if opts.scenario.is_some()
             || opts.screenshot.is_some()
@@ -95,8 +98,69 @@ fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
         {
             None
         }
-        None => Some(data_dir().join(format!("{}.ron", opts.map))),
-    };
+        None => Some(data_dir().join("career.ron")),
+    }
+}
+
+/// The valley a saved career is headed for, if there is one.
+pub fn career_destination(opts: &LaunchOptions) -> Option<String> {
+    let path = career_path(opts)?;
+    read_career(&path).map(|c| c.map).filter(|m| !m.is_empty())
+}
+
+/// Reads a career, or brings in the saves of an older build (one file per
+/// map, next to where the career goes) as one.
+fn read_career(path: &std::path::Path) -> Option<Career> {
+    if let Ok(text) = std::fs::read_to_string(path) {
+        return match Career::from_ron(&text) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                // Keep the broken file for inspection rather than overwrite it.
+                let bad = path.with_extension("ron.bad");
+                let _ = std::fs::rename(path, &bad);
+                error!("{}: {e}; moved to {}", path.display(), bad.display());
+                None
+            }
+        };
+    }
+    let dir = path.parent()?;
+    let mut old: Vec<(std::time::SystemTime, SaveGame)> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "ron"))
+        .filter_map(|e| {
+            let save = SaveGame::from_ron(&std::fs::read_to_string(e.path()).ok()?).ok()?;
+            let when = e.metadata().ok()?.modified().ok()?;
+            Some((when, save))
+        })
+        .collect();
+    // Oldest first, so the newest save's stash and kit win.
+    old.sort_by_key(|(when, _)| *when);
+    let mut career: Option<Career> = None;
+    for (_, save) in &old {
+        match &mut career {
+            Some(c) => c.store(save),
+            None => career = Some(Career::from_game(save)),
+        }
+    }
+    if let (Some(c), Some((_, newest))) = (&mut career, old.last()) {
+        c.map = newest.zone.map.clone();
+        info!(
+            "brought {} older save(s) into one career ({} valleys)",
+            old.len(),
+            c.zones.len()
+        );
+    }
+    career
+}
+
+/// The whole career in memory; this session's valley is written into it
+/// on every save.
+#[derive(Resource, Debug, Default)]
+pub struct CareerState(pub Career);
+
+fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
+    let slot = career_path(&opts);
     if let Some(p) = &slot {
         info!("saving to {}", p.display());
     }
@@ -113,30 +177,19 @@ fn load_save(
     let Some(path) = &slot.0 else {
         return;
     };
-    if opts.new_game {
+    let career = if opts.new_game {
         info!("new game: ignoring any existing save");
-        commands.insert_resource(Restore {
-            save: fresh_save(&opts.map),
-            zone: false,
-        });
-        return;
-    }
-    let save = match std::fs::read_to_string(path) {
-        Ok(text) => match SaveGame::from_ron(&text) {
-            Ok(s) => s,
-            Err(e) => {
-                // Keep the broken file for inspection rather than overwrite it.
-                let bad = path.with_extension("ron.bad");
-                let _ = std::fs::rename(path, &bad);
-                error!("{}: {e}; moved to {}", path.display(), bad.display());
-                fresh_save(&opts.map)
-            }
-        },
-        Err(_) => {
-            info!("no save at {}; starting fresh", path.display());
-            fresh_save(&opts.map)
-        }
+        None
+    } else {
+        read_career(path)
     };
+    let mut career = career.unwrap_or_else(|| {
+        info!("no career at {}; starting fresh", path.display());
+        Career::from_game(&fresh_save(&opts.map))
+    });
+    career.map = opts.map.clone();
+    let save = career.game(&opts.map);
+    commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;
     raid.raids = save.stats.raids;
     raid.extractions = save.stats.extractions;
@@ -648,8 +701,8 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     save
 }
 
-fn write_save(path: &std::path::Path, save: &SaveGame) {
-    let text = match save.to_ron() {
+fn write_career(path: &std::path::Path, career: &Career) {
+    let text = match career.to_ron() {
         Ok(t) => t,
         Err(e) => {
             error!("save: {e}");
@@ -674,6 +727,32 @@ fn autosave(time: Res<Time<Real>>, mut last: Local<f32>, mut out: MessageWriter<
     }
 }
 
+/// The truck is driving to another valley: save the career pointed there,
+/// and end this session (`main` opens the game again in the new valley).
+fn relocate(world: &mut World) {
+    let Some(to) = world
+        .resource_mut::<Messages<crate::raid::route::Relocate>>()
+        .drain()
+        .last()
+        .map(|r| r.to)
+    else {
+        return;
+    };
+    if let Some(path) = world.resource::<SaveSlot>().0.clone() {
+        let save = snapshot(world);
+        if let Some(mut career) = world.get_resource_mut::<CareerState>() {
+            career.0.store(&save);
+            career.0.map = to.clone();
+            write_career(&path, &career.0);
+        }
+    }
+    info!("driving to {to}");
+    crate::request_restart(&to);
+    if !world.resource::<LaunchOptions>().headless {
+        world.write_message(AppExit::Success);
+    }
+}
+
 fn save_on_request_or_exit(world: &mut World) {
     let asked = world.resource_mut::<Messages<SaveNow>>().drain().count() > 0;
     let exiting = world
@@ -686,8 +765,13 @@ fn save_on_request_or_exit(world: &mut World) {
         return;
     };
     let save = snapshot(world);
-    write_save(&path, &save);
-    debug!("saved {} items", save.item_count());
+    let n = save.item_count();
+    let Some(mut career) = world.get_resource_mut::<CareerState>() else {
+        return;
+    };
+    career.0.store(&save);
+    write_career(&path, &career.0);
+    debug!("saved {n} items");
 }
 
 /// Back at base after the Surge has been through: the Zone resets. Loose
@@ -775,7 +859,11 @@ mod tests {
     }
 
     fn temp_save(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("extraction-test-{}", std::process::id()));
+        // A folder each: a missing career makes the loader look around it
+        // for older saves to bring in.
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join(name);
         let _ = std::fs::create_dir_all(&dir);
         let p = dir.join(name);
         let _ = std::fs::remove_file(&p);
@@ -792,7 +880,9 @@ mod tests {
         a.world_mut().resource_mut::<Raid>().clock = 500.0;
         let save = snapshot(a.world_mut());
         assert_eq!(save.item_count(), items_a, "every item is saved once");
-        write_save(&path, &save);
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
 
         let mut b = app_with_save(&path);
         assert_eq!(count::<With<Item>>(b.world_mut()), items_a);
@@ -808,6 +898,21 @@ mod tests {
         let again = snapshot(b.world_mut());
         assert_eq!(again.item_count(), save.item_count());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn an_older_per_map_save_becomes_the_career() {
+        let path = temp_save("career.ron");
+        let mut old = fresh_save("marrow_creek");
+        old.stats.raids = 7;
+        old.zone.cycle = 4;
+        let text = old.to_ron().unwrap();
+        std::fs::write(path.with_file_name("marrow_creek.ron"), text).unwrap();
+        let mut app = app_with_save(&path);
+        let raid = app.world().resource::<Raid>();
+        assert_eq!(raid.raids, 7, "the record came across");
+        assert_eq!(raid.cycle, 4, "and the Zone's cycle");
+        assert!(stash_len(app.world_mut()) > 0, "and the stash");
     }
 
     #[test]

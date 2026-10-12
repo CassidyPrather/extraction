@@ -48,6 +48,8 @@ pub enum ScreenStyle {
     Lcd,
     /// A sheet of paper, pencilled.
     Paper,
+    /// A card with a few words in big letters.
+    Card,
 }
 
 /// The bench in truck space.

@@ -150,6 +150,18 @@ pub fn run_headless(opts: LaunchOptions) -> AppExit {
     headless_app(opts, true).run()
 }
 
+/// A valley to open the game in again once this session ends (the truck
+/// drove there). `main` re-launches into it.
+static RESTART_INTO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn request_restart(map: &str) {
+    *RESTART_INTO.lock().unwrap() = Some(map.to_owned());
+}
+
+pub fn take_restart() -> Option<String> {
+    RESTART_INTO.lock().unwrap().take()
+}
+
 /// The headless app, ready to run or to step by hand in tests.
 pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     use bevy::app::ScheduleRunnerPlugin;

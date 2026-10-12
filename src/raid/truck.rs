@@ -54,6 +54,8 @@ pub enum Pressable {
     Cook,
     /// Fold a deployed cover back up into an item.
     FoldCover,
+    /// The route card: which valley the truck drives to next.
+    Destination,
 }
 
 /// The stash crate in the truck bed.

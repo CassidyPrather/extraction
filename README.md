@@ -39,12 +39,15 @@ Comfort: `--smooth-turn` (or `--snap-turn`), `--vignette 0..1` (default
 `~/.local/share/extraction/settings.ron` (Windows: `%APPDATA%\extraction`):
 `(smooth_turn: true, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6)`.
 
-The game saves itself (the stash, what you carry, and the Zone as you left
-it) to the same folder; `--new-game` starts over.
+The game saves itself (the stash, what you carry, and each valley's Zone
+as you left it) to `career.ron` in the same folder; `--new-game` starts
+over.
 
-Two Zones so far: **Marrow Creek** (the default), a foggy river valley,
-and **Kettle Pass** (`--map kettle_pass`), a mining valley that climbs to a
-high pass. Each keeps its own save.
+Two valleys so far: **Marrow Creek**, a foggy river valley, and **Kettle
+Pass**, a mining valley that climbs to a high pass. To change valleys,
+press the route card on the truck bed's right wall and ring the bell; the
+truck drives through the night and the game reopens there. `--map NAME`
+opens a valley directly.
 
 ## Development
 

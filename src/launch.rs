@@ -62,6 +62,9 @@ pub struct LaunchOptions {
     /// Dev: put a gun, magazine or robot in front of the camera to look at
     /// (see `dev::gallery`).
     pub gallery: Option<String>,
+    /// The map was named on the command line (otherwise a saved career
+    /// picks it: wherever the truck was headed).
+    pub map_explicit: bool,
     /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
     pub weather: Option<String>,
     /// Map simulation: play this many bot raids (each in a subprocess).
@@ -100,6 +103,7 @@ impl Default for LaunchOptions {
             surge_in: None,
             gallery: None,
             weather: None,
+            map_explicit: false,
             sim: None,
             sim_run: None,
             personality: None,
@@ -147,7 +151,10 @@ impl LaunchOptions {
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),
-                "--map" => o.map = val(),
+                "--map" => {
+                    o.map = val();
+                    o.map_explicit = true;
+                }
                 "--seed" => o.seed = val().parse().unwrap_or(1),
                 "--scene" => {
                     o.scene = match val().as_str() {
