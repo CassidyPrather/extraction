@@ -66,8 +66,9 @@ pub const TRUCK_PARTS: &[(Vec3, Vec3, u8)] = &[
     (Vec3::new(2.3, 1.7, 2.0), Vec3::new(0.0, 1.75, -2.9), 0),
     // Bonnet.
     (Vec3::new(2.0, 0.9, 1.1), Vec3::new(0.0, 1.35, -4.4), 0),
-    // Chassis rails.
-    (Vec3::new(1.2, 0.3, 7.6), Vec3::new(0.0, 0.75, -1.2), 1),
+    // Chassis rails. They stop under the bed's tail: run out past it, they'd
+    // wall off the rear steps (0.9 m is no step).
+    (Vec3::new(1.2, 0.3, 6.8), Vec3::new(0.0, 0.75, -1.6), 1),
     // Bed floor.
     (
         Vec3::new(2.3, 0.14, 3.6),
@@ -133,7 +134,7 @@ impl Plugin for TruckPlugin {
 
 /// Base pose: the south-gate truck stop, facing out of the Zone so the bed
 /// opens toward it.
-fn base_pose(zone: &Zone) -> Transform {
+pub fn base_pose(zone: &Zone) -> Transform {
     let m = zone.marker(&MarkerKind::TruckStop);
     let at = m.map(|m| m.at).unwrap_or([0.0, 0.0]);
     let ins = zone
@@ -143,11 +144,10 @@ fn base_pose(zone: &Zone) -> Transform {
     // Rear (+Z) toward the insertion point.
     let back = Vec3::new(ins[0] - at[0], 0.0, ins[1] - at[1]).normalize_or(Vec3::Z);
     let yaw = (back.x).atan2(back.z);
-    Transform::from_translation(zone.on_ground(at[0], at[1]))
-        .with_rotation(Quat::from_rotation_y(yaw))
+    parked(zone, at, yaw)
 }
 
-fn rv_pose(zone: &Zone, rv: usize) -> Transform {
+pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
     let rvs: Vec<[f32; 2]> = zone
         .map
         .markers_of(&MarkerKind::Rendezvous)
@@ -157,8 +157,19 @@ fn rv_pose(zone: &Zone, rv: usize) -> Transform {
     // Park with the bed toward the map centre, so you walk into it.
     let back = Vec3::new(-at[0], 0.0, -at[1]).normalize_or(Vec3::Z);
     let yaw = back.x.atan2(back.z);
-    Transform::from_translation(zone.on_ground(at[0], at[1]))
-        .with_rotation(Quat::from_rotation_y(yaw))
+    parked(zone, at, yaw)
+}
+
+/// The truck standing at `at` facing `yaw`, settled low enough that its
+/// rear steps reach the ground where the ground falls away behind it
+/// (otherwise the bed is out of reach on a slope).
+fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
+    let rot = Quat::from_rotation_y(yaw);
+    let mut t = Transform::from_translation(zone.on_ground(at[0], at[1])).with_rotation(rot);
+    let foot = t.transform_point(Vec3::new(0.0, 0.0, 2.6));
+    let drop = t.translation.y - zone.ground(foot.x, foot.z);
+    t.translation.y -= drop.clamp(0.0, 0.8);
+    t
 }
 
 fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {

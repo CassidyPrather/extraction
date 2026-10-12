@@ -69,7 +69,36 @@ pub enum Task {
     },
     Expect(Expect),
     Log(String),
+    /// Walk within reach of this item and grab it (for bots that choose
+    /// what they want, rather than "the nearest of an id").
+    Grab {
+        item: Entity,
+        side: Side,
+    },
+    /// Walk within reach of a pressable (bell pull, button) and press it.
+    Press(Entity),
+    /// Walk to a door and press it if it's shut; done when it's open.
+    OpenDoor(Entity),
+    /// Use the item in this hand (radio, dressing, food): what VR's primary
+    /// button and flat mode's U do.
+    Use(Side),
+    /// Throw what's in this hand at a point (a bolt into an anomaly).
+    Throw {
+        side: Side,
+        at: Vec3,
+    },
+    /// Shoot at one robot's core with the right-hand gun: `shots` trigger
+    /// pulls, or until it's wrecked or the gun is empty.
+    Shoot {
+        target: Entity,
+        shots: u32,
+    },
 }
+
+/// How far a bot reaches for things, metres (horizontal, from the body).
+pub const REACH: f32 = 1.2;
+/// How quickly a bot's body swings onto its aim point, per second.
+const AIM_RATE: f32 = 14.0;
 
 /// Checks a scenario makes along the way.
 #[derive(Clone, Debug)]
@@ -105,6 +134,10 @@ pub struct Bot {
     pub walk: Option<Vec2>,
     pub aim: bool,
     pub trigger: bool,
+    /// Run instead of walking (stamina permitting).
+    pub sprint: bool,
+    /// The last aim point and when, for leading a moving target.
+    track: Option<(Vec3, f32)>,
     pub hits: u32,
     pub passed: u32,
     pub failed: u32,
@@ -125,6 +158,8 @@ impl Bot {
             walk: None,
             aim: false,
             trigger: false,
+            sprint: false,
+            track: None,
             hits: 0,
             passed: 0,
             failed: 0,
@@ -136,6 +171,24 @@ impl Bot {
 
     pub fn done(&self) -> bool {
         self.tasks.is_empty()
+    }
+
+    /// Drops whatever it was doing (hands stay as they are) and takes on
+    /// these tasks instead: for brains that react to the world.
+    pub fn replace(&mut self, tasks: impl IntoIterator<Item = Task>) {
+        self.tasks = tasks.into_iter().collect();
+        self.elapsed = 0.0;
+        self.fired = 0;
+        self.pending = false;
+        self.retry = 0.0;
+        self.walk = None;
+        self.aim = false;
+        self.trigger = false;
+    }
+
+    /// Adds tasks after the current ones.
+    pub fn extend(&mut self, tasks: impl IntoIterator<Item = Task>) {
+        self.tasks.extend(tasks);
     }
 
     fn note(&mut self, msg: String) {
@@ -197,7 +250,9 @@ fn drive_bots(
         while d < -std::f32::consts::PI {
             d += std::f32::consts::TAU;
         }
-        let step = (6.0 * time.delta_secs()).min(1.0);
+        // Turning to aim is quicker than turning to walk.
+        let rate = if bot.aim { AIM_RATE } else { 6.0 };
+        let step = (rate * time.delta_secs()).min(1.0);
         root.rotation = Quat::from_rotation_y(cur_yaw + d * step);
         let pitch = to.y.clamp(-1.0, 1.0).asin();
         let head_rot = Quat::from_rotation_x(pitch);
@@ -215,7 +270,7 @@ fn drive_bots(
             }
             None => Vec2::ZERO,
         };
-        input.sprint = false;
+        input.sprint = bot.sprint && bot.walk.is_some();
         for side in Side::BOTH {
             let offset = Vec3::new(0.2 * side.sign(), -0.32, -0.38);
             let pose = Transform::from_translation(eye + head_rot * offset)
@@ -256,6 +311,16 @@ fn count_hits(mut hits: MessageReader<Hit>, mut bots: Query<(Entity, &mut Bot)>)
     }
 }
 
+/// What the newer tasks need, bundled to keep `run_tasks` under Bevy's
+/// parameter limit.
+#[derive(bevy::ecs::system::SystemParam)]
+struct TaskExtras<'w, 's> {
+    placed: Query<'w, 's, (&'static GlobalTransform, Option<&'static Held>)>,
+    doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+    parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
+    uses: MessageWriter<'w, crate::items::usage::UseItem>,
+}
+
 /// Advances each bot's current task.
 fn run_tasks(
     mut bots: Query<(
@@ -285,8 +350,11 @@ fn run_tasks(
     mut combine: MessageWriter<Combine>,
     mut toggle: MessageWriter<ToggleBackpack>,
     robots: Query<(Entity, &crate::robots::Robot, &GlobalTransform)>,
-    zone: Res<crate::world::Zone>,
-    healths: Query<&crate::health::Health>,
+    (zone, healths, mut ext): (
+        Res<crate::world::Zone>,
+        Query<&crate::health::Health>,
+        TaskExtras,
+    ),
     mut commands: Commands,
 ) {
     let dt = time.delta_secs();
@@ -521,6 +589,182 @@ fn run_tasks(
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
                 if bot.elapsed > 0.5 && !empty && bot.fired < shots {
                     let period = 0.3;
+                    let was = bot.trigger;
+                    bot.trigger = (bot.elapsed % period) < period * 0.5;
+                    if bot.trigger && !was {
+                        bot.fired += 1;
+                    }
+                } else if empty || bot.fired >= shots {
+                    bot.trigger = false;
+                    bot.aim = false;
+                    bot.next();
+                }
+            }
+            Task::Grab { item, side } => {
+                if hand(side).and_then(|h| h.holding) == Some(item) {
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                }
+                let Ok((gt, held)) = ext.placed.get(item) else {
+                    bot.failed += 1;
+                    bot.note(format!("FAIL {item} is gone"));
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                };
+                if held.is_some_and(|h| h.player != player) {
+                    bot.failed += 1;
+                    bot.note(format!("FAIL someone else has {item}"));
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                }
+                let at = gt.translation();
+                bot.look = at;
+                let flat = Vec2::new(at.x, at.z);
+                if pos.distance(flat) > REACH {
+                    bot.walk = Some(flat);
+                } else {
+                    bot.walk = None;
+                    bot.retry += dt;
+                    if !bot.pending || bot.retry > 2.0 {
+                        actions.write(HandAction::Grab {
+                            player,
+                            side,
+                            item,
+                            point: None,
+                        });
+                        bot.pending = true;
+                        bot.retry = 0.0;
+                    }
+                }
+            }
+            Task::Press(item) => {
+                let Ok((gt, _)) = ext.placed.get(item) else {
+                    bot.failed += 1;
+                    bot.note(format!("FAIL nothing to press at {item}"));
+                    bot.next();
+                    continue;
+                };
+                let at = gt.translation();
+                bot.look = at;
+                let flat = Vec2::new(at.x, at.z);
+                if pos.distance(flat) > REACH {
+                    bot.walk = Some(flat);
+                } else {
+                    bot.walk = None;
+                    actions.write(HandAction::Grab {
+                        player,
+                        side: Side::Left,
+                        item,
+                        point: None,
+                    });
+                    bot.next();
+                }
+            }
+            Task::OpenDoor(door) => {
+                let (Ok(d), Ok((gt, _))) = (ext.doors.get(door), ext.placed.get(door)) else {
+                    bot.next();
+                    continue;
+                };
+                bot.walk = None;
+                bot.look = gt.translation() + Vec3::Y * 1.0;
+                if d.open {
+                    // Wait for it to swing most of the way.
+                    if d.angle > 0.85 {
+                        bot.next();
+                    }
+                } else if !bot.pending || bot.retry > 2.0 {
+                    let hinge = Vec2::new(gt.translation().x, gt.translation().z);
+                    if pos.distance(hinge) > REACH + 1.5 {
+                        bot.failed += 1;
+                        bot.note("FAIL door out of reach".into());
+                        bot.next();
+                        continue;
+                    }
+                    actions.write(HandAction::Grab {
+                        player,
+                        side: Side::Left,
+                        item: door,
+                        point: None,
+                    });
+                    bot.pending = true;
+                    bot.retry = 0.0;
+                } else {
+                    bot.retry += dt;
+                }
+            }
+            Task::Use(side) => {
+                if let Some(item) = hand(side).and_then(|h| h.holding) {
+                    ext.uses
+                        .write(crate::items::usage::UseItem { player, item });
+                } else {
+                    bot.failed += 1;
+                    bot.note(format!("FAIL nothing in the {side:?} hand to use"));
+                }
+                bot.next();
+            }
+            Task::Throw { side, at } => {
+                bot.walk = None;
+                // Lob it: aim a little above the point, by distance.
+                let d = Vec2::new(at.x - pos.x, at.z - pos.y).length();
+                bot.look = at + Vec3::Y * (0.15 * d);
+                if bot.elapsed > 0.4 {
+                    actions.write(HandAction::Release {
+                        player,
+                        side,
+                        throw: (2.5 + d * 0.7).min(12.0),
+                    });
+                    bot.next();
+                }
+            }
+            Task::Shoot { target, shots } => {
+                let alive = robots
+                    .get(target)
+                    .ok()
+                    .filter(|(_, r, _)| !r.wrecked)
+                    .map(|(_, _, gt)| gt.translation());
+                let Some(root_at) = alive else {
+                    bot.trigger = false;
+                    bot.aim = false;
+                    bot.next();
+                    continue;
+                };
+                // The core if it's still there, else the body.
+                let core = ext
+                    .parts
+                    .iter()
+                    .find(|(p, _)| {
+                        p.robot == target && p.role == crate::robots::PartRole::Core && p.alive()
+                    })
+                    .map(|(_, gt)| gt.translation());
+                bot.walk = None;
+                // Lead a moving target: by the swing lag and the bullet's
+                // flight.
+                let at = core.unwrap_or(root_at);
+                let now = bot.elapsed;
+                let vel = match bot.track {
+                    Some((p, t)) if now > t + 1e-3 && now - t < 0.5 => (at - p) / (now - t),
+                    _ => Vec3::ZERO,
+                };
+                bot.track = Some((at, now));
+                let flight = at.distance(root.translation) / 700.0;
+                bot.look = at + vel * (1.0 / AIM_RATE + flight);
+                bot.aim = true;
+                let gun = hand(Side::Right)
+                    .and_then(|h| h.holding)
+                    .and_then(|e| guns.get(e).ok());
+                let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
+                // Squeeze only with the body square to the target.
+                let to = bot.look - root.translation;
+                let bearing = (-to.x).atan2(-to.z);
+                let (yaw, _, _) = root.rotation.to_euler(EulerRot::YXZ);
+                let off = (bearing - yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+                    - std::f32::consts::PI;
+                let on_target = off.abs() < 0.05 || bot.elapsed > 6.0;
+                if bot.elapsed > 0.5 && !empty && bot.fired < shots && (on_target || bot.trigger) {
+                    let period = 0.35;
                     let was = bot.trigger;
                     bot.trigger = (bot.elapsed % period) < period * 0.5;
                     if bot.trigger && !was {

@@ -5,7 +5,12 @@
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS]
+//! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
+//!            [--sim-minutes M] [--sim-out DIR]
 //! ```
+//!
+//! `--sim N` plays N bot raids headless, each in its own process, and
+//! writes telemetry (see `sim` and `docs/SIMULATION.md`).
 //!
 //! `--screenshot` renders `--frames` frames, saves the window to `PATH` and
 //! quits: the tool for checking how things look on a machine with no
@@ -59,6 +64,20 @@ pub struct LaunchOptions {
     pub gallery: Option<String>,
     /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
     pub weather: Option<String>,
+    /// Map simulation: play this many bot raids (each in a subprocess).
+    pub sim: Option<u32>,
+    /// Map simulation: this process plays one bot raid under this run name.
+    pub sim_run: Option<String>,
+    /// Bot personality for a sim raid (`looter`, `hunter`, `cautious`,
+    /// `reckless`); by default it rotates with the run index.
+    pub personality: Option<String>,
+    /// Raid minutes a sim bot plans for before heading out (default: by
+    /// personality, 9-14).
+    pub sim_minutes: Option<f32>,
+    /// Where sim telemetry goes (default `target/sim/<map>`).
+    pub sim_out: Option<PathBuf>,
+    /// Sim raids run at once.
+    pub jobs: usize,
 }
 
 impl Default for LaunchOptions {
@@ -81,6 +100,12 @@ impl Default for LaunchOptions {
             surge_in: None,
             gallery: None,
             weather: None,
+            sim: None,
+            sim_run: None,
+            personality: None,
+            sim_minutes: None,
+            sim_out: None,
+            jobs: 2,
         }
     }
 }
@@ -113,6 +138,15 @@ impl LaunchOptions {
                     o.scenario = Some(val());
                     o.robots = false;
                 }
+                "--sim" => o.sim = val().parse().ok(),
+                "--sim-run" => {
+                    o.sim_run = Some(val());
+                    o.headless = true;
+                }
+                "--personality" => o.personality = Some(val()),
+                "--sim-minutes" => o.sim_minutes = val().parse().ok(),
+                "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
+                "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),
                 "--map" => o.map = val(),
                 "--seed" => o.seed = val().parse().unwrap_or(1),
                 "--scene" => {

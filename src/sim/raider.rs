@@ -1,0 +1,1895 @@
+//! The raiding bot: an autonomous brain on top of the task-list [`Bot`].
+//!
+//! The [`Raider`] decides; the [`Bot`] does. Each time the bot runs out of
+//! tasks (or something urgent happens — a robot opens fire, an anomaly
+//! turns up on the route) the raider looks at the world and queues the
+//! next few tasks: walk a path, open a door, grab that, stow it, shoot
+//! that, use the radio. Everything still goes through `RigInput` and
+//! `HandAction`, so a raid played by a raider is a raid a player could
+//! have played.
+//!
+//! What it knows is what a player who'd studied the map would know: where
+//! the buildings, loot markers, artifact fields and rendezvous are. What's
+//! actually lying on the shelves, it finds out when it gets there. It sees
+//! robots and anomalies only near it and in line of sight.
+
+use avian3d::prelude::*;
+use bevy::ecs::system::SystemParam;
+use bevy::math::Vec3Swizzles;
+use bevy::prelude::*;
+use extraction_core::anomaly::AnomalyKind;
+use extraction_core::items::{Category, ItemDef, SizeClass};
+use extraction_core::map::MarkerKind;
+use extraction_core::nav::{NavGrid, Obstacle};
+use extraction_core::noise::Rng;
+use serde_json::json;
+use std::collections::HashSet;
+
+use super::indoor::{BuildingPlan, plan_buildings};
+use super::telemetry::{SimLog, round};
+use crate::anomaly::Anomaly;
+use crate::bot::{Bot, Task};
+use crate::health::Health;
+use crate::interact::body::{Backpack, InBackpack};
+use crate::interact::{Hand, Held, InSocket, Socket, SocketKind, SocketOwner};
+use crate::items::{Catalog, Item};
+use crate::launch::LaunchOptions;
+use crate::raid::truck::{Pressable, Truck};
+use crate::raid::{Phase, Raid};
+use crate::rig::{LocalPlayer, RigHand, Side};
+use crate::robots::walker::Nav;
+use crate::robots::{Awareness, Brain, Job, JobKind, Robot};
+use crate::weapons::flat::MacroKind;
+use crate::weapons::{Gun, Mag};
+use crate::world::buildings::{Building, BuildingLoot, DoorLeaf};
+use crate::world::{Layer, Zone};
+
+/// Who the bot is: what it values, what it risks.
+#[derive(Clone, Debug)]
+pub struct Traits {
+    pub name: &'static str,
+    /// Items valued below this are left behind.
+    pub min_value: f32,
+    /// Fraction of backpack bulk that sends it home.
+    pub full_at: f32,
+    /// Raid minutes it plans for.
+    pub minutes: f32,
+    /// Site preference multipliers.
+    pub buildings: f32,
+    pub spots: f32,
+    pub fields: f32,
+    /// Routes round anomalies it has seen.
+    pub avoid_anomalies: bool,
+    /// Opens fire on robots within this range that haven't noticed it.
+    pub fight_range: f32,
+    /// Slips away from robots that are only suspicious, rather than fight.
+    pub evade: bool,
+    /// Goes through wrecks it made.
+    pub salvage: bool,
+    /// Throws something into a snare before reaching into it.
+    pub test_anomalies: bool,
+    /// Carried kilograms that send it home (encumbrance bites past 20).
+    pub max_kg: f32,
+}
+
+impl Traits {
+    pub const NAMES: [&'static str; 4] = ["looter", "hunter", "cautious", "reckless"];
+
+    pub fn named(name: &str) -> Self {
+        let base = Traits {
+            name: "looter",
+            min_value: 0.0,
+            full_at: 0.9,
+            minutes: 13.0,
+            buildings: 1.4,
+            spots: 1.0,
+            fields: 0.4,
+            avoid_anomalies: true,
+            fight_range: 0.0,
+            evade: false,
+            salvage: true,
+            test_anomalies: true,
+            max_kg: 26.0,
+        };
+        // (Everyone but the reckless fights only what comes for them.)
+        match name {
+            "hunter" => Traits {
+                name: "hunter",
+                min_value: 3.0,
+                full_at: 0.8,
+                minutes: 12.0,
+                buildings: 0.5,
+                spots: 0.5,
+                fields: 4.0,
+                ..base
+            },
+            "cautious" => Traits {
+                name: "cautious",
+                min_value: 2.0,
+                full_at: 0.7,
+                minutes: 10.0,
+                buildings: 1.2,
+                spots: 0.8,
+                fields: 0.0,
+                fight_range: 0.0,
+                evade: true,
+                salvage: false,
+                max_kg: 18.0,
+                ..base
+            },
+            "reckless" => Traits {
+                name: "reckless",
+                min_value: 1.0,
+                full_at: 1.0,
+                minutes: 14.0,
+                buildings: 1.0,
+                spots: 1.0,
+                fields: 1.5,
+                avoid_anomalies: false,
+                fight_range: 60.0,
+                test_anomalies: false,
+                max_kg: 34.0,
+                ..base
+            },
+            _ => base,
+        }
+    }
+
+    /// How much this bot wants an item.
+    pub fn value(&self, def: &ItemDef) -> f32 {
+        let v = match def.category {
+            Category::Artifact => 10.0,
+            Category::Firearm => 6.0,
+            Category::Medical => 5.0,
+            Category::Magazine | Category::Ammo | Category::Gadget => 4.0,
+            Category::Tool | Category::RobotPart | Category::Attachment => 3.0,
+            Category::Material | Category::Curio => 2.0,
+            Category::Food => 1.5,
+        };
+        match (self.name, def.category) {
+            ("hunter", Category::Artifact) => v * 3.0,
+            ("cautious", Category::Artifact) => v * 0.3,
+            _ => v,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    /// Out of the truck bed, picking up the kit.
+    KitUp,
+    /// Looting.
+    Raid,
+    /// Heading for the rendezvous.
+    Extract,
+    /// Gone (extracted, dead or timed out).
+    Done,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SiteKind {
+    Building(usize),
+    Spot,
+    Field,
+    Wreck(Entity),
+}
+
+#[derive(Clone, Debug)]
+struct Site {
+    name: String,
+    kind: SiteKind,
+    at: Vec2,
+    /// Loot spots it holds (for buildings), for scoring.
+    spots: usize,
+    visited: bool,
+    tries: u8,
+}
+
+/// What the raider is in the middle of.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Act {
+    Idle,
+    Travel(usize),
+    Search(usize),
+    Take(usize, Entity),
+    /// Heading for the rendezvous's approach point.
+    ToRv,
+    /// Climbing into the truck and pulling the bell.
+    Board,
+}
+
+/// An ongoing fight, for the telemetry.
+#[derive(Clone, Debug)]
+pub struct Combat {
+    pub target: Entity,
+    pub kind: String,
+    pub started: f32,
+    pub at: Vec2,
+    pub shots_at_start: u32,
+    pub hits_at_start: u32,
+    /// Seconds the target has been out of sight.
+    pub unseen: f32,
+    /// Shots fired when the last burst began, to notice a gun that clicks.
+    pub burst_shots: u32,
+    pub dry_bursts: u32,
+    /// Rounds stopped by walls etc. when the last burst began.
+    pub blocked_at_burst: u32,
+}
+
+impl Combat {
+    pub fn close(&mut self, log: &mut SimLog, outcome: &str) {
+        let shots = log.stats.shots - self.shots_at_start;
+        let hits = log.stats.hits - self.hits_at_start;
+        log.event(
+            "engage_end",
+            json!({"robot": self.kind, "outcome": outcome, "shots": shots, "hits": hits,
+                   "secs": round(log.t - self.started, 1),
+                   "x": round(self.at.x, 1), "z": round(self.at.y, 1)}),
+        );
+    }
+}
+
+#[derive(Component)]
+pub struct Raider {
+    pub traits: Traits,
+    pub stage: Stage,
+    pub combat: Option<Combat>,
+    /// Deliberately walking into an anomaly (for an artifact).
+    pub diving: bool,
+    rng: Rng,
+    grid: NavGrid,
+    plans: Vec<BuildingPlan>,
+    sites: Vec<Site>,
+    act: Act,
+    /// Items it gave up on or dropped.
+    skip: HashSet<Entity>,
+    /// Anomalies it has seen.
+    known: HashSet<Entity>,
+    /// The current plan was cut short (a fight, a repath): redo, don't
+    /// give up.
+    interrupted: bool,
+    pack_full: bool,
+    rv: Option<usize>,
+    radioed_at: f32,
+    /// Stuck detection: where it was, and since when.
+    anchor: (Vec2, f32),
+    scan: f32,
+    clock: f32,
+    retreat_until: f32,
+    /// Its gun, once it has one.
+    gun: Option<Entity>,
+    /// Stows refused (a full pack).
+    refusals: u32,
+    last_refill: f32,
+    /// `SIM_DEBUG` is set: log every plan.
+    debug: bool,
+    /// Health and carried kilograms as of this frame.
+    hp: f32,
+    kg: f32,
+}
+
+impl Raider {
+    pub fn stage_name(&self) -> &'static str {
+        match self.stage {
+            Stage::KitUp => "kit_up",
+            Stage::Raid => "raid",
+            Stage::Extract => "extract",
+            Stage::Done => "done",
+        }
+    }
+
+    pub fn doing(&self) -> &'static str {
+        if self.combat.is_some() {
+            return "fight";
+        }
+        match self.act {
+            Act::Idle => "idle",
+            Act::Travel(_) => "travel",
+            Act::Search(_) => "search",
+            Act::Take(..) => "take",
+            Act::ToRv => "to_rv",
+            Act::Board => "board",
+        }
+    }
+}
+
+/// Puts the local player under a raider's control (sim runs only).
+pub fn attach_raider(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Res<Zone>,
+    nav: Option<Res<Nav>>,
+    players: Query<Entity, With<LocalPlayer>>,
+    buildings: Query<(Entity, &Building, &Transform)>,
+    doors: Query<(Entity, &DoorLeaf, &ChildOf)>,
+    loot: Option<Res<BuildingLoot>>,
+    mut log: ResMut<SimLog>,
+) {
+    let Some(run) = &opts.sim_run else {
+        return;
+    };
+    let Some(nav) = nav else {
+        error!("sim: no navigation grid");
+        return;
+    };
+    let mut traits = Traits::named(opts.personality.as_deref().unwrap_or("looter"));
+    if let Some(m) = opts.sim_minutes {
+        traits.minutes = m;
+    }
+    let plans = plan_buildings(&buildings, &doors);
+    let mut sites: Vec<Site> = Vec::new();
+    let mut site_of_plan = vec![None; plans.len()];
+    let spots: Vec<Vec3> = loot
+        .map(|l| l.0.iter().map(|s| s.at).collect())
+        .unwrap_or_default();
+    for (i, plan) in plans.iter().enumerate() {
+        let n = spots.iter().filter(|s| plan.contains(**s, 0.5)).count();
+        if n == 0 || plan.entries.is_empty() {
+            continue;
+        }
+        site_of_plan[i] = Some(sites.len());
+        sites.push(Site {
+            name: plan.name.clone(),
+            kind: SiteKind::Building(i),
+            at: plan.xf.translation.xz(),
+            spots: n,
+            visited: false,
+            tries: 0,
+        });
+    }
+    for m in &zone.map.markers {
+        match &m.kind {
+            MarkerKind::Loot { .. } => {
+                let p = zone.on_ground(m.at[0], m.at[1]);
+                if let Some(s) = plans
+                    .iter()
+                    .position(|pl| pl.contains(p, 0.5))
+                    .and_then(|i| site_of_plan[i])
+                {
+                    sites[s].spots += 1;
+                    continue;
+                }
+                sites.push(Site {
+                    name: if m.name.is_empty() {
+                        "loot".into()
+                    } else {
+                        m.name.clone()
+                    },
+                    kind: SiteKind::Spot,
+                    at: Vec2::from_array(m.at),
+                    spots: 1,
+                    visited: false,
+                    tries: 0,
+                });
+            }
+            MarkerKind::ArtifactField => sites.push(Site {
+                name: m.name.clone(),
+                kind: SiteKind::Field,
+                at: Vec2::from_array(m.at),
+                spots: 6,
+                visited: false,
+                tries: 0,
+            }),
+            _ => {}
+        }
+    }
+    if std::env::var_os("SIM_DUMP_PLANS").is_some() {
+        if let Some(dir) = log.path.parent() {
+            super::indoor::dump_plans(&plans, &spots, &dir.join("plans"));
+        }
+    }
+    let seed = opts.seed;
+    log.event(
+        "start",
+        json!({"run": run, "map": opts.map, "seed": seed, "personality": traits.name,
+               "minutes": traits.minutes, "format": super::telemetry::FORMAT,
+               "sites": sites.len(), "buildings": plans.len()}),
+    );
+    info!(
+        "sim: {} raider, {} sites ({} buildings planned)",
+        traits.name,
+        sites.len(),
+        plans.len()
+    );
+    let kit = kit_tasks();
+    for p in &players {
+        commands.entity(p).insert((
+            Bot::new(kit.clone()),
+            Raider {
+                traits: traits.clone(),
+                stage: Stage::KitUp,
+                combat: None,
+                diving: false,
+                rng: Rng::new(seed ^ 0x5133),
+                grid: nav.0.as_ref().clone(),
+                plans: plans.clone(),
+                sites: sites.clone(),
+                act: Act::Idle,
+                skip: HashSet::new(),
+                known: HashSet::new(),
+                interrupted: false,
+                pack_full: false,
+                rv: None,
+                radioed_at: -999.0,
+                anchor: (Vec2::ZERO, 0.0),
+                scan: 0.0,
+                clock: 0.0,
+                retreat_until: 0.0,
+                gun: None,
+                refusals: 0,
+                last_refill: -999.0,
+                debug: std::env::var_os("SIM_DEBUG").is_some(),
+                hp: 100.0,
+                kg: 0.0,
+            },
+        ));
+    }
+}
+
+/// Out of the truck bed and kitted up from what's on the ground by the
+/// insertion point (the dev cache and the sim kit): an AK with two
+/// magazines, a box of rounds, the radio, two dressings.
+fn kit_tasks() -> Vec<Task> {
+    let s = |x: &str| x.to_string();
+    let mut t = vec![Task::Log(s("kitting up"))];
+    t.push(Task::PickUp {
+        id: s("ak74"),
+        side: Side::Right,
+    });
+    for id in [
+        "ak_mag",
+        "ak_mag",
+        "radio",
+        "field_dressing",
+        "field_dressing",
+        "ammo_545",
+    ] {
+        t.push(Task::PickUp {
+            id: s(id),
+            side: Side::Left,
+        });
+        t.push(Task::Stow(Side::Left));
+    }
+    t.push(Task::Gun(MacroKind::Reload));
+    // Safe -> auto -> semi: aimed single shots.
+    t.push(Task::Gun(MacroKind::Mode));
+    t.push(Task::Gun(MacroKind::Mode));
+    t
+}
+
+/// Steps out of the truck bed first (the rear is +Z, truck space).
+pub fn leave_bed(truck: &GlobalTransform) -> Vec<Task> {
+    let p = |z: f32| {
+        let w = truck.transform_point(Vec3::new(0.0, 0.0, z));
+        Vec2::new(w.x, w.z)
+    };
+    vec![
+        Task::WalkTo {
+            to: p(2.6),
+            within: 0.4,
+        },
+        Task::WalkTo {
+            to: p(5.5),
+            within: 0.8,
+        },
+    ]
+}
+
+#[derive(SystemParam)]
+pub struct Scene<'w, 's> {
+    time: Res<'w, Time>,
+    raid: Res<'w, Raid>,
+    zone: Res<'w, Zone>,
+    catalog: Res<'w, Catalog>,
+    hands: Query<'w, 's, (&'static RigHand, &'static Hand)>,
+    items: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static Item,
+            &'static GlobalTransform,
+            Option<&'static Held>,
+            Option<&'static InSocket>,
+            Option<&'static InBackpack>,
+        ),
+    >,
+    sockets: Query<'w, 's, (&'static Socket, &'static SocketOwner)>,
+    bags: Query<'w, 's, &'static Backpack>,
+    guns: Query<'w, 's, &'static Gun>,
+    mags: Query<'w, 's, (&'static Item, &'static Mag)>,
+    robots: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static Robot,
+            &'static GlobalTransform,
+            &'static Awareness,
+            &'static Brain,
+            &'static Job,
+        ),
+    >,
+    anomalies: Query<'w, 's, (Entity, &'static Anomaly, &'static GlobalTransform)>,
+    trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
+    pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    spatial: SpatialQuery<'w, 's>,
+}
+
+impl Scene<'_, '_> {
+    fn hand(&self, children: &Children, side: Side) -> Option<Entity> {
+        children.iter().find_map(|c| {
+            self.hands
+                .get(c)
+                .ok()
+                .filter(|(rh, _)| rh.side == side)
+                .and_then(|(_, h)| h.holding)
+        })
+    }
+
+    /// Whether this item is on me: a body slot, or my worn backpack.
+    fn mine(&self, me: Entity, item: Entity) -> bool {
+        let Ok((_, _, _, _, sock, bag)) = self.items.get(item) else {
+            return false;
+        };
+        sock.is_some_and(|s| self.sockets.get(s.socket).is_ok_and(|(_, o)| o.0 == me))
+            || bag.is_some_and(|b| {
+                self.bags
+                    .get(b.bag)
+                    .is_ok_and(|b| b.owner == me && b.carried)
+            })
+    }
+
+    /// My things with this id (on the body or in the pack).
+    fn carried(&self, me: Entity, id: &str) -> Vec<Entity> {
+        self.items
+            .iter()
+            .filter(|(e, it, ..)| self.catalog.get(it.kind()).id == id && self.mine(me, *e))
+            .map(|(e, ..)| e)
+            .collect()
+    }
+
+    fn pack(&self, me: Entity) -> Option<&Backpack> {
+        self.bags.iter().find(|b| b.owner == me && b.carried)
+    }
+
+    /// Backpack bulk used and capacity.
+    fn pack_use(&self, me: Entity) -> (f32, f32) {
+        let Some(b) = self.pack(me) else {
+            return (0.0, 1.0);
+        };
+        let used = b
+            .contents
+            .iter()
+            .filter_map(|e| self.items.get(*e).ok())
+            .map(|(_, it, ..)| self.catalog.get(it.kind()).bulk)
+            .sum();
+        (used, b.model.capacity)
+    }
+
+    fn free_slings(&self, me: Entity) -> usize {
+        self.sockets
+            .iter()
+            .filter(|(s, o)| {
+                o.0 == me
+                    && s.occupant.is_none()
+                    && s.kind == SocketKind::Body(extraction_core::inventory::SlotKind::Sling)
+            })
+            .count()
+    }
+
+    /// Rounds in the gun, and in my spare magazines for it.
+    fn ammo(&self, me: Entity, gun: Option<Entity>) -> (u32, u32) {
+        let Some(g) = gun.and_then(|g| self.guns.get(g).ok()) else {
+            return (0, 0);
+        };
+        let family = g.firearm.def.magazine_family.clone().unwrap_or_default();
+        let spare = self
+            .items
+            .iter()
+            .filter(|(e, ..)| self.mine(me, *e))
+            .filter_map(|(e, ..)| self.mags.get(e).ok())
+            .filter(|(_, m)| m.family == family)
+            .map(|(it, _)| it.rounds)
+            .sum();
+        (g.firearm.live_rounds(), spare)
+    }
+
+    /// A clear line from the eye to a point, and from a hand's breadth
+    /// lower (a window sill lets you see what you can't shoot).
+    fn visible(&self, from: Vec3, to: Vec3) -> bool {
+        self.ray_clear(from, to) && self.ray_clear(from - Vec3::Y * 0.25, to)
+    }
+
+    fn ray_clear(&self, from: Vec3, to: Vec3) -> bool {
+        let d = to - from;
+        let len = d.length();
+        let Ok(dir) = Dir3::new(d) else {
+            return true;
+        };
+        self.spatial
+            .cast_ray(
+                from,
+                dir,
+                (len - 0.8).max(0.0),
+                true,
+                &SpatialQueryFilter::from_mask(Layer::World),
+            )
+            .is_none()
+    }
+}
+
+/// The raider's think step: react, then plan when the bot runs dry.
+pub fn think(
+    mut bots: Query<
+        (
+            Entity,
+            &mut Bot,
+            &mut Raider,
+            &Transform,
+            &Health,
+            &crate::player::Body,
+            &Children,
+        ),
+        With<LocalPlayer>,
+    >,
+    scene: Scene,
+    mut log: ResMut<SimLog>,
+) {
+    let dt = scene.time.delta_secs();
+    for (me, mut bot, mut r, tf, health, body, children) in &mut bots {
+        let r = &mut *r;
+        if r.stage == Stage::Done || health.down {
+            continue;
+        }
+        r.clock += dt;
+        r.hp = health.hp;
+        r.kg = body.carried_kg;
+        let pos = tf.translation;
+        let here = pos.xz();
+        let eye = pos + Vec3::Y * 1.6;
+        // What's in the right hand, and its own gun wherever it is (slung
+        // between fights: a long gun carried in one hand snags on door
+        // frames).
+        let gun = scene.hand(children, Side::Right);
+        let own_gun = r.gun.or(gun);
+
+        // Leaving the truck bed comes before everything.
+        if r.stage == Stage::KitUp && r.clock < dt * 1.5 {
+            if let Some((_, t)) = scene.trucks.iter().next() {
+                let mut tasks = leave_bed(t);
+                tasks.extend(bot.tasks.drain(..));
+                bot.replace(tasks);
+            }
+        }
+
+        // --- React: robots. -------------------------------------------
+        r.scan -= dt;
+        if r.scan <= 0.0 && r.stage != Stage::KitUp {
+            r.scan = 0.25;
+            react_to_robots(
+                me,
+                &mut bot,
+                r,
+                &scene,
+                &mut log,
+                eye,
+                gun,
+                health.since_hit < 4.0,
+            );
+            if r.stage == Stage::Done {
+                continue;
+            }
+            spot_anomalies(&mut bot, r, &scene, here);
+        }
+
+        // Stuck: walking somewhere and getting nowhere.
+        if bot.walk.is_some() && r.combat.is_none() {
+            if here.distance(r.anchor.0) > 1.0 {
+                r.anchor = (here, r.clock);
+            } else if r.clock - r.anchor.1 > 6.0 {
+                r.anchor = (here, r.clock);
+                log.event(
+                    "stuck",
+                    json!({"x": round(here.x, 1), "z": round(here.y, 1), "doing": r.doing(),
+                           "task": format!("{:?}", bot.tasks.front())}),
+                );
+                let a = r.rng.range(0.0, std::f32::consts::TAU);
+                let side = here + Vec2::new(a.cos(), a.sin()) * 3.0;
+                // Give up on what it was reaching for; sidestep; replan.
+                if let Act::Take(_, item) = r.act {
+                    r.skip.insert(item);
+                }
+                if let Act::Travel(s) = r.act {
+                    r.sites[s].tries += 1;
+                }
+                r.interrupted = true;
+                bot.replace([Task::WalkTo {
+                    to: side,
+                    within: 0.8,
+                }]);
+            }
+        } else {
+            r.anchor = (here, r.clock);
+        }
+
+        if !bot.done() {
+            continue;
+        }
+
+        // --- Plan. -----------------------------------------------------
+        if let Some(target) = r.combat.as_ref().map(|c| c.target) {
+            // Between bursts: a dressing if it's bad, else keep at it.
+            if let Some(tasks) = heal(me, r, &scene, health, children, &mut log, true) {
+                bot.replace(tasks);
+                continue;
+            }
+            fight_on(me, &mut bot, r, &scene, &mut log, eye, gun, target);
+            continue;
+        }
+        r.diving = false;
+        bot.sprint = false;
+        if let Some(tasks) = heal(me, r, &scene, health, children, &mut log, false) {
+            bot.replace(tasks);
+            continue;
+        }
+        if r.stage != Stage::KitUp {
+            if let Some(tasks) = maintain(me, r, &scene, &mut log, pos, gun, children) {
+                r.interrupted = true;
+                bot.replace(tasks);
+                continue;
+            }
+        }
+        match r.stage {
+            Stage::KitUp => {
+                let loaded = gun
+                    .and_then(|g| scene.guns.get(g).ok())
+                    .map(|g| g.firearm.live_rounds())
+                    .unwrap_or(0);
+                log.event(
+                    "kit",
+                    json!({"gun": gun.is_some(), "rounds": loaded,
+                           "radio": !scene.carried(me, "radio").is_empty()}),
+                );
+                r.gun = gun;
+                // Sling it until it's wanted.
+                bot.replace([Task::Stow(Side::Right), Task::Wait(0.2)]);
+                r.stage = Stage::Raid;
+                r.act = Act::Idle;
+            }
+            Stage::Raid => {
+                if let Some(why) = time_to_go(me, r, &scene, health, own_gun) {
+                    log.stats.extract_reason = Some(why.to_string());
+                    log.event(
+                        "decide_extract",
+                        json!({"why": why, "clock": round(scene.raid.clock, 1)}),
+                    );
+                    r.stage = Stage::Extract;
+                    r.act = Act::Idle;
+                    continue;
+                }
+                let tasks = raid_step(me, r, &scene, &mut log, here, pos, children);
+                bot.sprint = r.diving;
+                if r.debug {
+                    log.event(
+                        "plan",
+                        json!({"tasks": format!("{tasks:?}"), "x": here.x, "z": here.y}),
+                    );
+                }
+                bot.replace(tasks);
+            }
+            Stage::Extract => {
+                let tasks = extract_step(me, r, &scene, &mut log, here, children);
+                // Hurt, it hurries.
+                bot.sprint = r.hp < 50.0;
+                if r.debug {
+                    log.event(
+                        "plan",
+                        json!({"tasks": format!("{tasks:?}"), "x": here.x, "z": here.y}),
+                    );
+                }
+                bot.replace(tasks);
+            }
+            Stage::Done => {}
+        }
+        r.interrupted = false;
+    }
+}
+
+/// Why it's time to head out, if it is.
+fn time_to_go(
+    me: Entity,
+    r: &Raider,
+    scene: &Scene,
+    health: &Health,
+    gun: Option<Entity>,
+) -> Option<&'static str> {
+    if scene.raid.clock > r.traits.minutes * 60.0 {
+        return Some("time");
+    }
+    let (used, cap) = scene.pack_use(me);
+    if r.pack_full || used >= cap * r.traits.full_at || r.kg > r.traits.max_kg {
+        return Some("full");
+    }
+    if health.hp < 30.0 {
+        return Some("hurt");
+    }
+    let meds = !scene.carried(me, "field_dressing").is_empty()
+        || !scene.carried(me, "regen_injector").is_empty();
+    if health.hp < 35.0 && !meds {
+        return Some("hurt");
+    }
+    let (loaded, spare) = scene.ammo(me, gun);
+    if loaded + spare == 0 {
+        return Some("no_ammo");
+    }
+    if !r.sites.iter().any(|s| !s.visited && s.tries < 3) {
+        return Some("done");
+    }
+    None
+}
+
+/// Dress wounds when bleeding or low (and not fighting).
+fn heal(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    health: &Health,
+    children: &Children,
+    log: &mut SimLog,
+    urgent_only: bool,
+) -> Option<Vec<Task>> {
+    let (bleed, low) = if urgent_only {
+        (1.0, 35.0)
+    } else {
+        (0.4, 45.0)
+    };
+    if health.bleeding < bleed && health.hp > low {
+        return None;
+    }
+    if scene.hand(children, Side::Left).is_some() {
+        return None;
+    }
+    let item = ["regen_injector", "field_dressing"]
+        .iter()
+        .find_map(|id| scene.carried(me, id).first().copied())?;
+    let id = scene
+        .items
+        .get(item)
+        .map(|(_, it, ..)| scene.catalog.get(it.kind()).id.clone())
+        .unwrap_or_default();
+    log.stats.heals += 1;
+    log.event(
+        "heal",
+        json!({"item": id, "hp": round(health.hp, 0), "bleeding": round(health.bleeding, 2)}),
+    );
+    let _ = r;
+    Some(vec![
+        Task::Grab {
+            item,
+            side: Side::Left,
+        },
+        Task::Use(Side::Left),
+        Task::Wait(0.3),
+    ])
+}
+
+/// Robots: start, continue or avoid a fight.
+fn react_to_robots(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+    gun: Option<Entity>,
+    hurt: bool,
+) {
+    // Climbing into the truck, or the truck's waiting and it's close: just
+    // go (running).
+    let truck_close = matches!(scene.raid.phase, Phase::TruckWaiting { .. })
+        && scene
+            .trucks
+            .iter()
+            .any(|(_, t)| t.translation().xz().distance(eye.xz()) < 70.0);
+    if (r.act == Act::Board || truck_close) && r.combat.is_none() {
+        if truck_close {
+            bot.sprint = true;
+        }
+        return;
+    }
+    if let Some(c) = &mut r.combat {
+        // Keep tabs on the target between bursts.
+        let gone = scene
+            .robots
+            .get(c.target)
+            .map(|(_, rb, ..)| rb.wrecked)
+            .unwrap_or(true);
+        if gone {
+            return;
+        }
+        let seen = scene
+            .robots
+            .get(c.target)
+            .map(|(_, _, gt, ..)| scene.visible(eye, gt.translation()))
+            .unwrap_or(false);
+        c.unseen = if seen { 0.0 } else { c.unseen + 0.25 };
+        return;
+    }
+    let (loaded, spare) = scene.ammo(me, r.gun.or(gun));
+    let armed = loaded + spare > 0;
+    let mut threat: Option<(Entity, f32, bool, String, Vec3)> = None;
+    for (e, robot, gt, aware, brain, job) in &scene.robots {
+        if robot.wrecked || job.kind == JobKind::Collect {
+            continue;
+        }
+        let at = gt.translation();
+        let d = at.distance(eye);
+        if d > 60.0 {
+            continue;
+        }
+        // Robots onto it get fought once they're close enough to hit
+        // (a drone on the attack closes to circle at about 18 m).
+        // Being shot at, it shoots back at anything in range; walkers hold
+        // at about 35 m to fire.
+        let close = d < 32.0
+            || (hurt && d < 60.0)
+            || (robot.kind == crate::robots::RobotKind::Walker && d < 50.0);
+        let onto_me = aware.target == Some(me)
+            && (matches!(brain, Brain::Engage) || aware.suspicion > 0.6)
+            && close;
+        if !onto_me && d > r.traits.fight_range.max(r.traits.evade as u8 as f32 * 45.0) {
+            continue;
+        }
+        if !scene.visible(eye, at) {
+            continue;
+        }
+        if threat.as_ref().is_none_or(|t| d < t.1) {
+            threat = Some((e, d, onto_me, format!("{:?}", robot.kind), at));
+        }
+    }
+    let Some((target, d, onto_me, kind, at)) = threat else {
+        return;
+    };
+    if r.traits.evade && !onto_me {
+        // Back off the way it came, out of sight.
+        if r.clock > r.retreat_until {
+            r.retreat_until = r.clock + 12.0;
+            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
+            let to = eye.xz() + away * 25.0;
+            log.event("evade", json!({"robot": kind, "dist": round(d, 0)}));
+            if let Some(tasks) = travel(&r.grid, eye.xz(), to, 2.0) {
+                r.interrupted = true;
+                bot.replace(tasks);
+                bot.sprint = true;
+            }
+        }
+        return;
+    }
+    if !armed {
+        // Nothing to fight with: run. Heading out already, run that way.
+        if r.stage == Stage::Extract {
+            bot.sprint = true;
+            return;
+        }
+        if r.clock > r.retreat_until {
+            r.retreat_until = r.clock + 15.0;
+            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
+            log.event("flee", json!({"robot": kind, "dist": round(d, 0)}));
+            if let Some(tasks) = travel(&r.grid, eye.xz(), eye.xz() + away * 40.0, 2.0) {
+                r.interrupted = true;
+                bot.replace(tasks);
+                bot.sprint = true;
+            }
+        }
+        return;
+    }
+    log.stats.engagements += 1;
+    log.event(
+        "engage",
+        json!({"robot": kind, "dist": round(d, 0), "noticed": onto_me,
+               "x": round(eye.x, 1), "z": round(eye.z, 1), "rx": round(at.x, 1), "rz": round(at.z, 1)}),
+    );
+    r.combat = Some(Combat {
+        target,
+        kind,
+        started: log.t,
+        at: eye.xz(),
+        shots_at_start: log.stats.shots,
+        hits_at_start: log.stats.hits,
+        unseen: 0.0,
+        burst_shots: log.stats.shots,
+        dry_bursts: 0,
+        blocked_at_burst: log.stats.blocked,
+    });
+    r.interrupted = true;
+    // Whatever's in the left hand goes down; both hands on the gun.
+    let mut tasks = vec![Task::Release(Side::Left)];
+    if let Some(g) = r.gun.filter(|g| gun != Some(*g)) {
+        tasks.push(Task::Release(Side::Right));
+        tasks.push(Task::Grab {
+            item: g,
+            side: Side::Right,
+        });
+    }
+    tasks.extend([Task::Support, Task::Shoot { target, shots: 4 }]);
+    bot.replace(tasks);
+}
+
+/// Between bursts: keep shooting, reload, or call it.
+fn fight_on(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+    gun: Option<Entity>,
+    target: Entity,
+) {
+    let outcome = match scene.robots.get(target) {
+        Err(_) => Some("gone"),
+        Ok((_, rb, ..)) if rb.wrecked => Some("wrecked"),
+        Ok((_, _, gt, ..)) if gt.translation().distance(eye) > 130.0 => Some("out_of_range"),
+        _ => None,
+    };
+    let lost = r.combat.as_ref().is_some_and(|c| c.unseen > 5.0);
+    let long = r.combat.as_ref().is_some_and(|c| log.t - c.started > 75.0);
+    // Two bursts in a row with nothing fired: something's wrong with the gun.
+    let mut clicked = false;
+    if let Some(c) = &mut r.combat {
+        if c.burst_shots == log.stats.shots {
+            c.dry_bursts += 1;
+        } else {
+            c.dry_bursts = 0;
+        }
+        clicked = c.dry_bursts >= 2;
+        c.burst_shots = log.stats.shots;
+    }
+    // Gun not in hand (a grab that didn't take): get it.
+    if let Some(g) = r.gun.filter(|g| gun != Some(*g)) {
+        bot.replace([
+            Task::Release(Side::Right),
+            Task::Grab {
+                item: g,
+                side: Side::Right,
+            },
+        ]);
+        return;
+    }
+    let (loaded, spare) = scene.ammo(me, gun);
+    let outcome = outcome
+        .or(lost.then_some("lost"))
+        .or(long.then_some("broke_off"))
+        .or((loaded + spare == 0).then_some("out_of_ammo"));
+    if let Some(outcome) = outcome {
+        let mut c = r.combat.take().unwrap();
+        c.close(log, outcome);
+        if outcome == "wrecked" {
+            *log.stats.kills.entry(c.kind.clone()).or_default() += 1;
+            if r.traits.salvage {
+                if let Ok((_, _, gt, ..)) = scene.robots.get(target) {
+                    r.sites.push(Site {
+                        name: format!("{} wreck", c.kind),
+                        kind: SiteKind::Wreck(target),
+                        at: gt.translation().xz(),
+                        spots: 2,
+                        visited: false,
+                        tries: 0,
+                    });
+                }
+            }
+        }
+        r.interrupted = true;
+        bot.replace([
+            Task::Release(Side::Left),
+            Task::Stow(Side::Right),
+            Task::Wait(0.3),
+        ]);
+        return;
+    }
+    let jammed = gun
+        .and_then(|g| scene.guns.get(g).ok())
+        .is_some_and(|g| g.firearm.malfunction.is_some());
+    if loaded > 0 && (jammed || clicked) {
+        log.event("rack", json!({"jammed": jammed}));
+        bot.replace([
+            Task::Gun(MacroKind::Rack),
+            Task::Support,
+            Task::Shoot { target, shots: 4 },
+        ]);
+        return;
+    }
+    if loaded == 0 {
+        bot.replace([
+            Task::Gun(MacroKind::Reload),
+            Task::Support,
+            Task::Shoot { target, shots: 4 },
+        ]);
+        log.event("reload", json!({"spare": spare}));
+        return;
+    }
+    // No line of fire: hold, rather than empty a magazine into a wall.
+    if r.combat.as_ref().is_some_and(|c| c.unseen > 0.0) {
+        bot.replace([Task::Wait(0.4)]);
+        return;
+    }
+    // The last burst went into something in the way: shift a few steps.
+    let walled = r.combat.as_mut().is_some_and(|c| {
+        let more = log.stats.blocked - c.blocked_at_burst;
+        c.blocked_at_burst = log.stats.blocked;
+        more >= 3
+    });
+    if walled {
+        let here = eye.xz();
+        let to = scene
+            .robots
+            .get(target)
+            .map(|(_, _, gt, ..)| gt.translation().xz())
+            .unwrap_or(here);
+        let toward = (to - here).normalize_or(Vec2::X);
+        let side = Vec2::new(-toward.y, toward.x) * if r.rng.chance(0.5) { 1.0 } else { -1.0 };
+        let step = here + (toward + side).normalize() * 3.0;
+        log.event("reposition", json!({}));
+        bot.replace([
+            Task::Release(Side::Left),
+            Task::WalkTo {
+                to: step,
+                within: 0.6,
+            },
+            Task::Support,
+            Task::Shoot { target, shots: 4 },
+        ]);
+        return;
+    }
+    bot.replace([Task::Support, Task::Shoot { target, shots: 4 }]);
+}
+
+/// Anomalies it can see get routed round (unless it's reckless).
+fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
+    let mut new = Vec::new();
+    for (e, a, gt) in &scene.anomalies {
+        if r.known.contains(&e) {
+            continue;
+        }
+        let at = gt.translation().xz();
+        if at.distance(here) < 30.0 {
+            r.known.insert(e);
+            new.push((at, a.radius));
+        }
+    }
+    if new.is_empty() || !r.traits.avoid_anomalies {
+        return;
+    }
+    for (at, radius) in &new {
+        r.grid.block(
+            Obstacle::Circle {
+                at: at.to_array(),
+                radius: radius + 1.0,
+            },
+            0.0,
+        );
+    }
+    // Replan if the walk ahead goes through one (not when diving on purpose).
+    if r.diving || r.combat.is_some() {
+        return;
+    }
+    let crosses = bot.tasks.iter().any(|t| match t {
+        Task::WalkTo { to, .. } => new
+            .iter()
+            .any(|(at, rad)| seg_dist(here, *to, *at) < rad + 0.8),
+        _ => false,
+    });
+    if crosses {
+        r.interrupted = true;
+        bot.replace([Task::Wait(0.1)]);
+    }
+}
+
+fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+    (a + ab * t).distance(p)
+}
+
+/// A walk along the Zone grid, as WalkTo tasks of at most 20 m each.
+fn travel(grid: &NavGrid, from: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let path = grid.path(from.to_array(), to.to_array())?;
+    let mut tasks = Vec::new();
+    let mut last = from;
+    let n = path.len();
+    for (i, p) in path.into_iter().enumerate().skip(1) {
+        let p = Vec2::from_array(p);
+        let steps = (last.distance(p) / 20.0).ceil().max(1.0) as usize;
+        for k in 1..=steps {
+            let q = last.lerp(p, k as f32 / steps as f32);
+            let end = i == n - 1 && k == steps;
+            tasks.push(Task::WalkTo {
+                to: q,
+                within: if end { within } else { 1.2 },
+            });
+        }
+        last = p;
+    }
+    // The grid snaps the goal to walkable ground; finish the last bit
+    // straight if it's short.
+    if last.distance(to) > within && last.distance(to) < 6.0 {
+        tasks.push(Task::WalkTo { to, within });
+    }
+    Some(tasks)
+}
+
+/// Indoors: from where the bot is (in the building's grid) to a local
+/// point, opening doors on the way.
+pub fn indoor_route(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    indoor(plan, from, to, within)
+}
+
+fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let a = plan.to_local(from).xz();
+    let goal = reach_cell(plan, a, to)?;
+    let path = plan.path(a, goal)?;
+    let mut tasks = Vec::new();
+    let mut last = a;
+    let n = path.len();
+    for (i, p) in path.into_iter().enumerate().skip(1) {
+        for (door, cross) in plan.doors_on(last, p) {
+            let dir = (p - last).normalize_or_zero();
+            let before = cross - dir * 1.1;
+            if (before - last).dot(dir) > 0.0 {
+                tasks.push(Task::WalkTo {
+                    to: plan.world2(before),
+                    within: 0.3,
+                });
+            }
+            tasks.push(Task::OpenDoor(door));
+        }
+        tasks.push(Task::WalkTo {
+            to: plan.world2(p),
+            within: if i == n - 1 { within } else { 0.35 },
+        });
+        last = p;
+    }
+    Some(tasks)
+}
+
+/// The walkable cell nearest a goal among those reachable from `from`
+/// (the nearest walkable cell might be through a wall).
+pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+    let g = &plan.grid;
+    let start = if g.walkable(from.to_array()) {
+        from
+    } else {
+        Vec2::from_array(g.nearest_walkable(from.to_array())?)
+    };
+    let (si, sj) = g.cell_of(start.to_array())?;
+    let n = g.n;
+    let mut seen = vec![false; n * n];
+    let mut stack = vec![(si, sj)];
+    seen[sj * n + si] = true;
+    let mut best: Option<(f32, Vec2)> = None;
+    // Reach for indoor things from indoors, not through the wall.
+    let indoors = plan.indoors(goal);
+    while let Some((i, j)) = stack.pop() {
+        let c = Vec2::from_array(g.centre(i, j));
+        let d = c.distance(goal);
+        if best.is_none_or(|b| d < b.0) && !(indoors && plan.outside[j * n + i]) {
+            best = Some((d, c));
+        }
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (ni, nj) = (i as i64 + di, j as i64 + dj);
+            if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                continue;
+            }
+            let k = nj as usize * n + ni as usize;
+            if !seen[k] && g.cost[k] != extraction_core::nav::BLOCKED {
+                seen[k] = true;
+                stack.push((ni as usize, nj as usize));
+            }
+        }
+    }
+    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+}
+
+/// The next thing to do while raiding.
+fn raid_step(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    here: Vec2,
+    pos: Vec3,
+    children: &Children,
+) -> Vec<Task> {
+    // Anything still in the left hand (a refused stow, a fight) goes down
+    // or away first.
+    if let Some(held) = scene.hand(children, Side::Left) {
+        // A stow that didn't take: the pack is full (or it's a long gun
+        // and the slings are taken). Put it down and remember.
+        r.refusals += 1;
+        r.skip.insert(held);
+        let bulky = scene
+            .items
+            .get(held)
+            .is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).size == SizeClass::Bulky);
+        if !bulky && r.refusals >= 2 {
+            r.pack_full = true;
+        }
+        log.event("drop", json!({"why": "no_room", "bulky": bulky}));
+        return vec![Task::Release(Side::Left), Task::Wait(0.2)];
+    }
+    for _ in 0..8 {
+        match r.act {
+            Act::Idle => {
+                let Some(s) = choose_site(r, scene, here) else {
+                    r.pack_full = true; // nothing left worth the walk
+                    return vec![Task::Wait(0.2)];
+                };
+                let site = &r.sites[s];
+                log.event(
+                    "goal",
+                    json!({"site": site.name, "kind": kind_name(site.kind),
+                           "x": round(site.at.x, 1), "z": round(site.at.y, 1),
+                           "dist": round(site.at.distance(here), 0)}),
+                );
+                r.act = Act::Travel(s);
+                if let Some(t) = go_to_site(r, s, pos) {
+                    return t;
+                }
+                r.sites[s].visited = true;
+                r.act = Act::Idle;
+            }
+            Act::Travel(s) => {
+                if arrived(r, s, pos) {
+                    // What's lying there (all of it, and what it wants).
+                    let site = &r.sites[s];
+                    let (mut all, mut artifacts) = (0, 0);
+                    for (_, it, gt, h, so, b) in &scene.items {
+                        if h.is_none()
+                            && so.is_none()
+                            && b.is_none()
+                            && at_site(r, site, gt.translation())
+                        {
+                            all += 1;
+                            if scene.catalog.get(it.kind()).category == Category::Artifact {
+                                artifacts += 1;
+                            }
+                        }
+                    }
+                    log.event(
+                        "arrive",
+                        json!({"site": site.name, "items": all, "artifacts": artifacts}),
+                    );
+                    r.act = Act::Search(s);
+                    continue;
+                }
+                if !r.interrupted {
+                    r.sites[s].tries += 1;
+                }
+                if r.sites[s].tries >= 3 {
+                    log.event("give_up", json!({"site": r.sites[s].name}));
+                    r.sites[s].visited = true;
+                    r.act = Act::Idle;
+                    continue;
+                }
+                if let Some(t) = go_to_site(r, s, pos) {
+                    return t;
+                }
+                r.sites[s].visited = true;
+                r.act = Act::Idle;
+            }
+            Act::Search(s) => {
+                match pick_item(me, r, scene, s, pos) {
+                    Some(item) => {
+                        r.act = Act::Take(s, item);
+                        if let Some(t) = take_item(r, scene, s, item, pos) {
+                            return t;
+                        }
+                        r.skip.insert(item);
+                        r.act = Act::Search(s);
+                    }
+                    None => {
+                        r.sites[s].visited = true;
+                        r.act = Act::Idle;
+                        // Out the door it came in by.
+                        if let SiteKind::Building(b) = r.sites[s].kind {
+                            let plan = &r.plans[b];
+                            if plan.in_grid(pos) && !plan.entries.is_empty() {
+                                let local = plan.to_local(pos).xz();
+                                let exit = plan
+                                    .entries
+                                    .iter()
+                                    .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
+                                    .copied()
+                                    .unwrap();
+                                if let Some(t) = indoor(plan, pos, exit, 0.6) {
+                                    return t;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Act::Take(s, item) => {
+                if scene.mine(me, item) {
+                    let (id, at) = scene
+                        .items
+                        .get(item)
+                        .map(|(_, it, gt, ..)| {
+                            (scene.catalog.get(it.kind()).id.clone(), gt.translation())
+                        })
+                        .unwrap_or_default();
+                    log.stats.loot.push(id.clone());
+                    log.event(
+                        "loot",
+                        json!({"item": id, "site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1),
+                               "ix": round(at.x, 1), "iz": round(at.z, 1)}),
+                    );
+                    r.skip.insert(item);
+                } else if !r.interrupted || r.skip.contains(&item) {
+                    r.skip.insert(item);
+                } else if let Some(t) = take_item(r, scene, s, item, pos) {
+                    return t;
+                } else {
+                    r.skip.insert(item);
+                }
+                r.act = Act::Search(s);
+            }
+            Act::ToRv | Act::Board => {
+                r.act = Act::Idle;
+            }
+        }
+    }
+    vec![Task::Wait(0.2)]
+}
+
+fn kind_name(k: SiteKind) -> &'static str {
+    match k {
+        SiteKind::Building(_) => "building",
+        SiteKind::Spot => "spot",
+        SiteKind::Field => "field",
+        SiteKind::Wreck(_) => "wreck",
+    }
+}
+
+/// Picks the next site: worth, distance, and the pull of the far side as
+/// the clock runs down.
+fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
+    let late = (scene.raid.clock / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
+    let rv_side = rv_centroid(&scene.zone);
+    let mut best: Option<(f32, usize)> = None;
+    for (i, s) in r.sites.iter().enumerate() {
+        if s.visited || s.tries >= 3 {
+            continue;
+        }
+        let pull = match s.kind {
+            SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
+            SiteKind::Spot => r.traits.spots,
+            SiteKind::Field => r.traits.fields * 3.0,
+            SiteKind::Wreck(_) => 4.0,
+        };
+        if pull <= 0.0 {
+            continue;
+        }
+        let d = s.at.distance(here);
+        // Later in the raid, sites toward the rendezvous side look better.
+        let toward = (here.distance(rv_side) - s.at.distance(rv_side)) / 200.0;
+        let score = pull / (1.0 + d / 80.0)
+            * (1.0 + late * toward.clamp(-0.8, 1.0))
+            * r.rng.range(0.75, 1.25);
+        if best.is_none_or(|b| score > b.0) {
+            best = Some((score, i));
+        }
+    }
+    best.map(|b| b.1)
+}
+
+fn rv_centroid(zone: &Zone) -> Vec2 {
+    let rvs: Vec<Vec2> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .collect();
+    if rvs.is_empty() {
+        return Vec2::ZERO;
+    }
+    rvs.iter().copied().sum::<Vec2>() / rvs.len() as f32
+}
+
+/// Where to walk to visit a site.
+fn site_target(r: &Raider, s: usize, pos: Vec3) -> Vec2 {
+    let site = &r.sites[s];
+    match site.kind {
+        SiteKind::Building(b) => {
+            let plan = &r.plans[b];
+            let local = plan.to_local(pos).xz();
+            plan.entries
+                .iter()
+                .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
+                .map(|e| plan.world2(*e))
+                .unwrap_or(site.at)
+        }
+        _ => site.at,
+    }
+}
+
+fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {
+    let to = site_target(r, s, pos);
+    let within = match r.sites[s].kind {
+        SiteKind::Building(_) => 0.6,
+        SiteKind::Field => 8.0,
+        _ => 2.0,
+    };
+    travel(&r.grid, pos.xz(), to, within)
+}
+
+fn arrived(r: &Raider, s: usize, pos: Vec3) -> bool {
+    let site = &r.sites[s];
+    match site.kind {
+        SiteKind::Building(b) => {
+            r.plans[b].in_grid(pos) && site_target(r, s, pos).distance(pos.xz()) < 3.0
+        }
+        SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
+        _ => site.at.distance(pos.xz()) < 6.0,
+    }
+}
+
+/// The best loose item at a site that's worth taking and fits.
+fn pick_item(me: Entity, r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Entity> {
+    let site = &r.sites[s];
+    let (used, cap) = scene.pack_use(me);
+    let slings = scene.free_slings(me);
+    let mut best: Option<(f32, Entity)> = None;
+    for (e, it, gt, held, sock, bag) in &scene.items {
+        if held.is_some() || sock.is_some() || bag.is_some() || r.skip.contains(&e) {
+            continue;
+        }
+        let at = gt.translation();
+        if !at_site(r, site, at) {
+            continue;
+        }
+        let def = scene.catalog.get(it.kind());
+        if site.kind == SiteKind::Field && def.category != Category::Artifact {
+            continue;
+        }
+        let v = r.traits.value(def);
+        if v < r.traits.min_value {
+            continue;
+        }
+        let fits = match def.size {
+            SizeClass::Bulky => slings > 0,
+            _ => used + def.bulk <= cap + 1e-3 || def.size <= SizeClass::Small,
+        };
+        if !fits {
+            continue;
+        }
+        let d = at.distance(pos);
+        let score = v / (1.0 + d / 10.0);
+        if best.is_none_or(|b| score > b.0) {
+            best = Some((score, e));
+        }
+    }
+    best.map(|b| b.1)
+}
+
+/// Tasks to fetch one item into the pack.
+fn take_item(
+    r: &mut Raider,
+    scene: &Scene,
+    s: usize,
+    item: Entity,
+    pos: Vec3,
+) -> Option<Vec<Task>> {
+    let at = scene.items.get(item).ok()?.2.translation();
+    let grab = [
+        Task::Grab {
+            item,
+            side: Side::Left,
+        },
+        Task::Stow(Side::Left),
+        Task::Wait(0.2),
+    ];
+    let mut tasks = Vec::new();
+    match r.sites[s].kind {
+        SiteKind::Building(b) => {
+            let plan = &r.plans[b];
+            if !plan.in_grid(pos) {
+                return None;
+            }
+            tasks.extend(indoor(plan, pos, plan.to_local(at).xz(), 0.3)?);
+        }
+        _ => {
+            // Artifacts sit in anomalies: test the snare, then dive.
+            let hazard = scene
+                .anomalies
+                .iter()
+                .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
+                .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
+            if let Some((kind, centre, rad)) = hazard {
+                // Not hurt, it doesn't.
+                if r.hp < 60.0 && r.traits.avoid_anomalies {
+                    return None;
+                }
+                let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
+                let edge = centre.xz() + out * (rad + 1.8);
+                tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
+                if kind == AnomalyKind::Snare && r.traits.test_anomalies {
+                    if let Some(junk) = junk(r, scene) {
+                        tasks.push(Task::Grab {
+                            item: junk,
+                            side: Side::Left,
+                        });
+                        tasks.push(Task::Throw {
+                            side: Side::Left,
+                            at: centre,
+                        });
+                        tasks.push(Task::Wait(0.6));
+                    }
+                }
+                r.diving = true;
+                tasks.extend(grab);
+                tasks.push(Task::WalkTo {
+                    to: edge,
+                    within: 0.8,
+                });
+                return Some(tasks);
+            }
+            if at.xz().distance(pos.xz()) > 12.0 {
+                tasks.extend(travel(&r.grid, pos.xz(), at.xz(), 1.0).unwrap_or_default());
+            }
+        }
+    }
+    tasks.extend(grab);
+    Some(tasks)
+}
+
+/// Something worthless from the pack, to throw.
+fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
+    let me = scene.bags.iter().find(|b| b.carried)?;
+    me.contents
+        .iter()
+        .filter_map(|e| scene.items.get(*e).ok())
+        .map(|(e, it, ..)| (e, r.traits.value(scene.catalog.get(it.kind()))))
+        .filter(|(_, v)| *v <= 3.0)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(e, _)| e)
+}
+
+/// Getting out: radio, walk to the RV, board, pull the bell.
+fn extract_step(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    here: Vec2,
+    children: &Children,
+) -> Vec<Task> {
+    let zone = &scene.zone;
+    if let Some(held) = scene.hand(children, Side::Left) {
+        let _ = held;
+        return vec![
+            Task::Stow(Side::Left),
+            Task::Wait(0.1),
+            Task::Release(Side::Left),
+        ];
+    }
+    let rvs: Vec<(String, Vec2)> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| (m.name.clone(), Vec2::from_array(m.at)))
+        .collect();
+    if rvs.is_empty() {
+        return vec![Task::Wait(5.0)];
+    }
+    // The truck goes to the RV nearest the caller, so that's the one.
+    let nearest = rvs
+        .iter()
+        .enumerate()
+        .min_by(|a, b| a.1.1.distance(here).total_cmp(&b.1.1.distance(here)))
+        .map(|(i, _)| i)
+        .unwrap();
+    let rv = *r.rv.get_or_insert(nearest);
+    let pose = crate::raid::truck::rv_pose(zone, rv);
+    let p = |z: f32| pose.transform_point(Vec3::new(0.0, 0.0, z)).xz();
+    let approach = p(8.0);
+    let phase = scene.raid.phase.clone();
+    // Call the truck once the walk is short enough to make its window
+    // (two minutes to come, five to wait), and again if it gave up.
+    let pace =
+        crate::player::WALK_SPEED * extraction_core::inventory::Encumbrance::from_mass(r.kg).speed;
+    let walk_secs = here.distance(approach) * 1.35 / pace.max(0.5);
+    let can_call = phase == Phase::Out && r.clock - r.radioed_at > 20.0;
+    if can_call && walk_secs < crate::raid::TRUCK_TRANSIT + 60.0 && nearest == rv {
+        if let Some(radio) = scene.carried(me, "radio").first().copied() {
+            r.radioed_at = r.clock;
+            log.event(
+                "radio",
+                json!({"rv": rvs[rv].0, "x": round(here.x, 1), "z": round(here.y, 1),
+                       "walk_secs": round(walk_secs, 0)}),
+            );
+            return vec![
+                Task::Grab {
+                    item: radio,
+                    side: Side::Left,
+                },
+                Task::Use(Side::Left),
+                Task::Wait(0.3),
+                Task::Stow(Side::Left),
+            ];
+        }
+    }
+    if here.distance(approach) > 4.0 {
+        r.act = Act::ToRv;
+        return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {
+            vec![Task::WalkTo {
+                to: approach,
+                within: 2.0,
+            }]
+        });
+    }
+    match phase {
+        Phase::TruckWaiting { .. } => {
+            let bell = scene
+                .pressables
+                .iter()
+                .find(|(_, p)| matches!(p, Pressable::BellPull))
+                .map(|(e, _)| e);
+            r.act = Act::Board;
+            board_tasks(p, bell)
+        }
+        _ => vec![Task::Wait(2.0)],
+    }
+}
+
+/// Kit upkeep between jobs: pick up the magazines it dropped reloading,
+/// and top them up from the ammunition it carries.
+fn maintain(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    pos: Vec3,
+    _gun: Option<Entity>,
+    children: &Children,
+) -> Option<Vec<Task>> {
+    let g = r.gun?;
+    // Its gun wandered off (snagged, dropped): go and get it, sling it.
+    if !scene.mine(me, g) {
+        let far = scene
+            .items
+            .get(g)
+            .map(|(_, _, gt, ..)| gt.translation().distance(pos))
+            .unwrap_or(0.0);
+        if far > 1.5 {
+            log.event("fetch_gun", json!({"dist": round(far, 1)}));
+            let mut t = Vec::new();
+            if scene.hand(children, Side::Right).is_some() {
+                t.push(Task::Release(Side::Right));
+            }
+            t.extend([
+                Task::Grab {
+                    item: g,
+                    side: Side::Right,
+                },
+                Task::Stow(Side::Right),
+            ]);
+            return Some(t);
+        }
+    }
+    let family = scene
+        .guns
+        .get(g)
+        .ok()?
+        .firearm
+        .def
+        .magazine_family
+        .clone()?;
+    // Its own empties, lying where they fell.
+    let dropped = scene.items.iter().find(|(e, it, gt, h, s, b)| {
+        h.is_none()
+            && s.is_none()
+            && b.is_none()
+            && !r.skip.contains(e)
+            && gt.translation().distance(pos) < 10.0
+            && scene.mags.get(*e).is_ok_and(|(_, m)| m.family == family)
+            && it.rounds < 5
+    });
+    if let Some((e, ..)) = dropped {
+        r.skip.insert(e);
+        return Some(vec![
+            Task::Grab {
+                item: e,
+                side: Side::Left,
+            },
+            Task::Stow(Side::Left),
+            Task::Wait(0.2),
+        ]);
+    }
+    if r.clock - r.last_refill < 20.0 {
+        return None;
+    }
+    // A magazine with room and a box that fits it.
+    let mine: Vec<Entity> = scene
+        .items
+        .iter()
+        .filter(|(e, ..)| scene.mine(me, *e))
+        .map(|(e, ..)| e)
+        .collect();
+    let mag = mine.iter().copied().find(|e| {
+        scene
+            .mags
+            .get(*e)
+            .is_ok_and(|(it, m)| m.family == family && it.rounds + 5 <= m.capacity)
+    })?;
+    let cart = scene
+        .items
+        .get(mag)
+        .ok()
+        .and_then(|(_, it, ..)| scene.catalog.get(it.kind()).magazine.clone())?
+        .cartridge;
+    let ammo = mine.iter().copied().find(|e| {
+        scene.items.get(*e).is_ok_and(|(_, it, ..)| {
+            let d = scene.catalog.get(it.kind());
+            d.category == Category::Ammo
+                && d.cartridge.as_deref() == Some(cart.as_str())
+                && it.rounds > 0
+        })
+    })?;
+    r.last_refill = r.clock;
+    log.event("refill", json!({}));
+    // Magazine and box in hand, together, away.
+    Some(vec![
+        Task::Stow(Side::Right),
+        Task::Grab {
+            item: mag,
+            side: Side::Right,
+        },
+        Task::Grab {
+            item: ammo,
+            side: Side::Left,
+        },
+        Task::Combine,
+        Task::Wait(0.3),
+        Task::Stow(Side::Left),
+        Task::Stow(Side::Right),
+        Task::Wait(0.2),
+    ])
+}
+
+/// Into the truck from behind (`p` maps a distance along the truck's
+/// rear axis to the ground), then the bell.
+pub fn board_tasks(p: impl Fn(f32) -> Vec2, bell: Option<Entity>) -> Vec<Task> {
+    let mut t = vec![
+        Task::WalkTo {
+            to: p(4.2),
+            within: 0.4,
+        },
+        Task::WalkTo {
+            to: p(1.6),
+            within: 0.35,
+        },
+        Task::WalkTo {
+            to: p(0.0),
+            within: 0.35,
+        },
+    ];
+    if let Some(bell) = bell {
+        t.push(Task::Press(bell));
+    }
+    t.push(Task::Wait(1.0));
+    t
+}
+
+/// Whether a point is part of a site (inside the building, by the marker,
+/// in the field).
+fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
+    match site.kind {
+        SiteKind::Building(b) => {
+            let plan = &r.plans[b];
+            plan.contains(at, 0.3) && plan.reachable_height(at)
+        }
+        SiteKind::Spot => at.xz().distance(site.at) < 5.0,
+        SiteKind::Field => at.xz().distance(site.at) < 40.0,
+        SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
+    }
+}

@@ -277,10 +277,22 @@ specific loot roll from pools; the places themselves are designed.
 
 ### Simulation
 
-`extraction-sim` runs the game headless at many times real speed with bot
-players and writes telemetry (paths taken, engagements, deaths, loot found,
-time-to-extract) to `target/sim/`, with heatmaps drawn over the map preview.
-That is the tool for "does this map play well?" questions.
+`extraction --sim N` (or `scripts/sim.sh <map> N`) plays N raids headless,
+each in its own process, at several times real speed. The player is a bot
+with a **raider** brain (`src/sim`) on top of the scenario bot's task list:
+it kits up, picks loot sites by personality (looter, artifact hunter,
+cautious, reckless), walks there on the robots' nav grid (and, indoors, a
+fine grid per building, opening doors), takes what's worth taking, fights
+robots that come for it, routes round anomalies (or doesn't), radios the
+truck, walks to the rendezvous and pulls the bell — all through `RigInput`
+and `HandAction`s, like a player. Each run writes JSON-lines telemetry
+(position every second, loot, shots and hits, fights, damage by cause,
+anomalies, death, the outcome) to `target/sim/<map>/`;
+`scripts/sim_report.py` draws traffic, death, engagement, loot and damage
+heatmaps over the map preview and writes a summary (extraction rate, raid
+times, causes of death, most-looted and never-visited places). That is the
+tool for "does this map play well?" questions. Details and the telemetry
+format: `docs/SIMULATION.md`.
 
 ## Art direction
 

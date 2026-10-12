@@ -21,6 +21,7 @@ pub mod raid;
 pub mod render;
 pub mod rig;
 pub mod robots;
+pub mod sim;
 pub mod weapons;
 pub mod world;
 
@@ -59,7 +60,8 @@ impl Plugin for GamePlugin {
                 anomaly::AnomalyPlugin,
                 gadgets::GadgetsPlugin,
             ),
-        ));
+        ))
+        .add_plugins(sim::SimPlugin);
     }
 }
 
