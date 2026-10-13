@@ -99,6 +99,11 @@ Death is data: the run ends when the bot goes down.
 | `cautious` | Buildings; leaves early (10 min) and light (18 kg) | Slips away from robots that haven't engaged it; won't touch artifacts |
 | `reckless` | A bit of everything, to the brim (34 kg) | Walks through anomalies, starts fights with anything within 60 m |
 
+All of them hear a drone's lock-on chirp and, most of the time (cautious
+nine times in ten, looter and hunter three in four, reckless three in
+ten), step to the nearest spot out of its sight. Ducking is worth a lot:
+the same Marrow Creek batch went from 50% home without it to 70% with.
+
 Tune them in `Traits::named`.
 
 ### What it knows
@@ -138,6 +143,7 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `heal` | `item`, `hp`, `bleeding` | Used a dressing or injector. |
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
+| `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
 | `extract` | `x`, `z` | Pulled the bell with the truck waiting: out. |
@@ -166,8 +172,8 @@ runs `map-dump` for you) draws over the map preview:
 picks a goal and sets off, with telemetry to show for it
 (`sim::tests::a_raider_kits_up_and_sets_off`, ~20 s in a debug build); a
 bot climbs into the truck at base and at every rendezvous; a bot routed by
-a building plan walks in through the shop door. `cargo test -- --ignored
-every_door` walks into every outside door on the map (slow). A full raid
+a building plan walks in through the shop door. ``every_door_lets_a_bot_in` walks into every outside door on the map
+(`EXTRACTION_TEST_MAP=kettle_pass` for another valley). A full raid
 is minutes of wall time, so CI doesn't play one; run `scripts/sim.sh`
 before and after map changes.
 

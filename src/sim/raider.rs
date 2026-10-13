@@ -73,6 +73,9 @@ pub struct Traits {
     /// How much artifact attention it will carry before heading home (the
     /// HUD's feeling: 1.5 "the air hums", 2.5 "the whole Zone is looking").
     pub heat: f32,
+    /// How likely it is to get out of sight when a drone chirps its
+    /// lock-on (`robots::drone::DroneLock`).
+    pub duck: f32,
 }
 
 impl Traits {
@@ -94,6 +97,7 @@ impl Traits {
             test_anomalies: true,
             max_kg: 26.0,
             heat: 1.6,
+            duck: 0.75,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -121,6 +125,7 @@ impl Traits {
                 salvage: false,
                 max_kg: 18.0,
                 heat: 1.0,
+                duck: 0.9,
                 ..base
             },
             "reckless" => Traits {
@@ -136,6 +141,7 @@ impl Traits {
                 test_anomalies: false,
                 max_kg: 34.0,
                 heat: f32::INFINITY,
+                duck: 0.3,
                 ..base
             },
             _ => base,
@@ -263,6 +269,8 @@ pub struct Raider {
     scan: f32,
     clock: f32,
     retreat_until: f32,
+    /// When it last ducked a drone's lock-on.
+    ducked_at: f32,
     /// Its gun, once it has one.
     gun: Option<Entity>,
     /// Stows refused (a full pack).
@@ -424,6 +432,7 @@ pub fn attach_raider(
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
+                ducked_at: -99.0,
                 gun: None,
                 refusals: 0,
                 last_refill: -999.0,
@@ -646,8 +655,10 @@ pub fn think(
     >,
     scene: Scene,
     mut log: ResMut<SimLog>,
+    mut locks: MessageReader<crate::robots::drone::DroneLock>,
 ) {
     let dt = scene.time.delta_secs();
+    let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
     for (me, mut bot, mut r, tf, health, body, children) in &mut bots {
         let r = &mut *r;
         if r.stage == Stage::Done || health.down {
@@ -672,6 +683,15 @@ pub fn think(
                 let mut tasks = leave_bed(t);
                 tasks.extend(bot.tasks.drain(..));
                 bot.replace(tasks);
+            }
+        }
+
+        // --- React: a drone's lock-on chirp. ---------------------------
+        for drone in &locks {
+            if let Some(tasks) = duck(me, r, &scene, &mut log, pos, *drone) {
+                r.interrupted = true;
+                bot.replace(tasks);
+                bot.sprint = true;
             }
         }
 
@@ -1031,6 +1051,44 @@ fn react_to_robots(
     }
     tasks.extend([Task::Support, Task::Shoot { target, shots: 4 }]);
     bot.replace(tasks);
+}
+
+/// A drone chirped its lock on this bot: get somewhere it can't see, if
+/// there's somewhere close (a player hears it and steps behind a tree).
+fn duck(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    pos: Vec3,
+    drone: Entity,
+) -> Option<Vec<Task>> {
+    let (_, _, gt, aware, ..) = scene.robots.get(drone).ok()?;
+    if aware.target != Some(me) || r.clock - r.ducked_at < 4.0 {
+        return None;
+    }
+    if r.rng.range(0.0, 1.0) > r.traits.duck {
+        return None;
+    }
+    let from = gt.translation();
+    let mut best: Option<(f32, Vec2)> = None;
+    for k in 0..12 {
+        let a = k as f32 * std::f32::consts::TAU / 12.0;
+        for d in [2.5, 4.5, 7.0] {
+            let p = pos.xz() + Vec2::new(a.cos(), a.sin()) * d;
+            let eye = Vec3::new(p.x, scene.zone.ground(p.x, p.y) + 1.5, p.y);
+            if !scene.visible(from, eye) && best.is_none_or(|b| d < b.0) {
+                best = Some((d, p));
+            }
+        }
+    }
+    let (d, to) = best?;
+    r.ducked_at = r.clock;
+    log.event(
+        "duck",
+        json!({"dist": round(d, 1), "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+    );
+    Some(vec![Task::WalkTo { to, within: 0.6 }, Task::Wait(1.2)])
 }
 
 /// Between bursts: keep shooting, reload, or call it.

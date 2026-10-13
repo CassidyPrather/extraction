@@ -470,10 +470,14 @@ mod tests {
     /// far as the room behind it.
     #[test]
     fn every_door_lets_a_bot_in() {
-        let opts = LaunchOptions {
+        // `EXTRACTION_TEST_MAP=kettle_pass` to walk another valley's doors.
+        let mut opts = LaunchOptions {
             robots: false,
             ..Default::default()
         };
+        if let Ok(map) = std::env::var("EXTRACTION_TEST_MAP") {
+            opts.map = map;
+        }
         let mut app = crate::headless_app(opts, false);
         app.finish();
         app.cleanup();
