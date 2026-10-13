@@ -173,6 +173,13 @@ street and a walker goes to look where it landed, not where you are
 (`items/impacts.rs`). Only gunfire and what the dirigible and pylons see
 get a response team sent; a clatter just gets looked at.
 
+**The radio listens.** Whenever a response team is sent — gunfire heard,
+the airship or a pylon reporting you, the Zone's attention coming due —
+the robots talk about it, and a radio you carry picks it up: a squelch
+and a burst of static with something mechanical chirping through it,
+and a line on your wrist saying whether it's about somewhere close by or
+which way off it is (`raid/chatter.rs`). It's your warning to move.
+
 **Buildings are not a refuge.** A robot hunting someone indoors goes to
 the building's doors (`robots/doors.rs`). A drone hovers low outside a
 doorway that stands open and looks in (it hangs back from a shut one,

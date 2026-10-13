@@ -225,7 +225,7 @@ fn accept_offerings(
 }
 
 /// A compass word for a direction on the map (north is -Z).
-fn bearing(d: Vec2) -> &'static str {
+pub(crate) fn bearing(d: Vec2) -> &'static str {
     let a = d.x.atan2(-d.y).to_degrees().rem_euclid(360.0);
     const NAMES: [&str; 8] = [
         "north",

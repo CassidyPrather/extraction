@@ -96,6 +96,7 @@ impl Plugin for AudioPlugin {
                     walker_steps,
                     pylon_sounds,
                     radio_sounds,
+                    chatter_sounds,
                     drop_sounds,
                     indoor_ambience,
                     ambient_oneshots,
@@ -998,6 +999,50 @@ fn radio_sounds(
             -16.0,
             0.05,
         );
+    }
+}
+
+/// Robot chatter on a carried radio: a squelch, a long hiss of static
+/// with servo-chirps through it — louder when it's about somewhere close.
+fn chatter_sounds(
+    mut commands: Commands,
+    mut heard: MessageReader<crate::raid::chatter::RobotChatter>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for h in heard.read() {
+        let at = positions.get(h.radio).ok().map(|g| g.translation());
+        let gain = if h.close { 0.0 } else { -5.0 };
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/radio_squelch",
+            at,
+            -8.0 + gain,
+            0.05,
+        );
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/radio_static",
+            at,
+            -12.0 + gain,
+            0.1,
+        );
+        for _ in 0..2 {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "machines/servo",
+                at,
+                -20.0 + gain,
+                0.4,
+            );
+        }
     }
 }
 

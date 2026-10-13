@@ -9,6 +9,7 @@
 //! Stay too long and the Surge comes for everyone.
 
 pub mod bench;
+pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
 pub mod route;
@@ -139,6 +140,7 @@ impl Plugin for RaidPlugin {
             kitchen::KitchenPlugin,
             route::RoutePlugin,
             comfort_board::ComfortBoardPlugin,
+            chatter::ChatterPlugin,
         ))
         .add_systems(
             Update,
@@ -267,7 +269,7 @@ fn radio_calls(
     }
 }
 
-fn tick_raid(
+pub(crate) fn tick_raid(
     mut raid: ResMut<Raid>,
     time: Res<Time>,
     zone: Res<Zone>,

@@ -494,7 +494,7 @@ fn spend_attention(
         budget.budget -= RESPONSE_COST;
         budget.spent_on_responses += RESPONSE_COST;
         let delay = director.rng.range(25.0, 50.0);
-        director.responses.push((delay, here));
+        director.queue_response(delay, here);
         info!("director: attention buys a response to {here:.0}");
     }
     budget.next_bloom -= dt;

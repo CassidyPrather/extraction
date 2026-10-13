@@ -34,6 +34,17 @@ pub struct Director {
     pub max_active: usize,
     /// Seconds until the next logistics run (dirigible and grapplers).
     pub next_logistics: f32,
+    /// Where responses were queued this tick: the robots talk about it, and
+    /// a radio can hear them.
+    pub chatter: Vec<Vec3>,
+}
+
+impl Director {
+    /// Send a response team to `at` in `delay` seconds.
+    pub fn queue_response(&mut self, delay: f32, at: Vec3) {
+        self.responses.push((delay, at));
+        self.chatter.push(at);
+    }
 }
 
 pub struct DirectorPlugin;
@@ -56,6 +67,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         response_cooldown: 0.0,
         max_active: 6,
         next_logistics: 150.0,
+        chatter: Vec::new(),
     });
 }
 
@@ -69,7 +81,7 @@ fn hear_reports(
         let by_player = n.source.is_some_and(|s| players.contains(s));
         if by_player && n.radius > 150.0 && director.response_cooldown <= 0.0 {
             let delay = director.rng.range(35.0, 70.0);
-            director.responses.push((delay, n.at));
+            director.queue_response(delay, n.at);
             director.response_cooldown = 45.0;
         }
     }

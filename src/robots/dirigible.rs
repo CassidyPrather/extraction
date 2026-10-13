@@ -381,7 +381,7 @@ fn report_sightings(
         }
         if let Some(p) = aware.target.and_then(|t| targets.get(t).ok()) {
             let delay = director.rng.range(20.0, 40.0);
-            director.responses.push((delay, p.translation()));
+            director.queue_response(delay, p.translation());
             d.report_cooldown = 90.0;
             info!("dirigible: spotted someone at {:.0}", p.translation());
         }

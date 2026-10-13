@@ -274,7 +274,7 @@ fn report_pylons(
         }
         if let Some(at) = aware.target.and_then(|t| targets.get(t).ok()) {
             let delay = director.rng.range(15.0, 30.0);
-            director.responses.push((delay, at.translation()));
+            director.queue_response(delay, at.translation());
             p.report_cooldown = 75.0;
             info!("pylon: reported someone at {:.0}", at.translation());
         }
