@@ -79,8 +79,11 @@ A raid, as the bot plays it:
    ammunition. It dresses wounds between fights, and mid-fight if it's
    bad. Out of ammunition it runs.
 4. **Get out.** When the clock says so, the pack is full or too heavy,
-   it's hurt, it's out of ammunition, or there's nothing left worth the
-   walk: radio the truck when the walk to the nearest rendezvous is about
+   it's hurt (sooner with an artifact on it: the robots keep coming),
+   the artifacts it carries draw more attention than its nerve allows
+   (`heat`: cautious 1.0, looter 1.6, hunter 2.2, reckless never), it's
+   out of ammunition, or there's nothing left worth the walk. Hurt or
+   carrying artifacts, it leaves wrecks alone: radio the truck when the walk to the nearest rendezvous is about
    as long as the truck's drive, walk there, wait, climb the rear steps
    into the bed and pull the bell. With the truck waiting close by, it
    stops fighting and runs for it.
@@ -135,7 +138,7 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `heal` | `item`, `hp`, `bleeding` | Used a dressing or injector. |
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
-| `decide_extract` | `why` (`time`, `full`, `hurt`, `no_ammo`, `done`), `clock` | Heading out. |
+| `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
 | `extract` | `x`, `z` | Pulled the bell with the truck waiting: out. |
 | `death` | `cause` (what did the most harm in the last 90 s, bleeding aside), `finisher` (what dealt the last point), `x`, `z`, `doing` | Went down. |

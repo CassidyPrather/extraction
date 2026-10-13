@@ -168,6 +168,18 @@
       }
     ]
   },
+  "anomaly/attention": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/attention.ogg",
+        "seconds": 10.5,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "anomaly/burner_roar": {
     "type": "loop",
     "channels": 2,

@@ -70,6 +70,9 @@ pub struct Traits {
     pub test_anomalies: bool,
     /// Carried kilograms that send it home (encumbrance bites past 20).
     pub max_kg: f32,
+    /// How much artifact attention it will carry before heading home (the
+    /// HUD's feeling: 1.5 "the air hums", 2.5 "the whole Zone is looking").
+    pub heat: f32,
 }
 
 impl Traits {
@@ -90,6 +93,7 @@ impl Traits {
             salvage: true,
             test_anomalies: true,
             max_kg: 26.0,
+            heat: 1.6,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -101,6 +105,7 @@ impl Traits {
                 buildings: 0.5,
                 spots: 0.5,
                 fields: 4.0,
+                heat: 2.2,
                 ..base
             },
             "cautious" => Traits {
@@ -115,6 +120,7 @@ impl Traits {
                 evade: true,
                 salvage: false,
                 max_kg: 18.0,
+                heat: 1.0,
                 ..base
             },
             "reckless" => Traits {
@@ -129,6 +135,7 @@ impl Traits {
                 fight_range: 60.0,
                 test_anomalies: false,
                 max_kg: 34.0,
+                heat: f32::INFINITY,
                 ..base
             },
             _ => base,
@@ -266,6 +273,8 @@ pub struct Raider {
     /// Health and carried kilograms as of this frame.
     hp: f32,
     kg: f32,
+    /// Attention from the artifacts it carries.
+    heat: f32,
 }
 
 impl Raider {
@@ -421,6 +430,7 @@ pub fn attach_raider(
                 debug: std::env::var_os("SIM_DEBUG").is_some(),
                 hp: 100.0,
                 kg: 0.0,
+                heat: 0.0,
             },
         ));
     }
@@ -513,6 +523,7 @@ pub struct Scene<'w, 's> {
     anomalies: Query<'w, 's, (Entity, &'static Anomaly, &'static GlobalTransform)>,
     trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     spatial: SpatialQuery<'w, 's>,
 }
 
@@ -645,6 +656,7 @@ pub fn think(
         r.clock += dt;
         r.hp = health.hp;
         r.kg = body.carried_kg;
+        r.heat = scene.attention.get(me).map_or(0.0, |a| a.carried);
         let pos = tf.translation;
         let here = pos.xz();
         let eye = pos + Vec3::Y * 1.6;
@@ -811,8 +823,13 @@ fn time_to_go(
     if r.pack_full || used >= cap * r.traits.full_at || r.kg > r.traits.max_kg {
         return Some("full");
     }
-    if health.hp < 30.0 {
+    // Carrying artifacts, the robots keep coming: hurt is hurt sooner.
+    let heat = r.heat;
+    if health.hp < 30.0 || (heat > 0.0 && health.hp < 50.0) {
         return Some("hurt");
+    }
+    if heat >= r.traits.heat {
+        return Some("heat");
     }
     let meds = !scene.carried(me, "field_dressing").is_empty()
         || !scene.carried(me, "regen_injector").is_empty();
@@ -1457,6 +1474,7 @@ fn kind_name(k: SiteKind) -> &'static str {
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
     let late = (scene.raid.clock / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
+    let heat = r.heat;
     let mut best: Option<(f32, usize)> = None;
     for (i, s) in r.sites.iter().enumerate() {
         if s.visited || s.tries >= 3 {
@@ -1466,6 +1484,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
+            // Picking over a wreck is for when nothing else is coming.
+            SiteKind::Wreck(_) if r.hp < 60.0 || heat > 0.0 => 0.0,
             SiteKind::Wreck(_) => 4.0,
         };
         if pull <= 0.0 {

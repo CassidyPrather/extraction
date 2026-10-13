@@ -75,7 +75,27 @@ impl Attention {
     pub fn total(&self) -> f32 {
         self.carried + self.noise
     }
+
+    /// How it feels, 0 (nothing) to 4: there is no number, only this.
+    pub fn feeling(&self) -> usize {
+        match self.total() {
+            t if t <= 0.05 => 0,
+            t if t < 0.5 => 1,
+            t if t < 1.5 => 2,
+            t if t < 2.5 => 3,
+            _ => 4,
+        }
+    }
 }
+
+/// The feelings, by [`Attention::feeling`].
+pub const FEELINGS: [&str; 5] = [
+    "",
+    "a prickle at the back of your neck",
+    "your teeth ache",
+    "the air hums around you",
+    "the whole Zone is looking at you",
+];
 
 /// The director's attention account.
 #[derive(Resource, Debug, Default)]
@@ -84,6 +104,8 @@ pub struct AttentionBudget {
     pub budget: f32,
     pub next_bloom: f32,
     pub warned: bool,
+    /// The strongest feeling announced lately (see [`Attention::feeling`]).
+    pub felt: usize,
 }
 
 /// Attention-seconds per response team.
@@ -91,6 +113,9 @@ pub const RESPONSE_COST: f32 = 90.0;
 /// Attention-seconds per bloom.
 pub const BLOOM_COST: f32 = 60.0;
 pub const MAX_BLOOMS: usize = 3;
+/// The most attention your own noise can draw (about a hard minute's
+/// shooting; it decays in half a minute).
+pub const NOISE_CAP: f32 = 1.0;
 pub const BLOOM_LIFE: f32 = 240.0;
 
 pub struct AnomalyPlugin;
@@ -448,11 +473,14 @@ fn measure_attention(
             .filter(|(_, c)| c.0 == p)
             .map(|(i, _)| catalog.get(i.kind()).attention)
             .sum();
-        // Noise attention halves every minute.
-        att.noise *= 0.5f32.powf(dt / 60.0);
+        // Noise attention halves every half minute. It is a small share:
+        // gunfire already gets a team sent where it was heard
+        // (`director::hear_reports`), and a big share here turned every
+        // fight into three more.
+        att.noise *= 0.5f32.powf(dt / 30.0);
         for (s, r) in &loud {
             if *s == p {
-                att.noise = (att.noise + r / 400.0).min(3.0);
+                att.noise = (att.noise + r / 1500.0).min(NOISE_CAP);
             }
         }
     }
@@ -482,11 +510,24 @@ fn spend_attention(
     };
     if raid.phase == crate::raid::Phase::AtBase {
         budget.warned = false;
+        budget.felt = 0;
         return;
     }
     if att.carried > 0.0 && !budget.warned {
         budget.warned = true;
         raid.say("Your teeth ache. Something has noticed you.");
+    }
+    // It getting worse is news; easing off a step lets it be news again.
+    let feeling = att.feeling();
+    if feeling > budget.felt {
+        budget.felt = feeling;
+        match feeling {
+            3 => raid.say("The air hums around you. More of them are coming."),
+            4 => raid.say("The whole Zone is looking at you."),
+            _ => {}
+        }
+    } else if feeling + 1 < budget.felt {
+        budget.felt = feeling + 1;
     }
     budget.budget += att.total() * dt;
     let here = gt.translation();
@@ -733,6 +774,13 @@ mod tests {
             "featherstone + hearth = 1.8/s, got {}",
             att.carried
         );
+        let raid = app.world().resource::<Raid>();
+        assert!(
+            raid.log.iter().any(|(l, _)| l.starts_with("The air hums")),
+            "1.8/s is felt: {:?}",
+            raid.log
+        );
+        assert_eq!(att.feeling(), 3);
         let after = app.world().get::<Body>(player).unwrap().carried_kg;
         // +0.2 (stone) - 6 (its lift) + 0.8 (hearth), floored at zero.
         assert!(

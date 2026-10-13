@@ -128,12 +128,16 @@ power gadgets (with the gadget pass).
 
 **Attention** is what they cost. Each carried artifact emits attention per
 second (data: `attention` in `items.ron`), and your gunfire adds a
-decaying share. The director turns attention into budget and spends it:
+small share that fades in half a minute (gunfire already gets a team
+sent to where it was heard; when noise counted for more, every fight
+bought three more and the sims showed nobody surviving the spiral). The director turns attention into budget and spends it:
 every 90 attention-seconds buys a response team sent to where you *are*
 (not where you were heard), and while you carry artifacts, anomalies
 **bloom** across your path ahead of you (temporary, at most three). There
-is no number on screen: the flat HUD describes the feeling ("your teeth
-ache"). A **lead-lined case** (2.4 kg, found among gadgets) seals one
+is no number on screen: you feel it. A ringing rises in your ears past
+the first prickle (synthesised, `anomaly/attention`), and each step worse
+is said once on your wrist ("your teeth ache", "the air hums around you",
+"the whole Zone is looking at you"); the flat HUD names the feeling. A **lead-lined case** (2.4 kg, found among gadgets) seals one
 artifact away: sealed, it draws no attention and does nothing for you —
 no aegis, no hearth, no lift. Carry it shut and open it when it counts.
 
@@ -418,8 +422,11 @@ catch for agent-written code. Revisit if that research changes.
    the lead-lined case, the camera drone, the climbing and zipline kits.
    A second map, Kettle Pass. Loot that rewards risk, after the sims
    showed the far side of Marrow Creek going unvisited (it no longer
-   does). Still open: drones decide every death in the sims and artifact
-   hunters rarely come back; playtesting in a headset.
+   does). Gunfire no longer snowballs into endless response teams (the
+   sims went from 30% to 60% extraction, hunters from none of 11 to
+   about half); the radio overhears responses, and attention is felt.
+   Still open: drones still decide most deaths; playtesting in a
+   headset.
 7. *(stop)* — VRChat port and multiplayer are later phases. The port's
    plan, and what of this game survives it, is in `VRCHAT_PORT.md`; the
    map already exports to Unity (`unity/README.md`).

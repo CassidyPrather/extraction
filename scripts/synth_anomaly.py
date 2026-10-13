@@ -185,11 +185,30 @@ def loopset(entries, name, data, kind="loop"):
     }
 
 
+def attention_ring(seed=23, seconds=12.0):
+    """Being watched: a thin ringing in the ears that beats against itself,
+    and a slow pressure in the jaw, like teeth aching."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        f = 2350 + 4.5 * ch
+        ring = (np.sin(2 * np.pi * f * t) + 0.7 * np.sin(2 * np.pi * (f + 3.0) * t))
+        ring *= 0.5 + 0.5 * np.sin(2 * np.pi * t / 6.0 + ch) ** 2
+        pressure = np.sin(2 * np.pi * 48 * t) * (0.5 + 0.5 * np.sin(2 * np.pi * t / 3.0) ** 4)
+        n = rng.normal(size=t.size)
+        air = lowpass(n, 3000) - lowpass(n, 1200)
+        x = 0.06 * ring + 0.7 * pressure + 0.25 * air / np.max(np.abs(air))
+        out.append(loop_crossfade(x, 1.5))
+    return np.stack(out)
+
+
 def main():
     entries = {}
     loopset(entries, "lift_hum", lift_hum())
     loopset(entries, "burner_roar", burner_roar())
     loopset(entries, "snare_buzz", snare_buzz())
+    loopset(entries, "attention", attention_ring())
     loopset(entries, "lift_pop", lift_pop(), kind="oneshot")
     loopset(entries, "offering", bowl(), kind="oneshot")
     path, secs = write("surge_drone", surge_drone())

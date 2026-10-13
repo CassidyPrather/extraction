@@ -202,15 +202,10 @@ fn update_hud(
     };
     lines.push(format!("raid: {phase}"));
     if let Ok(att) = attention.get(player) {
-        if att.total() > 0.05 {
-            // No number: the Zone doesn't tell you, you just feel it.
-            let feel = match att.total() {
-                t if t < 0.5 => "a prickle at the back of your neck",
-                t if t < 1.5 => "your teeth ache",
-                t if t < 2.5 => "the air hums around you",
-                _ => "the whole Zone is looking at you",
-            };
-            lines.push(format!("attention: {feel}"));
+        // No number: the Zone doesn't tell you, you just feel it.
+        let feel = att.feeling();
+        if feel > 0 {
+            lines.push(format!("attention: {}", crate::anomaly::FEELINGS[feel]));
         }
     }
     for (msg, _) in raid.log.iter().rev().take(3) {

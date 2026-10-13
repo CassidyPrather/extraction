@@ -70,6 +70,10 @@ fn rain_volume(
 #[derive(Component)]
 struct SurgeDrone;
 
+/// A ringing in the ears that grows with attention (`anomaly::Attention`).
+#[derive(Component)]
+struct AttentionLoop;
+
 /// The ambient creek bed, moved along the bank to stay nearest the listener.
 #[derive(Component)]
 struct CreekLoop;
@@ -98,7 +102,13 @@ impl Plugin for AudioPlugin {
                     radio_sounds,
                     chatter_sounds,
                     drop_sounds,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
                     indoor_ambience,
+                    attention_hum,
                     ambient_oneshots,
                     move_creek,
                     surge_sounds,
@@ -449,6 +459,17 @@ fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<
     if let Some(sample) = bank.pick("ambience/room_tone", &mut rng.0) {
         commands.spawn((
             RoomLoop,
+            SamplePlayer::new(sample).looping(),
+            PlaybackSettings::default(),
+            sample_effects![VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            }],
+        ));
+    }
+    if let Some(sample) = bank.pick("anomaly/attention", &mut rng.0) {
+        commands.spawn((
+            AttentionLoop,
             SamplePlayer::new(sample).looping(),
             PlaybackSettings::default(),
             sample_effects![VolumeNode {
@@ -931,6 +952,34 @@ fn indoor_ambience(
                 Volume::SILENT
             } else {
                 Volume::Decibels(-30.0 + 12.0 * k)
+            };
+        }
+    }
+}
+
+/// Attention is felt, not shown: past the first prickle a ringing rises in
+/// your ears, loudest when the whole Zone is looking at you.
+fn attention_hum(
+    players: Query<&crate::anomaly::Attention, With<crate::rig::LocalPlayer>>,
+    hum: Query<&SampleEffects, With<AttentionLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
+    time: Res<Time>,
+    mut level: Local<f32>,
+) {
+    let target = players
+        .iter()
+        .next()
+        .map_or(0.0, |a| ((a.total() - 0.3) / 2.7).clamp(0.0, 1.0));
+    // Swells over a few seconds, fades slower.
+    let rate = if target > *level { 0.25 } else { 0.1 };
+    *level += (target - *level).clamp(-rate * time.delta_secs(), rate * time.delta_secs());
+    let k = *level;
+    for effects in &hum {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = if k < 0.01 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(-34.0 + 20.0 * k)
             };
         }
     }
