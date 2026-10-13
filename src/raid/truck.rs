@@ -58,6 +58,8 @@ pub enum Pressable {
     Destination,
     /// A comfort board card (turning, vignette).
     Setting,
+    /// The driver's request card: hand over what's wanted.
+    Request,
 }
 
 /// The stash crate in the truck bed.

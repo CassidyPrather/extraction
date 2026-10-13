@@ -13,6 +13,7 @@ pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
 pub mod logbook;
+pub mod requests;
 pub mod route;
 pub mod truck;
 
@@ -143,6 +144,7 @@ impl Plugin for RaidPlugin {
             comfort_board::ComfortBoardPlugin,
             chatter::ChatterPlugin,
             logbook::LogbookPlugin,
+            requests::RequestsPlugin,
         ))
         .add_systems(
             Update,

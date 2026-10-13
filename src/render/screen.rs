@@ -44,6 +44,50 @@ struct ScreenView {
     font: f32,
 }
 
+/// Word-wraps `text` into at most `max_lines` lines of `columns`
+/// characters, ending in "..." if it doesn't all fit.
+pub fn wrap(text: &str, columns: usize, max_lines: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for word in text.split_whitespace() {
+        let fits = cur.is_empty() || cur.chars().count() + 1 + word.chars().count() <= columns;
+        if !fits {
+            lines.push(std::mem::take(&mut cur));
+        }
+        if !cur.is_empty() {
+            cur.push(' ');
+        }
+        // A word longer than the line is cut.
+        cur.extend(word.chars().take(columns));
+    }
+    if !cur.is_empty() {
+        lines.push(cur);
+    }
+    if lines.len() > max_lines {
+        lines.truncate(max_lines);
+        let last = &mut lines[max_lines - 1];
+        while last.chars().count() + 3 > columns {
+            last.pop();
+        }
+        *last = format!("{}...", last.trim_end());
+    }
+    lines
+}
+
+/// Word-wraps every line of `text` to `columns`.
+pub fn wrap_lines(text: &str, columns: usize) -> String {
+    text.lines()
+        .flat_map(|l| {
+            if l.trim().is_empty() {
+                vec![String::new()]
+            } else {
+                wrap(l, columns, usize::MAX)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// The largest font (px) up to `max` at which `text` fits a `px` panel
 /// without wrapping: bounded by line count and by the longest line.
 fn fit_font(text: &str, px: Vec2, max: f32) -> f32 {

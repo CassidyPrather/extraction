@@ -141,6 +141,16 @@
             Item(id: "robot_ammo_belt", weight: 1.5),
             Table(name: "gadgets", weight: 0.8),
         ]),
+        // What the driver hides for you in return for a request
+        // (`raid/requests.rs`): the good stuff, a pile of it.
+        "driver_cache": (rolls: (4, 6), entries: [
+            Table(name: "ammo_common", weight: 3.0),
+            Table(name: "gadgets", weight: 2.0),
+            Table(name: "medical", weight: 2.0),
+            Table(name: "tools", weight: 1.0),
+            Table(name: "weapons_rare", weight: 0.6),
+            Item(id: "fuel_can", weight: 0.8),
+        ]),
         "starter_cache": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 1.0, condition: (0.7, 0.8)),
         ]),

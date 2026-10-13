@@ -51,7 +51,8 @@ with another valley on the card and the truck drives there through the
 night: the career is saved, and the game opens again in the new valley.
 The game always opens wherever the truck was headed (`--map` overrides).
 
-**The logbook**, a card by the tailgate, writes up the last raid: how
+**The logbook**, a card by the tailgate (next to the driver's request
+card, see the sinks), writes up the last raid: how
 long you were out, what you wrecked, what came home with you (artifacts
 by name) or what the convoy took, under your record of raids, homecomings
 and losses (`raid/logbook.rs`).
@@ -92,6 +93,15 @@ parts, and artifacts. They leave the world through sinks:
 | **Memorial convoy** | Your body and everything on it are hauled off-site unless you intercept the convoy |
 | **Decay** | Batteries drain, food spoils (cosmetically), artifacts eventually go inert |
 | **Truck space** | The stash is the truck's physical shelving; it is finite, so hoarding costs |
+| **The driver's requests** | A card by the tailgate asks for a few of one thing (robot eyes, scrap, stew); hand them over from the stash and they're gone |
+
+The driver pays for a request the only way that keeps "nothing is bought"
+true: by telling you where they hid a cache of their own, a pile of the
+good stuff (ammunition, gadgets, medicine, now and then a gun) left at a
+building well out in the Zone — "in the log cabin by the Hunting lodge."
+You still have to go and get it, and get it home; the Surge sweeps up a
+cache nobody fetched. A new request comes with the next raid
+(`raid/requests.rs`).
 
 ### Inventory: weight, bulk, and two big guns
 

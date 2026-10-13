@@ -207,6 +207,7 @@ fn card_text(
         Some(e) => format!("LOGBOOK\n{e}\n\n{record}"),
         None => format!("LOGBOOK\n\n{record}"),
     };
+    let text = crate::render::screen::wrap_lines(&text, 26);
     for mut c in &mut cards {
         if c.text != text {
             c.text = text.clone();

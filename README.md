@@ -51,7 +51,8 @@ Listen. A drone that has you chirps three times before it fires, so get
 behind something. A radio on you crackles with robot chatter when a
 response team is sent, and says whether it's coming your way. Artifacts
 draw attention you feel rather than see: a ringing in your ears that
-grows. The logbook by the tailgate writes up each raid.
+grows. The logbook by the tailgate writes up each raid; beside it the driver
+asks for things, and pays by telling you where their cache is.
 
 Two valleys so far: **Marrow Creek**, a foggy river valley, and **Kettle
 Pass**, a mining valley that climbs to a high pass. To change valleys,

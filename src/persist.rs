@@ -174,6 +174,7 @@ fn load_save(
     mut raid: ResMut<Raid>,
     mut memorial: ResMut<Memorial>,
     mut logbook: ResMut<crate::raid::logbook::Logbook>,
+    mut requests: ResMut<crate::raid::requests::Requests>,
 ) {
     let Some(path) = &slot.0 else {
         return;
@@ -199,6 +200,11 @@ fn load_save(
     raid.cycle = save.zone.cycle;
     memorial.0 = save.memorial.clone();
     logbook.written = save.logbook.clone();
+    *requests = crate::raid::requests::Requests {
+        number: save.requests.number,
+        want: save.requests.want.clone(),
+        cache: save.requests.cache.clone(),
+    };
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
         save.item_count(),
@@ -583,6 +589,13 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     save.logbook = world
         .get_resource::<crate::raid::logbook::Logbook>()
         .and_then(|l| l.written.clone());
+    if let Some(r) = world.get_resource::<crate::raid::requests::Requests>() {
+        save.requests = extraction_core::save::RequestsSave {
+            number: r.number,
+            want: r.want.clone(),
+            cache: r.cache.clone(),
+        };
+    }
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()
@@ -903,6 +916,13 @@ mod tests {
                 .as_deref(),
             Some("RAID 3: HOME, 12 MIN"),
             "the logbook keeps the last raid"
+        );
+        assert_eq!(
+            *b.world().resource::<crate::raid::requests::Requests>(),
+            a.world()
+                .resource::<crate::raid::requests::Requests>()
+                .clone(),
+            "and the driver's request"
         );
         let loaded_guns = b
             .world_mut()

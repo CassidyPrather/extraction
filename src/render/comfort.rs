@@ -191,7 +191,7 @@ fn wrist_panel(
         if health.bleeding > 0.05 { " BLEED" } else { "" }
     );
     if let Some((msg, _)) = raid.log.last() {
-        for line in wrap(msg, WRIST_COLUMNS, 3) {
+        for line in crate::render::screen::wrap(msg, WRIST_COLUMNS, 3) {
             text += "\n";
             text += &line;
         }
@@ -206,39 +206,10 @@ fn wrist_panel(
 /// Characters per line on the wrist: narrow keeps the type big.
 const WRIST_COLUMNS: usize = 26;
 
-/// Word-wraps `text` into at most `max_lines` lines of `columns`
-/// characters, ending in "..." if it doesn't all fit.
-fn wrap(text: &str, columns: usize, max_lines: usize) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for word in text.split_whitespace() {
-        let fits = cur.is_empty() || cur.chars().count() + 1 + word.chars().count() <= columns;
-        if !fits {
-            lines.push(std::mem::take(&mut cur));
-        }
-        if !cur.is_empty() {
-            cur.push(' ');
-        }
-        // A word longer than the line is cut.
-        cur.extend(word.chars().take(columns));
-    }
-    if !cur.is_empty() {
-        lines.push(cur);
-    }
-    if lines.len() > max_lines {
-        lines.truncate(max_lines);
-        let last = &mut lines[max_lines - 1];
-        while last.chars().count() + 3 > columns {
-            last.pop();
-        }
-        *last = format!("{}...", last.trim_end());
-    }
-    lines
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::screen::wrap;
 
     #[test]
     fn wrist_messages_wrap_rather_than_lose_their_end() {

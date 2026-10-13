@@ -23,6 +23,17 @@ pub struct SaveGame {
     /// The logbook's write-up of the last raid.
     #[serde(default)]
     pub logbook: Option<String>,
+    #[serde(default)]
+    pub requests: RequestsSave,
+}
+
+/// The driver's requests: how many there have been, what's wanted now,
+/// and where the last cache was left.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct RequestsSave {
+    pub number: u32,
+    pub want: Option<(String, u32)>,
+    pub cache: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -123,6 +134,8 @@ pub struct Career {
     pub zones: Vec<ZoneSave>,
     #[serde(default)]
     pub logbook: Option<String>,
+    #[serde(default)]
+    pub requests: RequestsSave,
 }
 
 impl Career {
@@ -146,6 +159,7 @@ impl Career {
         save.loadout = self.loadout.clone();
         save.memorial = self.memorial.clone();
         save.logbook = self.logbook.clone();
+        save.requests = self.requests.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -159,6 +173,7 @@ impl Career {
         self.loadout = save.loadout.clone();
         self.memorial = save.memorial.clone();
         self.logbook = save.logbook.clone();
+        self.requests = save.requests.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }
