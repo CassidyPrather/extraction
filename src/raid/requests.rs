@@ -87,7 +87,7 @@ impl Plugin for RequestsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Requests>().add_systems(
             Update,
-            (spawn_card, new_request, press_card, card_text)
+            (spawn_card, new_request, press_card, find_cache, card_text)
                 .chain()
                 .after(super::leave_base),
         );
@@ -311,6 +311,38 @@ fn building_name(prefab: &str) -> String {
     }
 }
 
+/// Walking up to the cache takes the cross off the map; a Surge sweeping
+/// the Zone takes the cache.
+fn find_cache(
+    mut requests: ResMut<Requests>,
+    mut raid: ResMut<Raid>,
+    opts: Res<crate::launch::LaunchOptions>,
+    players: Query<&GlobalTransform, With<crate::rig::LocalPlayer>>,
+    mut cycle: Local<Option<u32>>,
+) {
+    let was = cycle.replace(raid.cycle);
+    if was.is_some_and(|c| c != raid.cycle) && requests.cache_at.is_some() {
+        requests.cache_at = None;
+        requests.cache = None;
+        raid.say("Whatever was left in the driver's cache, the Surge has it now.");
+        return;
+    }
+    let Some((map, at)) = requests.cache_at.clone() else {
+        return;
+    };
+    if map != opts.map {
+        return;
+    }
+    let near = players.iter().any(|p| {
+        Vec2::new(p.translation().x, p.translation().z).distance(Vec2::from_array(at)) < 3.0
+    });
+    if near {
+        requests.cache_at = None;
+        requests.cache = None;
+        raid.say("The driver's cache. Just where they said.");
+    }
+}
+
 fn card_text(
     requests: Res<Requests>,
     catalog: Res<Catalog>,
@@ -423,6 +455,20 @@ mod tests {
         assert!(r.want.is_none(), "handed over");
         let note = r.cache.expect("told where the cache is");
         assert!(r.cache_at.is_some(), "and it's on the map");
+        // Walking up to it takes the cross off.
+        let at = r.cache_at.clone().unwrap().1;
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = zone.on_ground(at[0], at[1]) + Vec3::Y * 0.1;
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(
+            app.world().resource::<Requests>().cache_at.is_none(),
+            "found it"
+        );
         assert!(note.starts_with("in the "), "{note}");
         let items_after = app.world_mut().query::<&Item>().iter(app.world()).count();
         assert!(
