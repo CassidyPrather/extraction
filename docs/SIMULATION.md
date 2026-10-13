@@ -172,10 +172,11 @@ runs `map-dump` for you) draws over the map preview:
 picks a goal and sets off, with telemetry to show for it
 (`sim::tests::a_raider_kits_up_and_sets_off`, ~20 s in a debug build); a
 bot climbs into the truck at base and at every rendezvous; a bot routed by
-a building plan walks in through the shop door. ``every_door_lets_a_bot_in` walks into every outside door on the map
-(`EXTRACTION_TEST_MAP=kettle_pass` for another valley). A full raid
-is minutes of wall time, so CI doesn't play one; run `scripts/sim.sh`
-before and after map changes.
+a building plan walks in through the shop door; and
+`every_door_lets_a_bot_in` walks into every outside door on the map
+(`EXTRACTION_TEST_MAP=kettle_pass` for another valley). A full raid is
+minutes of wall time, so CI doesn't play one; run `scripts/sim.sh` before
+and after map changes.
 
 The sim has already paid for itself: its bots found that nobody could
 step up a kerb or a stair (the step-up never took), that the truck's
