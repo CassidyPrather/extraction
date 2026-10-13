@@ -71,11 +71,10 @@ fn listen(
         let d = Vec2::new(at.x - me.x, at.z - me.z);
         let close = d.length() < CLOSE;
         raid.say(if close {
-            "The radio spits a burst of robot chatter. They're talking about somewhere close by."
-                .to_string()
+            "Robot chatter on the radio. They're coming here.".to_string()
         } else {
             format!(
-                "The radio spits a burst of robot chatter: something's stirring off to the {}.",
+                "Robot chatter on the radio: something's moving, off to the {}.",
                 crate::anomaly::offering::bearing(d)
             )
         });
@@ -163,6 +162,6 @@ mod tests {
         assert_eq!(heard[0].radio, radio);
         assert!(heard[0].close);
         let raid = app.world().resource::<Raid>();
-        assert!(raid.log.iter().any(|(l, _)| l.contains("close by")));
+        assert!(raid.log.iter().any(|(l, _)| l.contains("coming here")));
     }
 }
