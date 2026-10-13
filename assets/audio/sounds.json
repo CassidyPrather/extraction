@@ -1493,6 +1493,23 @@
       }
     ]
   },
+  "machines/drone_lock": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/drone_lock_1.ogg",
+        "seconds": 0.85,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/drone_lock_2.ogg",
+        "seconds": 0.85,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "machines/drone_rotor": {
     "type": "loop",
     "channels": 1,

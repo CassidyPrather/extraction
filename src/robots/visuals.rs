@@ -30,6 +30,7 @@ impl Plugin for RobotVisualsPlugin {
                 dim_dead_eyes,
                 dress_pylon_masts,
                 pylon_work_lights,
+                lock_flares,
             ),
         );
     }
@@ -774,5 +775,48 @@ fn pylon_work_lights(
             (false, Some(l)) => commands.entity(l).despawn(),
             (false, None) => {}
         }
+    }
+}
+
+/// A red flare under a drone settling its gun on you.
+#[derive(Component)]
+struct LockFlare {
+    left: f32,
+}
+
+fn lock_flares(
+    mut commands: Commands,
+    mut locks: MessageReader<super::drone::DroneLock>,
+    mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
+    time: Res<Time>,
+) {
+    for l in locks.read() {
+        if let Ok(mut c) = commands.get_entity(l.drone) {
+            c.with_child((
+                LockFlare {
+                    left: super::drone::LOCK_TIME,
+                },
+                PointLight {
+                    color: Color::srgb(1.0, 0.12, 0.08),
+                    intensity: 0.0,
+                    range: 8.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, -0.15, -0.25),
+            ));
+        }
+    }
+    let dt = time.delta_secs();
+    for (e, mut f, mut light) in &mut flares {
+        f.left -= dt;
+        if f.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        // Pulses in step with the chirps, the last held.
+        let k = 1.0 - f.left / super::drone::LOCK_TIME;
+        let on = k > 0.38 || (k % 0.19) < 0.09;
+        light.intensity = if on { 25_000.0 } else { 0.0 };
     }
 }

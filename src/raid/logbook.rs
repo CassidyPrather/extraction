@@ -34,6 +34,8 @@ pub struct Logbook {
     wrecked: BTreeMap<&'static str, u32>,
     started: f32,
     pub last: Option<RaidEntry>,
+    /// The last raid as the card shows it (saved with the career).
+    pub written: Option<String>,
 }
 
 #[derive(Component)]
@@ -150,6 +152,7 @@ fn write_entries(
         items,
         artifacts,
     };
+    book.written = Some(entry_text(&entry));
     book.last = Some(entry);
 }
 
@@ -200,8 +203,8 @@ fn card_text(
         "{} raids, {} home, {} lost",
         raid.raids, raid.extractions, raid.deaths
     );
-    let text = match &book.last {
-        Some(e) => format!("LOGBOOK\n{}\n\n{record}", entry_text(e)),
+    let text = match &book.written {
+        Some(e) => format!("LOGBOOK\n{e}\n\n{record}"),
         None => format!("LOGBOOK\n\n{record}"),
     };
     for mut c in &mut cards {

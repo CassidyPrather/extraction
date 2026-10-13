@@ -173,6 +173,7 @@ fn load_save(
     opts: Res<LaunchOptions>,
     mut raid: ResMut<Raid>,
     mut memorial: ResMut<Memorial>,
+    mut logbook: ResMut<crate::raid::logbook::Logbook>,
 ) {
     let Some(path) = &slot.0 else {
         return;
@@ -197,6 +198,7 @@ fn load_save(
     raid.clock = save.zone.clock;
     raid.cycle = save.zone.cycle;
     memorial.0 = save.memorial.clone();
+    logbook.written = save.logbook.clone();
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
         save.item_count(),
@@ -578,6 +580,9 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     }
     save.zone.rolled = true;
     save.memorial = world.resource::<Memorial>().0.clone();
+    save.logbook = world
+        .get_resource::<crate::raid::logbook::Logbook>()
+        .and_then(|l| l.written.clone());
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()
@@ -878,6 +883,9 @@ mod tests {
         let stash_a = stash_len(a.world_mut());
         assert!(stash_a >= 6, "a new game starts with a kit in the stash");
         a.world_mut().resource_mut::<Raid>().clock = 500.0;
+        a.world_mut()
+            .resource_mut::<crate::raid::logbook::Logbook>()
+            .written = Some("RAID 3: HOME, 12 MIN".into());
         let save = snapshot(a.world_mut());
         assert_eq!(save.item_count(), items_a, "every item is saved once");
         let mut career = a.world().resource::<CareerState>().0.clone();
@@ -888,6 +896,14 @@ mod tests {
         assert_eq!(count::<With<Item>>(b.world_mut()), items_a);
         assert_eq!(stash_len(b.world_mut()), stash_a);
         assert_eq!(b.world().resource::<Raid>().clock, 500.0);
+        assert_eq!(
+            b.world()
+                .resource::<crate::raid::logbook::Logbook>()
+                .written
+                .as_deref(),
+            Some("RAID 3: HOME, 12 MIN"),
+            "the logbook keeps the last raid"
+        );
         let loaded_guns = b
             .world_mut()
             .query::<&Gun>()

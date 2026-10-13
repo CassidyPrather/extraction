@@ -20,6 +20,9 @@ pub struct SaveGame {
     pub stash: Vec<SavedItem>,
     pub loadout: LoadoutSave,
     pub memorial: Memorial,
+    /// The logbook's write-up of the last raid.
+    #[serde(default)]
+    pub logbook: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -118,6 +121,8 @@ pub struct Career {
     pub loadout: LoadoutSave,
     pub memorial: Memorial,
     pub zones: Vec<ZoneSave>,
+    #[serde(default)]
+    pub logbook: Option<String>,
 }
 
 impl Career {
@@ -140,6 +145,7 @@ impl Career {
         save.stash = self.stash.clone();
         save.loadout = self.loadout.clone();
         save.memorial = self.memorial.clone();
+        save.logbook = self.logbook.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -152,6 +158,7 @@ impl Career {
         self.stash = save.stash.clone();
         self.loadout = save.loadout.clone();
         self.memorial = save.memorial.clone();
+        self.logbook = save.logbook.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }

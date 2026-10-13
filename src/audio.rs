@@ -101,6 +101,7 @@ impl Plugin for AudioPlugin {
                     pylon_sounds,
                     radio_sounds,
                     chatter_sounds,
+                    lock_sounds,
                     drop_sounds,
                 ),
             )
@@ -1092,6 +1093,26 @@ fn chatter_sounds(
                 0.4,
             );
         }
+    }
+}
+
+/// A drone settling its gun on you: the chirp that means move.
+fn lock_sounds(
+    mut commands: Commands,
+    mut locks: MessageReader<crate::robots::drone::DroneLock>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for l in locks.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/drone_lock",
+            Some(l.at),
+            4.0,
+            0.03,
+        );
     }
 }
 

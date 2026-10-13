@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Synthesises the sounds of things that don't exist (the Surge, anomalies).
+"""Synthesises the sounds of things that don't exist (the Surge, anomalies,
+robot voices).
 
 Recorded sounds cover the real world (see fetch_audio.py); these are the
 exceptions the audio direction allows. Deterministic: rerunning produces
@@ -45,8 +46,8 @@ def loop_crossfade(x, fade):
     return np.concatenate([mixed, body, tail[:0]])[: len(x) - n]
 
 
-def write(name, stereo, quality=4):
-    OUT.mkdir(parents=True, exist_ok=True)
+def write(name, stereo, quality=4, out=OUT):
+    out.mkdir(parents=True, exist_ok=True)
     peak = np.max(np.abs(stereo))
     stereo = stereo / peak * 0.89
     pcm = (stereo * 32767).astype("<i2")
@@ -57,7 +58,7 @@ def write(name, stereo, quality=4):
         w.setsampwidth(2)
         w.setframerate(SR)
         w.writeframes(pcm.T.copy().tobytes())
-    path = OUT / f"{name}.ogg"
+    path = out / f"{name}.ogg"
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", tmp, "-c:a", "libvorbis",
          "-q:a", str(quality), "-fflags", "+bitexact", "-flags:a", "+bitexact",
@@ -203,6 +204,25 @@ def attention_ring(seed=23, seconds=12.0):
     return np.stack(out)
 
 
+def drone_lock(seed, seconds=0.85):
+    """A drone settling its gun on you: three quick electronic chirps,
+    rising, the last held — a sound that means *move*."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    base = 1250 + 60 * (seed % 3)
+    x = np.zeros(n)
+    for k, (start, length) in enumerate([(0.0, 0.07), (0.16, 0.07), (0.32, 0.45)]):
+        a, b = int(start * SR), int((start + length) * SR)
+        tt = t[a:b] - start
+        f = base * (1.0 + 0.18 * k) * (1.0 + 0.04 * tt / length)
+        env = np.minimum(1.0, tt / 0.006) * np.minimum(1.0, (length - tt) / 0.02)
+        tone = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * 0.35 + np.sin(2 * np.pi * np.cumsum(f) / SR)
+        x[a:b] += tone * env
+    x = lowpass(x, 5500) + 0.01 * rng.normal(size=n)
+    return np.stack([x, x])
+
+
 def main():
     entries = {}
     loopset(entries, "lift_hum", lift_hum())
@@ -223,6 +243,14 @@ def main():
         files.append({"file": str(path.relative_to(ROOT / "assets")), "seconds": round(secs, 3),
                       "source": "synth:scripts/synth_anomaly.py"})
     entries["anomaly/surge_crack"] = {"type": "oneshot", "channels": 2, "loop": False, "files": files}
+
+    files = []
+    robots = ROOT / "assets" / "audio" / "machines"
+    for i in range(2):
+        path, secs = write(f"drone_lock_{i + 1}", drone_lock(i), out=robots)
+        files.append({"file": str(path.relative_to(ROOT / "assets")), "seconds": round(secs, 3),
+                      "source": "synth:scripts/synth_anomaly.py"})
+    entries["machines/drone_lock"] = {"type": "oneshot", "channels": 2, "loop": False, "files": files}
 
     sounds = ROOT / "assets" / "audio" / "sounds.json"
     data = json.loads(sounds.read_text())

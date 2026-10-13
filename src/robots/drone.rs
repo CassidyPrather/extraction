@@ -42,6 +42,20 @@ pub struct Drone {
     /// Orbit phase while working or engaging.
     pub phase: f32,
     pub looted: bool,
+    /// Seconds it has held a firing solution on its target: it fires only
+    /// once this reaches [`LOCK_TIME`].
+    pub lock: f32,
+}
+
+/// A drone settling its gun on someone, before the first burst: the chirp
+/// that tells you to get behind something.
+pub const LOCK_TIME: f32 = 0.9;
+
+/// A drone began locking on (audio chirps; the eye flares).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct DroneLock {
+    pub drone: Entity,
+    pub at: Vec3,
 }
 
 /// The gun pod's muzzle, for shots.
@@ -52,7 +66,7 @@ pub struct DronePlugin;
 
 impl Plugin for DronePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_message::<DroneLock>().add_systems(
             FixedUpdate,
             (drone_parts_destroyed, drone_brain, fly_drones, drone_guns)
                 .chain()
@@ -79,6 +93,7 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 goal: at,
                 phase: 0.0,
                 looted: false,
+                lock: 0.0,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -358,7 +373,10 @@ fn fly_drones(
         let face_flat = Vec3::new(face.x, 0.0, face.z);
         let yaw_err = if face_flat.length() > 0.5 {
             let f = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
-            f.cross(face_flat.normalize()).y.clamp(-1.0, 1.0).asin()
+            let to = face_flat.normalize();
+            // Signed angle, full turn when the target is behind (an arcsine
+            // of the cross product reads zero there, and it never turned).
+            f.cross(to).y.atan2(f.dot(to))
         } else {
             0.0
         };
@@ -403,12 +421,21 @@ fn drone_guns(
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut shots: MessageWriter<Shot>,
+    mut locks: MessageWriter<DroneLock>,
     mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut d, brain, aware, robot, children, _t) in &mut drones {
+    for (e, mut d, brain, aware, robot, children, t) in &mut drones {
         d.gun_cooldown -= dt;
-        if robot.wrecked || !matches!(brain, Brain::Engage) || !aware.can_see_target {
+        if robot.wrecked || !matches!(brain, Brain::Engage) {
+            d.lock = 0.0;
+            continue;
+        }
+        if !aware.can_see_target {
+            // A moment behind cover doesn't shake it; a while does.
+            if aware.unseen > 1.5 {
+                d.lock = 0.0;
+            }
             continue;
         }
         let Some(target) = aware
@@ -421,7 +448,20 @@ fn drone_guns(
         let Some((gun_gt, part)) = children.iter().find_map(|c| guns.get(c).ok()) else {
             continue;
         };
-        if !part.alive() || d.gun_cooldown > 0.0 {
+        if !part.alive() {
+            continue;
+        }
+        if d.lock < LOCK_TIME {
+            if d.lock == 0.0 {
+                locks.write(DroneLock {
+                    drone: e,
+                    at: t.translation,
+                });
+            }
+            d.lock += dt;
+            continue;
+        }
+        if d.gun_cooldown > 0.0 {
             continue;
         }
         let muzzle = gun_gt.transform_point(Vec3::new(0.0, 0.0, -0.18));
@@ -450,5 +490,88 @@ fn drone_guns(
         });
         d.burst_left -= 1;
         d.gun_cooldown = if d.burst_left == 0 { 1.8 } else { 0.11 };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Resource, Default)]
+    struct Heard {
+        lock: Option<f32>,
+        shot: Option<f32>,
+    }
+
+    fn listen(
+        mut locks: MessageReader<DroneLock>,
+        mut shots: MessageReader<Shot>,
+        drones: Query<(), With<Drone>>,
+        time: Res<Time>,
+        mut heard: ResMut<Heard>,
+    ) {
+        let t = time.elapsed_secs();
+        if locks.read().next().is_some() && heard.lock.is_none() {
+            heard.lock = Some(t);
+        }
+        for s in shots.read() {
+            if s.shooter.is_some_and(|e| drones.contains(e)) && heard.shot.is_none() {
+                heard.shot = Some(t);
+            }
+        }
+    }
+
+    #[test]
+    fn a_drone_chirps_before_it_fires() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.init_resource::<Heard>().add_systems(Last, listen);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let at = zone.on_ground(40.0, 255.0);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at;
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let site = at + Vec3::new(0.0, 6.0, -15.0);
+        {
+            let mut c = Commands::new(&mut queue, app.world());
+            spawn_drone(
+                &mut c,
+                site,
+                Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 999.0,
+                    exit: site,
+                },
+            );
+        }
+        queue.apply(app.world_mut());
+        for _ in 0..90 * 15 {
+            app.update();
+            if app.world().resource::<Heard>().shot.is_some() {
+                break;
+            }
+        }
+        let heard = app.world().resource::<Heard>();
+        let lock = heard.lock.expect("it locked on");
+        let shot = heard.shot.expect("then fired");
+        assert!(
+            shot - lock >= LOCK_TIME - 0.05,
+            "a beat to duck: locked at {lock:.2}, fired at {shot:.2}"
+        );
     }
 }

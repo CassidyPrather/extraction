@@ -131,18 +131,20 @@ height); the aegis knot turns the first hit and needs 90 s to re-knot; the
 glass eye, held to your eye, shows robots through walls; the hearth will
 power gadgets (with the gadget pass).
 
-**Attention** is what they cost. Each carried artifact emits attention per
-second (data: `attention` in `items.ron`), and your gunfire adds a
+**Attention** is what they cost. Each carried artifact emits attention
+per second (data: `attention` in `items.ron`), and your gunfire adds a
 small share that fades in half a minute (gunfire already gets a team
 sent to where it was heard; when noise counted for more, every fight
-bought three more and the sims showed nobody surviving the spiral). The director turns attention into budget and spends it:
-every 90 attention-seconds buys a response team sent to where you *are*
-(not where you were heard), and while you carry artifacts, anomalies
-**bloom** across your path ahead of you (temporary, at most three). There
-is no number on screen: you feel it. A ringing rises in your ears past
-the first prickle (synthesised, `anomaly/attention`), and each step worse
-is said once on your wrist ("your teeth ache", "the air hums around you",
-"the whole Zone is looking at you"); the flat HUD names the feeling. A **lead-lined case** (2.4 kg, found among gadgets) seals one
+bought three more and the sims showed nobody surviving the spiral). The
+director turns attention into budget and spends it: every 90
+attention-seconds buys a response team sent to where you *are* (not
+where you were heard), and while you carry artifacts, anomalies
+**bloom** across your path ahead of you (temporary, at most three).
+There is no number on screen: you feel it. A ringing rises in your ears
+past the first prickle (synthesised, `anomaly/attention`), and each step
+worse is said once on your wrist ("your teeth ache", "the air hums
+around you", "the whole Zone is looking at you"); the flat HUD names the
+feeling. A **lead-lined case** (2.4 kg, found among gadgets) seals one
 artifact away: sealed, it draws no attention and does nothing for you —
 no aegis, no hearth, no lift. Carry it shut and open it when it counts.
 
@@ -188,6 +190,11 @@ the robots talk about it, and a radio you carry picks it up: a squelch
 and a burst of static with something mechanical chirping through it,
 and a line on your wrist saying whether it's about somewhere close by or
 which way off it is (`raid/chatter.rs`). It's your warning to move.
+
+**Drones warn before they fire.** Each time a drone gets its gun on you
+it settles first: three rising chirps and a red flare under its nose,
+0.9 s, then the burst (`robots/drone.rs`). Duck out of sight for a moment
+and it keeps the lock; stay out for longer and it has to settle again.
 
 **Buildings are not a refuge.** A robot hunting someone indoors goes to
 the building's doors (`robots/doors.rs`). A drone hovers low outside a

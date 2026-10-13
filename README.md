@@ -47,6 +47,12 @@ The game saves itself (the stash, what you carry, and each valley's Zone
 as you left it) to `career.ron` in the same folder; `--new-game` starts
 over.
 
+Listen. A drone that has you chirps three times before it fires, so get
+behind something. A radio on you crackles with robot chatter when a
+response team is sent, and says whether it's coming your way. Artifacts
+draw attention you feel rather than see: a ringing in your ears that
+grows. The logbook by the tailgate writes up each raid.
+
 Two valleys so far: **Marrow Creek**, a foggy river valley, and **Kettle
 Pass**, a mining valley that climbs to a high pass. To change valleys,
 press the route card on the truck bed's right wall and ring the bell; the
