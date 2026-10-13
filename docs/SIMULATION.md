@@ -175,3 +175,12 @@ The sim has already paid for itself: its bots found that nobody could
 step up a kerb or a stair (the step-up never took), that the truck's
 chassis rails walled off its rear steps, and that a truck parked on a
 slope left its steps in the air.
+Later it found that gunfire bought response teams twice over (every
+fight snowballed into three or four more), and that a bot deciding to
+head home while still in a back room walked at the wall instead of out
+the door.
+
+Known bot weakness: now and then a bot opening an outward door from
+outside stands where the leaf swings and wedges itself against it (seen
+at the Kettle Pass barn's side door). A player steps aside; the bot gives
+up on the site after three tries, but can lose minutes there.

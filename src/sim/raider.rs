@@ -791,7 +791,7 @@ pub fn think(
                 bot.replace(tasks);
             }
             Stage::Extract => {
-                let tasks = extract_step(me, r, &scene, &mut log, here, children);
+                let tasks = extract_step(me, r, &scene, &mut log, here, pos, children);
                 // Hurt, it hurries.
                 bot.sprint = r.hp < 50.0;
                 if r.debug {
@@ -1533,8 +1533,30 @@ fn site_target(r: &Raider, s: usize, pos: Vec3) -> Vec2 {
     }
 }
 
+/// Indoors, out the nearest door first: the Zone grid knows nothing of
+/// walls, and a straight line from a back room goes through one.
+fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
+    let plan = r
+        .plans
+        .iter()
+        .find(|p| p.in_grid(pos) && p.indoors(p.to_local(pos).xz()))?;
+    let local = plan.to_local(pos).xz();
+    let exit = plan
+        .entries
+        .iter()
+        .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
+        .copied()?;
+    indoor(plan, pos, exit, 0.6)
+}
+
 fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {
     let to = site_target(r, s, pos);
+    let same = matches!(r.sites[s].kind, SiteKind::Building(b) if r.plans[b].in_grid(pos));
+    if !same {
+        if let Some(out) = leave_building(r, pos) {
+            return Some(out);
+        }
+    }
     let within = match r.sites[s].kind {
         SiteKind::Building(_) => 0.6,
         SiteKind::Field => 8.0,
@@ -1682,6 +1704,7 @@ fn extract_step(
     scene: &Scene,
     log: &mut SimLog,
     here: Vec2,
+    pos: Vec3,
     children: &Children,
 ) -> Vec<Task> {
     let zone = &scene.zone;
@@ -1740,6 +1763,9 @@ fn extract_step(
     }
     if here.distance(approach) > 4.0 {
         r.act = Act::ToRv;
+        if let Some(out) = leave_building(r, pos) {
+            return out;
+        }
         return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
                 to: approach,

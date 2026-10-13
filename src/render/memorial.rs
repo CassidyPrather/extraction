@@ -68,7 +68,7 @@ fn hang_board(
                 size: Vec2::new(0.36, 0.5),
                 style: crate::raid::bench::ScreenStyle::Paper,
             },
-            Transform::from_xyz(-1.12, FLOOR + 1.35, -0.2).with_rotation(
+            Transform::from_xyz(-1.12, FLOOR + 1.72, -0.2).with_rotation(
                 Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) * Quat::from_rotation_z(-0.04),
             ),
             Visibility::default(),

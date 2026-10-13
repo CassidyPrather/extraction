@@ -51,6 +51,11 @@ with another valley on the card and the truck drives there through the
 night: the career is saved, and the game opens again in the new valley.
 The game always opens wherever the truck was headed (`--map` overrides).
 
+**The logbook**, a card by the tailgate, writes up the last raid: how
+long you were out, what you wrecked, what came home with you (artifacts
+by name) or what the convoy took, under your record of raids, homecomings
+and losses (`raid/logbook.rs`).
+
 The **Zone clock** runs only while you are out, and carries over from
 raid to raid. Every 60 minutes of Zone time — two or three raids — the
 **Surge** comes: five minutes of warning (sky, radio), then two minutes
