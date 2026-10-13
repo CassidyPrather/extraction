@@ -542,6 +542,12 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "boxcar" => boxcar(&mut b),
         "log_pile" => log_pile(&mut b),
         "anomaly_core" => anomaly(&mut b),
+        "factory_hall" => {
+            hall(&mut b, 36.0, 20.0, 9.0, Mat::Brick, Mat::Corrugated, false);
+            b.crate_box(Vec3::new(-14.0, 0.1, -7.0), 0.9, Some("workshop"));
+            b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
+        }
+        "chimney" => chimney(&mut b),
         _ => return None,
     }
     Some(b.finish())
@@ -932,6 +938,36 @@ fn mast_hut(b: &mut Builder) {
     b.flat_roof(w, d, f + h, Mat::Concrete);
     b.counter(Vec3::new(1.2, f, 1.4), 0.0, 2.2, Some("gadgets"));
     b.shelf(Vec3::new(-1.8, f, 1.5), 0.0, Some("tools"));
+}
+
+/// A works chimney: a tapering brick stack banded with iron, a red lamp
+/// on top. You see it from anywhere in the valley the fog allows.
+fn chimney(b: &mut Builder) {
+    b.bx(
+        Vec3::new(5.0, 2.0, 5.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Mat::Concrete,
+    );
+    let (segs, total) = (6, 36.0);
+    let h = total / segs as f32;
+    let mut y = 2.0;
+    for i in 0..segs {
+        let r = 2.1 - 0.13 * i as f32;
+        b.piece(
+            Shape::Cylinder(r, h),
+            Transform::from_xyz(0.0, y + h * 0.5, 0.0),
+            Mat::Brick,
+            true,
+        );
+        b.piece(
+            Shape::Cylinder(r + 0.07, 0.3),
+            Transform::from_xyz(0.0, y + h, 0.0),
+            Mat::RustyMetal,
+            false,
+        );
+        y += h;
+    }
+    b.geo.lights.push(Vec3::new(0.0, y + 0.4, 0.0));
 }
 
 fn radio_mast(b: &mut Builder) {

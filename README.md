@@ -54,8 +54,9 @@ draw attention you feel rather than see: a ringing in your ears that
 grows. The logbook by the tailgate writes up each raid; beside it the driver
 asks for things, and pays by telling you where their cache is.
 
-Two valleys so far: **Marrow Creek**, a foggy river valley, and **Kettle
-Pass**, a mining valley that climbs to a high pass. To change valleys,
+Three valleys so far: **Marrow Creek**, a foggy river valley; **Kettle
+Pass**, a mining valley that climbs to a high pass; and **Cinder Works**,
+a burnt-out works on a canal. To change valleys,
 press the route card on the truck bed's right wall and ring the bell; the
 truck drives through the night and the game reopens there. `--map NAME`
 opens a valley directly.

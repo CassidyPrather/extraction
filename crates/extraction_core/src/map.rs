@@ -305,6 +305,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "boxcar" => [3.0, 4.2, 14.0],
         "ranger_tower" => [6.0, 12.0, 5.0],
         "robot_gate" => [17.6, 14.0, 4.0],
+        "factory_hall" => [36.0, 10.0, 20.0],
+        "chimney" => [5.0, 38.0, 5.0],
         _ => [4.0, 3.0, 4.0],
     }
 }
@@ -356,6 +358,8 @@ impl MapDef {
 pub const MARROW_CREEK: &str = include_str!("../../../assets/maps/marrow_creek.ron");
 /// The second map.
 pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron");
+/// The third.
+pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.ron");
 
 #[cfg(test)]
 mod tests {
@@ -376,6 +380,36 @@ mod tests {
         let gate = hm.height([120.0, 270.0]);
         let pass = hm.height([10.0, -250.0]);
         assert!(pass - gate > 15.0, "gate {gate:.1}, pass {pass:.1}");
+        for m in map.markers.iter().filter(|m| {
+            matches!(
+                m.kind,
+                MarkerKind::Insertion | MarkerKind::Rendezvous | MarkerKind::Offering
+            )
+        }) {
+            assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
+            assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
+        }
+    }
+
+    #[test]
+    fn cinder_works_parses_and_builds() {
+        let map = MapDef::from_ron(CINDER_WORKS).expect("map parses");
+        assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
+        let hm = Heightmap::build(&map);
+        assert!(
+            hm.water_level([20.0, 56.0]).is_some(),
+            "the canal under the bridge"
+        );
+        assert!(hm.water_level([-50.0, 155.0]).is_none(), "Ash Row is dry");
+        assert!(hm.water_level([75.0, -20.0]).is_none(), "the works are dry");
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
+        for rv in map.markers_of(&MarkerKind::Rendezvous) {
+            assert!(
+                crate::geom::dist(ins.at, rv.at) > 350.0,
+                "{} is too close to the insertion",
+                rv.name
+            );
+        }
         for m in map.markers.iter().filter(|m| {
             matches!(
                 m.kind,

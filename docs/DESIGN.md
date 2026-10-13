@@ -362,14 +362,21 @@ top-down preview renderer draws the layout for design review. Prefabs are
 modelled by Blender Python scripts in `art/`, exported as glTF with
 collision and socket markers as custom properties. Enemy spawns, jobs and
 specific loot roll from pools; the places themselves are designed.
-Two maps so far. **Marrow Creek**: a river valley, the creek its spine,
+Three maps so far. **Marrow Creek**: a river valley, the creek its spine,
 three ways across it and every rendezvous on the far side. **Kettle
 Pass**: a valley that climbs 30 m from the south gate to a saddle
 between two summits; the pass road switchbacks up the middle in plain
 view, and cutting across means climbing. Its rendezvous are the pass
 itself, the mine yard in the west and the hunting lodge on the east
 shoulder; its artifacts grow in the quarry pit and on the mine's spoil
-heap. Each map keeps its own Zone; the stash and kit travel with you
+heap. **Cinder Works**: a flat, burnt industrial valley cut in two by a
+canal with one bridge. The works sit in the middle under a 38 m chimney
+you can steer by when the fog allows; the north-west burned and stands
+dead (long sightlines, nothing low to hide behind), and the artifacts are
+on the slag heaps in the north-east, under the robots' Gate, and in the
+ash pit to the west. Its rendezvous are the fire lookout in the dead
+wood, the north sidings and the works yard at the railway's east end.
+Each map keeps its own Zone; the stash and kit travel with you
 (see "Changing valleys" above).
 
 Risk pays: each region's loot spots roll `0.8 + 0.2 × danger` times
@@ -440,16 +447,18 @@ catch for agent-written code. Revisit if that research changes.
    decay of cells), artifacts and attention, anomalies, gadgets, cooking,
    the Surge.
 6. **Polish** — in progress. Done: models for the truck, airship, pod,
-   harpoon launcher, gadgets and artifacts; map simulation with telemetry
-   and heatmaps (see `SIMULATION.md`); forest and building batching for VR;
-   the lead-lined case, the camera drone, the climbing and zipline kits.
-   A second map, Kettle Pass. Loot that rewards risk, after the sims
-   showed the far side of Marrow Creek going unvisited (it no longer
-   does). Gunfire no longer snowballs into endless response teams (the
-   sims went from 30% to 60% extraction, hunters from none of 11 to
-   about half); the radio overhears responses, and attention is felt.
-   Still open: drones still decide most deaths; playtesting in a
-   headset.
+   harpoon launcher, gadgets and artifacts; map simulation with
+   telemetry and heatmaps (see `SIMULATION.md`); forest and building
+   batching for VR; the lead-lined case, the camera drone, the climbing
+   and zipline kits. A second map, Kettle Pass, and a third, Cinder
+   Works. Loot that rewards risk, after the sims showed the far side of
+   Marrow Creek going unvisited (it no longer does). Gunfire no longer
+   snowballs into endless response teams (the sims went from 30% to 60%
+   extraction, hunters from none of 11 to about half); the radio
+   overhears responses, and attention is felt. Drones chirp before they
+   fire; the driver asks for things and pays in caches; a logbook writes
+   up each raid. Still open: drones still decide most deaths;
+   playtesting in a headset.
 7. *(stop)* — VRChat port and multiplayer are later phases. The port's
    plan, and what of this game survives it, is in `VRCHAT_PORT.md`; the
    map already exports to Unity (`unity/README.md`).

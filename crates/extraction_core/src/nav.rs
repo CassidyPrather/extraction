@@ -155,10 +155,19 @@ impl NavGrid {
     /// Opens a corridor (doorways, bridges) that something else blocked.
     pub fn open_line(&mut self, a: P2, b: P2, cost: u8) {
         let steps = (crate::geom::dist(a, b) / (self.cell * 0.5)).ceil() as usize + 1;
+        let mut last: Option<(usize, usize)> = None;
         for s in 0..=steps {
             let p = crate::geom::lerp(a, b, s as f32 / steps as f32);
             if let Some((i, j)) = self.cell_of(p) {
                 self.cost[j * self.n + i] = cost.max(1);
+                // A diagonal step would be a corner the pathfinder won't
+                // cut: open the cell beside it so the line stays walkable.
+                if let Some((li, lj)) = last {
+                    if li != i && lj != j {
+                        self.cost[lj * self.n + i] = cost.max(1);
+                    }
+                }
+                last = Some((i, j));
             }
         }
     }

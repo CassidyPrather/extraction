@@ -736,4 +736,33 @@ mod tests {
         assert!((knee.distance(foot) - LOWER).abs() < 1e-3);
         assert!(knee.y > hip.y - 0.2, "knee bends upward, like a spider's");
     }
+
+    /// On every map, every rendezvous can be walked to from the insertion
+    /// (the bots path on this grid too: a missing bridge is a valley
+    /// nobody crosses).
+    #[test]
+    fn every_rendezvous_is_reachable_on_every_map() {
+        use extraction_core::map::MarkerKind;
+        let mut failed = Vec::new();
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let nav = app.world().resource::<Nav>().0.clone();
+            let ins = zone.marker(&MarkerKind::Insertion).unwrap().at;
+            for rv in zone.map.markers_of(&MarkerKind::Rendezvous) {
+                if nav.path(ins, rv.at).is_none() {
+                    failed.push(format!("{map}: {}", rv.name));
+                }
+            }
+        }
+        assert!(failed.is_empty(), "no way to: {failed:?}");
+    }
 }
