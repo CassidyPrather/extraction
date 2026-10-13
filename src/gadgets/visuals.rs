@@ -33,6 +33,7 @@ impl Plugin for GadgetVisualsPlugin {
                 add_wrist_feed,
                 drone_feeds,
                 dress_ropes,
+                mark_caches,
             ),
         );
     }
@@ -237,6 +238,7 @@ fn dress_gadgets(
                     ),
                     MeshMaterial3d(paper),
                     Transform::from_xyz(0.0, 0.006, 0.0),
+                    MapSheet,
                 ));
             }
             _ => {}
@@ -819,5 +821,78 @@ fn dress_ropes(
                 ));
             }
         });
+    }
+}
+
+/// The paper in a map case (0.28 m square, north up).
+#[derive(Component)]
+pub struct MapSheet;
+
+/// The driver's cache, pencilled on a map sheet as a red cross.
+#[derive(Component)]
+struct CacheMark;
+
+const SHEET: f32 = 0.28;
+
+fn mark_caches(
+    mut commands: Commands,
+    requests: Res<crate::raid::requests::Requests>,
+    opts: Res<crate::launch::LaunchOptions>,
+    zone: Res<crate::world::Zone>,
+    sheets: Query<(Entity, Option<&Children>), With<MapSheet>>,
+    mut marks: Query<&mut Transform, With<CacheMark>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+) {
+    let at = requests
+        .cache_at
+        .as_ref()
+        .filter(|(map, _)| *map == opts.map)
+        .map(|(_, p)| *p);
+    for (sheet, children) in &sheets {
+        let mark = children.and_then(|c| c.iter().find(|c| marks.contains(*c)));
+        match (at, mark) {
+            (Some(p), None) => {
+                let (mesh, mat) = look
+                    .get_or_insert_with(|| {
+                        (
+                            meshes.add(Cuboid::new(0.016, 0.0006, 0.003)),
+                            materials.add(StandardMaterial {
+                                base_color: Color::srgb(0.7, 0.08, 0.06),
+                                perceptual_roughness: 0.95,
+                                ..default()
+                            }),
+                        )
+                    })
+                    .clone();
+                let local = Vec3::new(p[0], 0.0, p[1]) / zone.map.size * SHEET + Vec3::Y * 0.0006;
+                commands.entity(sheet).with_child((
+                    CacheMark,
+                    Transform::from_translation(local),
+                    Visibility::default(),
+                    children![
+                        (
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(mat.clone()),
+                            Transform::from_rotation(Quat::from_rotation_y(0.785)),
+                        ),
+                        (
+                            Mesh3d(mesh),
+                            MeshMaterial3d(mat),
+                            Transform::from_rotation(Quat::from_rotation_y(-0.785)),
+                        ),
+                    ],
+                ));
+            }
+            (Some(p), Some(m)) => {
+                if let Ok(mut t) = marks.get_mut(m) {
+                    t.translation =
+                        Vec3::new(p[0], 0.0, p[1]) / zone.map.size * SHEET + Vec3::Y * 0.0006;
+                }
+            }
+            (None, Some(m)) => commands.entity(m).despawn(),
+            (None, None) => {}
+        }
     }
 }

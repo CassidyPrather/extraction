@@ -34,6 +34,9 @@ pub struct RequestsSave {
     pub number: u32,
     pub want: Option<(String, u32)>,
     pub cache: Option<String>,
+    /// The cache's valley and (x, z) there.
+    #[serde(default)]
+    pub cache_at: Option<(String, [f32; 2])>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

@@ -99,7 +99,8 @@ The driver pays for a request the only way that keeps "nothing is bought"
 true: by telling you where they hid a cache of their own, a pile of the
 good stuff (ammunition, gadgets, medicine, now and then a gun) left at a
 building well out in the Zone — "in the log cabin by the Hunting lodge."
-You still have to go and get it, and get it home; the Surge sweeps up a
+It's pencilled on your field map as a red cross. You still have to go
+and get it, and get it home; the Surge sweeps up a
 cache nobody fetched. A new request comes with the next raid
 (`raid/requests.rs`).
 

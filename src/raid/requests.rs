@@ -55,6 +55,9 @@ pub struct Requests {
     pub want: Option<(String, u32)>,
     /// Where the driver's cache is, once told.
     pub cache: Option<String>,
+    /// And on the map: the valley, and (x, z) there (pencilled on the
+    /// field map).
+    pub cache_at: Option<(String, [f32; 2])>,
 }
 
 impl Requests {
@@ -188,17 +191,20 @@ fn press_card(
             commands.entity(e).despawn();
         }
         let mut rng = Rng::new(opts.seed ^ 0xCAC4E ^ requests.number as u64);
-        let note = match (&loot, &spots) {
+        let placed = match (&loot, &spots) {
             (Some(loot), Some(spots)) => {
                 place_cache(&mut commands, &zone, spots, loot, &catalog, &mut rng)
             }
             _ => None,
         };
         requests.want = None;
-        match &note {
-            Some(where_) => {
-                raid.say(format!("Driver: \"Ta. My cache: {where_} Help yourself.\""));
-                requests.cache = Some(where_.clone());
+        match placed {
+            Some((where_, at)) => {
+                raid.say(format!(
+                    "Driver: \"Ta. My cache: {where_} It's on your map.\""
+                ));
+                requests.cache = Some(where_);
+                requests.cache_at = Some((opts.map.clone(), [at.x, at.z]));
             }
             None => raid.say("Driver: \"Ta. I owe you one.\""),
         }
@@ -214,7 +220,7 @@ fn place_cache(
     loot: &Loot,
     catalog: &Catalog,
     rng: &mut Rng,
-) -> Option<String> {
+) -> Option<(String, Vec3)> {
     let base = zone
         .marker(&MarkerKind::TruckStop)
         .map(|m| Vec2::from_array(m.at))
@@ -250,7 +256,7 @@ fn place_cache(
             },
         );
     }
-    Some(describe_place(zone, at))
+    Some((describe_place(zone, at), at))
 }
 
 /// "in the barn by the Low farm."
@@ -416,6 +422,7 @@ mod tests {
         let r = app.world().resource::<Requests>().clone();
         assert!(r.want.is_none(), "handed over");
         let note = r.cache.expect("told where the cache is");
+        assert!(r.cache_at.is_some(), "and it's on the map");
         assert!(note.starts_with("in the "), "{note}");
         let items_after = app.world_mut().query::<&Item>().iter(app.world()).count();
         assert!(

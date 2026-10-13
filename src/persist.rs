@@ -204,6 +204,7 @@ fn load_save(
         number: save.requests.number,
         want: save.requests.want.clone(),
         cache: save.requests.cache.clone(),
+        cache_at: save.requests.cache_at.clone(),
     };
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
@@ -594,6 +595,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             number: r.number,
             want: r.want.clone(),
             cache: r.cache.clone(),
+            cache_at: r.cache_at.clone(),
         };
     }
     save.version = SAVE_VERSION;
