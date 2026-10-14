@@ -74,6 +74,7 @@ cargo test --workspace                             # unit tests (core rules are 
 cargo run -- --headless --scenario all             # bot-driven integration tests
 cargo run -- --scenario pistol_drill               # ...watch one in a window
 scripts/map-preview.sh                             # top-down map design preview
+scripts/sim.sh marrow_creek 8 --jobs 3             # bots play 8 raids; report + heatmaps
 scripts/shot.sh out.png X,Y,Z,YAW,PITCH 20         # headless screenshot (Xvfb + software Vulkan)
 cargo clippy --workspace --all-targets             # default lints; warnings don't fail CI
 ```
@@ -100,13 +101,17 @@ without them (procedural stand-ins). Every asset is credited in
     collector, perception and the director
   - `anomaly/` — anomalies, artifacts and attention, offerings
   - `raid/` — the truck, the raid clock and the Surge, the bench, the camp
-    kitchen
-  - `persist.rs` — saving and loading the Zone and the stash
+    kitchen, the route card, the logbook, the driver's requests, radio
+    chatter
+  - `persist.rs` — the career save: stash, kit, record, and each valley's
+    Zone
   - `world/` — map loading, terrain, sky, fog, weather and rain, water,
     forests, buildings
   - `render/` — materials, height fog, in-world text panels, props
   - `models.rs` — glTF models built by the Blender scripts in `art/`
   - `bot/` — bot brains and the scenario tests
+  - `sim/` — map simulation: bot raiders that play whole raids and write
+    telemetry ([docs/SIMULATION.md](docs/SIMULATION.md))
 - `assets/` — data (`data/items.ron`, `data/loot.ron`), maps, shaders,
   models, sounds.
 - `art/` — Blender Python scripts for every model (`python3 art/build.py`).
