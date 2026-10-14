@@ -225,4 +225,81 @@ mod tests {
         }
         assert!(bad.is_empty(), "{bad:#?}");
     }
+
+    /// A bot walks across every bridge, both ways, from the road before it
+    /// to the road after.
+    #[test]
+    fn a_bot_walks_over_every_bridge() {
+        use crate::bot::{Bot, Task};
+        use crate::rig::LocalPlayer;
+        let mut stuck = Vec::new();
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            // Each bridge as waypoints along its centreline, every 2 m, from
+            // 4 m before the deck to 4 m after it (bots follow the path).
+            let routes: Vec<Vec<Vec3>> = {
+                let zone = app.world().resource::<Zone>();
+                zone.hm
+                    .road_lines
+                    .iter()
+                    .flat_map(|rl| {
+                        rl.bridges.iter().map(|(a, b)| {
+                            let mut pts = Vec::new();
+                            let mut s = a - 4.0;
+                            while s <= b + 4.0 {
+                                let p = extraction_core::geom::polyline_at(&rl.points, s).0;
+                                pts.push(zone.on_ground(p[0], p[1]));
+                                s += 2.0;
+                            }
+                            pts
+                        })
+                    })
+                    .collect()
+            };
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            for route in routes {
+                let back: Vec<Vec3> = route.iter().rev().copied().collect();
+                for way in [route, back] {
+                    let (from, to) = (way[0], *way.last().unwrap());
+                    app.world_mut()
+                        .get_mut::<Transform>(player)
+                        .unwrap()
+                        .translation = from + Vec3::Y * 0.1;
+                    app.update();
+                    let tasks = way[1..]
+                        .iter()
+                        .map(|p| Task::WalkTo {
+                            to: p.xz(),
+                            within: 0.6,
+                        })
+                        .collect::<Vec<_>>();
+                    app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                    for _ in 0..4000 {
+                        app.update();
+                        if app.world().get::<Bot>(player).unwrap().done() {
+                            break;
+                        }
+                    }
+                    let t = app.world().get::<Transform>(player).unwrap().translation;
+                    if t.xz().distance(to.xz()) > 1.5 {
+                        stuck.push(format!("{map}: {from:.0} -> {to:.0} stopped at {t:.1}"));
+                    }
+                }
+            }
+        }
+        assert!(stuck.is_empty(), "{stuck:#?}");
+    }
 }

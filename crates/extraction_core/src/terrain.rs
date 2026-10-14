@@ -532,10 +532,19 @@ impl Heightmap {
             if on_bridge(arc[s]) {
                 // Under the deck: cut away any bank that would come up
                 // through it (the deck runs straight; the bank needn't).
+                // Not at its ends: there the ground is the abutment, built
+                // up or cut down to just under the deck's top. Otherwise
+                // the grid spreads a cut or a low bank a cell's width past
+                // the deck, and the step off the end drops into a ditch you
+                // can't climb out of onto the road.
+                let end = bridges
+                    .iter()
+                    .any(|(a, b)| arc[s] < a + 1.5 || arc[s] > b - 1.5);
                 if d <= half_w + 0.5 {
-                    let under = profile[s] - 0.5;
-                    if self.heights[k] > under {
-                        self.heights[k] = under;
+                    if end {
+                        self.heights[k] = profile[s] - 0.05;
+                    } else if self.heights[k] > profile[s] - 0.5 {
+                        self.heights[k] = profile[s] - 0.5;
                     }
                 }
                 continue;
