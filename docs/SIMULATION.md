@@ -197,4 +197,8 @@ The sim has already paid for itself. Its bots found:
 - that a bot leaving the Cinder Works bus depot's office stopped in the
   hall and walked into its wall for the rest of the raid: a hall whose
   bays have no doors counts as "outside" for its doors (bots now take
-  the shortest way all the way out of the footprint).
+  the shortest way all the way out of the footprint);
+- that a third of a batch's stuck bots were at one end of the Marrow
+  village bridge: the cut under a deck began a cell before it, a ditch
+  with the deck's edge for a step out (now `a_bot_walks_over_every_bridge`
+  checks every bridge both ways).
