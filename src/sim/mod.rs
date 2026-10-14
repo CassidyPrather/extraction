@@ -123,61 +123,65 @@ mod tests {
         use crate::raid::truck::{Truck, base_pose, rv_pose};
         use crate::rig::LocalPlayer;
         use bevy::math::Vec3Swizzles;
-        let opts = LaunchOptions {
-            robots: false,
-            ..Default::default()
-        };
-        let mut app = crate::headless_app(opts, false);
-        app.finish();
-        app.cleanup();
-        app.update();
-        let zone = app.world().resource::<Zone>().clone();
-        let rvs = zone.map.markers_of(&MarkerKind::Rendezvous).count();
-        let poses: Vec<(String, Transform)> =
-            std::iter::once(("base".to_string(), base_pose(&zone)))
-                .chain((0..rvs).map(|i| (format!("rendezvous {i}"), rv_pose(&zone, i))))
-                .collect();
-        let player = app
-            .world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        let truck = app
-            .world_mut()
-            .query_filtered::<Entity, With<Truck>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        // Keep the raid logic from parking the truck back at base.
-        app.world_mut().get_mut::<Truck>(truck).unwrap().at_base = true;
-        for (name, pose) in poses {
-            *app.world_mut().get_mut::<Transform>(truck).unwrap() = pose;
-            let behind = pose.transform_point(Vec3::new(0.0, 0.0, 7.0));
-            let ground = zone.ground(behind.x, behind.z);
-            app.world_mut()
-                .get_mut::<Transform>(player)
-                .unwrap()
-                .translation = Vec3::new(behind.x, ground + 0.05, behind.z);
+        // Every valley's stops (`EXTRACTION_TEST_MAP` for just one).
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
             app.update();
-            let p = |z: f32| pose.transform_point(Vec3::new(0.0, 0.0, z)).xz();
-            app.world_mut()
-                .entity_mut(player)
-                .insert(Bot::new(super::raider::board_tasks(p, None)));
-            for _ in 0..90 * 20 {
+            let zone = app.world().resource::<Zone>().clone();
+            let rvs = zone.map.markers_of(&MarkerKind::Rendezvous).count();
+            let poses: Vec<(String, Transform)> =
+                std::iter::once(("base".to_string(), base_pose(&zone)))
+                    .chain((0..rvs).map(|i| (format!("rendezvous {i}"), rv_pose(&zone, i))))
+                    .collect();
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let truck = app
+                .world_mut()
+                .query_filtered::<Entity, With<Truck>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            // Keep the raid logic from parking the truck back at base.
+            app.world_mut().get_mut::<Truck>(truck).unwrap().at_base = true;
+            for (name, pose) in poses {
+                *app.world_mut().get_mut::<Transform>(truck).unwrap() = pose;
+                let behind = pose.transform_point(Vec3::new(0.0, 0.0, 7.0));
+                let ground = zone.ground(behind.x, behind.z);
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = Vec3::new(behind.x, ground + 0.05, behind.z);
                 app.update();
-                if app.world().get::<Bot>(player).unwrap().done() {
-                    break;
+                let p = |z: f32| pose.transform_point(Vec3::new(0.0, 0.0, z)).xz();
+                app.world_mut()
+                    .entity_mut(player)
+                    .insert(Bot::new(super::raider::board_tasks(p, None)));
+                for _ in 0..90 * 20 {
+                    app.update();
+                    if app.world().get::<Bot>(player).unwrap().done() {
+                        break;
+                    }
                 }
+                let at = app.world().get::<Transform>(player).unwrap().translation;
+                let gt = *app.world().get::<GlobalTransform>(truck).unwrap();
+                let t = app.world().get::<Truck>(truck).unwrap();
+                assert!(
+                    t.in_bed(&gt, at + Vec3::Y * 0.1),
+                    "{map} {name}: the bot is in the bed (truck-local {:.2?})",
+                    gt.affine().inverse().transform_point3(at)
+                );
             }
-            let at = app.world().get::<Transform>(player).unwrap().translation;
-            let gt = *app.world().get::<GlobalTransform>(truck).unwrap();
-            let t = app.world().get::<Truck>(truck).unwrap();
-            assert!(
-                t.in_bed(&gt, at + Vec3::Y * 0.1),
-                "{name}: the bot is in the bed (truck-local {:.2?})",
-                gt.affine().inverse().transform_point3(at)
-            );
         }
     }
 }

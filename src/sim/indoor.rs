@@ -470,87 +470,91 @@ mod tests {
     /// far as the room behind it.
     #[test]
     fn every_door_lets_a_bot_in() {
-        // `EXTRACTION_TEST_MAP=kettle_pass` to walk another valley's doors.
-        let mut opts = LaunchOptions {
-            robots: false,
-            ..Default::default()
-        };
-        if let Ok(map) = std::env::var("EXTRACTION_TEST_MAP") {
-            opts.map = map;
-        }
-        let mut app = crate::headless_app(opts, false);
-        app.finish();
-        app.cleanup();
-        app.update();
-        let plans = plans(&mut app);
-        let player = app
-            .world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        let mut failed = Vec::new();
-        let mut tried = 0;
-        for plan in &plans {
-            for d in &plan.doors {
-                let Some(entry) = d.outside else { continue };
-                let mid = (d.a + d.b) * 0.5;
-                // A metre and a half past the doorway, inside (or as near
-                // as the furniture allows).
-                let Some(goal) = super::super::raider::reach_cell(
-                    plan,
-                    entry,
-                    mid + (mid - entry).normalize() * 1.5,
-                ) else {
-                    failed.push(format!("{} door {:?}: nowhere inside", plan.name, d.entity));
-                    continue;
-                };
-                let start = plan.to_world(entry);
-                let ground = app
-                    .world()
-                    .resource::<crate::world::Zone>()
-                    .ground(start.x, start.z);
-                {
-                    let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
-                    t.translation = Vec3::new(start.x, ground.max(start.y) + 0.05, start.z);
-                }
-                app.world_mut()
-                    .get_mut::<crate::player::Body>(player)
-                    .unwrap()
-                    .velocity = Vec3::ZERO;
-                app.update();
-                let pos = app.world().get::<Transform>(player).unwrap().translation;
-                let Some(tasks) = super::super::raider::indoor_route(plan, pos, goal, 0.3) else {
-                    failed.push(format!("{} door {:?}: no route", plan.name, d.entity));
-                    continue;
-                };
-                tried += 1;
-                app.world_mut().entity_mut(player).insert(Bot::new(tasks));
-                for _ in 0..90 * 25 {
-                    app.update();
-                    if app.world().get::<Bot>(player).unwrap().done() {
-                        break;
+        // Every valley's doors (`EXTRACTION_TEST_MAP` for just one).
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let mut failed = Vec::new();
+            let mut tried = 0;
+            for plan in &plans {
+                for d in &plan.doors {
+                    let Some(entry) = d.outside else { continue };
+                    let mid = (d.a + d.b) * 0.5;
+                    // A metre and a half past the doorway, inside (or as near
+                    // as the furniture allows).
+                    let Some(goal) = super::super::raider::reach_cell(
+                        plan,
+                        entry,
+                        mid + (mid - entry).normalize() * 1.5,
+                    ) else {
+                        failed.push(format!(
+                            "{map} {} door {:?}: nowhere inside",
+                            plan.name, d.entity
+                        ));
+                        continue;
+                    };
+                    let start = plan.to_world(entry);
+                    let ground = app
+                        .world()
+                        .resource::<crate::world::Zone>()
+                        .ground(start.x, start.z);
+                    {
+                        let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+                        t.translation = Vec3::new(start.x, ground.max(start.y) + 0.05, start.z);
                     }
-                }
-                let t = app.world().get::<Transform>(player).unwrap().translation;
-                let got = plan.to_local(t).xz();
-                if got.distance(goal) > 0.9 {
-                    failed.push(format!(
-                        "{} at {:.0?}: door {:?} entry {entry:.2?} goal {goal:.2?}, stopped at {got:.2?} (y {:.2})",
+                    app.world_mut()
+                        .get_mut::<crate::player::Body>(player)
+                        .unwrap()
+                        .velocity = Vec3::ZERO;
+                    app.update();
+                    let pos = app.world().get::<Transform>(player).unwrap().translation;
+                    let Some(tasks) = super::super::raider::indoor_route(plan, pos, goal, 0.3)
+                    else {
+                        failed.push(format!("{map} {} door {:?}: no route", plan.name, d.entity));
+                        continue;
+                    };
+                    tried += 1;
+                    app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                    for _ in 0..90 * 25 {
+                        app.update();
+                        if app.world().get::<Bot>(player).unwrap().done() {
+                            break;
+                        }
+                    }
+                    let t = app.world().get::<Transform>(player).unwrap().translation;
+                    let got = plan.to_local(t).xz();
+                    if got.distance(goal) > 0.9 {
+                        failed.push(format!(
+                        "{map} {} at {:.0?}: door {:?} entry {entry:.2?} goal {goal:.2?}, stopped at {got:.2?} (y {:.2})",
                         plan.name,
                         plan.xf.translation,
                         d.entity,
                         plan.to_local(t).y
                     ));
+                    }
                 }
             }
+            assert!(tried > 0, "no doors tried");
+            assert!(
+                failed.is_empty(),
+                "{} of {tried} doors failed:\n{}",
+                failed.len(),
+                failed.join("\n")
+            );
         }
-        assert!(tried > 0, "no doors tried");
-        assert!(
-            failed.is_empty(),
-            "{} of {tried} doors failed:\n{}",
-            failed.len(),
-            failed.join("\n")
-        );
     }
 }

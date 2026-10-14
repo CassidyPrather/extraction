@@ -180,6 +180,25 @@ pub fn relaunch_args(args: impl IntoIterator<Item = String>, map: &str) -> Vec<S
     out
 }
 
+/// The valleys a map test walks: `EXTRACTION_TEST_MAP` if set, else every
+/// map in `assets/maps`.
+#[cfg(test)]
+pub(crate) fn test_maps() -> Vec<String> {
+    if let Ok(map) = std::env::var("EXTRACTION_TEST_MAP") {
+        return vec![map];
+    }
+    let mut maps: Vec<String> = std::fs::read_dir(asset_root_path().join("maps"))
+        .expect("assets/maps")
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            (p.extension()? == "ron").then(|| p.file_stem()?.to_str().map(str::to_owned))?
+        })
+        .collect();
+    maps.sort();
+    maps
+}
+
 #[cfg(test)]
 mod relaunch_tests {
     #[test]

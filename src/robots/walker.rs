@@ -744,10 +744,10 @@ mod tests {
     fn every_rendezvous_is_reachable_on_every_map() {
         use extraction_core::map::MarkerKind;
         let mut failed = Vec::new();
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in crate::test_maps() {
             let opts = crate::LaunchOptions {
                 robots: false,
-                map: map.into(),
+                map: map.clone(),
                 ..Default::default()
             };
             let mut app = crate::headless_app(opts, false);
