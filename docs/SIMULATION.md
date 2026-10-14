@@ -189,7 +189,8 @@ fight snowballed into three or four more), and that a bot deciding to
 head home while still in a back room walked at the wall instead of out
 the door.
 
-Known bot weakness: now and then a bot opening an outward door from
-outside stands where the leaf swings and wedges itself against it (seen
-at the Kettle Pass barn's side door). A player steps aside; the bot gives
-up on the site after three tries, but can lose minutes there.
+It also found a bot wedged in a barn corner routing out *through* the
+wall (the nearest walkable cell to a blocked start was outside), and bots
+shoved aside by an outward-swinging door walking at the frame on a slant;
+both fixed (`raider::near_walkable_same_side`, re-squaring to a doorway
+after opening it).

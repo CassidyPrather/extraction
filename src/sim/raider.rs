@@ -1311,13 +1311,22 @@ fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<
         for (door, cross) in plan.doors_on(last, p) {
             let dir = (p - last).normalize_or_zero();
             let before = cross - dir * 1.1;
-            if (before - last).dot(dir) > 0.0 {
+            let square = (before - last).dot(dir) > 0.0;
+            if square {
                 tasks.push(Task::WalkTo {
                     to: plan.world2(before),
                     within: 0.3,
                 });
             }
             tasks.push(Task::OpenDoor(door));
+            // A door swinging out can shove you aside: square up to the
+            // doorway again rather than go at the frame on a slant.
+            if square {
+                tasks.push(Task::WalkTo {
+                    to: plan.world2(before),
+                    within: 0.3,
+                });
+            }
         }
         tasks.push(Task::WalkTo {
             to: plan.world2(p),
@@ -1328,6 +1337,40 @@ fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<
     Some(tasks)
 }
 
+/// Wedged in a corner, the nearest walkable cell can be through the wall:
+/// the nearest one on the same side of the footprint's edge instead.
+fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
+    let g = &plan.grid;
+    let within = |p: Vec2, pad: f32| p.x.abs() < plan.half.x + pad && p.y.abs() < plan.half.y + pad;
+    let inside = within(from, 0.0);
+    let (ci, cj) = g.cell_of(from.to_array())?;
+    let r = (1.5 / g.cell).ceil() as i64;
+    let mut best: Option<(f32, Vec2)> = None;
+    for dj in -r..=r {
+        for di in -r..=r {
+            let (i, j) = (ci as i64 + di, cj as i64 + dj);
+            if i < 0 || j < 0 || i >= g.n as i64 || j >= g.n as i64 {
+                continue;
+            }
+            let (i, j) = (i as usize, j as usize);
+            if g.cost[j * g.n + i] == extraction_core::nav::BLOCKED {
+                continue;
+            }
+            let c = Vec2::from_array(g.centre(i, j));
+            let same = if inside {
+                within(c, -0.2)
+            } else {
+                !within(c, 0.2)
+            };
+            let d = c.distance(from);
+            if same && best.is_none_or(|b| d < b.0) {
+                best = Some((d, c));
+            }
+        }
+    }
+    best.map(|b| b.1)
+}
+
 /// The walkable cell nearest a goal among those reachable from `from`
 /// (the nearest walkable cell might be through a wall).
 pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
@@ -1335,7 +1378,8 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let start = if g.walkable(from.to_array()) {
         from
     } else {
-        Vec2::from_array(g.nearest_walkable(from.to_array())?)
+        near_walkable_same_side(plan, from)
+            .or_else(|| g.nearest_walkable(from.to_array()).map(Vec2::from_array))?
     };
     let (si, sj) = g.cell_of(start.to_array())?;
     let n = g.n;
