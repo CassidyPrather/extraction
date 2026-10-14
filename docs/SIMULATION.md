@@ -201,4 +201,6 @@ The sim has already paid for itself. Its bots found:
 - that a third of a batch's stuck bots were at one end of the Marrow
   village bridge: the cut under a deck began a cell before it, a ditch
   with the deck's edge for a step out (now `a_bot_walks_over_every_bridge`
-  checks every bridge both ways).
+  checks every bridge both ways), and that routes over a bridge ran
+  along the bank beneath it and, on a curving footbridge, cut the
+  curve into the rails (decks are lanes in the nav grid now).
