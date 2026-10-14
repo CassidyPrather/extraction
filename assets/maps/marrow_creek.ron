@@ -111,16 +111,15 @@
             points: [(-330.0, -150.0), (-280.0, -165.0), (-200.0, -235.0), (-120.0, -255.0),
                      (0.0, -258.0), (120.0, -245.0), (200.0, -215.0), (330.0, -200.0)],
         ),
-        // Footpath from the logging camp up through the trees to the
-        // pumping station footbridge.
+        // Footpath from the logging camp up through the trees, over the
+        // creek on the pumping station's footbridge, and on up through the
+        // pines to the mast road.
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-160.0, 140.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0)],
-        ),
-        // North of the footbridge, up through the pines to the mast road.
-        (
-            name: "Mast path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-178.0, -30.0), (-165.0, -70.0), (-150.0, -110.0), (-125.0, -150.0)],
+            points: [(-160.0, 140.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
+                     (-178.0, -16.0), (-178.0, -30.0), (-165.0, -70.0), (-150.0, -110.0),
+                     (-125.0, -150.0)],
+            bridges: [(at: (-178.0, -16.0), length: 24.0)],
         ),
     ],
 
@@ -216,9 +215,9 @@
         (prefab: "house_plank", at: (-45.0, 75.0), rot: 0.0),
         (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
         
-        // Pumping station on the south bank, footbridge across.
+        // Pumping station on the south bank (the forest path's footbridge
+        // crosses beside it).
         (prefab: "pump_station", at: (-200.0, 22.0), rot: 0.0),
-        (prefab: "footbridge", at: (-178.0, -16.0), rot: 0.0),
 
         // The Hollow: weird stuff in the bowl.
         (prefab: "anomaly_core", at: (150.0, -40.0), rot: 0.0),

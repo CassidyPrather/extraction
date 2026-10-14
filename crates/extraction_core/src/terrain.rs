@@ -454,6 +454,14 @@ impl Heightmap {
         }
         for (k, (d, s)) in best {
             if on_bridge(arc[s]) {
+                // Under the deck: cut away any bank that would come up
+                // through it (the deck runs straight; the bank needn't).
+                if d <= half_w + 0.5 {
+                    let under = profile[s] - 0.5;
+                    if self.heights[k] > under {
+                        self.heights[k] = under;
+                    }
+                }
                 continue;
             }
             let target = profile[s];

@@ -3,6 +3,7 @@
 //! [`WorldPlugin`] is the logic half (map, heightmap, colliders) and runs
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
+pub mod bridges;
 pub mod buildings;
 pub mod rain;
 pub mod sky;
@@ -113,6 +114,7 @@ impl Plugin for WorldPlugin {
                     structures::spawn_structures,
                     structures::spawn_boundary,
                     buildings::spawn_buildings,
+                    bridges::spawn_bridges,
                     trees::spawn_tree_colliders,
                 ),
             );

@@ -94,6 +94,7 @@ impl Plugin for ClientPlugin {
                 world::structures::blockout_visuals,
                 world::structures::fence_visuals,
                 world::buildings::building_visuals,
+                world::bridges::bridge_visuals,
                 log_frame_times,
             ),
         );
