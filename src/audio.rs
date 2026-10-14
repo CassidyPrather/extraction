@@ -510,7 +510,8 @@ fn ambient_oneshots(
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
-    mut next: Local<(f32, f32)>,
+    zone: Res<Zone>,
+    mut next: Local<(f32, f32, f32)>,
 ) {
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
@@ -518,6 +519,41 @@ fn ambient_oneshots(
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
+    next.2 -= dt;
+    // Old works settling: now and then a clank of metal from the nearest
+    // big iron building, if one's within earshot.
+    if next.2 <= 0.0 {
+        next.2 = rng.0.range(20.0, 60.0);
+        const IRON: [&str; 6] = [
+            "factory_hall",
+            "chimney",
+            "rail_shed",
+            "bus_depot",
+            "pump_station",
+            "boxcar",
+        ];
+        let here = [ear.x, ear.z];
+        let near = zone
+            .map
+            .placements
+            .iter()
+            .filter(|p| IRON.contains(&p.prefab.as_str()))
+            .map(|p| (extraction_core::geom::dist(p.at, here), p.at))
+            .filter(|(d, _)| *d < 150.0)
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, at)) = near {
+            let at = Vec3::new(at[0], zone.ground(at[0], at[1]) + 3.0, at[1]);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "machines/clank",
+                Some(at),
+                -10.0,
+                0.25,
+            );
+        }
+    }
     if next.0 <= 0.0 {
         next.0 = rng.0.range(12.0, 45.0);
         let a = rng.0.range(0.0, std::f32::consts::TAU);
