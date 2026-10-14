@@ -348,7 +348,21 @@ impl Heightmap {
     /// footing the building stands on (its lowest corner, as the game
     /// places it), so the ground never pokes up through a floor.
     fn settle(&mut self, map: &MapDef) {
-        for p in &map.placements {
+        // Whether a point is under some other placement (a gate stands on
+        // its lowest corner: dig under a post and the whole gate sinks).
+        let under_other = |me: usize, q: P2| {
+            map.placements.iter().enumerate().any(|(i, o)| {
+                if i == me {
+                    return false;
+                }
+                let [w, _, d] = crate::map::prefab_footprint(&o.prefab);
+                let (s, c) = (-o.rot.to_radians()).sin_cos();
+                let (dx, dz) = (q[0] - o.at[0], q[1] - o.at[1]);
+                let l = [dx * c - dz * s, dx * s + dz * c];
+                l[0].abs() <= w * 0.5 + 1.0 && l[1].abs() <= d * 0.5 + 1.0
+            })
+        };
+        for (me, p) in map.placements.iter().enumerate() {
             if p.absolute || !crate::map::prefab_wants_pad(&p.prefab) {
                 continue;
             }
@@ -388,6 +402,13 @@ impl Heightmap {
                     let out = (l[0].abs() - half_w)
                         .max(0.0)
                         .hypot((l[1].abs() - half_d).max(0.0));
+                    // Past its own walls it leaves roads and other
+                    // structures be: a booth by the gate would dig a dip in
+                    // the road through it.
+                    let inside = l[0].abs() <= w * 0.5 && l[1].abs() <= d * 0.5;
+                    if !inside && (hm.roads[k].weight > 0 || under_other(me, q)) {
+                        return;
+                    }
                     hm.heights[k] = hm.heights[k].min(y + out * RAMP);
                 });
                 if footing(self) >= y - 1e-3 {
