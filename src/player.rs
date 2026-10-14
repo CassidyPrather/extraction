@@ -156,7 +156,7 @@ pub fn move_bodies(
         ),
         With<Player>,
     >,
-    colliders: Query<Entity, With<BodyCollider>>,
+    mut colliders: Query<&mut Transform, (With<BodyCollider>, Without<Player>)>,
     move_and_slide: MoveAndSlide,
     time: Res<Time>,
     zone: Res<Zone>,
@@ -170,8 +170,20 @@ pub fn move_bodies(
         let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
             .with_excluded_entities(own.iter().copied().chain([entity]));
         let enc = Encumbrance::from_mass(body.carried_kg);
+        // Room-scale: you stand under your head, wherever it has walked to
+        // in the playspace. The capsule goes there, and moves from there.
+        let under = head_offset(&root, input);
+        for c in &own {
+            if let Ok(mut t) = colliders.get_mut(*c) {
+                let local = Vec3::new(input.head.translation.x, 0.0, input.head.translation.z);
+                if t.translation.xz() != local.xz() {
+                    t.translation.x = local.x;
+                    t.translation.z = local.z;
+                }
+            }
+        }
         // Water: wading drags at you; deep enough and you float.
-        let feet = root.translation;
+        let feet = root.translation + under;
         let water = zone.hm.water_level([feet.x, feet.z]);
         let depth = water.map_or(0.0, |w| (w - feet.y).max(0.0));
         body.wading = depth;
@@ -244,8 +256,9 @@ pub fn move_bodies(
         }
 
         root.rotate_y(input.turn);
+        let under = head_offset(&root, input);
 
-        let centre = root.translation + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        let centre = root.translation + under + Vec3::Y * CAPSULE_HEIGHT * 0.5;
         let mut grounded = false;
         let out = move_and_slide.move_and_slide(
             &shape,
@@ -308,7 +321,7 @@ pub fn move_bodies(
         body.grounded = grounded;
         body.velocity = velocity;
         let moved = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z).length();
-        root.translation = new_centre - Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        root.translation = new_centre - under - Vec3::Y * CAPSULE_HEIGHT * 0.5;
 
         if swimming {
             // Strokes: the water's own sound, slower than steps.
@@ -334,6 +347,22 @@ pub fn move_bodies(
             }
         }
     }
+}
+
+/// Where the head stands over the playspace floor, from the root, in the
+/// world's axes (zero for flat play and bots, whose heads sit over the
+/// root; the walked-off distance in room-scale VR).
+pub fn head_offset(root: &Transform, input: &RigInput) -> Vec3 {
+    root.rotation * Vec3::new(input.head.translation.x, 0.0, input.head.translation.z)
+}
+
+/// Where a player is standing: under their head.
+pub fn standing_at(root: &GlobalTransform, input: &RigInput) -> Vec3 {
+    root.transform_point(Vec3::new(
+        input.head.translation.x,
+        0.0,
+        input.head.translation.z,
+    ))
 }
 
 fn try_step(
@@ -406,6 +435,63 @@ fn try_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Room-scale: step off the middle of the playspace and your body
+    /// (what bullets hit, what bumps into walls) comes with your head.
+    #[test]
+    fn the_body_stands_under_the_head() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // Open ground, away from the truck.
+        let at = zone.on_ground(0.0, 200.0);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at + Vec3::Y * 0.05;
+        for _ in 0..30 {
+            app.update();
+        }
+        let before = app.world().get::<Transform>(player).unwrap().translation;
+        // The headset reports the head 0.8 m to the right of the middle;
+        // keep it there against the flat driver.
+        for _ in 0..30 {
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation = Vec3::new(0.8, 1.6, 0.0);
+            app.world_mut().run_schedule(FixedUpdate);
+        }
+        let collider = app
+            .world_mut()
+            .query_filtered::<&Transform, With<BodyCollider>>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+            .translation;
+        assert!(
+            (collider.x - 0.8).abs() < 1e-3 && collider.z.abs() < 1e-3,
+            "{collider}"
+        );
+        let after = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(
+            Vec2::new(after.x - before.x, after.z - before.z).length() < 0.05,
+            "the playspace stays put ({before} -> {after})"
+        );
+    }
 
     /// Dropped into the canal, you come up and float with your head out;
     /// walked out onto the bank, you're on your feet again.

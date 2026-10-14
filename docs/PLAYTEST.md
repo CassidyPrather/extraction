@@ -126,6 +126,9 @@ worth noticing:
 - **No headset has ever run this.** Expect the XR side to need fixes:
   bindings for your exact controllers, the floor height, hand offsets on
   the grips, haptic strength.
+- Room-scale: your body follows your head around the playspace. Walk
+  physically into a wall and the world is nudged back to keep you out of
+  it; tell me if that feels bad.
 - Hands are simple: no finger tracking beyond the trigger finger.
 - Some models are blockouts (plain boxes): a few props and buildings,
   the pylon's mast.

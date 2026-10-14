@@ -354,19 +354,18 @@ pub(crate) fn tick_raid(
 fn depart(
     mut requests: MessageReader<DepartRequest>,
     mut raid: ResMut<Raid>,
-    players: Query<&GlobalTransform, With<Player>>,
+    players: Query<(&GlobalTransform, &crate::rig::RigInput), With<Player>>,
     trucks: Query<(&GlobalTransform, &truck::Truck)>,
     dest: Option<Res<route::Destination>>,
     opts: Res<crate::launch::LaunchOptions>,
     mut relocate: MessageWriter<route::Relocate>,
 ) {
     for req in requests.read() {
-        let Ok(p) = players.get(req.player) else {
+        let Ok((p, input)) = players.get(req.player) else {
             continue;
         };
-        let in_bed = trucks
-            .iter()
-            .any(|(t, truck)| truck.in_bed(t, p.translation()));
+        let at = crate::player::standing_at(p, input) + Vec3::Y * 0.1;
+        let in_bed = trucks.iter().any(|(t, truck)| truck.in_bed(t, at));
         if !in_bed {
             continue;
         }
