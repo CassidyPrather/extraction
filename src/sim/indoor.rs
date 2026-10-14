@@ -160,6 +160,7 @@ pub fn plan_buildings(
             cell: CELL,
             origin: -extent,
             cost: vec![1; n * n],
+            lanes: Vec::new(),
         };
         for piece in geo.pieces.iter().filter(|p| p.collide) {
             if let Some(ob) = obstacle(piece.shape, piece.at, floor) {

@@ -20,6 +20,9 @@ pub struct NavGrid {
     pub origin: f32,
     /// 0 = blocked, otherwise relative cost to cross (1 = road).
     pub cost: Vec<u8>,
+    /// Narrow ways (bridge decks) as centrelines: a path through their
+    /// cells follows the line itself, not the cell centres beside it.
+    pub lanes: Vec<Vec<P2>>,
 }
 
 /// Something that blocks walking: a circle (trunks, posts) or an oriented
@@ -48,6 +51,7 @@ impl NavGrid {
             cell,
             origin: hm.origin,
             cost: vec![1; n * n],
+            lanes: Vec::new(),
         };
         for j in 0..n {
             for i in 0..n {
@@ -307,12 +311,36 @@ impl NavGrid {
         if let Some(last) = raw.last_mut() {
             *last = goal_p;
         }
-        Some(self.smooth(&raw))
+        // On a lane, walk its line (and keep every point of it: a chord
+        // across a curving deck walks off the side).
+        let mut pinned = vec![false; raw.len()];
+        for (i, p) in raw.iter_mut().enumerate() {
+            if i == 0 || i + 1 == pinned.len() {
+                continue;
+            }
+            if let Some(q) = self.on_lane(*p) {
+                *p = q;
+                pinned[i] = true;
+            }
+        }
+        Some(self.smooth(&raw, &pinned))
+    }
+
+    /// The nearest point of a lane within a cell of `p`.
+    fn on_lane(&self, p: P2) -> Option<P2> {
+        let mut best: Option<(f32, P2)> = None;
+        for lane in self.lanes.iter().filter(|l| l.len() >= 2) {
+            let (d, s, _) = crate::geom::polyline_closest(lane, p);
+            if d <= self.cell && best.is_none_or(|b| d < b.0) {
+                best = Some((d, crate::geom::polyline_at(lane, s).0));
+            }
+        }
+        best.map(|b| b.1)
     }
 
     /// String-pulls a cell path: skip waypoints while the straight line
     /// stays walkable and doesn't cross notably dearer ground.
-    fn smooth(&self, raw: &[P2]) -> Vec<P2> {
+    fn smooth(&self, raw: &[P2], pinned: &[bool]) -> Vec<P2> {
         if raw.len() <= 2 {
             return raw.to_vec();
         }
@@ -320,7 +348,7 @@ impl NavGrid {
         let mut anchor = 0;
         let mut i = 2;
         while i < raw.len() {
-            if !self.line_clear(raw[anchor], raw[i]) {
+            if pinned[i - 1] || !self.line_clear(raw[anchor], raw[i]) {
                 out.push(raw[i - 1]);
                 anchor = i - 1;
             }
@@ -371,6 +399,7 @@ mod tests {
             cell: 1.0,
             origin: -25.0,
             cost: vec![3; 2500],
+            lanes: Vec::new(),
         }
     }
 

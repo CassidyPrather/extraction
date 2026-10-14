@@ -154,6 +154,14 @@ pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
                 );
                 s += 1.0;
             }
+            // Waypoints follow the deck's own line.
+            let mut lane = Vec::new();
+            let mut s = *a - 3.0;
+            while s <= *b + 3.0 {
+                lane.push(at(s));
+                s += 1.0;
+            }
+            g.lanes.push(lane);
             // Out past where the blocking reaches, onto the road.
             let mut s = *a - 5.0;
             while s < *b + 5.0 {
