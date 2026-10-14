@@ -412,6 +412,10 @@ fn drive_xr_rig(
         hand.stick = stick;
         hand.stick_click = click && side == Side::Right;
     }
+    // Both sticks clicked, standing still: a playtest mark.
+    input.mark = read_b(&a.stick_click, a.left)
+        && read_b(&a.stick_click, a.right)
+        && input.hand(Side::Left).stick.length() < 0.3;
     // Locomotion and comfort turning.
     let left_stick = input.hand(Side::Left).stick;
     if read_b(&a.stick_click, a.left) && left_stick.length() > 0.3 {

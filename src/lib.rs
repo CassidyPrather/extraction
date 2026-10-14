@@ -62,7 +62,7 @@ impl Plugin for GamePlugin {
                 gadgets::GadgetsPlugin,
             ),
         ))
-        .add_plugins(sim::SimPlugin);
+        .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
     }
 }
 
@@ -94,9 +94,41 @@ impl Plugin for ClientPlugin {
                 world::structures::blockout_visuals,
                 world::structures::fence_visuals,
                 world::buildings::building_visuals,
+                log_frame_times,
             ),
         );
     }
+}
+
+/// Every ten seconds, how the frames went (in the session log): mean, the
+/// slowest 1% and the worst, in real milliseconds. A headset wants every
+/// frame under its refresh (11.1 ms at 90 Hz).
+fn log_frame_times(
+    time: Res<Time<Real>>,
+    raid: Option<Res<raid::Raid>>,
+    mut frames: Local<Vec<f32>>,
+    mut since: Local<f32>,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+    frames.push(dt * 1000.0);
+    *since += dt;
+    if *since < 10.0 {
+        return;
+    }
+    *since = 0.0;
+    let mut f = std::mem::take(&mut *frames);
+    f.sort_by(|a, b| a.total_cmp(b));
+    let mean = f.iter().sum::<f32>() / f.len() as f32;
+    let p99 = f[((f.len() as f32 * 0.99) as usize).min(f.len() - 1)];
+    let worst = f[f.len() - 1];
+    let phase = raid.map(|r| format!("{:?}", r.phase)).unwrap_or_default();
+    info!(
+        "frames: {} in 10 s, mean {mean:.1} ms, 1% {p99:.1} ms, worst {worst:.1} ms ({phase})",
+        f.len()
+    );
 }
 
 /// Builds and runs the client (or, with `--headless`, the bare simulation).
@@ -111,9 +143,14 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         present_mode: PresentMode::AutoVsync,
         ..default()
     };
+    capture_panics();
     let defaults = DefaultPlugins
         .set(WindowPlugin {
             primary_window: Some(window),
+            ..default()
+        })
+        .set(bevy::log::LogPlugin {
+            custom_layer: log_file_layer,
             ..default()
         })
         .set(AssetPlugin {
@@ -142,6 +179,56 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
     app.run()
+}
+
+/// Where this session's log goes: `<data dir>/logs/`, one file a session,
+/// the last ten kept (send them with a bug report).
+fn log_dir() -> std::path::PathBuf {
+    persist::data_dir().join("logs")
+}
+
+fn session_stamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// Everything logged also goes to a file (no colours, with timestamps).
+fn log_file_layer(_app: &mut App) -> Option<bevy::log::BoxedLayer> {
+    use bevy::log::tracing_subscriber::Layer;
+    let dir = log_dir();
+    std::fs::create_dir_all(&dir).ok()?;
+    // Keep the newest few.
+    let mut old: Vec<_> = std::fs::read_dir(&dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "log"))
+        .collect();
+    old.sort();
+    while old.len() >= 10 {
+        let _ = std::fs::remove_file(old.remove(0));
+    }
+    let file = std::fs::File::create(dir.join(format!("session-{}.log", session_stamp()))).ok()?;
+    Some(
+        bevy::log::tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(file))
+            .boxed(),
+    )
+}
+
+/// A crash writes what happened, and where, next to the logs before the
+/// usual report.
+fn capture_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let dir = log_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let text = format!("{info}\n\n{}", std::backtrace::Backtrace::force_capture());
+        let _ = std::fs::write(dir.join(format!("crash-{}.txt", session_stamp())), text);
+        default(info);
+    }));
 }
 
 /// The game with no window and no renderer, stepping one fixed tick per

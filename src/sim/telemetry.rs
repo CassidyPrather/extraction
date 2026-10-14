@@ -115,7 +115,7 @@ pub struct Tracker {
     phase: String,
 }
 
-fn phase_name(p: &Phase) -> &'static str {
+pub(crate) fn phase_name(p: &Phase) -> &'static str {
     match p {
         Phase::AtBase => "at_base",
         Phase::Out => "out",
@@ -132,7 +132,17 @@ pub fn record(
     mut tr: Local<Tracker>,
     time: Res<Time>,
     raid: Res<Raid>,
-    bots: Query<(Entity, &Transform, &Health, &Body, &Raider, &Children), With<LocalPlayer>>,
+    bots: Query<
+        (
+            Entity,
+            &Transform,
+            &Health,
+            &Body,
+            Option<&Raider>,
+            &Children,
+        ),
+        With<LocalPlayer>,
+    >,
     colliders: Query<(), With<BodyCollider>>,
     robots: Query<&Robot>,
     parts: Query<&RobotPart>,
@@ -235,7 +245,8 @@ pub fn record(
                 log.event(
                     "anomaly_enter",
                     json!({"kind": format!("{:?}", a.kind), "x": round(pos.x, 1), "z": round(pos.z, 1),
-                           "bloom": a.bloom.is_some(), "deliberate": raider.diving}),
+                           "bloom": a.bloom.is_some(),
+                           "deliberate": raider.is_some_and(|r| r.diving)}),
                 );
             }
         }
@@ -301,8 +312,9 @@ pub fn record(
         log.event(
             "pos",
             json!({"x": round(pos.x, 1), "z": round(pos.z, 1), "hp": round(hp.max(0.0), 0),
-                   "kg": round(body.carried_kg, 1), "stage": raider.stage_name(),
-                   "doing": raider.doing()}),
+                   "kg": round(body.carried_kg, 1),
+                   "stage": raider.map_or("player", |r| r.stage_name()),
+                   "doing": raider.map_or("player", |r| r.doing())}),
         );
         let pending = std::mem::take(&mut tr.pending);
         for (cause, amount) in pending {
@@ -407,7 +419,7 @@ pub fn finish(
 /// What killed the bot: the cause that did the most harm in the last 90
 /// seconds (bleeding out is the wound's fault), and what dealt the last
 /// point.
-fn death_cause(log: &SimLog) -> (String, String) {
+pub(crate) fn death_cause(log: &SimLog) -> (String, String) {
     let mut by: BTreeMap<&str, f32> = BTreeMap::new();
     for (_, c, a) in &log.recent {
         if c != "bleeding" {

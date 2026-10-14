@@ -4,7 +4,7 @@
 //! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
-//!            [--save PATH] [--new-game] [--surge-in SECONDS]
+//!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
 //!            [--sim-minutes M] [--sim-out DIR]
 //! ```
@@ -57,6 +57,8 @@ pub struct LaunchOptions {
     pub save: Option<PathBuf>,
     /// Ignore any existing save and start over.
     pub new_game: bool,
+    /// Don't write raid recordings (`sim::playtest`).
+    pub no_record: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -100,6 +102,7 @@ impl Default for LaunchOptions {
             window_size: (1600, 900),
             save: None,
             new_game: false,
+            no_record: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -130,6 +133,7 @@ impl LaunchOptions {
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
+                "--no-record" => o.no_record = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" => {}
                 "--vignette" => {

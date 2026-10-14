@@ -79,6 +79,8 @@ pub struct RigInput {
     pub sprint: bool,
     pub jump: bool,
     pub crouch: bool,
+    /// Playtest mark: flag this moment (flat F9; VR both sticks clicked).
+    pub mark: bool,
 }
 
 impl RigInput {

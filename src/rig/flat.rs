@@ -100,6 +100,7 @@ fn drive_flat_rig(
         input.locomotion = axis.clamp_length_max(1.0);
         input.sprint = keys.pressed(KeyCode::ShiftLeft);
         input.jump = keys.just_pressed(KeyCode::Space);
+        input.mark = keys.just_pressed(KeyCode::F9);
         if keys.just_pressed(KeyCode::KeyC) {
             input.crouch = !input.crouch;
         }

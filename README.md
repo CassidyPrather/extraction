@@ -10,7 +10,8 @@ Rust + [Bevy](https://bevy.org/) 0.19, OpenXR via
 runtime is present (SteamVR, Meta Link, WMR, Monado), flat on a monitor
 otherwise.
 
-Design decisions and the roadmap: [docs/DESIGN.md](docs/DESIGN.md).
+Design decisions and the roadmap: [docs/DESIGN.md](docs/DESIGN.md). Before a
+playtest: [docs/PLAYTEST.md](docs/PLAYTEST.md).
 
 ## Playing
 

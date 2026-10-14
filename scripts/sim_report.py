@@ -365,6 +365,12 @@ def write_summary(out, runs, meta, mapname):
     L += [f"- {k}: {v} items" for k, v in sites.most_common(10)] or ["- none"]
     L += ["", "Most-taken items: " + (", ".join(f"{k} {v}" for k, v in items.most_common(12)) or "none")]
 
+    # Playtest marks (F9 / both sticks): where someone flagged a moment.
+    marks = [(r["name"], e) for r in runs for e in r["events"] if e["ev"] == "mark"]
+    if marks:
+        L += ["", "## Marks", "", "Moments flagged in play (screenshots in the data folder's `marks/`):", ""]
+        L += [f"- {name}, {e['t']:.0f} s in: ({e['x']}, {e['z']})" for name, e in marks]
+
     # Places nobody went: markers and buildings no position sample came
     # within 15 m of.
     pts = np.array([(e["x"], e["z"]) for r in runs for e in r["events"] if e["ev"] == "pos"] or [(1e9, 1e9)])

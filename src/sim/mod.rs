@@ -13,6 +13,7 @@
 //! `RigInput` and `HandAction`s as a player, through [`crate::bot`].
 
 pub mod indoor;
+pub mod playtest;
 pub mod raider;
 pub mod telemetry;
 
