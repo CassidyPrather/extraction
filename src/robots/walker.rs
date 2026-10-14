@@ -132,12 +132,34 @@ pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
     for f in &zone.map.forests {
         g.scale_cost_in(&f.polygon, 1.6);
     }
-    // Bridges are walkable even though the creek under them isn't.
+    // Bridges are walkable even though the creek under them isn't; the
+    // bank beneath and beside a deck isn't (no headroom under it, rails
+    // along it): the way is along the deck, following its curve.
     for rl in &zone.hm.road_lines {
+        let half = if matches!(rl.kind, extraction_core::map::RoadKind::Path) {
+            0.9
+        } else {
+            rl.width * 0.5 + 0.4
+        };
         for (a, b) in &rl.bridges {
-            let pa = extraction_core::geom::polyline_at(&rl.points, *a).0;
-            let pb = extraction_core::geom::polyline_at(&rl.points, *b).0;
-            g.open_line(pa, pb, 1);
+            let at = |s: f32| extraction_core::geom::polyline_at(&rl.points, s).0;
+            let mut s = *a + 1.0;
+            while s < *b - 1.0 {
+                g.block(
+                    Obstacle::Circle {
+                        at: at(s),
+                        radius: half,
+                    },
+                    0.6,
+                );
+                s += 1.0;
+            }
+            // Out past where the blocking reaches, onto the road.
+            let mut s = *a - 5.0;
+            while s < *b + 5.0 {
+                g.open_line(at(s), at((s + 2.0).min(*b + 5.0)), 1);
+                s += 2.0;
+            }
         }
     }
     info!(
