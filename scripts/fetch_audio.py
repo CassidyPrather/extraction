@@ -94,14 +94,15 @@ def need_tool(name: str) -> None:
 
 
 def http_get(url: str, tries: int = 4) -> bytes:
-    """GET with retries; Freesound answers 429/503 when hit too quickly."""
+    """GET with retries; Freesound answers 429/503 (and sometimes 403 on its
+    pages) when hit too quickly."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
-            if e.code not in (429, 500, 502, 503, 504) or attempt == tries - 1:
+            if e.code not in (403, 429, 500, 502, 503, 504) or attempt == tries - 1:
                 raise
         except urllib.error.URLError:
             if attempt == tries - 1:
@@ -735,7 +736,12 @@ def main() -> int:
             "loop": d["type"] == "loop", "files": files,
         }
         log(f"  -> {len(files)} file(s) in {cat_dir.relative_to(ROOT)}")
-    index = {k: index[k] for k in sorted(index) if k in names}
+    # Drop sets that left the manifest, but keep the ones another script
+    # owns (synth_anomaly.py's synthesized sounds).
+    def owned_elsewhere(entry: dict) -> bool:
+        return all(f.get("source", "").startswith("synth:") for f in entry["files"])
+
+    index = {k: index[k] for k in sorted(index) if k in names or owned_elsewhere(index[k])}
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2) + "\n")
     if failed:

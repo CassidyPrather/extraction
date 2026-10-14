@@ -50,6 +50,41 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// What the valley sounds like.
+    #[serde(default)]
+    pub sounds: SoundsDef,
+}
+
+/// A valley's ambience: sound set ids from `assets/audio/sounds.json`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SoundsDef {
+    /// The wind bed, always on.
+    #[serde(default = "default_wind")]
+    pub wind: String,
+    /// Birds calling now and then out in the fog.
+    #[serde(default = "default_birds")]
+    pub birds: Vec<String>,
+    /// Now and then, far off (rockfall in the mountains).
+    #[serde(default)]
+    pub distant: Vec<String>,
+}
+
+impl Default for SoundsDef {
+    fn default() -> Self {
+        Self {
+            wind: default_wind(),
+            birds: default_birds(),
+            distant: Vec::new(),
+        }
+    }
+}
+
+fn default_wind() -> String {
+    "ambience/wind_conifers".into()
+}
+
+fn default_birds() -> Vec<String> {
+    vec!["ambience/crow".into()]
 }
 
 const fn default_cell() -> f32 {

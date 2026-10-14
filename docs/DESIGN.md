@@ -380,7 +380,10 @@ dead (long sightlines, nothing low to hide behind), and the artifacts are
 on the slag heaps in the north-east, under the robots' Gate, and in the
 ash pit to the west. The air is its own: a warm ash-brown haze over the
 sky and fog, and ash still drifting down when it isn't raining (maps
-can set `haze` and `ash`). Its rendezvous are the fire lookout in the dead
+can set `haze` and `ash`), and it sounds of wind through scaffolding,
+metal groaning in the halls, jackdaws. Kettle Pass has gusts over bare
+rock, ravens and scree letting go up the slopes; maps pick these with
+`sounds`. Its rendezvous are the fire lookout in the dead
 wood, the north sidings and the works yard at the railway's east end.
 Each map keeps its own Zone; the stash and kit travel with you
 (see "Changing valleys" above).

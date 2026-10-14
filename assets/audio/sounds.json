@@ -63,6 +63,38 @@
       }
     ]
   },
+  "ambience/jackdaw": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/ambience/jackdaw_1.ogg",
+        "seconds": 1.998,
+        "source": "fs_612814"
+      },
+      {
+        "file": "audio/ambience/jackdaw_2.ogg",
+        "seconds": 2.5,
+        "source": "fs_612814"
+      },
+      {
+        "file": "audio/ambience/jackdaw_3.ogg",
+        "seconds": 3.0,
+        "source": "fs_612814"
+      },
+      {
+        "file": "audio/ambience/jackdaw_4.ogg",
+        "seconds": 2.5,
+        "source": "fs_612814"
+      },
+      {
+        "file": "audio/ambience/jackdaw_5.ogg",
+        "seconds": 2.5,
+        "source": "fs_612814"
+      }
+    ]
+  },
   "ambience/rain_light": {
     "type": "loop",
     "channels": 2,
@@ -77,6 +109,85 @@
         "file": "audio/ambience/rain_light_2.ogg",
         "seconds": 45.0,
         "source": "fs_200273"
+      }
+    ]
+  },
+  "ambience/raven": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/ambience/raven_1.ogg",
+        "seconds": 0.398,
+        "source": "fs_274439"
+      },
+      {
+        "file": "audio/ambience/raven_2.ogg",
+        "seconds": 2.5,
+        "source": "fs_328846"
+      },
+      {
+        "file": "audio/ambience/raven_3.ogg",
+        "seconds": 0.635,
+        "source": "fs_274439"
+      },
+      {
+        "file": "audio/ambience/raven_4.ogg",
+        "seconds": 2.5,
+        "source": "fs_328846"
+      },
+      {
+        "file": "audio/ambience/raven_5.ogg",
+        "seconds": 0.285,
+        "source": "fs_274439"
+      },
+      {
+        "file": "audio/ambience/raven_6.ogg",
+        "seconds": 0.34,
+        "source": "fs_274439"
+      },
+      {
+        "file": "audio/ambience/raven_7.ogg",
+        "seconds": 0.305,
+        "source": "fs_274439"
+      },
+      {
+        "file": "audio/ambience/raven_8.ogg",
+        "seconds": 0.27,
+        "source": "fs_274439"
+      }
+    ]
+  },
+  "ambience/rockfall": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/ambience/rockfall_1.ogg",
+        "seconds": 13.947,
+        "source": "fs_500638"
+      },
+      {
+        "file": "audio/ambience/rockfall_2.ogg",
+        "seconds": 3.34,
+        "source": "fs_381645"
+      },
+      {
+        "file": "audio/ambience/rockfall_3.ogg",
+        "seconds": 15.28,
+        "source": "fs_389303"
+      },
+      {
+        "file": "audio/ambience/rockfall_4.ogg",
+        "seconds": 3.455,
+        "source": "fs_381645"
+      },
+      {
+        "file": "audio/ambience/rockfall_5.ogg",
+        "seconds": 2.77,
+        "source": "fs_381645"
       }
     ]
   },
@@ -165,6 +276,40 @@
         "file": "audio/ambience/wind_conifers_2.ogg",
         "seconds": 45.0,
         "source": "fs_637565"
+      }
+    ]
+  },
+  "ambience/wind_mountain": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/wind_mountain_1.ogg",
+        "seconds": 45.0,
+        "source": "fs_454092"
+      },
+      {
+        "file": "audio/ambience/wind_mountain_2.ogg",
+        "seconds": 45.0,
+        "source": "fs_759918"
+      }
+    ]
+  },
+  "ambience/wind_works": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/wind_works_1.ogg",
+        "seconds": 45.0,
+        "source": "fs_714264"
+      },
+      {
+        "file": "audio/ambience/wind_works_2.ogg",
+        "seconds": 45.0,
+        "source": "fs_853990"
       }
     ]
   },
@@ -1524,6 +1669,53 @@
         "file": "audio/machines/drone_rotor_2.ogg",
         "seconds": 2.414,
         "source": "fs_383852"
+      }
+    ]
+  },
+  "machines/groan": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/groan_1.ogg",
+        "seconds": 8.607,
+        "source": "fs_496836"
+      },
+      {
+        "file": "audio/machines/groan_2.ogg",
+        "seconds": 4.782,
+        "source": "fs_172411"
+      },
+      {
+        "file": "audio/machines/groan_3.ogg",
+        "seconds": 1.335,
+        "source": "fs_489442"
+      },
+      {
+        "file": "audio/machines/groan_4.ogg",
+        "seconds": 3.132,
+        "source": "fs_238289"
+      },
+      {
+        "file": "audio/machines/groan_5.ogg",
+        "seconds": 7.41,
+        "source": "fs_172411"
+      },
+      {
+        "file": "audio/machines/groan_6.ogg",
+        "seconds": 2.017,
+        "source": "fs_489442"
+      },
+      {
+        "file": "audio/machines/groan_7.ogg",
+        "seconds": 1.465,
+        "source": "fs_489442"
+      },
+      {
+        "file": "audio/machines/groan_8.ogg",
+        "seconds": 1.505,
+        "source": "fs_489442"
       }
     ]
   },

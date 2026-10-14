@@ -30,6 +30,12 @@
     fence_inset: 38.0,
     // Thin, cold mountain air.
     haze: Some((0.94, 0.98, 1.06)),
+    // Gusts over bare rock, ravens, scree letting go somewhere up the slopes.
+    sounds: (
+        wind: "ambience/wind_mountain",
+        birds: ["ambience/raven", "ambience/raven", "ambience/crow"],
+        distant: ["ambience/rockfall"],
+    ),
 
     features: [
         // The whole valley climbs north.

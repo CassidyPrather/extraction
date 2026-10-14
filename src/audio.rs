@@ -435,7 +435,18 @@ fn rotor_loops(
     }
 }
 
-fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<AudioRng>) {
+fn start_ambience(
+    mut commands: Commands,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    zone: Option<Res<Zone>>,
+) {
+    // Each valley has its own wind; fall back to the forest's.
+    let wind = zone
+        .as_ref()
+        .map(|z| z.map.sounds.wind.as_str())
+        .filter(|w| bank.has(w))
+        .unwrap_or("ambience/wind_conifers");
     if let Some(sample) = bank.pick("ambience/rain_light", &mut rng.0) {
         commands.spawn((
             RainLoop,
@@ -447,7 +458,7 @@ fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<
             }],
         ));
     }
-    if let Some(sample) = bank.pick("ambience/wind_conifers", &mut rng.0) {
+    if let Some(sample) = bank.pick(wind, &mut rng.0) {
         commands.spawn((
             WindLoop,
             SamplePlayer::new(sample).looping(),
@@ -504,7 +515,8 @@ fn start_ambience(mut commands: Commands, bank: Res<SoundBank>, mut rng: ResMut<
     }
 }
 
-/// Crows, distant thunder: now and then, somewhere out in the fog.
+/// Birds, distant thunder, the valley's own far-off sounds: now and then,
+/// somewhere out in the fog.
 fn ambient_oneshots(
     mut commands: Commands,
     bank: Res<SoundBank>,
@@ -512,7 +524,7 @@ fn ambient_oneshots(
     time: Res<Time>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     zone: Res<Zone>,
-    mut next: Local<(f32, f32, f32)>,
+    mut next: Local<(f32, f32, f32, f32)>,
 ) {
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
@@ -521,6 +533,7 @@ fn ambient_oneshots(
     next.0 -= dt;
     next.1 -= dt;
     next.2 -= dt;
+    next.3 -= dt;
     // Old works settling: now and then a clank of metal from the nearest
     // big iron building, if one's within earshot.
     if next.2 <= 0.0 {
@@ -544,15 +557,14 @@ fn ambient_oneshots(
             .min_by(|a, b| a.0.total_cmp(&b.0));
         if let Some((_, at)) = near {
             let at = Vec3::new(at[0], zone.ground(at[0], at[1]) + 3.0, at[1]);
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "machines/clank",
-                Some(at),
-                -10.0,
-                0.25,
-            );
+            // Mostly a clank; sometimes a long groan of a beam taking the
+            // weight.
+            let (set, gain) = if rng.0.f32() < 0.35 {
+                ("machines/groan", -8.0)
+            } else {
+                ("machines/clank", -10.0)
+            };
+            play(&mut commands, &bank, &mut rng.0, set, Some(at), gain, 0.25);
         }
     }
     if next.0 <= 0.0 {
@@ -560,15 +572,27 @@ fn ambient_oneshots(
         let a = rng.0.range(0.0, std::f32::consts::TAU);
         let d = rng.0.range(25.0, 70.0);
         let at = ear + Vec3::new(a.cos() * d, rng.0.range(4.0, 15.0), a.sin() * d);
-        play(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "ambience/crow",
-            Some(at),
-            -6.0,
-            0.08,
-        );
+        let birds = &zone.map.sounds.birds;
+        if !birds.is_empty() {
+            let set = &birds[rng.0.below(birds.len())];
+            play(&mut commands, &bank, &mut rng.0, set, Some(at), -6.0, 0.08);
+        }
+    }
+    // The valley's own far-off sounds come from high ground: scree letting
+    // go on the slopes above you.
+    let distant = &zone.map.sounds.distant;
+    if next.3 <= 0.0 && !distant.is_empty() {
+        next.3 = rng.0.range(45.0, 140.0);
+        let at = (0..6)
+            .map(|_| {
+                let a = rng.0.range(0.0, std::f32::consts::TAU);
+                let d = rng.0.range(70.0, 160.0);
+                let (x, z) = (ear.x + a.cos() * d, ear.z + a.sin() * d);
+                Vec3::new(x, zone.ground(x, z) + 2.0, z)
+            })
+            .max_by(|a, b| a.y.total_cmp(&b.y));
+        let set = &distant[rng.0.below(distant.len())];
+        play(&mut commands, &bank, &mut rng.0, set, at, 2.0, 0.1);
     }
     if next.1 <= 0.0 {
         next.1 = rng.0.range(60.0, 180.0);
@@ -1227,5 +1251,31 @@ fn pylon_sounds(
             "machines/clank"
         };
         play(&mut commands, &bank, &mut rng.0, set, Some(at), -4.0, 0.2);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every sound a map asks for is in the index (a missing set plays
+    /// nothing, silently).
+    #[test]
+    fn every_valley_sound_exists() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/sounds.json");
+        let index: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let mut missing = Vec::new();
+        for map in crate::test_maps() {
+            let sounds = crate::world::Zone::load(&map).map.sounds.clone();
+            for set in std::iter::once(&sounds.wind)
+                .chain(&sounds.birds)
+                .chain(&sounds.distant)
+            {
+                if index.get(set).is_none() {
+                    missing.push(format!("{map}: {set}"));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "{missing:?}");
     }
 }

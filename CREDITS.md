@@ -168,12 +168,26 @@ it. Thirty seconds now versus archaeology later.
 | `assets/audio/ambience/crow_*.ogg` | Freesound "CrowOrRaven2.wav" — <https://freesound.org/s/512780/> | iwanPlays | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/crow_*.ogg` | Freesound "U.S. National Park Service - American Crow.flac" — <https://freesound.org/s/182090/> | qubodup | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/crow_*.ogg` | Freesound "Common Raven - Yellowstone National Park" — <https://freesound.org/s/519591/> | Nivatius | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/wind_mountain_*.ogg` | Freesound "mountain wind heavy strong gusts Swiss Alps.flac" — <https://freesound.org/s/454092/> | kyles | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/wind_mountain_*.ogg` | Freesound "Tramontane Wind on Top of the Canigou Mountain (French Pyrenees)" — <https://freesound.org/s/759918/> | davidlagarde | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/wind_works_*.ogg` | Freesound "wind and scaffolding" — <https://freesound.org/s/714264/> | bruno.auzet | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/wind_works_*.ogg` | Freesound "Wind metal cabin" — <https://freesound.org/s/853990/> | fran_marenco | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/rockfall_*.ogg` | Freesound "20120808_064004 Cathedral Mountain rock slide, slow blocky chunks.wav" — <https://freesound.org/s/500638/> | betchkal | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/rockfall_*.ogg` | Freesound "RockFall1b.wav" — <https://freesound.org/s/381645/> | AlanCat | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/rockfall_*.ogg` | Freesound "rockfall2a.wav" — <https://freesound.org/s/389303/> | AlanCat | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/raven_*.ogg` | Freesound "Raven_Caw.wav" — <https://freesound.org/s/274439/> | KiddoFish86 | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/raven_*.ogg` | Freesound "Raven call.wav" — <https://freesound.org/s/328846/> | deleted_user_958643 | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/jackdaw_*.ogg` | Freesound "Group of jackdaw" — <https://freesound.org/s/612814/> | GeniusKevin | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo noises" — <https://freesound.org/s/188821/> | peridactyloptrix | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Small servo (arduino)" — <https://freesound.org/s/520514/> | gpag1 | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo motor" — <https://freesound.org/s/322021/> | Burningmonkey | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/clank_*.ogg` | Freesound "SFX Metal Shed Door - Hits, Clangs, Rattle" — <https://freesound.org/s/264889/> | EpicWizard | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/clank_*.ogg` | Freesound "Clank1.wav" — <https://freesound.org/s/94127/> | BMacZero | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/clank_*.ogg` | Kenney "Impact Sounds 1.0" (impactMetal_heavy_000.ogg, impactMetal_heavy_001.ogg, impactMetal_heavy_002.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/groan_*.ogg` | Freesound "Metallic Groan" — <https://freesound.org/s/496836/> | hinchinbrook | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/groan_*.ogg` | Freesound "Creaking Metal - Slow" — <https://freesound.org/s/172411/> | EagleStealthTeam | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/groan_*.ogg` | Freesound "Creaking Metal.wav" — <https://freesound.org/s/489442/> | Soapuel | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/groan_*.ogg` | Freesound "Long Metal Creak" — <https://freesound.org/s/238289/> | LoafDV | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/drone_rotor_*.ogg` | Freesound "Toy Drone Engine Close" — <https://freesound.org/s/188242/> | qubodup | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/drone_rotor_*.ogg` | Freesound "Mini Quadcopter Flying Loop" — <https://freesound.org/s/383852/> | simeonradivoev | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/hum_*.ogg` | Freesound "50Hz  electrical mains hum" — <https://freesound.org/s/733736/> | chungus43A | CC0 1.0 | 2026-10 |

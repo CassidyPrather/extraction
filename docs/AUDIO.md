@@ -48,8 +48,8 @@ and avoid repeating the last one.
 | `guns/` mechanisms | mag_insert, mag_release, slide_rack, charging_handle, bolt_open, bolt_close, stripper_clip, shotgun_open, shotgun_close, shell_insert, dry_fire, safety, casing | Glock 17 and Remington 870 foley, a Romanian AK, a Mosin-Nagant and a Remington 700 bolt, a break-action 12-gauge, brass dropped on tile and concrete. |
 | `impacts/` | metal, wood, dirt, concrete, ricochet | Target-side recordings of real hits on steel; rock and stick hits standing in for wood, dirt and stone. |
 | `physical/` | drop_metal, drop_wood, drop_plastic, drop_cardboard, zip, cloth, velcro, door_creak, door_open, door_close, glass_break | |
-| `ambience/` | wind_conifers, rain_light, creek, rural, room_tone (stereo loops); thunder_distant (stereo one-shots); crow (mono one-shots) | Loops are 15–45 s, 2 variants each. |
-| `machines/` | servo, clank (one-shots); drone_rotor, hum, radio_static (mono loops); radio_squelch (one-shots); siren (stereo, 60 s) | The siren is a recorded air-raid siren, for the Surge warning. |
+| `ambience/` | wind_conifers, wind_mountain, wind_works, rain_light, creek, rural, room_tone (stereo loops); thunder_distant (stereo one-shots); crow, raven, jackdaw, rockfall (mono one-shots) | Loops are 15–45 s, 2 variants each. Each valley picks its wind, birds and far-off sounds in its map file (`sounds:`). |
+| `machines/` | servo, clank, groan (one-shots); drone_rotor, hum, radio_static (mono loops); radio_squelch (one-shots); siren (stereo, 60 s) | The siren is a recorded air-raid siren, for the Surge warning. |
 
 ## Sources
 
