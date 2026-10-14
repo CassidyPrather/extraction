@@ -269,7 +269,7 @@ pub struct Raider {
     scan: f32,
     clock: f32,
     retreat_until: f32,
-    /// When it last ducked a drone's lock-on.
+    /// When it last ducked into cover (a drone's lock-on, or hurt).
     ducked_at: f32,
     /// Its gun, once it has one.
     gun: Option<Entity>,
@@ -621,6 +621,23 @@ impl Scene<'_, '_> {
         self.ray_clear(from, to) && self.ray_clear(from - Vec3::Y * 0.25, to)
     }
 
+    /// Nothing solid between the two points, all the way.
+    fn path_clear(&self, from: Vec3, to: Vec3) -> bool {
+        let d = to - from;
+        let Ok(dir) = Dir3::new(d) else {
+            return true;
+        };
+        self.spatial
+            .cast_ray(
+                from,
+                dir,
+                d.length() + 0.3,
+                true,
+                &SpatialQueryFilter::from_mask(Layer::World),
+            )
+            .is_none()
+    }
+
     fn ray_clear(&self, from: Vec3, to: Vec3) -> bool {
         let d = to - from;
         let len = d.length();
@@ -756,7 +773,8 @@ pub fn think(
                 bot.replace(tasks);
                 continue;
             }
-            fight_on(me, &mut bot, r, &scene, &mut log, eye, gun, target);
+            let hit = health.since_hit < 2.0;
+            fight_on(me, &mut bot, r, &scene, &mut log, eye, gun, target, hit);
             continue;
         }
         r.diving = false;
@@ -953,6 +971,11 @@ fn react_to_robots(
         c.unseen = if seen { 0.0 } else { c.unseen + 0.25 };
         return;
     }
+    // Just ducked into cover: stay there a moment rather than step straight
+    // back out to fight.
+    if r.clock - r.ducked_at < 4.0 {
+        return;
+    }
     let (loaded, spare) = scene.ammo(me, r.gun.or(gun));
     let armed = loaded + spare > 0;
     let mut threat: Option<(Entity, f32, bool, String, Vec3)> = None;
@@ -1070,25 +1093,38 @@ fn duck(
     if r.rng.range(0.0, 1.0) > r.traits.duck {
         return None;
     }
-    let from = gt.translation();
-    let mut best: Option<(f32, Vec2)> = None;
-    for k in 0..12 {
-        let a = k as f32 * std::f32::consts::TAU / 12.0;
-        for d in [2.5, 4.5, 7.0] {
-            let p = pos.xz() + Vec2::new(a.cos(), a.sin()) * d;
-            let eye = Vec3::new(p.x, scene.zone.ground(p.x, p.y) + 1.5, p.y);
-            if !scene.visible(from, eye) && best.is_none_or(|b| d < b.0) {
-                best = Some((d, p));
-            }
-        }
-    }
-    let (d, to) = best?;
+    let (d, to) = cover_from(scene, pos, gt.translation(), 7.0)?;
     r.ducked_at = r.clock;
     log.event(
         "duck",
         json!({"dist": round(d, 1), "x": round(pos.x, 1), "z": round(pos.z, 1)}),
     );
     Some(vec![Task::WalkTo { to, within: 0.6 }, Task::Wait(1.2)])
+}
+
+/// The nearest spot within `reach` that `threat` can't see.
+fn cover_from(scene: &Scene, pos: Vec3, threat: Vec3, reach: f32) -> Option<(f32, Vec2)> {
+    let mut best: Option<(f32, Vec2)> = None;
+    for k in 0..12 {
+        let a = k as f32 * std::f32::consts::TAU / 12.0;
+        for d in [2.5, 4.5, 7.0, 10.0] {
+            if d > reach {
+                break;
+            }
+            let p = pos.xz() + Vec2::new(a.cos(), a.sin()) * d;
+            let eye = Vec3::new(p.x, scene.zone.ground(p.x, p.y) + 1.5, p.y);
+            // Not into water, and not through a wall to get there.
+            if scene.zone.hm.water_level([p.x, p.y]).is_some()
+                || !scene.path_clear(pos + Vec3::Y * 0.9, eye - Vec3::Y * 0.6)
+            {
+                break;
+            }
+            if !scene.visible(threat, eye) && best.is_none_or(|b| d < b.0) {
+                best = Some((d, p));
+            }
+        }
+    }
+    best
 }
 
 /// Between bursts: keep shooting, reload, or call it.
@@ -1101,7 +1137,13 @@ fn fight_on(
     eye: Vec3,
     gun: Option<Entity>,
     target: Entity,
+    hit: bool,
 ) {
+    let threat = scene
+        .robots
+        .get(target)
+        .ok()
+        .map(|(_, _, gt, ..)| gt.translation());
     let outcome = match scene.robots.get(target) {
         Err(_) => Some("gone"),
         Ok((_, rb, ..)) if rb.wrecked => Some("wrecked"),
@@ -1133,7 +1175,15 @@ fn fight_on(
         return;
     }
     let (loaded, spare) = scene.ammo(me, gun);
+    // Hurt and still being hit: get out of its sight and see to it (the
+    // dressing comes once out of the fight; it'll be back if the robot
+    // follows).
+    let cover = threat
+        .filter(|t| hit && r.hp < 45.0 && scene.visible(*t, eye))
+        .filter(|_| r.rng.range(0.0, 1.0) < r.traits.duck)
+        .and_then(|t| cover_from(scene, eye - Vec3::Y * 1.6, t, 10.0));
     let outcome = outcome
+        .or(cover.is_some().then_some("took_cover"))
         .or(lost.then_some("lost"))
         .or(long.then_some("broke_off"))
         .or((loaded + spare == 0).then_some("out_of_ammo"));
@@ -1156,6 +1206,21 @@ fn fight_on(
             }
         }
         r.interrupted = true;
+        if let Some((d, to)) = cover {
+            r.ducked_at = r.clock;
+            log.event(
+                "cover",
+                json!({"why": "hurt", "dist": round(d, 1), "hp": round(r.hp, 0)}),
+            );
+            bot.sprint = true;
+            bot.replace([
+                Task::Release(Side::Left),
+                Task::WalkTo { to, within: 0.6 },
+                Task::Stow(Side::Right),
+                Task::Wait(2.0),
+            ]);
+            return;
+        }
         bot.replace([
             Task::Release(Side::Left),
             Task::Stow(Side::Right),
@@ -1176,12 +1241,30 @@ fn fight_on(
         return;
     }
     if loaded == 0 {
-        bot.replace([
-            Task::Gun(MacroKind::Reload),
-            Task::Support,
-            Task::Shoot { target, shots: 4 },
-        ]);
-        log.event("reload", json!({"spare": spare}));
+        // Reload where it can't see you, then step back out.
+        let cover = threat
+            .filter(|t| scene.visible(*t, eye))
+            .filter(|_| r.rng.range(0.0, 1.0) < r.traits.duck)
+            .and_then(|t| cover_from(scene, eye - Vec3::Y * 1.6, t, 7.0));
+        log.event("reload", json!({"spare": spare, "cover": cover.is_some()}));
+        match cover {
+            Some((_, to)) => bot.replace([
+                Task::Release(Side::Left),
+                Task::WalkTo { to, within: 0.6 },
+                Task::Gun(MacroKind::Reload),
+                Task::WalkTo {
+                    to: eye.xz(),
+                    within: 0.8,
+                },
+                Task::Support,
+                Task::Shoot { target, shots: 4 },
+            ]),
+            None => bot.replace([
+                Task::Gun(MacroKind::Reload),
+                Task::Support,
+                Task::Shoot { target, shots: 4 },
+            ]),
+        }
         return;
     }
     // No line of fire: hold, rather than empty a magazine into a wall.
