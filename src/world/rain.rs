@@ -22,7 +22,7 @@ impl Plugin for RainPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<RainMaterial>::default())
             .add_systems(Startup, spawn_rain)
-            .add_systems(Update, rain_intensity);
+            .add_systems(Update, (rain_intensity, ash_fall));
     }
 }
 
@@ -121,6 +121,61 @@ fn spawn_rain(
         NotShadowCaster,
         NotShadowReceiver,
     ));
+}
+
+/// Ash drifting down, in a valley that burned (`MapDef::ash`): the rain
+/// field again, slowed to a drift, flakes for streaks. Rain washes it out.
+#[derive(Component)]
+struct Ash(Handle<RainMaterial>);
+
+fn ash_fall(
+    mut commands: Commands,
+    conditions: Res<Conditions>,
+    zone: Res<super::Zone>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<RainMaterial>>,
+    mut ash: Query<(&Ash, &mut Visibility)>,
+    mut spawned: Local<bool>,
+) {
+    let amount = zone.map.ash;
+    if amount <= 0.0 {
+        return;
+    }
+    if !*spawned {
+        *spawned = true;
+        let m = materials.add(RainMaterial {
+            rain: RainParams {
+                // Slow, short, and a fraction as many.
+                params: Vec4::new(amount, 0.55, 0.035, BOX),
+                // y: flakes (pale, wobbling); w: flake width.
+                wind: Vec4::new(0.35, 1.0, 0.15, 0.03),
+            },
+        });
+        commands.spawn((
+            Name::new("Ash"),
+            Ash(m.clone()),
+            Mesh3d(meshes.add(streak_mesh())),
+            MeshMaterial3d(m),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
+        return;
+    }
+    if !conditions.is_changed() {
+        return;
+    }
+    for (a, mut vis) in &mut ash {
+        *vis = if conditions.rain < 0.5 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+        if let Some(mut m) = materials.get_mut(&a.0) {
+            m.rain.params.x = amount * (1.0 - conditions.rain).clamp(0.0, 1.0);
+        }
+    }
 }
 
 fn rain_intensity(

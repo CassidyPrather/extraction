@@ -43,6 +43,13 @@ pub struct MapDef {
     pub markers: Vec<Marker>,
     #[serde(default)]
     pub regions: Vec<Region>,
+    /// The valley's own air: a colour the sky and fog are multiplied by
+    /// (linear rgb; none is neutral).
+    #[serde(default)]
+    pub haze: Option<[f32; 3]>,
+    /// Ash drifting down when it isn't raining, 0..1.
+    #[serde(default)]
+    pub ash: f32,
 }
 
 const fn default_cell() -> f32 {

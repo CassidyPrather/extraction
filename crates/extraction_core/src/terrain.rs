@@ -556,6 +556,8 @@ mod tests {
             placements: vec![],
             markers: vec![],
             regions: vec![],
+            haze: None,
+            ash: 0.0,
         }
     }
 

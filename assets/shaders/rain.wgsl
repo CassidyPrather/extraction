@@ -12,7 +12,7 @@
 struct RainParams {
     // x: intensity 0..1, y: fall speed m/s, z: streak length m, w: box size m
     params: vec4<f32>,
-    // xz: wind, m/s
+    // xz: wind, m/s; y: 1 for ash (pale flakes that tumble); w: width m
     wind: vec4<f32>,
 }
 
@@ -27,6 +27,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) fade: f32,
+    @location(2) ash: f32,
 };
 
 @vertex
@@ -38,17 +39,23 @@ fn vertex(v: Vertex) -> VertexOutput {
     let fall = vec3<f32>(rain.wind.x, -speed, rain.wind.z);
     // Base point drifts with the fall, wrapped into the box round the camera.
     var p = v.position + fall * t;
+    if (rain.wind.y > 0.5) {
+        // Ash tumbles as it drifts.
+        let ph = v.position.x * 3.1 + v.position.z * 1.7;
+        p = p + vec3<f32>(sin(t * 0.8 + ph), 0.0, cos(t * 0.6 + ph * 1.3)) * 0.35;
+    }
     p = p - cam;
     p = (fract(p / box_size + 0.5) - 0.5) * box_size;
     let centre = cam + p;
     let axis = normalize(-fall);
     let to_cam = normalize(cam - centre);
     let side = normalize(cross(axis, to_cam));
-    let width = 0.006;
+    let width = select(0.006, rain.wind.w, rain.wind.w > 0.0);
     let pos = centre + side * (v.uv.x - 0.5) * width + axis * v.uv.y * rain.params.z;
     var out: VertexOutput;
     out.clip_position = position_world_to_clip(pos);
     out.uv = v.uv;
+    out.ash = rain.wind.y;
     // Fade near the box edge (no popping) and right at the eye.
     let d = length(p) / (box_size * 0.5);
     out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * smoothstep(0.4, 1.5, length(p));
@@ -63,6 +70,12 @@ fn vertex(v: Vertex) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let edge = 1.0 - abs(in.uv.x - 0.5) * 2.0;
+    if (in.ash > 0.5) {
+        // A soft grey flake.
+        let r = length(in.uv - vec2<f32>(0.5, 0.5)) * 2.0;
+        let a = 0.55 * in.fade * (1.0 - smoothstep(0.5, 1.0, r));
+        return vec4<f32>(0.6, 0.58, 0.55, a);
+    }
     let a = 0.22 * in.fade * edge * (0.4 + 0.6 * in.uv.y);
     return vec4<f32>(0.62, 0.66, 0.70, a);
 }

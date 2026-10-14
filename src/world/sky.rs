@@ -267,6 +267,7 @@ fn apply_weather(
     domes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<GlobalAmbientLight>,
+    zone: Res<super::Zone>,
 ) {
     // New cameras (the player's, a scope's) take the weather as they appear.
     let fresh = fogs.iter_mut().any(|f| f.is_added());
@@ -281,9 +282,14 @@ fn apply_weather(
         super::weather::WeatherKind::Clearing => 1.12,
         super::weather::WeatherKind::Drizzle => 1.0,
     };
+    let haze = zone.map.haze.unwrap_or([1.0; 3]);
     let scale = |c: Color| {
         let l = c.to_linear();
-        Color::linear_rgb(l.red * k, l.green * k, l.blue * k)
+        Color::linear_rgb(
+            l.red * k * haze[0],
+            l.green * k * haze[1],
+            l.blue * k * haze[2],
+        )
     };
     weather.horizon = scale(base.horizon);
     weather.zenith = scale(base.zenith);

@@ -29,6 +29,9 @@
     noise: (seed: 61, amplitude: 3.0, scale: 110.0, octaves: 5, detail: 0.3),
     rim: (width: 70.0, height: 14.0),
     fence_inset: 38.0,
+    // Ash-brown air, and ash still drifting down when it isn't raining.
+    haze: Some((1.12, 0.95, 0.80)),
+    ash: 0.6,
 
     features: [
         // A gentle fall toward the canal from both sides.
