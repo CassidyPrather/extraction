@@ -720,10 +720,66 @@ fn dress_pylon_masts(
     };
     for e in &masts {
         commands.entity(e).insert((
-            Mesh3d(meshes.add(Cuboid::new(0.25, 1.0, 0.25))),
+            Mesh3d(meshes.add(lattice_mast())),
             MeshMaterial3d(m.dark.clone()),
         ));
     }
+}
+
+/// A unit-tall lattice mast (the pylon stretches it as it goes up): three
+/// legs, a ring and a pair of diagonals for every metre at full height.
+fn lattice_mast() -> Mesh {
+    const R: f32 = 0.13;
+    // At full height (`pylon::MAST`), one bay a metre.
+    let bays = super::pylon::MAST.round().max(1.0) as usize;
+    let legs: Vec<Vec3> = (0..3)
+        .map(|i| {
+            let a = i as f32 * std::f32::consts::TAU / 3.0;
+            Vec3::new(a.cos() * R, 0.0, a.sin() * R)
+        })
+        .collect();
+    let mut out: Option<Mesh> = None;
+    let mut add = |size: Vec3, t: Transform| {
+        let m = Mesh::from(Cuboid::from_size(size)).transformed_by(t);
+        match &mut out {
+            Some(o) => {
+                let _ = o.merge(&m);
+            }
+            None => out = Some(m),
+        }
+    };
+    for l in &legs {
+        add(
+            Vec3::new(0.035, 1.0, 0.035),
+            Transform::from_translation(*l),
+        );
+    }
+    let step = 1.0 / bays as f32;
+    for b in 0..=bays {
+        let y = -0.5 + b as f32 * step;
+        for i in 0..3 {
+            let (p, q) = (legs[i], legs[(i + 1) % 3]);
+            let mid = (p + q) * 0.5 + Vec3::Y * y;
+            let d = q - p;
+            let yaw = Quat::from_rotation_y(-d.z.atan2(d.x));
+            add(
+                Vec3::new(d.length(), 0.004, 0.02),
+                Transform::from_translation(mid).with_rotation(yaw),
+            );
+            if b < bays {
+                // A diagonal across the face, up to the next ring.
+                let a3 = p + Vec3::Y * y;
+                let b3 = q + Vec3::Y * (y + step);
+                let along = b3 - a3;
+                add(
+                    Vec3::new(0.015, along.length(), 0.015),
+                    Transform::from_translation((a3 + b3) * 0.5)
+                        .with_rotation(Quat::from_rotation_arc(Vec3::Y, along.normalize())),
+                );
+            }
+        }
+    }
+    out.unwrap_or_else(|| Mesh::from(Cuboid::new(0.25, 1.0, 0.25)))
 }
 
 /// A pylon going up (or coming down) throws a flickering work light from

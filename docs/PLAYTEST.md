@@ -130,8 +130,8 @@ worth noticing:
   physically into a wall and the world is nudged back to keep you out of
   it; tell me if that feels bad.
 - Hands are simple: no finger tracking beyond the trigger finger.
-- Some models are blockouts (plain boxes): a few props and buildings,
-  the pylon's mast.
+- Some models are still simple: a few props and buildings are close to
+  plain boxes.
 - Drones still decide most deaths in the sims; whether that's right is
   the main balance question for you.
 - Sim bots sometimes wedge themselves on doors. A person shouldn't, but
