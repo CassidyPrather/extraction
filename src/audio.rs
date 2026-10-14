@@ -101,6 +101,7 @@ impl Plugin for AudioPlugin {
                     pylon_sounds,
                     radio_sounds,
                     chatter_sounds,
+                    splash_sounds,
                     lock_sounds,
                     drop_sounds,
                 ),
@@ -1149,6 +1150,33 @@ fn lock_sounds(
             4.0,
             0.03,
         );
+    }
+}
+
+/// Going into deeper water: a splash, louder the harder you went in.
+fn splash_sounds(
+    mut commands: Commands,
+    bodies: Query<(Entity, &crate::player::Body, &GlobalTransform)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut was: Local<std::collections::HashMap<Entity, f32>>,
+) {
+    for (e, body, gt) in &bodies {
+        let before = was.insert(e, body.wading).unwrap_or(body.wading);
+        if before < 0.25 && body.wading >= 0.25 {
+            let hard = (body.velocity.length() / 4.0).clamp(0.2, 1.0);
+            for _ in 0..2 {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "footsteps/water",
+                    Some(gt.translation()),
+                    -8.0 + 8.0 * hard,
+                    0.15,
+                );
+            }
+        }
     }
 }
 
