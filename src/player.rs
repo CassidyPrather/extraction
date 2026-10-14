@@ -71,7 +71,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Footstep>()
             .add_systems(Startup, spawn_local_player)
-            .add_systems(FixedUpdate, move_bodies);
+            .add_systems(FixedUpdate, (move_bodies, fit_hitboxes));
     }
 }
 
@@ -116,6 +116,7 @@ pub fn spawn_player(commands: &mut Commands, feet: Vec3, yaw_deg: f32, local: bo
         c.spawn((
             Name::new("Body collider"),
             BodyCollider,
+            HitboxHeight(CAPSULE_HEIGHT),
             Transform::from_xyz(0.0, CAPSULE_HEIGHT * 0.5, 0.0),
             RigidBody::Kinematic,
             Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS),
@@ -349,6 +350,37 @@ pub fn move_bodies(
     }
 }
 
+/// What gets shot is as tall as you are standing right now: duck behind a
+/// wall for real and the capsule ducks with you. (Moving uses the full
+/// capsule; this is the one bullets and robots meet.)
+fn fit_hitboxes(
+    mut commands: Commands,
+    players: Query<(&RigInput, &Children), With<Player>>,
+    mut colliders: Query<(Entity, &mut Transform, &mut HitboxHeight), With<BodyCollider>>,
+) {
+    for (input, children) in &players {
+        let want = (input.head.translation.y + 0.12).clamp(0.9, CAPSULE_HEIGHT);
+        for c in children.iter() {
+            let Ok((e, mut t, mut h)) = colliders.get_mut(c) else {
+                continue;
+            };
+            if (h.0 - want).abs() < 0.05 {
+                continue;
+            }
+            h.0 = want;
+            t.translation.y = want * 0.5;
+            commands.entity(e).insert(Collider::capsule(
+                CAPSULE_RADIUS,
+                want - 2.0 * CAPSULE_RADIUS,
+            ));
+        }
+    }
+}
+
+/// The body collider's current height.
+#[derive(Component)]
+pub struct HitboxHeight(pub f32);
+
 /// Where the head stands over the playspace floor, from the root, in the
 /// world's axes (zero for flat play and bots, whose heads sit over the
 /// root; the walked-off distance in room-scale VR).
@@ -491,6 +523,23 @@ mod tests {
             Vec2::new(after.x - before.x, after.z - before.z).length() < 0.05,
             "the playspace stays put ({before} -> {after})"
         );
+        // Crouch for real: what gets shot crouches too.
+        for _ in 0..5 {
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation = Vec3::new(0.8, 1.0, 0.0);
+            app.world_mut().run_schedule(FixedUpdate);
+        }
+        let h = app
+            .world_mut()
+            .query_filtered::<&HitboxHeight, With<BodyCollider>>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+            .0;
+        assert!((h - 1.12).abs() < 0.01, "crouched hitbox {h}");
     }
 
     /// Dropped into the canal, you come up and float with your head out;
