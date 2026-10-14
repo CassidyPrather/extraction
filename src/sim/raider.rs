@@ -1356,6 +1356,17 @@ fn travel(grid: &NavGrid, from: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>
     let mut tasks = Vec::new();
     let mut last = from;
     let n = path.len();
+    // Standing in a building's or a tree's margin, the path starts from
+    // the nearest open cell instead: step out to it first, rather than
+    // cutting the corner to the next point.
+    let start = Vec2::from_array(path[0]);
+    if start.distance(from) > 0.5 {
+        tasks.push(Task::WalkTo {
+            to: start,
+            within: 0.6,
+        });
+        last = start;
+    }
     for (i, p) in path.into_iter().enumerate().skip(1) {
         let p = Vec2::from_array(p);
         let steps = (last.distance(p) / 20.0).ceil().max(1.0) as usize;
