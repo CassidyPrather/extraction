@@ -28,6 +28,8 @@
     noise: (seed: 31, amplitude: 5.0, scale: 120.0, octaves: 5, detail: 0.35),
     rim: (width: 70.0, height: 16.0),
     fence_inset: 38.0,
+    // Thin, cold mountain air.
+    haze: Some((0.94, 0.98, 1.06)),
 
     features: [
         // The whole valley climbs north.
