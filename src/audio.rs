@@ -20,6 +20,8 @@ use crate::robots::{Robot, RobotPart};
 use crate::weapons::GunEvent;
 use crate::weapons::ballistics::{Hit, Shot};
 use crate::world::Zone;
+use crate::world::surfaces::{Surfaces, footstep_set, impact_set, underfoot};
+use avian3d::prelude::*;
 
 /// Every sound set by name (`"guns/rifle_shot"`), as loaded handles.
 #[derive(Resource, Default)]
@@ -217,14 +219,20 @@ fn footsteps(
     mut rng: ResMut<AudioRng>,
     zone: Res<Zone>,
     trucks: Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
     for s in steps.read() {
         let p = [s.position.x, s.position.z];
         let in_truck = trucks
             .iter()
             .any(|(gt, t)| t.in_bed(gt, s.position + Vec3::Y * 0.2));
+        // A floor, a deck, a stair: whatever's underfoot, if it's built.
+        let floor = underfoot(&spatial, &built, s.position);
         let set = if in_truck {
             "footsteps/wood"
+        } else if let Some(m) = floor {
+            footstep_set(m)
         } else {
             surface_set(zone.hm.surface(p, zone.in_forest(p[0], p[1])))
         };
@@ -345,12 +353,19 @@ fn hit_sounds(
     trees: Query<(), With<crate::world::trees::TreeTrunks>>,
     structures: Query<(), With<crate::world::structures::Structure>>,
     items: Query<(), With<crate::items::Item>>,
+    built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
     for h in hits.read() {
+        let made_of = built
+            .get(h.entity)
+            .ok()
+            .and_then(|(gt, surf)| surf.at(gt, h.point));
         let set = if parts.contains(h.entity) || items.contains(h.entity) {
             "impacts/metal"
         } else if trees.contains(h.entity) {
             "impacts/wood"
+        } else if let Some(m) = made_of {
+            impact_set(m)
         } else if structures.contains(h.entity) {
             "impacts/concrete"
         } else {

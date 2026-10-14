@@ -1247,7 +1247,18 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             ))
             .id();
         let mut colliders = Vec::new();
-        for piece in geo.pieces.iter().filter(|q| q.collide) {
+        let mut surfaces = Vec::new();
+        for piece in &geo.pieces {
+            let half = match piece.shape {
+                Shape::Box(s) => s * 0.5,
+                Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+            };
+            // Visual-only pieces count too: floorboards over a plinth.
+            surfaces.push((half, piece.at, piece.mat));
+            if !piece.collide {
+                continue;
+            }
             let c = match piece.shape {
                 Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
                 Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
@@ -1260,6 +1271,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 RigidBody::Static,
                 Collider::compound(colliders),
                 CollisionLayers::new(Layer::World, LayerMask::ALL),
+                super::surfaces::Surfaces(surfaces),
             ));
         }
         for d in &geo.doors {

@@ -8,6 +8,7 @@ pub mod buildings;
 pub mod rain;
 pub mod sky;
 pub mod structures;
+pub mod surfaces;
 pub mod terrain;
 pub mod trees;
 pub mod water;

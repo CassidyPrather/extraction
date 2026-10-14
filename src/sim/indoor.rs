@@ -224,14 +224,17 @@ pub fn plan_buildings(
             let mid = (d.a + d.b) * 0.5;
             let along = (d.b - d.a).normalize_or_zero();
             let normal = Vec2::new(-along.y, along.x);
-            for side in [1.0, -1.0] {
-                let probe = mid + normal * side * 0.9;
-                if is_out(probe) {
-                    let stand = mid + normal * side * 1.3;
-                    d.outside = Some(stand);
-                    entries.push(stand);
-                    break;
-                }
+            // In a hall with open bays both sides flood as "outside": take
+            // the side beyond the footprint.
+            let beyond = |p: Vec2| p.x.abs() > half.x || p.y.abs() > half.y;
+            let side = [1.0, -1.0]
+                .into_iter()
+                .filter(|s| is_out(mid + normal * *s * 0.9))
+                .max_by_key(|s| beyond(mid + normal * *s * 0.9));
+            if let Some(side) = side {
+                let stand = mid + normal * side * 1.3;
+                d.outside = Some(stand);
+                entries.push(stand);
             }
         }
         if infos.is_empty() {
@@ -464,6 +467,82 @@ mod tests {
             local.distance(goal) < 0.8,
             "the bot got to {local:?}, not {goal:?}"
         );
+    }
+
+    /// A step just inside every outside door, and one on every bridge
+    /// deck, lands on something built (so it sounds like boards or
+    /// concrete, not the grass under it).
+    #[test]
+    fn every_floor_and_deck_has_a_surface() {
+        use crate::render::materials::Mat;
+        use crate::world::bridges::Bridge;
+        use crate::world::surfaces::{Surfaces, underfoot};
+        use avian3d::prelude::SpatialQuery;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            let mut steps: Vec<(String, Vec3)> = Vec::new();
+            for plan in plans(&mut app) {
+                for d in &plan.doors {
+                    let Some(entry) = d.outside else { continue };
+                    // Earth floors are the ground's.
+                    if plan.name == "barn" {
+                        continue;
+                    }
+                    let mid = (d.a + d.b) * 0.5;
+                    let inside = mid + (mid - entry).normalize() * 1.0;
+                    let at = plan
+                        .xf
+                        .transform_point(Vec3::new(inside.x, plan.floor, inside.y));
+                    steps.push((format!("{} door", plan.name), at));
+                }
+            }
+            let decks: Vec<Vec3> = app
+                .world_mut()
+                .query::<&Bridge>()
+                .iter(app.world())
+                .filter_map(|b| {
+                    // The deck: the wide, flat pieces; the middle one.
+                    let deck: Vec<_> = b
+                        .pieces
+                        .iter()
+                        .filter(|(s, ..)| s.x > 1.0 && s.y < 0.5)
+                        .collect();
+                    let (size, t, _) = deck.get(deck.len() / 2)?;
+                    Some(t.translation + t.rotation * Vec3::Y * size.y * 0.5)
+                })
+                .collect();
+            steps.extend(decks.into_iter().map(|p| ("bridge".to_string(), p)));
+            let found: Vec<(String, Vec3, Option<Mat>)> = app
+                .world_mut()
+                .run_system_once(
+                    move |spatial: SpatialQuery, built: Query<(&GlobalTransform, &Surfaces)>| {
+                        steps
+                            .iter()
+                            .map(|(n, p)| (n.clone(), *p, underfoot(&spatial, &built, *p)))
+                            .collect::<Vec<_>>()
+                    },
+                )
+                .unwrap();
+            let missing: Vec<_> = found.iter().filter(|f| f.2.is_none()).collect();
+            assert!(
+                missing.is_empty(),
+                "{map}: nothing built underfoot at {missing:?}"
+            );
+            assert!(
+                found.iter().any(|f| f.2 == Some(Mat::WoodFloor)),
+                "{map}: no floorboards anywhere"
+            );
+        }
     }
 
     /// Every outside door of every building on the map lets a bot in, as

@@ -137,9 +137,16 @@ pub fn spawn_bridges(mut commands: Commands, zone: Res<Zone>) {
                 )
             })
             .collect();
+        let surfaces = super::surfaces::Surfaces(
+            b.pieces
+                .iter()
+                .map(|(size, t, m)| (*size * 0.5, *t, *m))
+                .collect(),
+        );
         commands.spawn((
             Name::new("Bridge"),
             b,
+            surfaces,
             Transform::IDENTITY,
             Visibility::default(),
             RigidBody::Static,

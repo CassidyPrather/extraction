@@ -101,6 +101,7 @@ impl Heightmap {
         for (i, road) in map.roads.iter().enumerate() {
             hm.road(i, road);
         }
+        hm.settle(map);
         hm
     }
 
@@ -339,6 +340,60 @@ impl Heightmap {
                 let t = 1.0 - geom::smoothstep(0.0, blend, out);
                 hm.heights[k] += (target - hm.heights[k]) * t;
             });
+        }
+    }
+
+    /// Roads are graded after the pads, and a road's fill can rise inside
+    /// a building: under every floor, the ground goes no higher than the
+    /// footing the building stands on (its lowest corner, as the game
+    /// places it), so the ground never pokes up through a floor.
+    fn settle(&mut self, map: &MapDef) {
+        for p in &map.placements {
+            if p.absolute || !crate::map::prefab_wants_pad(&p.prefab) {
+                continue;
+            }
+            let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+            let yaw = -p.rot.to_radians();
+            let (s, c) = yaw.sin_cos();
+            let footing = |hm: &Self| {
+                [
+                    (-0.5, -0.5),
+                    (0.5, -0.5),
+                    (0.5, 0.5),
+                    (-0.5, 0.5),
+                    (0.0, 0.0),
+                ]
+                .iter()
+                .map(|(sx, sz)| {
+                    let (x, z) = (sx * w, sz * d);
+                    hm.height([p.at[0] + x * c + z * s, p.at[1] - x * s + z * c])
+                })
+                .fold(f32::INFINITY, f32::min)
+            };
+            // Flat to a cell past the walls (so nothing between samples
+            // rises inside), then a ramp no steeper than half a metre per
+            // metre back up to the ground as it was (no ditch round it).
+            const RAMP: f32 = 0.5;
+            let (half_w, half_d) = (w * 0.5 + self.cell, d * 0.5 + self.cell);
+            let reach = half_w.max(half_d) + 8.0;
+            let lo = [p.at[0] - reach, p.at[1] - reach];
+            let hi = [p.at[0] + reach, p.at[1] + reach];
+            // Lowering cells can lower the corner the building stands on in
+            // turn: settle until it stops moving.
+            for _ in 0..8 {
+                let y = footing(self);
+                self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                    let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+                    let l = [dx * c - dz * s, dx * s + dz * c];
+                    let out = (l[0].abs() - half_w)
+                        .max(0.0)
+                        .hypot((l[1].abs() - half_d).max(0.0));
+                    hm.heights[k] = hm.heights[k].min(y + out * RAMP);
+                });
+                if footing(self) >= y - 1e-3 {
+                    break;
+                }
+            }
         }
     }
 
