@@ -429,6 +429,30 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "prints water depths"]
+    fn water_depths() {
+        for (name, src) in [
+            ("marrow", MARROW_CREEK),
+            ("kettle", KETTLE_PASS),
+            ("cinder", CINDER_WORKS),
+        ] {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = Heightmap::build(&map);
+            let mut deepest: f32 = 0.0;
+            let n = (map.size / 2.0) as i32;
+            for i in -n..n {
+                for j in -n..n {
+                    let p = [i as f32 * 2.0, j as f32 * 2.0];
+                    if let Some(w) = hm.water_level(p) {
+                        deepest = deepest.max(w - hm.height(p));
+                    }
+                }
+            }
+            println!("DEPTH {name} {deepest:.2}");
+        }
+    }
+
+    #[test]
     fn risk_pays_in_loot() {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
         let village = map.richness_at([5.0, 70.0]);

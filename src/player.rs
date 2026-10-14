@@ -24,6 +24,10 @@ const JUMP_SPEED: f32 = 3.6;
 const CAPSULE_RADIUS: f32 = 0.28;
 const CAPSULE_HEIGHT: f32 = 1.75;
 const STEP_HEIGHT: f32 = 0.4;
+/// Deeper water than this and you float, head and shoulders out.
+pub const FLOAT_DEPTH: f32 = 1.3;
+/// Swimming pace with a kit on your back: a slow paddle.
+const SWIM_SPEED: f32 = 0.8;
 
 #[derive(Component)]
 pub struct Player;
@@ -43,6 +47,10 @@ pub struct Body {
     pub stride: f32,
     /// Downward speed at the last landing, m/s (health reads and clears it).
     pub impact: f32,
+    /// How deep the water is around the feet, m (0 on dry land).
+    pub wading: f32,
+    /// Afloat in deep water.
+    pub swimming: bool,
 }
 
 /// The capsule collider entity (child of the root).
@@ -151,6 +159,7 @@ pub fn move_bodies(
     colliders: Query<Entity, With<BodyCollider>>,
     move_and_slide: MoveAndSlide,
     time: Res<Time>,
+    zone: Res<Zone>,
     mut steps: MessageWriter<Footstep>,
 ) {
     let dt = time.delta_secs();
@@ -161,20 +170,34 @@ pub fn move_bodies(
         let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
             .with_excluded_entities(own.iter().copied().chain([entity]));
         let enc = Encumbrance::from_mass(body.carried_kg);
+        // Water: wading drags at you; deep enough and you float.
+        let feet = root.translation;
+        let water = zone.hm.water_level([feet.x, feet.z]);
+        let depth = water.map_or(0.0, |w| (w - feet.y).max(0.0));
+        body.wading = depth;
+        let swimming = !climbing && depth > FLOAT_DEPTH - 0.05;
+        body.swimming = swimming;
+        let drag = 1.0 - (depth / FLOAT_DEPTH).clamp(0.0, 1.0) * 0.6;
 
         // Desired horizontal velocity from the head's yaw.
         let head_fwd = (root.rotation * input.head.rotation) * Vec3::NEG_Z;
         let fwd = Vec3::new(head_fwd.x, 0.0, head_fwd.z).normalize_or(Vec3::NEG_Z);
         let right = Vec3::new(-fwd.z, 0.0, fwd.x);
-        let want_sprint =
-            input.sprint && enc.can_sprint && body.stamina > 0.05 && input.locomotion.y > 0.3;
-        let speed = if input.crouch {
+        let want_sprint = input.sprint
+            && enc.can_sprint
+            && body.stamina > 0.05
+            && input.locomotion.y > 0.3
+            && depth < 0.5;
+        let speed = if swimming {
+            SWIM_SPEED
+        } else if input.crouch {
             CROUCH_SPEED
         } else if want_sprint {
             SPRINT_SPEED
         } else {
             WALK_SPEED
-        } * enc.speed;
+        } * enc.speed
+            * if swimming { 1.0 } else { drag };
         let target = if climbing {
             // On a rope the stick climbs (see `gadgets::climbing`).
             Vec3::ZERO
@@ -182,7 +205,13 @@ pub fn move_bodies(
             (fwd * input.locomotion.y + right * input.locomotion.x) * speed
         };
         // Responsive but not instant: a little weight to starting and stopping.
-        let accel = if body.grounded { 12.0 } else { 2.0 };
+        let accel = if swimming {
+            3.0
+        } else if body.grounded {
+            12.0
+        } else {
+            2.0
+        };
         let horiz = Vec3::new(body.velocity.x, 0.0, body.velocity.z);
         let horiz = if climbing {
             horiz
@@ -200,6 +229,11 @@ pub fn move_bodies(
 
         if climbing {
             // The rope holds you up; `climb` set the velocity.
+        } else if let (true, Some(w)) = (swimming, water) {
+            // Afloat: bob toward riding with the feet FLOAT_DEPTH under the
+            // surface. No jumping off water.
+            let want = w - FLOAT_DEPTH;
+            body.velocity.y = ((want - feet.y) * 3.0).clamp(-2.0, 2.0);
         } else {
             if input.jump && (body.grounded || body.airborne < 0.15) {
                 body.velocity.y = JUMP_SPEED;
@@ -276,7 +310,18 @@ pub fn move_bodies(
         let moved = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z).length();
         root.translation = new_centre - Vec3::Y * CAPSULE_HEIGHT * 0.5;
 
-        if grounded {
+        if swimming {
+            // Strokes: the water's own sound, slower than steps.
+            body.stride += moved;
+            if body.stride > 1.2 {
+                body.stride = 0.0;
+                steps.write(Footstep {
+                    entity,
+                    position: root.translation,
+                    speed: moved / dt.max(1e-4),
+                });
+            }
+        } else if grounded {
             body.stride += moved;
             let stride_len = if want_sprint { 1.5 } else { 0.85 };
             if body.stride > stride_len {
@@ -356,4 +401,69 @@ fn try_step(
     let moved = raised + delta;
     let hit = down(moved)?;
     (hit.normal1.y > 0.65).then(|| moved - Vec3::Y * (hit.distance - 0.01).max(0.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Dropped into the canal, you come up and float with your head out;
+    /// walked out onto the bank, you're on your feet again.
+    #[test]
+    fn deep_water_floats_you() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "cinder_works".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // The deepest spot across the canal at x = -100.
+        let (at, w) = (40..80)
+            .filter_map(|z| {
+                let p = [-100.0, z as f32];
+                zone.hm
+                    .water_level(p)
+                    .map(|w| (p, w, w - zone.hm.height(p)))
+            })
+            .max_by(|a, b| a.2.total_cmp(&b.2))
+            .map(|(p, w, _)| (p, w))
+            .expect("the canal");
+        assert!(w - zone.hm.height(at) > FLOAT_DEPTH, "deep enough to swim");
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(at[0], zone.hm.height(at) + 0.05, at[1]);
+        for _ in 0..90 * 3 {
+            app.update();
+        }
+        let feet = app.world().get::<Transform>(player).unwrap().translation;
+        let body = app.world().get::<Body>(player).unwrap();
+        assert!(body.swimming, "afloat");
+        assert!(
+            (feet.y - (w - FLOAT_DEPTH)).abs() < 0.25,
+            "riding with the head out: feet {:.2}, water {w:.2}",
+            feet.y
+        );
+        // Out on the bank, on foot.
+        let bank = [-100.0, 100.0];
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(bank[0], zone.hm.height(bank) + 0.05, bank[1]);
+        for _ in 0..30 {
+            app.update();
+        }
+        let body = app.world().get::<Body>(player).unwrap();
+        assert!(!body.swimming && body.wading < 0.01, "dry land");
+    }
 }

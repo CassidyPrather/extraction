@@ -362,6 +362,10 @@ top-down preview renderer draws the layout for design review. Prefabs are
 modelled by Blender Python scripts in `art/`, exported as glTF with
 collision and socket markers as custom properties. Enemy spawns, jobs and
 specific loot roll from pools; the places themselves are designed.
+**Water** is in the way, not scenery: wading drags at you (down to 40%
+of your pace at chest depth, and no sprinting), and deeper than that you
+float with your head out and paddle slowly, kit and all — no jumping
+out of it (`player.rs`). A creek or canal is a crossing to plan.
 Three maps so far. **Marrow Creek**: a river valley, the creek its spine,
 three ways across it and every rendezvous on the far side. **Kettle
 Pass**: a valley that climbs 30 m from the south gate to a saddle
