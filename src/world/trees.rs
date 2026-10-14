@@ -380,8 +380,9 @@ fn lod_range(far: bool, fog: f32) -> bevy::camera::visibility::VisibilityRange {
     }
 }
 
-/// Far trees go with the fog: beyond what the weather lets you see (plus
-/// half a chunk, as range is to a chunk's centre) nothing is drawn.
+/// Far trees go with the fog: well beyond what the weather lets you see
+/// (the fog's last few percent still show a treeline; plus half a chunk,
+/// as range is to a chunk's centre) nothing is drawn.
 fn fog_cull(
     weather: Res<super::sky::Weather>,
     mut far: Query<&mut bevy::camera::visibility::VisibilityRange, With<FarForest>>,
@@ -390,7 +391,7 @@ fn fog_cull(
     if !weather.is_changed() && added.is_empty() {
         return;
     }
-    let fog = weather.visibility * 1.05 + CHUNK * 0.7;
+    let fog = weather.visibility * 1.3 + CHUNK * 0.7;
     for mut r in &mut far {
         let want = lod_range(true, fog);
         if r.end_margin != want.end_margin {
