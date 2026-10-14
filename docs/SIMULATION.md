@@ -193,4 +193,8 @@ The sim has already paid for itself. Its bots found:
   wall (the nearest walkable cell was on the other side);
 - that nobody ever crossed Cinder Works' canal: the bridge was laid in
   the navigation grid as cells touching only at their corners, which the
-  pathfinder won't step between.
+  pathfinder won't step between;
+- that a bot leaving the Cinder Works bus depot's office stopped in the
+  hall and walked into its wall for the rest of the raid: a hall whose
+  bays have no doors counts as "outside" for its doors (bots now take
+  the shortest way all the way out of the footprint).
