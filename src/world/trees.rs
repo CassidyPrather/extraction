@@ -20,7 +20,10 @@ pub struct TreesPlugin;
 impl Plugin for TreesPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<FarCrownMaterial>::default())
-            .add_systems(PostUpdate, (spawn_forests, stream_near_detail).chain());
+            .add_systems(
+                PostUpdate,
+                (spawn_forests, stream_near_detail, fog_cull).chain(),
+            );
     }
 }
 
@@ -221,7 +224,9 @@ fn spawn_forests(
         ] {
             let b = bark(s, &mut library, &mut materials);
             for v in 0..VARIANTS {
-                let m = build_tree(s, 1000 + v as u64 * 17 + s as u64 * 101, textured);
+                let seed = 1000 + v as u64 * 17 + s as u64 * 101;
+                let m = build_tree(s, seed, textured, false);
+                let far = build_tree(s, seed, textured, true);
                 let card_mat = match s {
                     TreeSpecies::Birch => leaves.clone(),
                     _ => needles.clone(),
@@ -232,6 +237,8 @@ fn spawn_forests(
                         crown: m.crown.as_ref().map(|c| meshes.add(c.clone())),
                         trunk_cpu: m.trunk,
                         crown_cpu: m.crown,
+                        trunk_far: far.trunk,
+                        crown_far: far.crown,
                         bark: b.clone(),
                         cards: m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat)),
                     },
@@ -266,26 +273,7 @@ fn spawn_forests(
     let mut grid = ForestGrid::default();
     let mut chunk_count = 0;
     for (key, members) in &chunks {
-        let mut trunks: Vec<(Handle<StandardMaterial>, Mesh)> = Vec::new();
-        let mut crowns: Option<Mesh> = None;
         for (e, tree, t) in members {
-            let v = &assets.handles[&(tree.species, tree.variant)];
-            let trunk = v.trunk_cpu.clone().transformed_by(*t);
-            match trunks.iter_mut().find(|(m, _)| *m == v.bark) {
-                Some((_, mesh)) => {
-                    let _ = mesh.merge(&trunk);
-                }
-                None => trunks.push((v.bark.clone(), trunk)),
-            }
-            if let Some(c) = &v.crown_cpu {
-                let c = c.clone().transformed_by(*t);
-                match &mut crowns {
-                    Some(m) => {
-                        let _ = m.merge(&c);
-                    }
-                    None => crowns = Some(c),
-                }
-            }
             grid.cells
                 .entry(*key)
                 .or_default()
@@ -298,20 +286,59 @@ fn spawn_forests(
                 Visibility::default(),
             ))
             .id();
-        for (bark, mesh) in trunks {
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(bark),
-                ChildOf(parent),
-            ));
-        }
-        if let Some(c) = crowns {
-            commands.spawn((
-                Mesh3d(meshes.add(c)),
-                MeshMaterial3d(assets.foliage.clone()),
-                bevy::light::NotShadowCaster,
-                ChildOf(parent),
-            ));
+        // Full detail near, the coarse LOD past `FAR_LOD` (cross-faded),
+        // and nothing past the fog (see `fog_cull`).
+        for far in [false, true] {
+            let mut trunks: Vec<(Handle<StandardMaterial>, Mesh)> = Vec::new();
+            let mut crowns: Option<Mesh> = None;
+            for (_, tree, t) in members {
+                let v = &assets.handles[&(tree.species, tree.variant)];
+                let (trunk, crown) = if far {
+                    (&v.trunk_far, &v.crown_far)
+                } else {
+                    (&v.trunk_cpu, &v.crown_cpu)
+                };
+                let trunk = trunk.clone().transformed_by(*t);
+                match trunks.iter_mut().find(|(m, _)| *m == v.bark) {
+                    Some((_, mesh)) => {
+                        let _ = mesh.merge(&trunk);
+                    }
+                    None => trunks.push((v.bark.clone(), trunk)),
+                }
+                if let Some(c) = crown {
+                    let c = c.clone().transformed_by(*t);
+                    match &mut crowns {
+                        Some(m) => {
+                            let _ = m.merge(&c);
+                        }
+                        None => crowns = Some(c),
+                    }
+                }
+            }
+            let range = lod_range(far, FOG_CULL_DEFAULT);
+            for (bark, mesh) in trunks {
+                let mut ec = commands.spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(bark),
+                    range.clone(),
+                    ChildOf(parent),
+                ));
+                if far {
+                    ec.insert(FarForest);
+                }
+            }
+            if let Some(c) = crowns {
+                let mut ec = commands.spawn((
+                    Mesh3d(meshes.add(c)),
+                    MeshMaterial3d(assets.foliage.clone()),
+                    bevy::light::NotShadowCaster,
+                    range.clone(),
+                    ChildOf(parent),
+                ));
+                if far {
+                    ec.insert(FarForest);
+                }
+            }
         }
         chunk_count += 1;
     }
@@ -325,6 +352,52 @@ fn spawn_forests(
 
 /// Chunk size for merged forest meshes, metres.
 pub const CHUNK: f32 = 48.0;
+/// A chunk (by its centre) switches to the coarse LOD this far away.
+const FAR_LOD: f32 = 130.0;
+/// Until the weather says otherwise, chunks vanish this far out.
+const FOG_CULL_DEFAULT: f32 = 560.0;
+
+/// A chunk's far-LOD mesh: hidden beyond the fog.
+#[derive(Component)]
+pub struct FarForest;
+
+/// Near or far LOD's distance band. Chunk meshes sit at the origin with
+/// world-space vertices, so distance is measured to their bounds' centre.
+fn lod_range(far: bool, fog: f32) -> bevy::camera::visibility::VisibilityRange {
+    let switch = (FAR_LOD - 10.0)..(FAR_LOD + 10.0);
+    if far {
+        bevy::camera::visibility::VisibilityRange {
+            start_margin: switch,
+            end_margin: fog..(fog + 20.0),
+            use_aabb: true,
+        }
+    } else {
+        bevy::camera::visibility::VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: switch,
+            use_aabb: true,
+        }
+    }
+}
+
+/// Far trees go with the fog: beyond what the weather lets you see (plus
+/// half a chunk, as range is to a chunk's centre) nothing is drawn.
+fn fog_cull(
+    weather: Res<super::sky::Weather>,
+    mut far: Query<&mut bevy::camera::visibility::VisibilityRange, With<FarForest>>,
+    added: Query<(), Added<FarForest>>,
+) {
+    if !weather.is_changed() && added.is_empty() {
+        return;
+    }
+    let fog = weather.visibility * 1.05 + CHUNK * 0.7;
+    for mut r in &mut far {
+        let want = lod_range(true, fog);
+        if r.end_margin != want.end_margin {
+            *r = want;
+        }
+    }
+}
 /// Near detail appears within this distance of the camera...
 pub const NEAR_SPAWN: f32 = 80.0;
 /// ...and is dropped beyond this one.
@@ -455,6 +528,9 @@ impl bevy::pbr::MaterialExtension for NearFade {
 struct VariantAssets {
     trunk_cpu: Mesh,
     crown_cpu: Option<Mesh>,
+    /// The far LOD's.
+    trunk_far: Mesh,
+    crown_far: Option<Mesh>,
     bark: Handle<StandardMaterial>,
     crown: Option<Handle<Mesh>>,
     cards: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
@@ -478,6 +554,8 @@ fn trunk_radius(s: TreeSpecies) -> f32 {
 /// Accumulates triangles with per-vertex colour and UVs.
 #[derive(Default)]
 struct MeshBuilder {
+    /// The far LOD: fewer sides and rings, no twigs.
+    coarse: bool,
     pos: Vec<[f32; 3]>,
     nrm: Vec<[f32; 3]>,
     col: Vec<[f32; 4]>,
@@ -554,6 +632,22 @@ impl MeshBuilder {
 
     /// A tapered tube along a polyline of (centre, radius) rings.
     fn tube(&mut self, rings: &[(Vec3, f32)], sides: usize, color: impl Fn(Vec3, f32) -> [f32; 4]) {
+        let thinned: Vec<(Vec3, f32)>;
+        let (rings, sides) = if self.coarse {
+            // Twigs vanish at a distance; trunks keep every other ring.
+            if rings.len() <= 2 && rings.first().is_some_and(|r| r.1 < 0.1) {
+                return;
+            }
+            thinned = rings
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| k % 2 == 0 || *k + 1 == rings.len())
+                .map(|(_, r)| *r)
+                .collect();
+            (&thinned[..], (sides / 2).max(3))
+        } else {
+            (rings, sides)
+        };
         let base = self.pos.len() as u32;
         let mut along = 0.0;
         // Bark wraps once round the base girth, so it doesn't pinch at the top.
@@ -596,7 +690,7 @@ impl MeshBuilder {
         seed: u32,
         color: impl Fn(Vec3, f32) -> [f32; 4],
     ) {
-        let (rings, segs) = (7, 10);
+        let (rings, segs) = if self.coarse { (4, 6) } else { (7, 10) };
         let base = self.pos.len() as u32;
         for i in 0..=rings {
             let v = i as f32 / rings as f32;
@@ -668,11 +762,19 @@ pub struct TreeMeshes {
 
 /// Builds a species variant. `textured` drops the trunk's vertex colours
 /// so scanned bark shows through.
-fn build_tree(species: TreeSpecies, seed: u64, textured: bool) -> TreeMeshes {
+/// `coarse` is the far LOD: the same tree (the same random draws), with
+/// fewer sides, rings and whorls, and no twigs.
+fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> TreeMeshes {
     let mut rng = Rng::new(seed);
     let mut crng = Rng::new(seed ^ 0xCA2D);
-    let mut trunk = MeshBuilder::default();
-    let mut crown = MeshBuilder::default();
+    let mut trunk = MeshBuilder {
+        coarse,
+        ..default()
+    };
+    let mut crown = MeshBuilder {
+        coarse,
+        ..default()
+    };
     let mut cards = MeshBuilder::default();
     let tau = std::f32::consts::TAU;
     match species {
@@ -696,25 +798,40 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool) -> TreeMeshes {
                 let r = rmax * (1.0 - t).powf(0.85) + 0.25;
                 let droop = r * 0.45;
                 let sides = 9;
+                let jag = rng.range(0.0, 1.0);
+                // Every point draws from the generator, drawn or not, so
+                // the far LOD (every other whorl, long points only) stays
+                // the same tree.
+                let points: Vec<(Vec3, Vec3, [f32; 4], bool)> = (0..=sides * 2)
+                    .map(|s| {
+                        let a = s as f32 / (sides * 2) as f32 * std::f32::consts::TAU + jag;
+                        // Alternate long and short points for branch tips.
+                        let rr = if s % 2 == 0 { r } else { r * 0.62 } * rng.range(0.85, 1.1);
+                        let dir = Vec3::new(a.cos(), 0.0, a.sin());
+                        let p = dir * rr + Vec3::Y * (y - droop * (rr / r));
+                        let tip = rr / r;
+                        let shade = 0.75 + 0.35 * tip + 0.15 * t;
+                        let c = lin(0.11 * shade, 0.155 * shade, 0.115 * shade);
+                        (p, (dir + Vec3::Y * 0.8).normalize(), c, s % 2 == 0)
+                    })
+                    .collect();
+                if crown.coarse && w % 2 == 1 {
+                    continue;
+                }
                 let base = crown.pos.len() as u32;
                 let top = crown.vertex(
                     Vec3::new(0.0, y + r * 0.55 + 0.3, 0.0),
                     Vec3::Y,
                     lin(0.10, 0.14, 0.10),
                 );
-                let jag = rng.range(0.0, 1.0);
-                for s in 0..=sides * 2 {
-                    let a = s as f32 / (sides * 2) as f32 * std::f32::consts::TAU + jag;
-                    // Alternate long and short points for branch tips.
-                    let rr = if s % 2 == 0 { r } else { r * 0.62 } * rng.range(0.85, 1.1);
-                    let dir = Vec3::new(a.cos(), 0.0, a.sin());
-                    let p = dir * rr + Vec3::Y * (y - droop * (rr / r));
-                    let tip = rr / r;
-                    let shade = 0.75 + 0.35 * tip + 0.15 * t;
-                    let c = lin(0.11 * shade, 0.155 * shade, 0.115 * shade);
-                    crown.vertex(p, (dir + Vec3::Y * 0.8).normalize(), c);
+                let mut n = 0u32;
+                for (p, nrm, c, long) in points {
+                    if !crown.coarse || long {
+                        crown.vertex(p, nrm, c);
+                        n += 1;
+                    }
                 }
-                for s in 0..(sides * 2) as u32 {
+                for s in 0..n - 1 {
                     crown
                         .idx
                         .extend_from_slice(&[top, base + 2 + s, base + 1 + s]);
