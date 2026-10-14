@@ -10,6 +10,7 @@ pub mod memorial;
 pub mod offering;
 pub mod props;
 pub mod screen;
+pub mod stats;
 pub mod terrain_material;
 pub mod water_material;
 
@@ -36,6 +37,7 @@ impl Plugin for RenderPlugin {
             offering::OfferingVisualsPlugin,
             logistics::LogisticsVisualsPlugin,
             comfort::ComfortPlugin,
+            stats::RenderStatsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
