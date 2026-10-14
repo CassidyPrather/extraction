@@ -53,7 +53,9 @@ you went, what hurt you, where you died, and a list of your marks.
 The session log also says, every ten seconds, how the frames went
 (`frames: ... mean 9.8 ms, 1% 12.4 ms, worst 31.0 ms`). At 90 Hz every
 frame needs to be under 11.1 ms; the 1% figure is the one that makes
-people feel sick.
+people feel sick. If a spot is slow, `EXTRACTION_RENDER_STATS=1` prints
+what the view draws (meshes and triangles, by what they belong to) a
+moment after the game starts; `--camera` puts the view anywhere.
 
 ## Order of business
 
