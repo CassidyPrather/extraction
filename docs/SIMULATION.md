@@ -180,17 +180,16 @@ just one). A full raid is
 minutes of wall time, so CI doesn't play one; run `scripts/sim.sh` before
 and after map changes.
 
-The sim has already paid for itself: its bots found that nobody could
-step up a kerb or a stair (the step-up never took), that the truck's
-chassis rails walled off its rear steps, and that a truck parked on a
-slope left its steps in the air.
-Later it found that gunfire bought response teams twice over (every
-fight snowballed into three or four more), and that a bot deciding to
-head home while still in a back room walked at the wall instead of out
-the door.
+The sim has already paid for itself. Its bots found:
 
-It also found a bot wedged in a barn corner routing out *through* the
-wall (the nearest walkable cell to a blocked start was outside), and bots
-shoved aside by an outward-swinging door walking at the frame on a slant;
-both fixed (`raider::near_walkable_same_side`, re-squaring to a doorway
-after opening it).
+- that nobody could step up a kerb or a stair (the step-up never took);
+- that the truck's chassis rails walled off its rear steps, and a truck
+  parked on a slope left its steps in the air;
+- that gunfire bought response teams twice over, so every fight
+  snowballed into three or four more;
+- that a bot heading home from a back room walked at the wall instead of
+  out the door, and one wedged in a barn corner routed out *through* the
+  wall (the nearest walkable cell was on the other side);
+- that nobody ever crossed Cinder Works' canal: the bridge was laid in
+  the navigation grid as cells touching only at their corners, which the
+  pathfinder won't step between.
