@@ -131,7 +131,11 @@ worth noticing:
 - Room-scale: your body follows your head around the playspace. Walk
   physically into a wall and the world is nudged back to keep you out of
   it; tell me if that feels bad.
-- Hands are simple: no finger tracking beyond the trigger finger.
+- Fingers are posed, not tracked: they wrap what you hold (a pistol grip
+  with the index along the frame until you squeeze, a handguard, a
+  slide, a can, a round between finger and thumb), and empty-handed the
+  grip closes the hand and the trigger the index. Mark a grip that looks
+  wrong.
 - Some models are still simple: a few props and buildings are close to
   plain boxes.
 - Drones still decide most deaths in the sims; whether that's right is

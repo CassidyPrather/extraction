@@ -71,6 +71,8 @@ fn gallery(
     mut stage: Local<u32>,
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use crate::items::{SpawnItem, spawn_item};
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
@@ -182,6 +184,40 @@ fn gallery(
                             Visibility::default(),
                         ));
                     }
+                }
+            }
+            "hands" => {
+                // Hands, palm down, fingers away: open, fist, on a pistol
+                // grip (index along the frame), and a left hand pinching.
+                let poses = [
+                    [0.0, 0.0, 0.0, 0.0, 0.0],
+                    [1.0, 1.0, 1.0, 1.0, 0.85],
+                    [0.22, 0.74, 0.76, 0.78, 0.62],
+                    [0.85, 0.9, 0.9, 0.9, 0.8],
+                ];
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                for (i, curl) in poses.into_iter().enumerate() {
+                    let at = eye + flat * dist.unwrap_or(0.45) + right * (i as f32 - 1.5) * 0.24
+                        - Vec3::Y * 0.08;
+                    let h = crate::render::props::spawn_hand(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        if i == 3 {
+                            crate::rig::Side::Left
+                        } else {
+                            crate::rig::Side::Right
+                        },
+                        curl,
+                    );
+                    // Fingers away from the camera, palm down, turned a
+                    // little to show the curl.
+                    let look = Transform::from_translation(at).looking_to(flat, Vec3::Y);
+                    commands.entity(h).insert(
+                        look.with_rotation(
+                            look.rotation * Quat::from_rotation_y(turn.to_radians()),
+                        ),
+                    );
                 }
             }
             "guns" => {

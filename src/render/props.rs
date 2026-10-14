@@ -340,17 +340,36 @@ fn dress_slots(
     }
 }
 
-/// A gloved hand: palm and fingers that curl with the grip.
+/// A gloved hand: a palm, four three-jointed fingers and a two-jointed
+/// thumb, curling to fit what they hold.
 #[derive(Component)]
 struct HandVisual {
     hand: Entity,
     side: Side,
+    /// Current curl per finger (index, middle, ring, little, thumb), 0..1,
+    /// eased toward the target.
+    curl: [f32; 5],
 }
 
+/// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
+/// `joint` 0 at the knuckle.
 #[derive(Component)]
 struct Finger {
-    index: usize,
+    finger: usize,
+    joint: usize,
 }
+
+/// Segment lengths per finger, knuckle outwards, metres.
+const FINGER_BONES: [[f32; 3]; 5] = [
+    [0.040, 0.025, 0.020],
+    [0.044, 0.028, 0.022],
+    [0.041, 0.026, 0.020],
+    [0.033, 0.020, 0.018],
+    [0.036, 0.030, 0.0],
+];
+/// Full-curl bend per joint, radians (knuckle, middle, tip).
+const JOINT_BEND: [f32; 3] = [1.4, 1.65, 1.1];
+const THUMB_BEND: [f32; 3] = [0.7, 0.9, 0.0];
 
 fn spawn_hand_visuals(
     mut commands: Commands,
@@ -363,94 +382,193 @@ fn spawn_hand_visuals(
         if !locals.contains(parent.parent()) {
             continue;
         }
-        let glove = mat(&mut materials, Color::srgb(0.1, 0.1, 0.09), 0.8, 0.0);
-        let palm = meshes.add(Cuboid::new(0.085, 0.03, 0.1));
-        let finger = meshes.add(Capsule3d::new(0.01, 0.06));
-        let root = commands
-            .spawn((
-                HandVisual {
-                    hand: e,
-                    side: rh.side,
-                },
-                Mesh3d(palm),
-                MeshMaterial3d(glove.clone()),
-                Transform::default(),
-                Visibility::default(),
-            ))
-            .id();
-        for i in 0..5 {
-            let x = if i == 4 {
-                0.05 * -rh.side.sign()
-            } else {
-                -0.03 + i as f32 * 0.02
-            };
-            let z = if i == 4 { 0.0 } else { -0.06 };
+        let root = spawn_hand(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            rh.side,
+            [0.0; 5],
+        );
+        commands.entity(root).insert(HandVisual {
+            hand: e,
+            side: rh.side,
+            curl: [0.0; 5],
+        });
+    }
+}
+
+/// A glove: the palm at the root, joints below it. Without a tracked hand
+/// (the gallery's), it keeps the curl it's given.
+pub(crate) fn spawn_hand(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    side: Side,
+    curl: [f32; 5],
+) -> Entity {
+    let glove = mat(materials, Color::srgb(0.1, 0.1, 0.09), 0.8, 0.0);
+    let palm = meshes.add(Cuboid::new(0.085, 0.03, 0.1));
+    let root = commands
+        .spawn((
+            HandVisual {
+                hand: Entity::PLACEHOLDER,
+                side,
+                curl,
+            },
+            Mesh3d(palm),
+            MeshMaterial3d(glove.clone()),
+            Transform::default(),
+            Visibility::default(),
+        ))
+        .id();
+    // Fingers point along -Z from the palm's front edge and curl toward its
+    // underside (-Y). The index is on the thumb's side.
+    let thumb_side = -side.sign();
+    for finger in 0..5 {
+        let at = if finger == 4 {
+            Vec3::new(0.038 * thumb_side, -0.008, -0.005)
+        } else {
+            let x = (0.03 - finger as f32 * 0.02) * thumb_side;
+            Vec3::new(x, 0.0, -0.048)
+        };
+        let mut parent = root;
+        let mut offset = at;
+        for (joint, len) in FINGER_BONES[finger].iter().enumerate() {
+            if *len <= 0.0 {
+                break;
+            }
+            let radius = if finger == 4 { 0.0105 } else { 0.009 } * (1.0 - joint as f32 * 0.1);
+            let seg = meshes.add(Capsule3d::new(radius, (len - radius).max(0.004)));
+            let j = commands
+                .spawn((
+                    Finger { finger, joint },
+                    Transform::from_translation(offset),
+                    Visibility::default(),
+                    ChildOf(parent),
+                ))
+                .id();
+            // The bone itself, laid along the joint's -Z.
             commands.spawn((
-                Finger { index: i },
-                Mesh3d(finger.clone()),
+                Mesh3d(seg),
                 MeshMaterial3d(glove.clone()),
-                Transform::from_xyz(x * rh.side.sign().abs(), 0.0, z),
-                ChildOf(root),
+                Transform::from_xyz(0.0, 0.0, -len * 0.5)
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                ChildOf(j),
             ));
+            parent = j;
+            offset = Vec3::new(0.0, 0.0, -len);
         }
     }
+    root
+}
+
+/// How far each finger wants to curl, given what the hand is doing.
+fn curl_targets(
+    hand: &Hand,
+    grip: f32,
+    trigger: f32,
+    held: &Query<(&Held, &GlobalTransform, &Grabbable)>,
+    bounds: &Query<&avian3d::prelude::ColliderAabb>,
+) -> [f32; 5] {
+    // [index, middle, ring, little, thumb]
+    if let Some(item) = hand.holding {
+        let role = held
+            .get(item)
+            .ok()
+            .and_then(|(h, _, g)| g.points.get(h.point).map(|p| p.role));
+        return match role {
+            // A pistol or rifle grip: the fingers round it, the index along
+            // the frame until it takes up the trigger.
+            Some(GripRole::Primary) => [0.22 + 0.33 * trigger, 0.74, 0.76, 0.78, 0.62],
+            Some(GripRole::Support) => [0.55, 0.6, 0.62, 0.64, 0.5],
+            Some(GripRole::Handle(_)) => [0.7, 0.72, 0.74, 0.76, 0.7],
+            // Anything else: wrapped as far as its size lets the fingers
+            // close (a round pinched, a can held round, a box flat-handed).
+            _ => {
+                let t = bounds
+                    .get(item)
+                    .map(|b| {
+                        let s = b.max - b.min;
+                        s.x.min(s.y).min(s.z)
+                    })
+                    .unwrap_or(0.06);
+                let wrap = (0.95 - t * 5.0).clamp(0.25, 0.9);
+                let index = (wrap + 0.25 * trigger).min(0.95);
+                [index, wrap, wrap, wrap, (wrap * 0.85).max(0.35)]
+            }
+        };
+    }
+    if hand.supporting.is_some() {
+        return [0.55, 0.6, 0.62, 0.64, 0.5];
+    }
+    if hand.handle.is_some() {
+        return [0.72, 0.74, 0.76, 0.78, 0.7];
+    }
+    // Empty: the grip closes the hand, the trigger the index finger.
+    [grip.max(trigger), grip, grip, grip, grip * 0.8]
 }
 
 /// Hands sit on what they hold (so the glove wraps the grip even when the
 /// gun is blocked by a wall), otherwise on the tracked pose.
 fn pose_hands(
-    mut visuals: Query<(&HandVisual, &mut Transform, &Children), Without<Finger>>,
-    mut fingers: Query<(&Finger, &mut Transform), Without<HandVisual>>,
+    time: Res<Time>,
+    mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
+    mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
     hands: Query<(&Hand, &GlobalTransform, &ChildOf)>,
     held: Query<(&Held, &GlobalTransform, &Grabbable)>,
+    bounds: Query<&avian3d::prelude::ColliderAabb>,
     inputs: Query<&RigInput>,
+    roots: Query<&ChildOf, With<Finger>>,
 ) {
-    for (v, mut t, children) in &mut visuals {
+    let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
+    for (mut v, mut t) in &mut visuals {
         let Ok((hand, gt, parent)) = hands.get(v.hand) else {
             continue;
         };
         let mut pose = gt.compute_transform();
-        let mut grip = inputs
-            .get(parent.parent())
-            .map(|i| i.hand(v.side).grip)
-            .unwrap_or(0.0);
-        // The index finger has a mind of its own: it follows the trigger.
-        let trigger = inputs
-            .get(parent.parent())
-            .map(|i| i.hand(v.side).trigger)
-            .unwrap_or(0.0);
+        let input = inputs.get(parent.parent()).map(|i| i.hand(v.side));
+        let grip = input.map_or(0.0, |i| i.grip);
+        let trigger = input.map_or(0.0, |i| i.trigger);
         if let Some(item) = hand.holding {
             if let Ok((h, igt, g)) = held.get(item) {
                 if let Some(p) = g.points.get(h.point).filter(|p| p.role != GripRole::Free) {
                     pose = igt.mul_transform(p.local).compute_transform();
                 }
             }
-            grip = 1.0;
-        }
-        if hand.supporting.is_some() || hand.handle.is_some() {
-            grip = 1.0;
         }
         *t = pose;
-        // Holding something, the index finger lies along it until you
-        // squeeze; empty-handed, it curls with the trigger too.
-        let index_curl = if hand.holding.is_some() {
-            0.25 + 0.75 * trigger
-        } else {
-            grip.max(trigger)
-        };
-        for c in children.iter() {
-            if let Ok((f, mut ft)) = fingers.get_mut(c) {
-                // Fingers are numbered from the index side; 4 is the thumb.
-                let amount = match (f.index, v.side) {
-                    (0, Side::Right) | (3, Side::Left) => index_curl,
-                    _ => grip,
-                };
-                let curl = amount * if f.index == 4 { 0.9 } else { 1.4 };
-                let x = ft.translation.x;
-                let base_z = if f.index == 4 { 0.0 } else { -0.06 };
-                ft.translation = Vec3::new(x, -0.02 * amount, base_z + 0.025 * amount);
-                ft.rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 - curl);
-            }
+        let target = curl_targets(hand, grip, trigger, &held, &bounds);
+        for (c, want) in v.curl.iter_mut().zip(target) {
+            *c += (want - *c) * ease;
         }
+    }
+    for (f, parent, mut ft) in &mut fingers {
+        // Up the chain to the hand this joint belongs to.
+        let mut up = parent.parent();
+        while let Ok(p) = roots.get(up) {
+            up = p.parent();
+        }
+        let Ok((v, _)) = visuals.get(up) else {
+            continue;
+        };
+        let c = v.curl[f.finger];
+        let bend = if f.finger == 4 {
+            THUMB_BEND[f.joint]
+        } else {
+            JOINT_BEND[f.joint]
+        };
+        let curl = Quat::from_rotation_x(-bend * c);
+        ft.rotation = if f.joint == 0 {
+            let thumb_side = -v.side.sign();
+            let aim = if f.finger == 4 {
+                Quat::from_rotation_y(0.75 * thumb_side) * Quat::from_rotation_z(-0.6 * thumb_side)
+            } else {
+                // Fingers fan a little as they open.
+                Quat::from_rotation_y((1.5 - f.finger as f32) * 0.06 * (1.0 - c) * thumb_side)
+            };
+            aim * curl
+        } else {
+            curl
+        };
     }
 }
