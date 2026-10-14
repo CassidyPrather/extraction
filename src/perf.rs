@@ -70,7 +70,12 @@ mod tests {
     #[test]
     #[ignore = "timing: run in release with --nocapture"]
     fn tick_cost_in_a_firefight() {
-        let mut app = crate::headless_app(crate::LaunchOptions::default(), false);
+        // `EXTRACTION_TEST_MAP=cinder_works` to time another valley.
+        let mut opts = crate::LaunchOptions::default();
+        if let Ok(map) = std::env::var("EXTRACTION_TEST_MAP") {
+            opts.map = map;
+        }
+        let mut app = crate::headless_app(opts, false);
         if std::env::var("PERF_SINGLE").is_ok() {
             use bevy::ecs::schedule::SingleThreadedExecutor;
             app.edit_schedule(FixedUpdate, |s| {
