@@ -1724,13 +1724,50 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
     let plan = r
         .plans
         .iter()
-        .find(|p| p.in_grid(pos) && p.indoors(p.to_local(pos).xz()))?;
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
     let local = plan.to_local(pos).xz();
+    // All the way out of the footprint, the shortest way round: a hall
+    // with open bays counts as "outside" for its doors, and leaving only
+    // the office in its corner left a bot inside, walking at the wall.
+    let ring = {
+        let h = plan.half + Vec2::splat(1.2);
+        let steps = |len: f32| ((len / 3.0).ceil() as usize).max(1);
+        let mut v = Vec::new();
+        for (a, b) in [
+            (Vec2::new(-h.x, -h.y), Vec2::new(h.x, -h.y)),
+            (Vec2::new(h.x, -h.y), Vec2::new(h.x, h.y)),
+            (Vec2::new(h.x, h.y), Vec2::new(-h.x, h.y)),
+            (Vec2::new(-h.x, h.y), Vec2::new(-h.x, -h.y)),
+        ] {
+            let n = steps(a.distance(b));
+            v.extend((0..n).map(|k| a.lerp(b, k as f32 / n as f32)));
+        }
+        v
+    };
+    // Each is a path search: the doors, and the nearest few of the ring.
+    let mut ring: Vec<Vec2> = ring
+        .into_iter()
+        .filter(|p| plan.grid.walkable(p.to_array()))
+        .collect();
+    ring.sort_by(|a, b| a.distance(local).total_cmp(&b.distance(local)));
+    ring.truncate(8);
+    // A door stand inside the footprint (the office's, in an open hall)
+    // isn't out.
+    let out = |e: &Vec2| e.x.abs() > plan.half.x || e.y.abs() > plan.half.y;
     let exit = plan
         .entries
         .iter()
-        .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
-        .copied()?;
+        .copied()
+        .filter(out)
+        .chain(ring)
+        .filter_map(|e| {
+            let path = plan.path(local, e)?;
+            let len: f32 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
+            // A path that ends short of the exit didn't get there.
+            (path.last()?.distance(e) < 0.8).then_some((len, e))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))?
+        .1;
     indoor(plan, pos, exit, 0.6)
 }
 
