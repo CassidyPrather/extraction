@@ -1,5 +1,7 @@
-//! The flat-screen HUD: a crosshair, what you're looking at, what your
-//! hands hold, and your load. VR gets diegetic readouts instead.
+//! The flat-screen HUD: a crosshair, what you're looking at, and what the
+//! radio says. Hold H to check yourself (hands, load, health, the Surge:
+//! what a headset player reads off the wrist); F1 lists the keys. VR gets
+//! diegetic readouts instead.
 
 use bevy::prelude::*;
 use extraction_core::inventory::Encumbrance;
@@ -129,7 +131,13 @@ fn update_hud(
     raid: Res<crate::raid::Raid>,
     healths: Query<&crate::health::Health>,
     attention: Query<&crate::anomaly::Attention>,
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    mut help: Local<bool>,
 ) {
+    let check = keys.as_ref().is_some_and(|k| k.pressed(KeyCode::KeyH));
+    if keys.as_ref().is_some_and(|k| k.just_pressed(KeyCode::F1)) {
+        *help = !*help;
+    }
     if let Ok(mut t) = target_text.single_mut() {
         t.0 = target
             .entity
@@ -143,6 +151,19 @@ fn update_hud(
         return;
     };
     let mut lines = Vec::new();
+    // Only what the radio says, unless you stop to check yourself.
+    if !check {
+        for (msg, _) in raid.log.iter().rev().take(3) {
+            lines.push(format!("> {msg}"));
+        }
+        lines.push(if *help {
+            KEYS.into()
+        } else {
+            "H: check yourself | F1: keys".into()
+        });
+        text.0 = lines.join("\n");
+        return;
+    }
     for c in children.iter() {
         if let Ok((rh, h)) = hands.get(c) {
             let what = match (h.holding, h.supporting, h.handle) {
@@ -211,6 +232,7 @@ fn update_hud(
     for (msg, _) in raid.log.iter().rev().take(3) {
         lines.push(format!("> {msg}"));
     }
-    lines.push("WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | C combine | U use (radio, bandage) | E on the bell pull to leave".into());
     text.0 = lines.join("\n");
 }
+
+const KEYS: &str = "WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | C combine | U use (radio, bandage) | E on the bell pull to leave | H check yourself";

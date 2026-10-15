@@ -21,7 +21,14 @@ impl Plugin for ComfortPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (add_vignette, vignette, add_wrist_panel, wrist_panel),
+            (
+                add_vignette,
+                vignette,
+                add_wrist_panel,
+                wrist_panel,
+                add_radio_screens,
+                radio_screens,
+            ),
         );
     }
 }
@@ -202,6 +209,74 @@ fn wrist_panel(
         }
     }
 }
+
+/// The field radio's own little screen: what it last heard.
+#[derive(Component)]
+pub struct RadioScreen;
+
+/// Gives every field radio a backlit screen on its face.
+fn add_radio_screens(
+    mut commands: Commands,
+    items: Query<(Entity, &crate::items::Item), Added<crate::items::Item>>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    for (e, item) in &items {
+        if catalog.get(item.kind()).id != "radio" {
+            continue;
+        }
+        commands.entity(e).with_child((
+            RadioScreen,
+            ScreenText {
+                text: "CH4  ----".into(),
+                size: Vec2::new(0.056, 0.032),
+                style: ScreenStyle::Lcd,
+            },
+            // Over the tuning window, above the speaker grille (the
+            // model's origin is near its top).
+            Transform::from_xyz(0.0, 0.024, 0.0245),
+            Visibility::default(),
+        ));
+    }
+}
+
+/// The last two transmissions, newest at the bottom; a channel line when
+/// it's quiet.
+fn radio_screens(
+    mut screens: Query<&mut ScreenText, With<RadioScreen>>,
+    raid: Res<crate::raid::Raid>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
+) {
+    *timer -= time.delta_secs();
+    if *timer > 0.0 || screens.is_empty() {
+        return;
+    }
+    *timer = 0.5;
+    let n = raid.log.len();
+    let text = if n == 0 {
+        format!(
+            "CH4  {}",
+            if (time.elapsed_secs() as u32) % 2 == 0 {
+                "...."
+            } else {
+                " ..."
+            }
+        )
+    } else {
+        raid.log[n.saturating_sub(2)..]
+            .iter()
+            .flat_map(|(m, _)| crate::render::screen::wrap(m, RADIO_COLUMNS, 3))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    for mut s in &mut screens {
+        if s.text != text {
+            s.text = text.clone();
+        }
+    }
+}
+
+const RADIO_COLUMNS: usize = 16;
 
 /// Characters per line on the wrist: narrow keeps the type big.
 const WRIST_COLUMNS: usize = 26;
