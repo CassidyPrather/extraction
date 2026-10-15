@@ -237,8 +237,8 @@
 
         // Kettle mine: the head-frame shed, wagons, pump house and hut.
         (prefab: "rail_shed", at: (-210.0, -65.0), rot: 75.0),
-        (prefab: "boxcar", at: (-175.0, -45.0), rot: 72.0),
-        (prefab: "boxcar", at: (-152.0, -38.0), rot: 68.0),
+        (prefab: "boxcar", at: (-175.7, -42.3), rot: 103.8),
+        (prefab: "boxcar", at: (-152.8, -35.6), rot: 109.2),
         (prefab: "pump_station", at: (-200.0, -100.0), rot: 90.0),
         (prefab: "mast_hut", at: (-232.0, -95.0), rot: 15.0),
 

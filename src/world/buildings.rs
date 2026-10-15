@@ -1678,8 +1678,62 @@ fn robot_gate(b: &mut Builder) {
 }
 
 fn boxcar(b: &mut Builder) {
+    // A goods wagon on two bogies: wheels on the rails, an underframe, a
+    // ribbed body with its sliding door half open, a low roof, ladders
+    // and couplers at the ends. Its length runs along Z.
     let (w, d, f, h) = (3.0, 14.0, 1.2, 2.6);
-    b.bx(Vec3::new(w, 0.15, d), Vec3::new(0.0, f, 0.0), Mat::Planks);
+    let half_pi = std::f32::consts::FRAC_PI_2;
+    let bogie = extraction_core::terrain::BOGIE;
+    for bz in [-bogie, bogie] {
+        for x in [-0.82, 0.82] {
+            b.bx(
+                Vec3::new(0.12, 0.35, 2.5),
+                Vec3::new(x, 0.6, bz),
+                Mat::DarkMetal,
+            );
+        }
+        b.bx(
+            Vec3::new(2.0, 0.25, 0.45),
+            Vec3::new(0.0, 0.88, bz),
+            Mat::DarkMetal,
+        );
+        for dz in [-0.9, 0.9] {
+            b.piece(
+                Shape::Cylinder(0.07, 1.75),
+                Transform::from_xyz(0.0, 0.45, bz + dz)
+                    .with_rotation(Quat::from_rotation_z(half_pi)),
+                Mat::DarkMetal,
+                false,
+            );
+            for x in [-0.7, 0.7] {
+                b.piece(
+                    Shape::Cylinder(0.45, 0.1),
+                    Transform::from_xyz(x, 0.45, bz + dz)
+                        .with_rotation(Quat::from_rotation_z(half_pi)),
+                    Mat::RustyMetal,
+                    false,
+                );
+            }
+        }
+    }
+    // Underframe: centre sill on the bolsters, side sills under the floor.
+    b.bx(
+        Vec3::new(0.4, 0.2, d - 0.1),
+        Vec3::new(0.0, 1.1, 0.0),
+        Mat::DarkMetal,
+    );
+    for x in [-1.36, 1.36] {
+        b.bx(
+            Vec3::new(0.16, 0.22, d - 0.1),
+            Vec3::new(x, 1.04, 0.0),
+            Mat::DarkMetal,
+        );
+    }
+    b.bx(
+        Vec3::new(w, 0.12, d),
+        Vec3::new(0.0, f + 0.0, 0.0),
+        Mat::Planks,
+    );
     b.shell(
         w,
         d,
@@ -1689,24 +1743,70 @@ fn boxcar(b: &mut Builder) {
         Mat::RustyMetal,
         [&[], &[gap(d * 0.5, 2.0, 2.3)], &[], &[]],
     );
-    b.bx(
-        Vec3::new(w + 0.1, 0.1, d + 0.1),
-        Vec3::new(0.0, f + h + 0.05, 0.0),
-        Mat::RustyMetal,
-    );
-    for z in [-5.0, -4.0, 4.0, 5.0] {
-        for x in [-0.75, 0.75] {
-            b.piece(
-                Shape::Cylinder(0.45, 0.12),
-                Transform::from_xyz(x, 0.45, z)
-                    .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                Mat::DarkMetal,
-                false,
+    // Ribs down both sides (clear of the doorway), the door on its rail,
+    // slid half back.
+    let mut z = -d * 0.5 + 0.6;
+    while z < d * 0.5 - 0.5 {
+        for side in [-1.0f32, 1.0] {
+            if side > 0.0 && z.abs() < 1.15 {
+                continue;
+            }
+            b.bx(
+                Vec3::new(0.05, h - 0.1, 0.08),
+                Vec3::new(side * (w * 0.5 + 0.055), f + h * 0.5, z),
+                Mat::RustyMetal,
             );
         }
+        z += 1.1;
     }
-    b.crate_box(Vec3::new(0.6, f + 0.08, 2.0), 0.8, Some("workshop"));
-    b.crate_box(Vec3::new(-0.6, f + 0.08, -3.0), 0.7, Some("food_common"));
+    b.bx(
+        Vec3::new(0.06, 0.08, 5.0),
+        Vec3::new(w * 0.5 + 0.1, f + 2.42, 0.6),
+        Mat::DarkMetal,
+    );
+    b.bx(
+        Vec3::new(0.05, 2.3, 2.1),
+        Vec3::new(w * 0.5 + 0.1, f + 1.2, 1.1),
+        Mat::RustyMetal,
+    );
+    b.bx(
+        Vec3::new(w + 0.1, 0.06, d + 0.1),
+        Vec3::new(0.0, f + h + 0.03, 0.0),
+        Mat::RustyMetal,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(w + 0.2, 0.22, d + 0.2)),
+        Transform::from_xyz(0.0, f + h + 0.06, 0.0),
+        Mat::RustyMetal,
+        true,
+    );
+    // Ladders at diagonally opposite corners, couplers at both ends.
+    for (end, x) in [(-1.0f32, -1.1f32), (1.0, 1.1)] {
+        let z = end * (d * 0.5 + 0.06);
+        for dx in [-0.2, 0.2] {
+            b.bx(
+                Vec3::new(0.04, h, 0.04),
+                Vec3::new(x + dx, f + h * 0.5, z),
+                Mat::DarkMetal,
+            );
+        }
+        let mut y = f + 0.3;
+        while y < f + h - 0.1 {
+            b.bx(
+                Vec3::new(0.44, 0.03, 0.03),
+                Vec3::new(x, y, z),
+                Mat::DarkMetal,
+            );
+            y += 0.35;
+        }
+        b.bx(
+            Vec3::new(0.28, 0.24, 0.6),
+            Vec3::new(0.0, 1.1, end * (d * 0.5 + 0.2)),
+            Mat::DarkMetal,
+        );
+    }
+    b.crate_box(Vec3::new(0.6, f + 0.06, 2.0), 0.8, Some("workshop"));
+    b.crate_box(Vec3::new(-0.6, f + 0.06, -3.0), 0.7, Some("food_common"));
 }
 
 fn log_pile(b: &mut Builder) {
@@ -1764,7 +1864,9 @@ pub struct BuildingLoot(pub Vec<LootSpot>);
 pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> Transform {
     // Where the terrain was settled for it (the lowest corner of a rough
     // footprint, lifted as far as its foundation allows).
-    let rot = Quat::from_rotation_y(-p.rot.to_radians());
+    // Rolling stock pitches to follow the grade under its bogies.
+    let pitch = zone.hm.pitch(&p.prefab, p.at, p.rot);
+    let rot = Quat::from_rotation_y(-p.rot.to_radians()) * Quat::from_rotation_x(-pitch);
     let y = zone.hm.footing(&p.prefab, p.at, p.rot);
     let y = if p.absolute { p.y } else { y + p.y };
     Transform::from_xyz(p.at[0], y, p.at[1]).with_rotation(rot)

@@ -156,3 +156,85 @@ mod tests {
         );
     }
 }
+
+/// A boxcar against the rails it should stand on: how far its centre is
+/// off the nearest rail line, how far its heading is off the line's, and
+/// where on the line (and at what heading) it would stand.
+#[derive(Debug, Clone)]
+pub struct OnRails {
+    pub at: [f32; 2],
+    pub off: f32,
+    pub turn_deg: f32,
+    pub snap_at: [f32; 2],
+    pub snap_rot: f32,
+}
+
+/// Every boxcar on a map, against its nearest rail line.
+pub fn on_rails(map: &MapDef, hm: &Heightmap) -> Vec<OnRails> {
+    let rails: Vec<&crate::terrain::RoadLine> = hm
+        .road_lines
+        .iter()
+        .filter(|l| l.kind == crate::map::RoadKind::Rail)
+        .collect();
+    map.placements
+        .iter()
+        .filter(|p| p.prefab == "boxcar")
+        .filter_map(|p| {
+            let (line, (off, s, _)) = rails
+                .iter()
+                .map(|l| (l, crate::geom::polyline_closest(&l.points, p.at)))
+                .min_by(|a, b| a.1.0.total_cmp(&b.1.0))?;
+            let (q, t) = crate::geom::polyline_at(&line.points, s);
+            // The car's length runs along its local Z, which the game's
+            // yaw (-rot about Y) turns to (-sin rot, cos rot).
+            let snap_rot = (-t[0]).atan2(t[1]).to_degrees();
+            let along = [-(p.rot.to_radians().sin()), p.rot.to_radians().cos()];
+            let cos = (along[0] * t[0] + along[1] * t[1]).abs().min(1.0);
+            Some(OnRails {
+                at: p.at,
+                off,
+                turn_deg: cos.acos().to_degrees(),
+                snap_at: q,
+                snap_rot,
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod rail_tests {
+    use super::*;
+
+    #[test]
+    fn boxcars_stand_on_rails() {
+        let mut bad = Vec::new();
+        for (name, text) in [
+            ("marrow_creek", crate::map::MARROW_CREEK),
+            ("kettle_pass", crate::map::KETTLE_PASS),
+            ("cinder_works", crate::map::CINDER_WORKS),
+        ] {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            for r in on_rails(&map, &hm) {
+                // Far from any line it's an abandoned car, not one on a
+                // siding.
+                let ok = r.off > 30.0 || (r.off < 0.3 && r.turn_deg < 2.0);
+                println!(
+                    "{name:13} boxcar at ({:6.1},{:6.1}): {:5.2} m off the rails, {:4.1} deg askew; on them: at ({:.1}, {:.1}), rot {:.1}{}",
+                    r.at[0],
+                    r.at[1],
+                    r.off,
+                    r.turn_deg,
+                    r.snap_at[0],
+                    r.snap_at[1],
+                    r.snap_rot,
+                    if ok { "" } else { "  <--" }
+                );
+                if !ok {
+                    bad.push(format!("{name} boxcar at {:?}", r.at));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "boxcars off their rails: {bad:#?}");
+    }
+}

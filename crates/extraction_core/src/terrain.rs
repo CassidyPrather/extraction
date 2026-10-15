@@ -28,6 +28,9 @@ pub enum Surface {
     Water,
 }
 
+/// A boxcar's bogie centres, metres either side of its middle.
+pub const BOGIE: f32 = 4.5;
+
 /// Per-cell road paint: which kind of road, and how strongly (0..=255).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RoadPaint {
@@ -348,6 +351,9 @@ impl Heightmap {
     /// up to its foundation's allowance (`map::prefab_lift`). The game, the
     /// terrain's settling and the Unity export all use this.
     pub fn footing(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+        if let Some((a, b)) = self.bogies(prefab, at, rot_deg) {
+            return (a + b) * 0.5;
+        }
         let [w, _, d] = crate::map::prefab_footprint(prefab);
         let (s, c) = rot_deg.to_radians().sin_cos();
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
@@ -365,6 +371,24 @@ impl Heightmap {
             hi = hi.max(h);
         }
         hi.min(lo + crate::map::prefab_lift(prefab))
+    }
+
+    /// Rolling stock stands on its bogies, on the rail's grade: the ground
+    /// under the rear and front bogie centres (along the car's local Z).
+    fn bogies(&self, prefab: &str, at: P2, rot_deg: f32) -> Option<(f32, f32)> {
+        if prefab != "boxcar" {
+            return None;
+        }
+        let (s, c) = rot_deg.to_radians().sin_cos();
+        let h = |lz: f32| self.height([at[0] - lz * s, at[1] + lz * c]);
+        Some((h(-BOGIE), h(BOGIE)))
+    }
+
+    /// How far a placement pitches nose-up about its local X, radians:
+    /// rolling stock follows the grade, buildings stand level.
+    pub fn pitch(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+        self.bogies(prefab, at, rot_deg)
+            .map_or(0.0, |(a, b)| (b - a).atan2(2.0 * BOGIE))
     }
 
     /// Roads are graded after the pads, and a road's fill can rise inside
