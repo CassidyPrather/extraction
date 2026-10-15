@@ -50,6 +50,8 @@ pub enum ScreenStyle {
     Paper,
     /// A card with a few words in big letters.
     Card,
+    /// A green-phosphor computer screen.
+    Crt,
 }
 
 /// The bench in truck space.

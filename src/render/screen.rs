@@ -136,6 +136,12 @@ fn build_screens(
                 false,
                 h as f32 / 4.5,
             ),
+            ScreenStyle::Crt => (
+                Color::srgb(0.01, 0.03, 0.015),
+                Color::srgb(0.35, 1.0, 0.45),
+                true,
+                h as f32 / 14.0,
+            ),
         };
         let max_font = font;
         let font = fit_font(&screen.text, Vec2::new(w as f32, h as f32), max_font);

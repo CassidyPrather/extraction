@@ -288,6 +288,26 @@ pub enum MarkerKind {
     WorkSite,
     /// Where the truck parks along the perimeter road.
     TruckStop,
+    /// A sheet of paper lying on whatever is built here (a table, a floor)
+    /// or on the ground: someone's note.
+    Note { text: String },
+    /// A painted board on a post, facing `rot`.
+    Sign { text: String },
+    /// A computer terminal on whatever is built here, screen facing `rot`;
+    /// press it for the next page.
+    Terminal { pages: Vec<String> },
+}
+
+impl MarkerKind {
+    /// The words a note, sign or terminal carries (all of a terminal's
+    /// pages), for checks and exports.
+    pub fn text(&self) -> Option<String> {
+        match self {
+            MarkerKind::Note { text } | MarkerKind::Sign { text } => Some(text.clone()),
+            MarkerKind::Terminal { pages } => Some(pages.join("\n\n")),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

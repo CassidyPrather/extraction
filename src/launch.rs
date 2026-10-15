@@ -67,6 +67,8 @@ pub struct LaunchOptions {
     /// Dev: screenshot every placement on the map into this folder and
     /// quit (see `tour`).
     pub tour: Option<std::path::PathBuf>,
+    /// Dev: only the tour views whose file name contains this.
+    pub tour_only: Option<String>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -99,6 +101,7 @@ impl Default for LaunchOptions {
             frames: 90,
             camera: None,
             tour: None,
+            tour_only: None,
             bot: false,
             scenario: None,
             headless: false,
@@ -184,6 +187,7 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--tour-only" => o.tour_only = Some(val()),
                 "--gallery" => {
                     o.gallery = Some(val());
                     o.robots = false;

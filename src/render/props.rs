@@ -84,7 +84,8 @@ fn dress_truck(
             | Pressable::FoldCover
             | Pressable::Destination
             | Pressable::Setting
-            | Pressable::Request => {}
+            | Pressable::Request
+            | Pressable::Terminal => {}
             Pressable::BellPull => {
                 let rope = mat(&mut materials, Color::srgb(0.55, 0.47, 0.32), 0.9, 0.0);
                 commands.entity(e).insert((

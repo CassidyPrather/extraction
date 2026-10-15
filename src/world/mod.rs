@@ -6,6 +6,7 @@
 pub mod bridges;
 pub mod buildings;
 pub mod impostors;
+pub mod notes;
 pub mod rain;
 pub mod sky;
 pub mod structures;
@@ -169,6 +170,7 @@ impl Plugin for WorldVisualsPlugin {
             terrain::TerrainVisualsPlugin,
             water::WaterPlugin,
             trees::TreesPlugin,
+            notes::NotesPlugin,
         ));
     }
 }

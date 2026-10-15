@@ -60,6 +60,8 @@ pub enum Pressable {
     Setting,
     /// The driver's request card: hand over what's wanted.
     Request,
+    /// A terminal in the Zone: next page.
+    Terminal,
 }
 
 /// The stash crate in the truck bed.

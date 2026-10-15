@@ -314,11 +314,15 @@ fn marker_json(hm: &Heightmap, m: &Marker) -> Value {
     let ground = hm.height(m.at);
     let (kind, table) = match &m.kind {
         MarkerKind::Loot { table } => ("Loot".to_string(), Some(table.clone())),
+        MarkerKind::Note { .. } => ("Note".to_string(), None),
+        MarkerKind::Sign { .. } => ("Sign".to_string(), None),
+        MarkerKind::Terminal { .. } => ("Terminal".to_string(), None),
         k => (format!("{k:?}"), None),
     };
     json!({
         "kind": kind,
         "loot_table": table,
+        "text": m.kind.text(),
         "name": m.name,
         "pos": v3(unity::to_unity([m.at[0], ground + m.y, m.at[1]])),
         "yaw_deg": r3(unity::placement_yaw_to_unity(m.rot)),

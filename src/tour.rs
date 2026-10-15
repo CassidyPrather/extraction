@@ -2,9 +2,11 @@
 //! free camera visits every placement, from outside (a three-quarter view
 //! of its front) and, for buildings you go into, from inside (by the back
 //! wall, looking to the door), and saves a screenshot of each to DIR with
-//! a `tour.json` saying what each one shows. Run it under `scripts/tour.sh`
-//! and look through the pictures for odd models, z-fighting, things
-//! floating or sunk, clipping.
+//! a `tour.json` saying what each one shows. Notes, signs and terminals
+//! get a view each, from where you'd stand to read them. Run it under
+//! `scripts/tour.sh` and look through the pictures for odd models,
+//! z-fighting, things floating or sunk, clipping, unreadable text.
+//! `--tour-only TEXT` keeps the views whose file name contains TEXT.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
@@ -107,6 +109,33 @@ pub fn views(zone: &Zone) -> Vec<View> {
             });
         }
     }
+    // Words: from where you'd stand to read them.
+    for (i, m) in zone.map.markers.iter().enumerate() {
+        use extraction_core::map::MarkerKind;
+        let (kind, reach, lift, back) = match &m.kind {
+            MarkerKind::Note { .. } => ("note", 2.2 + m.y, 0.0, 0.55),
+            MarkerKind::Terminal { .. } => ("terminal", 2.2 + m.y, 0.23, 0.9),
+            MarkerKind::Sign { .. } => ("sign", 0.0, 1.45, 1.6),
+            _ => continue,
+        };
+        let y = if kind == "sign" {
+            zone.ground(m.at[0], m.at[1])
+        } else {
+            crate::world::notes::rest_height(zone, m.at[0], m.at[1], reach)
+        };
+        // The text faces the marker's local +Z.
+        let r = m.rot.to_radians();
+        let out_dir = Vec3::new(-r.sin(), 0.0, r.cos());
+        let target = Vec3::new(m.at[0], y + lift, m.at[1]);
+        let eye = target + out_dir * back + Vec3::Y * if kind == "note" { 0.55 } else { 0.15 };
+        let slug = m.name.to_lowercase().replace(' ', "_");
+        out.push(View {
+            file: format!("w{i:03}_{kind}_{slug}.png"),
+            what: format!("{kind} \"{}\" at ({:.0}, {:.0})", m.name, m.at[0], m.at[1]),
+            at: eye.to_array(),
+            look: target.to_array(),
+        });
+    }
     out
 }
 
@@ -129,7 +158,10 @@ fn tour(
     }
     let state = &mut *state;
     let views = state.views.get_or_insert_with(|| {
-        let v = views(&zone);
+        let mut v = views(&zone);
+        if let Some(only) = &opts.tour_only {
+            v.retain(|v| v.file.contains(only.as_str()));
+        }
         let _ = std::fs::create_dir_all(dir);
         if let Ok(json) = serde_json::to_string_pretty(&v) {
             let _ = std::fs::write(dir.join("tour.json"), json);

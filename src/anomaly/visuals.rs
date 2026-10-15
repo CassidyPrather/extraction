@@ -205,18 +205,57 @@ fn assets(
     a
 }
 
+/// A ground mark draped over the terrain round `centre` (the anomaly's
+/// position): a grid whose every vertex sits just above the ground, so a
+/// slope can't bury half a flat disc and cut it off in a hard line.
+fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
+    let n = 12;
+    let mut pos = Vec::new();
+    let mut uv = Vec::new();
+    let mut nrm = Vec::new();
+    let mut idx = Vec::new();
+    for j in 0..=n {
+        for i in 0..=n {
+            let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
+            let (x, z) = ((u * 2.0 - 1.0) * half, (v * 2.0 - 1.0) * half);
+            let y = zone.ground(centre.x + x, centre.z + z) - centre.y + 0.04;
+            pos.push([x, y, z]);
+            uv.push([u, v]);
+            nrm.push([0.0, 1.0, 0.0]);
+        }
+    }
+    for j in 0..n {
+        for i in 0..n {
+            let k = (j * (n + 1) + i) as u32;
+            let r = (n + 1) as u32;
+            idx.extend_from_slice(&[k, k + r, k + 1, k + 1, k + r, k + r + 1]);
+        }
+    }
+    Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(bevy::mesh::Indices::U32(idx))
+}
+
 fn dress_anomalies(
     mut commands: Commands,
-    added: Query<(Entity, &Anomaly), Added<Anomaly>>,
+    added: Query<(Entity, &Anomaly, &Transform), Added<Anomaly>>,
     a: Res<AnomalyAssets>,
+    zone: Res<crate::world::Zone>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let near = VisibilityRange {
         start_margin: 0.0..0.0,
         end_margin: 70.0..90.0,
         use_aabb: false,
     };
-    for (e, anomaly) in &added {
+    for (e, anomaly, at) in &added {
         let r = anomaly.radius;
+        let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
         let mut rng = extraction_core::noise::Rng::new(e.to_bits());
         let (mark, motes, mote_mat, mote_size) = match anomaly.kind {
             AnomalyKind::Lift => (&a.flattened, 64, None, 0.2),
@@ -225,9 +264,9 @@ fn dress_anomalies(
         };
         commands.entity(e).with_children(|c| {
             c.spawn((
-                Mesh3d(a.disc.clone()),
+                Mesh3d(disc),
                 MeshMaterial3d(mark.clone()),
-                Transform::from_xyz(0.0, 0.04, 0.0).with_scale(Vec3::new(r * 1.1, 1.0, r * 1.1)),
+                Transform::IDENTITY,
                 NotShadowCaster,
                 near.clone(),
             ));
