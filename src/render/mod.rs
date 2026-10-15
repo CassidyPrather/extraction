@@ -105,13 +105,26 @@ fn attach_flat_camera(
 pub fn camera_bundle(weather: &Weather) -> impl Bundle {
     (
         Camera3d::default(),
-        Hdr,
         Projection::Perspective(PerspectiveProjection {
             fov: 75f32.to_radians(),
-            near: 0.03,
+            near: NEAR_CLIP,
             far: 2000.0,
             ..default()
         }),
+        camera_look(weather),
+    )
+}
+
+/// How close to the eye things still draw: iron sights sit a few
+/// centimetres off it.
+pub const NEAR_CLIP: f32 = 0.03;
+
+/// The look every player-view camera shares, the headset's eyes included:
+/// exposure, tonemapping and the weather's fog (which also hides where the
+/// trees and grass are cut off).
+pub fn camera_look(weather: &Weather) -> impl Bundle {
+    (
+        Hdr,
         Tonemapping::AgX,
         bevy::camera::Exposure { ev100: 10.6 },
         weather.fog(),

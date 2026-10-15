@@ -11,8 +11,12 @@
 //! - left stick: walk (click to sprint); right stick: snap turn left/right,
 //!   down to crouch-toggle; right stick click: fire selector
 //!
-//! None of this can be exercised without a headset; it is written against
-//! `bevy_mod_openxr` 0.6's API and its `raw_actions` example.
+//! Any other runtime gets the Khronos simple controller: select grabs and
+//! fires, menu is primary.
+//!
+//! The headset path runs in CI-less checks against Monado's simulated
+//! headset (`scripts/xr_check.sh`): instance, session, swapchains, actions
+//! and what the eyes see. Real controllers still need a real headset.
 
 use bevy::prelude::*;
 use bevy_mod_openxr::action_binding::{OxrSendActionBindings, OxrSuggestActionBinding};
@@ -38,6 +42,7 @@ impl Plugin for XrDriverPlugin {
                 XrSessionCreated,
                 (attach_actions, spawn_controller_spaces, make_tracking_root),
             )
+            .add_systems(Update, (ride_player, dress_eyes, follow_mirror))
             .add_systems(
                 PreUpdate,
                 sync_actions
@@ -128,11 +133,13 @@ fn suggest_bindings(
     let click = a.stick_click.as_raw();
     let haptic = a.haptic.as_raw();
     for profile in [
+        // (Quest 3's Touch Plus is offered to apps as plain Touch unless
+        // they enable its extension.)
         "/interaction_profiles/oculus/touch_controller",
-        "/interaction_profiles/meta/touch_controller_plus",
         "/interaction_profiles/valve/index_controller",
         "/interaction_profiles/microsoft/motion_controller",
         "/interaction_profiles/htc/vive_controller",
+        "/interaction_profiles/khr/simple_controller",
     ] {
         bind(profile, pose_l, &["/user/hand/left/input/grip/pose"]);
         bind(profile, pose_r, &["/user/hand/right/input/grip/pose"]);
@@ -144,6 +151,27 @@ fn suggest_bindings(
                 "/user/hand/right/output/haptic",
             ],
         );
+        if profile.contains("simple") {
+            for action in [grip, trigger] {
+                bind(
+                    profile,
+                    action,
+                    &[
+                        "/user/hand/left/input/select/click",
+                        "/user/hand/right/input/select/click",
+                    ],
+                );
+            }
+            bind(
+                profile,
+                primary,
+                &[
+                    "/user/hand/left/input/menu/click",
+                    "/user/hand/right/input/menu/click",
+                ],
+            );
+            continue;
+        }
         let touchlike = profile.contains("touch") || profile.contains("index");
         if profile.contains("vive") {
             bind(
@@ -329,16 +357,87 @@ fn spawn_controller_spaces(
     }
 }
 
-/// The local player's root is the playspace; the flat camera goes away.
-fn make_tracking_root(
+/// Keeps the tracking root on the local player (whenever both exist).
+fn ride_player(
     mut commands: Commands,
     players: Query<Entity, With<LocalPlayer>>,
+    roots: Query<(Entity, Option<&ChildOf>), (With<XrTrackingRoot>, Without<LocalPlayer>)>,
+) {
+    let Some(p) = players.iter().next() else {
+        return;
+    };
+    for (root, parent) in &roots {
+        if parent.map(|c| c.parent()) != Some(p) {
+            commands
+                .entity(root)
+                .insert((ChildOf(p), Transform::IDENTITY));
+        }
+    }
+}
+
+/// The headset's eyes get the game's look (fog, exposure, tonemapping),
+/// which the backend's cameras don't come with, and a near plane close
+/// enough for iron sights.
+fn dress_eyes(
+    mut commands: Commands,
+    mut eyes: Query<(Entity, &mut Projection), Added<XrCamera>>,
+    weather: Res<crate::world::sky::Weather>,
+) {
+    for (e, mut projection) in &mut eyes {
+        if let Projection::Custom(custom) = &mut *projection {
+            if let Some(p) = custom.get_mut::<bevy_mod_xr::camera::XrProjection>() {
+                p.near = crate::render::NEAR_CLIP;
+            }
+        }
+        commands
+            .entity(e)
+            .insert(crate::render::camera_look(&weather));
+    }
+}
+
+/// `--mirror`: a window view of what the left eye sees, for whoever is
+/// watching the player (and for screenshots of the headset's view).
+#[derive(Component)]
+struct Mirror;
+
+fn follow_mirror(
+    mut commands: Commands,
+    opts: Res<crate::launch::LaunchOptions>,
+    weather: Res<crate::world::sky::Weather>,
+    eyes: Query<(&XrCamera, &GlobalTransform)>,
+    mut mirrors: Query<&mut Transform, With<Mirror>>,
+) {
+    if !opts.mirror {
+        return;
+    }
+    let Some((_, eye)) = eyes.iter().find(|(c, _)| c.0 == 0) else {
+        return;
+    };
+    let pose = eye.compute_transform();
+    match mirrors.single_mut() {
+        Ok(mut t) => *t = pose,
+        Err(_) => {
+            commands.spawn((
+                Name::new("Mirror"),
+                Mirror,
+                pose,
+                crate::render::camera_bundle(&weather),
+            ));
+        }
+    }
+}
+
+/// The local player's root is the playspace; the flat camera goes away.
+///
+/// `bevy_mod_xr` makes its own tracking root at startup and parents the
+/// eyes and controllers to it, and renders from the one root there is. So
+/// that root rides on the player, rather than the player becoming a second
+/// root (which left the eyes at the world origin, under the map).
+fn make_tracking_root(
+    mut commands: Commands,
     flat_cams: Query<Entity, (With<super::RigHead>, With<Camera3d>)>,
     mut driver: ResMut<super::RigDriver>,
 ) {
-    for p in &players {
-        commands.entity(p).insert(XrTrackingRoot);
-    }
     for c in &flat_cams {
         commands.entity(c).remove::<Camera3d>().remove::<Camera>();
     }

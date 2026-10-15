@@ -1,7 +1,7 @@
 //! Command-line launch options.
 //!
 //! ```text
-//! extraction [--flat] [--map NAME] [--seed N] [--scene NAME]
+//! extraction [--flat] [--mirror] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
@@ -35,6 +35,8 @@ pub enum SceneChoice {
 pub struct LaunchOptions {
     /// Skip OpenXR even if it is compiled in.
     pub flat: bool,
+    /// In the headset: show the left eye's view in the desktop window.
+    pub mirror: bool,
     pub map: String,
     pub seed: u64,
     pub scene: SceneChoice,
@@ -96,6 +98,7 @@ impl Default for LaunchOptions {
     fn default() -> Self {
         Self {
             flat: false,
+            mirror: false,
             map: "marrow_creek".into(),
             seed: 1,
             scene: SceneChoice::Raid,
@@ -139,6 +142,7 @@ impl LaunchOptions {
             let mut val = || args.next().unwrap_or_default();
             match a.as_str() {
                 "--flat" => o.flat = true,
+                "--mirror" => o.mirror = true,
                 "--bot" => o.bot = true,
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,
@@ -214,6 +218,10 @@ impl LaunchOptions {
                 }
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // A screenshot with the mirror on is of the headset's view.
+        if o.mirror {
+            o.flat = false;
         }
         o
     }

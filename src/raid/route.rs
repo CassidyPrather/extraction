@@ -113,7 +113,10 @@ fn press_card(
 ) {
     for ev in events.read() {
         if let InteractEvent::Pressed { item, .. } = ev {
-            if cards.contains(*item) && dest.maps.len() > 1 {
+            if cards.contains(*item)
+                && dest.maps.len() > 1
+                && opts.map != crate::camp::TRAINING_YARD
+            {
                 dest.index = (dest.index + 1) % dest.maps.len();
                 let line = if dest.id() == opts.map {
                     format!("Next drive: {}. Staying put.", dest.name())
@@ -133,6 +136,21 @@ fn card_text(
     added: Query<(), Added<RouteCard>>,
 ) {
     if !dest.is_changed() && added.is_empty() {
+        return;
+    }
+    // In the yard the cord goes on to the career's valley; the card can't
+    // change that.
+    if opts.map == crate::camp::TRAINING_YARD {
+        let to = crate::persist::career_destination(&LaunchOptions::default())
+            .unwrap_or_else(|| "marrow_creek".into());
+        let name = dest
+            .maps
+            .iter()
+            .find(|(id, _)| *id == to)
+            .map_or(to.clone(), |(_, n)| n.clone());
+        for mut c in &mut cards {
+            c.text = format!("NEXT DRIVE\n{}\n(pull the cord)", name.to_uppercase());
+        }
         return;
     }
     let here = dest.id() == opts.map;

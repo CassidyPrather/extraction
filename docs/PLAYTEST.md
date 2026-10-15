@@ -149,9 +149,18 @@ whether the ending felt like one.
 
 ## Known rough edges
 
-- **No headset has ever run this.** Expect the XR side to need fixes:
-  bindings for your exact controllers, the floor height, hand offsets on
-  the grips, haptic strength.
+- **No real headset has run this yet.** The headset path does run
+  against Monado's simulated headset (`scripts/xr_check.sh`): the
+  OpenXR session starts and gets focus, every binding is accepted, and
+  the eyes see the game from the player's head with its fog and
+  lighting. That check found and fixed three bugs that would have
+  sunk the first session: the eyes were at the world origin, under
+  the map; they had none of the game's fog or exposure; and their near
+  plane cut off iron sights. What it can't check: your controllers'
+  feel, the floor height, hand offsets on the grips, haptic strength.
+- On Linux the game needs the OpenXR loader as `libopenxr_loader.so`
+  (install the loader's dev package, or symlink the `.so.1`). On
+  Windows it's built in. Without a runtime the game starts flat.
 - Room-scale: your body follows your head around the playspace. Walk
   physically into a wall and the world is nudged back to keep you out of
   it; tell me if that feels bad.
@@ -175,6 +184,7 @@ whether the ending felt like one.
 | Flag | What |
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
+| `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
 | `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |

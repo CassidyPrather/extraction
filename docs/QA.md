@@ -22,6 +22,7 @@ with a gauge, so it stays found.
 | Worn ground (`terrain::rain_wears_…`) | How far relief and erosion move the land, overall and under buildings. | `cargo test -p extraction_core rain_wears` | RMS over 0.15 m, nowhere over 6 m; buildings' ground moved under 0.02 m (median), 0.5 m at most |
 | Rocks and cover (`rocks`, `cover`) | Counts per map and per patch, and that none lies on a road, in water or on a floor. | `cargo test -p extraction_core rocks cover` | 1,000–20,000 rocks a map; 600+ plants per 24 m patch |
 | Render load (`render/stats.rs`) | Meshes, triangles and shadow casters a view draws. Also warns about LOD-ranged meshes at the world origin or without bounds. | `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` | eyeballed against `docs/PLAYTEST.md`. The warning should never print. |
+| Headset path (`scripts/xr_check.sh`) | The game against Monado's simulated headset and WMR controllers: session focus, bindings accepted, and a screenshot of the left eye (`--mirror`). | `MONADO=<prefix> scripts/xr_check.sh [map] [out.png]` | the session reaches FOCUSED, no binding is rejected, and the eye's view is eyeballed |
 | Sim telemetry (`scripts/sim.sh`) | Bots raiding a map: who gets home, who dies, where they get stuck. | `scripts/sim.sh <map> N --jobs 3 --seed S` | see `docs/SIMULATION.md` |
 
 A map test can be pointed at one map with `EXTRACTION_TEST_MAP=<map>`.
