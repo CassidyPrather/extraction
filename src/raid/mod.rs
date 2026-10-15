@@ -142,6 +142,7 @@ impl Plugin for RaidPlugin {
             kitchen::KitchenPlugin,
             route::RoutePlugin,
             comfort_board::ComfortBoardPlugin,
+            crate::camp::CampPlugin,
             chatter::ChatterPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,

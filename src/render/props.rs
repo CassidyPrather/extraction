@@ -21,6 +21,7 @@ impl Plugin for PropVisualsPlugin {
                 (dress_truck, dress_containers, finish_models).chain(),
                 dress_slots,
                 spawn_hand_visuals,
+                dress_camp,
             ),
         )
         .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate));
@@ -85,7 +86,8 @@ fn dress_truck(
             | Pressable::Destination
             | Pressable::Setting
             | Pressable::Request
-            | Pressable::Terminal => {}
+            | Pressable::Terminal
+            | Pressable::Camp => {}
             Pressable::BellPull => {
                 let rope = mat(&mut materials, Color::srgb(0.55, 0.47, 0.32), 0.9, 0.0);
                 commands.entity(e).insert((
@@ -571,5 +573,145 @@ fn pose_hands(
         } else {
             curl
         };
+    }
+}
+
+/// The camp's folding table (with a lantern burning on it), the board
+/// propped at its back, and the post the yard's skip card hangs on.
+fn dress_camp(
+    mut commands: Commands,
+    props: Query<(Entity, &crate::camp::CampProps), Added<crate::camp::CampProps>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    use crate::camp::{BOARD, CampProps, POST_HEIGHT, TABLE};
+    use crate::render::materials::{Mat, metric_box};
+    for (e, p) in &props {
+        let mut part = |m: Mat, size: Vec3, at: Transform| {
+            let material = lib.get(m, &server, &mut materials);
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(size))),
+                MeshMaterial3d(material),
+                at,
+                ChildOf(e),
+            ));
+        };
+        match p {
+            CampProps::Table => {
+                part(
+                    Mat::Planks,
+                    Vec3::new(TABLE.x, 0.04, TABLE.z),
+                    Transform::from_xyz(0.0, TABLE.y - 0.02, 0.0),
+                );
+                for (x, z) in [(-0.58, -0.28), (0.58, -0.28), (-0.58, 0.28), (0.58, 0.28)] {
+                    part(
+                        Mat::DarkMetal,
+                        Vec3::new(0.035, TABLE.y - 0.04, 0.035),
+                        Transform::from_xyz(x, (TABLE.y - 0.04) * 0.5, z),
+                    );
+                }
+                // A stool to stand by, a crate under the table.
+                part(
+                    Mat::Planks,
+                    Vec3::new(0.5, 0.4, 0.4),
+                    Transform::from_xyz(-0.35, 0.2, -0.05),
+                );
+                part(
+                    Mat::Timber,
+                    Vec3::new(0.34, 0.04, 0.34),
+                    Transform::from_xyz(0.75, 0.45, 0.65),
+                );
+                part(
+                    Mat::Timber,
+                    Vec3::new(0.04, 0.43, 0.04),
+                    Transform::from_xyz(0.75, 0.215, 0.65),
+                );
+                // The lantern: a dark body, a warm glass, its light.
+                let glass = materials.add(StandardMaterial {
+                    base_color: Color::srgb(1.0, 0.8, 0.5),
+                    emissive: LinearRgba::rgb(6.0, 3.2, 1.0),
+                    ..default()
+                });
+                let dark = lib.get(Mat::DarkMetal, &server, &mut materials);
+                let lantern = Vec3::new(-0.48, TABLE.y, 0.12);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.06, 0.03))),
+                    MeshMaterial3d(dark.clone()),
+                    Transform::from_translation(lantern + Vec3::Y * 0.015),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.045, 0.13))),
+                    MeshMaterial3d(glass),
+                    Transform::from_translation(lantern + Vec3::Y * 0.095),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.055, 0.025))),
+                    MeshMaterial3d(dark),
+                    Transform::from_translation(lantern + Vec3::Y * 0.17),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    PointLight {
+                        color: Color::srgb(1.0, 0.72, 0.42),
+                        intensity: 9_000.0,
+                        range: 7.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_translation(lantern + Vec3::Y * 0.1),
+                    ChildOf(e),
+                ));
+            }
+            CampProps::Board => {
+                part(
+                    Mat::Planks,
+                    Vec3::new(BOARD.x, BOARD.y, 0.025),
+                    Transform::default(),
+                );
+                // A frame round it, and a strut behind.
+                for (size, at) in [
+                    (
+                        Vec3::new(BOARD.x + 0.06, 0.04, 0.04),
+                        Vec3::new(0.0, BOARD.y * 0.5, 0.0),
+                    ),
+                    (
+                        Vec3::new(BOARD.x + 0.06, 0.04, 0.04),
+                        Vec3::new(0.0, -BOARD.y * 0.5, 0.0),
+                    ),
+                    (
+                        Vec3::new(0.04, BOARD.y, 0.04),
+                        Vec3::new(BOARD.x * 0.5 + 0.01, 0.0, 0.0),
+                    ),
+                    (
+                        Vec3::new(0.04, BOARD.y, 0.04),
+                        Vec3::new(-BOARD.x * 0.5 - 0.01, 0.0, 0.0),
+                    ),
+                ] {
+                    part(Mat::Timber, size, Transform::from_translation(at));
+                }
+                part(
+                    Mat::Timber,
+                    Vec3::new(0.04, BOARD.y * 0.9, 0.04),
+                    Transform::from_xyz(0.0, -0.05, -0.2)
+                        .with_rotation(Quat::from_rotation_x(0.45)),
+                );
+            }
+            CampProps::Post => {
+                part(
+                    Mat::Timber,
+                    Vec3::new(0.08, POST_HEIGHT, 0.08),
+                    Transform::from_xyz(0.0, POST_HEIGHT * 0.5, 0.0),
+                );
+                part(
+                    Mat::Planks,
+                    Vec3::new(0.42, 0.28, 0.03),
+                    Transform::from_xyz(0.0, 1.35, 0.025),
+                );
+            }
+        }
     }
 }

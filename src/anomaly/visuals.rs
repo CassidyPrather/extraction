@@ -80,7 +80,6 @@ struct AnomalyAssets {
     ember: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     segment: Handle<Mesh>,
-    disc: Handle<Mesh>,
     scorch: Handle<StandardMaterial>,
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
@@ -180,12 +179,6 @@ fn assets(
             ..default()
         }),
         segment: meshes.add(Cuboid::new(0.012, 0.012, 1.0)),
-        disc: meshes.add(
-            Rectangle::new(2.0, 2.0)
-                .mesh()
-                .build()
-                .rotated_by(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-        ),
         scorch: ground(
             Color::srgba(0.02, 0.018, 0.015, 0.92),
             LinearRgba::rgb(0.25, 0.05, 0.0),

@@ -62,6 +62,8 @@ pub enum Pressable {
     Request,
     /// A terminal in the Zone: next page.
     Terminal,
+    /// A card on the camp's board (`camp`).
+    Camp,
 }
 
 /// The stash crate in the truck bed.
@@ -263,10 +265,14 @@ fn press_things(
     pressables: Query<&Pressable>,
     mut depart: MessageWriter<DepartRequest>,
     locals: Query<Entity, With<LocalPlayer>>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
     for ev in events.read() {
         if let InteractEvent::Pressed { item, player } = ev {
             match pressables.get(*item) {
+                // In the training yard the cord ends the practice
+                // (`camp`), it doesn't send the truck anywhere.
+                Ok(Pressable::BellPull) if opts.map == crate::camp::TRAINING_YARD => {}
                 Ok(Pressable::BellPull) => {
                     depart.write(DepartRequest { player: *player });
                 }

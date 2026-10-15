@@ -98,8 +98,29 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
         {
             None
         }
+        // The training yard is practice: nothing there is kept.
+        None if opts.map == crate::camp::TRAINING_YARD => None,
         None => Some(data_dir().join("career.ron")),
     }
+}
+
+/// Whether this player has been through (or skipped) the training yard.
+pub fn trained() -> bool {
+    data_dir().join("trained").exists()
+}
+
+pub fn mark_trained() {
+    let _ = std::fs::create_dir_all(data_dir());
+    let _ = std::fs::write(data_dir().join("trained"), "yes\n");
+}
+
+/// A new career: the old one is put aside (`career.ron.old`, one deep) and
+/// the training yard offered again.
+pub fn burn_career(opts: &LaunchOptions) {
+    if let Some(path) = career_path(opts) {
+        let _ = std::fs::rename(&path, path.with_extension("ron.old"));
+    }
+    let _ = std::fs::remove_file(data_dir().join("trained"));
 }
 
 /// The valley a saved career is headed for, if there is one.

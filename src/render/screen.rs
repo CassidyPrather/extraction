@@ -1,6 +1,9 @@
 //! In-world text panels: any entity with a [`ScreenText`] gets a quad
-//! showing its text, drawn by a UI tree rendered into a texture (one small
-//! 2D camera per panel). The bench display, notes on the memorial board.
+//! showing its text, drawn by a UI tree rendered into a texture. The
+//! camera and UI that draw it exist only while it redraws (a few frames
+//! after its text changes); the texture keeps the picture. So dozens of
+//! panels cost nothing while they're idle, and the renderer never carries
+//! dozens of cameras. The bench display, notes on the memorial board.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
@@ -14,9 +17,9 @@ pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<Drawings>().add_systems(
             Update,
-            (build_screens, update_screens, idle_screens).chain(),
+            (build_screens, update_screens, idle_screens, drop_screens).chain(),
         );
     }
 }
@@ -25,23 +28,85 @@ impl Plugin for ScreenPlugin {
 /// and frames after its text changes (laying out, then drawing).
 const FIRST_FRAMES: u8 = 30;
 const REFRESH_FRAMES: u8 = 3;
-/// An idle panel still renders one frame in this many, in case anything
-/// it shows changed without its text changing.
-const IDLE_EVERY: u32 = 30;
 
 /// Pixels per metre on a panel.
 const PX_PER_M: f32 = 1000.0;
 
 #[derive(Component)]
 struct ScreenView {
-    text: Entity,
-    camera: Entity,
-    /// Frames left to render: a panel's texture keeps its last picture,
-    /// so its camera only runs for a moment after the text changes.
+    /// The camera and UI tree drawing the panel, while it redraws.
+    drawing: Option<Drawing>,
+    image: Handle<Image>,
+    /// Frames left to draw; then the camera and UI go and the texture
+    /// keeps its picture.
     refresh: u8,
-    /// Panel pixels and the style's largest font.
+    /// Panel pixels, the style's largest font, its colours.
     px: Vec2,
     font: f32,
+    bg: Color,
+    fg: Color,
+}
+
+#[derive(Clone, Copy)]
+struct Drawing {
+    camera: Entity,
+    ui: Entity,
+    text: Entity,
+}
+
+/// Panels' drawing entities, so a panel that goes away takes them along.
+#[derive(Resource, Default)]
+struct Drawings(std::collections::HashMap<Entity, Drawing>);
+
+/// Spawns the camera and UI tree that draw `text` into `view`'s texture.
+fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Drawing {
+    let camera = commands
+        .spawn((
+            Camera2d,
+            Camera {
+                order: -10,
+                clear_color: ClearColorConfig::Custom(view.bg),
+                ..default()
+            },
+            RenderTarget::Image(view.image.clone().into()),
+        ))
+        .id();
+    let font = fit_font(text, view.px, view.font);
+    let mut text_e = Entity::PLACEHOLDER;
+    let ui = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                height: percent(100),
+                padding: UiRect::all(px(font * 0.8)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            UiTargetCamera(camera),
+        ))
+        .with_children(|ui| {
+            text_e = ui
+                .spawn((
+                    Text::new(text.to_owned()),
+                    TextFont {
+                        font_size: FontSize::Px(font),
+                        ..default()
+                    },
+                    TextColor(view.fg),
+                ))
+                .id();
+        })
+        .id();
+    Drawing {
+        camera,
+        ui,
+        text: text_e,
+    }
+}
+
+fn stop_drawing(commands: &mut Commands, d: Drawing) {
+    commands.entity(d.ui).despawn();
+    commands.entity(d.camera).despawn();
 }
 
 /// Word-wraps `text` into at most `max_lines` lines of `columns`
@@ -111,6 +176,7 @@ fn build_screens(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut drawings: ResMut<Drawings>,
 ) {
     for (e, screen) in &screens {
         // Small panels (a wrist readout) still need enough pixels for text.
@@ -143,8 +209,6 @@ fn build_screens(
                 h as f32 / 14.0,
             ),
         };
-        let max_font = font;
-        let font = fit_font(&screen.text, Vec2::new(w as f32, h as f32), max_font);
         let mut image = Image::new_fill(
             Extent3d {
                 width: w,
@@ -160,41 +224,18 @@ fn build_screens(
             | TextureUsages::COPY_DST
             | TextureUsages::RENDER_ATTACHMENT;
         let handle = images.add(image);
-        let camera = commands
-            .spawn((
-                Camera2d,
-                Camera {
-                    order: -10,
-                    clear_color: ClearColorConfig::Custom(bg),
-                    ..default()
-                },
-                RenderTarget::Image(handle.clone().into()),
-            ))
-            .id();
-        let mut text = Entity::PLACEHOLDER;
-        commands
-            .spawn((
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    padding: UiRect::all(px(font * 0.8)),
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-                UiTargetCamera(camera),
-            ))
-            .with_children(|ui| {
-                text = ui
-                    .spawn((
-                        Text::new(screen.text.clone()),
-                        TextFont {
-                            font_size: FontSize::Px(font),
-                            ..default()
-                        },
-                        TextColor(fg),
-                    ))
-                    .id();
-            });
+        let mut view = ScreenView {
+            drawing: None,
+            image: handle.clone(),
+            refresh: FIRST_FRAMES,
+            px: Vec2::new(w as f32, h as f32),
+            font,
+            bg,
+            fg,
+        };
+        let d = start_drawing(&mut commands, &view, &screen.text);
+        view.drawing = Some(d);
+        drawings.0.insert(e, d);
         let material = materials.add(StandardMaterial {
             base_color: if emissive { Color::BLACK } else { Color::WHITE },
             base_color_texture: (!emissive).then(|| handle.clone()),
@@ -207,59 +248,75 @@ fn build_screens(
             perceptual_roughness: if emissive { 0.15 } else { 0.95 },
             ..default()
         });
-        commands
-            .entity(e)
-            .insert(ScreenView {
-                text,
-                camera,
-                refresh: FIRST_FRAMES,
-                px: Vec2::new(w as f32, h as f32),
-                font: max_font,
-            })
-            .with_child((
-                Mesh3d(meshes.add(Rectangle::new(screen.size.x, screen.size.y))),
-                MeshMaterial3d(material),
-                NotShadowCaster,
-            ));
+        commands.entity(e).insert(view).with_child((
+            Mesh3d(meshes.add(Rectangle::new(screen.size.x, screen.size.y))),
+            MeshMaterial3d(material),
+            NotShadowCaster,
+        ));
     }
 }
 
 fn update_screens(
-    mut screens: Query<(&ScreenText, &mut ScreenView), Changed<ScreenText>>,
+    mut commands: Commands,
+    mut screens: Query<(Entity, &ScreenText, &mut ScreenView), Changed<ScreenText>>,
     mut texts: Query<(&mut Text, &mut TextFont)>,
+    mut drawings: ResMut<Drawings>,
 ) {
-    for (screen, mut view) in &mut screens {
-        if let Ok((mut t, mut f)) = texts.get_mut(view.text) {
-            if t.0 != screen.text {
-                view.refresh = REFRESH_FRAMES;
-                t.0 = screen.text.clone();
-                let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
-                if f.font_size != size {
-                    f.font_size = size;
+    for (e, screen, mut view) in &mut screens {
+        match view.drawing {
+            Some(d) => {
+                if let Ok((mut t, mut f)) = texts.get_mut(d.text) {
+                    if t.0 != screen.text {
+                        view.refresh = view.refresh.max(REFRESH_FRAMES);
+                        t.0 = screen.text.clone();
+                        let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
+                        if f.font_size != size {
+                            f.font_size = size;
+                        }
+                    }
                 }
+            }
+            None => {
+                let d = start_drawing(&mut commands, &view, &screen.text);
+                view.drawing = Some(d);
+                view.refresh = REFRESH_FRAMES;
+                drawings.0.insert(e, d);
             }
         }
     }
 }
 
-/// Panels whose text hasn't changed stop rendering: their texture keeps
-/// the last picture. (Ten-odd UI passes a frame saved, twice over in a
-/// headset.)
+/// A panel that has finished drawing lets its camera and UI go: its
+/// texture keeps the picture.
 fn idle_screens(
+    mut commands: Commands,
     mut screens: Query<(Entity, &mut ScreenView)>,
-    mut cams: Query<&mut Camera>,
-    mut frame: Local<u32>,
+    mut drawings: ResMut<Drawings>,
 ) {
-    *frame = frame.wrapping_add(1);
     for (e, mut view) in &mut screens {
-        // Staggered, so the idle refreshes don't all land on one frame.
-        let tick = (*frame).wrapping_add(e.index_u32()) % IDLE_EVERY == 0;
-        let on = view.refresh > 0 || tick;
-        if let Ok(mut cam) = cams.get_mut(view.camera) {
-            if cam.is_active != on {
-                cam.is_active = on;
-            }
+        if view.drawing.is_none() {
+            continue;
         }
         view.refresh = view.refresh.saturating_sub(1);
+        if view.refresh == 0 {
+            if let Some(d) = view.drawing.take() {
+                stop_drawing(&mut commands, d);
+                drawings.0.remove(&e);
+            }
+        }
+    }
+}
+
+/// A panel that went away (despawned, or its text taken off) takes its
+/// drawing along.
+fn drop_screens(
+    mut commands: Commands,
+    mut removed: RemovedComponents<ScreenText>,
+    mut drawings: ResMut<Drawings>,
+) {
+    for e in removed.read() {
+        if let Some(d) = drawings.0.remove(&e) {
+            stop_drawing(&mut commands, d);
+        }
     }
 }

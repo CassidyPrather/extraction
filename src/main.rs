@@ -12,6 +12,14 @@ fn main() -> AppExit {
     if let Some(n) = opts.sim {
         return run_sim_batch(&opts, n);
     }
+    // Someone new (no career, never through the training yard) starts in
+    // the yard; they can skip it there.
+    if !opts.map_explicit
+        && extraction::persist::career_path(&opts).is_some_and(|p| !p.exists())
+        && !extraction::persist::trained()
+    {
+        opts.map = extraction::camp::TRAINING_YARD.into();
+    }
     // A saved career opens wherever the truck was headed.
     if !opts.map_explicit && !opts.new_game {
         if let Some(map) = extraction::persist::career_destination(&opts) {
@@ -30,10 +38,14 @@ fn main() -> AppExit {
             }
         }
     }
+    // Nothing hunts you in the training yard.
+    if opts.map == extraction::camp::TRAINING_YARD {
+        opts.robots = false;
+    }
     let exit = extraction::run(opts);
     // The truck drove to another valley: open the game again there.
-    if let Some(map) = extraction::take_restart() {
-        let args = extraction::relaunch_args(std::env::args().skip(1), &map);
+    if let Some(to) = extraction::take_restart() {
+        let args = extraction::relaunch_args(std::env::args().skip(1), &to);
         if let Ok(exe) = std::env::current_exe() {
             if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {
                 eprintln!("couldn't reopen the game: {e}");

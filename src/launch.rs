@@ -67,6 +67,8 @@ pub struct LaunchOptions {
     /// Dev: screenshot every placement on the map into this folder and
     /// quit (see `tour`).
     pub tour: Option<std::path::PathBuf>,
+    /// Set up the camp table even where the game wouldn't (a screenshot).
+    pub camp: bool,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// The map was named on the command line (otherwise a saved career
@@ -102,6 +104,7 @@ impl Default for LaunchOptions {
             camera: None,
             tour: None,
             tour_only: None,
+            camp: false,
             bot: false,
             scenario: None,
             headless: false,
@@ -188,6 +191,7 @@ impl LaunchOptions {
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
                 "--tour-only" => o.tour_only = Some(val()),
+                "--camp" => o.camp = true,
                 "--gallery" => {
                     o.gallery = Some(val());
                     o.robots = false;

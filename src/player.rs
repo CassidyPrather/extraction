@@ -310,6 +310,15 @@ pub fn move_bodies(
             }
         }
 
+        // Static friction: standing still on the ground, stay put. (Pushing
+        // the capsule out of a slope moves it along the slope's normal, a
+        // little downhill every tick.)
+        if grounded && body.grounded && target.length() < 1e-3 && horiz.length() < 0.05 {
+            new_centre.x = centre.x;
+            new_centre.z = centre.z;
+            velocity.x = 0.0;
+            velocity.z = 0.0;
+        }
         if grounded {
             if !body.grounded {
                 body.impact = body.impact.max(-body.velocity.y);
@@ -540,6 +549,56 @@ mod tests {
             .unwrap()
             .0;
         assert!((h - 1.12).abs() < 0.01, "crouched hitbox {h}");
+    }
+
+    /// Standing still on a hillside, you stay where you stand.
+    #[test]
+    fn standing_still_on_a_slope_stays_put() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        // The steepest walkable ground near the south gate.
+        let mut at = Vec2::new(40.0, 280.0);
+        let mut steepest = 0.0;
+        for i in -20..=20 {
+            for j in -20..=20 {
+                let p = Vec2::new(40.0 + i as f32 * 2.0, 280.0 + j as f32 * 2.0);
+                let s = zone.hm.slope_deg([p.x, p.y]);
+                if s > steepest && s < 30.0 && zone.hm.road_at([p.x, p.y]).weight == 0 {
+                    steepest = s;
+                    at = p;
+                }
+            }
+        }
+        assert!(steepest > 8.0, "a slope to stand on ({steepest} deg)");
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = zone.on_ground(at.x, at.y) + Vec3::Y * 0.05;
+        for _ in 0..20 {
+            app.update();
+        }
+        let before = app.world().get::<Transform>(player).unwrap().translation;
+        for _ in 0..120 {
+            app.update();
+        }
+        let after = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(
+            Vec2::new(after.x - before.x, after.z - before.z).length() < 0.02,
+            "standing on a {steepest:.0} deg slope: {before} -> {after}"
+        );
     }
 
     /// Dropped into the canal, you come up and float with your head out;

@@ -207,7 +207,10 @@ mod tests {
         for _ in 0..3 {
             a.update();
         }
-        assert_eq!(crate::take_restart().as_deref(), Some("kettle_pass"));
+        assert_eq!(
+            crate::take_restart().map(|r| r.map).as_deref(),
+            Some("kettle_pass")
+        );
         let career =
             extraction_core::save::Career::from_ron(&std::fs::read_to_string(&path).unwrap())
                 .unwrap();

@@ -7,6 +7,7 @@
 pub mod anomaly;
 pub mod audio;
 pub mod bot;
+pub mod camp;
 pub mod dev;
 pub mod gadgets;
 pub mod health;
@@ -242,20 +243,40 @@ pub fn run_headless(opts: LaunchOptions) -> AppExit {
 }
 
 /// A valley to open the game in again once this session ends (the truck
-/// drove there). `main` re-launches into it.
-static RESTART_INTO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-pub fn request_restart(map: &str) {
-    *RESTART_INTO.lock().unwrap() = Some(map.to_owned());
+/// drove there; the training yard or a new career was asked for at camp).
+/// `main` re-launches into it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Restart {
+    pub map: String,
+    /// Start a new career there (`--new-game`).
+    pub fresh: bool,
 }
 
-pub fn take_restart() -> Option<String> {
+static RESTART_INTO: std::sync::Mutex<Option<Restart>> = std::sync::Mutex::new(None);
+
+pub fn request_restart(map: &str) {
+    *RESTART_INTO.lock().unwrap() = Some(Restart {
+        map: map.to_owned(),
+        fresh: false,
+    });
+}
+
+/// Open the game again in `map` with a new career.
+pub fn request_fresh_restart(map: &str) {
+    *RESTART_INTO.lock().unwrap() = Some(Restart {
+        map: map.to_owned(),
+        fresh: true,
+    });
+}
+
+pub fn take_restart() -> Option<Restart> {
     RESTART_INTO.lock().unwrap().take()
 }
 
-/// The arguments to open the game again in `map`: this session's, less any
-/// `--map` (and `--new-game`, which would throw the career away).
-pub fn relaunch_args(args: impl IntoIterator<Item = String>, map: &str) -> Vec<String> {
+/// The arguments to open the game again for `to`: this session's, less any
+/// `--map` and `--new-game` (which would throw the career away), plus the
+/// new valley and, for a fresh start, `--new-game`.
+pub fn relaunch_args(args: impl IntoIterator<Item = String>, to: &Restart) -> Vec<String> {
     let mut out = Vec::new();
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
@@ -267,7 +288,10 @@ pub fn relaunch_args(args: impl IntoIterator<Item = String>, map: &str) -> Vec<S
             _ => out.push(a),
         }
     }
-    out.extend(["--map".to_owned(), map.to_owned()]);
+    out.extend(["--map".to_owned(), to.map.clone()]);
+    if to.fresh {
+        out.push("--new-game".to_owned());
+    }
     out
 }
 
@@ -303,9 +327,29 @@ mod relaunch_tests {
             "0.3",
         ]
         .map(String::from);
+        let to = super::Restart {
+            map: "kettle_pass".into(),
+            fresh: false,
+        };
         assert_eq!(
-            super::relaunch_args(args, "kettle_pass"),
+            super::relaunch_args(args.clone(), &to),
             ["--flat", "--vignette", "0.3", "--map", "kettle_pass"].map(String::from)
+        );
+        let fresh = super::Restart {
+            map: "marrow_creek".into(),
+            fresh: true,
+        };
+        assert_eq!(
+            super::relaunch_args(args, &fresh),
+            [
+                "--flat",
+                "--vignette",
+                "0.3",
+                "--map",
+                "marrow_creek",
+                "--new-game"
+            ]
+            .map(String::from)
         );
     }
 }
