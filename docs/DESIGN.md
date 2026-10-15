@@ -223,6 +223,36 @@ running, so you can suit up again from the truck and race to intercept the
 convoy before it leaves the map. Everything the convoy delivers is gone for
 good and counted on a memorial board in the truck.
 
+### The camp, the yard, and words in the world
+
+No menus, still. The title screen is a **camp** behind the parked truck:
+a folding table, a lantern, a board with the game's name, your career,
+and cards you press (training yard, new career, comfort, pack up). You
+start a raid by walking out through the gate. Someone new starts in the
+**training yard** instead (`assets/maps/training_yard.ron`), a fenced
+practice valley where signs walk you through the kit; a card skips it,
+the truck's cord finishes it. Nothing there is kept.
+
+Text lives on things:
+- signs on posts, and notes on tables and floors (`MarkerKind::Note`,
+  `Sign`, placed by `scripts/place_notes.py` on the buildings' tables);
+- terminals that page when pressed;
+- the radio's own LCD, the wrist, the truck's cards.
+
+The flat-screen HUD keeps only a crosshair, what you're looking at, and
+the radio. Hold H to check yourself; F1 lists the keys.
+
+### The capstone: recalling the machines
+
+The terminals tell it. The machines are the Quarantine Authority's
+**Custodian**, still sweeping the valleys for a review that never came,
+and each Gate is one of its depots. Three **valley keys** recall them,
+one per valley at its worst place, set together in the lock beside any
+Gate. Carrying all three at once is the risk: the stash holds them
+between raids, and going down loses them to the collector. After the
+recall no machines come, in any valley; the Zone stays, the Surge too,
+quiet to walk. It's an ending, not a stop: the career goes on.
+
 ### Offerings
 
 The well in the village and the stone ring on the eastern hill take what

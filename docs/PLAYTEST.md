@@ -75,9 +75,24 @@ moment after the game starts; `--camera` puts the view anywhere.
 
 If any of this fails, stop and send the log: everything else depends on it.
 
+### 1b. The yard and the camp (10 minutes)
+
+- A first launch (no career yet) opens in the **training yard**: a small
+  fenced valley with nothing hunting you and nothing kept. A gravel track
+  runs north from the truck past signed stations (kit, pockets, loading
+  and the targets, searching, staying alive, the machines, artifacts,
+  calling the truck). Do the stations; mark a sign you couldn't read or
+  that told you wrong. Pull the cord in the truck when you're done, or
+  press the card by the tailgate to skip: either way the game reopens in
+  Marrow Creek.
+- Every later launch opens at the **camp**: you stand at a table behind
+  the truck, a board on it with your career and cards to press (TRAINING
+  YARD, NEW CAREER (press twice), the comfort cards, PACK UP to quit).
+  To play, walk out through the gate. Is this a good first minute?
+
 ### 2. Comfort (5 minutes)
 
-Press the cards on the truck bed's left wall: turning (snap 30°/45°,
+Press the cards on the camp board (or the truck bed's left wall): turning (snap 30°/45°,
 smooth 90–180°/s) and vignette (off to 90%, darkening the edges while
 the stick moves you). Note which you end up with, and anything that made
 you queasy — climbing, the zipline, being knocked about, swimming.
@@ -93,8 +108,8 @@ you queasy — climbing, the zipline, being knocked about, swimming.
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.
-- `--scene range` is a flat range with every gun on a table if you want
-  to shoot without the raid around you.
+- The training yard (`--map training_yard`) has targets at 15, 30 and
+  60 m if you want to shoot without the raid around you.
 
 ### 4. A raid (as long as you like)
 
@@ -117,6 +132,15 @@ worth noticing:
 - **Dying** sends the convoy for your kit. The logbook writes it up
   either way.
 
+### 4b. The long game
+
+Notes on tables and terminals in the buildings (press a terminal for its
+next page) tell what the machines are and point to three depot keys, one
+per valley, each in a strongbox with a blinking beacon at the valley's
+worst place. Bring all three to the lock beside any robot Gate in one
+raid and set them in its cradle. Mark whether the trail was findable and
+whether the ending felt like one.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -136,8 +160,11 @@ worth noticing:
   slide, a can, a round between finger and thumb), and empty-handed the
   grip closes the hand and the trigger the index. Mark a grip that looks
   wrong.
-- Some models are still simple: a few props and buildings are close to
-  plain boxes.
+- Some models are still simple, the lathes and lock pedestal among them.
+- The camp, the yard and the keys are new and have never been played
+  through end to end by a person: expect rough edges in them first.
+- To see the yard again after skipping it, delete `trained` from the
+  data folder (or press NEW CAREER at camp).
 - Drones still decide most deaths in the sims; whether that's right is
   the main balance question for you.
 - Sim bots sometimes wedge themselves on doors. A person shouldn't, but
@@ -148,11 +175,11 @@ worth noticing:
 | Flag | What |
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
-| `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works` |
+| `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |
+| `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
-| `--scene range` | The test range; `--scene truck` the truck alone |
 | `--no-robots` | An empty Zone, for looking around |
 | `--smooth-turn`, `--vignette 0.5` | Comfort, without the cards |
 | `--no-record` | Don't record raids |
