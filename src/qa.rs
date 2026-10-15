@@ -5,7 +5,8 @@
 //!   way, overlapping, with different materials. The depth buffer can't
 //!   choose between them; they flicker as you move (z-fighting).
 //! - **Floating pieces**: a piece whose underside rests on nothing (not
-//!   the ground, not another piece's top or body).
+//!   the ground, not another piece's top or body), that nothing holds from
+//!   the side or hangs from above.
 //!
 //! `cargo test --lib qa -- --nocapture` prints the tally per prefab;
 //! `qa::tests` holds the line at zero. How buildings meet the terrain is
@@ -276,7 +277,19 @@ pub fn floating(geo: &Geo) -> Vec<(usize, Vec3)> {
                     }
                 })
         });
-        let rests = grid || tops;
+        // Or it hangs: just above its top face is inside another piece (a
+        // hook on its chain, a lamp from a beam).
+        let top = faces(s, &t)
+            .into_iter()
+            .max_by(|a, b| a.c.y.total_cmp(&b.c.y))
+            .unwrap();
+        let hung = all.iter().any(|&(j, s2, t2)| {
+            j != i && {
+                let p = top.c + Vec3::Y * 0.02;
+                inside(p, s2, &t2, 0.04)
+            }
+        });
+        let rests = grid || tops || hung;
         // Or something holds it from the side (a shelf on a wall): its
         // own body touches another piece.
         let held = all.iter().any(|&(j, s2, t2)| {

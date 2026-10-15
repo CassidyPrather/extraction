@@ -226,6 +226,22 @@ impl Builder {
                     );
                 }
                 OpeningKind::Door => {
+                    // Jambs standing a little proud of the wall either
+                    // side, so the doorway reads from inside and out (and
+                    // half a centimetre into it: flush with the wall's end
+                    // they'd fight it).
+                    for s in [s0 - 0.025, s1 + 0.025] {
+                        self.piece(
+                            Shape::Box(Vec3::new(0.06, o.top - o.bottom - 0.005, thick + 0.04)),
+                            Transform::from_translation(at(
+                                s,
+                                y0 + (o.bottom + o.top + 0.005) * 0.5,
+                            ))
+                            .with_rotation(rot),
+                            frame,
+                            false,
+                        );
+                    }
                     let hinge = at(s0 + 0.02, y0);
                     self.geo.doors.push(DoorDef {
                         hinge,
@@ -326,6 +342,23 @@ impl Builder {
         roof: Mat,
         gable: Mat,
     ) -> &mut Self {
+        self.gable_roof_with(w, d, eave_y, pitch_deg, overhang, roof, gable, true)
+    }
+
+    /// A pitched roof, with a ceiling at the eaves or open to the rafters
+    /// (halls show their trusses).
+    #[allow(clippy::too_many_arguments)]
+    pub fn gable_roof_with(
+        &mut self,
+        w: f32,
+        d: f32,
+        eave_y: f32,
+        pitch_deg: f32,
+        overhang: f32,
+        roof: Mat,
+        gable: Mat,
+        ceiling: bool,
+    ) -> &mut Self {
         let pitch = pitch_deg.to_radians();
         let rise = (w * 0.5) * pitch.tan();
         let slope_len = (w * 0.5 + overhang) / pitch.cos();
@@ -350,12 +383,14 @@ impl Builder {
             );
         }
         // Ceiling, so the attic doesn't glare.
-        self.piece(
-            Shape::Box(Vec3::new(w, 0.04, d)),
-            Transform::from_xyz(0.0, eave_y + 0.02, 0.0),
-            Mat::Planks,
-            false,
-        );
+        if ceiling {
+            self.piece(
+                Shape::Box(Vec3::new(w, 0.04, d)),
+                Transform::from_xyz(0.0, eave_y + 0.02, 0.0),
+                Mat::Planks,
+                false,
+            );
+        }
         self
     }
 
@@ -576,6 +611,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "anomaly_core" => anomaly(&mut b),
         "factory_hall" => {
             hall(&mut b, 36.0, 20.0, 9.0, Mat::Brick, Mat::Corrugated, false);
+            factory_fitout(&mut b, 36.0, 20.0, 9.0, 0.1);
             b.crate_box(Vec3::new(-14.0, 0.1, -7.0), 0.9, Some("workshop"));
             b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
         }
@@ -1051,6 +1087,173 @@ fn pump_station(b: &mut Builder) {
     b.workbench(Vec3::new(-5.5, f, -3.5), 0.0, Some("workshop"));
 }
 
+/// The works' machine floor: an overhead crane on runway beams along the
+/// columns, its hook hanging, and a row of lathes.
+fn factory_fitout(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
+    let xc = w * 0.5 - 0.26;
+    let rail_y = f + h - 1.6;
+    for side in [-1.0f32, 1.0] {
+        // Runway beam on brackets off the columns (at +-3.75 and +-7.5).
+        b.piece(
+            Shape::Box(Vec3::new(0.3, 0.4, d - 1.2)),
+            Transform::from_xyz(side * (xc - 0.4), rail_y, 0.0),
+            Mat::RustyMetal,
+            false,
+        );
+        for z in [-7.5, -3.75, 3.75, 7.5] {
+            b.piece(
+                Shape::Box(Vec3::new(0.55, 0.3, 0.25)),
+                Transform::from_xyz(side * (xc - 0.3), rail_y - 0.35, z),
+                Mat::RustyMetal,
+                false,
+            );
+        }
+    }
+    // The bridge across, its trolley and hoist, the hook let down.
+    let bz = 1.8;
+    b.piece(
+        Shape::Box(Vec3::new(2.0 * (xc - 0.4) + 0.3, 0.6, 0.5)),
+        Transform::from_xyz(0.0, rail_y + 0.5, bz),
+        Mat::PaintedMetal,
+        false,
+    );
+    for side in [-1.0f32, 1.0] {
+        b.piece(
+            Shape::Box(Vec3::new(0.5, 0.3, 1.4)),
+            Transform::from_xyz(side * (xc - 0.4), rail_y + 0.35, bz),
+            Mat::PaintedMetal,
+            false,
+        );
+    }
+    let hx = -4.0;
+    b.piece(
+        Shape::Box(Vec3::new(0.9, 0.5, 0.9)),
+        Transform::from_xyz(hx, rail_y + 0.0, bz),
+        Mat::DarkMetal,
+        false,
+    );
+    let drop = 4.0;
+    for dz in [-0.06, 0.06] {
+        b.piece(
+            Shape::Box(Vec3::new(0.03, drop, 0.03)),
+            Transform::from_xyz(hx, rail_y - 0.25 - drop * 0.5, bz + dz),
+            Mat::DarkMetal,
+            false,
+        );
+    }
+    b.piece(
+        Shape::Box(Vec3::new(0.35, 0.3, 0.3)),
+        Transform::from_xyz(hx, rail_y - 0.25 - drop - 0.15, bz),
+        Mat::PaintedMetal,
+        false,
+    );
+    b.piece(
+        Shape::Box(Vec3::new(0.08, 0.3, 0.08)),
+        Transform::from_xyz(hx, rail_y - 0.25 - drop - 0.45, bz),
+        Mat::DarkMetal,
+        false,
+    );
+    // Lathes in a row: a bed on two pedestals, headstock, chuck,
+    // tailstock.
+    for x in [-9.0, -3.0, 3.0] {
+        let z = -2.0;
+        for px in [x - 0.8, x + 0.8] {
+            b.bx(
+                Vec3::new(0.4, 0.8, 0.5),
+                Vec3::new(px, f + 0.4, z),
+                Mat::PaintedMetal,
+            );
+        }
+        b.bx(
+            Vec3::new(2.4, 0.18, 0.45),
+            Vec3::new(x, f + 0.89, z),
+            Mat::DarkMetal,
+        );
+        b.bx(
+            Vec3::new(0.5, 0.45, 0.5),
+            Vec3::new(x - 0.9, f + 1.2, z),
+            Mat::PaintedMetal,
+        );
+        b.piece(
+            Shape::Cylinder(0.14, 0.12),
+            Transform::from_xyz(x - 0.59, f + 1.2, z)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            Mat::DarkMetal,
+            false,
+        );
+        b.bx(
+            Vec3::new(0.3, 0.3, 0.32),
+            Vec3::new(x + 0.9, f + 1.13, z),
+            Mat::PaintedMetal,
+        );
+    }
+}
+
+/// A hall's steel frame: columns inside the long walls and a truss on
+/// each pair under the open roof (`gable_roof_with`, pitch 14 degrees,
+/// over `w + 0.5`), clear of the side windows.
+fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
+    let pitch = 14f32.to_radians();
+    let eave = f + h;
+    // The roof sheet's underside above x (see `gable_roof_with`).
+    let (rw, ov, thick) = (w + 0.5, 0.4, 0.12);
+    let cx = (rw * 0.5 + ov) * 0.5;
+    let cy = eave + (rw * 0.5) * pitch.tan() * 0.5 - ov * pitch.tan() * 0.5 + 0.06;
+    let under = |x: f32| cy + (cx - x.abs()) * pitch.tan() - thick * 0.5 / pitch.cos();
+    let xc = w * 0.5 - 0.26;
+    let mut zs = Vec::new();
+    let mut z = 3.75;
+    while z <= d * 0.5 - 1.5 {
+        zs.push(z);
+        zs.push(-z);
+        z += 3.75;
+    }
+    for z in zs {
+        for side in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.25, h, 0.25),
+                Vec3::new(side * xc, f + h * 0.5, z),
+                Mat::RustyMetal,
+            );
+        }
+        // Bottom chord at the eaves, top chords under the sheeting, and
+        // struts between at the quarters and the middle.
+        b.piece(
+            Shape::Box(Vec3::new(2.0 * xc + 0.25, 0.18, 0.14)),
+            Transform::from_xyz(0.0, eave - 0.09, z),
+            Mat::RustyMetal,
+            false,
+        );
+        for side in [-1.0f32, 1.0] {
+            let (x0, x1) = (side * (xc + 0.12), 0.0);
+            let (y0, y1) = (under(x0) - 0.1, under(x1) - 0.1);
+            let along = Vec2::new(x1 - x0, y1 - y0);
+            b.piece(
+                Shape::Box(Vec3::new(along.length(), 0.18, 0.14)),
+                Transform::from_xyz((x0 + x1) * 0.5, (y0 + y1) * 0.5, z)
+                    .with_rotation(Quat::from_rotation_z(along.y.atan2(along.x))),
+                Mat::RustyMetal,
+                false,
+            );
+            let xq = side * xc * 0.5;
+            let top = under(xq) - 0.19;
+            b.piece(
+                Shape::Box(Vec3::new(0.1, top - eave, 0.1)),
+                Transform::from_xyz(xq, (top + eave) * 0.5, z),
+                Mat::RustyMetal,
+                false,
+            );
+        }
+        let top = under(0.0) - 0.19;
+        b.piece(
+            Shape::Box(Vec3::new(0.12, top - eave, 0.12)),
+            Transform::from_xyz(0.0, (top + eave) * 0.5, z),
+            Mat::RustyMetal,
+            false,
+        );
+    }
+}
+
 fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: bool) {
     let f = 0.1;
     b.piece(
@@ -1078,7 +1281,8 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
             &[wide_window(d * 0.5, 3.0)],
         ],
     );
-    b.gable_roof(w + 0.5, d + 0.5, f + h, 14.0, 0.4, roof, wall);
+    b.gable_roof_with(w + 0.5, d + 0.5, f + h, 14.0, 0.4, roof, wall, false);
+    hall_frame(b, w, d, h, f);
     b.workbench(Vec3::new(-w * 0.35, f, d * 0.35), 0.0, Some("workshop"));
     b.workbench(Vec3::new(w * 0.35, f, d * 0.35), 0.0, Some("workshop"));
     b.crate_box(Vec3::new(w * 0.4, f, -d * 0.3), 0.9, Some("tools"));
@@ -1750,12 +1954,45 @@ pub fn building_visuals(
             Transform::from_xyz(leaf.width * 0.5, leaf.height * 0.5 + 0.01, 0.0),
             ChildOf(e),
         ));
-        let knob = library.get(Mat::DarkMetal, &server, &mut materials);
+        // A ledged and braced door: two ledges and a diagonal on the
+        // inside face, a knob either side.
+        let timber = library.get(Mat::Timber, &server, &mut materials);
+        for y in [0.3, leaf.height - 0.3] {
+            commands.spawn((
+                Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::new(
+                    leaf.width - 0.1,
+                    0.12,
+                    0.03,
+                )))),
+                MeshMaterial3d(timber.clone()),
+                Transform::from_xyz(leaf.width * 0.5, y, 0.04),
+                ChildOf(e),
+            ));
+        }
+        let (a, b) = (
+            Vec2::new(0.12, 0.36),
+            Vec2::new(leaf.width - 0.12, leaf.height - 0.36),
+        );
+        let brace = b - a;
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.035))),
-            MeshMaterial3d(knob),
-            Transform::from_xyz(leaf.width - 0.1, 1.0, -0.05),
+            Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::new(
+                brace.length(),
+                0.1,
+                0.03,
+            )))),
+            MeshMaterial3d(timber),
+            Transform::from_xyz((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, 0.04)
+                .with_rotation(Quat::from_rotation_z(brace.y.atan2(brace.x))),
             ChildOf(e),
         ));
+        let knob = library.get(Mat::DarkMetal, &server, &mut materials);
+        for z in [-0.05, 0.08] {
+            commands.spawn((
+                Mesh3d(meshes.add(Sphere::new(0.035))),
+                MeshMaterial3d(knob.clone()),
+                Transform::from_xyz(leaf.width - 0.1, 1.0, z),
+                ChildOf(e),
+            ));
+        }
     }
 }

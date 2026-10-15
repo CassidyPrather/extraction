@@ -81,18 +81,29 @@ pub fn views(zone: &Zone) -> Vec<View> {
             look: centre.to_array(),
         });
         if has_inside(&p.prefab) {
-            // Inside: by the back wall, eye height above the floor (the
-            // building stands on its lowest corner; floors sit up to half a
-            // metre above it), looking to the front.
-            let back =
-                Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(0.15 * f.x, 0.0, f.z * 0.32);
-            let eye = Vec3::new(back.x, ground + 2.1, back.z);
-            let front = Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(0.0, 0.0, -f.z * 0.5);
+            // Inside: in a back corner at eye height above the floor (the
+            // building stands where `Heightmap::footing` says; floors sit
+            // up to half a metre above that, the ranger tower's cabin on
+            // its legs), looking across to the opposite front corner, so
+            // the room shows rather than the nearest wall.
+            let footing = zone.hm.footing(&p.prefab, p.at, p.rot);
+            let floor = match p.prefab.as_str() {
+                "ranger_tower" => 9.1,
+                _ => 0.4,
+            };
+            let (cx, cz) = if p.prefab == "ranger_tower" {
+                (1.6, 1.6)
+            } else {
+                (f.x * 0.5 - 0.6, f.z * 0.5 - 0.6)
+            };
+            let corner = Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(cx, 0.0, cz);
+            let eye = Vec3::new(corner.x, footing + floor + 1.6, corner.z);
+            let across = Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(-cx, 0.0, -cz);
             out.push(View {
                 file: format!("{i:03}_{}_in.png", p.prefab),
                 what: format!("{} at ({:.0}, {:.0}), inside", p.prefab, p.at[0], p.at[1]),
                 at: eye.to_array(),
-                look: Vec3::new(front.x, eye.y - 0.4, front.z).to_array(),
+                look: Vec3::new(across.x, eye.y - 0.6, across.z).to_array(),
             });
         }
     }
