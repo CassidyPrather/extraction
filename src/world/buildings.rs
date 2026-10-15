@@ -1661,18 +1661,85 @@ fn guard_booth(b: &mut Builder) {
 }
 
 fn robot_gate(b: &mut Builder) {
-    // A sleek white arch: two piers and a lintel, glowing seams.
-    for x in [-8.0, 8.0] {
+    // The machines' gate: stepped white piers on concrete plinths, dark
+    // seams where the panels meet, a scanner bar under the lintel, sensor
+    // pods on top and conduits down the back.
+    for side in [-1.0f32, 1.0] {
+        let x = side * 8.0;
         b.bx(
-            Vec3::new(1.6, 12.0, 4.0),
-            Vec3::new(x, 6.0, 0.0),
+            Vec3::new(2.4, 0.6, 4.6),
+            Vec3::new(x, 0.3, 0.0),
+            Mat::Concrete,
+        );
+        b.bx(
+            Vec3::new(1.8, 5.0, 4.0),
+            Vec3::new(x, 3.1, 0.0),
             Mat::RobotShell,
+        );
+        b.bx(
+            Vec3::new(1.5, 6.6, 3.6),
+            Vec3::new(x, 8.9, 0.0),
+            Mat::RobotShell,
+        );
+        // A band proud of the joint, and seams up the inner face.
+        b.bx(
+            Vec3::new(1.86, 0.1, 4.06),
+            Vec3::new(x, 5.6, 0.0),
+            Mat::DarkMetal,
+        );
+        for (z, y0, y1) in [
+            (-1.2, 0.8, 5.5),
+            (1.2, 0.8, 5.5),
+            (-0.9, 5.7, 12.0),
+            (0.9, 5.7, 12.0),
+        ] {
+            let face = if y0 < 5.6 { 0.9 } else { 0.75 };
+            b.bx(
+                Vec3::new(0.04, y1 - y0, 0.12),
+                Vec3::new(x - side * (face + 0.01), (y0 + y1) * 0.5, z),
+                Mat::DarkMetal,
+            );
+        }
+        // Conduit down the back, into the plinth.
+        b.bx(
+            Vec3::new(0.18, 12.0, 0.18),
+            Vec3::new(x + side * 0.4, 6.4, 1.89),
+            Mat::DarkMetal,
+        );
+        b.piece(
+            Shape::Cylinder(0.35, 0.6),
+            Transform::from_xyz(x, 13.9, -1.3),
+            Mat::DarkMetal,
+            true,
+        );
+        b.piece(
+            Shape::Cylinder(0.2, 0.12),
+            Transform::from_xyz(x, 14.06, -1.3)
+                .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            Mat::Glass,
+            false,
         );
     }
     b.bx(
         Vec3::new(17.6, 1.6, 4.0),
         Vec3::new(0.0, 12.8, 0.0),
         Mat::RobotShell,
+    );
+    b.bx(
+        Vec3::new(17.66, 0.1, 4.06),
+        Vec3::new(0.0, 12.1, 0.0),
+        Mat::DarkMetal,
+    );
+    // The scanner: a dark bar under the lintel, its glass strip below.
+    b.bx(
+        Vec3::new(14.2, 0.3, 0.6),
+        Vec3::new(0.0, 11.9, -1.2),
+        Mat::DarkMetal,
+    );
+    b.bx(
+        Vec3::new(14.0, 0.06, 0.45),
+        Vec3::new(0.0, 11.72, -1.2),
+        Mat::Glass,
     );
     b.geo.lights.push(Vec3::new(0.0, 11.5, -2.2));
 }
