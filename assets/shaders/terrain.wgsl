@@ -130,26 +130,99 @@ fn procedural_layer(i: u32, wp: vec2<f32>) -> Layer {
     return l;
 }
 
+// Hex-tiling (after Mikkelsen, "Practical Real-Time Hex-Tiling"): the
+// plane is cut into a triangle grid; each grid vertex carries its own
+// random offset and rotation, and a pixel blends the three samples of the
+// triangle it falls in. No two neighbouring patches of ground are the same
+// part of the texture, at any scale, so a field doesn't read as tiles.
+fn hash22(p: vec2<f32>) -> vec2<f32> {
+    let q = vec2<f32>(dot(p, vec2<f32>(127.1, 311.7)), dot(p, vec2<f32>(269.5, 183.3)));
+    return fract(sin(q) * 43758.5453);
+}
+
+struct HexCell {
+    weights: vec3<f32>,
+    v1: vec2<f32>,
+    v2: vec2<f32>,
+    v3: vec2<f32>,
+}
+
+fn hex_cell(uv: vec2<f32>) -> HexCell {
+    // About one texture tile per hex.
+    let s = uv * 1.7320508;
+    let skewed = vec2<f32>(s.x - 0.57735027 * s.y, 1.15470054 * s.y);
+    let base = floor(skewed);
+    let f = fract(skewed);
+    let z = 1.0 - f.x - f.y;
+    var c: HexCell;
+    if (z > 0.0) {
+        c.weights = vec3<f32>(z, f.y, f.x);
+        c.v1 = base;
+        c.v2 = base + vec2<f32>(0.0, 1.0);
+        c.v3 = base + vec2<f32>(1.0, 0.0);
+    } else {
+        c.weights = vec3<f32>(-z, 1.0 - f.y, 1.0 - f.x);
+        c.v1 = base + vec2<f32>(1.0, 1.0);
+        c.v2 = base + vec2<f32>(1.0, 0.0);
+        c.v3 = base + vec2<f32>(0.0, 1.0);
+    }
+    return c;
+}
+
+struct Tap {
+    albedo: vec3<f32>,
+    normal: vec3<f32>,
+    arm: vec3<f32>,
+}
+
+// One of the three samples: the vertex's offset and rotation applied to
+// the coordinates (and their derivatives), the normal turned back.
+fn hex_tap(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, vertex: vec2<f32>) -> Tap {
+    let r = hash22(vertex + vec2<f32>(f32(i) * 7.31, 0.0));
+    let a = r.x * 6.2831853;
+    let cs = cos(a);
+    let sn = sin(a);
+    let rot = mat2x2<f32>(cs, sn, -sn, cs);
+    let off = hash22(vertex * 1.31 + vec2<f32>(3.7, f32(i)));
+    let u = rot * uv + off;
+    let ddx = rot * dx;
+    let ddy = rot * dy;
+    var t: Tap;
+    t.albedo = textureSampleGrad(albedo_tex, albedo_smp, u, i32(i), ddx, ddy).rgb;
+    var n = textureSampleGrad(normal_tex, normal_smp, u, i32(i), ddx, ddy).xyz * 2.0 - 1.0;
+    // Undo the rotation on the normal's tangent-plane part.
+    n = vec3<f32>(cs * n.x - sn * n.y, sn * n.x + cs * n.y, n.z);
+    t.normal = n;
+    t.arm = textureSampleGrad(arm_tex, arm_smp, u, i32(i), ddx, ddy).rgb;
+    return t;
+}
+
 fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
     if (terrain.textured == 0u) {
         return procedural_layer(i, wp);
     }
     let uv = wp / (terrain.tile / layer_scale(i));
-    // Anti-tiling: blend with a rotated, offset second sample far away.
-    let uv2 = mat2x2<f32>(0.8, -0.6, 0.6, 0.8) * uv * 0.37 + vec2<f32>(0.31, 0.17);
-    let far = smoothstep(0.35, 0.65, fbm(wp * 0.05 + vec2<f32>(f32(i), 0.0)));
-    let a1 = textureSample(albedo_tex, albedo_smp, uv, i32(i)).rgb;
-    let a2 = textureSample(albedo_tex, albedo_smp, uv2, i32(i)).rgb;
-    let n1 = textureSample(normal_tex, normal_smp, uv, i32(i)).xyz * 2.0 - 1.0;
-    let n2 = textureSample(normal_tex, normal_smp, uv2, i32(i)).xyz * 2.0 - 1.0;
-    let m1 = textureSample(arm_tex, arm_smp, uv, i32(i)).rgb;
-    let m2 = textureSample(arm_tex, arm_smp, uv2, i32(i)).rgb;
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    let c = hex_cell(uv);
+    let t1 = hex_tap(i, uv, dx, dy, c.v1);
+    let t2 = hex_tap(i, uv, dx, dy, c.v2);
+    let t3 = hex_tap(i, uv, dx, dy, c.v3);
+    // Sharpen the blend toward the brighter (higher) sample so the seams
+    // between cells read as one surface, not a cross-fade.
+    let lum = vec3<f32>(
+        dot(t1.albedo, vec3<f32>(0.3, 0.59, 0.11)),
+        dot(t2.albedo, vec3<f32>(0.3, 0.59, 0.11)),
+        dot(t3.albedo, vec3<f32>(0.3, 0.59, 0.11)),
+    );
+    var w = pow(c.weights, vec3<f32>(5.0)) * (1.0 + 2.0 * lum);
+    w = w / max(w.x + w.y + w.z, 1e-5);
     var l: Layer;
     // Large-scale brightness variation so fields don't read as wallpaper.
     let macro_v = 0.85 + 0.3 * fbm(wp * 0.02 + vec2<f32>(f32(i) * 3.0, 1.0));
-    l.albedo = mix(a1, a2, far) * macro_v;
-    l.normal = normalize(mix(n1, n2, far));
-    let m = mix(m1, m2, far);
+    l.albedo = (t1.albedo * w.x + t2.albedo * w.y + t3.albedo * w.z) * macro_v;
+    l.normal = normalize(t1.normal * w.x + t2.normal * w.y + t3.normal * w.z);
+    let m = t1.arm * w.x + t2.arm * w.y + t3.arm * w.z;
     l.ao = m.r;
     l.rough = m.g;
     l.height = dot(l.albedo, vec3<f32>(0.3, 0.59, 0.11));
