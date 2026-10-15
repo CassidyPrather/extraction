@@ -48,6 +48,10 @@ impl Plugin for RenderPlugin {
 #[derive(Component)]
 pub struct OffscreenCamera;
 
+/// The camera `--camera` puts anywhere (screenshots, the tour).
+#[derive(Component)]
+pub struct FreeCamera;
+
 /// In flat mode the local player's head is a camera. (The XR driver adds
 /// its own per-eye cameras instead.)
 fn attach_flat_camera(
@@ -72,6 +76,7 @@ fn attach_flat_camera(
         let ground = zone.ground(pos.x, pos.z);
         commands.spawn((
             Name::new("Free camera"),
+            FreeCamera,
             Transform::from_xyz(pos.x, pos.y.max(ground + 0.3), pos.z).with_rotation(
                 Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0),
             ),
@@ -102,5 +107,31 @@ pub fn camera_bundle(weather: &Weather) -> impl Bundle {
         bevy::camera::Exposure { ev100: 10.6 },
         weather.fog(),
         Msaa::Sample4,
+    )
+}
+
+/// A merged world-space mesh, re-centred on its own bounds: the handle,
+/// the bounds and the transform that puts it back where it was.
+///
+/// Both halves matter for a `VisibilityRange`. The GPU's dither between
+/// LODs measures from the mesh's origin, whatever `use_aabb` says, so a
+/// mesh left at the world origin fades by the camera's distance from the
+/// map centre; and a `RENDER_WORLD`-only mesh spawned late in a frame
+/// loses its vertices before `calculate_bounds` sees them, so it never gets
+/// an `Aabb` (nor frustum culling) unless it is given one.
+pub fn centred(
+    meshes: &mut Assets<Mesh>,
+    mesh: Mesh,
+) -> (Mesh3d, bevy::camera::primitives::Aabb, Transform) {
+    use bevy::camera::primitives::MeshAabb;
+    let c = mesh
+        .compute_aabb()
+        .map_or(Vec3::ZERO, |b| Vec3::from(b.center));
+    let mesh = mesh.translated_by(-c);
+    let aabb = mesh.compute_aabb().unwrap_or_default();
+    (
+        Mesh3d(meshes.add(mesh)),
+        aabb,
+        Transform::from_translation(c),
     )
 }

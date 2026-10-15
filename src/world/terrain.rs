@@ -90,9 +90,8 @@ fn spawn_terrain_meshes(
                 commands.spawn((
                     Name::new("Terrain chunk"),
                     TerrainChunk { lod },
-                    Mesh3d(meshes.add(mesh)),
+                    crate::render::centred(&mut meshes, mesh),
                     MeshMaterial3d(material.clone()),
-                    Transform::IDENTITY,
                     lod_range(lod, FOG_CULL_DEFAULT),
                 ));
             }

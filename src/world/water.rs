@@ -70,9 +70,8 @@ fn spawn_water(
     .with_inserted_indices(Indices::U32(indices));
     commands.spawn((
         Name::new("Water"),
-        Mesh3d(meshes.add(mesh)),
+        crate::render::centred(&mut meshes, mesh),
         MeshMaterial3d(materials.add(water_material())),
-        Transform::IDENTITY,
         NotShadowCaster,
     ));
 }

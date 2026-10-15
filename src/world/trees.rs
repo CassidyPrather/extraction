@@ -345,7 +345,9 @@ fn spawn_forests(
                 let trunk = trunk.clone().transformed_by(*t);
                 match trunks.iter_mut().find(|(m, _)| *m == v.bark) {
                     Some((_, mesh)) => {
-                        let _ = mesh.merge(&trunk);
+                        if let Err(e) = mesh.merge(&trunk) {
+                            warn!("forest: trunk merge failed: {e:?}");
+                        }
                     }
                     None => trunks.push((v.bark.clone(), trunk)),
                 }
@@ -362,7 +364,7 @@ fn spawn_forests(
             let range = lod_range(far, FOG_CULL_DEFAULT);
             for (bark, mesh) in trunks {
                 let mut ec = commands.spawn((
-                    Mesh3d(meshes.add(mesh)),
+                    crate::render::centred(&mut meshes, mesh),
                     MeshMaterial3d(bark),
                     range.clone(),
                     ChildOf(parent),
@@ -373,7 +375,7 @@ fn spawn_forests(
             }
             if let Some(c) = crowns {
                 let mut ec = commands.spawn((
-                    Mesh3d(meshes.add(c)),
+                    crate::render::centred(&mut meshes, c),
                     MeshMaterial3d(assets.foliage.clone()),
                     bevy::light::NotShadowCaster,
                     range.clone(),
@@ -406,7 +408,7 @@ fn spawn_forests(
             let (_, mat) = assets.handles[&key].impostor.as_ref().unwrap();
             commands.spawn((
                 Name::new("Forest impostors"),
-                Mesh3d(meshes.add(b.build())),
+                crate::render::centred(&mut meshes, b.build()),
                 MeshMaterial3d(mat.clone()),
                 bevy::light::NotShadowCaster,
                 impostor_range(FOG_CULL_DEFAULT),
@@ -719,12 +721,15 @@ struct MeshBuilder {
     idx: Vec<u32>,
 }
 
-/// Sprig regions of the spruce atlas (u0, v0, u1, v1), stem at the bottom.
+/// Sprig regions of the spruce atlas (u0, v0, u1, v1), stem at the bottom:
+/// the two big sprigs, then the two smaller ones above them. Measured from
+/// the atlas's alpha (a rect that strays into the bark strip down the left
+/// or the stems along the bottom draws an opaque brown board).
 const SPRIGS: [[f32; 4]; 4] = [
-    [0.15, 0.40, 0.43, 0.83],
-    [0.42, 0.45, 0.66, 0.85],
-    [0.07, 0.04, 0.28, 0.32],
-    [0.32, 0.03, 0.49, 0.31],
+    [0.300, 0.385, 0.656, 0.768],
+    [0.660, 0.446, 0.935, 0.765],
+    [0.183, 0.041, 0.444, 0.326],
+    [0.646, 0.034, 0.944, 0.375],
 ];
 /// The hanging birch branch, stem at the top.
 const BIRCH_LEAVES: [f32; 4] = [0.21, 0.0, 0.81, 1.0];
@@ -897,6 +902,11 @@ impl MeshBuilder {
         .with_inserted_indices(Indices::U32(self.idx));
         if colours {
             m.insert_attribute(Mesh::ATTRIBUTE_COLOR, self.col);
+        } else {
+            // Textured bark is normal-mapped: without tangents the main
+            // pass can't draw it (the shadow pass still does, so a
+            // trunkless crown casts a trunk's shadow).
+            let _ = m.generate_tangents();
         }
         m
     }
@@ -1026,7 +1036,7 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                         base + Vec3::Y * 0.05,
                         along * 0.85,
                         Vec3::Y,
-                        len * 0.4,
+                        len * 0.6,
                         SPRIGS[2 + crng.below(2)],
                         centre,
                         false,
@@ -1182,5 +1192,64 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
         trunk: trunk.build_with(!textured),
         crown: (!crown.pos.is_empty()).then(|| crown.build()),
         cards: (!cards.pos.is_empty()).then(|| cards.build_with(false)),
+    }
+}
+
+#[cfg(test)]
+mod atlas_tests {
+    /// Every sprig rect holds needles (but isn't solid) and stays clear of
+    /// the atlas's opaque bark strip and stems (`fetch_assets.py` builds the atlas; the
+    /// test is skipped when it hasn't been run).
+    #[test]
+    fn sprig_rects_are_mostly_clear() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/textures/foliage/spruce_branch/albedo.png"
+        );
+        let Ok(bytes) = std::fs::read(path) else {
+            eprintln!("no atlas at {path}: skipped");
+            return;
+        };
+        let img = bevy::image::Image::from_buffer(
+            &bytes,
+            bevy::image::ImageType::Extension("png"),
+            bevy::image::CompressedImageFormats::NONE,
+            false,
+            bevy::image::ImageSampler::Default,
+            bevy::asset::RenderAssetUsages::default(),
+        )
+        .unwrap();
+        let (w, h) = (img.width(), img.height());
+        let data = img.data.as_ref().unwrap();
+        struct Px<'a>(&'a [u8], u32);
+        impl Px<'_> {
+            fn get_pixel(&self, x: u32, y: u32) -> [u8; 4] {
+                let i = ((y * self.1 + x) * 4) as usize;
+                [self.0[i], self.0[i + 1], self.0[i + 2], self.0[i + 3]]
+            }
+        }
+        let img = Px(data, w);
+        for r in super::SPRIGS {
+            let (x0, y0) = ((r[0] * w as f32) as u32, (r[1] * h as f32) as u32);
+            let (x1, y1) = ((r[2] * w as f32) as u32, (r[3] * h as f32) as u32);
+            let mut opaque = 0usize;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    opaque += (img.get_pixel(x, y)[3] > 115) as usize;
+                }
+            }
+            let frac = opaque as f32 / ((x1 - x0) * (y1 - y0)) as f32;
+            assert!(
+                (0.05..0.45).contains(&frac),
+                "sprig {r:?} is {:.0}% opaque: off its sprig?",
+                frac * 100.0
+            );
+            // Clear of the bark strip down the left and the stems along
+            // the bottom (whose diagonal reaches up the right edge).
+            assert!(
+                r[0] > 0.17 && r[3] < 0.77,
+                "sprig {r:?} reaches the strip or stems"
+            );
+        }
     }
 }
