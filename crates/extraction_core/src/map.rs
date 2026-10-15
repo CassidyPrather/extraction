@@ -353,6 +353,29 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
     }
 }
 
+/// How far below its footing a prefab's foundation reaches (the plinth a
+/// house stands on), metres: it may sit that much above the lowest ground
+/// under it, less a margin, and still be footed. `qa` in the game checks
+/// this against the models.
+pub fn prefab_foundation(id: &str) -> f32 {
+    match id {
+        "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
+        | "mast_hut" | "guard_booth" => 1.5,
+        "sawmill" => 2.25,
+        "pump_station" => 2.1,
+        "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
+        _ => 0.0,
+    }
+}
+
+/// How far above the lowest ground under its footprint a building may sit
+/// (on a slope it sits on its highest corner, if that's no higher): its
+/// foundation shows on the downhill side rather than the hill being dug
+/// out on the uphill one.
+pub fn prefab_lift(id: &str) -> f32 {
+    (prefab_foundation(id) - 0.4).clamp(0.0, 0.9)
+}
+
 /// Radius around a placement kept free of trees.
 pub fn prefab_clearance(id: &str) -> f32 {
     let [w, _, d] = prefab_footprint(id);

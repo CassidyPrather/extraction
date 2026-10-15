@@ -287,25 +287,9 @@ fn road_paint(hm: &Heightmap, p: P2) -> Vec<(SplatLayer, f32)> {
     acc
 }
 
-/// Lowest ground under a placement's rough footprint (its four corners and
-/// centre), which is where the game sits a building so nothing floats.
-pub fn placement_ground(hm: &Heightmap, at: P2, rot_deg: f32, footprint: [f32; 3]) -> f32 {
-    let (s, c) = rot_deg.to_radians().sin_cos();
-    let mut y = f32::INFINITY;
-    for (sx, sz) in [
-        (-0.5, -0.5),
-        (0.5, -0.5),
-        (0.5, 0.5),
-        (-0.5, 0.5),
-        (0.0, 0.0),
-    ] {
-        let (lx, lz) = (sx * footprint[0], sz * footprint[2]);
-        // The game's Quat::from_rotation_y(-rot) applied to (lx, 0, lz).
-        let dx = lx * c - lz * s;
-        let dz = lx * s + lz * c;
-        y = y.min(hm.height([at[0] + dx, at[1] + dz]));
-    }
-    y
+/// Where the game stands a placement (see `Heightmap::footing`).
+pub fn placement_ground(hm: &Heightmap, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+    hm.footing(prefab, at, rot_deg)
 }
 
 #[cfg(test)]

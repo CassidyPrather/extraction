@@ -300,12 +300,15 @@ impl Builder {
     pub fn front_steps(&mut self, x: f32, front_z: f32, floor_y: f32, mat: Mat) -> &mut Self {
         let n = (floor_y / 0.18).ceil().max(1.0) as usize;
         let rise = floor_y / n as f32;
+        // Each step runs a metre into the ground: a building lifted on a
+        // slope (`map::prefab_lift`) mustn't leave its steps hanging.
+        let sunk = 1.0;
         for k in 0..n {
             let top = rise * (k + 1) as f32;
             let out = (n - k) as f32 * 0.3;
             self.bx(
-                Vec3::new(1.4, top, 0.3),
-                Vec3::new(x, top * 0.5, front_z - out + 0.15),
+                Vec3::new(1.4, top + sunk, 0.3),
+                Vec3::new(x, (top - sunk) * 0.5, front_z - out + 0.15),
                 mat,
             );
         }
@@ -1385,20 +1388,10 @@ pub struct BuildingLoot(pub Vec<LootSpot>);
 
 /// Building pose in the world.
 pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> Transform {
-    // Sit on the lowest corner of a rough footprint, so nothing floats.
-    let size = super::structures::footprint(&p.prefab);
+    // Where the terrain was settled for it (the lowest corner of a rough
+    // footprint, lifted as far as its foundation allows).
     let rot = Quat::from_rotation_y(-p.rot.to_radians());
-    let mut y = f32::INFINITY;
-    for (sx, sz) in [
-        (-0.5, -0.5),
-        (0.5, -0.5),
-        (0.5, 0.5),
-        (-0.5, 0.5),
-        (0.0, 0.0),
-    ] {
-        let c = rot * Vec3::new(sx * size.x, 0.0, sz * size.z);
-        y = y.min(zone.ground(p.at[0] + c.x, p.at[1] + c.z));
-    }
+    let y = zone.hm.footing(&p.prefab, p.at, p.rot);
     let y = if p.absolute { p.y } else { y + p.y };
     Transform::from_xyz(p.at[0], y, p.at[1]).with_rotation(rot)
 }

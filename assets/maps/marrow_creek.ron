@@ -91,7 +91,7 @@
         // Village to pumping station along the south bank.
         (
             name: "Station road", kind: Gravel, width: 5.0,
-            points: [(2.0, 60.0), (-60.0, 45.0), (-120.0, 30.0), (-170.0, 25.0), (-195.0, 22.0)],
+            points: [(2.0, 60.0), (-60.0, 45.0), (-120.0, 30.0), (-170.0, 25.0), (-187.0, 22.5)],
         ),
         // Farm track down to the ford and up the far side to the Hollow and the rail yard.
         (
@@ -225,7 +225,7 @@
         // North: bus depot, radio mast, rail yard, ranger tower, robot Gate.
         (prefab: "bus_depot", at: (25.0, -225.0), rot: 0.0),
         (prefab: "radio_mast", at: (-120.0, -175.0), rot: 0.0),
-        (prefab: "mast_hut", at: (-108.0, -168.0), rot: 30.0),
+        (prefab: "mast_hut", at: (-112.0, -160.0), rot: 30.0),
         (prefab: "rail_shed", at: (185.0, -210.0), rot: 10.0),
         (prefab: "boxcar", at: (150.0, -238.0), rot: 98.0),
         (prefab: "boxcar", at: (110.0, -244.0), rot: 95.0),

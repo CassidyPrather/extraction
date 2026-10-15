@@ -8,7 +8,8 @@
 //!   the ground, not another piece's top or body).
 //!
 //! `cargo test --lib qa -- --nocapture` prints the tally per prefab;
-//! `qa::tests` holds the line at zero.
+//! `qa::tests` holds the line at zero. How buildings meet the terrain is
+//! `extraction_core::fit`'s gauge.
 
 use bevy::prelude::*;
 
@@ -343,6 +344,33 @@ mod tests {
             bad.is_empty(),
             "geometry gauges: {bad:#?} (see geometry_report)"
         );
+    }
+
+    /// A building may sit as high above the lowest ground under it as
+    /// `map::prefab_foundation` says its foundation reaches down: the model
+    /// must reach that deep, or the lifted building floats.
+    #[test]
+    fn foundations_reach_as_deep_as_claimed() {
+        for id in crate::world::buildings::PREFABS {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let low = geo
+                .pieces
+                .iter()
+                .map(|p| {
+                    let s = match p.shape {
+                        Shape::Box(s) | Shape::Prism(s) => s,
+                        Shape::Cylinder(r, h) => Vec3::new(2.0 * r, h, 2.0 * r),
+                    };
+                    p.at.translation.y - s.y * 0.5
+                })
+                .fold(f32::INFINITY, f32::min);
+            let claim = extraction_core::map::prefab_foundation(id);
+            assert!(
+                claim <= 0.0 || -low >= claim - 1e-3,
+                "{id}: foundation claimed {claim} m deep, the model reaches {:.2}",
+                -low
+            );
+        }
     }
 
     /// Prints the tally (run with --nocapture).

@@ -343,6 +343,30 @@ impl Heightmap {
         }
     }
 
+    /// Where a placement stands: the lowest ground under its rough
+    /// footprint (four corners and centre), lifted toward the highest by
+    /// up to its foundation's allowance (`map::prefab_lift`). The game, the
+    /// terrain's settling and the Unity export all use this.
+    pub fn footing(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+        let [w, _, d] = crate::map::prefab_footprint(prefab);
+        let (s, c) = rot_deg.to_radians().sin_cos();
+        let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+        for (sx, sz) in [
+            (-0.5, -0.5),
+            (0.5, -0.5),
+            (0.5, 0.5),
+            (-0.5, 0.5),
+            (0.0, 0.0),
+        ] {
+            let (lx, lz) = (sx * w, sz * d);
+            // The game's Quat::from_rotation_y(-rot) applied to (lx, 0, lz).
+            let h = self.height([at[0] + lx * c - lz * s, at[1] + lx * s + lz * c]);
+            lo = lo.min(h);
+            hi = hi.max(h);
+        }
+        hi.min(lo + crate::map::prefab_lift(prefab))
+    }
+
     /// Roads are graded after the pads, and a road's fill can rise inside
     /// a building: under every floor, the ground goes no higher than the
     /// footing the building stands on (its lowest corner, as the game
@@ -369,21 +393,7 @@ impl Heightmap {
             let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
             let yaw = -p.rot.to_radians();
             let (s, c) = yaw.sin_cos();
-            let footing = |hm: &Self| {
-                [
-                    (-0.5, -0.5),
-                    (0.5, -0.5),
-                    (0.5, 0.5),
-                    (-0.5, 0.5),
-                    (0.0, 0.0),
-                ]
-                .iter()
-                .map(|(sx, sz)| {
-                    let (x, z) = (sx * w, sz * d);
-                    hm.height([p.at[0] + x * c + z * s, p.at[1] - x * s + z * c])
-                })
-                .fold(f32::INFINITY, f32::min)
-            };
+            let footing = |hm: &Self| hm.footing(&p.prefab, p.at, p.rot);
             // Flat to a cell past the walls (so nothing between samples
             // rises inside), then a ramp no steeper than half a metre per
             // metre back up to the ground as it was (no ditch round it).

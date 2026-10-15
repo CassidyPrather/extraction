@@ -218,7 +218,7 @@
 
         // Miners' Row: the village in the kettle, both sides of the road.
         (prefab: "house_plank", at: (-42.0, 125.0), rot: 90.0),
-        (prefab: "house_plank", at: (-48.0, 95.0), rot: 90.0),
+        (prefab: "house_plank", at: (-30.0, 72.0), rot: 90.0),
         (prefab: "house_brick", at: (-8.0, 150.0), rot: 0.0, tag: "chapel"),
         (prefab: "shop", at: (55.0, 98.0), rot: 270.0),
         (prefab: "house_plank", at: (62.0, 68.0), rot: 270.0),
@@ -248,7 +248,7 @@
         // The hunting lodge on the east shoulder.
         (prefab: "cabin_log", at: (205.0, -205.0), rot: 0.0, tag: "lodge"),
         (prefab: "cabin_log", at: (232.0, -188.0), rot: 90.0),
-        (prefab: "shed", at: (185.0, -182.0), rot: 0.0),
+        (prefab: "shed", at: (178.0, -190.0), rot: 40.0),
 
         // The pass: the weather mast and its hut, the ranger tower.
         (prefab: "radio_mast", at: (62.0, -222.0), rot: 0.0),

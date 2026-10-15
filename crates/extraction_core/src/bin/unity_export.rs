@@ -104,7 +104,7 @@ fn main() {
         .iter()
         .map(|p| {
             let footprint = prefab_footprint(&p.prefab);
-            let ground = unity::placement_ground(&hm, p.at, p.rot, footprint);
+            let ground = unity::placement_ground(&hm, &p.prefab, p.at, p.rot);
             let base = if p.absolute { p.y } else { ground + p.y };
             json!({
                 "prefab": p.prefab,
