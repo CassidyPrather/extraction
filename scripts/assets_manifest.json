@@ -145,6 +145,22 @@
         }
       }
     },
+    "acg:Wood060": {
+      "provider": "ambientcg",
+      "id": "Wood060",
+      "res": "2K-JPG",
+      "author": "Lennart Demes (ambientCG)",
+      "license": "CC0-1.0",
+      "page": "https://ambientcg.com/a/Wood060",
+      "files": {
+        "Wood060_2K-JPG.zip": {
+          "role": "zip",
+          "url": "https://ambientcg.com/get?file=Wood060_2K-JPG.zip",
+          "sha256": "54527fac1222a0d59c2a039f5ab83c84eec284936557fb2f87ee30c566594900",
+          "bytes": 37500228
+        }
+      }
+    },
     "ph:dry_mud_field_001": {
       "provider": "polyhaven",
       "id": "dry_mud_field_001",
@@ -830,6 +846,10 @@
         "source": "acg:Asphalt021",
         "brightness": 0.9,
         "note": "worn road asphalt (the terrain's road layer), for bridge decks"
+      },
+      "timber": {
+        "source": "acg:Wood060",
+        "note": "dark rough sawn wood grain, for beams, posts, benches and tables"
       }
     }
   },

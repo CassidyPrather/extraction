@@ -123,7 +123,7 @@ impl Mat {
             ),
             Mat::Glass => (None, 1.0, Color::srgba(0.12, 0.14, 0.15, 0.55), 0.05),
             Mat::DarkMetal => (None, 1.0, Color::srgb(0.12, 0.12, 0.12), 0.55),
-            Mat::Timber => (None, 1.0, Color::srgb(0.38, 0.29, 0.2), 0.8),
+            Mat::Timber => (Some("timber"), 1.5, Color::srgb(0.9, 0.85, 0.8), 0.8),
             Mat::Asphalt => (Some("asphalt"), 4.0, Color::srgb(0.25, 0.25, 0.24), 0.75),
         }
     }

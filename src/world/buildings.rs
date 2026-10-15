@@ -784,35 +784,179 @@ fn barn(b: &mut Builder) {
 }
 
 fn sawmill(b: &mut Builder) {
+    // An open shed: posts on concrete pads under a pitched iron roof (the
+    // ridge along the length, on tie beams and purlins), over a saw bench
+    // with a log on its carriage.
     let (w, d, h) = (24.0, 12.0, 4.5);
-    for x in [-11.5, -5.75, 0.0, 5.75, 11.5] {
+    let xs = [-11.5, -5.75, 0.0, 5.75, 11.5];
+    for x in xs {
         for z in [-5.5, 5.5] {
             b.bx(
-                Vec3::new(0.25, h, 0.25),
-                Vec3::new(x, h * 0.5, z),
+                Vec3::new(0.5, 0.5, 0.5),
+                Vec3::new(x, -0.1, z),
+                Mat::Concrete,
+            );
+            b.bx(
+                Vec3::new(0.25, h - 0.15, 0.25),
+                Vec3::new(x, 0.15 + (h - 0.15) * 0.5, z),
                 Mat::Timber,
             );
         }
+        // Tie beam across, at the eaves.
+        b.bx(
+            Vec3::new(0.22, 0.3, d - 0.5),
+            Vec3::new(x, h - 0.15, 0.0),
+            Mat::Timber,
+        );
+        // King post up to the ridge, and a rafter down each side.
+        let pitch = 15f32.to_radians();
+        let rise = (d * 0.5) * pitch.tan();
+        b.bx(
+            Vec3::new(0.18, rise, 0.18),
+            Vec3::new(x, h + rise * 0.5, 0.0),
+            Mat::Timber,
+        );
+        for side in [-1.0f32, 1.0] {
+            let z = side * d * 0.25;
+            b.piece(
+                Shape::Box(Vec3::new(0.12, 0.18, d * 0.5 / pitch.cos())),
+                Transform::from_xyz(x, h + rise - z.abs() * pitch.tan() - 0.08, z)
+                    .with_rotation(Quat::from_rotation_x(side * pitch)),
+                Mat::Timber,
+                false,
+            );
+        }
+    }
+    let pitch = 15f32.to_radians();
+    let half = d * 0.5 + 0.6;
+    let slope = half / pitch.cos();
+    let rise = (d * 0.5) * pitch.tan();
+    for side in [-1.0f32, 1.0] {
+        let tilt = Quat::from_rotation_x(side * pitch);
+        // Sheeting, then two purlins under it along the length.
+        b.piece(
+            Shape::Box(Vec3::new(w + 1.0, 0.05, slope)),
+            Transform::from_xyz(
+                0.0,
+                h + rise - half * 0.5 * pitch.tan() + 0.2,
+                side * half * 0.5,
+            )
+            .with_rotation(tilt),
+            Mat::Corrugated,
+            true,
+        );
+        for f in [0.33, 0.75] {
+            let z = side * d * 0.5 * f;
+            b.piece(
+                Shape::Box(Vec3::new(w + 0.6, 0.14, 0.12)),
+                Transform::from_xyz(0.0, h + rise - z.abs() * pitch.tan() + 0.08, z)
+                    .with_rotation(tilt),
+                Mat::Timber,
+                false,
+            );
+        }
+    }
+    b.piece(
+        Shape::Box(Vec3::new(w + 0.6, 0.2, 0.16)),
+        Transform::from_xyz(0.0, h + rise + 0.05, 0.0),
+        Mat::Timber,
+        false,
+    );
+    // The saw bench: trestle legs, two rails, a carriage with a log on it.
+    let (bx0, bx1) = (-7.0, 3.0);
+    let mut x = bx0;
+    while x <= bx1 + 0.01 {
+        for z in [-0.55, 0.55] {
+            b.bx(
+                Vec3::new(0.14, 0.8, 0.14),
+                Vec3::new(x, 0.4, z),
+                Mat::Timber,
+            );
+        }
+        b.bx(
+            Vec3::new(0.12, 0.12, 1.3),
+            Vec3::new(x, 0.74, 0.0),
+            Mat::Timber,
+        );
+        x += 2.0;
+    }
+    for z in [-0.5, 0.5] {
+        b.bx(
+            Vec3::new(bx1 - bx0 + 0.3, 0.08, 0.1),
+            Vec3::new((bx0 + bx1) * 0.5, 0.84, z),
+            Mat::DarkMetal,
+        );
     }
     b.bx(
-        Vec3::new(w + 1.0, 0.2, d + 1.0),
-        Vec3::new(0.0, h + 0.1, 0.0),
-        Mat::Corrugated,
+        Vec3::new(3.0, 0.08, 1.3),
+        Vec3::new(-4.5, 0.92, 0.0),
+        Mat::Planks,
     );
-    b.bx(
-        Vec3::new(10.0, 0.9, 1.4),
-        Vec3::new(-2.0, 0.45, 0.0),
-        Mat::Timber,
+    for x in [-5.6, -3.4] {
+        b.bx(
+            Vec3::new(0.15, 0.25, 1.1),
+            Vec3::new(x, 1.08, 0.0),
+            Mat::DarkMetal,
+        );
+    }
+    b.piece(
+        Shape::Cylinder(0.32, 3.4),
+        Transform::from_xyz(-4.5, 1.28, 0.0)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        Mat::BarkSpruce,
+        true,
+    );
+    // The blade, its guard, and the motor driving it by a belt.
+    b.piece(
+        Shape::Cylinder(0.65, 0.012),
+        Transform::from_xyz(-1.0, 0.95, 0.0)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Mat::GunMetal,
+        false,
     );
     b.piece(
-        Shape::Cylinder(0.7, 0.04),
-        Transform::from_xyz(-2.0, 1.1, 0.0)
+        Shape::Cylinder(0.08, 0.3),
+        Transform::from_xyz(-1.0, 0.95, 0.0)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Mat::DarkMetal,
+        false,
+    );
+    b.bx(
+        Vec3::new(1.5, 0.1, 0.24),
+        Vec3::new(-1.0, 1.66, 0.0),
+        Mat::PaintedMetal,
+    );
+    // The guard's post stands on the floor beside the bench.
+    b.bx(
+        Vec3::new(0.08, 1.66, 0.08),
+        Vec3::new(-0.2, 0.83, 0.7),
+        Mat::PaintedMetal,
+    );
+    b.bx(
+        Vec3::new(0.08, 0.08, 0.7),
+        Vec3::new(-0.2, 1.62, 0.35),
+        Mat::PaintedMetal,
+    );
+    b.bx(
+        Vec3::new(0.9, 0.6, 0.6),
+        Vec3::new(-1.0, 0.3, 1.5),
+        Mat::PaintedMetal,
+    );
+    b.bx(
+        Vec3::new(0.9, 0.06, 0.62),
+        Vec3::new(-1.0, 0.63, 1.5),
+        Mat::DarkMetal,
+    );
+    let belt = Vec3::new(0.0, 0.95 - 0.45, 0.0 - 1.5);
+    b.piece(
+        Shape::Box(Vec3::new(0.08, 0.02, belt.length())),
+        Transform::from_xyz(-1.0, 0.7, 0.75).looking_to(belt, Vec3::Y),
         Mat::DarkMetal,
         false,
     );
     b.workbench(Vec3::new(8.0, 0.0, 3.5), 0.0, Some("workshop"));
     b.workbench(Vec3::new(8.0, 0.0, -3.5), 0.0, Some("tools"));
+    // Logs waiting, and sawn boards stacked on bearers with stickers.
     for k in 0..6 {
         b.piece(
             Shape::Cylinder(0.25, 5.0),
@@ -825,6 +969,32 @@ fn sawmill(b: &mut Builder) {
             Mat::BarkSpruce,
             true,
         );
+    }
+    for x in [2.6, 4.0, 5.4] {
+        b.bx(
+            Vec3::new(0.15, 0.15, 1.2),
+            Vec3::new(x, 0.075, -4.0),
+            Mat::Timber,
+        );
+    }
+    for layer in 0..5 {
+        let y = 0.15 + layer as f32 * 0.09;
+        for k in 0..5 {
+            b.bx(
+                Vec3::new(3.4, 0.05, 0.2),
+                Vec3::new(4.0, y + 0.025, -4.45 + k as f32 * 0.22),
+                Mat::Planks,
+            );
+        }
+        if layer < 4 {
+            for x in [2.6, 4.0, 5.4] {
+                b.bx(
+                    Vec3::new(0.04, 0.04, 1.1),
+                    Vec3::new(x, y + 0.07, -4.0),
+                    Mat::Timber,
+                );
+            }
+        }
     }
 }
 

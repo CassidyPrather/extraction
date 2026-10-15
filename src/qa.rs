@@ -353,6 +353,8 @@ mod tests {
     fn foundations_reach_as_deep_as_claimed() {
         for id in crate::world::buildings::PREFABS {
             let geo = crate::world::buildings::prefab(id).unwrap();
+            // Lowest point of any piece, rotation included (a log
+            // lying on its side reaches no deeper than its radius).
             let low = geo
                 .pieces
                 .iter()
@@ -361,9 +363,13 @@ mod tests {
                         Shape::Box(s) | Shape::Prism(s) => s,
                         Shape::Cylinder(r, h) => Vec3::new(2.0 * r, h, 2.0 * r),
                     };
-                    p.at.translation.y - s.y * 0.5
+                    let m = Mat3::from_quat(p.at.rotation);
+                    let reach =
+                        m.x_axis.y.abs() * s.x + m.y_axis.y.abs() * s.y + m.z_axis.y.abs() * s.z;
+                    p.at.translation.y - reach * 0.5
                 })
                 .fold(f32::INFINITY, f32::min);
+            println!("{id:16} reaches {:.2} below its footing", -low);
             let claim = extraction_core::map::prefab_foundation(id);
             assert!(
                 claim <= 0.0 || -low >= claim - 1e-3,

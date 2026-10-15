@@ -360,9 +360,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
 pub fn prefab_foundation(id: &str) -> f32 {
     match id {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
-        | "mast_hut" | "guard_booth" => 1.5,
-        "sawmill" => 2.25,
-        "pump_station" => 2.1,
+        | "mast_hut" | "guard_booth" | "pump_station" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
         _ => 0.0,
     }
