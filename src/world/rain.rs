@@ -1,6 +1,7 @@
 //! Rain you can see: a field of streaks animated entirely in a vertex
 //! shader (`assets/shaders/rain.wgsl`), thickened or thinned by the
-//! weather's rain intensity.
+//! weather's rain intensity. Under the roofs nearest the camera nothing
+//! falls (`Shelters`).
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -22,7 +23,7 @@ impl Plugin for RainPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<RainMaterial>::default())
             .add_systems(Startup, spawn_rain)
-            .add_systems(Update, (rain_intensity, ash_fall));
+            .add_systems(Update, (rain_intensity, ash_fall, shelter_nearby));
     }
 }
 
@@ -32,10 +33,23 @@ pub struct RainParams {
     pub wind: Vec4,
 }
 
+/// Roofed volumes near the camera: the shader drops any streak inside
+/// one. Two vec4 each: (centre x, centre z, bottom y, top y) and (half
+/// width, half depth, cos yaw, sin yaw); a zero half width is unused.
+#[derive(Clone, Copy, Debug, Default, ShaderType, Reflect)]
+pub struct Shelters {
+    pub boxes: [Vec4; 2 * SHELTERS],
+}
+
+/// How many roofs the shader checks: the nearest to the camera.
+pub const SHELTERS: usize = 8;
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct RainMaterial {
     #[uniform(0)]
     pub rain: RainParams,
+    #[uniform(1)]
+    pub shelters: Shelters,
 }
 
 impl Material for RainMaterial {
@@ -110,6 +124,7 @@ fn spawn_rain(
             params: Vec4::new(0.35, 9.0, 0.55, BOX),
             wind: Vec4::new(1.2, 0.0, 0.6, 0.0),
         },
+        shelters: Shelters::default(),
     });
     commands.spawn((
         Name::new("Rain"),
@@ -150,6 +165,7 @@ fn ash_fall(
                 // y: flakes (pale, wobbling); w: flake width.
                 wind: Vec4::new(0.35, 1.0, 0.15, 0.03),
             },
+            shelters: Shelters::default(),
         });
         commands.spawn((
             Name::new("Ash"),
@@ -195,6 +211,94 @@ fn rain_intensity(
         if let Some(mut m) = materials.get_mut(&r.0) {
             m.rain.params.x = conditions.rain;
             m.rain.wind = Vec4::new(1.2 + 2.0 * conditions.rain, 0.0, 0.6 + conditions.rain, 0.0);
+        }
+    }
+}
+
+/// Prefabs with a roof over their floor.
+fn roofed(prefab: &str) -> bool {
+    matches!(
+        prefab,
+        "house_plank"
+            | "farmhouse"
+            | "house_brick"
+            | "cabin_log"
+            | "shop"
+            | "shed"
+            | "barn"
+            | "sawmill"
+            | "pump_station"
+            | "bus_depot"
+            | "rail_shed"
+            | "mast_hut"
+            | "guard_booth"
+            | "factory_hall"
+    )
+}
+
+/// Every roof on the map, as the shader wants it, with its centre.
+#[derive(Default)]
+struct Roofs(Vec<(Vec2, [Vec4; 2])>);
+
+/// Hands the roofs nearest the camera to the rain and ash, whenever the
+/// camera has moved a few metres.
+fn shelter_nearby(
+    zone: Res<super::Zone>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    rain: Query<&MeshMaterial3d<RainMaterial>>,
+    mut materials: ResMut<Assets<RainMaterial>>,
+    mut roofs: Local<Option<Roofs>>,
+    mut last: Local<Option<Vec3>>,
+    mut count: Local<usize>,
+) {
+    let roofs = roofs.get_or_insert_with(|| {
+        Roofs(
+            zone.map
+                .placements
+                .iter()
+                .filter(|p| roofed(&p.prefab))
+                .map(|p| {
+                    let t = super::buildings::placement_transform(&zone, p);
+                    let [w, h, d] = extraction_core::map::prefab_footprint(&p.prefab);
+                    let (s, c) = p.rot.to_radians().sin_cos();
+                    let at = Vec2::new(p.at[0], p.at[1]);
+                    let y = t.translation.y;
+                    (
+                        at,
+                        [
+                            Vec4::new(at.x, at.y, y - 2.0, y + h),
+                            // Just inside the walls: rain still falls past
+                            // the eaves and in the doorway.
+                            Vec4::new(w * 0.5 - 0.15, d * 0.5 - 0.15, c, s),
+                        ],
+                    )
+                })
+                .collect(),
+        )
+    });
+    let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    // Re-sort when the camera moves, or a new rain material appears.
+    let n = rain.iter().count();
+    if last.is_some_and(|l| l.distance(eye) < 3.0) && *count == n {
+        return;
+    }
+    *last = Some(eye);
+    *count = n;
+    let mut near: Vec<&(Vec2, [Vec4; 2])> = roofs.0.iter().collect();
+    near.sort_by(|a, b| {
+        a.0.distance_squared(eye.xz())
+            .total_cmp(&b.0.distance_squared(eye.xz()))
+    });
+    let mut shelters = Shelters::default();
+    for (i, (_, b)) in near.iter().take(SHELTERS).enumerate() {
+        shelters.boxes[2 * i] = b[0];
+        shelters.boxes[2 * i + 1] = b[1];
+    }
+    for m in &rain {
+        if let Some(mut mat) = materials.get_mut(&m.0) {
+            mat.shelters = shelters;
         }
     }
 }

@@ -16,7 +16,32 @@ struct RainParams {
     wind: vec4<f32>,
 }
 
+// The nearest roofs: per roof, (centre x, centre z, bottom y, top y) then
+// (half width, half depth, cos yaw, sin yaw). Nothing falls inside one.
+struct Shelters {
+    boxes: array<vec4<f32>, 16>,
+}
+
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> rain: RainParams;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var<uniform> shelters: Shelters;
+
+fn sheltered(p: vec3<f32>) -> bool {
+    for (var i = 0u; i < 8u; i = i + 1u) {
+        let a = shelters.boxes[2u * i];
+        let b = shelters.boxes[2u * i + 1u];
+        if (b.x <= 0.0) {
+            continue;
+        }
+        let d = p.xz - a.xy;
+        // Into the building's frame (the game's yaw is about -Y).
+        let lx = d.x * b.z + d.y * b.w;
+        let lz = -d.x * b.w + d.y * b.z;
+        if (abs(lx) < b.x && abs(lz) < b.y && p.y > a.z && p.y < a.w) {
+            return true;
+        }
+    }
+    return false;
+}
 
 struct Vertex {
     @location(0) position: vec3<f32>,
@@ -61,7 +86,7 @@ fn vertex(v: Vertex) -> VertexOutput {
     out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * smoothstep(0.4, 1.5, length(p));
     // Thin the field out with intensity: drop a fraction of streaks.
     let keep = fract(sin(dot(v.position.xz, vec2<f32>(12.9898, 78.233))) * 43758.5453);
-    if (keep > rain.params.x) {
+    if (keep > rain.params.x || sheltered(centre)) {
         out.clip_position = vec4<f32>(0.0, 0.0, -10.0, 1.0);
     }
     return out;
