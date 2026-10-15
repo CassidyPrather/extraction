@@ -145,15 +145,17 @@ pub fn centred(
     meshes: &mut Assets<Mesh>,
     mesh: Mesh,
 ) -> (Mesh3d, bevy::camera::primitives::Aabb, Transform) {
+    let (mesh, aabb, at) = centre(mesh);
+    (Mesh3d(meshes.add(mesh)), aabb, at)
+}
+
+/// `centred`'s work without the asset store, for a background task.
+pub fn centre(mesh: Mesh) -> (Mesh, bevy::camera::primitives::Aabb, Transform) {
     use bevy::camera::primitives::MeshAabb;
     let c = mesh
         .compute_aabb()
         .map_or(Vec3::ZERO, |b| Vec3::from(b.center));
     let mesh = mesh.translated_by(-c);
     let aabb = mesh.compute_aabb().unwrap_or_default();
-    (
-        Mesh3d(meshes.add(mesh)),
-        aabb,
-        Transform::from_translation(c),
-    )
+    (mesh, aabb, Transform::from_translation(c))
 }

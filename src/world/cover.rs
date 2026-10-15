@@ -41,9 +41,20 @@ impl Plugin for CoverPlugin {
     }
 }
 
+/// A patch's meshes (centred) and which material and fade each takes.
+type Built = Vec<(
+    Mesh,
+    bevy::camera::primitives::Aabb,
+    Transform,
+    bool,
+    std::ops::Range<f32>,
+)>;
+
 #[derive(Resource)]
 struct CoverAssets {
-    cover: CoverMap,
+    cover: std::sync::Arc<CoverMap>,
+    /// Patches being built on the task pool.
+    building: std::collections::HashMap<(i32, i32), bevy::tasks::Task<Built>>,
     blades: Handle<StandardMaterial>,
     fronds: Handle<StandardMaterial>,
     /// Built patches and their entities.
@@ -233,7 +244,8 @@ fn stream_cover(
             })
             .load("textures/foliage/fern/albedo.ktx2");
         commands.insert_resource(CoverAssets {
-            cover: CoverMap::new(&zone.map),
+            cover: std::sync::Arc::new(CoverMap::new(&zone.map)),
+            building: Default::default(),
             blades: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 perceptual_roughness: 0.85,
@@ -258,6 +270,43 @@ fn stream_cover(
         });
         return;
     };
+    // Finished patches go in every frame (the work was done elsewhere).
+    let assets = &mut *assets;
+    let done: Vec<(i32, i32)> = assets
+        .building
+        .iter()
+        .filter(|(_, t)| t.is_finished())
+        .map(|(k, _)| *k)
+        .collect();
+    for key in done {
+        let task = assets.building.remove(&key).unwrap();
+        let parts = bevy::tasks::block_on(task);
+        let ents = parts
+            .into_iter()
+            .map(|(mesh, aabb, at, fronds, fade)| {
+                commands
+                    .spawn((
+                        Name::new("Ground cover"),
+                        Mesh3d(meshes.add(mesh)),
+                        aabb,
+                        at,
+                        MeshMaterial3d(if fronds {
+                            assets.fronds.clone()
+                        } else {
+                            assets.blades.clone()
+                        }),
+                        VisibilityRange {
+                            start_margin: 0.0..0.0,
+                            end_margin: fade,
+                            use_aabb: true,
+                        },
+                        bevy::light::NotShadowCaster,
+                    ))
+                    .id()
+            })
+            .collect();
+        assets.built.insert(key, ents);
+    }
     *timer -= time.delta_secs();
     if *timer > 0.0 {
         return;
@@ -274,7 +323,7 @@ fn stream_cover(
             .map(|e| e.clamp(lo, lo + Vec2::splat(PATCH)).distance(*e))
             .fold(f32::INFINITY, f32::min)
     };
-    let assets = &mut *assets;
+    assets.building.retain(|key, _| reach(*key) < DROP);
     assets.built.retain(|key, ents| {
         let keep = reach(*key) < DROP;
         if !keep {
@@ -294,6 +343,7 @@ fn stream_cover(
                 let d = reach((i, j));
                 if d < SPAWN
                     && !assets.built.contains_key(&(i, j))
+                    && !assets.building.contains_key(&(i, j))
                     && !wanted.iter().any(|w| w.0 == (i, j))
                 {
                     wanted.push(((i, j), d));
@@ -302,48 +352,42 @@ fn stream_cover(
         }
     }
     wanted.sort_by(|a, b| a.1.total_cmp(&b.1));
+    // Built off the main thread: a patch is a couple of milliseconds of
+    // work, and several at once would drop frames in the headset.
+    let pool = bevy::tasks::AsyncComputeTaskPool::get();
+    let detail = opts.detail;
     for (key, _) in wanted.into_iter().take(6) {
-        let lo = [key.0 as f32 * PATCH, key.1 as f32 * PATCH];
-        let plants = assets.cover.patch(&zone.hm, lo, PATCH);
-        let (mut near, mut far, mut fronds) =
-            (Builder::default(), Builder::default(), Builder::default());
-        for s in &plants {
-            // Lower detail keeps fewer plants (by rank, so the same ones).
-            if s.rank > opts.detail {
-                continue;
+        let cover = assets.cover.clone();
+        let hm = zone.hm.clone();
+        let task = pool.spawn(async move {
+            let lo = [key.0 as f32 * PATCH, key.1 as f32 * PATCH];
+            let plants = cover.patch(&hm, lo, PATCH);
+            let (mut near, mut far, mut fronds) =
+                (Builder::default(), Builder::default(), Builder::default());
+            for s in &plants {
+                // Lower detail keeps fewer plants (by rank, so the same ones).
+                if s.rank > detail {
+                    continue;
+                }
+                match s.kind {
+                    CoverKind::Fern => fern(&mut fronds, s),
+                    _ if s.rank < KEEP_FAR => tuft(&mut far, s),
+                    _ => tuft(&mut near, s),
+                }
             }
-            match s.kind {
-                CoverKind::Fern => fern(&mut fronds, s),
-                _ if s.rank < KEEP_FAR => tuft(&mut far, s),
-                _ => tuft(&mut near, s),
-            }
-        }
-        let mut ents = Vec::new();
-        for (b, mat, fade) in [
-            (near, &assets.blades, NEAR_FADE),
-            (far, &assets.blades, FADE),
-            (fronds, &assets.fronds, FADE),
-        ] {
-            let Some(mesh) = b.build() else {
-                continue;
-            };
-            ents.push(
-                commands
-                    .spawn((
-                        Name::new("Ground cover"),
-                        crate::render::centred(&mut meshes, mesh),
-                        MeshMaterial3d(mat.clone()),
-                        VisibilityRange {
-                            start_margin: 0.0..0.0,
-                            end_margin: fade,
-                            use_aabb: true,
-                        },
-                        bevy::light::NotShadowCaster,
-                    ))
-                    .id(),
-            );
-        }
-        assets.built.insert(key, ents);
+            [
+                (near, false, NEAR_FADE),
+                (far, false, FADE),
+                (fronds, true, FADE),
+            ]
+            .into_iter()
+            .filter_map(|(b, is_fronds, fade)| {
+                let (mesh, aabb, at) = crate::render::centre(b.build()?);
+                Some((mesh, aabb, at, is_fronds, fade))
+            })
+            .collect()
+        });
+        assets.building.insert(key, task);
     }
 }
 
