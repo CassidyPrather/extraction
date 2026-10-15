@@ -255,6 +255,10 @@ pub struct Restart {
 
 static RESTART_INTO: std::sync::Mutex<Option<Restart>> = std::sync::Mutex::new(None);
 
+/// Tests that ask for a restart hold this, so they don't take each other's.
+#[cfg(test)]
+pub static RESTART_TEST: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn request_restart(map: &str) {
     *RESTART_INTO.lock().unwrap() = Some(Restart {
         map: map.to_owned(),

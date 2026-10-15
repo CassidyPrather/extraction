@@ -141,8 +141,7 @@ fn card_text(
     // In the yard the cord goes on to the career's valley; the card can't
     // change that.
     if opts.map == crate::camp::TRAINING_YARD {
-        let to = crate::persist::career_destination(&LaunchOptions::default())
-            .unwrap_or_else(|| "marrow_creek".into());
+        let to = crate::persist::next_valley(&opts);
         let name = dest
             .maps
             .iter()
@@ -200,6 +199,9 @@ mod tests {
 
     #[test]
     fn the_truck_drives_to_the_other_valley() {
+        let _restarts = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir()
             .join(format!("extraction-test-{}", std::process::id()))
             .join("route");

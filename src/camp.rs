@@ -66,7 +66,7 @@ struct CampState {
 /// Whether this session opens at the camp: a real game (or `--camp`), not
 /// the training yard.
 pub fn camp_wanted(opts: &LaunchOptions) -> bool {
-    !opts.headless
+    crate::persist::owns_profile(opts)
         && opts.map != TRAINING_YARD
         && (opts.camp || crate::persist::career_path(opts).is_some())
 }
@@ -332,7 +332,7 @@ fn press_camp(
                     if let Some(slot) = slot.as_mut() {
                         slot.0 = None;
                     }
-                    if !opts.headless {
+                    if crate::persist::owns_profile(&opts) {
                         crate::persist::burn_career(&opts);
                     }
                     leave(&opts, TRAINING_YARD, true, &mut exit);
@@ -344,13 +344,11 @@ fn press_camp(
                 }
             }
             CampCard::SkipYard => {
-                if !opts.headless {
-                    crate::persist::mark_trained();
+                if crate::persist::owns_profile(&opts) {
+                    crate::persist::mark_trained(&opts);
                 }
                 raid.say("\"Right then.\" The engine turns over.");
-                let to = crate::persist::career_destination(&LaunchOptions::default())
-                    .unwrap_or_else(|| "marrow_creek".into());
-                leave(&opts, &to, false, &mut exit);
+                leave(&opts, &crate::persist::next_valley(&opts), false, &mut exit);
             }
         }
     }
@@ -362,7 +360,9 @@ fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<
         "camp: on to {map}{}",
         if fresh { " (new career)" } else { "" }
     );
-    if opts.headless {
+    // A headless run with its own profile (a test) asks to restart but
+    // doesn't quit: the test opens the next session itself.
+    if !crate::persist::owns_profile(opts) {
         return;
     }
     if fresh {
@@ -370,7 +370,9 @@ fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<
     } else {
         crate::request_restart(map);
     }
-    exit.write(AppExit::Success);
+    if !opts.headless {
+        exit.write(AppExit::Success);
+    }
 }
 
 fn camp_text(
@@ -427,6 +429,130 @@ mod tests {
         assert!(camp_wanted(&o));
         o.map = TRAINING_YARD.into();
         assert!(!camp_wanted(&o));
+    }
+
+    fn open(opts: LaunchOptions) -> App {
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..8 {
+            app.update();
+        }
+        app
+    }
+
+    fn card(app: &mut App, which: CampCard) -> Option<Entity> {
+        app.world_mut()
+            .query::<(Entity, &CampCard)>()
+            .iter(app.world())
+            .find(|(_, c)| **c == which)
+            .map(|(e, _)| e)
+    }
+
+    fn press(app: &mut App, item: Entity) {
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .write_message(InteractEvent::Pressed { item, player });
+        app.update();
+    }
+
+    /// Someone new, start to finish through the menus: the yard first, on
+    /// to a valley with the camp and a career, back to the yard from the
+    /// camp, and a new career. Each "restart" opens the session the game
+    /// would relaunch into.
+    #[test]
+    fn a_new_player_goes_from_the_yard_to_the_camp_and_round_again() {
+        let _restarts = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::take_restart();
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join("journey");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = LaunchOptions {
+            data_dir: Some(dir.clone()),
+            robots: false,
+            ..Default::default()
+        };
+        let relaunch = |map: &str| LaunchOptions {
+            map: map.into(),
+            map_explicit: true,
+            ..base.clone()
+        };
+
+        // First launch: the yard, with nothing hunting and a way out.
+        let mut o = base.clone();
+        crate::persist::choose_start(&mut o);
+        assert_eq!(o.map, TRAINING_YARD, "someone new starts in the yard");
+        assert!(!camp_wanted(&o));
+        let mut yard = open(o);
+        let skip = card(&mut yard, CampCard::SkipYard).expect("a skip card by the truck");
+        assert!(
+            card(&mut yard, CampCard::Title).is_none(),
+            "no camp in the yard"
+        );
+        press(&mut yard, skip);
+        let to = crate::take_restart().expect("skipping the yard drives on");
+        assert_eq!((to.map.as_str(), to.fresh), ("marrow_creek", false));
+        assert!(crate::persist::trained(&base), "the yard is marked done");
+        drop(yard);
+
+        // The valley: the camp, and a career written to the profile.
+        let o = relaunch(&to.map);
+        assert!(camp_wanted(&o));
+        let mut valley = open(o);
+        for c in [
+            CampCard::Title,
+            CampCard::Career,
+            CampCard::Training,
+            CampCard::NewCareer,
+            CampCard::PackUp,
+        ] {
+            assert!(card(&mut valley, c).is_some(), "no {c:?} card at camp");
+        }
+        valley.world_mut().write_message(crate::persist::SaveNow);
+        valley.update();
+        assert!(
+            dir.join("career.ron").exists(),
+            "the career is saved in the profile"
+        );
+
+        // Next launch, no --map: straight back to that valley.
+        let mut o = base.clone();
+        crate::persist::choose_start(&mut o);
+        assert_eq!(o.map, "marrow_creek");
+
+        // Back to the yard from the camp; the career stays.
+        let training = card(&mut valley, CampCard::Training).unwrap();
+        press(&mut valley, training);
+        let to = crate::take_restart().expect("the training card drives to the yard");
+        assert_eq!((to.map.as_str(), to.fresh), (TRAINING_YARD, false));
+        assert!(dir.join("career.ron").exists());
+
+        // NEW CAREER asks twice; then the logbook is put aside.
+        let new = card(&mut valley, CampCard::NewCareer).unwrap();
+        press(&mut valley, new);
+        assert!(crate::take_restart().is_none(), "one press only asks");
+        press(&mut valley, new);
+        let to = crate::take_restart().expect("the second press starts over");
+        assert_eq!((to.map.as_str(), to.fresh), (TRAINING_YARD, true));
+        drop(valley);
+        assert!(!dir.join("career.ron").exists() && dir.join("career.ron.old").exists());
+        assert!(!crate::persist::trained(&base));
+        let mut o = base.clone();
+        crate::persist::choose_start(&mut o);
+        assert_eq!(
+            o.map, TRAINING_YARD,
+            "a new career starts in the yard again"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -173,7 +173,9 @@ whether the ending felt like one.
 - The camp, the yard and the keys are new and have never been played
   through end to end by a person: expect rough edges in them first.
 - To see the yard again after skipping it, delete `trained` from the
-  data folder (or press NEW CAREER at camp).
+  data folder (or press NEW CAREER at camp). For a first launch without
+  touching your own career, run with `--data-dir` pointing at an empty
+  folder.
 - Drones still decide most deaths in the sims; whether that's right is
   the main balance question for you.
 - Sim bots sometimes wedge themselves on doors. A person shouldn't, but
@@ -184,6 +186,7 @@ whether the ending felt like one.
 | Flag | What |
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
+| `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
 | `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |
 | `--camp` | Set up the camp table even in a screenshot |

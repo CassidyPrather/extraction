@@ -12,32 +12,12 @@ fn main() -> AppExit {
     if let Some(n) = opts.sim {
         return run_sim_batch(&opts, n);
     }
+    if let Some(dir) = &opts.data_dir {
+        extraction::persist::set_data_dir(dir.clone());
+    }
     // Someone new (no career, never through the training yard) starts in
-    // the yard; they can skip it there.
-    if !opts.map_explicit
-        && extraction::persist::career_path(&opts).is_some_and(|p| !p.exists())
-        && !extraction::persist::trained()
-    {
-        opts.map = extraction::camp::TRAINING_YARD.into();
-    }
-    // A saved career opens wherever the truck was headed.
-    if !opts.map_explicit && !opts.new_game {
-        if let Some(map) = extraction::persist::career_destination(&opts) {
-            if std::path::Path::new("assets/maps")
-                .join(format!("{map}.ron"))
-                .exists()
-                || std::env::current_exe()
-                    .ok()
-                    .and_then(|e| {
-                        e.parent()
-                            .map(|d| d.join("assets/maps").join(format!("{map}.ron")))
-                    })
-                    .is_some_and(|p| p.exists())
-            {
-                opts.map = map;
-            }
-        }
-    }
+    // the yard; a saved career opens wherever the truck was headed.
+    extraction::persist::choose_start(&mut opts);
     // Nothing hunts you in the training yard.
     if opts.map == extraction::camp::TRAINING_YARD {
         opts.robots = false;

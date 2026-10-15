@@ -67,8 +67,19 @@ impl Plugin for PersistPlugin {
     }
 }
 
-/// `$XDG_DATA_HOME/extraction` (or the platform equivalent).
+/// Set by `--data-dir` for the whole process (logs, settings, career).
+static DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_data_dir(dir: PathBuf) {
+    let _ = DATA_DIR.set(dir);
+}
+
+/// `$XDG_DATA_HOME/extraction` (or the platform equivalent), unless
+/// `--data-dir` says otherwise.
 pub fn data_dir() -> PathBuf {
+    if let Some(d) = DATA_DIR.get() {
+        return d.clone();
+    }
     let env = |k: &str| std::env::var_os(k).map(PathBuf::from);
     #[cfg(windows)]
     let base = env("APPDATA").unwrap_or_else(|| PathBuf::from("."));
@@ -92,7 +103,7 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
         None if opts.scenario.is_some()
             || opts.screenshot.is_some()
             || opts.camera.is_some()
-            || opts.headless
+            || !owns_profile(opts)
             || opts.gallery.is_some()
             || opts.scene != crate::launch::SceneChoice::Raid =>
         {
@@ -100,18 +111,64 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
         }
         // The training yard is practice: nothing there is kept.
         None if opts.map == crate::camp::TRAINING_YARD => None,
-        None => Some(data_dir().join("career.ron")),
+        None => Some(profile(opts).join("career.ron")),
     }
 }
 
-/// Whether this player has been through (or skipped) the training yard.
-pub fn trained() -> bool {
-    data_dir().join("trained").exists()
+/// The folder this session's career, `trained` flag and so on live in:
+/// `--data-dir`, else the data folder.
+pub fn profile(opts: &LaunchOptions) -> PathBuf {
+    opts.data_dir.clone().unwrap_or_else(data_dir)
 }
 
-pub fn mark_trained() {
-    let _ = std::fs::create_dir_all(data_dir());
-    let _ = std::fs::write(data_dir().join("trained"), "yes\n");
+/// Whether this session may read and write its profile: a real game, or a
+/// headless run given one of its own (a test). Sims and other headless
+/// runs leave the player's alone.
+pub fn owns_profile(opts: &LaunchOptions) -> bool {
+    !opts.headless || opts.data_dir.is_some()
+}
+
+/// Where a new session should open, if the command line didn't say: the
+/// yard for someone who has never played (no career, yard not done), else
+/// the valley the career is headed for.
+pub fn choose_start(opts: &mut LaunchOptions) {
+    if opts.map_explicit {
+        return;
+    }
+    if career_path(opts).is_some_and(|p| !p.exists()) && !trained(opts) {
+        opts.map = crate::camp::TRAINING_YARD.into();
+        return;
+    }
+    if opts.new_game {
+        return;
+    }
+    if let Some(map) = career_destination(opts) {
+        if crate::asset_root_path()
+            .join("maps")
+            .join(format!("{map}.ron"))
+            .exists()
+        {
+            opts.map = map;
+        }
+    }
+}
+
+/// The valley the truck goes on to from the yard: the career's, or the
+/// first.
+pub fn next_valley(opts: &LaunchOptions) -> String {
+    let mut o = opts.clone();
+    o.map = "marrow_creek".into();
+    career_destination(&o).unwrap_or(o.map)
+}
+
+/// Whether this player has been through (or skipped) the training yard.
+pub fn trained(opts: &LaunchOptions) -> bool {
+    profile(opts).join("trained").exists()
+}
+
+pub fn mark_trained(opts: &LaunchOptions) {
+    let _ = std::fs::create_dir_all(profile(opts));
+    let _ = std::fs::write(profile(opts).join("trained"), "yes\n");
 }
 
 /// A new career: the old one is put aside (`career.ron.old`, one deep) and
@@ -120,7 +177,7 @@ pub fn burn_career(opts: &LaunchOptions) {
     if let Some(path) = career_path(opts) {
         let _ = std::fs::rename(&path, path.with_extension("ron.old"));
     }
-    let _ = std::fs::remove_file(data_dir().join("trained"));
+    let _ = std::fs::remove_file(profile(opts).join("trained"));
 }
 
 /// The valley a saved career is headed for, if there is one.
