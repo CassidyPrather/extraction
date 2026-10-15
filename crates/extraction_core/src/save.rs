@@ -44,6 +44,9 @@ pub struct Stats {
     pub raids: u32,
     pub extractions: u32,
     pub deaths: u32,
+    /// The three keys were turned at a Gate: the machines went home.
+    #[serde(default)]
+    pub recalled: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

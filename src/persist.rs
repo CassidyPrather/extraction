@@ -217,6 +217,7 @@ fn load_save(
     raid.raids = save.stats.raids;
     raid.extractions = save.stats.extractions;
     raid.deaths = save.stats.deaths;
+    raid.recalled = save.stats.recalled;
     raid.clock = save.zone.clock;
     raid.cycle = save.zone.cycle;
     memorial.0 = save.memorial.clone();
@@ -603,6 +604,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.stats.raids = raid.raids;
         save.stats.extractions = raid.extractions;
         save.stats.deaths = raid.deaths;
+        save.stats.recalled = raid.recalled;
         save.zone.clock = raid.clock;
         save.zone.cycle = raid.cycle;
     }

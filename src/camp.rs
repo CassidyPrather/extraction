@@ -394,6 +394,9 @@ fn camp_text(
                         raid.raids, raid.extractions, raid.deaths, raid.cycle
                     );
                 }
+                if raid.recalled {
+                    t += "The machines went home.\nThe valleys are quiet.\n\n";
+                }
                 t +=
                     "Your kit is in the crate in the truck.\n\nWalk out through the gate to start.";
                 t

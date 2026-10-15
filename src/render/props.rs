@@ -22,6 +22,7 @@ impl Plugin for PropVisualsPlugin {
                 dress_slots,
                 spawn_hand_visuals,
                 dress_camp,
+                dress_capstone,
             ),
         )
         .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate));
@@ -711,6 +712,116 @@ fn dress_camp(
                     Vec3::new(0.42, 0.28, 0.03),
                     Transform::from_xyz(0.0, 1.35, 0.025),
                 );
+            }
+        }
+    }
+}
+
+/// The depot lock's pedestal (cradle, screen housing, lamp) and the
+/// strongbox a valley key lies in (a beacon blinking amber on it).
+fn dress_capstone(
+    mut commands: Commands,
+    props: Query<(Entity, &crate::capstone::CapstoneProps), Added<crate::capstone::CapstoneProps>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    use crate::capstone::CapstoneProps;
+    use crate::render::materials::{Mat, metric_box};
+    for (e, p) in &props {
+        let lamp = |materials: &mut Assets<StandardMaterial>, c: LinearRgba| {
+            materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: c,
+                ..default()
+            })
+        };
+        let mut part = |m: Mat, size: Vec3, at: Vec3| {
+            let material = lib.get(m, &server, &mut materials);
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(size))),
+                MeshMaterial3d(material),
+                Transform::from_translation(at),
+                ChildOf(e),
+            ));
+        };
+        match p {
+            CapstoneProps::Pedestal => {
+                part(
+                    Mat::RobotShell,
+                    Vec3::new(0.7, 1.0, 0.55),
+                    Vec3::new(0.0, 0.5, 0.0),
+                );
+                // The cradle: a plate with a rim and two dividers.
+                part(
+                    Mat::DarkMetal,
+                    Vec3::new(0.62, 0.03, 0.46),
+                    Vec3::new(0.0, 1.015, 0.0),
+                );
+                for (size, at) in [
+                    (Vec3::new(0.62, 0.06, 0.02), Vec3::new(0.0, 1.06, 0.22)),
+                    (Vec3::new(0.62, 0.06, 0.02), Vec3::new(0.0, 1.06, -0.22)),
+                    (Vec3::new(0.02, 0.06, 0.42), Vec3::new(0.3, 1.06, 0.0)),
+                    (Vec3::new(0.02, 0.06, 0.42), Vec3::new(-0.3, 1.06, 0.0)),
+                    (Vec3::new(0.015, 0.05, 0.42), Vec3::new(0.1, 1.055, 0.0)),
+                    (Vec3::new(0.015, 0.05, 0.42), Vec3::new(-0.1, 1.055, 0.0)),
+                ] {
+                    part(Mat::DarkMetal, size, at);
+                }
+                // The screen's mast and housing, behind the cradle.
+                part(
+                    Mat::DarkMetal,
+                    Vec3::new(0.06, 0.3, 0.06),
+                    Vec3::new(0.0, 1.15, -0.25),
+                );
+                part(
+                    Mat::RobotShell,
+                    Vec3::new(0.48, 0.36, 0.08),
+                    Vec3::new(0.0, 1.45, -0.24),
+                );
+            }
+            CapstoneProps::Strongbox => {
+                part(
+                    Mat::DarkMetal,
+                    Vec3::new(0.5, 0.04, 0.36),
+                    Vec3::new(0.0, 0.02, 0.0),
+                );
+                for (size, at) in [
+                    (Vec3::new(0.5, 0.18, 0.02), Vec3::new(0.0, 0.11, 0.17)),
+                    (Vec3::new(0.5, 0.18, 0.02), Vec3::new(0.0, 0.11, -0.17)),
+                    (Vec3::new(0.02, 0.18, 0.32), Vec3::new(0.24, 0.11, 0.0)),
+                    (Vec3::new(0.02, 0.18, 0.32), Vec3::new(-0.24, 0.11, 0.0)),
+                ] {
+                    part(Mat::PaintedMetal, size, at);
+                }
+                // The lid, thrown back.
+                let lid = lib.get(Mat::PaintedMetal, &server, &mut materials);
+                commands.spawn((
+                    Mesh3d(meshes.add(metric_box(Vec3::new(0.5, 0.02, 0.36)))),
+                    MeshMaterial3d(lid),
+                    Transform::from_xyz(0.0, 0.3, -0.3).with_rotation(Quat::from_rotation_x(1.2)),
+                    ChildOf(e),
+                ));
+                // A survey beacon still blinking on it: you see it first.
+                let glow = lamp(&mut materials, LinearRgba::rgb(8.0, 3.5, 0.6));
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.025, 0.05))),
+                    MeshMaterial3d(glow),
+                    Transform::from_xyz(0.22, 0.225, 0.15),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    PointLight {
+                        color: Color::srgb(1.0, 0.6, 0.2),
+                        intensity: 6_000.0,
+                        range: 8.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_xyz(0.22, 0.35, 0.15),
+                    ChildOf(e),
+                ));
             }
         }
     }

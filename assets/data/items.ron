@@ -408,6 +408,24 @@
         ),
 
         // ---------------------------------------------------------------
+        // The valley keys: the Quarantine Authority's depot keys, one per
+        // valley. Bring all three to a robot Gate's lock (see `capstone`).
+        (
+            id: "key_marrow", dims: Some((0.09, 0.03, 0.14)), name: "Depot key M",
+            description: "A heavy grey cartridge stencilled KEY-M MARROW. The Hollow survey post's, by the tag on it.",
+            category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
+        ),
+        (
+            id: "key_kettle", dims: Some((0.09, 0.03, 0.14)), name: "Depot key K",
+            description: "A heavy grey cartridge stencilled KEY-K KETTLE, scorched along one edge.",
+            category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
+        ),
+        (
+            id: "key_cinder", dims: Some((0.09, 0.03, 0.14)), name: "Depot key C",
+            description: "A heavy grey cartridge stencilled KEY-C CINDER, gritty with ash.",
+            category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
+        ),
+
         // Curios: no use but to keep, or to offer.
         // ---------------------------------------------------------------
         (id: "wristwatch", name: "Stopped wristwatch", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),

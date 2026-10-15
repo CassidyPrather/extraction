@@ -296,6 +296,8 @@ pub enum MarkerKind {
     /// A computer terminal on whatever is built here, screen facing `rot`;
     /// press it for the next page.
     Terminal { pages: Vec<String> },
+    /// Where this valley's depot key lies until someone takes it home.
+    ValleyKey { item: String },
 }
 
 impl MarkerKind {

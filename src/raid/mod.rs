@@ -61,6 +61,9 @@ pub struct Raid {
     /// Seconds since stepping out of the truck.
     pub clock: f32,
     pub raids: u32,
+    /// The machines were recalled (the capstone): no more robots, in any
+    /// valley.
+    pub recalled: bool,
     /// Surge cycles survived by this Zone (each one re-rolls the loot).
     pub cycle: u32,
     pub extractions: u32,
@@ -128,6 +131,7 @@ impl Plugin for RaidPlugin {
             phase: Phase::AtBase,
             clock: 0.0,
             raids: 0,
+            recalled: false,
             cycle: 0,
             extractions: 0,
             deaths: 0,
@@ -143,6 +147,7 @@ impl Plugin for RaidPlugin {
             route::RoutePlugin,
             comfort_board::ComfortBoardPlugin,
             crate::camp::CampPlugin,
+            crate::capstone::CapstonePlugin,
             chatter::ChatterPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,

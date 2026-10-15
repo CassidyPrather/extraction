@@ -116,6 +116,25 @@ pub fn views(zone: &Zone) -> Vec<View> {
             MarkerKind::Note { .. } => ("note", 2.2 + m.y, 0.0, 0.55),
             MarkerKind::Terminal { .. } => ("terminal", 2.2 + m.y, 0.23, 0.9),
             MarkerKind::Sign { .. } => ("sign", 0.0, 1.45, 1.6),
+            MarkerKind::ValleyKey { .. } => ("key", 0.0, 0.1, 1.4),
+            // The depot lock beside the Gate (see `capstone`).
+            MarkerKind::RobotGate => {
+                let yaw = Quat::from_rotation_y(-m.rot.to_radians());
+                let off = yaw * Vec3::new(-10.5, 0.0, -2.5);
+                let at = Vec3::new(m.at[0] + off.x, 0.0, m.at[1] + off.z);
+                let target = Vec3::new(at.x, zone.ground(at.x, at.z) + 1.2, at.z);
+                let eye = target + yaw * Vec3::new(0.0, 0.3, 1.3);
+                out.push(View {
+                    file: format!(
+                        "w{i:03}_lock_{}.png",
+                        m.name.to_lowercase().replace(' ', "_")
+                    ),
+                    what: format!("depot lock by \"{}\"", m.name),
+                    at: eye.to_array(),
+                    look: target.to_array(),
+                });
+                continue;
+            }
             _ => continue,
         };
         let y = if kind == "sign" {

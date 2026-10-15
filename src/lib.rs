@@ -8,6 +8,7 @@ pub mod anomaly;
 pub mod audio;
 pub mod bot;
 pub mod camp;
+pub mod capstone;
 pub mod dev;
 pub mod gadgets;
 pub mod health;
