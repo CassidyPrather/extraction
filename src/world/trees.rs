@@ -19,11 +19,20 @@ pub struct TreesPlugin;
 
 impl Plugin for TreesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<FarCrownMaterial>::default())
-            .add_systems(
-                PostUpdate,
-                (spawn_forests, stream_near_detail, fog_cull).chain(),
-            );
+        app.add_plugins((
+            MaterialPlugin::<FarCrownMaterial>::default(),
+            super::impostors::ImpostorPlugin,
+        ))
+        .add_systems(
+            PostUpdate,
+            (spawn_forests, stream_near_detail, fog_cull).chain(),
+        )
+        .add_systems(
+            PostUpdate,
+            cut_near_detail
+                .after(TransformSystems::Propagate)
+                .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+        );
     }
 }
 
@@ -121,21 +130,23 @@ pub fn spawn_tree_colliders(mut commands: Commands, zone: Res<Zone>) {
 /// Client: how the forest is drawn, built for thousands of trees at VR
 /// frame rates.
 ///
-/// - Trunks and the far (solid) crowns are merged into one mesh per
-///   [`CHUNK`]-metre square of map (per bark material), so the whole
-///   forest is a few hundred draws and entities instead of tens of
-///   thousands. The far crowns' material dissolves them near the camera
-///   (`shaders/near_fade.wgsl`), where the detailed ones take over.
-/// - Near detail — the alpha-tested foliage cards, and the spruces' dark
-///   core — is streamed: spawned on trees within [`NEAR_SPAWN`] of the
-///   camera and dropped again past [`NEAR_DROP`]. Bevy's visibility range
-///   cross-fades them against the far crowns between 62 and 74 m.
+/// - Trunks are merged into one mesh per [`CHUNK`]-metre square of map
+///   (per bark material), full detail near and a coarse LOD past
+///   [`FAR_LOD`], and nothing past the fog: a few hundred draws for the
+///   whole forest.
+/// - Foliage near (within `impostors::NEAR`) is each tree's own alpha-
+///   tested cards (and the spruces' dark core), streamed in and out round
+///   the camera; beyond it, impostors: a picture of the same cards taken
+///   at start, on crossed quads merged per chunk. The two swap per tree,
+///   at once, by the same distance (no dithered cross-fade).
 fn spawn_forests(
     mut commands: Commands,
     trees: Query<(Entity, &Tree, &Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut fade_materials: ResMut<Assets<FarCrownMaterial>>,
+    mut impostor_materials: ResMut<Assets<super::impostors::ImpostorMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
     mut done: Local<bool>,
@@ -231,16 +242,49 @@ fn spawn_forests(
                     TreeSpecies::Birch => leaves.clone(),
                     _ => needles.clone(),
                 };
+                let crown = m.crown.as_ref().map(|c| meshes.add(c.clone()));
+                let bounds = m.cards.as_ref().and_then(mesh_bounds);
+                let cards = m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat));
+                // Far foliage: this variant's cards (and a spruce's core)
+                // photographed for its impostor.
+                let impostor = match (&cards, bounds) {
+                    (Some((mesh, mat)), Some((min, max))) => {
+                        let card_mat = materials.get(mat).cloned().unwrap_or_default();
+                        let core_mat = materials.get(&core).cloned().unwrap_or_default();
+                        let core_part = crown
+                            .clone()
+                            .filter(|_| s == TreeSpecies::Spruce)
+                            .map(|c| (c, &core_mat, CORE_SCALE));
+                        let imp = super::impostors::capture(
+                            &mut commands,
+                            &mut images,
+                            &mut materials,
+                            handles.len(),
+                            (mesh.clone(), &card_mat),
+                            core_part,
+                            min,
+                            max,
+                        );
+                        let tint = card_mat.base_color;
+                        let mat = impostor_materials.add(super::impostors::material(
+                            imp.image.clone(),
+                            tint_to_white(tint),
+                        ));
+                        Some((imp, mat))
+                    }
+                    _ => None,
+                };
                 handles.insert(
                     (s, v),
                     VariantAssets {
-                        crown: m.crown.as_ref().map(|c| meshes.add(c.clone())),
+                        crown,
                         trunk_cpu: m.trunk,
                         crown_cpu: m.crown,
                         trunk_far: far.trunk,
                         crown_far: far.crown,
                         bark: b.clone(),
-                        cards: m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat)),
+                        cards,
+                        impostor,
                     },
                 );
             }
@@ -305,7 +349,7 @@ fn spawn_forests(
                     }
                     None => trunks.push((v.bark.clone(), trunk)),
                 }
-                if let Some(c) = crown {
+                if let Some(c) = crown.as_ref().filter(|_| v.impostor.is_none()) {
                     let c = c.clone().transformed_by(*t);
                     match &mut crowns {
                         Some(m) => {
@@ -339,6 +383,36 @@ fn spawn_forests(
                     ec.insert(FarForest);
                 }
             }
+        }
+        // Far foliage: impostors, one mesh per variant in the chunk.
+        let mut by_variant: std::collections::HashMap<
+            (TreeSpecies, usize),
+            super::impostors::Builder,
+        > = Default::default();
+        for (_, tree, t) in members {
+            let v = &assets.handles[&(tree.species, tree.variant)];
+            if let Some((imp, _)) = &v.impostor {
+                super::impostors::quads(
+                    imp,
+                    t,
+                    by_variant.entry((tree.species, tree.variant)).or_default(),
+                );
+            }
+        }
+        for (key, b) in by_variant {
+            if b.is_empty() {
+                continue;
+            }
+            let (_, mat) = assets.handles[&key].impostor.as_ref().unwrap();
+            commands.spawn((
+                Name::new("Forest impostors"),
+                Mesh3d(meshes.add(b.build())),
+                MeshMaterial3d(mat.clone()),
+                bevy::light::NotShadowCaster,
+                impostor_range(FOG_CULL_DEFAULT),
+                ImpostorForest,
+                ChildOf(parent),
+            ));
         }
         chunk_count += 1;
     }
@@ -385,19 +459,97 @@ fn lod_range(far: bool, fog: f32) -> bevy::camera::visibility::VisibilityRange {
 /// as range is to a chunk's centre) nothing is drawn.
 fn fog_cull(
     weather: Res<super::sky::Weather>,
-    mut far: Query<&mut bevy::camera::visibility::VisibilityRange, With<FarForest>>,
-    added: Query<(), Added<FarForest>>,
+    mut far: Query<
+        (
+            &mut bevy::camera::visibility::VisibilityRange,
+            Has<ImpostorForest>,
+        ),
+        Or<(With<FarForest>, With<ImpostorForest>)>,
+    >,
+    added: Query<(), Or<(Added<FarForest>, Added<ImpostorForest>)>>,
 ) {
     if !weather.is_changed() && added.is_empty() {
         return;
     }
     let fog = weather.visibility * 1.3 + CHUNK * 0.7;
-    for mut r in &mut far {
-        let want = lod_range(true, fog);
+    for (mut r, impostor) in &mut far {
+        let want = if impostor {
+            impostor_range(fog)
+        } else {
+            lod_range(true, fog)
+        };
         if r.end_margin != want.end_margin {
             *r = want;
         }
     }
+}
+
+/// A tree's cards (and core) show within the impostors' cut and hide
+/// beyond it, by the same horizontal distance from the same camera the
+/// impostor shader measures, every frame: the tree swaps all at once.
+fn cut_near_detail(
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    trees: Query<(&GlobalTransform, &NearDetail)>,
+    mut vis: Query<&mut Visibility>,
+) {
+    let eyes: Vec<Vec2> = cams.iter().map(|g| g.translation().xz()).collect();
+    if eyes.is_empty() {
+        return;
+    }
+    let cut = super::impostors::NEAR;
+    for (gt, detail) in &trees {
+        let p = gt.translation().xz();
+        let d = eyes
+            .iter()
+            .map(|e| e.distance(p))
+            .fold(f32::INFINITY, f32::min);
+        let want = if d < cut {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        for kid in &detail.0 {
+            if let Ok(mut v) = vis.get_mut(*kid) {
+                if *v != want {
+                    *v = want;
+                }
+            }
+        }
+    }
+}
+
+/// A chunk's impostors: drawn out to the fog (the near cut is the
+/// shader's, per tree).
+#[derive(Component)]
+pub struct ImpostorForest;
+
+fn impostor_range(fog: f32) -> bevy::camera::visibility::VisibilityRange {
+    bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: fog..(fog + 20.0),
+        use_aabb: true,
+    }
+}
+
+/// The spruce's dark core, scaled inside its cards.
+const CORE_SCALE: Vec3 = Vec3::new(0.62, 0.96, 0.62);
+
+/// The card material's tint is baked into the picture: the impostor's own
+/// is white.
+fn tint_to_white(_tint: Color) -> Color {
+    Color::WHITE
+}
+
+/// Bounds of a mesh's positions (local).
+fn mesh_bounds(m: &Mesh) -> Option<(Vec3, Vec3)> {
+    let pos = m.attribute(Mesh::ATTRIBUTE_POSITION)?.as_float3()?;
+    let mut lo = Vec3::splat(f32::INFINITY);
+    let mut hi = Vec3::splat(f32::NEG_INFINITY);
+    for p in pos {
+        lo = lo.min(Vec3::from_array(*p));
+        hi = hi.max(Vec3::from_array(*p));
+    }
+    lo.is_finite().then_some((lo, hi))
 }
 /// Near detail appears within this distance of the camera...
 pub const NEAR_SPAWN: f32 = 80.0;
@@ -443,7 +595,8 @@ fn stream_near_detail(
     if eyes.is_empty() {
         return;
     }
-    let near = |p: Vec3, r: f32| eyes.iter().any(|e| e.distance(p) < r);
+    // Horizontal, as the impostors' cut is.
+    let near = |p: Vec3, r: f32| eyes.iter().any(|e| e.xz().distance(p.xz()) < r);
     // Drop what's now far.
     for (e, detail, gt) in &detailed {
         if !near(gt.translation(), NEAR_DROP) {
@@ -456,11 +609,8 @@ fn stream_near_detail(
     // Add what's now near.
     let assets = &assets.0;
     let reach = (NEAR_SPAWN / CHUNK).ceil() as i32 + 1;
-    let fade = bevy::camera::visibility::VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: 62.0..74.0,
-        use_aabb: false,
-    };
+    // Shown or hidden at the impostors' cut by `cut_near_detail`.
+    let fade = Visibility::Hidden;
     let mut seen = std::collections::HashSet::new();
     for eye in &eyes {
         let (cx, cz) = chunk_of(*eye);
@@ -494,7 +644,7 @@ fn stream_near_detail(
                                         .spawn((
                                             Mesh3d(crown.clone()),
                                             MeshMaterial3d(assets.core.clone()),
-                                            Transform::from_scale(Vec3::new(0.62, 0.96, 0.62)),
+                                            Transform::from_scale(CORE_SCALE),
                                             fade.clone(),
                                             ChildOf(*e),
                                         ))
@@ -527,6 +677,11 @@ impl bevy::pbr::MaterialExtension for NearFade {
 }
 
 struct VariantAssets {
+    /// The far foliage, when there are cards to photograph.
+    impostor: Option<(
+        super::impostors::Impostor,
+        Handle<super::impostors::ImpostorMaterial>,
+    )>,
     trunk_cpu: Mesh,
     crown_cpu: Option<Mesh>,
     /// The far LOD's.

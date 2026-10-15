@@ -5,6 +5,7 @@
 
 pub mod bridges;
 pub mod buildings;
+pub mod impostors;
 pub mod rain;
 pub mod sky;
 pub mod structures;
