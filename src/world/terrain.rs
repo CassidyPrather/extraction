@@ -93,6 +93,10 @@ fn spawn_terrain_meshes(
                     crate::render::centred(&mut meshes, mesh),
                     MeshMaterial3d(material.clone()),
                     lod_range(lod, FOG_CULL_DEFAULT),
+                    // Under this sky the land's own shadows are faint, and
+                    // the cascades are drawn per eye: it takes shadows
+                    // (trees, buildings) but casts none.
+                    bevy::light::NotShadowCaster,
                 ));
             }
             i0 = i1;

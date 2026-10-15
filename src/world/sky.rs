@@ -92,6 +92,7 @@ pub struct Sun;
 fn spawn_sky(
     mut commands: Commands,
     weather: Res<Weather>,
+    opts: Res<crate::launch::LaunchOptions>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<SkyMaterial>>,
 ) {
@@ -125,11 +126,12 @@ fn spawn_sky(
         },
         Transform::IDENTITY.looking_to(weather.sun_dir, Vec3::Y),
         // Cascades are per view: in a headset, two eyes each. Two cascades
-        // out to 90 m (past that the fog has the shadows anyway).
+        // out to 90 m (past that the fog has the shadows anyway), less at
+        // lower `--detail`.
         CascadeShadowConfigBuilder {
             num_cascades: 2,
             first_cascade_far_bound: 15.0,
-            maximum_distance: 90.0,
+            maximum_distance: 40.0 + 50.0 * opts.detail,
             ..default()
         }
         .build(),

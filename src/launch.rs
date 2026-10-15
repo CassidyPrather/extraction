@@ -1,7 +1,7 @@
 //! Command-line launch options.
 //!
 //! ```text
-//! extraction [--flat] [--mirror] [--data-dir DIR] [--map NAME] [--seed N] [--scene NAME]
+//! extraction [--flat] [--mirror] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
@@ -40,6 +40,9 @@ pub struct LaunchOptions {
     /// The profile folder (career, settings, logs) instead of the usual
     /// data folder: a second player, or a test's own.
     pub data_dir: Option<PathBuf>,
+    /// 0.25..=1: how much ground cover, field stones and shadow distance
+    /// (lower for a slower machine).
+    pub detail: f32,
     pub map: String,
     pub seed: u64,
     pub scene: SceneChoice,
@@ -103,6 +106,7 @@ impl Default for LaunchOptions {
             flat: false,
             mirror: false,
             data_dir: None,
+            detail: 1.0,
             map: "marrow_creek".into(),
             seed: 1,
             scene: SceneChoice::Raid,
@@ -148,6 +152,7 @@ impl LaunchOptions {
                 "--flat" => o.flat = true,
                 "--mirror" => o.mirror = true,
                 "--data-dir" => o.data_dir = Some(PathBuf::from(val())),
+                "--detail" => o.detail = val().parse::<f32>().unwrap_or(1.0).clamp(0.25, 1.0),
                 "--bot" => o.bot = true,
                 "--headless" => o.headless = true,
                 "--no-robots" => o.robots = false,

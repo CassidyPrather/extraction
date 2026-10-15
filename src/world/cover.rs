@@ -220,6 +220,7 @@ fn stream_cover(
     server: Res<AssetServer>,
     time: Res<Time>,
     mut timer: Local<f32>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -307,6 +308,10 @@ fn stream_cover(
         let (mut near, mut far, mut fronds) =
             (Builder::default(), Builder::default(), Builder::default());
         for s in &plants {
+            // Lower detail keeps fewer plants (by rank, so the same ones).
+            if s.rank > opts.detail {
+                continue;
+            }
             match s.kind {
                 CoverKind::Fern => fern(&mut fronds, s),
                 _ if s.rank < KEEP_FAR => tuft(&mut far, s),

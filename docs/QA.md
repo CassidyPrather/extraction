@@ -47,6 +47,14 @@ A map test can be pointed at one map with `EXTRACTION_TEST_MAP=<map>`.
   the chances in `rocks::scatter_rocks`; ground cover is `cell` and the
   chances in `cover::CoverMap::patch`, and its distances (`PATCH`,
   `SPAWN`, `NEAR_FADE`, `FADE`, `KEEP_FAR`) are in `world/cover.rs`.
+- **Detail**: `--detail` (0.25 to 1) thins ground cover by rank, drops
+  field stones and shortens the sun's shadows. Rock LOD bands are
+  `NEAR_LOD`, `FAR_LOD`, `CULL`, `STONES_NEAR` and `STONES` in
+  `world/rocks.rs`. Render load at four standing views after the ground
+  work and the rock LODs: 387k to 535k triangles drawn, 108k to 360k in
+  the sun's shadows (most of that the forest's foliage). Before the rock
+  LODs, rocks alone were 65k to 225k drawn and 156k to 247k in shadows,
+  and the terrain another 140k to 160k in shadows (it no longer casts).
 - **Screenshot height**: `scripts/shot.sh` with y = 0 stands you on the
   ground (eyes at 1.7 m). Any other y is absolute. Until this was the
   rule, a y of 0 put the camera 0.3 m off the ground, and ground-level

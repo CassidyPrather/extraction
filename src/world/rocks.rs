@@ -11,13 +11,17 @@ use extraction_core::rocks::{ROCK_VARIANTS, RockSpot, SOLID_RADIUS, scatter_rock
 use super::{Layer, Zone};
 use crate::render::materials::{Mat, MaterialLibrary};
 
-/// Chunk size for merged rock meshes and compound colliders.
-const CHUNK: f32 = 64.0;
-/// Past this a chunk's rocks drop to the coarse mesh...
-const FAR_LOD: f32 = 110.0;
+/// Chunk size for merged rock meshes and compound colliders (small enough
+/// that a chunk's distance is near enough each rock's for the LOD bands).
+const CHUNK: f32 = 32.0;
+/// Boulders: fine (ico 2) to here, then medium (ico 1)...
+const NEAR_LOD: f32 = 35.0;
+/// ...then coarse (ico 0), which casts no shadow...
+const FAR_LOD: f32 = 130.0;
 /// ...and past this they're gone (the fog has them).
 const CULL: f32 = 420.0;
-/// Field stones go sooner.
+/// Field stones: medium to here, coarse to `STONES`, never a shadow.
+const STONES_NEAR: f32 = 25.0;
 const STONES: f32 = 90.0;
 
 pub fn rocks(zone: &Zone) -> Vec<RockSpot> {
@@ -175,6 +179,7 @@ fn spawn_rock_meshes(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut library: ResMut<MaterialLibrary>,
     server: Res<AssetServer>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -186,6 +191,12 @@ fn spawn_rock_meshes(
     let mat = library.get(Mat::Boulder, &server, &mut materials);
     let mut chunks: std::collections::HashMap<(i32, i32), Vec<RockSpot>> = Default::default();
     for r in rocks(&zone) {
+        // Lower detail thins the field stones (they're only looks).
+        if r.radius < SOLID_RADIUS
+            && hash((r.pos[0] * 7.0 + r.pos[2] * 131.0) as i64 as u64) > opts.detail
+        {
+            continue;
+        }
         chunks.entry(chunk_of(r.pos)).or_default().push(r);
     }
     use bevy::camera::visibility::VisibilityRange;
@@ -201,12 +212,15 @@ fn spawn_rock_meshes(
     for (_, list) in chunks {
         let (small, big): (Vec<&RockSpot>, Vec<&RockSpot>) =
             list.iter().partition(|r| r.radius < SOLID_RADIUS);
-        // Boulders: fine near, coarse far. Field stones: coarse, and only
-        // near (they're grain in the ground, not landmarks).
-        for (rocks, detail, range) in [
-            (&big, 2, range(0.0, FAR_LOD)),
-            (&big, 1, range(FAR_LOD, CULL)),
-            (&small, 1, range(0.0, STONES)),
+        // Boulders: three LODs. Field stones: two, and only near (they're
+        // grain in the ground, not landmarks). Shadows only from what's
+        // near enough to show one.
+        for (rocks, detail, range, shadow) in [
+            (&big, 2, range(0.0, NEAR_LOD), true),
+            (&big, 1, range(NEAR_LOD, FAR_LOD), true),
+            (&big, 0, range(FAR_LOD, CULL), false),
+            (&small, 1, range(0.0, STONES_NEAR), false),
+            (&small, 0, range(STONES_NEAR, STONES), false),
         ] {
             if rocks.is_empty() {
                 continue;
@@ -226,12 +240,15 @@ fn spawn_rock_meshes(
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv);
             let _ = mesh.generate_tangents();
-            commands.spawn((
+            let mut e = commands.spawn((
                 Name::new("Rock chunk"),
                 crate::render::centred(&mut meshes, mesh),
                 MeshMaterial3d(mat.clone()),
                 range,
             ));
+            if !shadow {
+                e.insert(bevy::light::NotShadowCaster);
+            }
         }
     }
 }

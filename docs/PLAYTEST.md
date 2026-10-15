@@ -187,6 +187,7 @@ whether the ending felt like one.
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
 | `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
+| `--detail 0.5` | Less grass, fewer field stones, shorter shadows (0.25 to 1; 1 is the default). Try it if the frames log says the 1% figure is over 11 ms |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
 | `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |
 | `--camp` | Set up the camp table even in a screenshot |
