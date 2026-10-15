@@ -67,6 +67,13 @@ fn report(
     tri_counts: Res<Triangles>,
     points: Query<&PointLight>,
     spots: Query<&SpotLight>,
+    ranged: Query<
+        (&GlobalTransform, Option<&bevy::camera::primitives::Aabb>),
+        (
+            With<Mesh3d>,
+            With<bevy::camera::visibility::VisibilityRange>,
+        ),
+    >,
 ) {
     *frame += 1;
     if *frame != 30 {
@@ -123,6 +130,20 @@ fn report(
             entry.0 += 1;
             entry.1 += tris(m);
         }
+    }
+    // The GPU's LOD dither measures from a mesh's origin, not its bounds:
+    // a ranged mesh left at the world origin fades by the camera's distance
+    // from the map centre (see `render::centred`).
+    let at_origin = ranged
+        .iter()
+        .filter(|(g, _)| g.translation().length() < 1e-3)
+        .count();
+    let unbounded = ranged.iter().filter(|(_, b)| b.is_none()).count();
+    if at_origin + unbounded > 0 {
+        println!(
+            "render stats WARNING: {at_origin} LOD-ranged meshes at the world origin, \
+             {unbounded} with no bounds"
+        );
     }
     let shadowed_points = points.iter().filter(|p| p.shadow_maps_enabled).count();
     let shadowed_spots = spots.iter().filter(|p| p.shadow_maps_enabled).count();
