@@ -1001,6 +1001,11 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                 let r = rmax * (1.0 - t).powf(0.85) + 0.4;
                 let k = (8.0 - t * 4.0) as usize;
                 let phase = crng.range(0.0, tau);
+                // The last whorls' few short plates read as a cross on the
+                // spire: the core's narrow top is the tip instead.
+                if t > 0.9 {
+                    continue;
+                }
                 let centre = Vec3::new(0.0, y, 0.0);
                 for i in 0..k {
                     let a = phase + i as f32 / k as f32 * tau + crng.range(-0.25, 0.25);
@@ -1028,14 +1033,6 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                     );
                 }
             }
-            cards.cross_cards(
-                Vec3::new(0.0, h - 1.6, 0.0),
-                Vec3::Y * 2.0,
-                1.0,
-                SPRIGS[0],
-                Vec3::new(0.0, h - 1.0, 0.0),
-                false,
-            );
         }
         TreeSpecies::Pine => {
             let h = rng.range(17.0, 24.0);
