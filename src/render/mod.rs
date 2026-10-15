@@ -74,12 +74,21 @@ fn attach_flat_camera(
     // A camera override (screenshots, flyovers) gets a free camera instead.
     if let Some((pos, yaw, pitch)) = opts.camera {
         let ground = zone.ground(pos.x, pos.z);
+        // A height of 0 (or less) means standing there, eyes 1.7 m up.
+        let y = if pos.y <= 0.0 {
+            ground + 1.7
+        } else {
+            pos.y.max(ground + 0.3)
+        };
         commands.spawn((
             Name::new("Free camera"),
             FreeCamera,
-            Transform::from_xyz(pos.x, pos.y.max(ground + 0.3), pos.z).with_rotation(
-                Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0),
-            ),
+            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                EulerRot::YXZ,
+                -yaw.to_radians(),
+                pitch.to_radians(),
+                0.0,
+            )),
             camera_bundle(&weather),
         ));
         return;

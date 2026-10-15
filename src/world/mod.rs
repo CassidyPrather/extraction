@@ -5,9 +5,11 @@
 
 pub mod bridges;
 pub mod buildings;
+pub mod cover;
 pub mod impostors;
 pub mod notes;
 pub mod rain;
+pub mod rocks;
 pub mod sky;
 pub mod structures;
 pub mod surfaces;
@@ -119,6 +121,7 @@ impl Plugin for WorldPlugin {
                     buildings::spawn_buildings,
                     bridges::spawn_bridges,
                     trees::spawn_tree_colliders,
+                    rocks::spawn_rock_colliders,
                 ),
             );
     }
@@ -171,6 +174,8 @@ impl Plugin for WorldVisualsPlugin {
             water::WaterPlugin,
             trees::TreesPlugin,
             notes::NotesPlugin,
+            rocks::RockVisualsPlugin,
+            cover::CoverPlugin,
         ));
     }
 }

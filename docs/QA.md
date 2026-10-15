@@ -19,6 +19,8 @@ with a gauge, so it stays found.
 | Sprig atlas (`trees::atlas_tests`) | Spruce card rects against the atlas alpha. | `cargo test --lib sprig` | 5–45% opaque, clear of the bark strip and the stems |
 | Doors and floors (`sim::indoor`) | A bot walks in through every door on every map; every floor and deck has a surface under it. | `cargo test --lib indoor` | every door, every floor |
 | Bridges (`world::bridges`) | A bot walks over every bridge, along waypoints every 2 m. | `cargo test --lib bridges` | every bridge |
+| Worn ground (`terrain::rain_wears_…`) | How far relief and erosion move the land, overall and under buildings. | `cargo test -p extraction_core rain_wears` | RMS over 0.15 m, nowhere over 6 m; buildings' ground moved under 0.02 m (median), 0.5 m at most |
+| Rocks and cover (`rocks`, `cover`) | Counts per map and per patch, and that none lies on a road, in water or on a floor. | `cargo test -p extraction_core rocks cover` | 1,000–20,000 rocks a map; 600+ plants per 24 m patch |
 | Render load (`render/stats.rs`) | Meshes, triangles and shadow casters a view draws. Also warns about LOD-ranged meshes at the world origin or without bounds. | `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` | eyeballed against `docs/PLAYTEST.md`. The warning should never print. |
 | Sim telemetry (`scripts/sim.sh`) | Bots raiding a map: who gets home, who dies, where they get stuck. | `scripts/sim.sh <map> N --jobs 3 --seed S` | see `docs/SIMULATION.md` |
 
@@ -35,6 +37,18 @@ A map test can be pointed at one map with `EXTRACTION_TEST_MAP=<map>`.
   sit). `Heightmap::footing` is the single rule that the terrain settle,
   the game and the Unity export all use. Rolling stock stands on its
   bogies (`terrain::BOGIE`) and pitches to the grade.
+- **Ground**: `noise.relief` and `noise.erosion` per map (1 by default;
+  0 turns either off). Droplet constants are at the top of
+  `Heightmap::rain`. For a hillshade of each valley,
+  `DUMP=dir cargo test -p extraction_core --release dump_heights --
+  --ignored` writes the heights as raw f32. Rock density is `cell` and
+  the chances in `rocks::scatter_rocks`; ground cover is `cell` and the
+  chances in `cover::CoverMap::patch`, and its distances (`PATCH`,
+  `SPAWN`, `NEAR_FADE`, `FADE`, `KEEP_FAR`) are in `world/cover.rs`.
+- **Screenshot height**: `scripts/shot.sh` with y = 0 stands you on the
+  ground (eyes at 1.7 m). Any other y is absolute. Until this was the
+  rule, a y of 0 put the camera 0.3 m off the ground, and ground-level
+  shots looked sparse and oversized because of it.
 - **Tour**: `scripts/tour.sh <map> [out] [args]` takes the game's
   arguments. Try `--weather fog` or `--weather rain`, a `--size`, or
   `--frames` to let more settle before shooting.
@@ -100,8 +114,12 @@ that now holds it.
 - **Bare halls, the bus as a box, placeholder sawmill and boxcar.**
   Models rebuilt. The geometry gauges keep the new pieces honest.
 
-Open items from that pass:
+Since that pass, the robot gate has been rebuilt and the anomaly's
+ground glow is a disc draped over the terrain. Still open:
 
-- The robot gate is still a plain white arch.
-- The anomaly's ground glow is a hard square.
 - The tour's outside camera can stand inside a tree.
+
+Then the ground itself: the terrain texture visibly repeated, and the
+land between buildings read as one smooth sheet. The texture is now
+hex-tiled, and the ground has natural relief, erosion, rocks and ground
+cover (see DESIGN, "Maps"). Gauges: worn ground; rocks and cover.

@@ -15,6 +15,9 @@
 // - Tree instances from trees.json. Each species ("spruce", "pine",
 //   "birch", "snag") uses the prefab of that name in the tree folder if
 //   there is one, otherwise a generated placeholder tree.
+// - Rocks from rocks.json: `boulder_<variant>.prefab` from the prefab
+//   folder if there is one (about unit radius, flat base at y -0.55),
+//   otherwise a squashed sphere. The big ones keep a collider.
 // - Placements from placements.json. Each uses the prefab named after its
 //   id (`barn.prefab`, ...) in the prefab folder if there is one,
 //   otherwise a labelled cube of the prefab's footprint.
@@ -46,6 +49,7 @@ public class ExtractionImporter : EditorWindow
     bool newScene = true;
     bool importTrees = true;
     bool importPlacements = true;
+    bool importRocks = true;
     bool importMarkers = true;
     bool importWater = true;
     bool addFog = true;
@@ -102,6 +106,7 @@ public class ExtractionImporter : EditorWindow
         newScene = EditorGUILayout.Toggle("Build in a new scene", newScene);
         importTrees = EditorGUILayout.Toggle("Trees", importTrees);
         importPlacements = EditorGUILayout.Toggle("Placements", importPlacements);
+        importRocks = EditorGUILayout.Toggle("Rocks", importRocks);
         importMarkers = EditorGUILayout.Toggle("Markers", importMarkers);
         importWater = EditorGUILayout.Toggle("Water", importWater);
         addFog = EditorGUILayout.Toggle("Distance fog", addFog);
@@ -156,6 +161,15 @@ public class ExtractionImporter : EditorWindow
         public float[] pos;
         public float yaw_deg;
         public float scale;
+    }
+
+    [Serializable] public class RocksJson { public int count; public float solid_radius_m; public RockJson[] rocks; }
+    [Serializable] public class RockJson
+    {
+        public int variant;
+        public float[] pos;
+        public float yaw_deg;
+        public float[] scale;
     }
 
     [Serializable] public class PlacementsJson { public PlacementJson[] placements; }
@@ -240,6 +254,11 @@ public class ExtractionImporter : EditorWindow
         {
             EditorUtility.DisplayProgressBar("Extraction import", "Placements", 0.7f);
             PlacePrefabs(root.transform);
+        }
+        if (importRocks)
+        {
+            EditorUtility.DisplayProgressBar("Extraction import", "Rocks", 0.75f);
+            PlaceRocks(root.transform);
         }
         if (importMarkers)
         {
@@ -531,6 +550,43 @@ public class ExtractionImporter : EditorWindow
             {
                 tm.font = font;
                 text.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            }
+        }
+    }
+
+    void PlaceRocks(Transform root)
+    {
+        RocksJson rj = ReadJson<RocksJson>(exportFolder, "rocks.json");
+        var parent = new GameObject("Rocks").transform;
+        parent.SetParent(root, false);
+        Material grey = ColourMaterial(new Color(0.45f, 0.45f, 0.42f));
+        foreach (RockJson r in rj.rocks)
+        {
+            Vector3 scale = V3(r.scale);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabFolder + "/boulder_" + r.variant + ".prefab");
+            GameObject go;
+            if (prefab != null)
+            {
+                go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            }
+            else
+            {
+                go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                go.transform.SetParent(parent, false);
+                go.GetComponent<Renderer>().sharedMaterial = grey;
+                // A sphere's radius is 0.5: double the scale to match.
+                scale *= 2f;
+            }
+            go.name = "Rock " + r.variant;
+            go.transform.position = V3(r.pos);
+            go.transform.rotation = Quaternion.Euler(0f, r.yaw_deg, 0f);
+            go.transform.localScale = scale;
+            go.isStatic = true;
+            // Small stones are stepped over.
+            if (r.scale[0] < rj.solid_radius_m)
+            {
+                var col = go.GetComponent<Collider>();
+                if (col != null) DestroyImmediate(col);
             }
         }
     }

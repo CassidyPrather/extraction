@@ -102,6 +102,18 @@ pub struct NoiseDef {
     /// Small-scale bumpiness on top, metres.
     #[serde(default)]
     pub detail: f32,
+    /// How much natural relief goes on top, as a share of `amplitude`:
+    /// patches of knolls and hummocks. 0 leaves the plain noise.
+    #[serde(default = "one")]
+    pub relief: f32,
+    /// How hard rain has worn the land (gullies down the slopes, the silt
+    /// spread at their feet). 0 leaves it unworn.
+    #[serde(default = "one")]
+    pub erosion: f32,
+}
+
+const fn one() -> f32 {
+    1.0
 }
 
 impl Default for NoiseDef {
@@ -112,6 +124,8 @@ impl Default for NoiseDef {
             scale: 120.0,
             octaves: 5,
             detail: 0.25,
+            relief: 1.0,
+            erosion: 1.0,
         }
     }
 }

@@ -418,6 +418,23 @@ wood, the north sidings and the works yard at the railway's east end.
 Each map keeps its own Zone; the stash and kit travel with you
 (see "Changing valleys" above).
 
+**The ground** is more than the author drew. On top of the map's noise
+and features every valley gets natural relief (`noise.relief`, a share
+of the amplitude): knolls and hummocks in patches, with sharper crests
+than hollows. Then it rains (`noise.erosion`): droplets run downhill,
+picking up soil where they speed up and dropping it where they slow,
+which cuts gullies down every slope and fans silt out at their feet.
+Round buildings and along streams the land stays as laid out, so pads,
+fords and bridges still meet it. **Rocks** (`extraction_core::rocks`)
+gather on steep ground and in slow-noise rock fields, with the odd lone
+erratic boulder to steer by and a sprinkling of field stones everywhere
+else; the big ones block the way for you, bullets and the walkers' nav.
+**Ground cover** (`extraction_core::cover`) is streamed round the
+player in 16 m patches: grass tufts as real blades, thick in meadows and
+thin between, sedge on wet ground, and ferns under the trees. Nothing
+of it collides. Rocks and cover are deterministic per map, so the game,
+the sims and the Unity export (`rocks.json`) see the same ones.
+
 Risk pays: each region's loot spots roll `0.8 + 0.2 × danger` times
 (fractions are a chance of one more), unless the map sets `loot` for the
 region. The village by the insertion point is set to 0.6 — picked over —

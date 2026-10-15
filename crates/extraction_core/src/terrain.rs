@@ -78,6 +78,24 @@ impl RoadLine {
     }
 }
 
+/// Natural relief in about `-0.5..1`, times the map's amplitude: in
+/// patches (a slow mask), knolls and hummocks a few tens of metres across,
+/// with a ridged octave so their crests are sharper than their hollows.
+fn relief(p: P2, seed: u32) -> f32 {
+    let mask = geom::smoothstep(
+        -0.15,
+        0.35,
+        noise::fbm(p[0] / 260.0, p[1] / 260.0, seed ^ 0x51F1, 2, 0.5),
+    );
+    // Warp the knolls so they don't line up on the noise grid.
+    let wx = 12.0 * noise::perlin(p[0] / 70.0, p[1] / 70.0, seed ^ 0x7A11);
+    let wz = 12.0 * noise::perlin(p[0] / 70.0 + 5.2, p[1] / 70.0 - 1.3, seed ^ 0x7A12);
+    let q = [p[0] + wx, p[1] + wz];
+    let knolls = noise::fbm(q[0] / 42.0, q[1] / 42.0, seed ^ 0x6B01, 2, 0.45);
+    let ridged = 1.0 - noise::perlin(q[0] / 28.0, q[1] / 28.0, seed ^ 0x6B02).abs();
+    mask * (0.75 * knolls + 0.5 * (ridged * ridged - 0.45))
+}
+
 impl Heightmap {
     pub fn build(map: &MapDef) -> Self {
         let n = (map.size / map.cell).round() as usize + 1;
@@ -92,7 +110,8 @@ impl Heightmap {
             wet: vec![0.0; n * n],
             road_lines: Vec::new(),
         };
-        hm.shape(map);
+        let relief = hm.shape(map);
+        hm.erode(map, &relief);
         hm.plateaus(map);
         hm.pads(map);
         hm.rim(map);
@@ -210,7 +229,10 @@ impl Heightmap {
         }
     }
 
-    fn shape(&mut self, map: &MapDef) {
+    /// The land from the noise and features; returns the natural relief's
+    /// share of each cell, which `erode` takes back off round buildings.
+    fn shape(&mut self, map: &MapDef) -> Vec<f32> {
+        let mut relief_h = vec![0.0; self.n * self.n];
         let nd = &map.noise;
         let splines: Vec<(Vec<P2>, &TerrainFeature)> = map
             .features
@@ -229,6 +251,11 @@ impl Heightmap {
                 if nd.amplitude != 0.0 {
                     h += nd.amplitude
                         * noise::fbm(p[0] / nd.scale, p[1] / nd.scale, nd.seed, nd.octaves, 0.5);
+                }
+                let k = self.idx(i, j);
+                if nd.relief != 0.0 && nd.amplitude != 0.0 {
+                    relief_h[k] = nd.relief * nd.amplitude * relief(p, nd.seed);
+                    h += relief_h[k];
                 }
                 if nd.detail != 0.0 {
                     h += nd.detail * noise::fbm(p[0] / 6.0, p[1] / 6.0, nd.seed ^ 0xABCD, 2, 0.5);
@@ -264,8 +291,147 @@ impl Heightmap {
                         _ => {}
                     }
                 }
-                let k = self.idx(i, j);
                 self.heights[k] += h;
+            }
+        }
+        relief_h
+    }
+
+    /// Rain on the land: droplets run downhill picking up soil where they
+    /// speed up and dropping it where they slow, which cuts gullies down
+    /// the slopes and fans silt out at their feet. Deterministic per map.
+    fn erode(&mut self, map: &MapDef, relief: &[f32]) {
+        let nd = &map.noise;
+        let before = self.heights.clone();
+        if nd.erosion > 0.0 {
+            self.rain(map);
+        }
+        // Where people built, the ground was settled: the land the map was
+        // laid out on (no knolls, no gullies) round the buildings.
+        for pl in &map.placements {
+            let r = crate::map::prefab_clearance(&pl.prefab);
+            let lo = [pl.at[0] - r - 8.0, pl.at[1] - r - 8.0];
+            let hi = [pl.at[0] + r + 8.0, pl.at[1] + r + 8.0];
+            self.for_cells_in(lo, hi, 0.0, |hm, k, p| {
+                let t = 1.0 - geom::smoothstep(r, r + 8.0, geom::dist(p, pl.at));
+                hm.heights[k] += (before[k] - relief[k] - hm.heights[k]) * t;
+            });
+        }
+        // And along the streams, whose levels and fords the map set.
+        for w in &map.water {
+            let line = geom::catmull_rom(&w.points, 2.0);
+            if line.is_empty() {
+                continue;
+            }
+            let (inner, outer) = (w.width * 0.5 + 8.0, w.width * 0.5 + 16.0);
+            let (lo, hi) = geom::bounds(&line);
+            self.for_cells_in(lo, hi, outer, |hm, k, p| {
+                let d = geom::polyline_closest(&line, p).0;
+                if d < outer {
+                    let t = 1.0 - geom::smoothstep(inner, outer, d);
+                    hm.heights[k] += (before[k] - relief[k] - hm.heights[k]) * t;
+                }
+            });
+        }
+    }
+
+    fn rain(&mut self, map: &MapDef) {
+        let nd = &map.noise;
+        let n = self.n;
+        let cell = self.cell;
+        // Droplets per square metre of map.
+        let area = (n as f32 * cell).powi(2);
+        let drops = (area * 0.12 * nd.erosion) as usize;
+        let mut rng = noise::Rng::new(u64::from(nd.seed) ^ 0x0E20_5104);
+        // A small brush so a gully is a few metres wide, not a crack.
+        let brush: Vec<(i32, i32, f32)> = {
+            let r = 2.2 / cell;
+            let ri = r.ceil() as i32;
+            let mut b = Vec::new();
+            for dj in -ri..=ri {
+                for di in -ri..=ri {
+                    let d = ((di * di + dj * dj) as f32).sqrt();
+                    if d < r {
+                        b.push((di, dj, r - d));
+                    }
+                }
+            }
+            let sum: f32 = b.iter().map(|w| w.2).sum();
+            b.into_iter().map(|(i, j, w)| (i, j, w / sum)).collect()
+        };
+        const INERTIA: f32 = 0.08;
+        const CAPACITY: f32 = 3.0;
+        const DEPOSIT: f32 = 0.25;
+        const ERODE: f32 = 0.2;
+        const EVAPORATE: f32 = 0.025;
+        const GRAVITY: f32 = 9.0;
+        const MIN_SLOPE: f32 = 0.004;
+        // At most this much off any one point of a drop's path, metres.
+        const BITE: f32 = 0.08;
+        let lim = (n - 2) as f32;
+        let sample = |h: &[f32], x: f32, y: f32| {
+            let (i, j) = (x as usize, y as usize);
+            let (fx, fy) = (x - i as f32, y - j as f32);
+            let k = j * n + i;
+            let (a, b, c, d) = (h[k], h[k + 1], h[k + n], h[k + n + 1]);
+            let gx = (b - a) * (1.0 - fy) + (d - c) * fy;
+            let gy = (c - a) * (1.0 - fx) + (d - b) * fx;
+            let height = a * (1.0 - fx) * (1.0 - fy)
+                + b * fx * (1.0 - fy)
+                + c * (1.0 - fx) * fy
+                + d * fx * fy;
+            (height, gx / cell, gy / cell)
+        };
+        for _ in 0..drops {
+            let (mut x, mut y) = (rng.range(2.0, lim - 1.0), rng.range(2.0, lim - 1.0));
+            let (mut dx, mut dy) = (0.0f32, 0.0f32);
+            let (mut speed, mut water, mut sediment) = (1.0f32, 1.0f32, 0.0f32);
+            for _ in 0..60 {
+                let (i, j) = (x as usize, y as usize);
+                let (fx, fy) = (x - i as f32, y - j as f32);
+                let (h, gx, gy) = sample(&self.heights, x, y);
+                dx = dx * INERTIA - gx * (1.0 - INERTIA);
+                dy = dy * INERTIA - gy * (1.0 - INERTIA);
+                let len = (dx * dx + dy * dy).sqrt();
+                if len < 1e-6 {
+                    break;
+                }
+                dx /= len;
+                dy /= len;
+                x += dx;
+                y += dy;
+                if x < 2.0 || y < 2.0 || x >= lim - 1.0 || y >= lim - 1.0 {
+                    break;
+                }
+                let dh = sample(&self.heights, x, y).0 - h;
+                let capacity = (-dh / cell).max(MIN_SLOPE) * speed * water * CAPACITY;
+                if sediment > capacity || dh > 0.0 {
+                    // Drop some: fill the pit it ran into, or shed the excess.
+                    let drop = if dh > 0.0 {
+                        dh.min(sediment)
+                    } else {
+                        (sediment - capacity) * DEPOSIT
+                    };
+                    sediment -= drop;
+                    let k = j * n + i;
+                    self.heights[k] += drop * (1.0 - fx) * (1.0 - fy);
+                    self.heights[k + 1] += drop * fx * (1.0 - fy);
+                    self.heights[k + n] += drop * (1.0 - fx) * fy;
+                    self.heights[k + n + 1] += drop * fx * fy;
+                } else {
+                    let take = ((capacity - sediment) * ERODE).min(-dh).min(BITE);
+                    for (di, dj, w) in &brush {
+                        let (bi, bj) = (i as i32 + di, j as i32 + dj);
+                        if bi < 0 || bj < 0 || bi >= n as i32 || bj >= n as i32 {
+                            continue;
+                        }
+                        let k = bj as usize * n + bi as usize;
+                        self.heights[k] -= take * w;
+                    }
+                    sediment += take;
+                }
+                speed = (speed * speed - dh * GRAVITY).max(0.0).sqrt();
+                water *= 1.0 - EVAPORATE;
             }
         }
     }
@@ -669,6 +835,8 @@ mod tests {
             noise: NoiseDef {
                 amplitude: 0.0,
                 detail: 0.0,
+                relief: 0.0,
+                erosion: 0.0,
                 ..NoiseDef::default()
             },
             rim: RimDef {
@@ -761,5 +929,64 @@ mod tests {
         assert_eq!(hm.surface([0.0, 0.0], false), Surface::Water);
         assert!(hm.water_level([0.0, 30.0]).is_none());
         assert!(hm.wetness([0.0, 4.0]) > 0.5);
+    }
+
+    #[test]
+    fn rain_wears_the_land_but_not_round_buildings() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let worn = Heightmap::build(&map);
+        map.noise.erosion = 0.0;
+        map.noise.relief = 0.0;
+        let plain = Heightmap::build(&map);
+        let d: Vec<f32> = worn
+            .heights
+            .iter()
+            .zip(&plain.heights)
+            .map(|(a, b)| a - b)
+            .collect();
+        assert!(d.iter().all(|x| x.is_finite()));
+        let rms = (d.iter().map(|x| x * x).sum::<f32>() / d.len() as f32).sqrt();
+        let most = d.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+        assert!(rms > 0.15 && most < 6.0, "rms {rms}, most {most}");
+        // Round buildings the ground is the map's own. (Not quite to the
+        // centimetre: a plateau or a road's grade averages the land round
+        // it, worn or not.)
+        let mut moved: Vec<(f32, &str)> = map
+            .placements
+            .iter()
+            .map(|p| {
+                (
+                    (worn.height(p.at) - plain.height(p.at)).abs(),
+                    p.prefab.as_str(),
+                )
+            })
+            .collect();
+        moved.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let median = moved[moved.len() / 2].0;
+        assert!(
+            median < 0.02 && moved.iter().all(|m| m.0 < 0.5),
+            "moved: {moved:?}"
+        );
+    }
+
+    /// Writes each valley's heights (little-endian f32, row by row) to
+    /// `$DUMP/<name>_<n>.f32`, for a hillshade: `DUMP=dir cargo test
+    /// --release dump_heights -- --ignored`.
+    #[test]
+    #[ignore]
+    fn dump_heights() {
+        let out = std::env::var("DUMP").unwrap();
+        for (name, src) in [
+            ("marrow", crate::map::MARROW_CREEK),
+            ("kettle", crate::map::KETTLE_PASS),
+            ("cinder", crate::map::CINDER_WORKS),
+        ] {
+            let map = MapDef::from_ron(src).unwrap();
+            let t = std::time::Instant::now();
+            let hm = Heightmap::build(&map);
+            println!("{name}: {:?}", t.elapsed());
+            let bytes: Vec<u8> = hm.heights.iter().flat_map(|h| h.to_le_bytes()).collect();
+            std::fs::write(format!("{out}/{name}_{}.f32", hm.n), bytes).unwrap();
+        }
     }
 }

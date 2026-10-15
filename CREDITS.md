@@ -23,6 +23,7 @@ it. Thirty seconds now versus archaeology later.
 | `assets/textures/materials/weathered_planks/` | Poly Haven `distressed_painted_planks` — <https://polyhaven.com/a/distressed_painted_planks> | Rob Tuytel | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/log_wall/` | Poly Haven `beam_wall_01` — <https://polyhaven.com/a/beam_wall_01> | Rob Tuytel | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/timber/` | ambientCG `Wood060` — <https://ambientcg.com/a/Wood060> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
+| `assets/textures/materials/boulder/` | ambientCG `Rock045` — <https://ambientcg.com/a/Rock045> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/red_brick/` | ambientCG `Bricks097` — <https://ambientcg.com/a/Bricks097> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/concrete_wet/` | Poly Haven `concrete_wall_007` — <https://polyhaven.com/a/concrete_wall_007> | Dario Barresi, Rico Cilliers, Charlotte Baglioni | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/rusty_metal/` | Poly Haven `rusty_metal_04` — <https://polyhaven.com/a/rusty_metal_04> | Amal Kumar | CC0 1.0 | 2026-10 |

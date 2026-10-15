@@ -68,6 +68,25 @@ fn main() {
         .collect();
     write_png(&out.join("water_mask.png"), ALPHA_RES, &water_mask);
 
+    // Rocks: the game builds each from an icosphere (variant seeds the
+    // lumps), scaled `radius` across and `radius * squash` half-high, its
+    // centre at `pos`. Any boulder model of about unit radius stands in.
+    let rocks = extraction_core::rocks::scatter_rocks(&map, &hm);
+    write_json(
+        out,
+        "rocks.json",
+        &json!({
+            "count": rocks.len(),
+            "solid_radius_m": extraction_core::rocks::SOLID_RADIUS,
+            "rocks": rocks.iter().map(|r| json!({
+                "variant": r.variant,
+                "pos": v3(unity::to_unity(r.pos)),
+                "yaw_deg": r3(unity::yaw_to_unity(r.yaw).to_degrees()),
+                "scale": v3([r.radius, r.radius * r.squash, r.radius]),
+            })).collect::<Vec<_>>(),
+        }),
+    );
+
     // Trees.
     let trees = forest::scatter_trees(&map, &hm);
     let mut species_counts = std::collections::BTreeMap::<String, usize>::new();
@@ -289,11 +308,11 @@ fn main() {
                 "all_json_positions": "Unity world coordinates unless a field says `game_`",
             },
             "files": {
-                "trees": "trees.json", "placements": "placements.json", "markers": "markers.json",
+                "trees": "trees.json", "rocks": "rocks.json", "placements": "placements.json", "markers": "markers.json",
                 "regions": "regions.json", "roads": "roads.json", "water": "water.json",
             },
             "counts": {
-                "trees": trees.len(), "placements": map.placements.len(), "markers": map.markers.len(),
+                "trees": trees.len(), "rocks": rocks.len(), "placements": map.placements.len(), "markers": map.markers.len(),
                 "regions": map.regions.len(), "roads": map.roads.len(), "water": map.water.len(),
             },
         }),
@@ -369,20 +388,23 @@ fn v3(p: [f32; 3]) -> Value {
 }
 
 fn write_json(dir: &Path, name: &str, value: &Value) {
-    // Trees run to tens of thousands: one line each rather than twenty.
-    let text = if name == "trees.json" {
+    // Trees and rocks run to thousands: one line each rather than twenty.
+    let list = name
+        .strip_suffix(".json")
+        .filter(|n| ["trees", "rocks"].contains(n));
+    let text = if let Some(key) = list {
         let mut v = value.clone();
-        let trees = v
+        let rows = v
             .as_object_mut()
-            .and_then(|o| o.remove("trees"))
+            .and_then(|o| o.remove(key))
             .unwrap_or_default();
         let head = serde_json::to_string_pretty(&v).expect("serialise");
-        let rows: Vec<String> = trees
+        let rows: Vec<String> = rows
             .as_array()
             .map(|a| a.iter().map(|t| format!("    {t}")).collect())
             .unwrap_or_default();
         let head = head.trim_end().trim_end_matches('}').trim_end();
-        format!("{head},\n  \"trees\": [\n{}\n  ]\n}}\n", rows.join(",\n"))
+        format!("{head},\n  \"{key}\": [\n{}\n  ]\n}}\n", rows.join(",\n"))
     } else {
         serde_json::to_string_pretty(value).expect("serialise")
     };

@@ -7,6 +7,7 @@
 
 pub mod anomaly;
 pub mod cooking;
+pub mod cover;
 pub mod fabrication;
 pub mod firearm;
 pub mod fit;
@@ -18,6 +19,7 @@ pub mod loot;
 pub mod map;
 pub mod nav;
 pub mod noise;
+pub mod rocks;
 pub mod save;
 pub mod terrain;
 pub mod unity;

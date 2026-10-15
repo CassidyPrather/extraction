@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Headless screenshot: scripts/shot.sh <out.png> <x,y,z,yaw,pitch> [frames] [extra args...]
+# y = 0 stands you there (eyes 1.7 m over the ground); otherwise y is absolute.
 # Renders with the software Vulkan driver under Xvfb; slow but needs no GPU.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

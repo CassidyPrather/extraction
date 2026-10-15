@@ -30,6 +30,7 @@ Each takes a couple of seconds and writes:
 | `splat_<layer>.png` | 1024² greyscale weights for grass, forest, dirt, gravel, asphalt, rock and mud (they sum to 255). North is at the top of the image |
 | `water_mask.png` | 1024², 255 under water |
 | `trees.json` | Every tree the game places: species, variant, position, yaw, scale (Marrow Creek 3,472, Kettle Pass 1,942) |
+| `rocks.json` | Every boulder and field stone: variant, position, yaw, scale (x/z the radius, y the half-height); smaller than `solid_radius_m` is walked over |
 | `placements.json` | Prefab id, tag, position on the ground, yaw, footprint (width, height, depth) |
 | `markers.json` | Insertion, rendezvous, gate, loot, POIs and so on, with names and loot tables |
 | `regions.json` | Danger regions (polygons, danger, loot richness) and the forest polygons |
@@ -65,6 +66,7 @@ are in the game's frame.
 outside the project) and press **Import**. It builds the scene:
 - a Terrain with its height and splat layers,
 - the trees as terrain tree instances,
+- the rocks (a `boulder_<variant>` prefab if there is one, else a squashed sphere),
 - buildings or blockouts,
 - empty marker objects,
 - a water ribbon per stream,

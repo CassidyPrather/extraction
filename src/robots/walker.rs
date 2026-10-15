@@ -129,6 +129,17 @@ pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
             0.5,
         );
     }
+    for r in crate::world::rocks::rocks(&zone) {
+        if r.radius >= extraction_core::rocks::SOLID_RADIUS {
+            g.block(
+                Obstacle::Circle {
+                    at: [r.pos[0], r.pos[2]],
+                    radius: r.radius * 0.9,
+                },
+                0.5,
+            );
+        }
+    }
     for f in &zone.map.forests {
         g.scale_cost_in(&f.polygon, 1.6);
     }

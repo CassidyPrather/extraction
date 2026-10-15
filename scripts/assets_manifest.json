@@ -850,6 +850,10 @@
       "timber": {
         "source": "acg:Wood060",
         "note": "dark rough sawn wood grain, for beams, posts, benches and tables"
+      },
+      "boulder": {
+        "source": "acg:Rock045",
+        "note": "grey lichen rock (the terrain's rock layer), for boulders and outcrops"
       }
     }
   },

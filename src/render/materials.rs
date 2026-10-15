@@ -42,6 +42,8 @@ pub enum Mat {
     Timber,
     /// Road asphalt (bridge decks).
     Asphalt,
+    /// Weathered rock: boulders and outcrops.
+    Boulder,
 }
 
 impl Mat {
@@ -125,6 +127,7 @@ impl Mat {
             Mat::DarkMetal => (None, 1.0, Color::srgb(0.12, 0.12, 0.12), 0.55),
             Mat::Timber => (Some("timber"), 1.5, Color::srgb(0.9, 0.85, 0.8), 0.8),
             Mat::Asphalt => (Some("asphalt"), 4.0, Color::srgb(0.25, 0.25, 0.24), 0.75),
+            Mat::Boulder => (Some("boulder"), 2.4, Color::srgb(0.62, 0.62, 0.57), 0.85),
         }
     }
 }
