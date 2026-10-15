@@ -369,6 +369,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
+        "target" => [2.4, 1.7, 2.0],
         _ => [4.0, 3.0, 4.0],
     }
 }
@@ -405,7 +406,7 @@ pub fn prefab_clearance(id: &str) -> f32 {
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
-        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar"
+        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar" | "target"
     )
 }
 
@@ -443,6 +444,7 @@ pub const MARROW_CREEK: &str = include_str!("../../../assets/maps/marrow_creek.r
 pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron");
 /// The third.
 pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.ron");
+pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
 
 #[cfg(test)]
 mod tests {

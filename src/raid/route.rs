@@ -62,6 +62,10 @@ fn init_destination(mut commands: Commands, opts: Res<LaunchOptions>) {
                 return None;
             }
             let id = path.file_stem()?.to_str()?.to_owned();
+            // Practice isn't a place the truck drives to.
+            if id == crate::camp::TRAINING_YARD {
+                return None;
+            }
             let text = std::fs::read_to_string(&path).ok()?;
             let map = extraction_core::map::MapDef::from_ron(&text).ok()?;
             Some((id, map.name))

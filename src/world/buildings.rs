@@ -542,7 +542,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 22] = [
+pub const PREFABS: [&str; 23] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -565,6 +565,7 @@ pub const PREFABS: [&str; 22] = [
     "anomaly_core",
     "factory_hall",
     "chimney",
+    "target",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -616,6 +617,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
             b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
         }
         "chimney" => chimney(&mut b),
+        "target" => target(&mut b),
         _ => return None,
     }
     Some(b.finish())
@@ -1658,6 +1660,42 @@ fn guard_booth(b: &mut Builder) {
         Mat::Corrugated,
     );
     b.counter(Vec3::new(0.0, f, 0.6), 0.0, 1.6, Some("ammo_common"));
+}
+
+/// A practice target: a canvas board on two posts, a black ring and a
+/// white centre painted on, an earth bank behind it for the rounds.
+fn target(b: &mut Builder) {
+    for x in [-0.45, 0.45] {
+        b.bx(
+            Vec3::new(0.08, 1.7, 0.08),
+            Vec3::new(x, 0.85, 0.0),
+            Mat::Timber,
+        );
+    }
+    b.bx(
+        Vec3::new(0.9, 0.9, 0.03),
+        Vec3::new(0.0, 1.2, 0.05),
+        Mat::Canvas,
+    );
+    b.piece(
+        Shape::Cylinder(0.3, 0.01),
+        Transform::from_xyz(0.0, 1.2, 0.07)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Mat::DarkMetal,
+        false,
+    );
+    b.piece(
+        Shape::Cylinder(0.12, 0.01),
+        Transform::from_xyz(0.0, 1.2, 0.08)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Mat::Plaster,
+        false,
+    );
+    b.bx(
+        Vec3::new(2.4, 1.0, 1.0),
+        Vec3::new(0.0, 0.3, -1.2),
+        Mat::Concrete,
+    );
 }
 
 fn robot_gate(b: &mut Builder) {

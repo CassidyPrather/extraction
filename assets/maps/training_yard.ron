@@ -1,0 +1,82 @@
+// The Training Yard — practice before the Zone.
+//
+// A small fenced valley, 240 m on a side, with nothing hunting in it (the
+// game turns robots off here and saves nothing). A gravel track runs north
+// from the truck past signed stations: kit and pockets, loading and the
+// firing line, searching a house, staying alive, the machines, artifacts,
+// and calling the truck from the far rendezvous. Pull the cord in the
+// truck to finish, or press the card by its tailgate to skip.
+//
+// Coordinates: [x, z] metres, origin at centre, x east, +z south.
+(
+    name: "Training Yard",
+    description: "A fenced practice ground by the depot road.",
+    size: 240.0,
+    cell: 1.0,
+    base_height: 12.0,
+    noise: (seed: 31, amplitude: 1.2, scale: 90.0, octaves: 4, detail: 0.3),
+    rim: (width: 40.0, height: 8.0),
+    fence_inset: 18.0,
+
+    features: [
+        // A low bank behind the firing line's targets.
+        Ridge(points: [(-45.0, -40.0), (-25.0, -45.0), (-5.0, -40.0)], width: 30.0, height: 4.0),
+        Hill(at: (55.0, -55.0), radius: 30.0, height: 5.0),
+    ],
+
+    roads: [
+        (
+            name: "Yard track", kind: Gravel, width: 4.0, smoothing: 10.0,
+            points: [(0.0, 104.0), (0.0, 70.0), (2.0, 30.0), (0.0, -20.0), (0.0, -78.0)],
+        ),
+    ],
+
+    forests: [
+        (name: "West belt", seed: 5, density: 1.2, undergrowth: 0.5,
+         mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
+         polygon: [(-102.0, 102.0), (-70.0, 102.0), (-70.0, -102.0), (-102.0, -102.0)]),
+        (name: "East belt", seed: 6, density: 1.0, undergrowth: 0.5,
+         mix: [(Spruce, 0.5), (Birch, 0.5)],
+         polygon: [(70.0, 102.0), (102.0, 102.0), (102.0, -102.0), (70.0, -102.0)]),
+        (name: "North copse", seed: 7, density: 0.6, undergrowth: 0.4,
+         mix: [(Pine, 0.7), (Birch, 0.3)],
+         polygon: [(-60.0, -85.0), (60.0, -85.0), (60.0, -102.0), (-60.0, -102.0)]),
+    ],
+
+    placements: [
+        (prefab: "quarantine_gate", at: (0.0, 74.0), rot: 0.0),
+        // The firing line: targets at 15, 30 and 60 m from the bench.
+        (prefab: "target", at: (-24.0, 25.0), rot: 0.0),
+        (prefab: "target", at: (-30.0, 10.0), rot: 0.0),
+        (prefab: "target", at: (-22.0, -20.0), rot: 0.0),
+        (prefab: "house_plank", at: (28.0, 18.0), rot: 270.0),
+        (prefab: "shed", at: (24.0, -12.0), rot: 270.0),
+        (prefab: "log_pile", at: (-12.0, -32.0), rot: 90.0),
+    ],
+
+    markers: [
+        (kind: Insertion, at: (0.0, 80.0), rot: 0.0, name: "Yard gate"),
+        (kind: TruckStop, at: (0.0, 96.0), rot: 0.0, name: "Yard gate"),
+        (kind: Rendezvous, at: (0.0, -74.0), name: "North post"),
+        (kind: RobotGate, at: (-90.0, -90.0), rot: 45.0, name: "Old gate"),
+        (kind: ArtifactField, at: (45.0, -45.0), name: "The soft ground"),
+        (kind: Poi, at: (-24.0, 30.0), name: "Firing line"),
+        (kind: Poi, at: (28.0, 18.0), name: "Practice house"),
+        (kind: Loot(table: "ammo_common"), at: (-21.0, 40.0), name: "Firing line ammo"),
+        (kind: Loot(table: "medical"), at: (5.0, 2.0), name: "Dressing station"),
+        (kind: Loot(table: "food_common"), at: (25.0, -14.0), name: "Shed food"),
+
+        (kind: Sign(text: "TRAINING YARD\n\nSame as the Zone, minus the machines. Nothing here is kept.\n\nYour kit is in the crate in the truck. Grip to grab (flat: E), let go to drop (Q)."), at: (4.0, 84.0), rot: 0.0, name: "Yard sign"),
+        (kind: Sign(text: "POCKETS AND PACK\n\nHold a thing at your chest or hip and let go: it's pocketed. Over the shoulder: into the pack (flat: G stows, Tab opens the pack).\n\nWeight slows you. Carry what you'll use."), at: (-5.0, 64.0), rot: 0.0, name: "Pockets sign"),
+        (kind: Sign(text: "LOADING AND SHOOTING\n\nThumb rounds into a magazine. Seat it, pull the slide or bolt back and let go.\nFlat: B mag, R reload, V rack, X mode.\n\nTargets at 15, 30 and 60 m."), at: (-18.0, 44.0), rot: 0.0, name: "Range sign"),
+        (kind: Sign(text: "SEARCHING\n\nThings are on tables, shelves and floors. Push doors to open them.\n\nTake what's useful; scrap and parts go to the bench in the truck."), at: (16.0, 26.0), rot: 0.0, name: "House sign"),
+        (kind: Sign(text: "STAYING ALIVE\n\nBleeding? Hold a field dressing to it (flat: U). Eat when you're slow.\n\nGo down out there and the collector comes for you and your kit. Beat it to your body."), at: (8.0, 4.0), rot: 0.0, name: "Medical sign"),
+        (kind: Sign(text: "THE MACHINES\n\nLittle flyers spot you and call the rest. Walkers come to look.\n\nShoot the eye, or keep still in cover. Pylons report what moves near them: knock them down."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
+        (kind: Sign(text: "ARTIFACTS\n\nBright stones form where the ground goes wrong. Don't walk into the shimmer.\n\nCarry one or two. Carry many and you'll hear the hum: the machines feel them too."), at: (34.0, -36.0), rot: 315.0, name: "Artifacts sign"),
+        (kind: Sign(text: "GETTING OUT\n\nCall the truck on the radio (flat: U with it in hand). It drives round to a rendezvous: two minutes, then it waits five.\n\nClimb in the back and pull the cord.\n\nHere: pull the cord at the truck when you're ready for the Zone."), at: (5.0, -66.0), rot: 0.0, name: "Rendezvous sign"),
+    ],
+
+    regions: [
+        (name: "Training yard", danger: 0, polygon: [(-100.0, -100.0), (100.0, -100.0), (100.0, 100.0), (-100.0, 100.0)]),
+    ],
+)
