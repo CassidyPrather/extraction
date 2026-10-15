@@ -18,11 +18,13 @@ pub mod models;
 mod perf;
 pub mod persist;
 pub mod player;
+pub mod qa;
 pub mod raid;
 pub mod render;
 pub mod rig;
 pub mod robots;
 pub mod sim;
+pub mod tour;
 pub mod weapons;
 pub mod world;
 
@@ -76,6 +78,7 @@ impl Plugin for ClientPlugin {
             world::WorldVisualsPlugin,
             rig::flat::FlatDriverPlugin,
             dev::DevPlugin,
+            tour::TourPlugin,
             items::ItemVisualsPlugin,
             weapons::visuals::GunVisualsPlugin,
             interact::flat::FlatInteractPlugin,

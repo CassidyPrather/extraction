@@ -64,6 +64,9 @@ pub struct LaunchOptions {
     /// Dev: put a gun, magazine or robot in front of the camera to look at
     /// (see `dev::gallery`).
     pub gallery: Option<String>,
+    /// Dev: screenshot every placement on the map into this folder and
+    /// quit (see `tour`).
+    pub tour: Option<std::path::PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -95,6 +98,7 @@ impl Default for LaunchOptions {
             screenshot: None,
             frames: 90,
             camera: None,
+            tour: None,
             bot: false,
             scenario: None,
             headless: false,
@@ -172,6 +176,14 @@ impl LaunchOptions {
                     o.flat = true;
                 }
                 "--frames" => o.frames = val().parse().unwrap_or(90),
+                "--tour" => {
+                    o.tour = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    // The tour drives a free camera.
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--gallery" => {
                     o.gallery = Some(val());
                     o.robots = false;

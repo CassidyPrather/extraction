@@ -203,8 +203,9 @@ impl Builder {
             let mid = at(o.centre, y0);
             match o.kind {
                 OpeningKind::Window => {
+                    // The glazing bar stands proud of the glass both sides.
                     self.piece(
-                        Shape::Box(Vec3::new(o.width, 0.012, 0.008)),
+                        Shape::Box(Vec3::new(o.width - 0.02, 0.03, 0.04)),
                         Transform::from_translation(mid + Vec3::Y * ((o.bottom + o.top) * 0.5))
                             .with_rotation(rot),
                         frame,
@@ -237,9 +238,11 @@ impl Builder {
                 OpeningKind::Gap => {}
             }
             if o.kind != OpeningKind::Gap {
+                // The lintel's underside a centimetre below the wall's over
+                // the opening (in the same plane they fight).
                 self.piece(
                     Shape::Box(Vec3::new(o.width + 0.12, 0.08, thick + 0.04)),
-                    Transform::from_translation(mid + Vec3::Y * (o.top + 0.04)).with_rotation(rot),
+                    Transform::from_translation(mid + Vec3::Y * (o.top + 0.03)).with_rotation(rot),
                     frame,
                     false,
                 );
@@ -500,6 +503,32 @@ impl Builder {
 }
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
+/// Every generated prefab's id.
+pub const PREFABS: [&str; 22] = [
+    "house_plank",
+    "farmhouse",
+    "house_brick",
+    "cabin_log",
+    "shop",
+    "shed",
+    "barn",
+    "sawmill",
+    "pump_station",
+    "bus_depot",
+    "rail_shed",
+    "mast_hut",
+    "radio_mast",
+    "ranger_tower",
+    "quarantine_gate",
+    "guard_booth",
+    "robot_gate",
+    "boxcar",
+    "log_pile",
+    "anomaly_core",
+    "factory_hall",
+    "chimney",
+];
+
 pub fn prefab(id: &str) -> Option<Geo> {
     let mut b = Builder::default();
     match id {
@@ -853,7 +882,7 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
     let f = 0.1;
     b.piece(
         Shape::Box(Vec3::new(w, 0.04, d)),
-        Transform::from_xyz(0.0, f, 0.0),
+        Transform::from_xyz(0.0, f - 0.02, 0.0),
         Mat::Concrete,
         false,
     );
@@ -887,13 +916,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
     );
     if office {
         // A wrecked bus in bay one, an office in the corner.
-        b.bx(
-            Vec3::new(2.5, 3.0, 10.0),
-            Vec3::new(-w * 0.2, f + 1.6, 0.0),
-            Mat::PaintedMetal,
-        );
+        wrecked_bus(b, Vec3::new(-w * 0.2, f, 0.0));
+        // Office walls stop at the shell's inner face, not in it.
+        let (x, z) = (w * 0.5 - 0.125, d * 0.5 - 0.125);
         b.wall(
-            Vec2::new(w * 0.5 - 6.0, d * 0.5),
+            Vec2::new(w * 0.5 - 6.0, z),
             Vec2::new(w * 0.5 - 6.0, d * 0.5 - 5.0),
             f,
             2.8,
@@ -903,7 +930,7 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
         );
         b.wall(
             Vec2::new(w * 0.5 - 6.0, d * 0.5 - 5.0),
-            Vec2::new(w * 0.5, d * 0.5 - 5.0),
+            Vec2::new(x, d * 0.5 - 5.0),
             f,
             2.8,
             0.12,
@@ -1007,6 +1034,78 @@ fn radio_mast(b: &mut Builder) {
     b.geo.lights.push(Vec3::new(0.0, h + 0.3, 0.0));
 }
 
+/// A dead bus standing on its wheels (one gone, that corner on a block):
+/// body, a band of dark windows, roof, bumpers, wheel arches, a door.
+fn wrecked_bus(b: &mut Builder, floor: Vec3) {
+    let (w, len) = (2.5, 10.0);
+    let wheel_r = 0.48;
+    let body_lo = floor.y + wheel_r + 0.15;
+    // Lower body (the skirt and panels below the windows).
+    b.bx(
+        Vec3::new(w, 1.05, len),
+        floor + Vec3::new(0.0, body_lo + 0.525 - floor.y, 0.0),
+        Mat::PaintedMetal,
+    );
+    // Window band: dark glass set in a little, pillars between.
+    let band = body_lo + 1.05;
+    b.piece(
+        Shape::Box(Vec3::new(w - 0.06, 0.9, len - 0.3)),
+        Transform::from_translation(floor + Vec3::new(0.0, band + 0.45 - floor.y, 0.0)),
+        Mat::Glass,
+        false,
+    );
+    for k in 0..7 {
+        let z = -len * 0.5 + 0.15 + k as f32 * (len - 0.3) / 6.0;
+        b.bx(
+            Vec3::new(w, 0.9, 0.12),
+            floor + Vec3::new(0.0, band + 0.45 - floor.y, z),
+            Mat::PaintedMetal,
+        );
+    }
+    // Roof, a little proud all round.
+    b.bx(
+        Vec3::new(w + 0.04, 0.16, len + 0.04),
+        floor + Vec3::new(0.0, band + 0.98 - floor.y, 0.0),
+        Mat::PaintedMetal,
+    );
+    // Bumpers.
+    for sgn in [-1.0, 1.0] {
+        b.bx(
+            Vec3::new(w + 0.06, 0.22, 0.14),
+            floor + Vec3::new(0.0, body_lo + 0.15 - floor.y, sgn * (len * 0.5 + 0.05)),
+            Mat::DarkMetal,
+        );
+    }
+    // A folding door on the right, front.
+    b.bx(
+        Vec3::new(0.04, 1.85, 0.95),
+        floor + Vec3::new(w * 0.5 + 0.01, body_lo + 0.95 - floor.y, -len * 0.5 + 1.0),
+        Mat::DarkMetal,
+    );
+    // Wheels: three corners on tyres, the fourth on a block.
+    for (i, (x, z)) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+        .iter()
+        .enumerate()
+    {
+        let at = floor + Vec3::new(x * (w * 0.5 - 0.25), wheel_r, z * (len * 0.5 - 1.9));
+        if i == 3 {
+            b.bx(
+                Vec3::new(0.4, body_lo - floor.y, 0.5),
+                Vec3::new(at.x, floor.y + (body_lo - floor.y) * 0.5, at.z),
+                Mat::Concrete,
+            );
+            continue;
+        }
+        b.piece(
+            Shape::Cylinder(wheel_r, 0.32),
+            Transform::from_translation(at)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+            Mat::DarkMetal,
+            true,
+        );
+    }
+}
+
 fn ranger_tower(b: &mut Builder) {
     let top = 9.0;
     for (x, z) in [(-1.8, -1.8), (1.8, -1.8), (1.8, 1.8), (-1.8, 1.8)] {
@@ -1032,10 +1131,68 @@ fn ranger_tower(b: &mut Builder) {
                 Mat::Planks,
             );
         }
+        // Stringers either side of the flight, their top edge along the
+        // treads' undersides, from below the first step to the last one:
+        // nothing stands proud of a tread or the landing to trip on.
+        let (first, last) = (-1.6, -1.6 + (steps - 1) as f32 * 3.2 / steps as f32);
+        let slope = (per - per / steps as f32) / (last - first);
+        let cos = (1.0 + slope * slope).sqrt().recip();
+        let drop = 0.06 + 0.11 / cos;
+        let line = |z: f32| y0 + per / steps as f32 + (z - first) * slope - drop;
+        let (z0, z1) = (first - 0.25, last);
+        let (a, bb) = (
+            Vec3::new(0.0, line(z0), side * z0),
+            Vec3::new(0.0, line(z1), side * z1),
+        );
+        let along = bb - a;
+        let tilt = Quat::from_rotation_x(-(along.y).atan2(along.z));
+        for x in [2.01, 2.99] {
+            b.piece(
+                Shape::Box(Vec3::new(0.06, 0.22, along.length())),
+                Transform::from_translation(Vec3::new(x, (a.y + bb.y) * 0.5, (a.z + bb.z) * 0.5))
+                    .with_rotation(tilt),
+                Mat::Timber,
+                false,
+            );
+        }
         b.bx(
             Vec3::new(0.9, 0.08, 1.0),
             Vec3::new(2.5, y0 + per - 0.04, side * 1.9),
             Mat::Planks,
+        );
+        // The landing on two posts, tied back to the leg; the top landing,
+        // whose posts would rise past the one below, hangs on knee braces
+        // from the leg instead.
+        let hi = y0 + per - 0.08;
+        if k < 2 {
+            for x in [2.1, 2.9] {
+                b.bx(
+                    Vec3::new(0.12, hi, 0.12),
+                    Vec3::new(x, hi * 0.5, side * 2.3),
+                    Mat::Timber,
+                );
+            }
+        } else {
+            // From the leg's outer face up to the tie beam's far end.
+            let (from, to) = (
+                Vec3::new(1.88, hi - 1.0, side * 1.8),
+                Vec3::new(2.85, hi - 0.17, side * 1.8),
+            );
+            let d = to - from;
+            b.piece(
+                Shape::Box(Vec3::new(0.1, 0.1, d.length())),
+                Transform::from_translation((from + to) * 0.5).looking_to(d, Vec3::Z),
+                Mat::Timber,
+                false,
+            );
+        }
+        // (Under the landing, out of reach: no collider to snag the
+        // floor plan.)
+        b.piece(
+            Shape::Box(Vec3::new(1.3, 0.12, 0.12)),
+            Transform::from_xyz(2.3, y0 + per - 0.14, side * 1.8),
+            Mat::Timber,
+            false,
         );
     }
     b.bx(
@@ -1075,10 +1232,28 @@ fn quarantine_gate(b: &mut Builder) {
             Mat::PaintedMetal,
         );
     }
+    // The barrier arm, raised, pivoting on the left post: a pin through
+    // the post and a counterweight below the pivot.
+    let pivot = Vec3::new(-4.3, 1.1, 0.25);
+    let lean = 0.15f32;
+    let dir = Vec3::new(-lean.sin(), lean.cos(), 0.0);
     b.piece(
         Shape::Box(Vec3::new(0.12, 6.0, 0.12)),
-        Transform::from_xyz(-4.0, 3.5, 0.0).with_rotation(Quat::from_rotation_z(0.15)),
+        Transform::from_translation(pivot + dir * 2.9).with_rotation(Quat::from_rotation_z(lean)),
         Mat::PaintedMetal,
+        false,
+    );
+    b.piece(
+        Shape::Box(Vec3::new(0.3, 0.45, 0.2)),
+        Transform::from_translation(pivot - dir * 0.3).with_rotation(Quat::from_rotation_z(lean)),
+        Mat::Concrete,
+        false,
+    );
+    b.piece(
+        Shape::Cylinder(0.05, 0.42),
+        Transform::from_translation(pivot - Vec3::Z * 0.12)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+        Mat::DarkMetal,
         false,
     );
 }
