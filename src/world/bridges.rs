@@ -1,8 +1,9 @@
 //! Bridges. A road's `bridges` mark where it crosses water; the terrain
 //! grades a straight deck line between the two abutments
-//! (`extraction_core::terrain`), and this builds the bridge on it: a deck
-//! you walk on, rails either side, piers down to the bed. Road bridges are
-//! concrete with iron rails, footpaths get a plank footbridge.
+//! (`extraction_core::terrain`), and this builds the bridge on it. Road
+//! bridges are an asphalted concrete slab on girders, with kerbs, an iron
+//! railing, piers of two columns under a cap, and abutments; footpaths get
+//! a timber footbridge of boards across stringers, on trestles.
 //!
 //! Physics is part of the game (bots cross them too); the look is the
 //! client's.
@@ -14,15 +15,26 @@ use extraction_core::map::RoadKind;
 use super::{Layer, Zone};
 use crate::render::materials::Mat;
 
-/// One bridge: its pieces in world space.
+/// One piece of a bridge, in world space: a box, what it's made of, and
+/// whether it's drawn, solid, or both (a footbridge's boards are drawn; one
+/// plain deck under them takes the feet).
+#[derive(Clone, Copy, Debug)]
+pub struct Piece {
+    pub size: Vec3,
+    pub at: Transform,
+    pub mat: Mat,
+    pub solid: bool,
+    pub seen: bool,
+}
+
+/// One bridge: its pieces.
 #[derive(Component, Clone, Debug)]
 pub struct Bridge {
-    pub pieces: Vec<(Vec3, Transform, Mat)>,
+    pub pieces: Vec<Piece>,
 }
 
 /// Deck segment length, metres.
 const SEG: f32 = 2.0;
-const DECK: f32 = 0.3;
 const RAIL: f32 = 1.0;
 
 /// The pieces of every bridge on the map.
@@ -30,14 +42,6 @@ pub fn bridges(zone: &Zone) -> Vec<Bridge> {
     let mut out = Vec::new();
     for rl in &zone.hm.road_lines {
         let foot = matches!(rl.kind, RoadKind::Path);
-        let (deck_mat, rail_mat, pier_mat) = if foot {
-            (Mat::Planks, Mat::Timber, Mat::Timber)
-        } else {
-            (Mat::Concrete, Mat::RustyMetal, Mat::Concrete)
-        };
-        // Footbridges are wider than their path, roads a little wider than
-        // the carriageway.
-        let width = if foot { 1.8 } else { rl.width + 0.8 };
         // The grade is sampled per centreline point; find heights by arc
         // length, not by index (the samples aren't exactly a metre apart).
         let mut arc = vec![0.0f32; rl.points.len()];
@@ -54,15 +58,23 @@ pub fn bridges(zone: &Zone) -> Vec<Bridge> {
         };
         for (a, b) in &rl.bridges {
             let mut pieces = Vec::new();
+            let mut put = |size: Vec3, at: Transform, mat: Mat, solid: bool, seen: bool| {
+                pieces.push(Piece {
+                    size,
+                    at,
+                    mat,
+                    solid,
+                    seen,
+                });
+            };
             let n = ((b - a) / SEG).ceil().max(1.0) as usize;
             for i in 0..n {
                 let s0 = a + (b - a) * i as f32 / n as f32;
                 let s1 = a + (b - a) * (i + 1) as f32 / n as f32;
                 let p0 = extraction_core::geom::polyline_at(&rl.points, s0).0;
                 let p1 = extraction_core::geom::polyline_at(&rl.points, s1).0;
-                let (h0, h1) = (height_at(s0), height_at(s1));
-                let a3 = Vec3::new(p0[0], h0, p0[1]);
-                let b3 = Vec3::new(p1[0], h1, p1[1]);
+                let a3 = Vec3::new(p0[0], height_at(s0), p0[1]);
+                let b3 = Vec3::new(p1[0], height_at(s1), p1[1]);
                 let along = b3 - a3;
                 let len = along.length() + 0.04;
                 // Heading, then the deck's pitch: no roll (a shortest-arc
@@ -74,46 +86,51 @@ pub fn bridges(zone: &Zone) -> Vec<Bridge> {
                 let mid = (a3 + b3) * 0.5;
                 let side = rot * Vec3::X;
                 let up = rot * Vec3::Y;
-                // Deck: its top on the grade line.
-                pieces.push((
-                    Vec3::new(width, DECK, len),
-                    Transform::from_translation(mid - up * DECK * 0.5).with_rotation(rot),
-                    deck_mat,
-                ));
-                // Rails and their posts.
-                for sgn in [-1.0, 1.0] {
-                    let edge = mid + side * sgn * (width * 0.5 - 0.04);
-                    pieces.push((
-                        Vec3::new(0.06, 0.06, len),
-                        Transform::from_translation(edge + up * RAIL).with_rotation(rot),
-                        rail_mat,
-                    ));
-                    pieces.push((
-                        Vec3::new(0.06, 0.06, len),
-                        Transform::from_translation(edge + up * RAIL * 0.5).with_rotation(rot),
-                        rail_mat,
-                    ));
-                    pieces.push((
-                        Vec3::new(0.08, RAIL, 0.08),
-                        Transform::from_translation(
-                            a3 + side * sgn * (width * 0.5 - 0.04) + Vec3::Y * RAIL * 0.5,
-                        )
-                        .with_rotation(yaw),
-                        rail_mat,
-                    ));
+                let flat = |at: Vec3| Transform::from_translation(at).with_rotation(rot);
+                let upright = |at: Vec3| Transform::from_translation(at).with_rotation(yaw);
+                let ground = zone.hm.height(p0);
+                if foot {
+                    footbridge_segment(
+                        &mut put, i, n, mid, a3, side, up, len, along, flat, upright, ground,
+                    );
+                } else {
+                    road_segment(
+                        &mut put, rl.width, i, n, mid, a3, side, up, len, flat, upright, ground,
+                    );
                 }
-                // A pier every few segments, down to the bed.
-                if i > 0 && i % 4 == 0 {
-                    let ground = zone.hm.height(p0);
-                    let top = h0 - DECK;
-                    let depth = top - ground + 0.6;
-                    if depth > 0.4 {
-                        pieces.push((
-                            Vec3::new(width * 0.8, depth, 0.5),
-                            Transform::from_translation(Vec3::new(p0[0], top - depth * 0.5, p0[1]))
-                                .with_rotation(yaw),
-                            pier_mat,
-                        ));
+            }
+            if !foot {
+                // Abutments: a wall under each end, wing walls along the
+                // bank either side.
+                let w = rl.width + 0.8;
+                for (s, inward) in [(*a, 1.0f32), (*b, -1.0)] {
+                    let p = extraction_core::geom::polyline_at(&rl.points, s);
+                    let (at, dir) = (p.0, Vec2::from_array(p.1).normalize_or(Vec2::Y));
+                    let top = height_at(s) - 0.4;
+                    let yaw = Quat::from_rotation_y(dir.x.atan2(dir.y));
+                    let c =
+                        Vec3::new(at[0], top, at[1]) + Vec3::new(dir.x, 0.0, dir.y) * 0.5 * inward;
+                    put(
+                        Vec3::new(w + 0.6, 3.0, 0.7),
+                        Transform::from_translation(c - Vec3::Y * 1.5).with_rotation(yaw),
+                        Mat::Concrete,
+                        true,
+                        true,
+                    );
+                    let across = yaw * Vec3::X;
+                    for sgn in [-1.0, 1.0] {
+                        put(
+                            Vec3::new(0.4, 2.6, 3.2),
+                            Transform::from_translation(
+                                c + across * sgn * (w * 0.5 + 0.1)
+                                    - Vec3::new(dir.x, 0.0, dir.y) * 1.2 * inward
+                                    - Vec3::Y * 1.0,
+                            )
+                            .with_rotation(yaw),
+                            Mat::Concrete,
+                            true,
+                            true,
+                        );
                     }
                 }
             }
@@ -123,24 +140,229 @@ pub fn bridges(zone: &Zone) -> Vec<Bridge> {
     out
 }
 
+/// A concrete road bridge's segment: an asphalt-surfaced slab on three
+/// girders, kerbs, an iron railing on posts, and every fourth segment a
+/// pier (two columns under a cap beam).
+#[allow(clippy::too_many_arguments)]
+fn road_segment(
+    put: &mut impl FnMut(Vec3, Transform, Mat, bool, bool),
+    road: f32,
+    i: usize,
+    n: usize,
+    mid: Vec3,
+    a3: Vec3,
+    side: Vec3,
+    up: Vec3,
+    len: f32,
+    flat: impl Fn(Vec3) -> Transform,
+    upright: impl Fn(Vec3) -> Transform,
+    ground: f32,
+) {
+    const KERB: f32 = 0.4;
+    let w = road + 2.0 * KERB;
+    // What the feet meet: the deck, its top on the grade line.
+    put(
+        Vec3::new(w, 0.4, len),
+        flat(mid - up * 0.2),
+        Mat::Concrete,
+        true,
+        false,
+    );
+    // Asphalt laid on the slab, the slab under it.
+    put(
+        Vec3::new(road, 0.06, len),
+        flat(mid - up * 0.03),
+        Mat::Asphalt,
+        false,
+        true,
+    );
+    put(
+        Vec3::new(w, 0.35, len),
+        flat(mid - up * 0.235),
+        Mat::Concrete,
+        false,
+        true,
+    );
+    // Girders.
+    for k in [-1.0, 0.0, 1.0] {
+        put(
+            Vec3::new(0.35, 0.55, len),
+            flat(mid + side * k * w * 0.32 - up * 0.685),
+            Mat::Concrete,
+            false,
+            true,
+        );
+    }
+    for sgn in [-1.0, 1.0] {
+        let edge = side * sgn * (w * 0.5 - KERB * 0.5);
+        // Kerb, standing a hand above the road.
+        put(
+            Vec3::new(KERB, 0.25, len),
+            flat(mid + edge + up * 0.065),
+            Mat::Concrete,
+            true,
+            true,
+        );
+        let rail_line = side * sgn * (w * 0.5 - 0.12);
+        let kerb_top = 0.19;
+        for (h, t) in [(RAIL, 0.07), (RAIL * 0.55, 0.05)] {
+            put(
+                Vec3::new(t, t, len),
+                flat(mid + rail_line + up * (kerb_top + h)),
+                Mat::RustyMetal,
+                true,
+                true,
+            );
+        }
+        put(
+            Vec3::new(0.08, RAIL, 0.08),
+            upright(a3 + rail_line + Vec3::Y * (kerb_top + RAIL * 0.5)),
+            Mat::RustyMetal,
+            true,
+            true,
+        );
+    }
+    // A pier every fourth segment, down to the bed.
+    if i > 0 && i < n && i % 4 == 0 {
+        let cap_top = a3.y - 0.96;
+        put(
+            Vec3::new(w * 0.95, 0.6, 0.9),
+            upright(Vec3::new(a3.x, cap_top - 0.3, a3.z)),
+            Mat::Concrete,
+            true,
+            true,
+        );
+        let depth = cap_top - 0.6 - ground + 0.8;
+        if depth > 0.3 {
+            for sgn in [-1.0, 1.0] {
+                let at = a3 + side * sgn * w * 0.3;
+                put(
+                    Vec3::new(0.6, depth, 0.6),
+                    upright(Vec3::new(at.x, cap_top - 0.6 - depth * 0.5, at.z)),
+                    Mat::Concrete,
+                    true,
+                    true,
+                );
+            }
+        }
+    }
+}
+
+/// A timber footbridge's segment: boards laid across two stringers, posts
+/// with a handrail and a mid-rail, and every third segment a trestle.
+#[allow(clippy::too_many_arguments)]
+fn footbridge_segment(
+    put: &mut impl FnMut(Vec3, Transform, Mat, bool, bool),
+    i: usize,
+    n: usize,
+    mid: Vec3,
+    a3: Vec3,
+    side: Vec3,
+    up: Vec3,
+    len: f32,
+    along: Vec3,
+    flat: impl Fn(Vec3) -> Transform,
+    upright: impl Fn(Vec3) -> Transform,
+    ground: f32,
+) {
+    const W: f32 = 1.8;
+    put(
+        Vec3::new(W, 0.2, len),
+        flat(mid - up * 0.1),
+        Mat::WoodFloor,
+        true,
+        false,
+    );
+    // Boards across, with gaps between.
+    let boards = ((len - 0.04) / 0.2).round().max(1.0) as usize;
+    for k in 0..boards {
+        let t = (k as f32 + 0.5) / boards as f32;
+        let at = a3 + along * t;
+        put(
+            Vec3::new(W, 0.05, 0.17),
+            flat(at - up * 0.025),
+            Mat::WoodFloor,
+            false,
+            true,
+        );
+    }
+    // Stringers under them.
+    for sgn in [-1.0, 1.0] {
+        put(
+            Vec3::new(0.15, 0.3, len),
+            flat(mid + side * sgn * 0.6 - up * 0.2),
+            Mat::Timber,
+            false,
+            true,
+        );
+    }
+    for sgn in [-1.0, 1.0] {
+        let edge = side * sgn * (W * 0.5 - 0.05);
+        for (h, t) in [
+            (RAIL, Vec2::new(0.07, 0.1)),
+            (RAIL * 0.5, Vec2::new(0.05, 0.08)),
+        ] {
+            put(
+                Vec3::new(t.x, t.y, len),
+                flat(mid + edge + up * h),
+                Mat::Timber,
+                true,
+                true,
+            );
+        }
+        put(
+            Vec3::new(0.1, RAIL + 0.05, 0.1),
+            upright(a3 + edge + Vec3::Y * (RAIL * 0.5)),
+            Mat::Timber,
+            true,
+            true,
+        );
+    }
+    // A trestle every third segment: two legs to the bed and a cross-beam.
+    if i > 0 && i < n && i % 3 == 0 {
+        let top = a3.y - 0.35;
+        put(
+            Vec3::new(W + 0.2, 0.18, 0.2),
+            upright(Vec3::new(a3.x, top - 0.09, a3.z)),
+            Mat::Timber,
+            false,
+            true,
+        );
+        let depth = top - ground + 0.4;
+        if depth > 0.3 {
+            for sgn in [-1.0, 1.0] {
+                let at = a3 + side * sgn * 0.7;
+                put(
+                    Vec3::new(0.18, depth, 0.18),
+                    upright(Vec3::new(at.x, top - depth * 0.5, at.z)),
+                    Mat::Timber,
+                    true,
+                    true,
+                );
+            }
+        }
+    }
+}
+
 /// The bridges, solid.
 pub fn spawn_bridges(mut commands: Commands, zone: Res<Zone>) {
     for b in bridges(&zone) {
         let parts: Vec<(Vec3, Quat, Collider)> = b
             .pieces
             .iter()
-            .map(|(size, t, _)| {
+            .filter(|p| p.solid)
+            .map(|p| {
                 (
-                    t.translation,
-                    t.rotation,
-                    Collider::cuboid(size.x, size.y, size.z),
+                    p.at.translation,
+                    p.at.rotation,
+                    Collider::cuboid(p.size.x, p.size.y, p.size.z),
                 )
             })
             .collect();
         let surfaces = super::surfaces::Surfaces(
             b.pieces
                 .iter()
-                .map(|(size, t, m)| (*size * 0.5, *t, *m))
+                .map(|p| (p.size * 0.5, p.at, p.mat))
                 .collect(),
         );
         commands.spawn((
@@ -167,15 +389,15 @@ pub fn bridge_visuals(
 ) {
     for (e, b) in &added {
         let mut merged: Vec<(Mat, Mesh)> = Vec::new();
-        for (size, t, mat) in &b.pieces {
-            let mut mesh = crate::render::materials::metric_box(*size);
+        for p in b.pieces.iter().filter(|p| p.seen) {
+            let mut mesh = crate::render::materials::metric_box(p.size);
             let _ = mesh.generate_tangents();
-            let mesh = mesh.transformed_by(*t);
-            match merged.iter_mut().find(|(m, _)| m == mat) {
+            let mesh = mesh.transformed_by(p.at);
+            match merged.iter_mut().find(|(m, _)| *m == p.mat) {
                 Some((_, into)) => {
                     let _ = into.merge(&mesh);
                 }
-                None => merged.push((*mat, mesh)),
+                None => merged.push((p.mat, mesh)),
             }
         }
         for (m, mesh) in merged {

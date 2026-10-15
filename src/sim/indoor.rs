@@ -512,14 +512,10 @@ mod tests {
                 .query::<&Bridge>()
                 .iter(app.world())
                 .filter_map(|b| {
-                    // The deck: the wide, flat pieces; the middle one.
-                    let deck: Vec<_> = b
-                        .pieces
-                        .iter()
-                        .filter(|(s, ..)| s.x > 1.0 && s.y < 0.5)
-                        .collect();
-                    let (size, t, _) = deck.get(deck.len() / 2)?;
-                    Some(t.translation + t.rotation * Vec3::Y * size.y * 0.5)
+                    // The deck (what the feet meet): the middle one.
+                    let deck: Vec<_> = b.pieces.iter().filter(|p| p.solid && !p.seen).collect();
+                    let p = deck.get(deck.len() / 2)?;
+                    Some(p.at.translation + p.at.rotation * Vec3::Y * p.size.y * 0.5)
                 })
                 .collect();
             steps.extend(decks.into_iter().map(|p| ("bridge".to_string(), p)));

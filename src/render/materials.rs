@@ -40,6 +40,8 @@ pub enum Mat {
     DarkMetal,
     /// Untextured raw timber (furniture, beams).
     Timber,
+    /// Road asphalt (bridge decks).
+    Asphalt,
 }
 
 impl Mat {
@@ -122,6 +124,7 @@ impl Mat {
             Mat::Glass => (None, 1.0, Color::srgba(0.12, 0.14, 0.15, 0.55), 0.05),
             Mat::DarkMetal => (None, 1.0, Color::srgb(0.12, 0.12, 0.12), 0.55),
             Mat::Timber => (None, 1.0, Color::srgb(0.38, 0.29, 0.2), 0.8),
+            Mat::Asphalt => (Some("asphalt"), 4.0, Color::srgb(0.25, 0.25, 0.24), 0.75),
         }
     }
 }

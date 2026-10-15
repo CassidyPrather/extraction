@@ -825,6 +825,11 @@
           56
         ],
         "note": "canvas weave recoloured olive drab"
+      },
+      "asphalt": {
+        "source": "acg:Asphalt021",
+        "brightness": 0.9,
+        "note": "worn road asphalt (the terrain's road layer), for bridge decks"
       }
     }
   },
