@@ -6,7 +6,7 @@
 //! get a view each, from where you'd stand to read them. Run it under
 //! `scripts/tour.sh` and look through the pictures for odd models,
 //! z-fighting, things floating or sunk, clipping, unreadable text.
-//! Then the open ground (`g###_*`): boulders, gullies, forest floor,
+//! Then the open ground (`g###_*`): boulders, rain hollows, forest floor,
 //! verges, banks and the land round building pads.
 //! `--tour-only TEXT` keeps the views whose file name contains TEXT.
 
@@ -89,14 +89,14 @@ impl Clearance {
                 .any(|(q, r)| q.distance(p) < r * 1.4 + 1.2)
     }
 
-    /// Nothing between `from` and `target`: no trunk within 2.5 m of the
-    /// line (branches spread), no rock on it.
+    /// Nothing between `from` and `target`: no trunk within 3.5 m of the
+    /// line (a spruce's skirt spreads that far at eye height), no rock.
     fn sight(&self, from: Vec2, target: Vec2) -> bool {
         let d = from.distance(target);
         let steps = (d / 1.0).ceil().max(1.0) as usize;
         (1..steps).all(|i| {
             let q = from.lerp(target, i as f32 / steps as f32);
-            self.trees.iter().all(|t| t.distance(q) > 2.5)
+            self.trees.iter().all(|t| t.distance(q) > 3.5)
                 && self.rocks.iter().all(|(c, r)| c.distance(q) > r + 0.3)
         })
     }
@@ -220,7 +220,7 @@ pub fn views(zone: &Zone) -> Vec<View> {
 }
 
 /// The open ground, from standing height: the biggest boulders on steep
-/// ground, the most hollowed spots (where the rain cut gullies), the
+/// ground, the most channel-like hollows (where the rain runs), the
 /// forest floor, road and water edges, and the ring where the worn land
 /// meets a building's pad.
 fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
@@ -316,8 +316,8 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
         let n = hm.normal([p.x, p.y]);
         let down = Vec2::new(n[0], n[2]).normalize_or(Vec2::X);
         push(
-            "gully",
-            format!("gully at ({:.0}, {:.0}), looking down it", p.x, p.y),
+            "hollow",
+            format!("rain hollow at ({:.0}, {:.0}), looking down it", p.x, p.y),
             stand(clear.of(p - down * 6.0, p)),
             on(p + down * 10.0, 0.0),
         );

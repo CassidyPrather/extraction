@@ -313,10 +313,9 @@ fn fragment(
             l = sample_rock_triplanar(wp, n_geo);
             // Wet, dark, and mossy where it faces up.
             let moss = smoothstep(0.55, 0.85, n_geo.y) * smoothstep(0.35, 0.6, fbm(wp.xz * 0.4));
-            // Weathered in bands and tones, warm like the boulders, not one
-            // grey sheet.
+            // Weathered in tones, warm like the boulders, not one grey sheet
+            // (no level bands: on patchy ground they read as terraces).
             let tone = fbm(wp.xz * 0.15 + vec2<f32>(3.0, 9.0));
-            let strata = 0.82 + 0.18 * sin(wp.y * 1.9 + fbm(wp.xz * 0.3) * 4.0);
             let tint = mix(vec3<f32>(1.05, 0.9, 0.72), vec3<f32>(0.72, 0.74, 0.76), tone);
             // Rills: rain cuts a bank into grooves straight down the fall
             // line (stretched noise across the slope, long down it).
@@ -325,7 +324,7 @@ fn fragment(
             let rill = fbm(vec2<f32>(across * 1.3, wp.y * 0.12));
             let steep = smoothstep(0.9, 0.6, n_geo.y);
             let rills = mix(1.0, mix(0.55, 1.15, rill), steep);
-            l.albedo = mix(l.albedo * 0.6 * tint * strata * rills, vec3<f32>(0.10, 0.13, 0.06), moss * 0.7);
+            l.albedo = mix(l.albedo * 0.6 * tint * rills, vec3<f32>(0.10, 0.13, 0.06), moss * 0.7);
             // Weathered rock is matt; the scan's gloss turned a bank to a
             // sheen of sky at a glancing angle.
             l.rough = max(l.rough, 0.85);

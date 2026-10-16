@@ -656,7 +656,18 @@ impl Heightmap {
                     if !inside && (hm.roads[k].weight > 0 || under_other(me, q)) {
                         return;
                     }
-                    hm.heights[k] = hm.heights[k].min(y + out * RAMP);
+                    // A smooth minimum past the flat, so the cut meets the
+                    // hillside in a rounded shoulder, not a straight crease
+                    // (it only ever lowers, and never under the walls).
+                    let (a, b) = (hm.heights[k], y + out * RAMP);
+                    let soft = 2.0 * geom::smoothstep(0.5, 3.0, out);
+                    let lower = if soft > 1e-3 {
+                        let t = ((soft - (a - b).abs()) / soft).max(0.0);
+                        a.min(b) - t * t * soft * 0.25
+                    } else {
+                        a.min(b)
+                    };
+                    hm.heights[k] = lower;
                 });
                 if footing(self) >= y - 1e-3 {
                     break;
