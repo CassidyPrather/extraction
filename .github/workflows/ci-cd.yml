@@ -80,11 +80,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Fetch CC0 assets
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The textures are fetched and processed at build time (they're not
+      # in git); the audio is committed, already mastered. Without numpy and
+      # Pillow the fetch failed at import and builds shipped without any
+      # textures, so a failed fetch now fails the package.
+      - name: Fetch CC0 textures
         shell: bash
         run: |
-          if [ -f scripts/fetch_assets.py ]; then python3 scripts/fetch_assets.py || echo "asset fetch failed; packaging without"; fi
-          if [ -f scripts/fetch_audio.py ]; then python3 scripts/fetch_audio.py || echo "audio fetch failed; packaging without"; fi
+          python -m pip install --quiet numpy pillow
+          python scripts/fetch_assets.py
+          test -f assets/textures/terrain/albedo.ktx2
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
