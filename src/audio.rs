@@ -12,6 +12,7 @@ use extraction_core::noise::Rng;
 use extraction_core::terrain::Surface;
 use std::collections::HashMap;
 
+use crate::audio_mix as mix;
 use crate::interact::InteractEvent;
 use crate::player::Footstep;
 use crate::rig::RigHead;
@@ -61,7 +62,7 @@ fn rain_volume(
             let db = if conditions.rain < 0.01 {
                 -80.0
             } else {
-                -30.0 + 18.0 * conditions.rain.sqrt()
+                mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt()
             };
             v.volume = Volume::Decibels(db);
         }
@@ -169,21 +170,25 @@ fn attach_listener(
     }
 }
 
-/// Plays one variant of a set at a point (or unspatialised with `None`).
+/// Plays one variant of a set at a point (or unspatialised with `None`),
+/// at the cue's gain (`audio_mix`) plus `offset_db`, falling off from the
+/// cue's reach.
+#[allow(clippy::too_many_arguments)]
 fn play(
     commands: &mut Commands,
     bank: &SoundBank,
     rng: &mut Rng,
     set: &str,
     at: Option<Vec3>,
-    gain_db: f32,
+    cue: &str,
+    offset_db: f32,
     pitch: f64,
 ) {
     let Some(sample) = bank.pick(set, rng) else {
         return;
     };
     let speed = 1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch;
-    let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(gain_db));
+    let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + offset_db));
     let settings = PlaybackSettings::default().with_speed(speed);
     match at {
         Some(p) => {
@@ -191,7 +196,7 @@ fn play(
                 player,
                 settings,
                 Transform::from_translation(p),
-                sample_effects![SpatialBasicNode::default()],
+                sample_effects![mix::spatial(cue)],
             ));
         }
         None => {
@@ -236,14 +241,15 @@ fn footsteps(
         } else {
             surface_set(zone.hm.surface(p, zone.in_forest(p[0], p[1])))
         };
-        let gain = -14.0 + (s.speed / 4.0).min(1.0) * 6.0;
+        let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
             &bank,
             &mut rng.0,
             set,
             Some(s.position),
-            gain,
+            "step",
+            offset,
             0.06,
         );
     }
@@ -275,31 +281,38 @@ fn gun_sounds(
     for ev in events.read() {
         let action = guns.get(ev.gun).map(|g| g.firearm.def.action).ok();
         use extraction_core::firearm::ActionKind::*;
-        let (set, gain) = match (&ev.event, action) {
+        let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
                 if far {
-                    ("guns/distant_shot", -6.0)
+                    ("guns/distant_shot", "gun.distant", 0.0)
                 } else {
-                    (shot_set(&ev.item), 0.0)
+                    (shot_set(&ev.item), "gun.shot", 0.0)
                 }
             }
-            (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", -8.0),
-            (FireEvent::MagazineInserted, _) => ("guns/mag_insert", -6.0),
-            (FireEvent::MagazineRemoved, _) => ("guns/mag_release", -6.0),
-            (FireEvent::ModeChanged(_), _) => ("guns/safety", -10.0),
-            (FireEvent::RoundLoaded, Some(BreakAction)) => ("guns/shell_insert", -8.0),
-            (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", -10.0),
-            (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", -6.0),
-            (FireEvent::BoltClosed, Some(BreakAction)) => ("guns/shotgun_close", -4.0),
-            (FireEvent::BoltClosed, Some(SemiAuto)) if ev.item == "ak74" => {
-                ("guns/charging_handle", -6.0)
+            (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire", 0.0),
+            (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
+            (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
+            (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
+            (FireEvent::RoundLoaded, Some(BreakAction)) => {
+                ("guns/shell_insert", "gun.shell_insert", 0.0)
             }
-            (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/slide_rack", -6.0),
-            (FireEvent::Cocked, Some(BoltAction)) => ("guns/bolt_open", -6.0),
-            (FireEvent::Cocked, Some(BreakAction)) => ("guns/shotgun_open", -4.0),
-            (FireEvent::Ejected(Round::Spent), _) => ("guns/casing", -16.0),
-            (FireEvent::Ejected(Round::Live), _) => ("guns/casing", -12.0),
+            (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip", 0.0),
+            (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", "gun.bolt_close", 0.0),
+            (FireEvent::BoltClosed, Some(BreakAction)) => {
+                ("guns/shotgun_close", "gun.shotgun_close", 0.0)
+            }
+            (FireEvent::BoltClosed, Some(SemiAuto)) if ev.item == "ak74" => {
+                ("guns/charging_handle", "gun.charging", 0.0)
+            }
+            (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/slide_rack", "gun.slide_rack", 0.0),
+            (FireEvent::Cocked, Some(BoltAction)) => ("guns/bolt_open", "gun.bolt_open", 0.0),
+            (FireEvent::Cocked, Some(BreakAction)) => {
+                ("guns/shotgun_open", "gun.shotgun_open", 0.0)
+            }
+            // A spent case is lighter than a live round.
+            (FireEvent::Ejected(Round::Spent), _) => ("guns/casing", "gun.casing", -4.0),
+            (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
             _ => continue,
         };
         // Shots aren't pitch-shifted much: a gun has one voice.
@@ -314,7 +327,8 @@ fn gun_sounds(
             &mut rng.0,
             set,
             Some(ev.at),
-            gain,
+            cue,
+            offset,
             pitch,
         );
     }
@@ -334,10 +348,10 @@ fn shot_sounds(
             let speed = 1.25;
             if let Some(sample) = bank.pick("guns/pistol_shot", &mut rng.0) {
                 commands.spawn((
-                    SamplePlayer::new(sample).with_volume(Volume::Decibels(-3.0)),
+                    SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("robot.shot"))),
                     PlaybackSettings::default().with_speed(speed),
                     Transform::from_translation(s.origin),
-                    sample_effects![SpatialBasicNode::default()],
+                    sample_effects![mix::spatial("robot.shot")],
                 ));
             }
         }
@@ -377,7 +391,8 @@ fn hit_sounds(
             &mut rng.0,
             set,
             Some(h.point),
-            -6.0,
+            "hit.impact",
+            0.0,
             0.08,
         );
         if rng.0.chance(0.12) && set != "impacts/dirt" {
@@ -387,7 +402,8 @@ fn hit_sounds(
                 &mut rng.0,
                 "impacts/ricochet",
                 Some(h.point),
-                -10.0,
+                "hit.ricochet",
+                0.0,
                 0.1,
             );
         }
@@ -402,15 +418,15 @@ fn hand_sounds(
     poses: Query<&GlobalTransform>,
 ) {
     for ev in events.read() {
-        let (item, set, gain) = match ev {
-            InteractEvent::Grabbed { item, .. } => (*item, "physical/cloth", -20.0),
-            InteractEvent::Stowed { item } => (*item, "physical/zip", -12.0),
-            InteractEvent::Socketed { item, .. } => (*item, "physical/velcro", -14.0),
-            InteractEvent::Refused { item } => (*item, "physical/cloth", -10.0),
+        let (item, set, cue) = match ev {
+            InteractEvent::Grabbed { item, .. } => (*item, "physical/cloth", "hand.grab"),
+            InteractEvent::Stowed { item } => (*item, "physical/zip", "hand.stow"),
+            InteractEvent::Socketed { item, .. } => (*item, "physical/velcro", "hand.socket"),
+            InteractEvent::Refused { item } => (*item, "physical/cloth", "hand.refused"),
             _ => continue,
         };
         let at = poses.get(item).map(|g| g.translation()).ok();
-        play(&mut commands, &bank, &mut rng.0, set, at, gain, 0.1);
+        play(&mut commands, &bank, &mut rng.0, set, at, cue, 0.0, 0.1);
     }
 }
 
@@ -433,10 +449,10 @@ fn rotor_loops(
                         RotorLoop,
                         SamplePlayer::new(sample)
                             .looping()
-                            .with_volume(Volume::Decibels(-4.0)),
+                            .with_volume(Volume::Decibels(mix::db("drone.rotor"))),
                         PlaybackSettings::default(),
                         Transform::default(),
-                        sample_effects![SpatialBasicNode::default()],
+                        sample_effects![mix::spatial("drone.rotor")],
                         ChildOf(e),
                     ));
                 }
@@ -479,7 +495,7 @@ fn start_ambience(
             SamplePlayer::new(sample).looping(),
             PlaybackSettings::default(),
             sample_effects![VolumeNode {
-                volume: Volume::Decibels(WIND_DB),
+                volume: Volume::Decibels(mix::db("wind")),
                 ..default()
             }],
         ));
@@ -522,10 +538,10 @@ fn start_ambience(
             CreekLoop,
             SamplePlayer::new(sample)
                 .looping()
-                .with_volume(Volume::Decibels(-4.0)),
+                .with_volume(Volume::Decibels(mix::db("creek"))),
             PlaybackSettings::default(),
             Transform::default(),
-            sample_effects![SpatialBasicNode::default()],
+            sample_effects![mix::spatial("creek")],
         ));
     }
 }
@@ -574,12 +590,21 @@ fn ambient_oneshots(
             let at = Vec3::new(at[0], zone.ground(at[0], at[1]) + 3.0, at[1]);
             // Mostly a clank; sometimes a long groan of a beam taking the
             // weight.
-            let (set, gain) = if rng.0.f32() < 0.35 {
-                ("machines/groan", -8.0)
+            let (set, cue) = if rng.0.f32() < 0.35 {
+                ("machines/groan", "works.groan")
             } else {
-                ("machines/clank", -10.0)
+                ("machines/clank", "works.clank")
             };
-            play(&mut commands, &bank, &mut rng.0, set, Some(at), gain, 0.25);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(at),
+                cue,
+                0.0,
+                0.25,
+            );
         }
     }
     if next.0 <= 0.0 {
@@ -590,7 +615,16 @@ fn ambient_oneshots(
         let birds = &zone.map.sounds.birds;
         if !birds.is_empty() {
             let set = &birds[rng.0.below(birds.len())];
-            play(&mut commands, &bank, &mut rng.0, set, Some(at), -6.0, 0.08);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(at),
+                "birds",
+                0.0,
+                0.08,
+            );
         }
     }
     // The valley's own far-off sounds come from high ground: scree letting
@@ -607,7 +641,16 @@ fn ambient_oneshots(
             })
             .max_by(|a, b| a.y.total_cmp(&b.y));
         let set = &distant[rng.0.below(distant.len())];
-        play(&mut commands, &bank, &mut rng.0, set, at, 2.0, 0.1);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            at,
+            "valley.distant",
+            0.0,
+            0.1,
+        );
     }
     if next.1 <= 0.0 {
         next.1 = rng.0.range(60.0, 180.0);
@@ -617,7 +660,8 @@ fn ambient_oneshots(
             &mut rng.0,
             "ambience/thunder_distant",
             None,
-            -14.0,
+            "thunder",
+            0.0,
             0.05,
         );
     }
@@ -675,7 +719,7 @@ fn surge_sounds(
             let db = if level < 0.01 {
                 -80.0
             } else {
-                -30.0 + 30.0 * level.sqrt()
+                mix::db("surge.drone") - 30.0 + 30.0 * level.sqrt()
             };
             v.volume = Volume::Decibels(db);
         }
@@ -689,7 +733,8 @@ fn surge_sounds(
             &mut rng.0,
             "anomaly/surge_crack",
             at,
-            -2.0 + 6.0 * f.strength,
+            "surge.crack",
+            -6.0 + 6.0 * f.strength,
             0.12,
         );
     }
@@ -704,7 +749,8 @@ fn surge_sounds(
             &mut rng.0,
             "machines/siren",
             gate,
-            10.0,
+            "surge.siren",
+            0.0,
             0.0,
         );
     }
@@ -738,20 +784,26 @@ fn anomaly_loops(
         let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
         match existing {
             None if d < 40.0 => {
-                let (set, db) = match a.kind {
-                    extraction_core::anomaly::AnomalyKind::Lift => ("anomaly/lift_hum", -2.0),
-                    extraction_core::anomaly::AnomalyKind::Burner => ("anomaly/burner_roar", 0.0),
-                    extraction_core::anomaly::AnomalyKind::Snare => ("anomaly/snare_buzz", -6.0),
+                let (set, cue) = match a.kind {
+                    extraction_core::anomaly::AnomalyKind::Lift => {
+                        ("anomaly/lift_hum", "anomaly.lift")
+                    }
+                    extraction_core::anomaly::AnomalyKind::Burner => {
+                        ("anomaly/burner_roar", "anomaly.burner")
+                    }
+                    extraction_core::anomaly::AnomalyKind::Snare => {
+                        ("anomaly/snare_buzz", "anomaly.snare")
+                    }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
                         AnomalyLoop,
                         SamplePlayer::new(sample)
                             .looping()
-                            .with_volume(Volume::Decibels(db)),
+                            .with_volume(Volume::Decibels(mix::db(cue))),
                         PlaybackSettings::default().with_speed(0.9 + rng.0.f32() as f64 * 0.2),
                         Transform::from_xyz(0.0, 1.0, 0.0),
-                        sample_effects![SpatialBasicNode::default()],
+                        sample_effects![mix::spatial(cue)],
                     ));
                 }
             }
@@ -782,7 +834,8 @@ fn anomaly_sounds(
             &mut rng.0,
             "machines/clank",
             at,
-            4.0,
+            "harpoon.fire",
+            0.0,
             0.1,
         );
         if h.hit {
@@ -793,6 +846,7 @@ fn anomaly_sounds(
                 &mut rng.0,
                 "impacts/metal",
                 at,
+                "harpoon.hit",
                 0.0,
                 0.1,
             );
@@ -806,42 +860,42 @@ fn anomaly_sounds(
         };
         if let Some(sample) = bank.pick("anomaly/offering", &mut rng.0) {
             commands.spawn((
-                SamplePlayer::new(sample).with_volume(Volume::Decibels(4.0)),
+                SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("offering"))),
                 PlaybackSettings::default().with_speed(speed),
                 Transform::from_translation(o.at),
-                sample_effects![SpatialBasicNode::default()],
+                sample_effects![mix::spatial("offering")],
             ));
         }
     }
     use crate::anomaly::AnomalyAct;
     for ev in events.read() {
-        let (set, db, speed) = match ev.what {
-            AnomalyAct::Discharge => ("anomaly/surge_crack", 2.0, 1.7),
-            AnomalyAct::Pop => ("anomaly/lift_pop", 4.0, 1.0),
-            AnomalyAct::Bloom => ("anomaly/surge_crack", -4.0, 0.6),
+        let (set, cue, speed) = match ev.what {
+            AnomalyAct::Discharge => ("anomaly/surge_crack", "anomaly.discharge", 1.7),
+            AnomalyAct::Pop => ("anomaly/lift_pop", "anomaly.pop", 1.0),
+            AnomalyAct::Bloom => ("anomaly/surge_crack", "anomaly.bloom", 0.6),
             AnomalyAct::Flare => continue,
         };
         let Some(sample) = bank.pick(set, &mut rng.0) else {
             continue;
         };
         commands.spawn((
-            SamplePlayer::new(sample).with_volume(Volume::Decibels(db)),
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
             PlaybackSettings::default().with_speed(speed),
             Transform::from_translation(ev.at),
-            sample_effects![SpatialBasicNode::default()],
+            sample_effects![mix::spatial(cue)],
         ));
     }
     for b in emps.read() {
-        for (set, db, speed) in [
-            ("anomaly/surge_crack", 6.0, 0.7),
-            ("anomaly/lift_pop", 2.0, 1.4),
+        for (set, cue, speed) in [
+            ("anomaly/surge_crack", "emp.crack", 0.7),
+            ("anomaly/lift_pop", "emp.pop", 1.4),
         ] {
             if let Some(sample) = bank.pick(set, &mut rng.0) {
                 commands.spawn((
-                    SamplePlayer::new(sample).with_volume(Volume::Decibels(db)),
+                    SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
                     PlaybackSettings::default().with_speed(speed),
                     Transform::from_translation(b.at),
-                    sample_effects![SpatialBasicNode::default()],
+                    sample_effects![mix::spatial(cue)],
                 ));
             }
         }
@@ -853,7 +907,8 @@ fn anomaly_sounds(
             &mut rng.0,
             "impacts/ricochet",
             Some(g.at),
-            2.0,
+            "hit.glance",
+            0.0,
             0.1,
         );
     }
@@ -886,16 +941,16 @@ fn gadget_loops(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::camera_drone::Flight;
-    let mut want: Vec<(Entity, &str, f32, f64)> = Vec::new();
+    let mut want: Vec<(Entity, &str, &str, f64)> = Vec::new();
     for (e, d, _) in &drones {
         if d.flight != Flight::Idle {
-            want.push((e, "machines/drone_rotor", -16.0, 1.9));
+            want.push((e, "machines/drone_rotor", "camera_drone", 1.9));
         }
     }
     for (e, g, _) in &grips {
         if ropes.get(g.rope).is_ok_and(|r| r.zip) && g.speed > 0.3 {
             let pitch = 0.6 + (g.speed / crate::gadgets::climbing::ZIP_SPEED) as f64 * 0.9;
-            want.push((e, "machines/hum", -10.0, pitch));
+            want.push((e, "machines/hum", "zipline", pitch));
         }
     }
     // Stop the ones that aren't wanted any more.
@@ -907,7 +962,7 @@ fn gadget_loops(
             commands.entity(l).despawn();
         }
     }
-    for (e, set, db, speed) in want {
+    for (e, set, cue, speed) in want {
         let existing = all_children
             .get(e)
             .ok()
@@ -926,10 +981,10 @@ fn gadget_loops(
                         GadgetLoop,
                         SamplePlayer::new(sample)
                             .looping()
-                            .with_volume(Volume::Decibels(db)),
+                            .with_volume(Volume::Decibels(mix::db(cue))),
                         PlaybackSettings { speed, ..default() },
                         Transform::default(),
-                        sample_effects![SpatialBasicNode::default()],
+                        sample_effects![mix::spatial(cue)],
                         ChildOf(e),
                     ));
                 }
@@ -951,10 +1006,10 @@ fn door_sounds(
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_some_and(|b| b != door.open) {
-            let (set, db) = if door.open {
-                ("physical/door_open", -8.0)
+            let (set, cue) = if door.open {
+                ("physical/door_open", "door.open")
             } else {
-                ("physical/door_close", -6.0)
+                ("physical/door_close", "door.close")
             };
             play(
                 &mut commands,
@@ -962,7 +1017,8 @@ fn door_sounds(
                 &mut rng.0,
                 set,
                 Some(gt.translation()),
-                db,
+                cue,
+                0.0,
                 0.08,
             );
         }
@@ -974,7 +1030,8 @@ fn door_sounds(
             &mut rng.0,
             "impacts/wood",
             Some(b.at),
-            2.0,
+            "door.blow",
+            0.0,
             0.15,
         );
         if b.broke {
@@ -984,7 +1041,8 @@ fn door_sounds(
                 &mut rng.0,
                 "physical/door_close",
                 Some(b.at),
-                4.0,
+                "door.broken",
+                0.0,
                 0.2,
             );
         }
@@ -997,8 +1055,6 @@ fn door_sounds(
 struct WindLoop;
 #[derive(Component)]
 struct RoomLoop;
-
-const WIND_DB: f32 = -16.0;
 
 fn indoor_ambience(
     entrances: Option<Res<crate::robots::doors::Entrances>>,
@@ -1020,7 +1076,7 @@ fn indoor_ambience(
     let k = *inside;
     for effects in &wind {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            v.volume = Volume::Decibels(WIND_DB - 14.0 * k);
+            v.volume = Volume::Decibels(mix::db("wind") - 14.0 * k);
         }
     }
     for effects in &room {
@@ -1028,7 +1084,7 @@ fn indoor_ambience(
             v.volume = if k < 0.01 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(-30.0 + 12.0 * k)
+                Volume::Decibels(mix::db("room") - 12.0 + 12.0 * k)
             };
         }
     }
@@ -1056,7 +1112,7 @@ fn attention_hum(
             v.volume = if k < 0.01 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(-34.0 + 20.0 * k)
+                Volume::Decibels(mix::db("attention") - 20.0 + 20.0 * k)
             };
         }
     }
@@ -1077,7 +1133,8 @@ fn walker_steps(
             &mut rng.0,
             "footsteps/metal",
             Some(s.at),
-            2.0,
+            "walker.step",
+            0.0,
             0.12,
         );
         if rng.0.f32() < 0.35 {
@@ -1087,7 +1144,8 @@ fn walker_steps(
                 &mut rng.0,
                 "machines/servo",
                 Some(s.at),
-                -6.0,
+                "walker.servo",
+                0.0,
                 0.15,
             );
         }
@@ -1113,7 +1171,8 @@ fn radio_sounds(
             &mut rng.0,
             "machines/radio_squelch",
             at,
-            -6.0,
+            "radio.squelch",
+            0.0,
             0.05,
         );
         play(
@@ -1122,7 +1181,8 @@ fn radio_sounds(
             &mut rng.0,
             "machines/radio_static",
             at,
-            -16.0,
+            "radio.static",
+            0.0,
             0.05,
         );
     }
@@ -1146,7 +1206,8 @@ fn chatter_sounds(
             &mut rng.0,
             "machines/radio_squelch",
             at,
-            -8.0 + gain,
+            "chatter.squelch",
+            gain,
             0.05,
         );
         play(
@@ -1155,7 +1216,8 @@ fn chatter_sounds(
             &mut rng.0,
             "machines/radio_static",
             at,
-            -12.0 + gain,
+            "chatter.static",
+            gain,
             0.1,
         );
         for _ in 0..2 {
@@ -1165,7 +1227,8 @@ fn chatter_sounds(
                 &mut rng.0,
                 "machines/servo",
                 at,
-                -20.0 + gain,
+                "chatter.chirp",
+                gain,
                 0.4,
             );
         }
@@ -1186,7 +1249,8 @@ fn lock_sounds(
             &mut rng.0,
             "machines/drone_lock",
             Some(l.at),
-            4.0,
+            "drone.lock",
+            0.0,
             0.03,
         );
     }
@@ -1211,6 +1275,7 @@ fn splash_sounds(
                     &mut rng.0,
                     "footsteps/water",
                     Some(gt.translation()),
+                    "splash",
                     -8.0 + 8.0 * hard,
                     0.15,
                 );
@@ -1235,8 +1300,17 @@ fn drop_sounds(
             Material::Plastic => "physical/drop_plastic",
             Material::Soft => "physical/drop_cardboard",
         };
-        let db = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
-        play(&mut commands, &bank, &mut rng.0, set, Some(i.at), db, 0.1);
+        let offset = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(i.at),
+            "drop",
+            offset,
+            0.1,
+        );
     }
 }
 
@@ -1265,7 +1339,16 @@ fn pylon_sounds(
         } else {
             "machines/clank"
         };
-        play(&mut commands, &bank, &mut rng.0, set, Some(at), -4.0, 0.2);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            "pylon.work",
+            0.0,
+            0.2,
+        );
     }
 }
 

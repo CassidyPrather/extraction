@@ -485,6 +485,27 @@ def finish_oneshot(st: dict, clip: np.ndarray) -> np.ndarray:
     return normalize(clip, st["normalize"])
 
 
+def match_variants(outs: list, st: dict) -> list:
+    """A one-shot set's variants, pulled toward the set's median loudness
+    (BS.1770 momentary max) so that no step or shot jumps out of its set,
+    keeping `keep_spread` of the natural variation (0.3 by default) and
+    moving none by more than 8 dB; then the set is scaled so its loudest
+    peak sits at `peak` (-1.5 dBFS by default, which keeps the Vorbis
+    encode's intersample overs under -1 dBTP)."""
+    if len(outs) < 2:
+        return outs
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import audio_audit as aa  # the same meter the audit uses
+    keep = st.get("keep_spread", 0.3)
+    loud = [float(aa.block_loudness(aa.k_weight(x)).max()) for x, _ in outs]
+    med = float(np.median(loud))
+    outs = [(x * undb(max(-8.0, min(8.0, (med - l) * (1 - keep)))), sid)
+            for (x, sid), l in zip(outs, loud)]
+    peak = max(float(np.abs(x).max()) for x, _ in outs)
+    ceiling = undb(st.get("peak", -1.5))
+    return [(x * (ceiling / peak), sid) for x, sid in outs] if peak > 0 else outs
+
+
 def build_set(st: dict, srcs: dict, paths: dict) -> list[tuple[Path, np.ndarray, str]]:
     """Returns (output path, audio, source id) per variant."""
     st = set_defaults(st)
@@ -524,6 +545,7 @@ def build_set(st: dict, srcs: dict, paths: dict) -> list[tuple[Path, np.ndarray,
                 picked.append(lst.pop(0))
             k += 1
         outs = [(finish_oneshot(st, c), sid) for c, sid in picked]
+        outs = match_variants(outs, st)
     name = st["name"]
     return [(OUT / st["category"] / f"{name}_{i + 1}.ogg", x, sid)
             for i, (x, sid) in enumerate(outs)]

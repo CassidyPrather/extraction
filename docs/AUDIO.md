@@ -193,3 +193,88 @@ rifle, and it reads as loud.
 
 A set's old files are deleted before it is rebuilt, so shrinking `count`
 leaves no stale variants behind.
+
+## Checking the mix
+
+Ears are fickle, so the mix is also judged by numbers.
+`python3 scripts/audio_audit.py` writes `target/audio_audit/` (`mix.txt`
+to read, `assets.json` and `mix.json` for tools); `--check` exits 1 if
+any cue is flagged, which makes it a gauge (`docs/QA.md`). The mix
+itself is data: every sound the game plays is a cue in
+`src/audio_mix.rs` with its playback gain, its reach (where its distance
+falloff starts) and what it is for. `audio.rs` reads its gains from
+there and the audit reads the same lines, so what is judged is what
+plays.
+
+**What's measured.** Every asset's loudness by ITU-R BS.1770, the
+K-weighting behind LUFS. One-shots are measured as momentary-max
+loudness (the loudest 400 ms; a short click counts the silence a meter
+would see, which is how short sounds are heard). Loops and beds are
+measured as gated integrated loudness. Also true peak (4x oversampled),
+crest factor, DC offset, onset delay, clipped runs, loop seams and a
+1/3-octave spectrum.
+
+**How a cue is judged.** Its level as heard is the asset's loudness plus
+its gain plus the falloff at its usual distance. That falloff follows
+Firewheel's model: inverse distance from the cue's reach, and a one-pole
+low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
+
+- **Realism, compressed.** Every cue carries a rough real-world level
+  (`spl`: a rifle at the shooter's ear about 140 dB(A), a footstep at
+  the walker's 55). A robust (Theil-Sen) line through the handling
+  sounds and actions gives the game's compression of the world's
+  dynamics, currently about 6:1. A detail or action more than 5 LU off
+  that line is flagged: it is louder or quieter than its kind.
+- **Roles.** Beds set the floor, and footsteps sit 2-10 LU over the wind.
+  Signals are the sounds that carry information: a drone's rotor and
+  lock-on, a walker's footfall, an anomaly, the radio, your own dry
+  fire. Realism doesn't decide those; audible range does (below). No
+  signal may be louder than your own gunshot.
+- **Audible range.** For each placed signal, the farthest it is still
+  heard over the calm bed (wind) and over a downpour (wind and full
+  rain). The masking model is simple: the masker's 1/3-octave levels,
+  spread to neighbouring bands at -25 dB per band below and -12 dB per
+  band above, less 6 dB. A signal is heard where it beats that threshold
+  in any band, after the falloff and the muffle. Targets
+  (`RANGE_TARGETS`) say how far each warning must reach, about as far
+  as the threat does: the drone's rotor 120 m calm and 40 m in a
+  downpour, a walker's footfall 60 and 30.
+- **Peaks.** A cue whose asset true peak plus its gain goes over 0 dBTP
+  is flagged. Loud, rare actions and events may lean on the master
+  limiter (bevy_seedling's default graph ends in one) up to +3.
+- **Scenes.** Five scenes are mixed offline from the assets as the game
+  plays them: a quiet walk, a downpour, a firefight in the rain,
+  indoors, the Surge. Each is measured for integrated loudness, peaks,
+  and how far each signal in it clears everything else.
+
+**What the first run found** (and what changed):
+
+- The drone's lock-on (a synthesised tone, crest factor 3.6 dB) played
+  11 LU louder than your own rifle, from 20 m away, and carried 750 m
+  through a downpour. The offering chime and the lift's pop were 14 LU
+  over your rifle. All three are now under it; the lock-on still clears
+  a firefight by 5 dB at 20 m.
+- Variants within a set differed by up to 16 LU: one-shots had been
+  peak-normalised, and a peak says little about loudness. The mastering
+  now pulls each set's variants to within about 2 LU of the set median,
+  keeping 30% of the natural spread (`match_variants` in
+  `fetch_audio.py`). It also leaves each set's loudest peak at -1.5 dBFS,
+  so the Vorbis encode stays under -1 dBTP; before, encodes reached
+  +2.4 dBTP.
+- Firewheel's default distance muffle closes to 20 Hz at 200 m, which
+  silenced everything farther off, the Surge siren at the Gate included.
+  The muffle now closes at 900 m, and the siren has a 200 m reach: it is
+  heard across the valley.
+- A robot's gunfire 30 m away sat 15 LU under its kind; it now has a
+  20 m reach. Your own dry fire was masked entirely by a downpour; it is
+  now heard to 9 m. A walker battering a door could not be heard in
+  rain; it now carries 30 m. Ricochets and impacts came up 4-6 dB.
+- The firefight scene peaked at +2.4 dBFS (204 samples over full scale,
+  caught by the limiter); it now peaks at +0.4 dBFS (5 samples). Overall
+  the game now runs from about -32 LUFS on a quiet walk to -17 LUFS in a
+  firefight, with your rifle at -23 LUFS momentary.
+
+**Changing the mix.** Edit a cue's gain or reach in `src/audio_mix.rs`
+and re-run the audit (a few seconds; assets are re-measured only when
+they change, or with `--fresh`). To move the targets, change the
+constants at the top of `scripts/audio_mix.py`.

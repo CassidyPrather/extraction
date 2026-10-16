@@ -6,6 +6,8 @@
 //! get a view each, from where you'd stand to read them. Run it under
 //! `scripts/tour.sh` and look through the pictures for odd models,
 //! z-fighting, things floating or sunk, clipping, unreadable text.
+//! Then the open ground (`g###_*`): boulders, gullies, forest floor,
+//! verges, banks and the land round building pads.
 //! `--tour-only TEXT` keeps the views whose file name contains TEXT.
 
 use bevy::prelude::*;
@@ -155,6 +157,143 @@ pub fn views(zone: &Zone) -> Vec<View> {
             look: target.to_array(),
         });
     }
+    out.extend(ground_views(zone));
+    out
+}
+
+/// The open ground, from standing height: the biggest boulders on steep
+/// ground, the most hollowed spots (where the rain cut gullies), the
+/// forest floor, road and water edges, and the ring where the worn land
+/// meets a building's pad.
+fn ground_views(zone: &Zone) -> Vec<View> {
+    use extraction_core::geom;
+    let hm = &zone.hm;
+    let mut out = Vec::new();
+    let stand = |p: Vec2| Vec3::new(p.x, zone.ground(p.x, p.y) + 1.7, p.y);
+    let on = |p: Vec2, up: f32| Vec3::new(p.x, zone.ground(p.x, p.y) + up, p.y);
+    let mut push = |kind: &str, what: String, from: Vec3, to: Vec3| {
+        let n = out.len();
+        out.push(View {
+            file: format!("g{n:03}_{kind}.png"),
+            what,
+            at: from.to_array(),
+            look: to.to_array(),
+        });
+    };
+    let far_apart = |picked: &[Vec2], p: Vec2, d: f32| picked.iter().all(|q| q.distance(p) > d);
+    // Boulders: the biggest, on the steepest ground, from downhill.
+    let mut rocks = extraction_core::rocks::scatter_rocks(&zone.map, hm);
+    rocks.sort_by(|a, b| {
+        let score = |r: &extraction_core::rocks::RockSpot| {
+            r.radius * (1.0 + hm.slope_deg([r.pos[0], r.pos[2]]) / 20.0)
+        };
+        score(b).total_cmp(&score(a))
+    });
+    let mut picked = Vec::new();
+    for r in rocks.iter() {
+        let p = Vec2::new(r.pos[0], r.pos[2]);
+        if picked.len() == 4 || !far_apart(&picked, p, 60.0) {
+            continue;
+        }
+        picked.push(p);
+        let n = hm.normal([p.x, p.y]);
+        let down = Vec2::new(n[0], n[2]).normalize_or(Vec2::X);
+        push(
+            "boulder",
+            format!("boulder r {:.1} m at ({:.0}, {:.0})", r.radius, p.x, p.y),
+            stand(p + down * (r.radius + 7.0)),
+            Vec3::from_array(r.pos),
+        );
+    }
+    // Gullies: the most concave ground, looking down it.
+    let half = zone.map.half() - zone.map.fence_inset.max(10.0) - 20.0;
+    let mut hollows = Vec::new();
+    let mut z = -half;
+    while z < half {
+        let mut x = -half;
+        while x < half {
+            let h = |dx: f32, dz: f32| hm.height([x + dx, z + dz]);
+            let lap = h(3.0, 0.0) + h(-3.0, 0.0) + h(0.0, 3.0) + h(0.0, -3.0) - 4.0 * h(0.0, 0.0);
+            if hm.road_at([x, z]).weight == 0 && hm.water_level([x, z]).is_none() {
+                hollows.push((lap, Vec2::new(x, z)));
+            }
+            x += 7.0;
+        }
+        z += 7.0;
+    }
+    hollows.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut picked = Vec::new();
+    for (_, p) in hollows {
+        if picked.len() == 3 {
+            break;
+        }
+        if !far_apart(&picked, p, 80.0) {
+            continue;
+        }
+        picked.push(p);
+        let n = hm.normal([p.x, p.y]);
+        let down = Vec2::new(n[0], n[2]).normalize_or(Vec2::X);
+        push(
+            "gully",
+            format!("gully at ({:.0}, {:.0}), looking down it", p.x, p.y),
+            stand(p - down * 6.0),
+            on(p + down * 10.0, 0.0),
+        );
+    }
+    // Forest floor: the middle of each of the first three forests.
+    for f in zone.map.forests.iter().take(3) {
+        let (lo, hi) = geom::bounds(&f.polygon);
+        let c = Vec2::new((lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5);
+        if !geom::point_in_polygon(&f.polygon, [c.x, c.y]) {
+            continue;
+        }
+        push(
+            "forest",
+            format!("forest floor in \"{}\" at ({:.0}, {:.0})", f.name, c.x, c.y),
+            stand(c),
+            on(c + Vec2::new(8.0, 3.0), 0.3),
+        );
+    }
+    // Road edges: along the first three roads, a third of the way, from
+    // the verge.
+    for rl in hm.road_lines.iter().take(3) {
+        let len = geom::polyline_length(&rl.points);
+        let (p, dir) = geom::polyline_at(&rl.points, len * 0.33);
+        let (p, dir) = (Vec2::from(p), Vec2::from(dir).normalize_or(Vec2::X));
+        let side = Vec2::new(-dir.y, dir.x) * (rl.width * 0.5 + 1.0);
+        push(
+            "verge",
+            format!("road verge at ({:.0}, {:.0})", p.x, p.y),
+            stand(p + side),
+            on(p + side + dir * 12.0, 0.2),
+        );
+    }
+    // Water's edge.
+    for w in zone.map.water.iter().take(2) {
+        let line = geom::catmull_rom(&w.points, 2.0);
+        let len = geom::polyline_length(&line);
+        let (p, dir) = geom::polyline_at(&line, len * 0.6);
+        let (p, dir) = (Vec2::from(p), Vec2::from(dir).normalize_or(Vec2::X));
+        let bank = Vec2::new(-dir.y, dir.x) * (w.width * 0.5 + 4.0);
+        push(
+            "bank",
+            format!("bank of \"{}\" at ({:.0}, {:.0})", w.name, p.x, p.y),
+            stand(p + bank),
+            on(p, 0.0),
+        );
+    }
+    // Where the worn land meets a building's settled ground.
+    for pl in zone.map.placements.iter().step_by(7).take(3) {
+        let r = extraction_core::map::prefab_clearance(&pl.prefab);
+        let at = Vec2::from(pl.at);
+        let from = at + Vec2::new(0.7, 0.7).normalize() * (r + 10.0);
+        push(
+            "pad",
+            format!("ground round {} at ({:.0}, {:.0})", pl.prefab, at.x, at.y),
+            stand(from),
+            on(at, 0.5),
+        );
+    }
     out
 }
 
@@ -206,7 +345,13 @@ fn tour(
         return;
     }
     state.wait += 1;
-    if state.wait < SETTLE {
+    // Ground views wait for the grass round them to be built.
+    let settle = if view.file.starts_with('g') {
+        SETTLE * 4
+    } else {
+        SETTLE
+    };
+    if state.wait < settle {
         return;
     }
     state.shooting = true;
