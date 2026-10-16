@@ -21,8 +21,10 @@ impl Plugin for TreesPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             MaterialPlugin::<FarCrownMaterial>::default(),
+            MaterialPlugin::<TreeSwayMaterial>::default(),
             super::impostors::ImpostorPlugin,
         ))
+        .add_systems(Update, blow_trees)
         .add_systems(
             PostUpdate,
             (spawn_forests, stream_near_detail, fog_cull).chain(),
@@ -145,6 +147,7 @@ fn spawn_forests(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut fade_materials: ResMut<Assets<FarCrownMaterial>>,
+    mut sway_materials: ResMut<Assets<TreeSwayMaterial>>,
     mut impostor_materials: ResMut<Assets<super::impostors::ImpostorMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
@@ -244,6 +247,14 @@ fn spawn_forests(
                 };
                 let crown = m.crown.as_ref().map(|c| meshes.add(c.clone()));
                 let bounds = m.cards.as_ref().and_then(mesh_bounds);
+                // The live near cards move in the wind; the impostor's
+                // camera photographs the still ones.
+                let live = card_mat.as_ref().and_then(|h| materials.get(h)).map(|m| {
+                    sway_materials.add(TreeSwayMaterial {
+                        base: m.clone(),
+                        extension: TreeSway::default(),
+                    })
+                });
                 let cards = m.cards.zip(card_mat).map(|(c, mat)| (meshes.add(c), mat));
                 // Far foliage: this variant's cards (and a spruce's core)
                 // photographed for its impostor.
@@ -284,6 +295,7 @@ fn spawn_forests(
                         crown_far: far.crown,
                         bark: b.clone(),
                         cards,
+                        live,
                         impostor,
                     },
                 );
@@ -628,16 +640,13 @@ fn stream_near_detail(
                     let v = &assets.handles[&(tree.species, tree.variant)];
                     let mut kids = Vec::new();
                     if let Some((cards, card_mat)) = &v.cards {
-                        kids.push(
-                            commands
-                                .spawn((
-                                    Mesh3d(cards.clone()),
-                                    MeshMaterial3d(card_mat.clone()),
-                                    fade.clone(),
-                                    ChildOf(*e),
-                                ))
-                                .id(),
-                        );
+                        let mut card =
+                            commands.spawn((Mesh3d(cards.clone()), fade.clone(), ChildOf(*e)));
+                        match &v.live {
+                            Some(live) => card.insert(MeshMaterial3d(live.clone())),
+                            None => card.insert(MeshMaterial3d(card_mat.clone())),
+                        };
+                        kids.push(card.id());
                         // Spruces need a dark core to read as dense.
                         if tree.species == TreeSpecies::Spruce {
                             if let Some(crown) = &v.crown {
@@ -659,6 +668,41 @@ fn stream_near_detail(
                 }
             }
         }
+    }
+}
+
+/// Near trees' foliage cards: standard PBR whose crowns lean with the
+/// wind (`shaders/tree_sway.wgsl`).
+pub type TreeSwayMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, TreeSway>;
+
+#[derive(Asset, bevy::render::render_resource::AsBindGroup, Reflect, Debug, Clone, Default)]
+pub struct TreeSway {
+    /// xy: the wind's direction (world x/z); z: strength 0..1; w: gusts.
+    #[uniform(100)]
+    pub wind: Vec4,
+    /// Unused by trees (the ground cover's push from the player's legs).
+    #[uniform(100)]
+    pub pusher: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for TreeSway {
+    fn vertex_shader() -> bevy::shader::ShaderRef {
+        "shaders/tree_sway.wgsl".into()
+    }
+}
+
+fn blow_trees(
+    mut materials: ResMut<Assets<TreeSwayMaterial>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    mut last: Local<f32>,
+) {
+    let strength = conditions.map_or(0.4, |c| c.wind());
+    if (strength - *last).abs() < 1e-3 && !materials.is_empty() && *last != 0.0 {
+        return;
+    }
+    *last = strength;
+    for (_, m) in materials.iter_mut() {
+        m.extension.wind = Vec4::new(0.8, 0.6, strength, 0.8);
     }
 }
 
@@ -692,6 +736,8 @@ struct VariantAssets {
     bark: Handle<StandardMaterial>,
     crown: Option<Handle<Mesh>>,
     cards: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+    /// The cards' material as near trees wear it: swaying.
+    live: Option<Handle<TreeSwayMaterial>>,
 }
 
 struct TreeAssets {
