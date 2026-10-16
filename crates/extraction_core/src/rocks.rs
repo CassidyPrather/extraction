@@ -28,6 +28,9 @@ pub struct RockSpot {
     /// Height over width (its half-height is `radius * squash`): boulders
     /// sit low.
     pub squash: f32,
+    /// Length over breadth: its local x is `radius * stretch` across, its
+    /// z `radius / stretch`.
+    pub stretch: f32,
     pub yaw: f32,
     /// `0..ROCK_VARIANTS`.
     pub variant: usize,
@@ -98,6 +101,37 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
                 .any(|rl| geom::polyline_closest(&rl.points, p).0 < rl.width * 0.5 + 1.5 + r)
             && !clear.iter().any(|(c, cr)| geom::dist(*c, p) < *cr + r)
     };
+    // A rock at `p`: its centre set so it rests in the ground. Its base
+    // (`-0.55` of its half-height below the centre) goes below the lowest
+    // ground round its rim, so no side hangs over a slope; `sink` buries
+    // it further, as a share of its height. None if it would vanish
+    // into the slope on the uphill side.
+    let place = |rng: &mut Rng, p: P2, r: f32, squash: f32, sink: f32| -> Option<RockSpot> {
+        let stretch = rng.range(0.75, 1.3);
+        let yaw = rng.range(0.0, std::f32::consts::TAU);
+        let h = r * squash;
+        let reach = r * stretch.max(1.0 / stretch) * 0.85;
+        let ring: Vec<f32> = (0..8)
+            .map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 8.0;
+                hm.height([p[0] + a.cos() * reach, p[1] + a.sin() * reach])
+            })
+            .collect();
+        let low = ring.iter().cloned().fold(f32::INFINITY, f32::min);
+        let high = ring.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let y = (hm.height(p) + h - 2.0 * h * sink).min(low + 0.55 * h - 0.06);
+        if y + 0.8 * h < high + 0.05 {
+            return None;
+        }
+        Some(RockSpot {
+            pos: [p[0], y, p[1]],
+            radius: r,
+            squash,
+            stretch,
+            yaw,
+            variant: rng.below(ROCK_VARIANTS),
+        })
+    };
     let half = map.half() - map.fence_inset.max(10.0) - 4.0;
     let cell = 9.0;
     let mut z = -half;
@@ -118,39 +152,37 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
             if rng.f32() < 0.012 {
                 let r = rng.range(1.8, 3.2);
                 if ok(c, r) {
-                    let squash = rng.range(0.55, 0.8);
-                    let h = r * squash;
-                    out.push(RockSpot {
-                        pos: [c[0], hm.height(c) + h - 2.0 * h * 0.3, c[1]],
-                        radius: r,
-                        squash,
-                        yaw: rng.range(0.0, std::f32::consts::TAU),
-                        variant: rng.below(ROCK_VARIANTS),
-                    });
+                    let squash = rng.range(0.5, 0.75);
+                    if let Some(rock) = place(&mut rng, c, r, squash, 0.3) {
+                        out.push(rock);
+                    }
                 }
                 continue;
             }
-            // Field stones: a few small ones in most open cells, so the
+            // What's been placed in this cell, so a cluster's rocks lie
+            // beside each other rather than through or on top.
+            let mut here: Vec<(P2, f32)> = Vec::new();
+            let apart = |here: &[(P2, f32)], p: P2, r: f32| {
+                here.iter()
+                    .all(|(q, rq)| geom::dist(*q, p) > 0.9 * (r + rq))
+            };
+            // Field stones: a few small ones in many open cells, so the
             // ground between boulders isn't bare texture.
-            if rng.f32() < 0.45 + 0.35 * fields {
-                let n = 2 + rng.below(6);
+            if rng.f32() < 0.25 + 0.3 * fields {
+                let n = 1 + rng.below(4);
                 for _ in 0..n {
                     let a = rng.range(0.0, std::f32::consts::TAU);
                     let d = rng.range(0.0, 4.0);
                     let p = [c[0] + 3.0 + a.cos() * d, c[1] + 3.0 + a.sin() * d];
                     let r = rng.range(0.1, 0.38);
-                    if !ok(p, r) {
+                    if !ok(p, r) || !apart(&here, p, r) {
                         continue;
                     }
-                    let squash = rng.range(0.45, 0.8);
-                    let h = r * squash;
-                    out.push(RockSpot {
-                        pos: [p[0], hm.height(p) + h - 2.0 * h * 0.4, p[1]],
-                        radius: r,
-                        squash,
-                        yaw: rng.range(0.0, std::f32::consts::TAU),
-                        variant: rng.below(ROCK_VARIANTS),
-                    });
+                    let squash = rng.range(0.35, 0.65);
+                    if let Some(rock) = place(&mut rng, p, r, squash, 0.4) {
+                        here.push((p, r));
+                        out.push(rock);
+                    }
                 }
             }
             let chance = 0.18 + 0.5 * steep * steep + 0.45 * fields;
@@ -169,26 +201,19 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
                     [0.0, 0.0]
                 } else {
                     let a = rng.range(0.0, std::f32::consts::TAU);
-                    let d = rng.range(0.8, 3.5);
+                    let d = rng.range(0.8, 3.5) + r;
                     [a.cos() * d, a.sin() * d]
                 };
                 let p = [c[0] + off[0], c[1] + off[1]];
-                if !ok(p, r) {
+                if !ok(p, r) || !apart(&here, p, r) {
                     continue;
                 }
-                let squash = rng.range(0.5, 0.85);
-                // Half its height is `r * squash`. Buried by a quarter of it
-                // or more on a slope (so the uphill side doesn't hang).
-                let ground = hm.height(p);
-                let h = r * squash;
-                let bury = 2.0 * h * (0.25 + 0.3 * steep);
-                out.push(RockSpot {
-                    pos: [p[0], ground + h - bury, p[1]],
-                    radius: r,
-                    squash,
-                    yaw: rng.range(0.0, std::f32::consts::TAU),
-                    variant: rng.below(ROCK_VARIANTS),
-                });
+                let squash = rng.range(0.45, 0.8);
+                // Buried by a quarter of its height, more on a slope.
+                if let Some(rock) = place(&mut rng, p, r, squash, 0.25 + 0.3 * steep) {
+                    here.push((p, r));
+                    out.push(rock);
+                }
             }
         }
         z += cell;
@@ -224,6 +249,19 @@ mod tests {
                 assert!(
                     r.pos[1] - half_h < g && r.pos[1] + half_h > g,
                     "{r:?} at ground {g}"
+                );
+                // Seated: its base under the ground all round its rim, so
+                // no side overhangs a slope.
+                let reach = r.radius * r.stretch.max(1.0 / r.stretch) * 0.85;
+                let low = (0..8)
+                    .map(|k| {
+                        let a = k as f32 * std::f32::consts::TAU / 8.0;
+                        hm.height([p[0] + a.cos() * reach, p[1] + a.sin() * reach])
+                    })
+                    .fold(f32::INFINITY, f32::min);
+                assert!(
+                    r.pos[1] - 0.55 * half_h < low,
+                    "{r:?} overhangs: rim ground {low}"
                 );
             }
             // Same map, same rocks.

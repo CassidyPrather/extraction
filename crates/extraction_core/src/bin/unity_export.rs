@@ -82,7 +82,7 @@ fn main() {
                 "variant": r.variant,
                 "pos": v3(unity::to_unity(r.pos)),
                 "yaw_deg": r3(unity::yaw_to_unity(r.yaw).to_degrees()),
-                "scale": v3([r.radius, r.radius * r.squash, r.radius]),
+                "scale": v3([r.radius * r.stretch, r.radius * r.squash, r.radius / r.stretch]),
             })).collect::<Vec<_>>(),
         }),
     );

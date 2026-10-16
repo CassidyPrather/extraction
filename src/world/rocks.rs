@@ -15,17 +15,25 @@ use crate::render::materials::{Mat, MaterialLibrary};
 /// that a chunk's distance is near enough each rock's for the LOD bands).
 const CHUNK: f32 = 32.0;
 /// Boulders: fine (ico 2) to here, then medium (ico 1)...
-const NEAR_LOD: f32 = 35.0;
+const NEAR_LOD: f32 = 60.0;
 /// ...then coarse (ico 0), which casts no shadow...
 const FAR_LOD: f32 = 130.0;
 /// ...and past this they're gone (the fog has them).
 const CULL: f32 = 420.0;
 /// Field stones: medium to here, coarse to `STONES`, never a shadow.
-const STONES_NEAR: f32 = 25.0;
+const STONES_NEAR: f32 = 40.0;
 const STONES: f32 = 90.0;
 
 pub fn rocks(zone: &Zone) -> Vec<RockSpot> {
     scatter_rocks(&zone.map, &zone.hm)
+}
+
+fn scale_of(r: &RockSpot) -> Vec3 {
+    Vec3::new(
+        r.radius * r.stretch,
+        r.radius * r.squash,
+        r.radius / r.stretch,
+    )
 }
 
 fn chunk_of(p: [f32; 3]) -> (i32, i32) {
@@ -56,21 +64,21 @@ pub fn rock_points(variant: usize, detail: u32) -> (Vec<Vec3>, Vec<[u32; 3]>) {
     };
     let seed = 0x0B01_DE25 + variant as u64 * 977;
     // Lumps: a handful of random directions that push the surface out or in.
-    let lumps: Vec<(Vec3, f32)> = (0..7)
+    let lumps: Vec<(Vec3, f32)> = (0..9)
         .map(|k| {
             let s = seed + k * 31;
             let d = Vec3::new(hash(s) - 0.5, hash(s + 1) - 0.5, hash(s + 2) - 0.5)
                 .normalize_or(Vec3::Y);
-            (d, (hash(s + 3) - 0.4) * 0.5)
+            (d, (hash(s + 3) - 0.45) * 0.8)
         })
         .collect();
     // Planes that shear off a side (fractured faces), and the flat base.
-    let cuts: Vec<(Vec3, f32)> = (0..3)
+    let cuts: Vec<(Vec3, f32)> = (0..4)
         .map(|k| {
             let s = seed + 500 + k * 17;
-            let d = Vec3::new(hash(s) - 0.5, (hash(s + 1) - 0.3) * 0.6, hash(s + 2) - 0.5)
+            let d = Vec3::new(hash(s) - 0.5, (hash(s + 1) - 0.2) * 0.9, hash(s + 2) - 0.5)
                 .normalize_or(Vec3::X);
-            (d, 0.7 + 0.2 * hash(s + 3))
+            (d, 0.6 + 0.25 * hash(s + 3))
         })
         .chain(std::iter::once((Vec3::NEG_Y, 0.55)))
         .collect();
@@ -95,21 +103,41 @@ pub fn rock_points(variant: usize, detail: u32) -> (Vec<Vec3>, Vec<[u32; 3]>) {
     (pos, tris)
 }
 
+/// A rock's faces: positions, normals, box-projected UVs (metres), and a
+/// colour (multiplying the texture).
+type RockFaces = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>);
+
 /// A faceted mesh for one rock placed in the world: flat-shaded faces,
-/// each textured by the axis it faces most (a box projection, metres).
-fn rock_mesh(r: &RockSpot, detail: u32) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>) {
+/// each textured by the axis it faces most. No two rocks are quite the
+/// same tone, and the faces that look at the sky carry moss (or, in a
+/// burnt valley, soot).
+fn rock_mesh(r: &RockSpot, detail: u32, burnt: bool) -> RockFaces {
     let (pts, tris) = rock_points(r.variant, detail);
     let xf = Transform::from_xyz(r.pos[0], r.pos[1], r.pos[2])
         .with_rotation(Quat::from_rotation_y(r.yaw))
-        .with_scale(Vec3::new(r.radius, r.radius * r.squash, r.radius));
+        .with_scale(scale_of(r));
     let mut pos = Vec::with_capacity(tris.len() * 3);
     let mut nrm = Vec::with_capacity(tris.len() * 3);
     let mut uv = Vec::with_capacity(tris.len() * 3);
+    let mut col = Vec::with_capacity(tris.len() * 3);
+    let key = (r.pos[0] * 13.0 + r.pos[2] * 7.0) as i64 as u64;
+    let tone = 0.7 + 0.35 * hash(key);
+    let warm = (hash(key + 1) - 0.5) * 0.12;
+    let moss = hash(key + 2) * 0.9;
+    let base = [tone * (1.0 + warm), tone, tone * (1.0 - warm)];
+    let top = if burnt {
+        [0.32, 0.3, 0.28]
+    } else {
+        [0.55, 0.66, 0.38]
+    };
     for t in tris {
         let w = t.map(|i| xf.transform_point(pts[i as usize]));
         let n = (w[1] - w[0]).cross(w[2] - w[0]).normalize_or(Vec3::Y);
         let a = n.abs();
+        let up = ((n.y - 0.45) / 0.45).clamp(0.0, 1.0) * moss;
+        let c = [0, 1, 2].map(|i| base[i] * (1.0 - up) + base[i] * top[i] * up);
         for p in w {
+            col.push([c[0], c[1], c[2], 1.0]);
             pos.push(p.to_array());
             nrm.push(n.to_array());
             uv.push(if a.y >= a.x && a.y >= a.z {
@@ -121,7 +149,7 @@ fn rock_mesh(r: &RockSpot, detail: u32) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f
             });
         }
     }
-    (pos, nrm, uv)
+    (pos, nrm, uv, col)
 }
 
 /// Logic: a compound collider of convex hulls per chunk, for the rocks big
@@ -133,7 +161,7 @@ pub fn spawn_rock_colliders(mut commands: Commands, zone: Res<Zone>) {
     let mut chunks: std::collections::HashMap<(i32, i32), Vec<(Position, Rotation, Collider)>> =
         Default::default();
     for r in all.iter().filter(|r| r.radius >= SOLID_RADIUS) {
-        let scale = Vec3::new(r.radius, r.radius * r.squash, r.radius);
+        let scale = scale_of(r);
         let pts: Vec<Vec3> = hulls[r.variant].iter().map(|p| *p * scale).collect();
         let Some(hull) = Collider::convex_hull(pts) else {
             continue;
@@ -225,12 +253,14 @@ fn spawn_rock_meshes(
             if rocks.is_empty() {
                 continue;
             }
-            let (mut pos, mut nrm, mut uv) = (Vec::new(), Vec::new(), Vec::new());
+            let (mut pos, mut nrm, mut uv, mut col) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new());
             for r in rocks {
-                let (p, n, u) = rock_mesh(r, detail);
+                let (p, n, u, c) = rock_mesh(r, detail, zone.map.ash > 0.0);
                 pos.extend(p);
                 nrm.extend(n);
                 uv.extend(u);
+                col.extend(c);
             }
             let mut mesh = Mesh::new(
                 PrimitiveTopology::TriangleList,
@@ -238,7 +268,8 @@ fn spawn_rock_meshes(
             )
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
             let _ = mesh.generate_tangents();
             let mut e = commands.spawn((
                 Name::new("Rock chunk"),

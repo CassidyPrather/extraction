@@ -78,6 +78,36 @@ impl RoadLine {
     }
 }
 
+/// A separable box blur of an `n`-by-`n` grid, radius `r` cells (edges
+/// clamped).
+fn box_blur(data: &[f32], n: usize, r: usize) -> Vec<f32> {
+    let pass = |src: &[f32], horizontal: bool| -> Vec<f32> {
+        let mut out = vec![0.0; src.len()];
+        for line in 0..n {
+            let at = |i: usize| {
+                if horizontal {
+                    line * n + i
+                } else {
+                    i * n + line
+                }
+            };
+            let mut sum = 0.0;
+            for i in 0..=r.min(n - 1) {
+                sum += src[at(i)];
+            }
+            sum += src[at(0)] * r as f32;
+            for i in 0..n {
+                out[at(i)] = sum / (2 * r + 1) as f32;
+                let add = src[at((i + r + 1).min(n - 1))];
+                let sub = src[at(i.saturating_sub(r))];
+                sum += add - sub;
+            }
+        }
+        out
+    };
+    pass(&pass(data, true), false)
+}
+
 /// Natural relief in about `-0.5..1`, times the map's amplitude: in
 /// patches (a slow mask), knolls and hummocks a few tens of metres across,
 /// with a ridged octave so their crests are sharper than their hollows.
@@ -305,6 +335,23 @@ impl Heightmap {
         let before = self.heights.clone();
         if nd.erosion > 0.0 {
             self.rain(map);
+            // Rain cuts crisp: soften what it changed (two box blurs, about
+            // a Gaussian of 2 m), so gullies are worn hollows with rounded
+            // shoulders rather than ditches with rims.
+            let n = self.n;
+            let mut delta: Vec<f32> = self
+                .heights
+                .iter()
+                .zip(&before)
+                .map(|(h, b)| h - b)
+                .collect();
+            let r = (2.0 / self.cell).round().max(1.0) as usize;
+            for _ in 0..2 {
+                delta = box_blur(&delta, n, r);
+            }
+            for (k, h) in self.heights.iter_mut().enumerate() {
+                *h = before[k] + delta[k];
+            }
         }
         // Where people built, the ground was settled: the land the map was
         // laid out on (no knolls, no gullies) round the buildings.

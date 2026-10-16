@@ -181,6 +181,30 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         });
     };
     let far_apart = |picked: &[Vec2], p: Vec2, d: f32| picked.iter().all(|q| q.distance(p) > d);
+    // Somewhere to stand: not in a tree or a rock. Walks round the target
+    // (keeping the distance) until clear.
+    let trees: Vec<Vec2> = extraction_core::forest::scatter_trees(&zone.map, hm)
+        .iter()
+        .map(|t| Vec2::new(t.pos[0], t.pos[2]))
+        .collect();
+    let rock_list = extraction_core::rocks::scatter_rocks(&zone.map, hm);
+    let blocked = |p: Vec2| {
+        trees.iter().any(|t| t.distance(p) < 3.0)
+            || rock_list
+                .iter()
+                .any(|r| Vec2::new(r.pos[0], r.pos[2]).distance(p) < r.radius * 1.4 + 1.2)
+    };
+    let clear_of = |from: Vec2, target: Vec2| {
+        let off = from - target;
+        for k in 0..16 {
+            let a = (k as f32 * 0.5).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 } * 0.4;
+            let p = target + Vec2::from_angle(a).rotate(off);
+            if !blocked(p) {
+                return p;
+            }
+        }
+        from
+    };
     // Boulders: the biggest, on the steepest ground, from downhill.
     let mut rocks = extraction_core::rocks::scatter_rocks(&zone.map, hm);
     rocks.sort_by(|a, b| {
@@ -201,7 +225,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "boulder",
             format!("boulder r {:.1} m at ({:.0}, {:.0})", r.radius, p.x, p.y),
-            stand(p + down * (r.radius + 7.0)),
+            stand(clear_of(p + down * (r.radius + 7.0), p)),
             Vec3::from_array(r.pos),
         );
     }
@@ -236,7 +260,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "gully",
             format!("gully at ({:.0}, {:.0}), looking down it", p.x, p.y),
-            stand(p - down * 6.0),
+            stand(clear_of(p - down * 6.0, p)),
             on(p + down * 10.0, 0.0),
         );
     }
@@ -250,7 +274,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "forest",
             format!("forest floor in \"{}\" at ({:.0}, {:.0})", f.name, c.x, c.y),
-            stand(c),
+            stand(clear_of(c, c + Vec2::new(8.0, 3.0))),
             on(c + Vec2::new(8.0, 3.0), 0.3),
         );
     }
@@ -264,7 +288,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "verge",
             format!("road verge at ({:.0}, {:.0})", p.x, p.y),
-            stand(p + side),
+            stand(clear_of(p + side, p + side + dir * 12.0)),
             on(p + side + dir * 12.0, 0.2),
         );
     }
@@ -278,7 +302,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "bank",
             format!("bank of \"{}\" at ({:.0}, {:.0})", w.name, p.x, p.y),
-            stand(p + bank),
+            stand(clear_of(p + bank, p)),
             on(p, 0.0),
         );
     }
@@ -290,7 +314,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "pad",
             format!("ground round {} at ({:.0}, {:.0})", pl.prefab, at.x, at.y),
-            stand(from),
+            stand(clear_of(from, at)),
             on(at, 0.5),
         );
     }

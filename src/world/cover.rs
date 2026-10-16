@@ -37,7 +37,52 @@ pub struct CoverPlugin;
 
 impl Plugin for CoverPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, stream_cover);
+        app.add_plugins(MaterialPlugin::<SwayMaterial>::default())
+            .add_systems(Update, (stream_cover, blow));
+    }
+}
+
+/// Ground cover's material: standard PBR whose vertices sway in the wind
+/// and lean away from the player's legs (`shaders/sway.wgsl`).
+pub type SwayMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, Sway>;
+
+#[derive(Asset, bevy::render::render_resource::AsBindGroup, Reflect, Debug, Clone, Default)]
+pub struct Sway {
+    /// xy: the wind's direction (world x/z); z: strength 0..1; w: gusts.
+    #[uniform(100)]
+    pub wind: Vec4,
+    /// xyz: the player's feet; w: how far round them plants lean away.
+    #[uniform(100)]
+    pub pusher: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for Sway {
+    fn vertex_shader() -> bevy::shader::ShaderRef {
+        "shaders/sway.wgsl".into()
+    }
+}
+
+/// The wind as the weather has it (still in thick fog, hard in a
+/// downpour), and where the player is standing.
+fn blow(
+    assets: Option<Res<CoverAssets>>,
+    mut materials: ResMut<Assets<SwayMaterial>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+    let strength = conditions.map_or(0.4, |c| c.wind());
+    let feet = cams
+        .iter()
+        .next()
+        .map_or(Vec3::splat(1e6), |g| g.translation() - Vec3::Y * 1.6);
+    for h in [&assets.blades, &assets.fronds] {
+        if let Some(mut m) = materials.get_mut(h) {
+            m.extension.wind = Vec4::new(0.8, 0.6, strength, 0.8);
+            m.extension.pusher = feet.extend(0.6);
+        }
     }
 }
 
@@ -55,8 +100,8 @@ struct CoverAssets {
     cover: std::sync::Arc<CoverMap>,
     /// Patches being built on the task pool.
     building: std::collections::HashMap<(i32, i32), bevy::tasks::Task<Built>>,
-    blades: Handle<StandardMaterial>,
-    fronds: Handle<StandardMaterial>,
+    blades: Handle<SwayMaterial>,
+    fronds: Handle<SwayMaterial>,
     /// Built patches and their entities.
     built: std::collections::HashMap<(i32, i32), Vec<Entity>>,
 }
@@ -75,7 +120,12 @@ struct Builder {
     nrm: Vec<[f32; 3]>,
     uv: Vec<[f32; 2]>,
     col: Vec<[f32; 4]>,
+    /// Per vertex: how free it is in the wind (0 root, 1 tip) and the
+    /// plant's phase (`sway.wgsl`).
+    sway: Vec<[f32; 2]>,
     idx: Vec<u32>,
+    /// The phase of the plant being built.
+    phase: f32,
 }
 
 impl Builder {
@@ -84,6 +134,7 @@ impl Builder {
         self.nrm.push(n.to_array());
         self.uv.push(uv);
         self.col.push(c);
+        self.sway.push([0.0, self.phase]);
         (self.pos.len() - 1) as u32
     }
 
@@ -102,6 +153,9 @@ impl Builder {
             let t = k as f32 / last as f32;
             let a = self.vertex(*p - *side * *w, n, uv(0.0, t), col(t));
             let b = self.vertex(*p + *side * *w, n, uv(1.0, t), col(t));
+            for v in [a, b] {
+                self.sway[v as usize][0] = t * t;
+            }
             if let Some((pa, pb)) = prev {
                 self.idx.extend([pa, pb, b, pa, b, a]);
             }
@@ -122,6 +176,7 @@ impl Builder {
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
             .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
             .with_inserted_indices(Indices::U32(self.idx)),
         )
     }
@@ -129,15 +184,23 @@ impl Builder {
 
 /// A tuft: a handful of blades leaning out from a point, dark at the root,
 /// paler (or straw, now and then) at the tips.
-fn tuft(b: &mut Builder, s: &CoverSpot) {
+fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
     let mut r = rng(s.seed);
+    b.phase = r.f32();
     let base = Vec3::from_array(s.pos);
     let sedge = s.kind == CoverKind::Sedge;
     let blades = if sedge { 10 } else { 6 + r.below(5) };
     let (tall, width) = if sedge { (0.55, 0.014) } else { (0.27, 0.011) };
     let dry = r.f32();
     let root = lin(Color::srgb(0.16, 0.17, 0.09));
-    let tip = if sedge {
+    let tip = if burnt {
+        // Scorched: grey-brown and straw, a little green coming back.
+        if dry < 0.6 {
+            lin(Color::srgb(0.42, 0.38, 0.3))
+        } else {
+            lin(Color::srgb(0.38, 0.4, 0.26))
+        }
+    } else if sedge {
         lin(Color::srgb(0.36, 0.39, 0.22))
     } else if dry < 0.3 {
         lin(Color::srgb(0.58, 0.53, 0.36))
@@ -181,6 +244,7 @@ fn tuft(b: &mut Builder, s: &CoverSpot) {
 /// A fern: fronds rising from the crown and arching over.
 fn fern(b: &mut Builder, s: &CoverSpot) {
     let mut r = rng(s.seed);
+    b.phase = r.f32();
     let base = Vec3::from_array(s.pos) + Vec3::Y * 0.02;
     let fronds = 5 + r.below(4);
     for k in 0..fronds {
@@ -227,7 +291,7 @@ fn stream_cover(
     assets: Option<ResMut<CoverAssets>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<SwayMaterial>>,
     server: Res<AssetServer>,
     time: Res<Time>,
     mut timer: Local<f32>,
@@ -244,27 +308,33 @@ fn stream_cover(
             })
             .load("textures/foliage/fern/albedo.ktx2");
         commands.insert_resource(CoverAssets {
-            cover: std::sync::Arc::new(CoverMap::new(&zone.map)),
+            cover: std::sync::Arc::new(CoverMap::new(&zone.map, &zone.hm)),
             building: Default::default(),
-            blades: materials.add(StandardMaterial {
-                base_color: Color::WHITE,
-                perceptual_roughness: 0.85,
-                reflectance: 0.15,
-                double_sided: true,
-                cull_mode: None,
-                diffuse_transmission: 0.2,
-                ..default()
+            blades: materials.add(SwayMaterial {
+                base: StandardMaterial {
+                    base_color: Color::WHITE,
+                    perceptual_roughness: 0.85,
+                    reflectance: 0.15,
+                    double_sided: true,
+                    cull_mode: None,
+                    diffuse_transmission: 0.2,
+                    ..default()
+                },
+                extension: Sway::default(),
             }),
-            fronds: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.85, 0.9, 0.78),
-                base_color_texture: Some(fern_tex),
-                alpha_mode: AlphaMode::Mask(0.45),
-                perceptual_roughness: 0.8,
-                reflectance: 0.2,
-                double_sided: true,
-                cull_mode: None,
-                diffuse_transmission: 0.3,
-                ..default()
+            fronds: materials.add(SwayMaterial {
+                base: StandardMaterial {
+                    base_color: Color::srgb(0.85, 0.9, 0.78),
+                    base_color_texture: Some(fern_tex),
+                    alpha_mode: AlphaMode::Mask(0.45),
+                    perceptual_roughness: 0.8,
+                    reflectance: 0.2,
+                    double_sided: true,
+                    cull_mode: None,
+                    diffuse_transmission: 0.3,
+                    ..default()
+                },
+                extension: Sway::default(),
             }),
             built: Default::default(),
         });
@@ -356,6 +426,7 @@ fn stream_cover(
     // work, and several at once would drop frames in the headset.
     let pool = bevy::tasks::AsyncComputeTaskPool::get();
     let detail = opts.detail;
+    let burnt = assets.cover.burnt;
     for (key, _) in wanted.into_iter().take(6) {
         let cover = assets.cover.clone();
         let hm = zone.hm.clone();
@@ -371,8 +442,8 @@ fn stream_cover(
                 }
                 match s.kind {
                     CoverKind::Fern => fern(&mut fronds, s),
-                    _ if s.rank < KEEP_FAR => tuft(&mut far, s),
-                    _ => tuft(&mut near, s),
+                    _ if s.rank < KEEP_FAR => tuft(&mut far, s, burnt),
+                    _ => tuft(&mut near, s, burnt),
                 }
             }
             [
@@ -410,7 +481,7 @@ mod tests {
             if kind == CoverKind::Fern {
                 fern(&mut b, &s);
             } else {
-                tuft(&mut b, &s);
+                tuft(&mut b, &s, false);
             }
             assert!(b.idx.len() >= 5 * 12, "{kind:?}: {} indices", b.idx.len());
             let top = b.pos.iter().map(|p| p[1]).fold(0.0, f32::max);

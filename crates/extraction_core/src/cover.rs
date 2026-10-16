@@ -34,15 +34,29 @@ pub struct CoverSpot {
 /// outlines and the buildings' floors, worked out once.
 pub struct CoverMap {
     seed: u32,
+    /// A burnt valley (`MapDef::ash`): drier, thinner cover.
+    pub burnt: bool,
+    /// Trees by 4 m cell: ferns grow in their shade, not in the open.
+    trees: std::collections::HashMap<(i32, i32), Vec<P2>>,
     forests: Vec<(Vec<P2>, (P2, P2), f32)>,
     /// Footprints: centre, sin/cos of the yaw, half width and depth.
     floors: Vec<(P2, (f32, f32), f32, f32)>,
 }
 
 impl CoverMap {
-    pub fn new(map: &MapDef) -> Self {
+    pub fn new(map: &MapDef, hm: &Heightmap) -> Self {
+        let mut trees: std::collections::HashMap<(i32, i32), Vec<P2>> = Default::default();
+        for t in crate::forest::scatter_trees(map, hm) {
+            let p = [t.pos[0], t.pos[2]];
+            trees
+                .entry(((p[0] / 4.0).floor() as i32, (p[1] / 4.0).floor() as i32))
+                .or_default()
+                .push(p);
+        }
         Self {
             seed: map.noise.seed ^ 0xC0FE,
+            burnt: map.ash > 0.0,
+            trees,
             forests: map
                 .forests
                 .iter()
@@ -76,6 +90,19 @@ impl CoverMap {
         })
     }
 
+    /// Whether a tree stands within `r` metres.
+    fn shaded(&self, p: P2, r: f32) -> bool {
+        let (ci, cj) = ((p[0] / 4.0).floor() as i32, (p[1] / 4.0).floor() as i32);
+        let n = (r / 4.0).ceil() as i32;
+        (-n..=n).any(|di| {
+            (-n..=n).any(|dj| {
+                self.trees
+                    .get(&(ci + di, cj + dj))
+                    .is_some_and(|v| v.iter().any(|t| geom::dist(*t, p) < r))
+            })
+        })
+    }
+
     fn on_a_floor(&self, p: P2) -> bool {
         self.floors.iter().any(|(at, (s, c), hw, hd)| {
             let (dx, dz) = (p[0] - at[0], p[1] - at[1]);
@@ -102,9 +129,13 @@ impl CoverMap {
         let step = size / n as f32;
         for j in 0..n {
             for i in 0..n {
+                // Jittered past the cell's edges (and kept in the patch), so
+                // the plants don't line up on a grid.
                 let p = [
-                    lo[0] + (i as f32 + rng.f32()) * step,
-                    lo[1] + (j as f32 + rng.f32()) * step,
+                    (lo[0] + (i as f32 + rng.range(-0.6, 1.6)) * step)
+                        .clamp(lo[0], lo[0] + size - 1e-3),
+                    (lo[1] + (j as f32 + rng.range(-0.6, 1.6)) * step)
+                        .clamp(lo[1], lo[1] + size - 1e-3),
                 ];
                 let (roll, scale, yaw, seed, rank) = (
                     rng.f32(),
@@ -127,13 +158,17 @@ impl CoverMap {
                     noise::fbm(p[0] / 38.0, p[1] / 38.0, self.seed, 3, 0.5),
                 );
                 let wet = hm.wetness(p);
-                let (kind, chance) = match self.forest(p) {
-                    // Ferns are big: fewer to the square metre than grass.
-                    Some(u) if roll < 0.08 * u + 0.025 => (CoverKind::Fern, 1.0),
+                let shade = self.forest(p).filter(|_| self.shaded(p, 6.0));
+                let fern_share = if self.burnt { 0.3 } else { 1.0 };
+                let (kind, chance) = match shade {
+                    // Ferns are big: fewer to the square metre than grass,
+                    // and only in a tree's shade.
+                    Some(u) if roll < (0.08 * u + 0.025) * fern_share => (CoverKind::Fern, 1.0),
                     Some(_) => (CoverKind::Grass, 0.15 + 0.25 * meadow),
                     None if wet > 0.3 => (CoverKind::Sedge, 0.5),
                     None => (CoverKind::Grass, 0.45 + 0.5 * meadow),
                 };
+                let chance = if self.burnt { chance * 0.55 } else { chance };
                 // A second roll for the chance so it isn't tied to the fern pick.
                 if kind != CoverKind::Fern && (roll * 7.31).fract() > chance {
                     continue;
@@ -171,7 +206,7 @@ mod tests {
     fn cover_grows_in_the_open_and_under_trees_but_not_on_roads_or_floors() {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
         let hm = Heightmap::build(&map);
-        let cover = CoverMap::new(&map);
+        let cover = CoverMap::new(&map, &hm);
         let size = 24.0;
         let mut counts = std::collections::HashMap::new();
         let mut patches = 0;
@@ -187,6 +222,9 @@ mod tests {
                     assert!(hm.road_at(p).weight <= 40, "a plant on the road at {p:?}");
                     assert!(hm.water_level(p).is_none());
                     assert!(!cover.on_a_floor(p));
+                    if s.kind == CoverKind::Fern {
+                        assert!(cover.shaded(p, 6.0), "a fern in the open at {p:?}");
+                    }
                     *counts.entry(s.kind).or_insert(0usize) += 1;
                 }
                 patches += 1;

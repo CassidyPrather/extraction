@@ -64,6 +64,17 @@ impl Conditions {
         own.min(self.visibility * 0.6)
     }
 
+    /// How hard the wind blows, 0..=1: still in thick fog, hard in a
+    /// downpour.
+    pub fn wind(&self) -> f32 {
+        match self.kind {
+            WeatherKind::Drizzle => 0.4,
+            WeatherKind::PeaSouper => 0.12,
+            WeatherKind::Downpour => 0.9,
+            WeatherKind::Clearing => 0.55,
+        }
+    }
+
     /// Hearing scale: rain covers footsteps (not gunshots, much).
     pub fn hearing(&self) -> f32 {
         1.0 - 0.35 * self.rain
