@@ -239,6 +239,11 @@ low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
   (`RANGE_TARGETS`) say how far each warning must reach, about as far
   as the threat does: the drone's rotor 120 m calm and 40 m in a
   downpour, a walker's footfall 60 and 30.
+- **Loop edges.** Loops the game only keeps near you (anomaly hums,
+  started inside 40 m) must start below hearing, or they switch on as
+  you walk up. They fade from full at 25 m to -40 dB at 40 m; the audit
+  reports each one's margin over the wind where it starts, and flags
+  any above 0.
 - **Peaks.** A cue whose asset true peak plus its gain goes over 0 dBTP
   is flagged. Loud, rare actions and events may lean on the master
   limiter (bevy_seedling's default graph ends in one) up to +3.

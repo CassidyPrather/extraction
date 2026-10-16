@@ -761,6 +761,17 @@ fn surge_sounds(
 #[derive(Component)]
 struct AnomalyLoop;
 
+/// Where an anomaly's loop is kept, and where it fades: full inside
+/// `FADE_NEAR`, down to -40 dB at `KEEP` where it starts and stops, so
+/// walking up to one never switches its hum on.
+const ANOMALY_FADE_NEAR: f32 = 25.0;
+const ANOMALY_KEEP: f32 = 40.0;
+
+fn anomaly_fade(d: f32) -> f32 {
+    let t = ((d - ANOMALY_FADE_NEAR) / (ANOMALY_KEEP - ANOMALY_FADE_NEAR)).clamp(0.0, 1.0);
+    -40.0 * t * t
+}
+
 /// Anomalies hum, roar and buzz when you're near enough to hear them (loops
 /// are only kept on the close ones).
 fn anomaly_loops(
@@ -773,7 +784,8 @@ fn anomaly_loops(
         &GlobalTransform,
         Option<&Children>,
     )>,
-    loops: Query<Entity, With<AnomalyLoop>>,
+    loops: Query<(Entity, &SampleEffects), With<AnomalyLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
 ) {
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
@@ -783,7 +795,7 @@ fn anomaly_loops(
         let d = gt.translation().distance(ear);
         let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
         match existing {
-            None if d < 40.0 => {
+            None if d < ANOMALY_KEEP => {
                 let (set, cue) = match a.kind {
                     extraction_core::anomaly::AnomalyKind::Lift => {
                         ("anomaly/lift_hum", "anomaly.lift")
@@ -803,14 +815,27 @@ fn anomaly_loops(
                             .with_volume(Volume::Decibels(mix::db(cue))),
                         PlaybackSettings::default().with_speed(0.9 + rng.0.f32() as f64 * 0.2),
                         Transform::from_xyz(0.0, 1.0, 0.0),
-                        sample_effects![mix::spatial(cue)],
+                        sample_effects![
+                            VolumeNode {
+                                volume: Volume::Decibels(anomaly_fade(d)),
+                                ..default()
+                            },
+                            mix::spatial(cue)
+                        ],
                     ));
                 }
             }
-            Some(l) if d > 50.0 => {
+            Some(l) if d > ANOMALY_KEEP + 5.0 => {
                 commands.entity(l).despawn();
             }
-            _ => {}
+            Some(l) => {
+                if let Ok((_, effects)) = loops.get(l)
+                    && let Ok(mut v) = volumes.get_effect_mut(effects)
+                {
+                    v.volume = Volume::Decibels(anomaly_fade(d));
+                }
+            }
+            None => {}
         }
     }
 }

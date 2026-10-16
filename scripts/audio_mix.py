@@ -301,9 +301,45 @@ def scene_pass(sets, mix):
     return out
 
 
+def loop_fades():
+    """Loops the game only keeps near you (anomaly hums): cue -> (fade
+    start, keep distance), read from audio.rs. Inside the fade start they
+    play at full level; they ease to -40 dB at the keep distance, where
+    they start and stop."""
+    text = (ROOT / "src" / "audio.rs").read_text()
+    near = float(re.search(r"ANOMALY_FADE_NEAR: f32 = ([\d.]+)", text).group(1))
+    keep = float(re.search(r"ANOMALY_KEEP: f32 = ([\d.]+)", text).group(1))
+    return {n: (near, keep) for n in ("anomaly.lift", "anomaly.burner", "anomaly.snare")}
+
+
+def fade_db(name, d):
+    f = loop_fades().get(name)
+    if not f:
+        return 0.0
+    t = min(1.0, max(0.0, (d - f[0]) / (f[1] - f[0])))
+    return -40.0 * t * t
+
+
+def audible_margin(cue_name, sets, mix, bed, d):
+    """How far over the bed's masking a cue is at `d` metres, dB."""
+    c = next(c for c in mix if c["name"] == cue_name)
+    x = samples(c["set"], sets)
+    base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"]
+    bed_parts = []
+    for b, extra in bed:
+        g, s = gain_of(b, mix, extra)
+        y = samples(s, sets)
+        bed_parts.append(y[: aa.SR * 4] * g)
+    t = masked_threshold(band_levels(sum(bed_parts)))
+    heard = (base + falloff(d, c["reach"]) + fade_db(cue_name, d)
+             + muffle_db(cutoff(d, c["reach"], c["muffle_full"])))
+    return float(np.max(heard - t))
+
+
 def audible_range(cue_name, sets, mix, bed):
     """The farthest a signal is still heard over a bed (by the masking
-    model, with the distance falloff and muffle), metres, to 1 km."""
+    model, with the distance falloff, muffle and any keep-near fade),
+    metres, to 1 km."""
     c = next(c for c in mix if c["name"] == cue_name)
     x = samples(c["set"], sets)
     base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"]
@@ -317,7 +353,8 @@ def audible_range(cue_name, sets, mix, bed):
     t = masked_threshold(m)
     best = 0.0
     for d in np.geomspace(1, 1000, 100):
-        heard_bands = base + falloff(d, reach) + muffle_db(cutoff(d, reach, full))
+        heard_bands = (base + falloff(d, reach) + fade_db(cue_name, d)
+                       + muffle_db(cutoff(d, reach, full)))
         if np.max(heard_bands - t) > 0:
             best = d
     return round(float(best))
@@ -340,7 +377,15 @@ def run(sets, out):
         if want and (r["calm"] < want[0] or r["downpour"] < want[1]):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"heard to {r['calm']}/{r['downpour']} m, wants {want[0]}/{want[1]}")
-    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges)
+    # A loop that starts audibly switches on as you walk up to it.
+    edges = {}
+    for n, (_, keep) in loop_fades().items():
+        m = audible_margin(n, sets, mix, calm, keep)
+        edges[n] = dict(keep=keep, margin_db=round(m, 1))
+        if m > 0:
+            next(c for c in mix if c["name"] == n)["flags"].append(
+                f"switches on at {keep:.0f} m, {m:+.1f} dB over the wind")
+    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges)
     (out / "mix.json").write_text(json.dumps(report, indent=1))
     lines = [f"Mix line: heard = {summary['intercept']} + {summary['slope']} x SPL "
              f"(the world's dynamics compressed {1 / max(summary['slope'], 1e-3):.1f}:1)",
@@ -362,6 +407,10 @@ def run(sets, out):
     for n, r in ranges.items():
         want = f"   (wants {r['want'][0]} / {r['want'][1]})" if r.get("want") else ""
         lines.append(f"    {n:20s} {r['calm']:4d} / {r['downpour']:4d}{want}")
+    lines.append("")
+    lines.append("Loops kept near you, where they start (over the wind):")
+    for n, e in edges.items():
+        lines.append(f"    {n:20s} at {e['keep']:.0f} m, {e['margin_db']:+.1f} dB")
     text = "\n".join(lines)
     (out / "mix.txt").write_text(text)
     print(text)
