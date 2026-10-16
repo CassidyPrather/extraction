@@ -140,7 +140,12 @@ The new ground was checked three ways. A ground tour (`g###_*` views:
 boulders, gullies, forest floor, verges, banks, pads) reviewed per
 valley found rocks seated and cover clear of roads, floors and water;
 it also found steep banks rendered as a glossy grey sheet (the rock
-scan's gloss caught the sky), now matt, toned and cut with rills. Bot
+scan's gloss caught the sky), now matt, toned and cut with rills; wet
+grass and boulders glinting the same way (only roads and mud go glossy
+now); Cinder Works' ground still green (the terrain now knows a valley
+is burnt and goes to ash); grass planted past the map's edge, hanging
+in the air (now held to the land, with a test); and building pads cut
+into hills meeting them in a straight crease (now a rounded shoulder). Bot
 raids on all three valleys (6 each) got home more often than before
 the new ground (13 of 18, against 7), and none of their stuck spots is
 by a rock: they are inside houses, reaching for loot past furniture,
