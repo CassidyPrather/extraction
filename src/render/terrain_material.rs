@@ -37,7 +37,8 @@ pub struct TerrainParams {
     pub wetness: f32,
     /// Metres per texture repeat for the base layers.
     pub tile: f32,
-    pub _pad: f32,
+    /// 1 in a burnt valley: the ground goes to ash and scorched earth.
+    pub burnt: f32,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -116,7 +117,7 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
                 textured: u32::from(textured),
                 wetness: 0.35,
                 tile: 3.0,
-                _pad: 0.0,
+                burnt: 0.0,
             },
             albedo: load("albedo", true),
             normal: load("normal", false),

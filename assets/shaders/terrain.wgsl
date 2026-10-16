@@ -27,7 +27,7 @@ struct TerrainParams {
     textured: u32,
     wetness: f32,
     tile: f32,
-    _pad: f32,
+    burnt: f32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> terrain: TerrainParams;
@@ -345,13 +345,25 @@ fn fragment(
         acc = acc + cover;
     }
 
+    // A burnt valley: the ground goes to ash and scorched earth, with
+    // patches where the fire passed lighter (roads keep their own colour).
+    if (terrain.burnt > 0.5) {
+        let lum = dot(albedo, vec3<f32>(0.3, 0.59, 0.11));
+        let ash = vec3<f32>(lum) * vec3<f32>(0.95, 0.88, 0.8) * 0.8;
+        let fire = 0.45 + 0.5 * smoothstep(0.3, 0.65, fbm(wp.xz * 0.025 + vec2<f32>(4.0, 2.0)));
+        albedo = mix(albedo, ash, fire * (1.0 - road));
+    }
+
     // Wetness: darker, glossier, especially near water and on roads.
     let wet = clamp(terrain.wetness * (0.5 + 0.5 * fbm(wp.xz * 0.05)) + water_wet * 0.8, 0.0, 1.0);
     let porosity = 1.0 - w[5] * 0.5;
     albedo = albedo * mix(1.0, 0.55, wet * porosity);
     // (Not mirror-wet: soaked ground should read as damp earth, not as
     // more water.)
-    rough = mix(rough, 0.42, wet * (0.4 + 0.6 * w[5] + 0.4 * mud));
+    // Only roads and mud go glossy: wet grass and rock stay matt (a sheen
+    // across a whole slope read as plaster under the overcast sky).
+    rough = mix(rough, 0.42, wet * (0.15 + 0.6 * w[5] + 0.4 * mud));
+    rough = max(rough, mix(0.8, 0.42, clamp(road + mud * wet, 0.0, 1.0)));
 
     // Tangent frame for an XZ projection: T = +X, B = +Z.
     let t = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geo * n_geo.x);

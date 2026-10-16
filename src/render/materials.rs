@@ -189,9 +189,16 @@ impl MaterialLibrary {
             m.normal_map_texture = Some(load("normal", false));
             let arm = load("arm", false);
             m.occlusion_texture = Some(arm.clone());
-            m.metallic_roughness_texture = Some(arm);
-            m.perceptual_roughness = 1.0;
-            m.metallic = 1.0;
+            if mat == Mat::Boulder {
+                // The scan's roughness glints like wet plastic on a big
+                // rock face: weathered rock is matt.
+                m.perceptual_roughness = 0.9;
+                m.metallic = 0.0;
+            } else {
+                m.metallic_roughness_texture = Some(arm);
+                m.perceptual_roughness = 1.0;
+                m.metallic = 1.0;
+            }
         }
         let h = materials.add(m);
         self.cache.insert(mat, h.clone());

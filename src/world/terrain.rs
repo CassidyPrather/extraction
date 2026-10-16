@@ -75,7 +75,11 @@ fn spawn_terrain_meshes(
     mut materials: ResMut<Assets<TerrainMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    let material = materials.add(terrain_material(&asset_server));
+    let mut material = terrain_material(&asset_server);
+    if zone.map.ash > 0.0 {
+        material.extension.params.burnt = 1.0;
+    }
+    let material = materials.add(material);
     let hm = &zone.hm;
     let cells = hm.n - 1;
     let step = (CHUNK as f32 / hm.cell).round() as usize;

@@ -105,14 +105,18 @@ impl Clearance {
     /// same distance (first with a clear sight of it, then without).
     fn of(&self, from: Vec2, target: Vec2) -> Vec2 {
         let off = from - target;
-        let round = |k: usize| {
+        let round = |k: usize, scale: f32| {
             let a = (k as f32 * 0.5).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 } * 0.4;
-            target + Vec2::from_angle(a).rotate(off)
+            target + Vec2::from_angle(a).rotate(off * scale)
         };
-        (0..16)
-            .map(round)
+        // Walk round at the same distance, then further back (in a wood
+        // the clear sight may only be from further off).
+        [1.0, 1.5, 2.0, 2.5]
+            .into_iter()
+            .flat_map(|s| (0..16).map(move |k| (k, s)))
+            .map(|(k, s)| round(k, s))
             .find(|p| !self.blocked(*p) && self.sight(*p, target))
-            .or_else(|| (0..16).map(round).find(|p| !self.blocked(*p)))
+            .or_else(|| (0..16).map(|k| round(k, 1.0)).find(|p| !self.blocked(*p)))
             .unwrap_or(from)
     }
 }
@@ -334,7 +338,9 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
             while x < hi[0] {
                 let c = Vec2::new(x, z);
                 let look = c + Vec2::new(8.0, 3.0);
-                if geom::point_in_polygon(&f.polygon, [c.x, c.y])
+                let inside = zone.map.half() - zone.map.fence_inset.max(10.0) - 10.0;
+                if c.x.abs().max(c.y.abs()) < inside
+                    && geom::point_in_polygon(&f.polygon, [c.x, c.y])
                     && off_road(c, 10.0)
                     && off_road(look, 6.0)
                     && dry(c, 8.0)

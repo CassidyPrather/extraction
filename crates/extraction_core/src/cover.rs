@@ -124,6 +124,9 @@ impl CoverMap {
                 ^ (key.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
                 ^ (key.1 as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F),
         );
+        // The ground ends at the map's edge; past it a height is the edge's,
+        // so a plant there would hang in the air beyond the last of the land.
+        let (min, max) = (hm.origin, hm.origin + (hm.n - 1) as f32 * hm.cell);
         let cell = 0.55;
         let n = (size / cell).round() as i32;
         let step = size / n as f32;
@@ -137,6 +140,9 @@ impl CoverMap {
                     (lo[1] + (j as f32 + rng.range(-0.6, 1.6)) * step)
                         .clamp(lo[1], lo[1] + size - 1e-3),
                 ];
+                if p[0] <= min || p[0] >= max || p[1] <= min || p[1] >= max {
+                    continue;
+                }
                 let (roll, scale, yaw, seed, rank) = (
                     rng.f32(),
                     rng.range(0.7, 1.3),
@@ -210,6 +216,33 @@ impl CoverMap {
 mod tests {
     use super::*;
     use crate::map::MARROW_CREEK;
+
+    /// Patches over the map's edge keep their plants on the land: past
+    /// the edge there is no ground to stand on.
+    #[test]
+    fn no_cover_past_the_edge_of_the_map() {
+        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        let hm = Heightmap::build(&map);
+        let cover = CoverMap::new(&map, &hm);
+        let half = map.half();
+        let mut kept = 0;
+        for lo in [
+            [half - 8.0, 0.0],
+            [-half - 8.0, 0.0],
+            [0.0, half - 8.0],
+            [0.0, -half - 8.0],
+        ] {
+            for c in cover.patch(&hm, lo, 16.0) {
+                assert!(
+                    c.pos[0].abs() <= half && c.pos[2].abs() <= half,
+                    "a plant at {:?}, past the edge at {half}",
+                    c.pos
+                );
+                kept += 1;
+            }
+        }
+        assert!(kept > 0, "the inner half of each patch keeps its plants");
+    }
 
     #[test]
     fn cover_grows_in_the_open_and_under_trees_but_not_on_roads_or_floors() {
