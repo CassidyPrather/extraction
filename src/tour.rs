@@ -61,8 +61,52 @@ fn has_inside(prefab: &str) -> bool {
 }
 
 /// Every placement's views.
+/// Somewhere to stand: not in a tree or a rock.
+struct Clearance {
+    trees: Vec<Vec2>,
+    rocks: Vec<(Vec2, f32)>,
+}
+
+impl Clearance {
+    fn new(zone: &Zone) -> Self {
+        Self {
+            trees: extraction_core::forest::scatter_trees(&zone.map, &zone.hm)
+                .iter()
+                .map(|t| Vec2::new(t.pos[0], t.pos[2]))
+                .collect(),
+            rocks: extraction_core::rocks::scatter_rocks(&zone.map, &zone.hm)
+                .iter()
+                .map(|r| (Vec2::new(r.pos[0], r.pos[2]), r.radius))
+                .collect(),
+        }
+    }
+
+    fn blocked(&self, p: Vec2) -> bool {
+        self.trees.iter().any(|t| t.distance(p) < 5.0)
+            || self
+                .rocks
+                .iter()
+                .any(|(q, r)| q.distance(p) < r * 1.4 + 1.2)
+    }
+
+    /// `from`, or the nearest clear spot walking round `target` at the
+    /// same distance.
+    fn of(&self, from: Vec2, target: Vec2) -> Vec2 {
+        let off = from - target;
+        for k in 0..16 {
+            let a = (k as f32 * 0.5).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 } * 0.4;
+            let p = target + Vec2::from_angle(a).rotate(off);
+            if !self.blocked(p) {
+                return p;
+            }
+        }
+        from
+    }
+}
+
 pub fn views(zone: &Zone) -> Vec<View> {
     let mut out = Vec::new();
+    let clear = Clearance::new(zone);
     for (i, p) in zone.map.placements.iter().enumerate() {
         let f = crate::world::structures::footprint(&p.prefab);
         let yaw = -p.rot.to_radians();
@@ -73,10 +117,11 @@ pub fn views(zone: &Zone) -> Vec<View> {
         let reach = f.x.max(f.z) * 0.9 + 6.0;
         let from =
             Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(-0.6, 0.0, -1.0).normalize() * reach;
+        let from = clear.of(from.xz(), Vec2::from(p.at));
         let from = Vec3::new(
             from.x,
-            zone.ground(from.x, from.z) + 1.7 + f.y * 0.3,
-            from.z,
+            zone.ground(from.x, from.y) + 1.7 + f.y * 0.3,
+            from.y,
         );
         out.push(View {
             file: format!("{i:03}_{}_out.png", p.prefab),
@@ -157,7 +202,7 @@ pub fn views(zone: &Zone) -> Vec<View> {
             look: target.to_array(),
         });
     }
-    out.extend(ground_views(zone));
+    out.extend(ground_views(zone, &clear));
     out
 }
 
@@ -165,7 +210,7 @@ pub fn views(zone: &Zone) -> Vec<View> {
 /// ground, the most hollowed spots (where the rain cut gullies), the
 /// forest floor, road and water edges, and the ring where the worn land
 /// meets a building's pad.
-fn ground_views(zone: &Zone) -> Vec<View> {
+fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
     use extraction_core::geom;
     let hm = &zone.hm;
     let mut out = Vec::new();
@@ -181,30 +226,6 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         });
     };
     let far_apart = |picked: &[Vec2], p: Vec2, d: f32| picked.iter().all(|q| q.distance(p) > d);
-    // Somewhere to stand: not in a tree or a rock. Walks round the target
-    // (keeping the distance) until clear.
-    let trees: Vec<Vec2> = extraction_core::forest::scatter_trees(&zone.map, hm)
-        .iter()
-        .map(|t| Vec2::new(t.pos[0], t.pos[2]))
-        .collect();
-    let rock_list = extraction_core::rocks::scatter_rocks(&zone.map, hm);
-    let blocked = |p: Vec2| {
-        trees.iter().any(|t| t.distance(p) < 5.0)
-            || rock_list
-                .iter()
-                .any(|r| Vec2::new(r.pos[0], r.pos[2]).distance(p) < r.radius * 1.4 + 1.2)
-    };
-    let clear_of = |from: Vec2, target: Vec2| {
-        let off = from - target;
-        for k in 0..16 {
-            let a = (k as f32 * 0.5).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 } * 0.4;
-            let p = target + Vec2::from_angle(a).rotate(off);
-            if !blocked(p) {
-                return p;
-            }
-        }
-        from
-    };
     // Boulders: the biggest, on the steepest ground, from downhill.
     let mut rocks = extraction_core::rocks::scatter_rocks(&zone.map, hm);
     rocks.sort_by(|a, b| {
@@ -225,7 +246,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "boulder",
             format!("boulder r {:.1} m at ({:.0}, {:.0})", r.radius, p.x, p.y),
-            stand(clear_of(p + down * (r.radius + 7.0), p)),
+            stand(clear.of(p + down * (r.radius + 7.0), p)),
             Vec3::from_array(r.pos),
         );
     }
@@ -263,7 +284,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "gully",
             format!("gully at ({:.0}, {:.0}), looking down it", p.x, p.y),
-            stand(clear_of(p - down * 6.0, p)),
+            stand(clear.of(p - down * 6.0, p)),
             on(p + down * 10.0, 0.0),
         );
     }
@@ -277,7 +298,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "forest",
             format!("forest floor in \"{}\" at ({:.0}, {:.0})", f.name, c.x, c.y),
-            stand(clear_of(c, c + Vec2::new(8.0, 3.0))),
+            stand(clear.of(c, c + Vec2::new(8.0, 3.0))),
             on(c + Vec2::new(8.0, 3.0), 0.3),
         );
     }
@@ -291,7 +312,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "verge",
             format!("road verge at ({:.0}, {:.0})", p.x, p.y),
-            stand(clear_of(p + side, p + side + dir * 12.0)),
+            stand(clear.of(p + side, p + side + dir * 12.0)),
             on(p + side + dir * 12.0, 0.2),
         );
     }
@@ -305,7 +326,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "bank",
             format!("bank of \"{}\" at ({:.0}, {:.0})", w.name, p.x, p.y),
-            stand(clear_of(p + bank, p)),
+            stand(clear.of(p + bank, p)),
             on(p, 0.0),
         );
     }
@@ -317,7 +338,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         push(
             "pad",
             format!("ground round {} at ({:.0}, {:.0})", pl.prefab, at.x, at.y),
-            stand(clear_of(from, at)),
+            stand(clear.of(from, at)),
             on(at, 0.5),
         );
     }
