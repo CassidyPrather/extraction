@@ -150,6 +150,15 @@ impl CoverMap {
                 {
                     continue;
                 }
+                // Nothing under (or poking through) a bridge deck.
+                if hm.road_lines.iter().any(|rl| {
+                    !rl.bridges.is_empty() && {
+                        let (d, s, _) = geom::polyline_closest(&rl.points, p);
+                        d < rl.width * 0.5 + 2.0 && rl.on_bridge(s)
+                    }
+                }) {
+                    continue;
+                }
                 // Meadows come and go: patches thick with grass, patches
                 // short and bare.
                 let meadow = geom::smoothstep(
@@ -165,7 +174,7 @@ impl CoverMap {
                     // and only in a tree's shade.
                     Some(u) if roll < (0.08 * u + 0.025) * fern_share => (CoverKind::Fern, 1.0),
                     Some(_) => (CoverKind::Grass, 0.15 + 0.25 * meadow),
-                    None if wet > 0.3 => (CoverKind::Sedge, 0.5),
+                    None if wet > 0.35 => (CoverKind::Sedge, 0.35),
                     None => (CoverKind::Grass, 0.45 + 0.5 * meadow),
                 };
                 let chance = if self.burnt { chance * 0.55 } else { chance };

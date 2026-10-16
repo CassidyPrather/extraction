@@ -166,9 +166,10 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
                 here.iter()
                     .all(|(q, rq)| geom::dist(*q, p) > 0.9 * (r + rq))
             };
-            // Field stones: a few small ones in many open cells, so the
-            // ground between boulders isn't bare texture.
-            if rng.f32() < 0.25 + 0.3 * fields {
+            // Field stones: a few small ones, mostly in the rock fields and
+            // on stony slopes, so the ground there isn't bare texture and
+            // the meadows aren't peppered evenly.
+            if rng.f32() < 0.06 + 0.45 * fields + 0.25 * steep {
                 let n = 1 + rng.below(4);
                 for _ in 0..n {
                     let a = rng.range(0.0, std::f32::consts::TAU);

@@ -748,11 +748,34 @@ fn dress_capstone(
         };
         match p {
             CapstoneProps::Pedestal => {
+                // A depot machine: a concrete plinth with hazard banding,
+                // a painted cabinet with vents and status lamps, and its
+                // cable going into the ground behind.
                 part(
-                    Mat::RobotShell,
-                    Vec3::new(0.7, 1.0, 0.55),
-                    Vec3::new(0.0, 0.5, 0.0),
+                    Mat::Concrete,
+                    Vec3::new(0.95, 0.12, 0.8),
+                    Vec3::new(0.0, 0.06, 0.0),
                 );
+                part(
+                    Mat::PaintedMetal,
+                    Vec3::new(0.7, 0.78, 0.55),
+                    Vec3::new(0.0, 0.51, 0.0),
+                );
+                part(
+                    Mat::DarkMetal,
+                    Vec3::new(0.66, 0.1, 0.5),
+                    Vec3::new(0.0, 0.95, -0.01),
+                );
+                // Vents down each side.
+                for side in [-1.0f32, 1.0] {
+                    for k in 0..4 {
+                        part(
+                            Mat::DarkMetal,
+                            Vec3::new(0.01, 0.025, 0.36),
+                            Vec3::new(side * 0.352, 0.35 + k as f32 * 0.07, 0.0),
+                        );
+                    }
+                }
                 // The cradle: a plate with a rim and two dividers.
                 part(
                     Mat::DarkMetal,
@@ -780,6 +803,64 @@ fn dress_capstone(
                     Vec3::new(0.48, 0.36, 0.08),
                     Vec3::new(0.0, 1.45, -0.24),
                 );
+                let yellow = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.75, 0.6, 0.12),
+                    perceptual_roughness: 0.7,
+                    ..default()
+                });
+                let black = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.05, 0.05, 0.05),
+                    perceptual_roughness: 0.7,
+                    ..default()
+                });
+                // Stripes along the plinth's front, standing proud of it.
+                for k in 0..8 {
+                    let x = -0.42 + k as f32 * 0.12;
+                    commands.spawn((
+                        Mesh3d(meshes.add(metric_box(Vec3::new(0.12, 0.1, 0.01)))),
+                        MeshMaterial3d(if k % 2 == 0 {
+                            yellow.clone()
+                        } else {
+                            black.clone()
+                        }),
+                        Transform::from_xyz(x, 0.06, 0.405),
+                        ChildOf(e),
+                    ));
+                }
+                // A sloped lid over the cabinet's front, under the cradle.
+                let lid = lib.get(Mat::PaintedMetal, &server, &mut materials);
+                commands.spawn((
+                    Mesh3d(meshes.add(metric_box(Vec3::new(0.7, 0.03, 0.2)))),
+                    MeshMaterial3d(lid),
+                    Transform::from_xyz(0.0, 0.93, 0.25).with_rotation(Quat::from_rotation_x(0.5)),
+                    ChildOf(e),
+                ));
+                // Three status lamps on the front, one per valley's key.
+                let dim = lamp(&mut materials, LinearRgba::rgb(2.2, 0.45, 0.1));
+                for k in 0..3 {
+                    commands.spawn((
+                        Mesh3d(meshes.add(Cylinder::new(0.022, 0.02))),
+                        MeshMaterial3d(dim.clone()),
+                        Transform::from_xyz(-0.12 + k as f32 * 0.12, 0.72, 0.28)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                        ChildOf(e),
+                    ));
+                }
+                // The cable: out of the back and down into the ground.
+                let cable = lib.get(Mat::DarkMetal, &server, &mut materials);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.035, 0.5))),
+                    MeshMaterial3d(cable.clone()),
+                    Transform::from_xyz(0.18, 0.35, -0.3),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.035, 0.35))),
+                    MeshMaterial3d(cable),
+                    Transform::from_xyz(0.18, 0.08, -0.45)
+                        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    ChildOf(e),
+                ));
             }
             CapstoneProps::Strongbox => {
                 part(

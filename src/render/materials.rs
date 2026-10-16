@@ -127,7 +127,7 @@ impl Mat {
             Mat::DarkMetal => (None, 1.0, Color::srgb(0.12, 0.12, 0.12), 0.55),
             Mat::Timber => (Some("timber"), 1.5, Color::srgb(0.9, 0.85, 0.8), 0.8),
             Mat::Asphalt => (Some("asphalt"), 4.0, Color::srgb(0.25, 0.25, 0.24), 0.75),
-            Mat::Boulder => (Some("boulder"), 2.4, Color::srgb(0.5, 0.5, 0.47), 0.85),
+            Mat::Boulder => (Some("boulder"), 2.4, Color::srgb(0.62, 0.56, 0.47), 0.85),
         }
     }
 }
@@ -180,6 +180,9 @@ impl MaterialLibrary {
             m.base_color = match mat {
                 Mat::Plaster => Color::srgb(0.78, 0.74, 0.66),
                 Mat::Concrete => Color::srgb(0.85, 0.85, 0.83),
+                // The rock scan is a pale, cool granite: warmer and darker
+                // to sit in the valleys' soil (rocks vary it per rock).
+                Mat::Boulder => color,
                 _ => Color::WHITE,
             };
             m.base_color_texture = Some(load("albedo", true));

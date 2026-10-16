@@ -121,9 +121,11 @@ fn rock_mesh(r: &RockSpot, detail: u32, burnt: bool) -> RockFaces {
     let mut uv = Vec::with_capacity(tris.len() * 3);
     let mut col = Vec::with_capacity(tris.len() * 3);
     let key = (r.pos[0] * 13.0 + r.pos[2] * 7.0) as i64 as u64;
-    let tone = 0.7 + 0.35 * hash(key);
-    let warm = (hash(key + 1) - 0.5) * 0.12;
-    let moss = hash(key + 2) * 0.9;
+    // (The texture is a cool grey; the tint warms it, and a burnt valley's
+    // rocks are smoke-dark.)
+    let tone = (0.7 + 0.35 * hash(key)) * if burnt { 0.72 } else { 1.0 };
+    let warm = (hash(key.wrapping_add(1)) - 0.5) * 0.12;
+    let moss = hash(key.wrapping_add(2)) * 0.9;
     let base = [tone * (1.0 + warm), tone, tone * (1.0 - warm)];
     let top = if burnt {
         [0.32, 0.3, 0.28]

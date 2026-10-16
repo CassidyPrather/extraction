@@ -189,7 +189,7 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         .collect();
     let rock_list = extraction_core::rocks::scatter_rocks(&zone.map, hm);
     let blocked = |p: Vec2| {
-        trees.iter().any(|t| t.distance(p) < 3.0)
+        trees.iter().any(|t| t.distance(p) < 5.0)
             || rock_list
                 .iter()
                 .any(|r| Vec2::new(r.pos[0], r.pos[2]).distance(p) < r.radius * 1.4 + 1.2)
@@ -238,7 +238,10 @@ fn ground_views(zone: &Zone) -> Vec<View> {
         while x < half {
             let h = |dx: f32, dz: f32| hm.height([x + dx, z + dz]);
             let lap = h(3.0, 0.0) + h(-3.0, 0.0) + h(0.0, 3.0) + h(0.0, -3.0) - 4.0 * h(0.0, 0.0);
-            if hm.road_at([x, z]).weight == 0 && hm.water_level([x, z]).is_none() {
+            let off_road = hm.road_lines.iter().all(|rl| {
+                extraction_core::geom::polyline_closest(&rl.points, [x, z]).0 > rl.width + 12.0
+            });
+            if off_road && hm.water_level([x, z]).is_none() {
                 hollows.push((lap, Vec2::new(x, z)));
             }
             x += 7.0;

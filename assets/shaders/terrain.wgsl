@@ -332,7 +332,9 @@ fn fragment(
     let wet = clamp(terrain.wetness * (0.5 + 0.5 * fbm(wp.xz * 0.05)) + water_wet * 0.8, 0.0, 1.0);
     let porosity = 1.0 - w[5] * 0.5;
     albedo = albedo * mix(1.0, 0.55, wet * porosity);
-    rough = mix(rough, 0.25, wet * (0.4 + 0.6 * w[5] + 0.4 * mud));
+    // (Not mirror-wet: soaked ground should read as damp earth, not as
+    // more water.)
+    rough = mix(rough, 0.42, wet * (0.4 + 0.6 * w[5] + 0.4 * mud));
 
     // Tangent frame for an XZ projection: T = +X, B = +Z.
     let t = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geo * n_geo.x);

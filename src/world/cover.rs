@@ -195,8 +195,8 @@ fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
     let root = lin(Color::srgb(0.16, 0.17, 0.09));
     let tip = if burnt {
         // Scorched: grey-brown and straw, a little green coming back.
-        if dry < 0.6 {
-            lin(Color::srgb(0.42, 0.38, 0.3))
+        if dry < 0.8 {
+            lin(Color::srgb(0.44, 0.4, 0.33))
         } else {
             lin(Color::srgb(0.38, 0.4, 0.26))
         }
