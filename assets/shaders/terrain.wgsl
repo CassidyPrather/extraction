@@ -276,7 +276,10 @@ fn fragment(
     var w: array<f32, 7>;
     let forest = clamp(splat.a + breakup * 0.6, 0.0, 1.0);
     let mud = clamp(splat.r * 1.4 + breakup * 0.5 + fine * 0.2 - 0.15, 0.0, 1.0);
-    let rock = clamp(splat.g * 1.3 + breakup * 0.4, 0.0, 1.0);
+    // Rock shows through in patches on the steep: grass holds on in tongues
+    // up a moderate slope, bare rock only where it's steepest.
+    let patches = fbm(wp.xz * 0.05 + vec2<f32>(11.0, 7.0)) - 0.5;
+    let rock = clamp(splat.g * 1.4 + breakup * 0.6 + patches * 0.9 - 0.2, 0.0, 1.0);
     let road = clamp(splat.b * 1.15 + fine * 0.35, 0.0, 1.0);
     // Patches of bare earth in open grass.
     let bare = smoothstep(0.62, 0.75, fbm(wp.xz * 0.11 + vec2<f32>(5.0, 3.0))) * (1.0 - forest);
@@ -310,7 +313,22 @@ fn fragment(
             l = sample_rock_triplanar(wp, n_geo);
             // Wet, dark, and mossy where it faces up.
             let moss = smoothstep(0.55, 0.85, n_geo.y) * smoothstep(0.35, 0.6, fbm(wp.xz * 0.4));
-            l.albedo = mix(l.albedo * 0.55, vec3<f32>(0.10, 0.13, 0.06), moss * 0.7);
+            // Weathered in bands and tones, warm like the boulders, not one
+            // grey sheet.
+            let tone = fbm(wp.xz * 0.15 + vec2<f32>(3.0, 9.0));
+            let strata = 0.82 + 0.18 * sin(wp.y * 1.9 + fbm(wp.xz * 0.3) * 4.0);
+            let tint = mix(vec3<f32>(1.05, 0.9, 0.72), vec3<f32>(0.72, 0.74, 0.76), tone);
+            // Rills: rain cuts a bank into grooves straight down the fall
+            // line (stretched noise across the slope, long down it).
+            let side = normalize(vec2<f32>(n_geo.x, n_geo.z) + vec2<f32>(1e-4, 0.0));
+            let across = dot(wp.xz, vec2<f32>(-side.y, side.x));
+            let rill = fbm(vec2<f32>(across * 1.3, wp.y * 0.12));
+            let steep = smoothstep(0.9, 0.6, n_geo.y);
+            let rills = mix(1.0, mix(0.55, 1.15, rill), steep);
+            l.albedo = mix(l.albedo * 0.6 * tint * strata * rills, vec3<f32>(0.10, 0.13, 0.06), moss * 0.7);
+            // Weathered rock is matt; the scan's gloss turned a bank to a
+            // sheen of sky at a glancing angle.
+            l.rough = max(l.rough, 0.85);
         } else {
             l = sample_layer(i, wp.xz);
         }

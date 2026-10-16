@@ -89,18 +89,31 @@ impl Clearance {
                 .any(|(q, r)| q.distance(p) < r * 1.4 + 1.2)
     }
 
+    /// Nothing between `from` and `target`: no trunk within 2.5 m of the
+    /// line (branches spread), no rock on it.
+    fn sight(&self, from: Vec2, target: Vec2) -> bool {
+        let d = from.distance(target);
+        let steps = (d / 1.0).ceil().max(1.0) as usize;
+        (1..steps).all(|i| {
+            let q = from.lerp(target, i as f32 / steps as f32);
+            self.trees.iter().all(|t| t.distance(q) > 2.5)
+                && self.rocks.iter().all(|(c, r)| c.distance(q) > r + 0.3)
+        })
+    }
+
     /// `from`, or the nearest clear spot walking round `target` at the
-    /// same distance.
+    /// same distance (first with a clear sight of it, then without).
     fn of(&self, from: Vec2, target: Vec2) -> Vec2 {
         let off = from - target;
-        for k in 0..16 {
+        let round = |k: usize| {
             let a = (k as f32 * 0.5).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 } * 0.4;
-            let p = target + Vec2::from_angle(a).rotate(off);
-            if !self.blocked(p) {
-                return p;
-            }
-        }
-        from
+            target + Vec2::from_angle(a).rotate(off)
+        };
+        (0..16)
+            .map(round)
+            .find(|p| !self.blocked(*p) && self.sight(*p, target))
+            .or_else(|| (0..16).map(round).find(|p| !self.blocked(*p)))
+            .unwrap_or(from)
     }
 }
 
@@ -250,20 +263,41 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
             Vec3::from_array(r.pos),
         );
     }
-    // Gullies: the most concave ground, looking down it.
+    // Gullies: ground that dips across its fall line (a channel, not the
+    // foot of a slope), on a moderate slope, away from roads, water and
+    // building pads, looking down it.
     let half = zone.map.half() - zone.map.fence_inset.max(10.0) - 20.0;
+    let off_road = |p: Vec2, by: f32| {
+        hm.road_lines
+            .iter()
+            .all(|rl| geom::polyline_closest(&rl.points, [p.x, p.y]).0 > rl.width * 0.5 + by)
+    };
+    let dry = |p: Vec2, by: f32| {
+        zone.map
+            .water
+            .iter()
+            .all(|w| geom::polyline_closest(&w.points, [p.x, p.y]).0 > w.width * 0.5 + by)
+    };
+    let off_pads = |p: Vec2| {
+        zone.map.placements.iter().all(|pl| {
+            Vec2::from(pl.at).distance(p)
+                > extraction_core::map::prefab_clearance(&pl.prefab) + 25.0
+        })
+    };
     let mut hollows = Vec::new();
     let mut z = -half;
     while z < half {
         let mut x = -half;
         while x < half {
-            let h = |dx: f32, dz: f32| hm.height([x + dx, z + dz]);
-            let lap = h(3.0, 0.0) + h(-3.0, 0.0) + h(0.0, 3.0) + h(0.0, -3.0) - 4.0 * h(0.0, 0.0);
-            let off_road = hm.road_lines.iter().all(|rl| {
-                extraction_core::geom::polyline_closest(&rl.points, [x, z]).0 > rl.width + 12.0
-            });
-            if off_road && hm.water_level([x, z]).is_none() {
-                hollows.push((lap, Vec2::new(x, z)));
+            let p = Vec2::new(x, z);
+            let slope = hm.slope_deg([x, z]);
+            if (6.0..25.0).contains(&slope) && off_road(p, 12.0) && dry(p, 25.0) && off_pads(p) {
+                let n = hm.normal([x, z]);
+                let down = Vec2::new(n[0], n[2]).normalize_or(Vec2::X);
+                let across = down.perp() * 3.0;
+                let h = |q: Vec2| hm.height([q.x, q.y]);
+                let channel = h(p + across) + h(p - across) - 2.0 * h(p);
+                hollows.push((channel, p));
             }
             x += 7.0;
         }
@@ -288,17 +322,39 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
             on(p + down * 10.0, 0.0),
         );
     }
-    // Forest floor: the middle of each of the first three forests.
+    // Forest floor: in each of the first three forests, the open spot off
+    // the roads nearest its middle.
     for f in zone.map.forests.iter().take(3) {
         let (lo, hi) = geom::bounds(&f.polygon);
-        let c = Vec2::new((lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5);
-        if !geom::point_in_polygon(&f.polygon, [c.x, c.y]) {
-            continue;
+        let mid = Vec2::new((lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5);
+        let mut best: Option<Vec2> = None;
+        let mut z = lo[1];
+        while z < hi[1] {
+            let mut x = lo[0];
+            while x < hi[0] {
+                let c = Vec2::new(x, z);
+                let look = c + Vec2::new(8.0, 3.0);
+                if geom::point_in_polygon(&f.polygon, [c.x, c.y])
+                    && off_road(c, 10.0)
+                    && off_road(look, 6.0)
+                    && dry(c, 8.0)
+                    && !clear.blocked(c)
+                    && clear.sight(c, look)
+                    && best.is_none_or(|b| b.distance(mid) > c.distance(mid))
+                {
+                    best = Some(c);
+                }
+                x += 4.0;
+            }
+            z += 4.0;
         }
+        let Some(c) = best else {
+            continue;
+        };
         push(
             "forest",
             format!("forest floor in \"{}\" at ({:.0}, {:.0})", f.name, c.x, c.y),
-            stand(clear.of(c, c + Vec2::new(8.0, 3.0))),
+            stand(c),
             on(c + Vec2::new(8.0, 3.0), 0.3),
         );
     }
@@ -322,11 +378,20 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
         let len = geom::polyline_length(&line);
         let (p, dir) = geom::polyline_at(&line, len * 0.6);
         let (p, dir) = (Vec2::from(p), Vec2::from(dir).normalize_or(Vec2::X));
-        let bank = Vec2::new(-dir.y, dir.x) * (w.width * 0.5 + 4.0);
+        // Stand on the bank, off any road or bridge, on whichever side
+        // has room.
+        let side = Vec2::new(-dir.y, dir.x);
+        let from = [1.0, -1.0]
+            .into_iter()
+            .flat_map(|s| [4.0, 7.0, 10.0].map(|d| p + side * s * (w.width * 0.5 + d)))
+            .find(|q| off_road(*q, 4.0) && hm.water_level([q.x, q.y]).is_none());
+        let Some(from) = from else {
+            continue;
+        };
         push(
             "bank",
             format!("bank of \"{}\" at ({:.0}, {:.0})", w.name, p.x, p.y),
-            stand(clear.of(p + bank, p)),
+            stand(clear.of(from, p)),
             on(p, 0.0),
         );
     }

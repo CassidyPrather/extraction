@@ -128,9 +128,21 @@ that now holds it.
 Since that pass, the robot gate has been rebuilt and the anomaly's
 ground glow is a disc draped over the terrain. Still open:
 
-- The tour's outside camera can stand inside a tree.
+- (Fixed since: the tour's cameras stand clear of trees and rocks and
+  keep a clear sight of what they look at.)
 
 Then the ground itself: the terrain texture visibly repeated, and the
 land between buildings read as one smooth sheet. The texture is now
 hex-tiled, and the ground has natural relief, erosion, rocks and ground
 cover (see DESIGN, "Maps"). Gauges: worn ground; rocks and cover.
+
+The new ground was checked three ways. A ground tour (`g###_*` views:
+boulders, gullies, forest floor, verges, banks, pads) reviewed per
+valley found rocks seated and cover clear of roads, floors and water;
+it also found steep banks rendered as a glossy grey sheet (the rock
+scan's gloss caught the sky), now matt, toned and cut with rills. Bot
+raids on all three valleys (6 each) got home more often than before
+the new ground (13 of 18, against 7), and none of their stuck spots is
+by a rock: they are inside houses, reaching for loot past furniture,
+and on the Kettle bridge, where a route steps off the deck into the
+railing (bots only; the bridge test walks its centreline).

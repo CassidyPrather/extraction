@@ -146,7 +146,7 @@ impl CoverMap {
                 );
                 if hm.water_level(p).is_some()
                     || hm.road_at(p).weight > 40
-                    || hm.slope_deg(p) > 40.0
+                    || hm.slope_deg(p) > 38.0
                 {
                     continue;
                 }
