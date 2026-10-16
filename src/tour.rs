@@ -295,7 +295,12 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
         while x < half {
             let p = Vec2::new(x, z);
             let slope = hm.slope_deg([x, z]);
-            if (6.0..25.0).contains(&slope) && off_road(p, 12.0) && dry(p, 25.0) && off_pads(p) {
+            if (6.0..25.0).contains(&slope)
+                && off_road(p, 12.0)
+                && dry(p, 25.0)
+                && off_pads(p)
+                && !clear.blocked(p)
+            {
                 let n = hm.normal([x, z]);
                 let down = Vec2::new(n[0], n[2]).normalize_or(Vec2::X);
                 let across = down.perp() * 3.0;
@@ -326,9 +331,13 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
             on(p + down * 10.0, 0.0),
         );
     }
-    // Forest floor: in each of the first three forests, the open spot off
-    // the roads nearest its middle.
-    for f in zone.map.forests.iter().take(3) {
+    // Forest floor: in the first three forests with room inside the fence,
+    // the open spot off the roads nearest each one's middle.
+    let mut forests = 0;
+    for f in &zone.map.forests {
+        if forests == 3 {
+            break;
+        }
         let (lo, hi) = geom::bounds(&f.polygon);
         let mid = Vec2::new((lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5);
         let mut best: Option<Vec2> = None;
@@ -357,6 +366,7 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
         let Some(c) = best else {
             continue;
         };
+        forests += 1;
         push(
             "forest",
             format!("forest floor in \"{}\" at ({:.0}, {:.0})", f.name, c.x, c.y),
