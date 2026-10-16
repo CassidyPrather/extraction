@@ -279,11 +279,48 @@ PROBES = {
 }
 
 
+# Share of a raid spent in each scene. Fighting is measured from the bot
+# raids (engagements were 6.7% of 164 bot-minutes); a fifth of raids
+# draw a downpour; indoors and the Surge are estimates.
+SESSION = {"quiet_walk": 0.60, "downpour": 0.15, "indoors": 0.15,
+           "firefight": 0.07, "surge": 0.03}
+# ASWG-R001 (the game-audio loudness practice from Sony's Audio Standards
+# Working Group): -24 LUFS +-2 integrated over representative play on
+# console/PC, true peaks at most -1 dBTP.
+SESSION_TARGET = (-24.0, 2.0)
+
+
+def session_loudness(blocks):
+    """BS.1770 gated loudness and EBU 3342 loudness range of a raid, from
+    each scene's 400 ms and 3 s blocks weighted by its share of play."""
+    def gated(b, w, rel_db):
+        keep = b > -70
+        b, w = b[keep], w[keep]
+        e = lambda b, w: 10 * np.log10(np.sum(w * 10 ** (b / 10)) / np.sum(w))
+        rel = e(b, w) + rel_db
+        return b[b > rel], w[b > rel], e
+    m = np.concatenate([blocks[n][0] for n in SESSION])
+    mw = np.concatenate([np.full(len(blocks[n][0]), SESSION[n] / len(blocks[n][0]))
+                         for n in SESSION])
+    b, w, e = gated(m, mw, -10)
+    integrated = e(b, w)
+    s = np.concatenate([blocks[n][1] for n in SESSION])
+    sw = np.concatenate([np.full(len(blocks[n][1]), SESSION[n] / len(blocks[n][1]))
+                         for n in SESSION])
+    b, w, _ = gated(s, sw, -20)
+    order = np.argsort(b)
+    cw = np.cumsum(w[order]) / np.sum(w)
+    lo, hi = b[order][np.searchsorted(cw, 0.10)], b[order][np.searchsorted(cw, 0.95)]
+    return round(float(integrated), 1), round(float(hi - lo), 1)
+
+
 def scene_pass(sets, mix):
     out = {}
+    blocks = {}
     for name, scene in SCENES.items():
         total, parts = render(scene, sets, mix)
         y = aa.k_weight(total)
+        blocks[name] = (aa.block_loudness(y, 0.4, 0.1), aa.block_loudness(y, 3.0, 1.0))
         r = {
             "integrated": round(aa.integrated(y), 1),
             "momentary_max": round(float(aa.block_loudness(y).max()), 1),
@@ -298,6 +335,7 @@ def scene_pass(sets, mix):
             m, band = margin(parts[key], rest, start, length)
             r["probes"].append({"cue": key.split(":", 1)[1], "margin_db": m, "band_hz": band})
         out[name] = r
+    out["_session"] = session_loudness(blocks)
     return out
 
 
@@ -364,6 +402,7 @@ def run(sets, out):
     mix = read_mix()
     summary, mix = mix_pass(sets, mix)
     scenes = scene_pass(sets, mix)
+    session, lra = scenes.pop("_session")
     calm = [("wind", 0.0)]
     storm = [("wind", 0.0), ("rain", 0.0)]
     ranges = {
@@ -385,7 +424,8 @@ def run(sets, out):
         if m > 0:
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"switches on at {keep:.0f} m, {m:+.1f} dB over the wind")
-    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges)
+    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges,
+                  session=dict(integrated=session, lra=lra, shares=SESSION))
     (out / "mix.json").write_text(json.dumps(report, indent=1))
     lines = [f"Mix line: heard = {summary['intercept']} + {summary['slope']} x SPL "
              f"(the world's dynamics compressed {1 / max(summary['slope'], 1e-3):.1f}:1)",
@@ -402,6 +442,10 @@ def run(sets, out):
         for p in r["probes"]:
             lines.append(f"    {p['cue']:16s} clears the rest by {p['margin_db']:+.1f} dB "
                          f"(at {p['band_hz']} Hz)")
+    lo, hi = SESSION_TARGET[0] - SESSION_TARGET[1], SESSION_TARGET[0] + SESSION_TARGET[1]
+    lines.append(f"a raid ({', '.join(f'{n} {w:.0%}' for n, w in SESSION.items())}): "
+                 f"{session} LUFS integrated, loudness range {lra} LU "
+                 f"(ASWG-R001 asks {lo:.0f}..{hi:.0f})")
     lines.append("")
     lines.append("Audible range (m), over the wind / over a downpour:")
     for n, r in ranges.items():
@@ -414,4 +458,7 @@ def run(sets, out):
     text = "\n".join(lines)
     (out / "mix.txt").write_text(text)
     print(text)
-    return sum(1 for c in mix if c["flags"])
+    off = abs(session - SESSION_TARGET[0]) > SESSION_TARGET[1]
+    if off:
+        print(f"a raid's loudness, {session} LUFS, is outside ASWG-R001's window")
+    return sum(1 for c in mix if c["flags"]) + off

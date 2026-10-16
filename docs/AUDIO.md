@@ -251,6 +251,17 @@ low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
   plays them: a quiet walk, a downpour, a firefight in the rain,
   indoors, the Surge. Each is measured for integrated loudness, peaks,
   and how far each signal in it clears everything else.
+- **A raid.** The scenes weighted by how much of a raid each takes
+  (fighting measured from the bot raids, 7%; a fifth of raids rain
+  hard) give a raid's integrated loudness and loudness range (EBU Tech
+  3342). The reference is ASWG-R001, the game-audio loudness practice
+  from Sony's Audio Standards Working Group: -24 LUFS +-2 over
+  representative play on console and PC. The check fails outside it. At
+  the time of writing a raid measures -24.9 LUFS with a 16 LU range: the
+  quiet walk sits 15 LU under a firefight, which is the tension the game
+  wants, but on a headset's open speakers in a noisy room the forest
+  may be lost under the room. A narrower-dynamics setting is the usual
+  answer if playtesters turn the volume up between fights.
 
 **What the first run found** (and what changed):
 
