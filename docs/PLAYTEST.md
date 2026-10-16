@@ -31,6 +31,41 @@ Your data folder is `%APPDATA%\extraction` on Windows
 | Every raid you play, as telemetry | `raids/<map>/raid*.jsonl` |
 | Marks you made (below) | `marks/*.png` |
 
+## Recording a session
+
+If you record video and talk over it, two habits make it easy to line
+the recording up with the logs afterwards:
+
+- **Say the mark out loud.** When you press a mark, say "mark 3" and a
+  word on why. The wrist confirms the number; the log, the raid
+  telemetry and `marks/` all carry it, so the video's timestamp, the
+  spot on the map and the screenshot meet on that number.
+- **Say when you start a raid and which valley.** Raid telemetry is one
+  file per raid, named in order; "raid two, Kettle Pass" on the tape is
+  enough to pair them.
+
+Then hand over the recording (or a transcript of it) with the files
+below, and the findings can be pulled out of both together.
+
+## What's new to look at (tonight)
+
+Changed since the last read of this guide, and worth a comment each:
+
+- **The ground.** Rocks and boulders, grass, ferns under the trees,
+  sedge by the water, worn and eroded land, rounded shoulders where a
+  building is cut into a hill. Cinder Works' ground is ash. Mark
+  anything floating, sunk, shiny or repeating.
+- **Wind.** Grass, ferns and the near trees sway; the grass leans away
+  from your legs. Too much? Too little? Does it bother your stomach?
+- **The mix.** Every sound's level was set by measurement rather than
+  by ear (`docs/AUDIO.md`). Listen for anything too loud for what it
+  is, a warning you missed, or the forest vanishing between fights.
+  The **SOUND** card (truck wall, camp board) switches to narrow range:
+  try both, and say which you'd keep and why.
+- **Anomaly hums** now fade in as you approach instead of switching on.
+- **Frame rate** on the new ground: if it stutters, note where. On a
+  slow machine `--detail 0.5` thins rocks and shadows.
+
 ## Marks
 
 **Something wrong, odd or great? Mark it.** Press **F9** on the keyboard,
@@ -171,7 +206,7 @@ whether the ending felt like one.
   slide, a can, a round between finger and thumb), and empty-handed the
   grip closes the hand and the trigger the index. Mark a grip that looks
   wrong.
-- Some models are still simple, the lathes and lock pedestal among them.
+- Some models are still simple, the hall's lathes among them.
 - The camp, the yard and the keys are new and have never been played
   through end to end by a person: expect rough edges in them first.
 - To see the yard again after skipping it, delete `trained` from the
