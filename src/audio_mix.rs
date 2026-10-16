@@ -145,11 +145,42 @@ pub const MIX: &[Cue] = &[
     cue!("thunder", "ambience/thunder_distant", -14.0, 75.0, 0.0, Event),
 ];
 
+/// Narrow dynamics (the comfort board's sound card), dB per role: the
+/// forest and your hands come up, gunfire and set pieces come down, for a
+/// headset's open speakers in a room that isn't quiet. One line per role:
+/// the audit reads these.
+#[rustfmt::skip]
+pub const NARROW: &[(Role, f32)] = &[
+    (Role::Bed, 6.0),
+    (Role::Detail, 5.0),
+    (Role::Signal, 5.0),
+    (Role::Action, -3.0),
+    (Role::Event, -3.0),
+];
+
+static NARROW_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Play with narrow dynamics from now on (sounds already playing keep
+/// their level, beds aside, whose level is set every frame).
+pub fn set_narrow(on: bool) {
+    NARROW_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// A cue's gain, dB. An unknown name logs an error and plays quietly
 /// rather than taking the game down (a test checks every name the audio
 /// code uses).
 pub fn db(name: &str) -> f32 {
-    find(name).map_or(-20.0, |c| c.db)
+    find(name).map_or(-20.0, |c| {
+        let lift = if NARROW_ON.load(std::sync::atomic::Ordering::Relaxed) {
+            NARROW
+                .iter()
+                .find(|(r, _)| *r == c.role)
+                .map_or(0.0, |l| l.1)
+        } else {
+            0.0
+        };
+        c.db + lift
+    })
 }
 
 fn find(name: &str) -> Option<&'static Cue> {
@@ -177,6 +208,28 @@ pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Narrow dynamics moves every role, and closes the gap between the
+    /// quiet ones and the loud ones rather than widening it.
+    #[test]
+    fn narrow_dynamics_lifts_the_quiet_over_the_loud() {
+        let lift = |r: Role| NARROW.iter().find(|(x, _)| *x == r).map(|l| l.1);
+        for r in [
+            Role::Bed,
+            Role::Detail,
+            Role::Action,
+            Role::Signal,
+            Role::Event,
+        ] {
+            assert!(lift(r).is_some(), "{r:?} has a lift");
+        }
+        assert!(lift(Role::Bed) > lift(Role::Action));
+        assert!(lift(Role::Detail) > lift(Role::Action));
+        assert!(
+            lift(Role::Signal) >= lift(Role::Detail),
+            "warnings keep their reach"
+        );
+    }
 
     /// Every cue's set exists, every name is unique, and every name the
     /// audio code asks for is in the table.

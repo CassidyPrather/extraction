@@ -403,6 +403,12 @@ def run(sets, out):
     summary, mix = mix_pass(sets, mix)
     scenes = scene_pass(sets, mix)
     session, lra = scenes.pop("_session")
+    # The same raid with the comfort board's narrow dynamics.
+    text = (ROOT / "src" / "audio_mix.rs").read_text()
+    lift = {r: float(v) for r, v in re.findall(r"\(Role::(\w+), (-?[\d.]+)\)", text)}
+    narrow_mix = [dict(c, db=c["db"] + lift.get(c["role"], 0.0)) for c in mix]
+    narrow_scenes = scene_pass(sets, narrow_mix)
+    n_session, n_lra = narrow_scenes.pop("_session")
     calm = [("wind", 0.0)]
     storm = [("wind", 0.0), ("rain", 0.0)]
     ranges = {
@@ -425,7 +431,9 @@ def run(sets, out):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"switches on at {keep:.0f} m, {m:+.1f} dB over the wind")
     report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges,
-                  session=dict(integrated=session, lra=lra, shares=SESSION))
+                  session=dict(integrated=session, lra=lra, shares=SESSION),
+                  narrow=dict(integrated=n_session, lra=n_lra,
+                              scenes={n: r["integrated"] for n, r in narrow_scenes.items()}))
     (out / "mix.json").write_text(json.dumps(report, indent=1))
     lines = [f"Mix line: heard = {summary['intercept']} + {summary['slope']} x SPL "
              f"(the world's dynamics compressed {1 / max(summary['slope'], 1e-3):.1f}:1)",
@@ -446,6 +454,8 @@ def run(sets, out):
     lines.append(f"a raid ({', '.join(f'{n} {w:.0%}' for n, w in SESSION.items())}): "
                  f"{session} LUFS integrated, loudness range {lra} LU "
                  f"(ASWG-R001 asks {lo:.0f}..{hi:.0f})")
+    lines.append(f"  with narrow dynamics: {n_session} LUFS, loudness range {n_lra} LU; "
+                 + ", ".join(f"{n} {r['integrated']}" for n, r in narrow_scenes.items()))
     lines.append("")
     lines.append("Audible range (m), over the wind / over a downpour:")
     for n, r in ranges.items():

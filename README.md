@@ -39,10 +39,11 @@ a scope or binoculars to your eye to look through them.
 
 Comfort: press the cards on the truck bed's left wall (turning: snap 30°
 or 45°, smooth 90-180°/s; vignette: off to 90%, darkening the edges
-while the stick moves you). Or `--smooth-turn` (or `--snap-turn`),
-`--vignette 0..1`, or put them in
+while the stick moves you; sound: full or narrow range). Or
+`--smooth-turn` (or `--snap-turn`), `--vignette 0..1`,
+`--narrow-dynamics`, or put them in
 `~/.local/share/extraction/settings.ron` (Windows: `%APPDATA%\extraction`):
-`(smooth_turn: true, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6)`.
+`(smooth_turn: true, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6, narrow_dynamics: false)`.
 
 The game saves itself (the stash, what you carry, and each valley's Zone
 as you left it) to `career.ron` in the same folder; `--new-game` starts

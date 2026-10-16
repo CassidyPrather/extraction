@@ -2,10 +2,11 @@
 //! command-line overrides:
 //!
 //! ```ron
-//! (smooth_turn: false, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6)
+//! (smooth_turn: false, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6,
+//!  narrow_dynamics: false)
 //! ```
 //!
-//! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`.
+//! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`.
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,8 @@ pub struct Comfort {
     pub snap_angle: f32,
     /// How dark the edges of the view go while the stick moves you (0 off).
     pub vignette: f32,
+    /// Quiet sounds up and loud ones down (`audio_mix::NARROW`).
+    pub narrow_dynamics: bool,
 }
 
 impl Default for Comfort {
@@ -30,6 +33,7 @@ impl Default for Comfort {
             turn_speed: 120.0,
             snap_angle: 30.0,
             vignette: 0.6,
+            narrow_dynamics: false,
         }
     }
 }
@@ -77,6 +81,14 @@ impl Comfort {
         }
     }
 
+    pub fn sound_label(&self) -> String {
+        if self.narrow_dynamics {
+            "SOUND\nnarrow range".into()
+        } else {
+            "SOUND\nfull range".into()
+        }
+    }
+
     /// Step to the next turning preset.
     pub fn next_turning(&mut self) {
         let now = Self::TURNING.iter().position(|(smooth, v)| {
@@ -120,6 +132,7 @@ impl Comfort {
             match a.as_str() {
                 "--smooth-turn" => c.smooth_turn = true,
                 "--snap-turn" => c.smooth_turn = false,
+                "--narrow-dynamics" => c.narrow_dynamics = true,
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.vignette = v.clamp(0.0, 1.0);
@@ -155,5 +168,6 @@ mod tests {
         assert!((c.vignette - 0.9).abs() < 1e-3);
         c.next_vignette();
         assert_eq!(c.vignette_label(), "VIGNETTE\noff");
+        assert_eq!(c.sound_label(), "SOUND\nfull range");
     }
 }

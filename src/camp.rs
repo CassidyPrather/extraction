@@ -184,11 +184,12 @@ fn spawn_camp(
         (Some(CampCard::PackUp), None),
         (None, Some(ComfortCard::Turning)),
         (None, Some(ComfortCard::Vignette)),
+        (None, Some(ComfortCard::Sound)),
     ];
     for (i, (camp_card, comfort)) in column.into_iter().enumerate() {
-        let at = Transform::from_xyz(0.38, 0.19 - i as f32 * 0.128, z);
+        let at = Transform::from_xyz(0.38, 0.195 - i as f32 * 0.112, z);
         if let Some(c) = camp_card {
-            commands.spawn((card(c, Vec2::new(0.3, 0.11)), at, ChildOf(board)));
+            commands.spawn((card(c, Vec2::new(0.3, 0.1)), at, ChildOf(board)));
         } else if let Some(c) = comfort {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -197,11 +198,11 @@ fn spawn_camp(
                 Grabbable {
                     points: vec![GrabPoint::free()],
                 },
-                Collider::cuboid(0.3, 0.11, 0.03),
+                Collider::cuboid(0.3, 0.1, 0.03),
                 CollisionLayers::new(Layer::Item, LayerMask::NONE),
                 ScreenText {
                     text: String::new(),
-                    size: Vec2::new(0.3, 0.11),
+                    size: Vec2::new(0.3, 0.1),
                     style: ScreenStyle::Card,
                 },
                 at,

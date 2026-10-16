@@ -260,8 +260,11 @@ low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
   the time of writing a raid measures -24.9 LUFS with a 16 LU range: the
   quiet walk sits 15 LU under a firefight, which is the tension the game
   wants, but on a headset's open speakers in a noisy room the forest
-  may be lost under the room. A narrower-dynamics setting is the usual
-  answer if playtesters turn the volume up between fights.
+  may be lost under the room. So the comfort cards offer narrow
+  dynamics (`audio_mix::NARROW`): beds +6 dB, details +5, signals +5
+  (with the beds, so warnings keep their reach), actions and events -3.
+  The audit measures it too: -23.6 LUFS with a 9.3 LU range, about what
+  night modes aim for.
 
 **What the first run found** (and what changed):
 

@@ -1,4 +1,4 @@
-//! The comfort board: two cards pinned on the bed's left wall, above the
+//! The comfort board: three cards pinned on the bed's left wall, above the
 //! stash, for the settings a headset player can't reach otherwise. Press
 //! one to step through its presets; the choice is kept in `settings.ron`.
 
@@ -16,19 +16,27 @@ use crate::world::Layer;
 pub enum ComfortCard {
     Turning,
     Vignette,
+    Sound,
 }
 
 pub struct ComfortBoardPlugin;
 
 impl Plugin for ComfortBoardPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_cards, press_cards, card_text).chain());
+        app.add_systems(
+            Update,
+            (spawn_cards, press_cards, card_text, follow_sound).chain(),
+        );
     }
 }
 
 fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     for truck in &trucks {
-        for (card, y) in [(ComfortCard::Turning, 1.62), (ComfortCard::Vignette, 1.44)] {
+        for (card, y) in [
+            (ComfortCard::Turning, 1.62),
+            (ComfortCard::Vignette, 1.44),
+            (ComfortCard::Sound, 1.80),
+        ] {
             commands.spawn((
                 Name::new("Comfort card"),
                 card,
@@ -70,6 +78,7 @@ fn press_cards(
             match card {
                 ComfortCard::Turning => comfort.next_turning(),
                 ComfortCard::Vignette => comfort.next_vignette(),
+                ComfortCard::Sound => comfort.narrow_dynamics = !comfort.narrow_dynamics,
             }
             // Tests and sims don't touch the player's settings.
             if !opts.headless {
@@ -94,10 +103,20 @@ fn card_text(
         let t = match card {
             ComfortCard::Turning => comfort.turning_label(),
             ComfortCard::Vignette => comfort.vignette_label(),
+            ComfortCard::Sound => comfort.sound_label(),
         };
         if text.text != t {
             text.text = t;
         }
+    }
+}
+
+/// The mix follows the sound card.
+fn follow_sound(comfort: Option<Res<Comfort>>) {
+    if let Some(c) = comfort
+        && c.is_changed()
+    {
+        crate::audio_mix::set_narrow(c.narrow_dynamics);
     }
 }
 

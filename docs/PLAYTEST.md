@@ -93,8 +93,10 @@ If any of this fails, stop and send the log: everything else depends on it.
 ### 2. Comfort (5 minutes)
 
 Press the cards on the camp board (or the truck bed's left wall): turning (snap 30°/45°,
-smooth 90–180°/s) and vignette (off to 90%, darkening the edges while
-the stick moves you). Note which you end up with, and anything that made
+smooth 90–180°/s), vignette (off to 90%, darkening the edges while
+the stick moves you) and sound (full range, or narrow: the forest and
+your hands up, gunfire down, for open speakers in a room that isn't
+quiet). Note which you end up with, and anything that made
 you queasy — climbing, the zipline, being knocked about, swimming.
 
 ### 3. The truck and the guns, at base (15 minutes)
@@ -195,5 +197,5 @@ whether the ending felt like one.
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
 | `--no-robots` | An empty Zone, for looking around |
-| `--smooth-turn`, `--vignette 0.5` | Comfort, without the cards |
+| `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics` | Comfort, without the cards |
 | `--no-record` | Don't record raids |
