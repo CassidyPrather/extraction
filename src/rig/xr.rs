@@ -11,8 +11,16 @@
 //! - left stick: walk (click to sprint); right stick: snap turn left/right,
 //!   down to crouch-toggle; right stick click: fire selector
 //!
-//! Any other runtime gets the Khronos simple controller: select grabs and
-//! fires, menu is primary.
+//! No fallback to the Khronos simple controller: offered one, SteamVR
+//! drove Index controllers through it (one "select" button, no sticks), and
+//! the first real playtest had only the grip. The log says which profile
+//! the runtime picked for each hand (`input: ... profile`) and the first
+//! time each control is used.
+//!
+//! A hand's pose is the grip pose's position with the aim pose's
+//! orientation: OpenXR's grip orientation runs -Z through the fist and X
+//! through the palm, while the game's hands, guns and the flat rig all take
+//! -Z as where you point and +Y as up, which is what the aim pose is.
 //!
 //! The headset path runs in CI-less checks against Monado's simulated
 //! headset (`scripts/xr_check.sh`): instance, session, swapchains, actions
@@ -38,6 +46,8 @@ impl Plugin for XrDriverPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_actions.run_if(session_available))
             .add_systems(Update, headset_missing)
+            .add_systems(Startup, size_swapchain)
+            .add_systems(Update, report_input.run_if(openxr_session_running))
             .add_systems(OxrSendActionBindings, suggest_bindings)
             .add_systems(
                 XrSessionCreated,
@@ -59,6 +69,102 @@ impl Plugin for XrDriverPlugin {
                     .in_set(RigDriverSystems)
                     .run_if(openxr_session_running),
             );
+    }
+}
+
+/// The eyes' resolution: the runtime's recommendation times the comfort
+/// render scale (auto: about 1800 px across an eye, so a very high-res
+/// headset on a laptop GPU isn't asked for 3000 px). Read when the session
+/// is created, so a change takes effect on the next launch.
+fn size_swapchain(
+    instance: Option<Res<OxrInstance>>,
+    system: Option<Res<bevy_mod_openxr::resources::OxrSystemId>>,
+    comfort: Res<super::comfort::Comfort>,
+    mut config: Option<ResMut<bevy_mod_openxr::resources::OxrSessionConfig>>,
+) {
+    let (Some(instance), Some(system), Some(config)) = (instance, system, config.as_mut()) else {
+        return;
+    };
+    let Ok(views) = instance.enumerate_view_configuration_views(
+        system.0,
+        openxr::ViewConfigurationType::PRIMARY_STEREO,
+    ) else {
+        return;
+    };
+    let Some(v) = views.first() else {
+        return;
+    };
+    let rec = UVec2::new(
+        v.recommended_image_rect_width,
+        v.recommended_image_rect_height,
+    );
+    let scale = comfort.render_scale_for(rec.x);
+    let size = (rec.as_vec2() * scale)
+        .round()
+        .as_uvec2()
+        .max(UVec2::splat(256));
+    info!(
+        "eyes: {}x{} ({:.0}% of the runtime's {}x{})",
+        size.x,
+        size.y,
+        scale * 100.0,
+        rec.x,
+        rec.y
+    );
+    config.resolutions = Some(vec![size]);
+}
+
+/// What the controllers are, and the first time each control is used: so
+/// the log of a playtest says whether the controls arrived at all.
+fn report_input(
+    actions: Option<Res<Actions>>,
+    instance: Res<OxrInstance>,
+    session: Res<OxrSession>,
+    players: Query<&RigInput, With<LocalPlayer>>,
+    mut profiles: Local<[String; 2]>,
+    mut seen: Local<std::collections::HashSet<String>>,
+    time: Res<Time>,
+    mut next: Local<f32>,
+) {
+    let Some(a) = actions else {
+        return;
+    };
+    if time.elapsed_secs() >= *next {
+        *next = time.elapsed_secs() + 1.0;
+        for (i, (side, path)) in [("left", a.left), ("right", a.right)]
+            .into_iter()
+            .enumerate()
+        {
+            let now = session
+                .current_interaction_profile(path)
+                .ok()
+                .filter(|p| *p != openxr::Path::NULL)
+                .and_then(|p| instance.path_to_string(p).ok())
+                .unwrap_or_else(|| "none".into());
+            if now != profiles[i] {
+                info!("input: {side} hand profile {now}");
+                profiles[i] = now;
+            }
+        }
+    }
+    let Some(input) = players.iter().next() else {
+        return;
+    };
+    for side in [Side::Left, Side::Right] {
+        let h = input.hand(side);
+        for (name, on) in [
+            ("grip", h.grip > 0.6),
+            ("trigger", h.trigger > 0.6),
+            ("primary", h.primary),
+            ("secondary", h.secondary),
+            ("stick", h.stick.length() > 0.5),
+            ("stick click", h.stick_click),
+        ] {
+            let key = format!("{side:?} {name}");
+            if on && seen.insert(key.clone()) {
+                info!("input: {key} works");
+            }
+        }
     }
 }
 
@@ -121,6 +227,7 @@ fn headset_missing(
 struct Actions {
     set: openxr::ActionSet,
     pose: [openxr::Action<Posef>; 2],
+    aim: [openxr::Action<Posef>; 2],
     grip: openxr::Action<f32>,
     trigger: openxr::Action<f32>,
     primary: openxr::Action<bool>,
@@ -132,9 +239,13 @@ struct Actions {
     right: openxr::Path,
 }
 
-/// A controller's tracked space, child of the tracking root.
+/// A controller's tracked grip space, child of the tracking root.
 #[derive(Component)]
 struct ControllerSpace(Side);
+
+/// A controller's tracked aim space: where it points.
+#[derive(Component)]
+struct AimSpace(Side);
 
 fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
     let make = || -> openxr::Result<Actions> {
@@ -146,6 +257,10 @@ fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
             pose: [
                 set.create_action("left_grip_pose", "Left grip pose", &[])?,
                 set.create_action("right_grip_pose", "Right grip pose", &[])?,
+            ],
+            aim: [
+                set.create_action("left_aim_pose", "Left aim pose", &[])?,
+                set.create_action("right_aim_pose", "Right aim pose", &[])?,
             ],
             grip: set.create_action("grip", "Grab", &both)?,
             trigger: set.create_action("trigger", "Trigger", &both)?,
@@ -181,6 +296,8 @@ fn suggest_bindings(
     };
     let pose_l = a.pose[0].as_raw();
     let pose_r = a.pose[1].as_raw();
+    let aim_l = a.aim[0].as_raw();
+    let aim_r = a.aim[1].as_raw();
     let grip = a.grip.as_raw();
     let trigger = a.trigger.as_raw();
     let primary = a.primary.as_raw();
@@ -195,10 +312,11 @@ fn suggest_bindings(
         "/interaction_profiles/valve/index_controller",
         "/interaction_profiles/microsoft/motion_controller",
         "/interaction_profiles/htc/vive_controller",
-        "/interaction_profiles/khr/simple_controller",
     ] {
         bind(profile, pose_l, &["/user/hand/left/input/grip/pose"]);
         bind(profile, pose_r, &["/user/hand/right/input/grip/pose"]);
+        bind(profile, aim_l, &["/user/hand/left/input/aim/pose"]);
+        bind(profile, aim_r, &["/user/hand/right/input/aim/pose"]);
         bind(
             profile,
             haptic,
@@ -207,27 +325,6 @@ fn suggest_bindings(
                 "/user/hand/right/output/haptic",
             ],
         );
-        if profile.contains("simple") {
-            for action in [grip, trigger] {
-                bind(
-                    profile,
-                    action,
-                    &[
-                        "/user/hand/left/input/select/click",
-                        "/user/hand/right/input/select/click",
-                    ],
-                );
-            }
-            bind(
-                profile,
-                primary,
-                &[
-                    "/user/hand/left/input/menu/click",
-                    "/user/hand/right/input/menu/click",
-                ],
-            );
-            continue;
-        }
         let touchlike = profile.contains("touch") || profile.contains("index");
         if profile.contains("vive") {
             bind(
@@ -410,6 +507,17 @@ fn spawn_controller_spaces(
             }
             Err(e) => error!("could not create {side:?} controller space: {e}"),
         }
+        match session.create_action_space(&a.aim[i], openxr::Path::NULL, Isometry3d::IDENTITY) {
+            Ok(space) => {
+                commands.spawn((
+                    Name::new(format!("{side:?} aim")),
+                    AimSpace(side),
+                    space,
+                    bevy_mod_xr::session::XrTracker,
+                ));
+            }
+            Err(e) => error!("could not create {side:?} aim space: {e}"),
+        }
     }
 }
 
@@ -512,6 +620,7 @@ fn drive_xr_rig(
     session: Res<OxrSession>,
     cameras: Query<&Transform, (With<XrCamera>, Without<LocalPlayer>)>,
     controllers: Query<(&ControllerSpace, &Transform), Without<LocalPlayer>>,
+    aims: Query<(&AimSpace, &Transform), Without<LocalPlayer>>,
     mut players: Query<(&mut RigInput, &mut Transform), With<LocalPlayer>>,
     mut turn: Local<TurnState>,
     comfort: Res<super::comfort::Comfort>,
@@ -532,6 +641,13 @@ fn drive_xr_rig(
     for (space, t) in &controllers {
         let hand = input.hand_mut(space.0);
         hand.pose = *t;
+        // Pointing orientation where the runtime gives one (see the module
+        // doc); an untracked aim (identity) leaves the grip's.
+        if let Some((_, aim)) = aims.iter().find(|(s, _)| s.0 == space.0)
+            && aim.rotation != Quat::IDENTITY
+        {
+            hand.pose.rotation = aim.rotation;
+        }
         hand.tracked = true;
     }
     let read_f = |action: &openxr::Action<f32>, path: openxr::Path| {

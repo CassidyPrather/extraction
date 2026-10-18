@@ -401,6 +401,11 @@ fn spawn_hand_visuals(
     }
 }
 
+/// The glove's mesh and fingers, rolled onto the hand's frame (see
+/// `spawn_hand`).
+#[derive(Component)]
+struct GloveModel;
+
 /// A glove: the palm at the root, joints below it. Without a tracked hand
 /// (the gallery's), it keeps the curl it's given.
 pub(crate) fn spawn_hand(
@@ -419,10 +424,24 @@ pub(crate) fn spawn_hand(
                 side,
                 curl,
             },
-            Mesh3d(palm),
-            MeshMaterial3d(glove.clone()),
             Transform::default(),
             Visibility::default(),
+        ))
+        .id();
+    // The hand's frame points -Z with +Y up (a hand holding a pistol: see
+    // `rig::xr`), so the palm faces inward and the thumb up. The model is
+    // built palm-down and rolled onto its side here; the first real
+    // headset showed the backs of the hands with palms facing each other.
+    let model = commands
+        .spawn((
+            GloveModel,
+            Mesh3d(palm),
+            MeshMaterial3d(glove.clone()),
+            Transform::from_rotation(Quat::from_rotation_z(
+                -std::f32::consts::FRAC_PI_2 * side.sign(),
+            )),
+            Visibility::default(),
+            ChildOf(root),
         ))
         .id();
     // Fingers point along -Z from the palm's front edge and curl toward its
@@ -435,7 +454,7 @@ pub(crate) fn spawn_hand(
             let x = (0.03 - finger as f32 * 0.02) * thumb_side;
             Vec3::new(x, 0.0, -0.048)
         };
-        let mut parent = root;
+        let mut parent = model;
         let mut offset = at;
         for (joint, len) in FINGER_BONES[finger].iter().enumerate() {
             if *len <= 0.0 {
@@ -523,6 +542,7 @@ fn pose_hands(
     bounds: Query<&avian3d::prelude::ColliderAabb>,
     inputs: Query<&RigInput>,
     roots: Query<&ChildOf, With<Finger>>,
+    models: Query<&ChildOf, With<GloveModel>>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -550,6 +570,9 @@ fn pose_hands(
         // Up the chain to the hand this joint belongs to.
         let mut up = parent.parent();
         while let Ok(p) = roots.get(up) {
+            up = p.parent();
+        }
+        if let Ok(p) = models.get(up) {
             up = p.parent();
         }
         let Ok((v, _)) = visuals.get(up) else {

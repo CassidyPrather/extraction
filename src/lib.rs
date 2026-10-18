@@ -166,7 +166,17 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         });
     #[cfg(feature = "xr")]
     if !opts.flat {
-        app.add_plugins(bevy_mod_openxr::add_xr_plugins(defaults));
+        // Named, so the runtime (SteamVR's binding UI, its per-app
+        // resolution) knows the game apart from other Bevy apps.
+        app.add_plugins(bevy_mod_openxr::add_xr_plugins(defaults).set(
+            bevy_mod_openxr::init::OxrInitPlugin {
+                app_info: bevy_mod_openxr::types::AppInfo {
+                    name: "Extraction".into(),
+                    version: bevy_mod_openxr::types::Version(0, 1, 0),
+                },
+                ..default()
+            },
+        ));
         app.add_plugins(rig::xr::XrDriverPlugin);
         app.insert_resource(XrActive);
     } else {

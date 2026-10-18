@@ -3,10 +3,11 @@
 //!
 //! ```ron
 //! (smooth_turn: false, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6,
-//!  narrow_dynamics: false)
+//!  narrow_dynamics: false, render_scale: 0.0)
 //! ```
 //!
-//! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`.
+//! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
+//! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,9 @@ pub struct Comfort {
     pub vignette: f32,
     /// Quiet sounds up and loud ones down (`audio_mix::NARROW`).
     pub narrow_dynamics: bool,
+    /// The eyes' resolution as a share of what the runtime recommends;
+    /// 0 is auto (about 1800 px across an eye). Next launch.
+    pub render_scale: f32,
 }
 
 impl Default for Comfort {
@@ -34,6 +38,7 @@ impl Default for Comfort {
             snap_angle: 30.0,
             vignette: 0.6,
             narrow_dynamics: false,
+            render_scale: 0.0,
         }
     }
 }
@@ -78,6 +83,37 @@ impl Comfort {
             "VIGNETTE\noff".into()
         } else {
             format!("VIGNETTE\n{:.0}%", self.vignette * 100.0)
+        }
+    }
+
+    /// Pixels across an eye that auto aims for: enough for a sharp view on
+    /// a laptop GPU (the playtest's Bigscreen Beyond 2 asked for 2980 and
+    /// ran at 20-30 fps).
+    pub const AUTO_EYE_PX: f32 = 1800.0;
+    pub const RENDER_SCALES: [f32; 6] = [0.0, 0.5, 0.6, 0.7, 0.85, 1.0];
+
+    /// The share of the runtime's `recommended` width to render.
+    pub fn render_scale_for(&self, recommended: u32) -> f32 {
+        if self.render_scale > 0.0 {
+            self.render_scale.clamp(0.3, 1.0)
+        } else {
+            (Self::AUTO_EYE_PX / recommended.max(1) as f32).min(1.0)
+        }
+    }
+
+    pub fn next_render_scale(&mut self) {
+        let now = Self::RENDER_SCALES
+            .iter()
+            .position(|v| (v - self.render_scale).abs() < 0.01);
+        self.render_scale =
+            Self::RENDER_SCALES[now.map_or(0, |i| (i + 1) % Self::RENDER_SCALES.len())];
+    }
+
+    pub fn render_scale_label(&self) -> String {
+        if self.render_scale <= 0.0 {
+            "SHARPNESS\nauto (next launch)".into()
+        } else {
+            format!("SHARPNESS\n{:.0}% (next launch)", self.render_scale * 100.0)
         }
     }
 
@@ -133,6 +169,11 @@ impl Comfort {
                 "--smooth-turn" => c.smooth_turn = true,
                 "--snap-turn" => c.smooth_turn = false,
                 "--narrow-dynamics" => c.narrow_dynamics = true,
+                "--render-scale" => {
+                    if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
+                        c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
+                    }
+                }
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.vignette = v.clamp(0.0, 1.0);
@@ -169,5 +210,10 @@ mod tests {
         c.next_vignette();
         assert_eq!(c.vignette_label(), "VIGNETTE\noff");
         assert_eq!(c.sound_label(), "SOUND\nfull range");
+        // Auto: a 2980-px eye renders at about 60%, a 1800-px one in full.
+        assert!((c.render_scale_for(2980) - 0.604).abs() < 0.01);
+        assert_eq!(c.render_scale_for(1600), 1.0);
+        c.next_render_scale();
+        assert_eq!(c.render_scale_for(2980), 0.5);
     }
 }
