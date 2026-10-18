@@ -149,8 +149,7 @@ impl MaterialLibrary {
             return h.clone();
         }
         let (dir, tile, color, rough) = mat.info();
-        let root =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/textures/materials");
+        let root = crate::asset_root_path().join("textures/materials");
         let textured = dir.is_some_and(|d| root.join(d).join("albedo.ktx2").exists());
         let mut m = StandardMaterial {
             base_color: color,

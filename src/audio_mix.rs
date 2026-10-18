@@ -235,8 +235,7 @@ mod tests {
     /// audio code asks for is in the table.
     #[test]
     fn the_mix_table_is_whole() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/sounds.json");
+        let path = crate::asset_root_path().join("audio/sounds.json");
         let index: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let mut seen = std::collections::HashSet::new();

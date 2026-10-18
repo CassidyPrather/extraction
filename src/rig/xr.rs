@@ -37,6 +37,7 @@ pub struct XrDriverPlugin;
 impl Plugin for XrDriverPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_actions.run_if(session_available))
+            .add_systems(Update, headset_missing)
             .add_systems(OxrSendActionBindings, suggest_bindings)
             .add_systems(
                 XrSessionCreated,
@@ -59,6 +60,61 @@ impl Plugin for XrDriverPlugin {
                     .run_if(openxr_session_running),
             );
     }
+}
+
+/// The headset was asked for and the runtime had none (not connected, or
+/// the machine's active OpenXR runtime isn't the one driving it: a Meta
+/// runtime left active on a SteamVR machine says "not available"). Reopen
+/// once on SteamVR if it's installed and wasn't tried; otherwise say
+/// what to do in the flat window, which is what's left.
+fn headset_missing(
+    mut commands: Commands,
+    state: Option<Res<bevy_mod_xr::session::XrState>>,
+    opts: Res<crate::launch::LaunchOptions>,
+    mut done: Local<bool>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if *done {
+        return;
+    }
+    let Some(state) = state else {
+        return;
+    };
+    *done = true;
+    if let Some(note) = super::runtime::NOTE.get() {
+        info!("{note}");
+    }
+    if *state != bevy_mod_xr::session::XrState::Unavailable {
+        return;
+    }
+    let tooling = opts.screenshot.is_some() || opts.tour.is_some() || opts.bot;
+    let tried = opts.steamvr || std::env::var_os("XR_RUNTIME_JSON").is_some();
+    if !tooling && !tried {
+        if let Some(steamvr) = super::runtime::steamvr_runtime() {
+            warn!(
+                "no headset on the active OpenXR runtime; SteamVR is installed ({}): \
+                 reopening on SteamVR",
+                steamvr.display()
+            );
+            match super::runtime::relaunch_on(&steamvr).and_then(|mut c| c.spawn()) {
+                Ok(_) => {
+                    exit.write(AppExit::Success);
+                    return;
+                }
+                Err(e) => error!("couldn't reopen on SteamVR: {e}"),
+            }
+        }
+    }
+    let msg = if opts.steamvr {
+        "NO HEADSET: SteamVR found none. Is it on and tracking? \
+         Start SteamVR first, then the game. (Or play flat: --flat)"
+    } else {
+        "NO HEADSET: the OpenXR runtime found none. Start your headset's \
+         runtime first; for SteamVR, set it as the OpenXR runtime \
+         (SteamVR settings) or run with --steamvr. (Or play flat: --flat)"
+    };
+    error!("{msg}");
+    commands.insert_resource(super::XrMissing(msg.into()));
 }
 
 #[derive(Resource)]

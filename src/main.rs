@@ -12,6 +12,16 @@ fn main() -> AppExit {
     if let Some(n) = opts.sim {
         return run_sim_batch(&opts, n);
     }
+    // On SteamVR whatever the machine's active OpenXR runtime: run again
+    // with the loader pointed at it, and finish when that run does.
+    if opts.steamvr && !opts.flat && !opts.headless {
+        if let Some(manifest) = extraction::rig::runtime::steamvr_env() {
+            match extraction::rig::runtime::relaunch_on(&manifest).and_then(|mut c| c.status()) {
+                Ok(status) => return AppExit::from_code(status.code().unwrap_or(1) as u8),
+                Err(e) => eprintln!("couldn't start on SteamVR ({e}); using the active runtime"),
+            }
+        }
+    }
     if let Some(dir) = &opts.data_dir {
         extraction::persist::set_data_dir(dir.clone());
     }

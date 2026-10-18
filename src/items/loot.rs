@@ -72,7 +72,7 @@ pub fn roll_zone_loot(world: &mut World) {
     crate::anomaly::roll_artifacts(world);
 }
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/data/loot.ron");
+    let path = crate::asset_root_path().join("data/loot.ron");
     let text = std::fs::read_to_string(path).unwrap_or_else(|_| BUILTIN_LOOT.to_owned());
     let tables = LootTables::from_ron(&text, &catalog).unwrap_or_else(|e| {
         error!("loot.ron: {e}");

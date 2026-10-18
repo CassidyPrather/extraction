@@ -21,7 +21,7 @@ pub struct Catalog(pub Arc<ItemCatalog>);
 
 impl Catalog {
     pub fn load() -> Self {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/data/items.ron");
+        let path = crate::asset_root_path().join("data/items.ron");
         let text = std::fs::read_to_string(&path).unwrap_or_else(|_| BUILTIN_CATALOG.to_owned());
         let catalog = ItemCatalog::from_ron(&text).unwrap_or_else(|e| {
             error!("items.ron: {e}; falling back to the built-in catalog");

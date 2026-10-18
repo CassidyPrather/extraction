@@ -37,6 +37,8 @@ pub struct LaunchOptions {
     pub flat: bool,
     /// In the headset: show the left eye's view in the desktop window.
     pub mirror: bool,
+    /// Use SteamVR's OpenXR runtime, whichever is the machine's active one.
+    pub steamvr: bool,
     /// The profile folder (career, settings, logs) instead of the usual
     /// data folder: a second player, or a test's own.
     pub data_dir: Option<PathBuf>,
@@ -105,6 +107,7 @@ impl Default for LaunchOptions {
         Self {
             flat: false,
             mirror: false,
+            steamvr: false,
             data_dir: None,
             detail: 1.0,
             map: "marrow_creek".into(),
@@ -151,6 +154,7 @@ impl LaunchOptions {
             match a.as_str() {
                 "--flat" => o.flat = true,
                 "--mirror" => o.mirror = true,
+                "--steamvr" => o.steamvr = true,
                 "--data-dir" => o.data_dir = Some(PathBuf::from(val())),
                 "--detail" => o.detail = val().parse::<f32>().unwrap_or(1.0).clamp(0.25, 1.0),
                 "--bot" => o.bot = true,

@@ -16,8 +16,10 @@ playtest: [docs/PLAYTEST.md](docs/PLAYTEST.md).
 ## Playing
 
 ```bash
-cargo run --release            # VR if a runtime is up, otherwise flat
-cargo run --release -- --flat  # always flat
+python scripts/fetch_assets.py    # once: the textures (not in git)
+cargo run --release               # VR if a runtime is up, otherwise flat
+cargo run --release -- --steamvr  # VR through SteamVR, whatever runtime is active
+cargo run --release -- --flat     # always flat
 ```
 
 Flat controls: WASD move, mouse look (click to capture, Esc to release),

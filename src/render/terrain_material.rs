@@ -78,13 +78,10 @@ impl Plugin for TerrainMaterialPlugin {
 const ARRAY_DIR: &str = "textures/terrain";
 
 fn arrays_present() -> bool {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
-    ["albedo", "normal", "arm"].iter().all(|m| {
-        root.join(format!("{ARRAY_DIR}/{m}.ktx2")).exists()
-            || std::path::Path::new("assets")
-                .join(format!("{ARRAY_DIR}/{m}.ktx2"))
-                .exists()
-    })
+    let root = crate::asset_root_path();
+    ["albedo", "normal", "arm"]
+        .iter()
+        .all(|m| root.join(format!("{ARRAY_DIR}/{m}.ktx2")).exists())
 }
 
 pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {

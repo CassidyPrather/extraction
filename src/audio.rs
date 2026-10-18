@@ -126,7 +126,7 @@ impl Plugin for AudioPlugin {
 }
 
 fn load_bank(mut commands: Commands, server: Res<AssetServer>) {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/sounds.json");
+    let path = crate::asset_root_path().join("audio/sounds.json");
     let mut bank = SoundBank::default();
     let Ok(text) = std::fs::read_to_string(&path) else {
         warn!("no assets/audio/sounds.json: running silent (run scripts/fetch_audio.py)");
@@ -1383,8 +1383,7 @@ mod tests {
     /// nothing, silently).
     #[test]
     fn every_valley_sound_exists() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/sounds.json");
+        let path = crate::asset_root_path().join("audio/sounds.json");
         let index: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let mut missing = Vec::new();

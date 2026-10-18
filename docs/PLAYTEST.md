@@ -15,9 +15,21 @@ cargo run --release -- --map cinder_works   # straight into a valley
 ```
 
 Keep a release build: the debug build is far too slow for a headset.
-SteamVR, Meta Link/Air Link (as the OpenXR runtime) and WMR should all be
-picked up; the controller bindings cover Quest Touch (and Touch Plus),
-Index, Vive wands and WMR controllers.
+From a checkout, run `python scripts/fetch_assets.py` once first: the
+textures aren't in git (without them everything is flat colour). The
+packaged zip has them.
+
+**Which headset runtime.** Windows has one *active* OpenXR runtime for
+the whole machine, whichever installed or claimed it last (Meta's often
+lingers after the Oculus app). The game uses that one. On a SteamVR
+setup (Index, Bigscreen Beyond, Vive), start SteamVR first, then either
+make it the active runtime (SteamVR → Settings → OpenXR → "Set SteamVR
+as OpenXR runtime") or launch with `--steamvr`. If the active runtime
+finds no headset and SteamVR is installed, the game reopens itself on
+SteamVR once by itself. A flat window saying **NO HEADSET** means the
+runtime it ended up on found none: is the headset on and tracking?
+Controller bindings cover Index, Quest Touch (and Touch Plus), Vive
+wands and WMR controllers.
 
 Your data folder is `%APPDATA%\extraction` on Windows
 (`~/.local/share/extraction` on Linux). In it:
@@ -232,5 +244,6 @@ whether the ending felt like one.
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
 | `--no-robots` | An empty Zone, for looking around |
+| `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics` | Comfort, without the cards |
 | `--no-record` | Don't record raids |

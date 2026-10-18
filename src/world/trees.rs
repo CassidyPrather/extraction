@@ -160,8 +160,7 @@ fn spawn_forests(
     *done = true;
     let assets = {
         use crate::render::materials::Mat;
-        let foliage_dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/textures/foliage");
+        let foliage_dir = crate::asset_root_path().join("textures/foliage");
         let textured = foliage_dir.join("spruce_branch/albedo.ktx2").exists()
             && foliage_dir.join("birch_leaves/albedo.ktx2").exists();
         let flat_bark = materials.add(StandardMaterial {

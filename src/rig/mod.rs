@@ -10,6 +10,7 @@
 pub mod comfort;
 pub mod flat;
 pub mod haptics;
+pub mod runtime;
 #[cfg(feature = "xr")]
 pub mod xr;
 
@@ -136,6 +137,11 @@ impl Plugin for RigPlugin {
             );
     }
 }
+
+/// The headset was asked for and not found: what to do about it, shown in
+/// the flat window instead of the key hints.
+#[derive(Resource, Clone, Debug)]
+pub struct XrMissing(pub String);
 
 /// Run condition: the flat driver is in charge.
 pub fn flat_driving(driver: Res<RigDriver>) -> bool {

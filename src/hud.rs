@@ -132,6 +132,7 @@ fn update_hud(
     healths: Query<&crate::health::Health>,
     attention: Query<&crate::anomaly::Attention>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
+    missing: Option<Res<crate::rig::XrMissing>>,
     mut help: Local<bool>,
 ) {
     let check = keys.as_ref().is_some_and(|k| k.pressed(KeyCode::KeyH));
@@ -155,6 +156,9 @@ fn update_hud(
     if !check {
         for (msg, _) in raid.log.iter().rev().take(3) {
             lines.push(format!("> {msg}"));
+        }
+        if let Some(m) = &missing {
+            lines.push(m.0.clone());
         }
         lines.push(if *help {
             KEYS.into()

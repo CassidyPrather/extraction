@@ -401,6 +401,10 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
 }
 
 /// The asset root as a path, for checking whether an optional file exists.
+/// Every file the game reads itself (rather than through the asset server)
+/// goes through this: a path baked in at compile time is the build
+/// machine's checkout, which a packaged build's player doesn't have (it
+/// once left the game silent and untextured).
 pub(crate) fn asset_root_path() -> std::path::PathBuf {
     std::path::PathBuf::from(asset_root())
 }
@@ -416,7 +420,8 @@ fn asset_root() -> String {
             }
         }
     }
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    // A checkout: the crate's own assets.
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")) // asset-root
         .join("assets")
         .to_string_lossy()
         .into_owned()
@@ -494,5 +499,40 @@ mod client_tests {
         let mut v: Vec<_> = by.into_iter().collect();
         v.sort_by(|a, b| b.1.cmp(&a.1));
         eprintln!("census by root: {:?}", &v[..v.len().min(12)]);
+    }
+}
+
+#[cfg(test)]
+mod asset_path_tests {
+    /// Game code finds its files through `asset_root_path`, never through
+    /// the build machine's checkout (`CARGO_MANIFEST_DIR`), outside tests
+    /// and the root finder itself.
+    #[test]
+    fn game_code_never_reads_from_the_build_machine() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut bad = Vec::new();
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                // Code after the first test module is test code.
+                let game = text.split("#[cfg(test)]").next().unwrap_or("");
+                for (i, line) in game.lines().enumerate() {
+                    let needle = concat!("env!(\"", "CARGO_MANIFEST_DIR");
+                    if line.contains(needle) && !line.contains("asset-root") {
+                        bad.push(format!("{}:{}", p.display(), i + 1));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "build-machine paths in game code: {bad:#?}");
     }
 }

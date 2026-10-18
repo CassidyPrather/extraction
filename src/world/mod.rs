@@ -73,10 +73,10 @@ impl Zone {
 /// Marrow Creek so tests and odd working directories still get a map.
 fn load_map_def(name: &str) -> MapDef {
     let candidates = [
-        std::path::PathBuf::from(format!("assets/maps/{name}.ron")),
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("assets/maps")
+        crate::asset_root_path()
+            .join("maps")
             .join(format!("{name}.ron")),
+        std::path::PathBuf::from(format!("assets/maps/{name}.ron")),
     ];
     for path in candidates {
         if let Ok(text) = std::fs::read_to_string(&path) {
