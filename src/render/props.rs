@@ -8,7 +8,7 @@ use crate::interact::{Grabbable, GripRole, Hand, Held};
 use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
 use crate::raid::Remains;
 use crate::raid::truck::{Pressable, Stash, TRUCK_PARTS, Truck, WHEELS};
-use crate::render::materials::MaterialLibrary;
+use crate::render::materials::{Mat, MaterialLibrary, metric_box};
 use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
 
 pub struct PropVisualsPlugin;
@@ -280,15 +280,39 @@ fn stash_blockout(
 fn dress_containers(
     mut commands: Commands,
     bags: Query<(Entity, Has<Stash>, Has<Remains>), Added<Backpack>>,
+    crates: Query<Entity, Added<crate::items::loot::SupplyCrate>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
 ) {
+    for e in &crates {
+        let planks = lib.get(Mat::Planks, &server, &mut materials);
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(metric_box(crate::items::loot::SUPPLY_CRATE))),
+            MeshMaterial3d(planks),
+        ));
+    }
     for (e, stash, remains) in &bags {
         if stash {
             models.request(STASH_MODEL, &server);
             commands.entity(e).insert(Undressed(STASH_MODEL));
+            // Its stand, and the shelf the kit sits on in its top.
+            let raise = crate::raid::truck::STASH_RAISE;
+            let timber = lib.get(Mat::Timber, &server, &mut materials);
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(Vec3::new(0.86, raise, 1.16)))),
+                MeshMaterial3d(timber.clone()),
+                Transform::from_xyz(0.0, -0.3 - raise * 0.5, 0.0),
+                ChildOf(e),
+            ));
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(Vec3::new(0.84, 0.02, 1.14)))),
+                MeshMaterial3d(timber),
+                Transform::from_xyz(0.0, 0.0, 0.0),
+                ChildOf(e),
+            ));
         } else if remains {
             let bag = mat(&mut materials, Color::srgb(0.12, 0.13, 0.12), 0.6, 0.0);
             commands.entity(e).insert((

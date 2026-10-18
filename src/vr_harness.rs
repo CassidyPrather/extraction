@@ -667,4 +667,177 @@ mod tests {
         let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
         assert!(drift < 0.05, "shoved {drift:.3} m leaning over a table");
     }
+
+    /// Everything there is to pick up in the yard starts at a standing
+    /// reach: the kit in the truck's crate, on its shelf; the yard's loot
+    /// on crates. Floors are for what you drop. (The first playtest spent
+    /// it sitting on the ground picking things up.)
+    #[test]
+    fn nothing_to_pick_up_starts_on_the_floor() {
+        let dir = std::env::temp_dir().join(format!("extraction-reach-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: crate::camp::TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..90 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let bed = {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>();
+            q.iter(app.world()).next().unwrap().translation().y + crate::raid::truck::FLOOR
+        };
+        let catalog = app.world().resource::<crate::items::Catalog>().0.clone();
+        let mut low = Vec::new();
+        let mut in_crate = 0;
+        let mut q = app.world_mut().query::<(
+            &crate::items::Item,
+            &GlobalTransform,
+            Option<&crate::interact::body::InBackpack>,
+            Option<&crate::interact::InSocket>,
+        )>();
+        for (item, gt, bag, socket) in q.iter(app.world()) {
+            let p = gt.translation();
+            // Artifacts grow out of the ground where it goes wrong: the one
+            // deliberate exception, and the far grab is for them.
+            let def = catalog.get(item.kind());
+            if socket.is_some() || def.category == extraction_core::items::Category::Artifact {
+                continue;
+            }
+            let (floor, what) = if bag.is_some() {
+                in_crate += 1;
+                (bed, "the bed")
+            } else {
+                (zone.ground(p.x, p.z), "the ground")
+            };
+            if p.y - floor < 0.5 {
+                low.push(format!(
+                    "{}: {:.2} m above {what} at {p:.1?}",
+                    def.id,
+                    p.y - floor
+                ));
+            }
+        }
+        // Every station the signs send you to has something on it.
+        let markers: Vec<_> = zone
+            .map
+            .markers
+            .iter()
+            .filter(|m| matches!(m.kind, extraction_core::map::MarkerKind::Loot { .. }))
+            .map(|m| (m.name.clone(), Vec2::new(m.at[0], m.at[1])))
+            .collect();
+        let mut q = app
+            .world_mut()
+            .query_filtered::<&GlobalTransform, With<crate::items::Item>>();
+        let bare: Vec<_> = markers
+            .iter()
+            .filter(|(_, at)| {
+                !q.iter(app.world())
+                    .any(|gt| gt.translation().xz().distance(*at) < 1.0)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !markers.is_empty() && bare.is_empty(),
+            "nothing at {bare:?}"
+        );
+        assert!(in_crate >= 8, "the kit is in the crate ({in_crate} items)");
+        assert!(low.is_empty(), "within a stoop of the floor: {low:#?}");
+    }
+
+    /// Out in the valleys, most of what's lying about is on a table, a
+    /// shelf, a crate or a bench, not at your feet. Floors happen (and the
+    /// far grab is for them), but as the exception.
+    #[test]
+    fn most_loot_in_the_zone_is_off_the_floor() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut report = Vec::new();
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let dir =
+                std::env::temp_dir().join(format!("extraction-loot-{map}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                data_dir: Some(dir.clone()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..90 {
+                app.update();
+            }
+            let (total, low) = app
+                .world_mut()
+                .run_system_once(
+                    |items: Query<
+                        (&crate::items::Item, &GlobalTransform),
+                        (
+                            Without<crate::interact::body::InBackpack>,
+                            Without<crate::interact::InSocket>,
+                            Without<crate::interact::Held>,
+                        ),
+                    >,
+                     catalog: Res<Catalog>,
+                     spatial: SpatialQuery| {
+                        let floor = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+                        let mut low = Vec::new();
+                        let mut total = 0;
+                        for (item, gt) in &items {
+                            let def = catalog.0.get(item.kind());
+                            if def.category == extraction_core::items::Category::Artifact {
+                                continue;
+                            }
+                            total += 1;
+                            let p = gt.translation();
+                            // Where you'd stand to reach it: the lowest
+                            // surface within a stride around it (rays that
+                            // start inside a wall, or drop off a storey,
+                            // say nothing).
+                            let below = (0..8)
+                                .filter_map(|k| {
+                                    let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                                    let from = p + Vec3::new(a.cos() * 0.6, 0.1, a.sin() * 0.6);
+                                    let d = spatial
+                                        .cast_ray(from, Dir3::NEG_Y, 2.1, true, &floor)?
+                                        .distance;
+                                    (d > 0.0).then_some(d - 0.1)
+                                })
+                                .fold(0.0f32, f32::max);
+                            if below < 0.3 {
+                                low.push(format!("{} {below:.2} m up at {p:.1?}", def.id));
+                            }
+                        }
+                        (total, low)
+                    },
+                )
+                .unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            report.push((map, total, low));
+        }
+        for (map, total, low) in &report {
+            eprintln!("{map}: {} of {total} on the floor", low.len());
+            for l in low {
+                eprintln!("  {l}");
+            }
+        }
+        for (map, total, low) in &report {
+            assert!(*total > 20, "{map} has loot ({total})");
+            assert!(
+                low.len() * 8 <= *total,
+                "{map}: {} of {total} things lie on the floor",
+                low.len()
+            );
+        }
+    }
 }

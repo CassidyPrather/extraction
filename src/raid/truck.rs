@@ -230,11 +230,17 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
             carried: false,
             half: Vec3::new(0.45, 0.3, 0.6),
         },
-        Transform::from_xyz(-0.55, FLOOR + 0.35, -1.0),
+        // Up on a stand, the kit on a shelf in its top: waist height for
+        // someone standing in the bed (it sat on the floor; the first
+        // playtest found most things to pick up were on the floor).
+        Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
         Visibility::default(),
         ChildOf(truck),
     ));
 }
+
+/// How high the stash crate's stand lifts it off the bed.
+pub const STASH_RAISE: f32 = 0.3;
 
 /// The local player starts in the truck bed.
 pub(crate) fn start_in_truck(

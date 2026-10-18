@@ -81,6 +81,13 @@ fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     commands.insert_resource(Loot(std::sync::Arc::new(tables)));
 }
 
+/// A crate set down under loot in the open (dressed by `render::props`).
+#[derive(Component)]
+pub struct SupplyCrate;
+
+/// Its size: the lid at a standing reach.
+pub const SUPPLY_CRATE: Vec3 = Vec3::new(0.9, 0.78, 0.6);
+
 fn spawn_marker_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -93,8 +100,30 @@ fn spawn_marker_loot(
         let MarkerKind::Loot { table } = &m.kind else {
             continue;
         };
-        let base = zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * (m.y + 0.1);
-        let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng);
+        let ground = zone.on_ground(m.at[0], m.at[1]);
+        // Loot isn't left on the ground for you to stoop for: a marker in
+        // the open gets a supply crate, and the loot sits on its lid.
+        let base = if m.y < 0.3 {
+            let yaw = (m.at[0] * 0.37 + m.at[1] * 0.11).sin() * 3.0;
+            commands.spawn((
+                Name::new(format!("Supply crate ({})", m.name)),
+                SupplyCrate,
+                Transform::from_translation(ground + Vec3::Y * SUPPLY_CRATE.y * 0.5)
+                    .with_rotation(Quat::from_rotation_y(yaw)),
+                Visibility::default(),
+                avian3d::prelude::RigidBody::Static,
+                avian3d::prelude::Collider::cuboid(SUPPLY_CRATE.x, SUPPLY_CRATE.y, SUPPLY_CRATE.z),
+                avian3d::prelude::CollisionLayers::new(
+                    crate::world::Layer::World,
+                    avian3d::prelude::LayerMask::ALL,
+                ),
+            ));
+            ground + Vec3::Y * (SUPPLY_CRATE.y + 0.06)
+        } else {
+            ground + Vec3::Y * (m.y + 0.1)
+        };
+        // A marker is a place someone meant to leave something: never bare.
+        let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng).max(1);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| loot.0.roll(table, catalog, &mut rng))
             .collect();
@@ -102,7 +131,7 @@ fn spawn_marker_loot(
             let offset = Vec3::new(
                 (i as f32 * 0.37).sin() * 0.25,
                 0.05 * i as f32,
-                (i as f32 * 0.37).cos() * 0.25,
+                (i as f32 * 0.37).cos() * 0.18,
             );
             let e = spawn_item(
                 commands,
@@ -176,8 +205,10 @@ fn spawn_dev_cache(
     zone: Res<Zone>,
     catalog: Res<Catalog>,
     slot: Res<crate::persist::SaveSlot>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
-    if slot.0.is_some() {
+    // (Not in the yard: it has its own kit, in the crate.)
+    if slot.0.is_some() || opts.map == crate::camp::TRAINING_YARD {
         return;
     }
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {

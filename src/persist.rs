@@ -255,6 +255,15 @@ fn load_save(
     mut requests: ResMut<crate::raid::requests::Requests>,
 ) {
     let Some(path) = &slot.0 else {
+        // The yard keeps nothing, but the sign says your kit is in the
+        // crate, so it is (the first playtest found it empty, and a pile of
+        // every gun in the game on the ground instead).
+        if opts.map == crate::camp::TRAINING_YARD && owns_profile(&opts) {
+            commands.insert_resource(Restore {
+                save: fresh_save(&opts.map),
+                zone: false,
+            });
+        }
         return;
     };
     let career = if opts.new_game {
@@ -306,21 +315,21 @@ fn fresh_save(map: &str) -> SaveGame {
         gun: None,
         inserted: Vec::new(),
     };
-    let mut pistol = item("pm_pistol", 0, [0.2, -0.2, -0.4]);
+    let mut pistol = item("pm_pistol", 0, [0.2, 0.05, -0.4]);
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
-    let mut torch = item("flashlight", 0, [0.0, -0.2, 0.2]);
+    let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
     s.stash = vec![
         pistol,
         torch,
-        item("pm_mag", 8, [0.25, -0.2, -0.2]),
-        item("ammo_9x18", 16, [-0.2, -0.2, -0.4]),
-        item("radio", 0, [-0.2, -0.2, 0.0]),
-        item("field_dressing", 0, [0.2, -0.2, 0.3]),
-        item("canned_stew", 0, [-0.25, -0.2, 0.4]),
-        item("cleaning_kit", 0, [0.0, -0.2, -0.1]),
-        item("map_case", 0, [-0.3, -0.25, -0.3]),
-        item("compass", 0, [0.3, -0.25, 0.0]),
+        item("pm_mag", 8, [0.25, 0.05, -0.2]),
+        item("ammo_9x18", 16, [-0.2, 0.05, -0.4]),
+        item("radio", 0, [-0.2, 0.05, 0.0]),
+        item("field_dressing", 0, [0.2, 0.05, 0.3]),
+        item("canned_stew", 0, [-0.25, 0.05, 0.4]),
+        item("cleaning_kit", 0, [0.0, 0.05, -0.1]),
+        item("map_case", 0, [-0.3, 0.05, -0.3]),
+        item("compass", 0, [0.3, 0.05, 0.0]),
     ];
     s
 }
@@ -445,11 +454,16 @@ pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
 }
 
 fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
+    let stash = world.get::<Stash>(bag_e).is_some();
     let Some(mut bag) = world.get_mut::<Backpack>(bag_e) else {
         return;
     };
     bag.contents.push(item);
-    let local = local.clamp(-bag.half, bag.half);
+    let mut local = local.clamp(-bag.half, bag.half);
+    if stash {
+        // On the crate's shelf, not down in its bottom (older saves).
+        local.y = local.y.max(0.05);
+    }
     let vis = if bag.open {
         Visibility::Inherited
     } else {

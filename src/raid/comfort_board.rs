@@ -33,11 +33,12 @@ impl Plugin for ComfortBoardPlugin {
 
 fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     for truck in &trucks {
-        for (card, y) in [
-            (ComfortCard::Turning, 1.62),
-            (ComfortCard::Vignette, 1.44),
-            (ComfortCard::Sound, 1.80),
-            (ComfortCard::Sharpness, 1.98),
+        // Two columns: above 1.9 m the canvas slopes into the canopy.
+        for (card, y, z) in [
+            (ComfortCard::Turning, 1.62, -1.25),
+            (ComfortCard::Vignette, 1.44, -1.25),
+            (ComfortCard::Sound, 1.80, -1.25),
+            (ComfortCard::Sharpness, 1.62, -0.93),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -54,7 +55,7 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
                     style: ScreenStyle::Card,
                 },
                 // Left canvas wall, facing in, toward the front.
-                Transform::from_xyz(-1.12, FLOOR + y, -1.25)
+                Transform::from_xyz(-1.12, FLOOR + y, z)
                     .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
                 Visibility::default(),
                 ChildOf(truck),
