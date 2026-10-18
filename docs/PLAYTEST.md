@@ -65,24 +65,38 @@ the recording up with the logs afterwards:
 Then hand over the recording (or a transcript of it) with the files
 below, and the findings can be pulled out of both together.
 
-## What's new to look at (tonight)
+## What's new to look at (since the first headset session)
 
-Changed since the last read of this guide, and worth a comment each:
+The first session found the controls mostly dead and a lot of stooping.
+What changed, and worth a comment each:
 
-- **The ground.** Rocks and boulders, grass, ferns under the trees,
-  sedge by the water, worn and eroded land, rounded shoulders where a
-  building is cut into a hill. Cinder Works' ground is ash. Mark
-  anything floating, sunk, shiny or repeating.
-- **Wind.** Grass, ferns and the near trees sway; the grass leans away
-  from your legs. Too much? Too little? Does it bother your stomach?
-- **The mix.** Every sound's level was set by measurement rather than
-  by ear (`docs/AUDIO.md`). Listen for anything too loud for what it
-  is, a warning you missed, or the forest vanishing between fights.
-  The **SOUND** card (truck wall, camp board) switches to narrow range:
-  try both, and say which you'd keep and why.
-- **Anomaly hums** now fade in as you approach instead of switching on.
-- **Frame rate** on the new ground: if it stutters, note where. On a
-  slow machine `--detail 0.5` thins rocks and shadows.
+- **Controls.** SteamVR had handed the game a generic "simple
+  controller" profile instead of the Index bindings, so most buttons did
+  nothing. That fallback is gone. The log now names each hand's profile
+  (`input: Right hand profile ...`) and the first use of every control
+  (`input: Right trigger works`): if something's dead, the log says which.
+- **Hands.** The hand points where your hand points, and the gloves sit
+  the right way round. **Grip** takes hold of things (doors, cords,
+  cards too). **Trigger**, with an empty hand, works a slide, bolt or
+  charging handle on the gun in your other hand. The glove glows green
+  and the controller ticks when something's in reach.
+- **Out of reach: point and flick.** Point an empty hand at something up
+  to 5 m off (a green ring shows what), squeeze the grip, flick your hand
+  back: it hops into your hand. Open the hand and it lands at your feet.
+- **Off the floor.** Your kit is in the stash crate, on a stand at
+  waist height. Loot in the open sits on supply crates, and indoors it's on
+  tables, shelves and crates. Floors still happen, as the exception.
+- **The body.** Belt and holster stay at your hip when you bend over;
+  they come down only if you crouch right down. Reach over your
+  shoulder and grip to take the pack off; let go of a thing over your
+  shoulder and it goes in the pack. Your own body no longer shades you.
+- **Magazines** seat when their top meets the well, and the bell cord
+  is easier to catch.
+- **Frame rate.** The Beyond 2 ran at 20-30 fps. The **SHARPNESS** card on
+  the truck wall sets the render scale (auto is about 60% on a Beyond 2;
+  takes effect next launch), as does `--render-scale 0.6`. The log says
+  the size each eye renders at (`eyes: ...`). Tell me how it looks
+  and how it feels.
 
 ## Marks
 
@@ -117,8 +131,9 @@ moment after the game starts; `--camera` puts the view anywhere.
 - The view is in the headset, the right way up, the right scale (the
   cards on the truck bed's walls should be about eye height), and it
   follows your head.
-- Both hands track. Grip picks things up; the index finger follows the
-  trigger.
+- Both hands track and point where your hands point. Grip picks things
+  up; the trigger works slides and bolts (and fires a gun in hand).
+  Point at something far off, squeeze and flick back: it comes to you.
 - Left stick walks (click to sprint), right stick snap-turns (or turns
   smoothly, see Comfort) and, pulled down, crouches.
 - The controllers buzz: grabbing something ticks, a shot kicks the hand
@@ -251,5 +266,6 @@ whether the ending felt like one.
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
+| `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics` | Comfort, without the cards |
 | `--no-record` | Don't record raids |

@@ -26,7 +26,7 @@ impl Plugin for PropVisualsPlugin {
             ),
         )
         .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
-        .add_systems(Update, (tint_gloves, body_casts_no_shadow));
+        .add_systems(Update, (tint_gloves, far_cue, body_casts_no_shadow));
     }
 }
 
@@ -497,6 +497,66 @@ fn tint_gloves(
                 LinearRgba::BLACK
             };
         }
+    }
+}
+
+/// A ring around what an empty hand is pointing at from afar, facing the
+/// hand, in the glove's tint: point, squeeze, flick and it comes to you.
+#[derive(Component)]
+struct FarCue;
+
+fn far_cue(
+    mut commands: Commands,
+    hands: Query<(Entity, &Hand)>,
+    items: Query<(&GlobalTransform, Option<&avian3d::prelude::ColliderAabb>)>,
+    mut cues: Query<(&mut Transform, &mut Visibility), With<FarCue>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<std::collections::HashMap<Entity, Entity>>,
+    time: Res<Time>,
+) {
+    for (hand_e, hand) in &hands {
+        let target = hand.far.and_then(|e| items.get(e).ok());
+        let cue = match made.get(&hand_e) {
+            Some(c) => *c,
+            None if target.is_some() => {
+                let c = commands
+                    .spawn((
+                        Name::new("Far grab cue"),
+                        FarCue,
+                        Mesh3d(meshes.add(Torus::new(0.94, 1.0))),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::srgba(0.3, 0.9, 0.4, 0.5),
+                            emissive: LinearRgba::rgb(0.3, 0.9, 0.4),
+                            unlit: true,
+                            alpha_mode: AlphaMode::Add,
+                            ..default()
+                        })),
+                        bevy::light::NotShadowCaster,
+                        Transform::default(),
+                        Visibility::Hidden,
+                    ))
+                    .id();
+                made.insert(hand_e, c);
+                continue;
+            }
+            None => continue,
+        };
+        let Ok((mut t, mut vis)) = cues.get_mut(cue) else {
+            continue;
+        };
+        let Some((gt, aabb)) = target else {
+            *vis = Visibility::Hidden;
+            continue;
+        };
+        let at = gt.translation();
+        let size = aabb.map_or(0.15, |a| (a.max - a.min).max_element());
+        let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 6.0).sin();
+        t.translation = at;
+        t.rotation =
+            Quat::from_rotation_arc(Vec3::Y, (hand.world.translation - at).normalize_or(Vec3::Y));
+        t.scale = Vec3::splat((size * 0.65 + 0.04).clamp(0.08, 0.6) * pulse);
+        *vis = Visibility::Visible;
     }
 }
 

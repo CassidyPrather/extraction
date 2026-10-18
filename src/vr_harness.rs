@@ -572,6 +572,74 @@ mod tests {
             .expect("a holster")
     }
 
+    /// Something on the ground three metres off: point at it, squeeze,
+    /// flick the hand back, and it's in your hand. Pointing away from it,
+    /// the same flick does nothing.
+    #[test]
+    fn point_and_flick_fetches_it() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let item = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(on_ground(&vr, OPEN.x, OPEN.z - 3.0) + Vec3::Y * 0.1),
+        );
+        vr.step(60);
+        let lying = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(item)
+            .unwrap()
+            .translation();
+        let hand = feet + Vec3::new(0.2, 1.2, -0.3);
+        let flick = |vr: &mut Vr, from: Vec3| {
+            vr.grip(Side::Right, 1.0);
+            vr.step(2);
+            for k in 1..=4 {
+                vr.move_hand(Side::Right, from + Vec3::new(0.0, 0.01, 0.045) * k as f32);
+                vr.step(1);
+            }
+            vr.step(80);
+        };
+
+        // Pointing off to the side: nothing chosen, nothing comes.
+        let away = Quat::from_rotation_arc(Vec3::NEG_Z, (lying - hand + Vec3::X * 2.0).normalize());
+        vr.hand(Side::Right, hand, away, 0.0, 0.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).far, None, "nothing pointed at");
+        flick(&mut vr, hand);
+        let still = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(item)
+            .unwrap()
+            .translation();
+        assert!(
+            still.distance(lying) < 0.05,
+            "it stayed put: {lying} -> {still}"
+        );
+        assert_eq!(vr.hand_state(Side::Right).holding, None);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+
+        // Pointing at it.
+        let at = Quat::from_rotation_arc(Vec3::NEG_Z, (lying - hand).normalize());
+        vr.hand(Side::Right, hand, at, 0.0, 0.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).far, Some(item), "pointed at");
+        flick(&mut vr, hand);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(item),
+            "caught: it's at {}",
+            vr.app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation()
+        );
+    }
+
     /// Bend down to reach your hip: the holster stays at your hip. Crouch
     /// right down: it comes down with you.
     #[test]

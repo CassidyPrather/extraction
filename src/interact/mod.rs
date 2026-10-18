@@ -15,6 +15,7 @@
 //! hand.
 
 pub mod body;
+pub mod far;
 pub mod flat;
 
 use avian3d::prelude::*;
@@ -109,6 +110,10 @@ pub struct Hand {
     /// VR: what the grip would take right now (for the glove's tint and a
     /// tick in the controller).
     pub hover: Option<Entity>,
+    /// VR: what the empty hand points at out of reach (see [`far`]).
+    pub far: Option<Entity>,
+    /// A far grab on its way to this hand, and when it set off.
+    pub pulling: Option<(Entity, f32)>,
     /// World-space velocity, smoothed, for throws.
     pub velocity: Vec3,
     pub angular_velocity: Vec3,
@@ -215,6 +220,11 @@ pub enum InteractEvent {
     Refused {
         item: Entity,
     },
+    /// A far grab set off toward a hand.
+    Pulled {
+        item: Entity,
+        side: Side,
+    },
     /// A pressable (bell pull, button) was grabbed.
     Pressed {
         item: Entity,
@@ -251,7 +261,12 @@ impl Plugin for InteractPlugin {
                 FixedUpdate,
                 (
                     track_hands.in_set(InteractSystems::Track),
-                    (grip_from_input, apply_hand_actions, seat_on_contact)
+                    (
+                        grip_from_input,
+                        far::far_grab,
+                        apply_hand_actions,
+                        seat_on_contact,
+                    )
                         .chain()
                         .in_set(InteractSystems::Grab),
                     follow_hands.in_set(InteractSystems::Follow),

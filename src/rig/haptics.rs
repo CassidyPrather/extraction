@@ -103,6 +103,13 @@ fn hand_haptics(
                     seconds: 0.012,
                 });
             }
+            InteractEvent::Pulled { side, .. } => {
+                out.write(Haptic {
+                    side: *side,
+                    amplitude: 0.3,
+                    seconds: 0.04,
+                });
+            }
             InteractEvent::Pressed { player, .. } if locals.contains(*player) => {
                 // Which hand pressed isn't in the event: both feel the click.
                 for side in [crate::rig::Side::Left, crate::rig::Side::Right] {
