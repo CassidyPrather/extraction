@@ -137,6 +137,12 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
         Grabbable {
             points: vec![GrabPoint::free()],
         },
+        // Reach over either shoulder, anywhere behind the head, and it's
+        // the bag you take (bag space: it rides 0.5 m below the eyes).
+        super::ReachZone {
+            centre: Vec3::new(0.0, 0.32, 0.02),
+            half: Vec3::new(0.42, 0.34, 0.3),
+        },
         Transform::from_translation(BACK),
         Visibility::default(),
         RigidBody::Dynamic,

@@ -25,7 +25,8 @@ impl Plugin for PropVisualsPlugin {
                 dress_capstone,
             ),
         )
-        .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate));
+        .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
+        .add_systems(Update, tint_gloves);
     }
 }
 
@@ -401,6 +402,35 @@ fn spawn_hand_visuals(
     }
 }
 
+/// A glove's own material, tinted while the hand is in reach of something
+/// it could take.
+#[derive(Component)]
+struct GloveMaterial(Handle<StandardMaterial>);
+
+fn tint_gloves(
+    visuals: Query<(&HandVisual, &GloveMaterial)>,
+    hands: Query<&Hand>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lit: Local<std::collections::HashMap<Entity, bool>>,
+) {
+    for (v, glove) in &visuals {
+        let Ok(hand) = hands.get(v.hand) else {
+            continue;
+        };
+        let on = hand.hover.is_some();
+        if lit.insert(v.hand, on) == Some(on) {
+            continue;
+        }
+        if let Some(mut m) = materials.get_mut(&glove.0) {
+            m.emissive = if on {
+                LinearRgba::rgb(0.06, 0.16, 0.08)
+            } else {
+                LinearRgba::BLACK
+            };
+        }
+    }
+}
+
 /// The glove's mesh and fingers, rolled onto the hand's frame (see
 /// `spawn_hand`).
 #[derive(Component)]
@@ -424,6 +454,7 @@ pub(crate) fn spawn_hand(
                 side,
                 curl,
             },
+            GloveMaterial(glove.clone()),
             Transform::default(),
             Visibility::default(),
         ))

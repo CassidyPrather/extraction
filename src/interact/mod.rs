@@ -106,12 +106,24 @@ pub struct Hand {
     /// The handle in `handle` was taken with the trigger: its release ends
     /// it, not the grip's.
     pub handle_by_trigger: bool,
+    /// VR: what the grip would take right now (for the glove's tint and a
+    /// tick in the controller).
+    pub hover: Option<Entity>,
     /// World-space velocity, smoothed, for throws.
     pub velocity: Vec3,
     pub angular_velocity: Vec3,
     last: Option<Transform>,
     /// World pose this tick.
     pub world: Transform,
+}
+
+/// A box (in the item's space) that counts as reaching it: the backpack on
+/// your back is taken by reaching over the shoulder anywhere behind the
+/// head, not by finding its middle with your hand.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ReachZone {
+    pub centre: Vec3,
+    pub half: Vec3,
 }
 
 /// What a socket takes.
@@ -175,6 +187,11 @@ pub enum HandAction {
 /// Something was grabbed or let go, for sounds and haptics.
 #[derive(Message, Clone, Debug)]
 pub enum InteractEvent {
+    /// A hand came within reach of something it could take.
+    Hover {
+        item: Entity,
+        side: Side,
+    },
     Grabbed {
         item: Entity,
         side: Side,
@@ -345,6 +362,21 @@ fn track_hands(
     }
 }
 
+/// What the hand's search sees of each grabbable.
+type GrabTargets<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static GlobalTransform,
+        &'static Grabbable,
+        Option<&'static Held>,
+        Has<ColliderDisabled>,
+        Option<&'static Visibility>,
+        Option<&'static ReachZone>,
+    ),
+>;
+
 /// VR path. The grip takes hold of things (and presses doors, cards,
 /// cords); the trigger works a moving part (bolt, slide, charging handle)
 /// with an empty hand, and lets it go when released. On a hand holding a
@@ -353,27 +385,56 @@ fn track_hands(
 fn grip_from_input(
     players: Query<(Entity, &RigInput, &Children), With<Player>>,
     mut hands: Query<(Entity, &RigHand, &mut Hand)>,
-    grabbables: Query<(
-        Entity,
-        &GlobalTransform,
-        &Grabbable,
-        Option<&Held>,
-        Has<ColliderDisabled>,
-    )>,
+    grabbables: GrabTargets,
     parents: Query<&ChildOf>,
+    torsos: Query<(&GlobalTransform, &ChildOf), With<body::Torso>>,
+    bags: Query<(), With<body::Backpack>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
     spatial: SpatialQuery,
     mut actions: MessageWriter<HandAction>,
+    mut events: MessageWriter<InteractEvent>,
 ) {
     for (player, input, children) in &players {
+        let torso = torsos
+            .iter()
+            .find(|(_, p)| p.parent() == player)
+            .map(|(t, _)| *t);
         for child in children.iter() {
             let Ok((_, rh, mut hand)) = hands.get_mut(child) else {
                 continue;
             };
+            if !input.hand(rh.side).tracked {
+                continue;
+            }
             let grip = input.hand(rh.side).grip;
             let trigger = input.hand(rh.side).trigger;
             let pressed = !hand.grip_down && grip > 0.6;
             let released = hand.grip_down && grip < 0.35;
             let busy = hand.holding.is_some() || hand.supporting.is_some() || hand.handle.is_some();
+            // What the grip would take: the glove tints and the controller
+            // ticks as something comes into reach.
+            let hover = if busy || !locals.contains(player) {
+                None
+            } else {
+                find_grab(
+                    &hand.world,
+                    player,
+                    Reach::Grip,
+                    &grabbables,
+                    &parents,
+                    &spatial,
+                )
+                .map(|(e, _)| e)
+            };
+            if hover != hand.hover {
+                hand.hover = hover;
+                if let Some(item) = hover {
+                    events.write(InteractEvent::Hover {
+                        item,
+                        side: rh.side,
+                    });
+                }
+            }
             if pressed {
                 hand.grip_down = true;
                 if !busy {
@@ -395,6 +456,21 @@ fn grip_from_input(
                 }
             } else if released {
                 hand.grip_down = false;
+                // Let go over the shoulder: into the pack.
+                let over_shoulder = torso.is_some_and(|t| {
+                    let local = t
+                        .affine()
+                        .inverse()
+                        .transform_point3(hand.world.translation);
+                    local.y > 0.05 && local.z > 0.08 && local.x.abs() < 0.45
+                });
+                if over_shoulder && hand.holding.is_some_and(|h| !bags.contains(h)) {
+                    actions.write(HandAction::Stow {
+                        player,
+                        side: rh.side,
+                    });
+                    continue;
+                }
                 // A handle held on the trigger stays held.
                 if !(hand.handle_by_trigger && hand.holding.is_none() && hand.supporting.is_none())
                 {
@@ -459,13 +535,7 @@ fn find_grab(
     hand: &Transform,
     player: Entity,
     reach_for: Reach,
-    grabbables: &Query<(
-        Entity,
-        &GlobalTransform,
-        &Grabbable,
-        Option<&Held>,
-        Has<ColliderDisabled>,
-    )>,
+    grabbables: &GrabTargets,
     parents: &Query<&ChildOf>,
     spatial: &SpatialQuery,
 ) -> Option<(Entity, usize)> {
@@ -497,10 +567,25 @@ fn find_grab(
         }
     }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, held, disabled) in grabbables.iter() {
+    for (e, gt, g, held, disabled, vis, zone) in grabbables.iter() {
         // Moving parts are worked on a gun already in your other hand.
         if reach_for == Reach::Handle && held.is_none_or(|h| h.player != player) {
             continue;
+        }
+        // Out of sight (in a closed bag) is out of reach.
+        if vis == Some(&Visibility::Hidden) {
+            continue;
+        }
+        if let (Some(z), Reach::Grip) = (zone, reach_for) {
+            let local = gt.affine().inverse().transform_point3(hand.translation) - z.centre;
+            if local.abs().cmple(z.half).all() {
+                // Anything you've actually got your hand on comes first.
+                let d = 0.12;
+                if best.is_none_or(|b| d < b.0) {
+                    best = Some((d, e, 0));
+                }
+                continue;
+            }
         }
         for (i, p) in g.points.iter().enumerate() {
             let is_handle = matches!(p.role, GripRole::Handle(_));

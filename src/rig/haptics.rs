@@ -96,6 +96,23 @@ fn hand_haptics(
                     });
                 }
             }
+            InteractEvent::Hover { side, .. } => {
+                out.write(Haptic {
+                    side: *side,
+                    amplitude: 0.08,
+                    seconds: 0.012,
+                });
+            }
+            InteractEvent::Pressed { player, .. } if locals.contains(*player) => {
+                // Which hand pressed isn't in the event: both feel the click.
+                for side in [crate::rig::Side::Left, crate::rig::Side::Right] {
+                    out.write(Haptic {
+                        side,
+                        amplitude: 0.25,
+                        seconds: 0.025,
+                    });
+                }
+            }
             InteractEvent::Refused { item } => {
                 if let Ok(h) = held.get(*item) {
                     if locals.contains(h.player) {

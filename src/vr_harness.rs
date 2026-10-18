@@ -365,4 +365,66 @@ mod tests {
         vr.step(3);
         assert!(vr.pressed().contains(&pull), "the cord answered");
     }
+
+    /// Reach over your shoulder and squeeze: you've got your pack.
+    #[test]
+    fn the_pack_comes_off_over_the_shoulder() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::interact::body::Backpack>>()
+            .iter(vr.app.world())
+            .next()
+            .expect("a backpack");
+        // Over the right shoulder, a hand's width behind the head.
+        let at = feet + Vec3::new(0.15, 1.6, 0.12);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        assert_eq!(
+            vr.hand_state(Side::Right).hover,
+            Some(bag),
+            "the bag is in reach"
+        );
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(bag));
+    }
+
+    /// Something in your hand, over the shoulder, let go: it's put away,
+    /// not dropped.
+    #[test]
+    fn letting_go_over_the_shoulder_puts_it_away() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let at = feet + Vec3::new(0.25, 1.0, -0.4);
+        let item = vr.spawn("field_dressing", Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(item));
+        let shoulder = feet + Vec3::new(0.15, 1.6, 0.12);
+        for i in 0..=10 {
+            vr.move_hand(Side::Right, at.lerp(shoulder, i as f32 / 10.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        let world = vr.app.world();
+        let away = world
+            .get::<crate::interact::body::InBackpack>(item)
+            .is_some()
+            || world.get::<crate::interact::InSocket>(item).is_some();
+        assert!(away, "put away");
+        assert_eq!(vr.hand_state(Side::Right).holding, None);
+    }
 }
