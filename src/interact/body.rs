@@ -22,11 +22,24 @@ use crate::world::Layer;
 /// Inner half-size of the backpack's stowing volume, metres.
 pub const BACKPACK_HALF_EXTENTS: Vec3 = Vec3::new(0.17, 0.24, 0.1);
 
-/// Chest-height anchor that follows the head's position and, lazily, its yaw.
+/// Chest-height anchor for the belt, pouches, holster and pack. It hangs
+/// at the height you stand at (learned from the headset), under your neck,
+/// and turns lazily with your head: bending down to reach your belt
+/// leaves the belt where it is. (It used to hang a fixed distance under
+/// the eyes, so the holster and pockets dropped away from a reaching hand:
+/// the first headset playtest couldn't reach them standing.)
 #[derive(Component)]
 pub struct Torso {
     pub yaw: f32,
+    /// Standing eye height, the tallest the head has lately been.
+    pub standing: f32,
 }
+
+/// How far below the standing eyes the torso anchor rides.
+const CHEST_BELOW_EYES: f32 = 0.38;
+/// How far the head can drop (bending, reaching down) before the body is
+/// taken to be crouching and the anchor follows.
+const BEND: f32 = 0.45;
 
 /// Index of a body socket in the default slot layout (1-9 keys in flat mode).
 #[derive(Component, Clone, Copy, Debug)]
@@ -101,7 +114,10 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
     let torso = commands
         .spawn((
             Name::new("Torso"),
-            Torso { yaw: 0.0 },
+            Torso {
+                yaw: 0.0,
+                standing: 1.65,
+            },
             Transform::from_xyz(0.0, 1.3, 0.0),
             Visibility::default(),
             ChildOf(player),
@@ -223,12 +239,23 @@ fn follow_head(
             } else {
                 0.8
             };
-            torso.yaw += diff * (rate * time.delta_secs()).min(1.0);
-            t.translation = Vec3::new(
-                head.translation.x,
-                head.translation.y - 0.38,
-                head.translation.z,
-            );
+            let dt = time.delta_secs();
+            torso.yaw += diff * (rate * dt).min(1.0);
+            // Standing height: the tallest lately (a headset recentred lower
+            // brings it down a centimetre a minute).
+            torso.standing = torso.standing.max(head.translation.y) - dt * 0.01 / 60.0;
+            let drop = (torso.standing - head.translation.y - BEND).max(0.0);
+            let y = torso.standing - CHEST_BELOW_EYES - drop;
+            // Under the neck (behind and below the eyes), so looking down
+            // doesn't swing the belt forward; eased, so it doesn't jitter.
+            let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
+            let want = Vec3::new(neck.x, y, neck.z);
+            let ease = (12.0 * dt).min(1.0);
+            t.translation = if t.translation.distance(want) > 0.5 {
+                want
+            } else {
+                t.translation.lerp(want, ease)
+            };
             t.rotation = Quat::from_rotation_y(torso.yaw);
         }
     }

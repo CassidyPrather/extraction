@@ -427,4 +427,244 @@ mod tests {
         assert!(away, "put away");
         assert_eq!(vr.hand_state(Side::Right).holding, None);
     }
+
+    /// The steepest walkable open ground near `around`.
+    fn slope_near(vr: &Vr, around: Vec2) -> (Vec2, f32) {
+        let zone = vr.app.world().resource::<crate::world::Zone>();
+        let mut best = (around, 0.0);
+        for i in -20..=20 {
+            for j in -20..=20 {
+                let p = around + Vec2::new(i as f32, j as f32) * 2.0;
+                let s = zone.hm.slope_deg([p.x, p.y]);
+                if s > best.1 && s < 28.0 && zone.hm.road_at([p.x, p.y]).weight == 0 {
+                    best = (p, s);
+                }
+            }
+        }
+        best
+    }
+
+    fn feet(vr: &Vr) -> Vec3 {
+        vr.app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation
+    }
+
+    /// Walk down a hillside with the stick and let go: you stop, and stay
+    /// stopped (the first playtest crept downhill for good).
+    #[test]
+    fn stopping_on_a_slope_stays_put() {
+        let mut vr = Vr::new("marrow_creek");
+        let (at, deg) = slope_near(&vr, Vec2::new(40.0, 280.0));
+        assert!(deg > 8.0, "a slope ({deg} deg)");
+        let n = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .hm
+            .normal([at.x, at.y]);
+        let down = Vec2::new(n[0], n[2]).normalize();
+        let yaw = (-down.x).atan2(-down.y);
+        let g = on_ground(&vr, at.x - down.x * 1.5, at.y - down.y * 1.5);
+        vr.stand(g + Vec3::Y * 0.05, yaw);
+        vr.step(30);
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::Y;
+        vr.step(60);
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::ZERO;
+        vr.step(30);
+        let stopped = feet(&vr);
+        vr.step(240);
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - stopped.x, after.z - stopped.z).length();
+        assert!(drift < 0.03, "crept {drift:.3} m on a {deg:.0} deg slope");
+    }
+
+    /// Walk up a hillside in the room, no stick: the playspace stays where
+    /// it is (being pushed out of the slope shoved it downhill).
+    #[test]
+    fn walking_uphill_in_the_room_keeps_the_playspace() {
+        let mut vr = Vr::new("marrow_creek");
+        let (at, deg) = slope_near(&vr, Vec2::new(40.0, 280.0));
+        assert!(deg > 8.0, "a slope ({deg} deg)");
+        let n = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .hm
+            .normal([at.x, at.y]);
+        let up = -Vec2::new(n[0], n[2]).normalize();
+        let yaw = (-up.x).atan2(-up.y);
+        vr.stand(on_ground(&vr, at.x, at.y) + Vec3::Y * 0.05, yaw);
+        vr.step(30);
+        let before = feet(&vr);
+        // A metre uphill over two seconds (local -Z faces uphill).
+        for i in 0..=120 {
+            vr.head(Vec3::new(0.0, 1.65, -(i as f32) / 120.0));
+            vr.step(1);
+        }
+        vr.step(10);
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
+        assert!(
+            drift < 0.05,
+            "playspace moved {drift:.3} m on a {deg:.0} deg slope"
+        );
+    }
+
+    /// Step up into the back of the truck in the room, no stick: you end up
+    /// standing on its bed.
+    #[test]
+    fn stepping_into_the_truck_in_the_room() {
+        let mut vr = Vr::new("training_yard");
+        let truck = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>();
+            q.iter(vr.app.world())
+                .next()
+                .expect("a truck")
+                .compute_transform()
+        };
+        let behind = truck.transform_point(Vec3::new(0.0, 0.0, 3.0));
+        let ground = on_ground(&vr, behind.x, behind.z);
+        let yaw = truck.rotation.to_euler(EulerRot::YXZ).0;
+        vr.stand(ground + Vec3::Y * 0.05, yaw);
+        vr.step(30);
+        for i in 0..=150 {
+            vr.head(Vec3::new(0.0, 1.65, -1.6 * i as f32 / 150.0));
+            vr.step(1);
+        }
+        vr.step(20);
+        let bed = truck.translation.y + crate::raid::truck::FLOOR;
+        let foot = feet(&vr).y;
+        assert!(
+            (foot - bed).abs() < 0.12,
+            "standing on the bed (feet {foot:.2}, bed {bed:.2})"
+        );
+    }
+
+    fn holster_y(vr: &mut Vr) -> f32 {
+        let mut q = vr.app.world_mut().query::<(
+            &crate::interact::Socket,
+            &crate::interact::SocketOwner,
+            &GlobalTransform,
+        )>();
+        q.iter(vr.app.world())
+            .find(|(s, o, _)| {
+                o.0 == vr.player
+                    && s.kind
+                        == crate::interact::SocketKind::Body(
+                            extraction_core::inventory::SlotKind::Holster,
+                        )
+            })
+            .map(|(_, _, g)| g.translation().y)
+            .expect("a holster")
+    }
+
+    /// Bend down to reach your hip: the holster stays at your hip. Crouch
+    /// right down: it comes down with you.
+    #[test]
+    fn bending_leaves_the_belt_where_it_is() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(60);
+        let standing = holster_y(&mut vr) - feet.y;
+        assert!(
+            (0.75..1.0).contains(&standing),
+            "holster at the hip ({standing:.2} m up)"
+        );
+        // Bending: head 35 cm lower and forward, looking down.
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .head = Transform::from_xyz(0.0, 1.35, -0.2).with_rotation(Quat::from_rotation_x(-0.9));
+        vr.step(30);
+        let bent = holster_y(&mut vr) - feet.y;
+        assert!(
+            (bent - standing).abs() < 0.02,
+            "bending moved it {standing:.2} -> {bent:.2}"
+        );
+        // Crouching: head at 0.95.
+        vr.head(Vec3::new(0.0, 0.95, 0.0));
+        vr.step(30);
+        let crouched = holster_y(&mut vr) - feet.y;
+        assert!(
+            crouched < standing - 0.2,
+            "crouched {standing:.2} -> {crouched:.2}"
+        );
+    }
+
+    /// Stand on a hillside swaying a little, as people do: the playspace
+    /// stays put.
+    #[test]
+    fn swaying_on_a_slope_keeps_the_playspace() {
+        let mut vr = Vr::new("marrow_creek");
+        let (at, deg) = slope_near(&vr, Vec2::new(40.0, 280.0));
+        assert!(deg > 8.0, "a slope ({deg} deg)");
+        vr.stand(on_ground(&vr, at.x, at.y) + Vec3::Y * 0.05, 0.0);
+        vr.step(30);
+        let before = feet(&vr);
+        for i in 0..600 {
+            let t = i as f32 / 60.0;
+            let sway = Vec3::new(
+                0.03 * (t * 6.3).sin(),
+                0.01 * (t * 3.1).sin(),
+                0.04 * (t * 4.1).cos(),
+            );
+            vr.head(Vec3::new(0.0, 1.65, 0.0) + sway);
+            vr.step(1);
+        }
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
+        assert!(
+            drift < 0.05,
+            "playspace moved {drift:.3} m swaying on {deg:.0} deg"
+        );
+    }
+
+    /// Lean over a table to look at what's on it: you aren't shoved back
+    /// from it.
+    #[test]
+    fn leaning_over_a_table_doesnt_shove_you() {
+        let mut vr = Vr::new("training_yard");
+        let feet0 = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet0 + Vec3::Y * 0.05, 0.0);
+        // A table top 0.76 m up, its near edge 0.35 m in front.
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(1.2, 0.04, 0.6),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet0 + Vec3::new(0.0, 0.74, -0.65)),
+        ));
+        vr.step(30);
+        let before = feet(&vr);
+        for i in 0..=60 {
+            let k = i as f32 / 60.0;
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_xyz(0.0, 1.65 - 0.25 * k, -0.4 * k)
+                .with_rotation(Quat::from_rotation_x(-0.8 * k));
+            vr.step(1);
+        }
+        vr.step(60);
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
+        assert!(drift < 0.05, "shoved {drift:.3} m leaning over a table");
+    }
 }

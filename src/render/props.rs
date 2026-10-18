@@ -26,7 +26,7 @@ impl Plugin for PropVisualsPlugin {
             ),
         )
         .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
-        .add_systems(Update, tint_gloves);
+        .add_systems(Update, (tint_gloves, body_casts_no_shadow));
     }
 }
 
@@ -315,6 +315,51 @@ fn dress_containers(
                 Transform::from_xyz(0.0, 0.25, 0.01),
                 ChildOf(e),
             ));
+        }
+    }
+}
+
+/// Put on our own player's body (the pack, the pouches, what's stowed in
+/// them) by this system, so it can take it off again.
+#[derive(Component)]
+struct OnBody;
+
+/// What rides on your own body casts no shadow: without a body to go with
+/// it, the first playtest saw a floating box (the pack) and hands in the
+/// sun's shadow on the ground. Hands still cast theirs.
+fn body_casts_no_shadow(
+    mut commands: Commands,
+    torsos: Query<(Entity, &ChildOf), With<crate::interact::body::Torso>>,
+    locals: Query<(), With<LocalPlayer>>,
+    children: Query<&Children>,
+    meshes: Query<(), (With<Mesh3d>, Without<OnBody>)>,
+    marked: Query<Entity, With<OnBody>>,
+    time: Res<Time>,
+    mut next: Local<f32>,
+) {
+    if time.elapsed_secs() < *next {
+        return;
+    }
+    *next = time.elapsed_secs() + 0.25;
+    let mut on = std::collections::HashSet::new();
+    for (torso, parent) in &torsos {
+        if !locals.contains(parent.parent()) {
+            continue;
+        }
+        for e in children.iter_descendants(torso) {
+            on.insert(e);
+            if meshes.contains(e) {
+                commands
+                    .entity(e)
+                    .try_insert((OnBody, bevy::light::NotShadowCaster));
+            }
+        }
+    }
+    for e in &marked {
+        if !on.contains(&e) {
+            commands
+                .entity(e)
+                .try_remove::<(OnBody, bevy::light::NotShadowCaster)>();
         }
     }
 }

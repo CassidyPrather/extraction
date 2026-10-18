@@ -390,6 +390,7 @@ fn grip_from_input(
     torsos: Query<(&GlobalTransform, &ChildOf), With<body::Torso>>,
     bags: Query<(), With<body::Backpack>>,
     locals: Query<(), With<crate::rig::LocalPlayer>>,
+    driver: Res<crate::rig::RigDriver>,
     spatial: SpatialQuery,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
@@ -413,13 +414,14 @@ fn grip_from_input(
             let busy = hand.holding.is_some() || hand.supporting.is_some() || hand.handle.is_some();
             // What the grip would take: the glove tints and the controller
             // ticks as something comes into reach.
-            let hover = if busy || !locals.contains(player) {
+            let hover = if busy || !locals.contains(player) || *driver != crate::rig::RigDriver::Xr
+            {
                 None
             } else {
                 find_grab(
                     &hand.world,
                     player,
-                    Reach::Grip,
+                    Reach::Hover,
                     &grabbables,
                     &parents,
                     &spatial,
@@ -456,13 +458,14 @@ fn grip_from_input(
                 }
             } else if released {
                 hand.grip_down = false;
-                // Let go over the shoulder: into the pack.
+                // Let go over the shoulder (above it, behind the neck): into
+                // the pack.
                 let over_shoulder = torso.is_some_and(|t| {
                     let local = t
                         .affine()
                         .inverse()
                         .transform_point3(hand.world.translation);
-                    local.y > 0.05 && local.z > 0.08 && local.x.abs() < 0.45
+                    local.y > 0.05 && local.z > 0.0 && local.x.abs() < 0.45
                 });
                 if over_shoulder && hand.holding.is_some_and(|h| !bags.contains(h)) {
                     actions.write(HandAction::Stow {
@@ -526,6 +529,9 @@ fn grip_from_input(
 pub(crate) enum Reach {
     Grip,
     Handle,
+    /// What the grip would take, asked every tick: items only (a door's
+    /// leaf is found when you actually squeeze).
+    Hover,
 }
 
 /// Nearest grab point in reach of a hand. Points with a radius must be
@@ -576,7 +582,15 @@ fn find_grab(
         if vis == Some(&Visibility::Hidden) {
             continue;
         }
-        if let (Some(z), Reach::Grip) = (zone, reach_for) {
+        // Nothing reaches more than an arm's length past its own middle
+        // (a rifle's grips, the pack's zone): cull the rest before looking
+        // at points. This runs every tick for each hand.
+        // (Touching it counts whatever its size: a door's middle is its hinge.)
+        if gt.translation().distance_squared(hand.translation) > 1.2 * 1.2 && !touching.contains(&e)
+        {
+            continue;
+        }
+        if let (Some(z), Reach::Grip | Reach::Hover) = (zone, reach_for) {
             let local = gt.affine().inverse().transform_point3(hand.translation) - z.centre;
             if local.abs().cmple(z.half).all() {
                 // Anything you've actually got your hand on comes first.
