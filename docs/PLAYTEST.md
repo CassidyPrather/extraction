@@ -45,6 +45,12 @@ Your data folder is `%APPDATA%\extraction` on Windows
 
 ## Recording a session
 
+In the headset the game's own window stays grey: it draws nothing
+unless you start with `--mirror`, which renders the left eye a third
+time (a real cost on a laptop GPU). To record, capture SteamVR's mirror
+instead (SteamVR menu → Display VR View, then an OBS window capture of
+it): it shows what the headset already has, for free.
+
 If you record video and talk over it, two habits make it easy to line
 the recording up with the logs afterwards:
 
