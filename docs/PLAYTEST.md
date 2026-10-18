@@ -95,7 +95,9 @@ What changed, and worth a comment each:
 - **Frame rate.** The Beyond 2 ran at 20-30 fps. The **SHARPNESS** card on
   the truck wall sets the render scale (auto is about 60% on a Beyond 2;
   takes effect next launch), as does `--render-scale 0.6`. The log says
-  the size each eye renders at (`eyes: ...`). Tell me how it looks
+  the size each eye renders at (`eyes: ...`), and every ten seconds,
+  next to the frame times, where the GPU's time went (`gpu: ... ms a
+  frame (main_opaque_pass_3d ..., shadows ...)`). Tell me how it looks
   and how it feels.
 
 ## Marks

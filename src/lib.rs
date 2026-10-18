@@ -115,12 +115,17 @@ impl Plugin for ClientPlugin {
 fn log_frame_times(
     time: Res<Time<Real>>,
     raid: Option<Res<raid::Raid>>,
+    store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
     mut frames: Local<Vec<f32>>,
     mut since: Local<f32>,
+    mut gpu: Local<GpuPasses>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
         return;
+    }
+    if let Some(store) = &store {
+        gpu.collect(store);
     }
     frames.push(dt * 1000.0);
     *since += dt;
@@ -138,6 +143,64 @@ fn log_frame_times(
         "frames: {} in 10 s, mean {mean:.1} ms, 1% {p99:.1} ms, worst {worst:.1} ms ({phase})",
         f.len()
     );
+    if let Some(line) = gpu.report(f.len()) {
+        info!("{line}");
+    }
+}
+
+/// GPU time per render pass (both eyes together), from the render
+/// diagnostics' timestamp queries, summed between reports. Where a
+/// headset's frame goes when the frame rate is the GPU's fault.
+#[derive(Default)]
+struct GpuPasses {
+    ms: std::collections::HashMap<String, f64>,
+    seen: Option<std::time::Instant>,
+}
+
+impl GpuPasses {
+    fn collect(&mut self, store: &bevy::diagnostic::DiagnosticsStore) {
+        let mut newest = self.seen;
+        for d in store.iter() {
+            let path = d.path().as_str();
+            let Some(pass) = path
+                .strip_prefix("render/")
+                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+            else {
+                continue;
+            };
+            for m in d.measurements() {
+                if self.seen.is_some_and(|s| m.time <= s) {
+                    continue;
+                }
+                *self.ms.entry(pass.to_string()).or_default() += m.value;
+                newest = newest.max(Some(m.time));
+            }
+        }
+        self.seen = newest;
+    }
+
+    /// "gpu: 9.8 ms a frame (main_opaque_pass_3d 5.1, shadows 2.2, ...)",
+    /// per frame over `frames` frames; top-level passes make the total.
+    fn report(&mut self, frames: usize) -> Option<String> {
+        let ms = std::mem::take(&mut self.ms);
+        if ms.is_empty() || frames == 0 {
+            return None;
+        }
+        let per = |v: f64| v / frames as f64;
+        let total: f64 = ms
+            .iter()
+            .filter(|(k, _)| !k.contains('/'))
+            .map(|(_, v)| per(*v))
+            .sum();
+        let mut passes: Vec<_> = ms.into_iter().map(|(k, v)| (k, per(v))).collect();
+        passes.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let top: Vec<_> = passes
+            .iter()
+            .take(6)
+            .map(|(k, v)| format!("{k} {v:.1}"))
+            .collect();
+        Some(format!("gpu: {total:.1} ms a frame ({})", top.join(", ")))
+    }
 }
 
 /// Builds and runs the client (or, with `--headless`, the bare simulation).
@@ -193,6 +256,9 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     if opts.screenshot.is_none() {
         app.add_plugins(audio::AudioPlugin);
     }
+    // GPU time per render pass for the session log (`log_frame_times`):
+    // the headset's device has timestamp queries; elsewhere it's a no-op.
+    app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
     app.insert_resource(opts)
         .insert_resource(Time::<Fixed>::from_hz(90.0))
         .add_plugins(PhysicsPlugins::default())
