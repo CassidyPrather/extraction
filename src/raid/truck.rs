@@ -40,7 +40,7 @@ impl Truck {
 }
 
 /// Something you grab to *do* something rather than pick it up.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pressable {
     /// Tell the driver to go.
     BellPull,
@@ -207,7 +207,9 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
             Grabbable {
                 points: vec![GrabPoint::free()],
             },
-            Collider::cuboid(0.06, 0.25, 0.06),
+            // The whole rope down to its wooden toggle (drawn 0.26 below
+            // the middle), which is where a hand takes it.
+            Collider::cuboid(0.08, 0.62, 0.08),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
             Transform::from_xyz(0.7, FLOOR + 1.6, -1.7),
             Visibility::default(),

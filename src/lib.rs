@@ -28,6 +28,8 @@ pub mod rig;
 pub mod robots;
 pub mod sim;
 pub mod tour;
+#[cfg(test)]
+mod vr_harness;
 pub mod weapons;
 pub mod world;
 

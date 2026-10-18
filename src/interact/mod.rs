@@ -92,7 +92,7 @@ pub struct Supported {
 }
 
 /// Per-hand state, on the rig hand entity.
-#[derive(Component, Default, Debug)]
+#[derive(Component, Default, Debug, Clone)]
 pub struct Hand {
     pub holding: Option<Entity>,
     pub supporting: Option<Entity>,
@@ -101,6 +101,11 @@ pub struct Hand {
     /// Hand pose when the handle was grabbed, in the item's space.
     pub handle_origin: Vec3,
     pub grip_down: bool,
+    /// VR: the trigger is down (handles are worked with the trigger).
+    pub trigger_down: bool,
+    /// The handle in `handle` was taken with the trigger: its release ends
+    /// it, not the grip's.
+    pub handle_by_trigger: bool,
     /// World-space velocity, smoothed, for throws.
     pub velocity: Vec3,
     pub angular_velocity: Vec3,
@@ -229,13 +234,82 @@ impl Plugin for InteractPlugin {
                 FixedUpdate,
                 (
                     track_hands.in_set(InteractSystems::Track),
-                    (grip_from_input, apply_hand_actions)
+                    (grip_from_input, apply_hand_actions, seat_on_contact)
                         .chain()
                         .in_set(InteractSystems::Grab),
                     follow_hands.in_set(InteractSystems::Follow),
                 ),
             )
+            .add_observer(held_layers)
+            .add_observer(unheld_layers)
             .add_plugins(body::BodyPlugin);
+    }
+}
+
+/// What a free item collides with, and what one in a hand does: things in
+/// your hands pass through each other (a magazine has to go up inside the
+/// gun in your other hand; the first headset playtest found the gun's box
+/// keeping it out), still meeting the world and robots.
+const LOOSE: [Layer; 3] = [Layer::World, Layer::Item, Layer::Robot];
+const IN_HAND: [Layer; 2] = [Layer::World, Layer::Robot];
+
+fn held_layers(add: On<Add, Held>, mut commands: Commands) {
+    commands
+        .entity(add.entity)
+        .try_insert(CollisionLayers::new(Layer::Item, IN_HAND));
+}
+
+/// Back to colliding with items once let go, unless whatever took it from
+/// the hand (the bag, a socket) set its own layers meanwhile.
+fn unheld_layers(remove: On<Remove, Held>, mut commands: Commands) {
+    let e = remove.entity;
+    commands.queue(move |world: &mut World| {
+        let held = CollisionLayers::new(Layer::Item, IN_HAND);
+        if let Ok(mut ent) = world.get_entity_mut(e)
+            && ent.get::<Held>().is_none()
+            && ent.get::<CollisionLayers>() == Some(&held)
+        {
+            ent.insert(CollisionLayers::new(Layer::Item, LOOSE));
+        }
+    });
+}
+
+/// A magazine brought up into the well of the gun in your other hand seats
+/// as it arrives: in a headset you don't let go of it first.
+fn seat_on_contact(
+    mut commands: Commands,
+    mut hands: Query<(Entity, &RigHand, &mut Hand)>,
+    mags: Query<(Entity, &Held, &GlobalTransform, &crate::weapons::Mag)>,
+    mut sockets: Query<(Entity, &mut Socket, &GlobalTransform, &SocketOwner)>,
+    held: Query<&Held>,
+    mut events: MessageWriter<InteractEvent>,
+) {
+    for (mag_e, h, gt, mag) in &mags {
+        let top = gt.transform_point(Vec3::Y * mag.height * 0.5);
+        for (socket_e, mut socket, sgt, owner) in &mut sockets {
+            let SocketKind::MagWell(family) = &socket.kind else {
+                continue;
+            };
+            if socket.occupant.is_some()
+                || *family != mag.family
+                || owner.0 == mag_e
+                || held.get(owner.0).map_or(true, |g| g.player != h.player)
+            {
+                continue;
+            }
+            if top.distance(sgt.translation()) > 0.045 {
+                continue;
+            }
+            if let Ok((_, _, mut hand)) = hands.get_mut(h.hand) {
+                hand.holding = None;
+            }
+            seat_in_socket(&mut commands, mag_e, socket_e, &mut socket);
+            events.write(InteractEvent::Socketed {
+                item: mag_e,
+                socket: socket_e,
+            });
+            break;
+        }
     }
 }
 
@@ -271,8 +345,11 @@ fn track_hands(
     }
 }
 
-/// VR path: grip presses become grabs of whatever is in reach, releases
-/// become drops or socketings.
+/// VR path. The grip takes hold of things (and presses doors, cards,
+/// cords); the trigger works a moving part (bolt, slide, charging handle)
+/// with an empty hand, and lets it go when released. On a hand holding a
+/// gun the trigger fires instead (`weapons`). Releases become drops or
+/// socketings.
 fn grip_from_input(
     players: Query<(Entity, &RigInput, &Children), With<Player>>,
     mut hands: Query<(Entity, &RigHand, &mut Hand)>,
@@ -283,6 +360,7 @@ fn grip_from_input(
         Option<&Held>,
         Has<ColliderDisabled>,
     )>,
+    parents: Query<&ChildOf>,
     spatial: SpatialQuery,
     mut actions: MessageWriter<HandAction>,
 ) {
@@ -292,16 +370,21 @@ fn grip_from_input(
                 continue;
             };
             let grip = input.hand(rh.side).grip;
+            let trigger = input.hand(rh.side).trigger;
             let pressed = !hand.grip_down && grip > 0.6;
             let released = hand.grip_down && grip < 0.35;
+            let busy = hand.holding.is_some() || hand.supporting.is_some() || hand.handle.is_some();
             if pressed {
                 hand.grip_down = true;
-                let busy =
-                    hand.holding.is_some() || hand.supporting.is_some() || hand.handle.is_some();
                 if !busy {
-                    if let Some((item, point)) =
-                        find_grab(&hand.world, player, &grabbables, &spatial)
-                    {
+                    if let Some((item, point)) = find_grab(
+                        &hand.world,
+                        player,
+                        Reach::Grip,
+                        &grabbables,
+                        &parents,
+                        &spatial,
+                    ) {
                         actions.write(HandAction::Grab {
                             player,
                             side: rh.side,
@@ -312,21 +395,70 @@ fn grip_from_input(
                 }
             } else if released {
                 hand.grip_down = false;
-                actions.write(HandAction::Release {
-                    player,
-                    side: rh.side,
-                    throw: 0.0,
-                });
+                // A handle held on the trigger stays held.
+                if !(hand.handle_by_trigger && hand.holding.is_none() && hand.supporting.is_none())
+                {
+                    actions.write(HandAction::Release {
+                        player,
+                        side: rh.side,
+                        throw: 0.0,
+                    });
+                }
+            }
+            let t_pressed = !hand.trigger_down && trigger > 0.6;
+            let t_released = hand.trigger_down && trigger < 0.35;
+            if t_pressed {
+                hand.trigger_down = true;
+                if !busy {
+                    if let Some((item, point)) = find_grab(
+                        &hand.world,
+                        player,
+                        Reach::Handle,
+                        &grabbables,
+                        &parents,
+                        &spatial,
+                    ) {
+                        hand.handle_by_trigger = true;
+                        actions.write(HandAction::Grab {
+                            player,
+                            side: rh.side,
+                            item,
+                            point: Some(point),
+                        });
+                    }
+                }
+            } else if t_released {
+                hand.trigger_down = false;
+                if hand.handle_by_trigger {
+                    hand.handle_by_trigger = false;
+                    if hand.holding.is_none() && hand.supporting.is_none() {
+                        actions.write(HandAction::Release {
+                            player,
+                            side: rh.side,
+                            throw: 0.0,
+                        });
+                    }
+                }
             }
         }
     }
 }
 
+/// What a hand reaches for: things to hold (grip), or moving parts to work
+/// (trigger).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reach {
+    Grip,
+    Handle,
+}
+
 /// Nearest grab point in reach of a hand. Points with a radius must be
-/// within it; free items are found by touching their collider.
+/// within it; free items are found by touching their collider, or a
+/// collider of theirs on a child (doors: the leaf is the world's).
 fn find_grab(
     hand: &Transform,
-    _player: Entity,
+    player: Entity,
+    reach_for: Reach,
     grabbables: &Query<(
         Entity,
         &GlobalTransform,
@@ -334,18 +466,47 @@ fn find_grab(
         Option<&Held>,
         Has<ColliderDisabled>,
     )>,
+    parents: &Query<&ChildOf>,
     spatial: &SpatialQuery,
 ) -> Option<(Entity, usize)> {
     let reach = Collider::sphere(0.07);
-    let touching = spatial.shape_intersections(
+    let mut touching = spatial.shape_intersections(
         &reach,
         hand.translation,
         Quat::IDENTITY,
         &SpatialQueryFilter::from_mask([Layer::Item]),
     );
+    if reach_for == Reach::Grip {
+        for hit in spatial.shape_intersections(
+            &reach,
+            hand.translation,
+            Quat::IDENTITY,
+            &SpatialQueryFilter::from_mask([Layer::World]),
+        ) {
+            let mut up = hit;
+            for _ in 0..4 {
+                if grabbables.contains(up) {
+                    touching.push(up);
+                    break;
+                }
+                let Ok(p) = parents.get(up) else {
+                    break;
+                };
+                up = p.parent();
+            }
+        }
+    }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, _held, disabled) in grabbables.iter() {
+    for (e, gt, g, held, disabled) in grabbables.iter() {
+        // Moving parts are worked on a gun already in your other hand.
+        if reach_for == Reach::Handle && held.is_none_or(|h| h.player != player) {
+            continue;
+        }
         for (i, p) in g.points.iter().enumerate() {
+            let is_handle = matches!(p.role, GripRole::Handle(_));
+            if is_handle != (reach_for == Reach::Handle) {
+                continue;
+            }
             let d = if p.role == GripRole::Free {
                 // Socketed and stowed things have no live collider: reach for their middle.
                 if disabled {
@@ -527,6 +688,7 @@ fn apply_hand_actions(
                     continue;
                 };
                 hand.handle = None;
+                hand.handle_by_trigger = false;
                 if let Some(item) = hand.supporting.take() {
                     commands.entity(item).remove::<Supported>();
                 }
