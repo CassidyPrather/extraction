@@ -72,6 +72,9 @@ pub struct SkyParams {
     pub horizon: Vec4,
     pub zenith: Vec4,
     pub sun_dir: Vec4,
+    /// x: how heavy the deck is (0 broken and high, 1 the reference
+    /// overcast, more is lower and darker), y: how much scud runs under it.
+    pub cloud: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -112,6 +115,7 @@ fn spawn_sky(
                 horizon: to_vec4(weather.horizon),
                 zenith: to_vec4(weather.zenith),
                 sun_dir: (-weather.sun_dir).extend(1.0),
+                cloud: Vec4::new(1.0, 1.0, 0.0, 0.0),
             },
         })),
         Transform::IDENTITY,
@@ -331,6 +335,12 @@ fn apply_weather(
             let z = weather.zenith.to_linear();
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
+            mat.params.cloud = match conditions.kind {
+                super::weather::WeatherKind::Downpour => Vec4::new(1.35, 1.6, 0.0, 0.0),
+                super::weather::WeatherKind::PeaSouper => Vec4::new(1.1, 0.3, 0.0, 0.0),
+                super::weather::WeatherKind::Clearing => Vec4::new(0.45, 0.5, 0.0, 0.0),
+                super::weather::WeatherKind::Drizzle => Vec4::new(1.0, 1.0, 0.0, 0.0),
+            };
         }
     }
 }

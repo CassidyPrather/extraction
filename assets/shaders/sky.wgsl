@@ -14,6 +14,8 @@ struct SkyParams {
     horizon: vec4<f32>,
     zenith: vec4<f32>,
     sun_dir: vec4<f32>,
+    // x: deck heaviness (1 the reference overcast), y: scud amount.
+    cloud: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> sky: SkyParams;
@@ -73,15 +75,20 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     ) - 0.5;
     let n = fbm2(plane * 1.1 + drift + warp * 1.2, detail);
     // Overcast: mostly cloud, the seams are where it thins.
-    let belly = smoothstep(0.42, 0.66, n);
-    let seam = 1.0 - smoothstep(0.3, 0.48, n);
-    col = col * mix(1.06, 0.7, belly * mix(0.5, 1.0, detail));
-    col = col + horizon * 0.2 * seam * detail;
+    // Heavier weather closes the seams and darkens the bellies; a clearing
+    // breaks the deck up into paler cloud with wide gaps.
+    let heavy = sky.cloud.x;
+    let shift = (heavy - 1.0) * 0.3;
+    let belly = smoothstep(0.42 - shift, 0.66 - shift, n);
+    let seam = 1.0 - smoothstep(0.3 - shift, 0.48 - shift, n);
+    let dark = clamp(0.7 - (heavy - 1.0) * 0.25, 0.5, 0.92);
+    col = col * mix(1.06, dark, belly * mix(0.5, 1.0, detail));
+    col = col + horizon * 0.2 * seam * detail * clamp(2.0 - heavy, 0.3, 1.6);
 
     // Scud: ragged low cloud, darker, moving faster and the other way.
     let scud_p = plane * 2.2 + vec2<f32>(-time * 0.011, time * 0.006);
     let scud = smoothstep(0.55, 0.8, fbm2(scud_p, detail * detail));
-    col = mix(col, zenith * 0.78, scud * 0.4 * detail);
+    col = mix(col, zenith * 0.78, clamp(scud * 0.4 * sky.cloud.y, 0.0, 0.8) * detail);
 
     // The sun, smeared through the deck (w: how much gets through).
     let s = max(dot(dir, normalize(sky.sun_dir.xyz)), 0.0);
