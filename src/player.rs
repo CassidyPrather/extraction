@@ -181,6 +181,7 @@ pub fn move_bodies(
         // Room-scale: you stand where your feet are (under your head,
         // unless you're leaning). The capsule goes there, and moves from
         // there.
+        let feet_before = body.feet;
         let feet_local = follow_feet(&mut body, &input.head, dt);
         let under = root.rotation * Vec3::new(feet_local.x, 0.0, feet_local.y);
         for c in &own {
@@ -267,8 +268,45 @@ pub fn move_bodies(
 
         root.rotate_y(input.turn);
         let under = root.rotation * Vec3::new(feet_local.x, 0.0, feet_local.y);
+        let under_before = feet_before.map_or(under, |f| root.rotation * Vec3::new(f.x, 0.0, f.y));
 
-        let centre = root.translation + under + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        // Room-scale: where the feet walked in the room, the capsule walks
+        // too (stepping up a step, stopping at a wall) rather than
+        // appearing there. (Appearing inside a step's box, it was pushed
+        // back out: walking up a house's steps in the room pushed the room
+        // away instead.)
+        let mut centre = root.translation + under_before + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        let walked = under - under_before;
+        if !climbing && walked.length_squared() > 1e-8 {
+            let out = move_and_slide.move_and_slide(
+                &shape,
+                centre,
+                Quat::IDENTITY,
+                walked / dt.max(1e-4),
+                time.delta(),
+                &config,
+                &filter,
+                |_| MoveAndSlideHitResponse::Accept,
+            );
+            centre = match walk_over(&move_and_slide, &shape, centre, walked, &filter) {
+                // Ground you can stand on (level, a slope): exactly where
+                // the feet went.
+                Some(on) => on,
+                // A step's edge or a wall: slide, and step up if it's a
+                // step.
+                None => {
+                    let mut reached = out.position;
+                    let got = Vec3::new(reached.x - centre.x, 0.0, reached.z - centre.z);
+                    if got.length() < walked.length() * 0.5 {
+                        let up = centre + Vec3::Y * STEP_HEIGHT;
+                        if let Some(s) = try_step(&move_and_slide, &shape, up, walked, &filter) {
+                            reached = s;
+                        }
+                    }
+                    reached
+                }
+            };
+        }
         let mut grounded = false;
         let out = move_and_slide.move_and_slide(
             &shape,
@@ -440,6 +478,40 @@ pub fn standing_at(root: &GlobalTransform, input: &RigInput) -> Vec3 {
         0.0,
         input.head.translation.z,
     ))
+}
+
+/// Room-scale walking: up a step's height, across by exactly what the feet
+/// walked, and down onto ground you can stand on (level or a slope). None
+/// when something is in the way or it lands on an edge (a step's: the
+/// caller steps up onto it) or the ground falls away further than a step.
+fn walk_over(
+    ms: &MoveAndSlide,
+    shape: &Collider,
+    centre: Vec3,
+    delta: Vec3,
+    filter: &SpatialQueryFilter,
+) -> Option<Vec3> {
+    let dir = Dir3::new(delta).ok()?;
+    let cast = |from: Vec3, dir: Dir3, d: f32| {
+        ms.spatial_query.cast_shape(
+            shape,
+            from,
+            Quat::IDENTITY,
+            dir,
+            &ShapeCastConfig::from_max_distance(d),
+            filter,
+        )
+    };
+    if cast(centre, Dir3::Y, STEP_HEIGHT).is_some() {
+        return None;
+    }
+    let raised = centre + Vec3::Y * STEP_HEIGHT;
+    if cast(raised, dir, delta.length()).is_some() {
+        return None;
+    }
+    let across = raised + delta;
+    let hit = cast(across, Dir3::NEG_Y, STEP_HEIGHT * 2.0)?;
+    (hit.normal1.y > 0.65).then(|| across - Vec3::Y * (hit.distance - 0.005).max(0.0))
 }
 
 fn try_step(

@@ -903,6 +903,58 @@ mod tests {
         assert!(drift < 0.05, "shoved {drift:.3} m leaning over a table");
     }
 
+    /// Walk up the practice house's front steps in your room, through the
+    /// open door: you end up on its floor. (The first headset session
+    /// couldn't: the capsule appeared inside the first step and was pushed
+    /// back out, pushing the room away.)
+    #[test]
+    fn walking_up_the_house_steps_in_the_room() {
+        let mut vr = Vr::new("training_yard");
+        let house = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::world::buildings::Building, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(b, _)| b.prefab == "house_plank")
+                .map(|(_, g)| g.compute_transform())
+                .expect("the practice house")
+        };
+        let start = house.transform_point(Vec3::new(0.0, 0.0, -6.0));
+        let yaw = house.rotation.to_euler(EulerRot::YXZ).0 + std::f32::consts::PI;
+        vr.stand(on_ground(&vr, start.x, start.z) + Vec3::Y * 0.05, yaw);
+        let doors: Vec<Entity> = {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &crate::world::buildings::Door, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, _, g)| g.translation().distance(house.translation) < 8.0)
+                .map(|(e, _, _)| e)
+                .collect()
+        };
+        assert!(!doors.is_empty(), "the house has a door");
+        for d in &doors {
+            vr.app.world_mut().write_message(InteractEvent::Pressed {
+                item: *d,
+                player: vr.player,
+            });
+        }
+        vr.step(120);
+        // Three and a bit metres across the room, up three steps.
+        for i in 0..=420 {
+            vr.head(Vec3::new(0.0, 1.65, -3.3 * i as f32 / 420.0));
+            vr.step(1);
+        }
+        vr.step(30);
+        let floor = house.translation.y + 0.5;
+        let foot = feet(&vr).y;
+        assert!(
+            (foot - floor).abs() < 0.08,
+            "on the house floor (feet {foot:.2}, floor {floor:.2})"
+        );
+    }
+
     /// Stand at the yard kitchen's bench, on its 13 degree slope, and lean
     /// in over it for ten seconds, swaying a little: you stay where you
     /// stand. (The first headset session slid down this slope here: the
