@@ -187,7 +187,9 @@ fn spawn_forests(
             materials.add(StandardMaterial {
                 base_color: tint,
                 base_color_texture: Some(tex),
-                alpha_mode: AlphaMode::Mask(0.45),
+                // Alpha to coverage: the 4x MSAA smooths the cards' cut
+                // edges, where an alpha test leaves them to crawl.
+                alpha_mode: AlphaMode::AlphaToCoverage,
                 perceptual_roughness: 0.8,
                 reflectance: 0.2,
                 double_sided: true,
@@ -1114,18 +1116,20 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
             // stacked up the trunk read as topiary in the first headset
             // session.)
             let crown_base = h * rng.range(0.48, 0.58);
-            let clumps = 13 + rng.below(5);
+            let clumps = 17 + rng.below(6);
             for _ in 0..clumps {
                 let t = rng.range(0.0, 1.0).powf(0.6);
                 let a = rng.range(0.0, std::f32::consts::TAU);
                 let y = crown_base + t * (h - crown_base) * 0.97;
-                let reach = rng.range(1.2, 3.6) * (1.0 - t * 0.55);
+                let reach = rng.range(1.0, 3.8) * (1.0 - t * 0.5);
                 let off = Vec3::new(a.cos(), 0.0, a.sin()) * reach;
                 let c = Vec3::new(0.0, y, 0.0) + lean * (y / h).powi(2) + off;
+                // Flat pads, wider than deep: a Scots pine's crown is
+                // layered plates of needles, not balls.
                 let rad = Vec3::new(
-                    rng.range(1.2, 1.9),
-                    rng.range(0.8, 1.2),
-                    rng.range(1.2, 1.9),
+                    rng.range(1.5, 2.3),
+                    rng.range(0.5, 0.75),
+                    rng.range(1.5, 2.3),
                 ) * (1.0 - t * 0.3);
                 crown.blob(c, rad * 0.8, rng.next_u64() as u32, |_, l| {
                     let s = 0.55 + 0.45 * l;
@@ -1138,12 +1142,21 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                 trunk.tube(&[(on_trunk, 0.06), (c, 0.025)], 5, |_, _| {
                     lin(0.5, 0.32, 0.2)
                 });
+                // Needle tufts spread through the pad, lying near level
+                // and tipped up at the ends. (Fanned out from one point
+                // they made a starburst: palms, in the headset.)
                 for _ in 0..14 {
                     let a = crng.range(0.0, tau);
-                    let dir = Vec3::new(a.cos(), crng.range(-0.2, 0.7), a.sin()).normalize();
-                    let len = rad.x * crng.range(0.9, 1.3);
+                    let dir = Vec3::new(a.cos(), crng.range(-0.05, 0.3), a.sin()).normalize();
+                    let b = crng.range(0.0, tau);
+                    let at = c + Vec3::new(
+                        b.cos() * rad.x * crng.range(0.0, 0.7),
+                        crng.range(-0.3, 0.4) * rad.y,
+                        b.sin() * rad.z * crng.range(0.0, 0.7),
+                    );
+                    let len = rad.x * crng.range(0.55, 0.85);
                     cards.cross_cards(
-                        c - dir * len * 0.3,
+                        at - dir * len * 0.5,
                         dir * len,
                         len * 0.8,
                         SPRIGS[crng.below(4)],
