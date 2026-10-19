@@ -198,6 +198,10 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
+| `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench | 0.1k to 1.8k |
+| `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet | 0.8k to 2.9k |
+| `art/props/openings.py` | door_leaf, window_sash, window_casing (stretched to their openings) | 0.4k to 1.2k |
+| `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern | 24 to 2.5k |
 
 ## Conventions
 

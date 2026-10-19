@@ -207,6 +207,21 @@ impl ModelMaterials {
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
             "Iron" => lib.get(Mat::DarkMetal, server, materials),
             "Glass" => lib.get(Mat::Glass, server, materials),
+            // World props (art/props).
+            "Timber" => lib.get(Mat::Timber, server, materials),
+            "Rusty" => lib.get(Mat::RustyMetal, server, materials),
+            "Painted" => lib.get(Mat::PaintedMetal, server, materials),
+            "Plaster" => lib.get(Mat::Plaster, server, materials),
+            "Concrete" => lib.get(Mat::Concrete, server, materials),
+            "Enamel" => flat(materials, Color::srgb(0.78, 0.77, 0.72), 0.0, 0.3),
+            // Cast iron: the gun-metal scan's relief, dull and dark.
+            "Cast" => derive(Mat::GunMetal, &|m| {
+                m.base_color = Color::srgb(0.32, 0.31, 0.3);
+                m.perceptual_roughness = m.perceptual_roughness.max(0.75);
+            }),
+            "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
+            "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
+            "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
             "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),
             "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
             "Yellow" => flat(materials, Color::srgb(0.85, 0.58, 0.12), 0.0, 0.6),

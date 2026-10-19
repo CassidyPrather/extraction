@@ -48,6 +48,18 @@ pub struct DoorDef {
     pub mat: Mat,
 }
 
+/// A modelled prop (`art/props`, see `render::world_props`) drawn in place
+/// of some of a recipe's pieces. Their colliders, surfaces and loot spots
+/// stay as they are; only their boxes' meshes give way, and only once every
+/// model here has loaded. An empty `pieces` range adds the models as
+/// dressing (a window's carved surround) with nothing to replace.
+#[derive(Clone, Debug)]
+pub struct PropDef {
+    /// Model names under `models/props/`, posed in building space.
+    pub models: Vec<(&'static str, Transform)>,
+    pub pieces: std::ops::Range<usize>,
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct Geo {
     pub pieces: Vec<Piece>,
@@ -55,6 +67,7 @@ pub struct Geo {
     pub doors: Vec<DoorDef>,
     /// Warm interior lamps (rare; most of the Zone is dark).
     pub lights: Vec<Vec3>,
+    pub props: Vec<PropDef>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -115,6 +128,14 @@ pub fn wide_window(centre: f32, width: f32) -> Opening {
 #[derive(Default)]
 pub struct Builder {
     pub geo: Geo,
+    /// Set while `shell` builds outside walls: their local -Z faces out.
+    exterior: bool,
+}
+
+/// One of `n` variants for a prop at `at`, so a room's two crates differ
+/// but a rebuild picks the same.
+fn variant(at: Vec3, n: usize) -> usize {
+    ((at.x * 7.31 + at.z * 3.17 + at.y * 1.3).sin().abs() * 997.0) as usize % n
 }
 
 impl Builder {
@@ -154,6 +175,17 @@ impl Builder {
             mat,
             false,
         )
+    }
+
+    /// The pieces pushed since `from` are drawn by these models once they
+    /// load (see [`PropDef`]).
+    pub fn dress(&mut self, from: usize, models: Vec<(&'static str, Transform)>) -> &mut Self {
+        let to = self.geo.pieces.len();
+        self.geo.props.push(PropDef {
+            models,
+            pieces: from..to,
+        });
+        self
     }
 
     pub fn loot(&mut self, at: Vec3, table: &'static str) -> &mut Self {
@@ -203,6 +235,7 @@ impl Builder {
             let mid = at(o.centre, y0);
             match o.kind {
                 OpeningKind::Window => {
+                    let from = self.geo.pieces.len();
                     // The glazing bar stands proud of the glass both sides.
                     self.piece(
                         Shape::Box(Vec3::new(o.width - 0.02, 0.03, 0.04)),
@@ -218,6 +251,32 @@ impl Builder {
                         Mat::Glass,
                         false,
                     );
+                    // Modelled: a row of sashes stretched to fill the
+                    // opening, and on a timber house's outside a carved
+                    // surround.
+                    let n = (o.width / 1.0).round().max(1.0);
+                    let (uw, h) = (o.width / n, o.top - o.bottom);
+                    let centre_y = y0 + (o.bottom + o.top) * 0.5;
+                    let sashes = (0..n as usize)
+                        .map(|i| {
+                            let s = o.centre - o.width * 0.5 + uw * (i as f32 + 0.5);
+                            (
+                                "window_sash",
+                                Transform::from_translation(at(s, centre_y))
+                                    .with_rotation(rot)
+                                    .with_scale(Vec3::new(uw, h / 1.1, 1.0)),
+                            )
+                        })
+                        .collect();
+                    self.dress(from, sashes);
+                    if self.exterior && matches!(mat, Mat::Planks | Mat::LogWall) {
+                        let face = at(o.centre, centre_y) + rot * Vec3::new(0.0, 0.0, -thick * 0.5);
+                        let casing = Transform::from_translation(face)
+                            .with_rotation(rot)
+                            .with_scale(Vec3::new(o.width, h / 1.1, 1.0));
+                        let here = self.geo.pieces.len();
+                        self.dress(here, vec![("window_casing", casing)]);
+                    }
                     self.piece(
                         Shape::Box(Vec3::new(o.width + 0.1, 0.05, thick + 0.08)),
                         Transform::from_translation(mid + Vec3::Y * o.bottom).with_rotation(rot),
@@ -289,9 +348,11 @@ impl Builder {
             Vec2::new(x, z),
             Vec2::new(-x, z),
         ];
+        self.exterior = true;
         for i in 0..4 {
             self.wall(c[i], c[(i + 1) % 4], y0, h, thick, mat, sides[i]);
         }
+        self.exterior = false;
         self
     }
 
@@ -403,8 +464,13 @@ impl Builder {
     }
 
     // --- furniture ---------------------------------------------------
+    //
+    // Each piece of furniture is boxes for its colliders and loot surfaces,
+    // drawn by its model from `art/props/furniture.py` and `crates.py` when
+    // that has loaded (the boxes otherwise).
 
     pub fn table(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(1.2, 0.05, 0.7)),
@@ -420,6 +486,10 @@ impl Builder {
                 false,
             );
         }
+        self.dress(
+            from,
+            vec![("table", Transform::from_translation(at).with_rotation(rot))],
+        );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.82, t);
         }
@@ -427,6 +497,7 @@ impl Builder {
     }
 
     pub fn shelf(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         for k in 0..4 {
             let y = 0.3 + k as f32 * 0.45;
@@ -450,10 +521,15 @@ impl Builder {
                 true,
             );
         }
-        self
+        let model = ["shelf", "shelf_metal"][variant(at, 2)];
+        self.dress(
+            from,
+            vec![(model, Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn bed(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(0.9, 0.45, 1.95)),
@@ -467,7 +543,10 @@ impl Builder {
             Mat::Canvas,
             false,
         );
-        self
+        self.dress(
+            from,
+            vec![("bed", Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn counter(
@@ -477,6 +556,7 @@ impl Builder {
         len: f32,
         loot: Option<&'static str>,
     ) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(len, 0.9, 0.6)),
@@ -484,6 +564,35 @@ impl Builder {
             Mat::Timber,
             true,
         );
+        // The model's doors face the room: towards the building's middle
+        // (behind a shop counter, that's the keeper's side).
+        let front = if (rot * Vec3::NEG_Z).dot(-at.with_y(0.0)) < 0.0 {
+            rot * Quat::from_rotation_y(std::f32::consts::PI)
+        } else {
+            rot
+        };
+        let n = (len / 0.6).round().max(1.0);
+        let w = len / n;
+        let pick = variant(at, 2);
+        let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
+            .map(|i| {
+                let x = -len * 0.5 + w * (i as f32 + 0.5);
+                let m = ["counter_cabinet", "counter_drawers"][(i + pick) % 2];
+                (
+                    m,
+                    Transform::from_translation(at + front * Vec3::X * x)
+                        .with_rotation(front)
+                        .with_scale(Vec3::new(w / 0.6, 1.0, 1.0)),
+                )
+            })
+            .collect();
+        models.push((
+            "counter_top",
+            Transform::from_translation(at)
+                .with_rotation(front)
+                .with_scale(Vec3::new(len, 1.0, 1.0)),
+        ));
+        self.dress(from, models);
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.95, t);
         }
@@ -491,6 +600,7 @@ impl Builder {
     }
 
     pub fn stove(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(0.7, 0.85, 0.6)),
@@ -504,11 +614,28 @@ impl Builder {
             Mat::DarkMetal,
             false,
         );
-        self
+        self.dress(
+            from,
+            vec![("stove", Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn crate_box(&mut self, at: Vec3, size: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         self.bx(Vec3::splat(size), at + Vec3::Y * size * 0.5, Mat::Planks);
+        // A cube either way round: turned a quarter or so for variety.
+        let k = variant(at, 8);
+        let model = ["crate_slat", "crate_army"][k % 2];
+        let turn = Quat::from_rotation_y((k / 2) as f32 * std::f32::consts::FRAC_PI_2);
+        self.dress(
+            from,
+            vec![(
+                model,
+                Transform::from_translation(at)
+                    .with_rotation(turn)
+                    .with_scale(Vec3::splat(size)),
+            )],
+        );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * (size + 0.05), t);
         }
@@ -516,6 +643,7 @@ impl Builder {
     }
 
     pub fn workbench(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(2.0, 0.08, 0.8)),
@@ -528,6 +656,13 @@ impl Builder {
             Transform::from_translation(at + Vec3::Y * 0.43).with_rotation(rot),
             Mat::RustyMetal,
             true,
+        );
+        self.dress(
+            from,
+            vec![(
+                "workbench",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
         );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.98, t);
@@ -2093,7 +2228,14 @@ pub fn swing_doors(
     }
 }
 
-/// Client: meshes for buildings and doors.
+/// A building waiting for its props' models before it builds its meshes
+/// (frames waited: it gives up on a model that never arrives).
+#[derive(Component)]
+pub struct PropsPending(u32);
+
+/// Client: lights for buildings, and door leaves (their boxes until the
+/// door model is in). The meshes come once the props' models have loaded
+/// (`dress_buildings`).
 pub fn building_visuals(
     mut commands: Commands,
     buildings: Query<(Entity, &Building), Added<Building>>,
@@ -2103,37 +2245,12 @@ pub fn building_visuals(
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
 ) {
+    use crate::render::world_props::{Blockout, SwapIn};
     for (e, b) in &buildings {
         let Some(geo) = prefab(&b.prefab) else {
             continue;
         };
-        // One mesh per material per building: a house is a handful of
-        // draws, not fifty.
-        let mut merged: Vec<(Mat, Mesh)> = Vec::new();
-        for piece in &geo.pieces {
-            let mut mesh = match piece.shape {
-                Shape::Box(s) => crate::render::materials::metric_box(s),
-                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
-                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
-            };
-            let _ = mesh.generate_tangents();
-            let mesh = mesh.transformed_by(piece.at);
-            let fits = match merged.iter_mut().find(|(m, _)| *m == piece.mat) {
-                Some((_, into)) => into.merge(&mesh).is_ok(),
-                None => {
-                    merged.push((piece.mat, mesh.clone()));
-                    true
-                }
-            };
-            if !fits {
-                let mat = library.get(piece.mat, &server, &mut materials);
-                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
-            }
-        }
-        for (m, mesh) in merged {
-            let mat = library.get(m, &server, &mut materials);
-            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
-        }
+        commands.entity(e).insert(PropsPending(0));
         for l in &geo.lights {
             commands.spawn((
                 PointLight {
@@ -2150,6 +2267,11 @@ pub fn building_visuals(
     }
     for (e, d) in &doors {
         let leaf = d.0;
+        // The plank door model is 0.91 x 2.03; stretched to other leaves.
+        commands.entity(e).insert(SwapIn(vec![(
+            "door_leaf",
+            Transform::from_scale(Vec3::new(leaf.width / 0.91, leaf.height / 2.03, 1.0)),
+        )]));
         let mat = library.get(leaf.mat, &server, &mut materials);
         commands.spawn((
             Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::new(
@@ -2160,6 +2282,7 @@ pub fn building_visuals(
             MeshMaterial3d(mat),
             Transform::from_xyz(leaf.width * 0.5, leaf.height * 0.5 + 0.01, 0.0),
             ChildOf(e),
+            Blockout,
         ));
         // A ledged and braced door: two ledges and a diagonal on the
         // inside face, a knob either side.
@@ -2174,6 +2297,7 @@ pub fn building_visuals(
                 MeshMaterial3d(timber.clone()),
                 Transform::from_xyz(leaf.width * 0.5, y, 0.04),
                 ChildOf(e),
+                Blockout,
             ));
         }
         let (a, b) = (
@@ -2191,6 +2315,7 @@ pub fn building_visuals(
             Transform::from_xyz((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, 0.04)
                 .with_rotation(Quat::from_rotation_z(brace.y.atan2(brace.x))),
             ChildOf(e),
+            Blockout,
         ));
         let knob = library.get(Mat::DarkMetal, &server, &mut materials);
         for z in [-0.05, 0.08] {
@@ -2199,7 +2324,91 @@ pub fn building_visuals(
                 MeshMaterial3d(knob.clone()),
                 Transform::from_xyz(leaf.width - 0.1, 1.0, z),
                 ChildOf(e),
+                Blockout,
             ));
+        }
+    }
+}
+
+/// Client: a building's meshes, one per material (a house is a handful of
+/// draws, not fifty), once its props' models have loaded or failed: each
+/// prop whose models are in is merged in place of its boxes.
+pub fn dress_buildings(
+    mut commands: Commands,
+    mut pending: Query<(Entity, &Building, &mut PropsPending)>,
+    mut props: crate::render::world_props::PropModels,
+    mut cache: ResMut<crate::render::world_props::PropMeshes>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::render::world_props::Resolved;
+    for (e, b, mut wait) in &mut pending {
+        let Some(geo) = prefab(&b.prefab) else {
+            commands.entity(e).remove::<PropsPending>();
+            continue;
+        };
+        wait.0 += 1;
+        let mut loading = false;
+        let ready: Vec<bool> = geo
+            .props
+            .iter()
+            .map(
+                |d| match props.resolve_all(d.models.iter().map(|(n, _)| *n)) {
+                    Resolved::Loading => {
+                        loading = true;
+                        false
+                    }
+                    Resolved::Missing => false,
+                    Resolved::Ready => true,
+                },
+            )
+            .collect();
+        // Models load in a few frames; past ten seconds, build without.
+        if loading && wait.0 < 600 {
+            continue;
+        }
+        commands.entity(e).remove::<PropsPending>();
+        let mut skip = vec![false; geo.pieces.len()];
+        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+            for i in d.pieces.clone() {
+                skip[i] = true;
+            }
+        }
+        let mut merged: Vec<(Handle<StandardMaterial>, Mesh)> = Vec::new();
+        let mut single: Vec<(Handle<StandardMaterial>, Mesh)> = Vec::new();
+        let mut add = |mat: Handle<StandardMaterial>, mesh: Mesh| {
+            let fits = match merged.iter_mut().find(|(m, _)| *m == mat) {
+                Some((_, into)) => into.merge(&mesh).is_ok(),
+                None => {
+                    merged.push((mat.clone(), mesh.clone()));
+                    true
+                }
+            };
+            if !fits {
+                single.push((mat, mesh));
+            }
+        };
+        for (piece, _) in geo.pieces.iter().zip(&skip).filter(|(_, s)| !**s) {
+            let mut mesh = match piece.shape {
+                Shape::Box(s) => crate::render::materials::metric_box(s),
+                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
+                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
+            };
+            let _ = mesh.generate_tangents();
+            let mat = props.lib.get(piece.mat, &props.server, &mut materials);
+            add(mat, mesh.transformed_by(piece.at));
+        }
+        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+            for (name, at) in &d.models {
+                let prims = cache.get(name, &mut props, &meshes).to_vec();
+                for (mat, mesh) in prims {
+                    let mat = props.material(&mat, &mut materials);
+                    add(mat, mesh.transformed_by(*at));
+                }
+            }
+        }
+        for (mat, mesh) in merged.into_iter().chain(single) {
+            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
         }
     }
 }
