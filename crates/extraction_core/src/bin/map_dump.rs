@@ -3,6 +3,9 @@
 //! look at a map without the game).
 //!
 //! Usage: `map-dump <map.ron> <out-dir>`
+//!
+//! Also runs the map lint and writes its main routes (`routes.json`) and
+//! findings (`lint.json`) for the preview to draw.
 
 use extraction_core::map::MapDef;
 use extraction_core::terrain::Heightmap;
@@ -79,12 +82,16 @@ fn main() {
         .placements
         .iter()
         .map(|p| {
+            let f = extraction_core::map::prefab_footprint(&p.prefab);
             format!(
-                "{{\"prefab\":\"{}\",\"at\":[{},{}],\"rot\":{}}}",
+                "{{\"prefab\":\"{}\",\"at\":[{},{}],\"rot\":{},\"size\":[{},{},{}]}}",
                 esc(&p.prefab),
                 p.at[0],
                 p.at[1],
-                p.rot
+                p.rot,
+                f[0],
+                f[1],
+                f[2]
             )
         })
         .collect::<Vec<_>>()
@@ -132,5 +139,9 @@ fn main() {
     j += &bridges.join(",");
     j += "]}";
     std::fs::write(format!("{out}/map.json"), j).unwrap();
+    let lint = extraction_core::map_lint::lint(&map, &hm);
+    std::fs::write(format!("{out}/routes.json"), lint.routes_json()).unwrap();
+    std::fs::write(format!("{out}/lint.json"), lint.findings_json()).unwrap();
+    eprint!("{}", lint.text());
     println!("{} ({}x{} samples) -> {out}", map.name, hm.n, hm.n);
 }

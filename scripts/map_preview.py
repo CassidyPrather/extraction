@@ -3,12 +3,16 @@
 
 Usage:
     scripts/map_preview.py <dump-dir> <out.png> [--heat heat.f32] [--paths paths.json]
+                           [--lint findings.json]
 
 Hillshade and contours for the land, water, roads by kind, forests, region
 outlines tinted by danger, markers with labels, a 50 m grid. Optional
 overlays: a heatmap (raw f32 grid the same size as the heightmap) and
-polyline paths (JSON list of {"points": [[x, z], ...], "color": "#rrggbb"})
-for the simulation tooling.
+polyline paths (JSON list of {"points": [[x, z], ...], "color": "#rrggbb"}),
+such as the map lint's main routes, and the lint's findings (JSON list of
+{"rule": ..., "what": ..., "at": [x, z]}), ringed and numbered with a key.
+`scripts/map-preview.sh` draws both from `cargo test -p extraction_core
+map_lint` (`LINT_DUMP`).
 """
 
 import argparse
@@ -61,13 +65,32 @@ def main():
     ap.add_argument("--px", type=int, default=1400)
     ap.add_argument("--heat")
     ap.add_argument("--paths")
+    ap.add_argument("--lint")
     ap.add_argument("--title")
     args = ap.parse_args()
     heat = None
     if args.heat:
         meta = json.load(open(os.path.join(args.dump, "map.json")))
         heat = np.fromfile(args.heat, dtype="<f4").reshape(meta["n"], meta["n"])
-    img, _, _ = render(args.dump, args.px, heat=heat, title=args.title)
+    img, _, px = render(args.dump, args.px, heat=heat, title=args.title)
+    d = ImageDraw.Draw(img)
+    if args.paths and os.path.exists(args.paths):
+        for path in json.load(open(args.paths)):
+            pts = [px(p) for p in path["points"]]
+            if len(pts) > 1:
+                d.line(pts, fill=path.get("color", "#40e0ff"), width=max(2, args.px // 400))
+    if args.lint and os.path.exists(args.lint):
+        findings = json.load(open(args.lint))
+        f_small = font(max(11, args.px // 110))
+        for i, f in enumerate(findings):
+            x, y = px(f["at"])
+            r = max(8, args.px // 90)
+            d.ellipse([x - r, y - r, x + r, y + r], outline=(255, 60, 60), width=2)
+            d.text((x + r, y - r), str(i + 1), fill=(255, 90, 90), font=f_small)
+        y0 = 40
+        for i, f in enumerate(findings[:40]):
+            d.text((12, y0), f'{i + 1}. {f["rule"]}: {f["what"]}', fill=(255, 120, 120), font=f_small)
+            y0 += f_small.size + 3
     img.save(args.out)
     print(args.out)
 
@@ -171,10 +194,21 @@ def render(dump, px_size=1400, heat=None, title=None, dim=0.0):
     # Bridges.
     for b in meta["bridges"]:
         d.line([px(b[0]), px(b[1])], fill=(200, 190, 170), width=max(3, int(6 * s)))
-    # Placements: footprint dot and name.
+    # Placements: footprint (to scale, turned as placed) and name.
     for p in meta["placements"]:
         x, y = px(p["at"])
-        d.rectangle([x - 4, y - 4, x + 4, y + 4], fill=(30, 30, 30), outline=(230, 230, 230))
+        if "size" in p:
+            # As the nav grid and the lint turn it.
+            hw, hd = p["size"][0] / 2, p["size"][2] / 2
+            yaw = np.radians(p["rot"])
+            c, s_ = np.cos(yaw), np.sin(yaw)
+            corners = [
+                px((p["at"][0] + lx * c - lz * s_, p["at"][1] + lx * s_ + lz * c))
+                for lx, lz in [(-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)]
+            ]
+            d.polygon(corners, fill=(30, 30, 30), outline=(230, 230, 230))
+        else:
+            d.rectangle([x - 4, y - 4, x + 4, y + 4], fill=(30, 30, 30), outline=(230, 230, 230))
         d.text((x + 6, y - 6), p["prefab"], fill=(220, 220, 220), font=f_small)
     # Markers.
     for m in meta["markers"]:
