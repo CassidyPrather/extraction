@@ -903,6 +903,60 @@ mod tests {
         assert!(drift < 0.05, "shoved {drift:.3} m leaning over a table");
     }
 
+    /// Stand at the yard kitchen's bench, on its 13 degree slope, and lean
+    /// in over it for ten seconds, swaying a little: you stay where you
+    /// stand. (The first headset session slid down this slope here: the
+    /// movement capsule leant in under the head, caught the bench's edge
+    /// and let go of the ground.)
+    #[test]
+    fn leaning_over_the_kitchen_bench_on_a_slope_stays_put() {
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        // The bench is beside the truck stop, its long side along z; stand
+        // east of it, facing west.
+        let stop = zone
+            .marker(&extraction_core::map::MarkerKind::TruckStop)
+            .unwrap()
+            .at;
+        let at = Vec2::new(stop[0] - 4.5 + 0.75, stop[1] - 1.0);
+        assert!(
+            zone.hm.slope_deg([at.x, at.y]) > 10.0,
+            "a slope to stand on"
+        );
+        vr.stand(
+            zone.on_ground(at.x, at.y) + Vec3::Y * 0.02,
+            std::f32::consts::FRAC_PI_2,
+        );
+        vr.step(60);
+        let before = feet(&vr);
+        let mut rng = extraction_core::noise::Rng::new(7);
+        for i in 0..=900 {
+            let t = i as f32 / 90.0;
+            let k = t.min(1.0);
+            let jitter = Vec3::new(
+                rng.range(-1.0, 1.0),
+                rng.range(-1.0, 1.0),
+                rng.range(-1.0, 1.0),
+            ) * 0.004;
+            // Leaning in and down, looking at the bench, swaying a little.
+            let at = Vec3::new(
+                (t * 2.1).sin() * 0.15,
+                1.65 - 0.2 * k + (t * 3.0).sin() * 0.02,
+                -0.4 * k + (t * 1.3).sin() * 0.075,
+            );
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_translation(at + jitter)
+                .with_rotation(Quat::from_rotation_x(-0.5 * k));
+            vr.step(1);
+        }
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
+        assert!(drift < 0.05, "slid {drift:.2} m leaning over the bench");
+    }
+
     /// Everything there is to pick up in the yard starts at a standing
     /// reach: the kit in the truck's crate, on its shelf; the yard's loot
     /// on crates. Floors are for what you drop. (The first playtest spent
