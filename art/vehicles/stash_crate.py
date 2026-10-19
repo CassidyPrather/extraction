@@ -17,6 +17,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from common import Part, RY, T, export, main_guard, make, report
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from _kit import text  # noqa: E402
 
 main_guard()
 
@@ -75,6 +77,10 @@ for sx in (-1, 1):
     for z in (-0.4, 0.4):
         c.box((0.06, 0.006, 0.08), (sx * (W / 2 + 0.03), Y0 + 0.003, z), "Iron")
         c.box((0.006, 0.06, 0.08), (sx * (W / 2 + 0.003), Y0 + 0.03, z), "Iron")
+# The unit's number stencilled on the aisle side, either side of the
+# batten (raised 5 mm: flush paint z-fights the boards).
+for z, label in ((0.3, "ВЧ"), (-0.3, "41812")):
+    text(c, label, 0.05, "Enamel", T(W / 2, 0.02, z) @ RY(math.pi / 2), depth=0.005)
 make(c)
 report()
 export("assets/models/vehicles/stash_crate.glb")
