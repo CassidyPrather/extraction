@@ -15,9 +15,11 @@ use crate::raid::bench::ScreenText;
 use crate::raid::truck::Pressable;
 use crate::rig::{LocalPlayer, RigDriver, RigHand, RigInput};
 
-/// The straight index finger's tip in the hand's frame (the glove's index:
-/// on the thumb side, its bones laid out along `-Z`; see `render::props`).
-pub const FINGERTIP: Vec3 = Vec3::new(0.0, 0.03, -0.133);
+/// The pointing index finger's tip in the hand's frame (the glove's index,
+/// on the thumb side, in `render::props::POINTING`; a test there keeps the
+/// modelled finger ending here). The hand's origin is the controller's grip,
+/// in the middle of the closed fist, so the tip is a finger's length ahead.
+pub const FINGERTIP: Vec3 = Vec3::new(0.0, 0.03, -0.0862);
 const FINGER_R: f32 = 0.008;
 /// The button's cap: radius, how proud of its base it stands, how far it
 /// travels.

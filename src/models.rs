@@ -250,7 +250,7 @@ impl ModelMaterials {
                     m.metallic = 0.0;
                     m.metallic_roughness_texture = None;
                     m.perceptual_roughness = rough;
-                    m.uv_transform = Affine2::from_scale(Vec2::splat(6.0));
+                    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(6.0));
                 })
             }
             "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),

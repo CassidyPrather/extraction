@@ -203,6 +203,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet | 0.8k to 2.9k |
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
+| `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.8k each (palm 2.2k, fingers 2.7k) |
 
 ## Conventions
 
@@ -239,6 +240,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   ladder's treads are the step boxes' tops. Its objects are static except
   `wheel`, one road wheel built at the front right station; the game puts
   a copy at each of `WHEELS` and turns the left ones round.
+- **Gloves.** `glove_{left,right}.glb` are built in the frame
+  `spawn_hand` (`src/render/props.rs`) builds its joints in: palm down,
+  fingers along -Z, the back +Y, the thumb on the left hand's +X. `palm`
+  is the hand, thenar, knuckle guard, seams and cuff; `finger_F_J` (F 0..3
+  index to little, 4 the thumb, J 0 at the knuckle) is one segment, origin
+  on its joint, bone along -Z, curling about X toward -Y, parented in a
+  chain at its rest pose. The game hangs each segment's mesh on its own
+  joint, so the joints must agree (`every_glove_segment_is_modelled_at_its_joint`);
+  segments are tapered capsules centred on the joints, so a curled finger
+  stays whole over the knuckle. The index tip is `interact::poke::FINGERTIP`
+  (`pointing_index_ends_on_the_poke_fingertip`). `Glove`, `Leather` and
+  `Padding` are per-glove copies, tinted while the hand is in reach of
+  something. `--gallery fp:open|point|<item id>` shows them first-person.
 - **Items.** `models/items/<item id>.glb` (magazines stay in
   `models/mags/`) is in item space: origin at the centre of the item's
   `dims` box from `items.ron` (a cube of side cbrt(bulk / 1000) without
@@ -259,7 +273,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   `Lens`, `Clear`, `Copper`, `Olive`, `Cream`, `Paper`, `Rope`, `Red`,
   `Yellow` (a true yellow), `Orange`, `Blue`, `Leaf` (green), `Enamel`
   (white enamel and white paint), `Worn` (bare steel where bluing or
-  paint has rubbed off), `Pebble`, `Char`, and the emissive `Lamp`,
+  paint has rubbed off), the gloves' `Glove`, `Leather` and `Padding`, `Pebble`, `Char`, and the emissive `Lamp`,
   `LampRed`, `Glow`, `Warn`, `Ember` and `Strange`. `MATERIAL_NAMES` in
   `src/models.rs` lists them; tests check every exported model uses only
   those names (anything else renders grey) and that `art/common.py`'s
@@ -277,7 +291,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.
 - **Fallbacks.** No file, or a failed load, gives the old blockout
-  (guns, truck), placeholder box (magazines and other items) or primitive
+  (guns, truck, gloves), placeholder box (magazines and other items) or primitive
   shapes (robots, cargo pod, harpoon launcher). The
   headless sim never loads models: it all happens in `ClientPlugin`.
 

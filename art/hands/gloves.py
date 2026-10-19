@@ -45,7 +45,6 @@ FINGER_BONES = [
     [0.036, 0.030, 0.0],
 ]
 FAN = 0.04
-THUMB_AIM = (0.75, -0.6)
 
 # Radius at each joint and at the tip, per finger.
 RADII = [
@@ -67,7 +66,8 @@ def finger_root(f, ts):
 def finger_aim(f, ts):
     """The first joint's rotation with the hand open."""
     if f == 4:
-        return RY(THUMB_AIM[0] * ts) @ RZ(THUMB_AIM[1] * ts)
+        d = Vector((0.45 * ts, -0.25, -0.86)).normalized()
+        return Vector((0, 0, -1)).rotation_difference(d).to_matrix().to_4x4() @ RZ(-0.6 * ts)
     return RY(f * FAN * ts)
 
 
@@ -224,24 +224,29 @@ def palm(ts):
 
     # The cuff: a short gauntlet over the wrist, with a padded strap and
     # its tab, open at the arm's end.
-    prof = [  # (z, grow over the wrist's shape, material)
-        (0.030, 0.0010), (0.040, 0.0030), (0.052, 0.0042), (0.060, 0.0046),
-        (0.0605, 0.0068), (0.0625, 0.0074), (0.0835, 0.0076), (0.0855, 0.0070),
-        (0.086, 0.0048), (0.104, 0.0054), (0.108, 0.0050), (0.110, 0.0036),
-        (0.1095, 0.0018), (0.100, 0.0016),
+    # Closed at the arm's end by a low dome: an open cuff showed a black
+    # hole whenever the hand pointed away from the eye.
+    prof = [  # (z, grow over the wrist's shape, scale about its centre)
+        (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
+        (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
+        (0.079, 0.0030, 1), (0.090, 0.0034, 1), (0.0925, 0.0030, 1), (0.094, 0.0018, 0.98),
+        (0.0955, 0.0010, 0.9), (0.097, 0.0004, 0.72), (0.098, 0.0, 0.42),
+        (0.0984, 0.0, 0.12),
     ]
     zw = Z_WRIST - 0.001
-    rings = [[palm_point(zw, 2 * math.pi * k / segs, g) + Vector((0, 0, z - zw))
-              for k in range(segs)] for z, g in prof]
+    _, yc0, _ = palm_shape(zw)
+    centre = Vector((0.0, yc0, 0.0))
+    rings = [[centre + (palm_point(zw, 2 * math.pi * k / segs, g) - centre) * sc
+              + Vector((0, 0, z - zw)) for k in range(segs)] for z, g, sc in prof]
     _, faces = p.loft(rings, "Glove")
     for f in faces:
         c = f.calc_center_median()
-        if 0.0603 < c.z < 0.0857 and f.normal.z * f.normal.z < 0.5:
+        if 0.0563 < c.z < 0.0787 and f.normal.z * f.normal.z < 0.5:
             f.material_index = p._mi("Padding")
     # The strap's tab on the little finger's side, sewn down at its end.
     w, yc, h = palm_shape(zw)
-    x = -ts * (w * 0.97 + 0.0072)
-    p.box((0.0055, 0.016, 0.022), (x - ts * 0.0012, yc + 0.003, 0.0735), "Padding",
+    x = -ts * (w * 0.97 + 0.0055)
+    p.box((0.0055, 0.016, 0.02), (x - ts * 0.0012, yc + 0.003, 0.0675), "Padding",
           bevel=0.0018, segs=2)
     return p
 
