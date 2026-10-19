@@ -337,3 +337,64 @@ prop("counter_drawers", counter_drawers)
 prop("counter_top", counter_top)
 prop("stove", stove)
 prop("workbench", workbench)
+
+# --- Chair and locker -------------------------------------------------------------------------
+
+def chair():
+    """A plank kitchen chair: seat 0.42 square at 0.45, its back at +Z up
+    to 0.9 (`Builder::chair`)."""
+    w = Wear(43)
+    p = Part("static")
+    seat = 0.45
+    for sx in (-1, 1):
+        # Back legs run up into the back's posts.
+        tapered_leg(p, sx * 0.18, 0.18, 0.9, 0.03, 0.034, "Timber")
+        tapered_leg(p, sx * 0.18, -0.18, seat - 0.025, 0.028, 0.034, "Timber")
+    for k in range(3):
+        bw = (0.42 - 0.006) / 3
+        z = -0.21 + bw / 2 + k * (bw + 0.003)
+        board(p, (0.42, 0.025, bw), (0.0, seat - 0.0125, z), "Timber", w, bevel=0.003)
+    # Seat rails (their tops 5 mm under the planks), stretchers, the back.
+    for sz in (-1, 1):
+        board(p, (0.33, 0.05, 0.02), (0.0, seat - 0.055, sz * 0.18), "Timber", bevel=0.002)
+    for sx in (-1, 1):
+        board(p, (0.02, 0.05, 0.33), (sx * 0.18, seat - 0.055, 0.0), "Timber", bevel=0.002)
+        board(p, (0.018, 0.025, 0.34), (sx * 0.18, 0.16, 0.0), "Timber", bevel=0.002)
+    for y in (0.62, 0.82):
+        board(p, (0.36, 0.07, 0.018), (0.0, y, 0.18), "Timber", w, bevel=0.003)
+    return [p]
+
+
+def locker():
+    """A steel locker 0.5 x 1.8 x 0.45 (`Builder::locker`), its door on
+    -Z: louvres, a latch handle, a number plate, dents of wear."""
+    w = Wear(47)
+    p = Part("static")
+    W, H, D = 0.5, 1.8, 0.45
+    # Body: sides, top, back as sheet; a plinth.
+    p.box((W, H - 0.06, D - 0.02), (0.0, 0.06 + (H - 0.06) / 2, 0.01), "Painted", bevel=0.006,
+          segs=1)
+    p.box((W - 0.04, 0.06, D - 0.06), (0.0, 0.03, 0.02), "Cast", bevel=0.003, segs=1)
+    # The door, a hair proud, its louvres pressed out top and bottom.
+    dz = -D / 2 + 0.02
+    p.box((W - 0.03, H - 0.1, 0.012), (0.0, 0.06 + (H - 0.06) / 2, dz - 0.006), "Painted",
+          bevel=0.003, segs=1)
+    for y0 in (1.55, 0.2):
+        for k in range(5):
+            p.box((0.26, 0.012, 0.008), (0.0, y0 + k * 0.03, dz - 0.016), "Painted",
+                  bevel=0.002, segs=1)
+    # Handle, a hasp for a padlock, the plate.
+    p.box((0.03, 0.14, 0.01), (W / 2 - 0.07, 1.0, dz - 0.017), "Zinc", bevel=0.002, segs=1)
+    rod(p, (W / 2 - 0.07, 1.05, dz - 0.02), (W / 2 - 0.07, 1.05, dz - 0.045), 0.006, "Zinc")
+    rod(p, (W / 2 - 0.07, 0.95, dz - 0.02), (W / 2 - 0.07, 0.95, dz - 0.045), 0.006, "Zinc")
+    rod(p, (W / 2 - 0.07, 0.94, dz - 0.045), (W / 2 - 0.07, 1.06, dz - 0.045), 0.007, "Zinc")
+    p.box((0.1, 0.05, 0.004), (0.0, 1.72, dz - 0.019), "Cream")
+    # Hinges on the left.
+    for y in (0.35, 1.5):
+        rod(p, (-W / 2 + 0.012, y - 0.04, dz - 0.012), (-W / 2 + 0.012, y + 0.04, dz - 0.012),
+            0.007, "Iron", segs=6)
+    return [p]
+
+
+prop("chair", chair)
+prop("locker", locker)

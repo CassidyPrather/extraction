@@ -878,6 +878,79 @@ impl Builder {
         self
     }
 
+    /// A plank chair, facing -Z (its back at +Z): solid seat and back.
+    pub fn chair(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(0.42, 0.45, 0.42)),
+            Transform::from_translation(at + Vec3::Y * 0.225).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.piece(
+            Shape::Box(Vec3::new(0.38, 0.45, 0.04)),
+            Transform::from_translation(at + rot * Vec3::new(0.0, 0.675, 0.18)).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("chair", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
+    /// A steel locker, its door on -Z.
+    pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(0.5, 1.8, 0.45)),
+            Transform::from_translation(at + Vec3::Y * 0.9).with_rotation(rot),
+            Mat::PaintedMetal,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("locker", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
+    /// A 200 l drum.
+    pub fn barrel(&mut self, at: Vec3) -> &mut Self {
+        let from = self.geo.pieces.len();
+        self.piece(
+            Shape::Cylinder(0.29, 0.88),
+            Transform::from_translation(at + Vec3::Y * 0.44),
+            Mat::PaintedMetal,
+            true,
+        );
+        let turn = Quat::from_rotation_y(variant(at, 12) as f32 * 0.5);
+        self.dress(
+            from,
+            vec![(
+                "barrel",
+                Transform::from_translation(at).with_rotation(turn),
+            )],
+        )
+    }
+
+    /// A pallet on the floor (things can stand on it).
+    pub fn pallet(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(1.2, 0.144, 0.8)),
+            Transform::from_translation(at + Vec3::Y * 0.072).with_rotation(rot),
+            Mat::Planks,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("pallet", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
     pub fn finish(self) -> Geo {
         self.geo
     }
@@ -956,7 +1029,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "factory_hall" => {
             hall(&mut b, 36.0, 20.0, 9.0, Mat::Brick, Mat::Corrugated, false);
             factory_fitout(&mut b, 36.0, 20.0, 9.0, 0.1);
-            b.crate_box(Vec3::new(-14.0, 0.1, -7.0), 0.9, Some("workshop"));
+            // On a pallet: the crate (and its loot) stand on the pallet's top.
+            b.pallet(Vec3::new(-14.0, 0.1, -7.0), 0.0);
+            b.crate_box(Vec3::new(-14.0, 0.244, -7.0), 0.9, Some("workshop"));
             b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
         }
         "chimney" => chimney(&mut b),
@@ -1009,6 +1084,11 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
     b.gable_roof(w + 0.36, d + 0.36, f + h, 32.0, 0.5, roof, wall);
     // Front room.
     b.table(Vec3::new(-x * 0.4, f, -z * 0.2), 0.0, Some("house"));
+    b.chair(
+        Vec3::new(-x * 0.4 - 0.3, f, -z * 0.2 - 0.6),
+        std::f32::consts::PI,
+    );
+    b.chair(Vec3::new(-x * 0.4 + 0.25, f, -z * 0.2 + 0.6), 0.1);
     b.shelf(
         Vec3::new(x - 0.3, f, -z * 0.4),
         std::f32::consts::FRAC_PI_2,
@@ -1058,6 +1138,7 @@ fn cabin(b: &mut Builder) {
     b.stove(Vec3::new(2.6, f, 2.3), 0.0);
     b.bed(Vec3::new(-2.8, f, 1.5), 0.0);
     b.table(Vec3::new(0.0, f, 0.5), 0.3, Some("kitchen"));
+    b.chair(Vec3::new(0.45, f, -0.5), std::f32::consts::PI + 0.3);
     b.shelf(Vec3::new(-1.0, f, 2.7), 0.0, Some("house"));
     b.crate_box(Vec3::new(2.8, f, -2.2), 0.6, Some("tools"));
 }
@@ -1162,6 +1243,8 @@ fn barn(b: &mut Builder) {
     );
     b.crate_box(Vec3::new(4.5, f, 5.5), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
+    b.barrel(Vec3::new(5.2, f, 6.9));
+    b.barrel(Vec3::new(4.6, f, 7.2));
 }
 
 fn sawmill(b: &mut Builder) {
@@ -1424,6 +1507,11 @@ fn pump_station(b: &mut Builder) {
         &[door(3.5)],
     );
     b.table(Vec3::new(5.5, f, -3.0), 0.0, Some("tools"));
+    b.chair(Vec3::new(5.4, f, -2.35), -0.2);
+    b.locker(Vec3::new(6.6, f, -4.45), 0.0);
+    for (x, z) in [(-6.3, 4.2), (-5.6, 4.35), (-6.2, 3.55)] {
+        b.barrel(Vec3::new(x, f, z));
+    }
     b.shelf(
         Vec3::new(6.6, f, -1.0),
         std::f32::consts::FRAC_PI_2,
@@ -1663,6 +1751,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
             Vec3::new(w * 0.5 - 3.0, f, d * 0.5 - 2.5),
             0.0,
             Some("house"),
+        );
+        b.chair(Vec3::new(w * 0.5 - 3.1, f, d * 0.5 - 1.85), 0.15);
+        b.locker(
+            Vec3::new(w * 0.5 - 5.5, f, d * 0.5 - 0.45),
+            std::f32::consts::PI,
         );
         b.shelf(
             Vec3::new(w * 0.5 - 1.0, f, d * 0.5 - 0.6),
@@ -2711,6 +2804,10 @@ mod tests {
             }
         }
         for name in [
+            "chair",
+            "locker",
+            "barrel",
+            "pallet",
             "door_leaf",
             "signpost",
             "fence_post",
