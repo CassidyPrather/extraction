@@ -85,6 +85,7 @@ reformatting their code.
 | Models: kit | `art/guns`, `art/mags`, `art/robots`, `art/vehicles`, `art/items`, and the Rust that places their nodes (`src/weapons` layouts, `src/robots/visuals.rs`) only where a model change needs it |
 | Visual design | `src/world/sky.rs`, `src/render/terrain_material.rs` + `assets/shaders/`, `src/world/terrain.rs` (visual), `src/world/trees.rs`, `src/render/materials.rs`, ground cover, rocks visuals, weather, post-processing, colour grading, per-valley atmosphere |
 | Map design | `assets/maps/{marrow_creek,kettle_pass,cinder_works}.ron`, map validation and lint (`crates/extraction_core/src/map*.rs`, new modules), `scripts/map_preview.py`, a map design guide in `docs/` |
+| Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.
