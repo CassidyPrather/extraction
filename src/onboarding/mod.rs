@@ -210,7 +210,7 @@ pub const STATIONS: &[Station] = &[
     },
     Station {
         title: "THE RANGE",
-        at: [-17.0, 47.0],
+        at: [-6.0, 47.5],
         rot: 315.0,
         goals: &[
             Goal::FillMag,
@@ -297,7 +297,7 @@ pub const PEN_HALF: f32 = 1.8;
 pub const PEN_FENCE: f32 = 1.1;
 pub const FAR_CRATE: Vec3 = Vec3::new(0.55, 0.95, 0.55);
 /// The range's table: centre, size; the shooter stands on its south side.
-pub const RANGE_TABLE_AT: [f32; 2] = [-25.5, 43.5];
+pub const RANGE_TABLE_AT: [f32; 2] = [-13.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
 /// A crate at the last station with a spare radio on it.
 pub const HOME_CRATE_AT: [f32; 2] = [5.5, -63.0];

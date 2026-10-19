@@ -47,9 +47,9 @@
     placements: [
         (prefab: "quarantine_gate", at: (0.0, 74.0), rot: 0.0),
         // The firing line: targets at 15, 30 and 60 m from the bench.
-        (prefab: "target", at: (-24.0, 25.0), rot: 0.0),
-        (prefab: "target", at: (-30.0, 10.0), rot: 0.0),
-        (prefab: "target", at: (-22.0, -20.0), rot: 0.0),
+        (prefab: "target", at: (-12.0, 25.0), rot: 0.0),
+        (prefab: "target", at: (-18.0, 10.0), rot: 0.0),
+        (prefab: "target", at: (-10.0, -20.0), rot: 0.0),
         (prefab: "house_plank", at: (28.0, 18.0), rot: 270.0),
         (prefab: "shed", at: (24.0, -12.0), rot: 270.0),
         (prefab: "log_pile", at: (-12.0, -32.0), rot: 90.0),
@@ -61,9 +61,9 @@
         (kind: Rendezvous, at: (0.0, -74.0), name: "North post"),
         (kind: RobotGate, at: (-90.0, -90.0), rot: 45.0, name: "Old gate"),
         (kind: ArtifactField, at: (45.0, -45.0), name: "The soft ground"),
-        (kind: Poi, at: (-24.0, 30.0), name: "Firing line"),
+        (kind: Poi, at: (-12.0, 30.0), name: "Firing line"),
         (kind: Poi, at: (28.0, 18.0), name: "Practice house"),
-        (kind: Loot(table: "ammo_common"), at: (-21.0, 40.0), name: "Firing line ammo"),
+        (kind: Loot(table: "ammo_common"), at: (-9.0, 46.5), name: "Firing line ammo"),
         (kind: Loot(table: "medical"), at: (5.0, 2.0), name: "Dressing station"),
         (kind: Loot(table: "food_common"), at: (25.0, -14.0), name: "Shed food"),
 
