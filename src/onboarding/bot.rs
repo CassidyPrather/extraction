@@ -42,16 +42,22 @@ pub struct Director {
 pub(super) fn direct(
     opts: Res<crate::launch::LaunchOptions>,
     mut ob: ResMut<Onboarding>,
-    mut bots: Query<(Entity, &mut Bot, &Transform), With<LocalPlayer>>,
+    mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     world: DirectorWorld,
     mut state: Local<Director>,
 ) {
     if opts.scenario.as_deref() != Some(SCENARIO) {
         return;
     }
-    let Some((player, mut bot, root)) = bots.iter_mut().next() else {
+    let Some((player, mut bot, root, mut input)) = bots.iter_mut().next() else {
         return;
     };
+    // The crouch toggle, as the stick or C would: down for its step, up
+    // after.
+    let crouch = ob.next_goal() == Some(Goal::Crouch);
+    if input.crouch != crouch {
+        input.crouch = crouch;
+    }
     // Only when the bot has nothing left but to idle, and a moment after
     // its last task, so what it did has had time to register.
     let idling =
@@ -237,6 +243,13 @@ impl DirectorWorld<'_, '_> {
                     t.push(Grab { item: e, side });
                 }
             }
+            Goal::Turn => {
+                // A look over the shoulder and back.
+                t.push(LookAt(Vec3::new(here.x, 13.0, here.y + 10.0)));
+                t.push(LookAt(Vec3::new(here.x + 10.0, 13.0, here.y)));
+                t.push(LookAt(Vec3::new(here.x, 13.0, here.y - 10.0)));
+            }
+            Goal::Crouch => t.push(Wait(0.3)),
             Goal::PutAway => {
                 if self.holding(Side::Right).is_none() {
                     if let Some(e) = self.in_stash("pm_pistol") {

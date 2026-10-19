@@ -1293,12 +1293,50 @@ mod onboarding {
         let l = lamps(&mut vr);
         assert_eq!((l[0], l[1]), (Lamp::Done, Lamp::Lit), "{l:?}");
         assert!(
-            said(&vr, "Next: the lamp by the tailgate"),
+            said(&vr, "Next: the lamp off the back of the truck"),
             "the driver sends you on"
         );
     }
 
-    /// Station 2: let go of a thing at a pocket, and of another over the
+    /// Station 2: the right stick sideways turns you, pulled down crouches
+    /// you; or squatting for real counts too.
+    #[test]
+    fn station_getting_about() {
+        let mut vr = Vr::first_run();
+        {
+            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+            o.done = vec![Goal::TakePistol, Goal::TakeRadio];
+        }
+        let feet = ground(&vr, [-3.5, 91.0]);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        assert!(!done(&vr, Goal::Turn));
+        let stick = |vr: &mut Vr, v: Vec2| {
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .hand_mut(Side::Right)
+                .stick = v;
+            vr.step(3);
+        };
+        // (The OpenXR driver turns the rig on it; headless, the stick is
+        // what there is.)
+        stick(&mut vr, Vec2::new(1.0, 0.0));
+        stick(&mut vr, Vec2::ZERO);
+        assert!(done(&vr, Goal::Turn), "the turn counted");
+        stick(&mut vr, Vec2::new(0.0, -1.0));
+        stick(&mut vr, Vec2::ZERO);
+        assert!(done(&vr, Goal::Crouch), "the crouch counted");
+        // Squatting for real does it too.
+        let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+        o.done.retain(|g| *g != Goal::Crouch);
+        vr.head(Vec3::new(0.0, 1.0, 0.0));
+        vr.step(3);
+        assert!(done(&vr, Goal::Crouch), "squatting counted");
+    }
+
+    /// Station 3: let go of a thing at a pocket, and of another over the
     /// shoulder.
     #[test]
     fn station_put_it_away() {
@@ -1640,7 +1678,7 @@ mod onboarding {
     fn station_buttons() {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         let mut vr = Vr::first_run();
-        let st = &crate::onboarding::STATIONS[7];
+        let st = &crate::onboarding::STATIONS[crate::onboarding::station_of(Goal::Button)];
         vr.stand(
             ground(&vr, [st.at[0] + 0.8, st.at[1]]),
             std::f32::consts::FRAC_PI_2,
@@ -1687,7 +1725,7 @@ mod onboarding {
                 .filter(|g| !matches!(g, Goal::CallTruck | Goal::PullCord))
                 .collect();
         }
-        let st = &crate::onboarding::STATIONS[8];
+        let st = &crate::onboarding::STATIONS[crate::onboarding::station_of(Goal::CallTruck)];
         let feet = ground(&vr, [st.at[0], st.at[1] + 1.5]);
         vr.stand(feet, 0.0);
         vr.step(20);
@@ -1779,10 +1817,11 @@ mod onboarding {
     fn skip_start_over_and_the_prompts() {
         let mut vr = Vr::first_run();
         vr.step(5);
-        let skip = card(&mut vr, OnboardCard::Skip(2));
+        let far = crate::onboarding::station_of(Goal::FarGrab);
+        let skip = card(&mut vr, OnboardCard::Skip(far));
         take_card(&mut vr, skip);
         assert!(done(&vr, Goal::FarGrab) && ob(&vr).skipped.contains(&Goal::FarGrab));
-        assert_eq!(lamps(&mut vr)[2], Lamp::Done);
+        assert_eq!(lamps(&mut vr)[far], Lamp::Done);
         let restart = card(&mut vr, OnboardCard::StartOver);
         take_card(&mut vr, restart);
         assert!(ob(&vr).done.is_empty());
