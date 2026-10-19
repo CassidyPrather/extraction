@@ -32,9 +32,11 @@ fn main() -> AppExit {
     if opts.map == extraction::camp::TRAINING_YARD {
         opts.robots = false;
     }
+    let tooling = opts.tooling();
     let exit = extraction::run(opts);
-    // The truck drove to another valley: open the game again there.
-    if let Some(to) = extraction::take_restart() {
+    // The truck drove to another valley: open the game again there. A
+    // tooling run ends where it is.
+    if let Some(to) = extraction::take_restart().filter(|_| !tooling) {
         let args = extraction::relaunch_args(std::env::args().skip(1), &to);
         if let Ok(exe) = std::env::current_exe() {
             if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {

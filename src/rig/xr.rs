@@ -193,7 +193,7 @@ fn headset_missing(
     if *state != bevy_mod_xr::session::XrState::Unavailable {
         return;
     }
-    let tooling = opts.screenshot.is_some() || opts.tour.is_some() || opts.bot;
+    let tooling = opts.tooling();
     let tried = opts.steamvr || std::env::var_os("XR_RUNTIME_JSON").is_some();
     if !tooling && !tried {
         if let Some(steamvr) = super::runtime::steamvr_runtime() {

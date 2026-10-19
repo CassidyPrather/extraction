@@ -223,7 +223,6 @@ impl ModelMaterials {
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
-            "Enamel" => flat(materials, Color::srgb(0.78, 0.77, 0.72), 0.0, 0.3),
             // Cast iron: the gun-metal scan's relief, dull and dark.
             "Cast" => derive(Mat::GunMetal, &|m| {
                 m.base_color = Color::srgb(0.32, 0.31, 0.3);
@@ -240,7 +239,8 @@ impl ModelMaterials {
             "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
             "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
-            // White enamel: mugs, bowls, the kettle, labels' white print.
+            // White enamel: mugs, bowls, the kettle, labels' white print, and the
+            // houses' stoves and sinks.
             "Enamel" => flat(materials, Color::srgb(0.88, 0.88, 0.85), 0.0, 0.3),
             // Bare steel showing through worn bluing, on gun edges.
             "Worn" => flat(materials, Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
