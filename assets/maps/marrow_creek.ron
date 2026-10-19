@@ -32,7 +32,7 @@
         Tilt(dir: (1.0, 0.6), rise_per_100m: -1.6),
 
         // Radio-mast hill: the landmark you can see through the fog.
-        Hill(at: (-120.0, -175.0), radius: 95.0, height: 30.0),
+        Hill(at: (-120.0, -175.0), radius: 120.0, height: 22.0),
         Hill(at: (-60.0, -230.0), radius: 60.0, height: 12.0),
         // Western ridge above the pumping station.
         Ridge(points: [(-270.0, 60.0), (-230.0, -20.0), (-235.0, -110.0)], width: 90.0, height: 16.0),
@@ -40,7 +40,7 @@
         Hill(at: (250.0, 170.0), radius: 80.0, height: 10.0),
         Hill(at: (90.0, 220.0), radius: 50.0, height: 6.0),
         // Eastern high ground over the Hollow.
-        Hill(at: (240.0, -110.0), radius: 90.0, height: 18.0),
+        Hill(at: (262.0, -118.0), radius: 85.0, height: 18.0),
         // The Hollow: a bowl blown into the hillside.
         Hill(at: (150.0, -40.0), radius: 55.0, height: -11.0),
         // Logging-camp knoll.
@@ -59,13 +59,15 @@
         ),
 
         // Building pads.
-        Plateau(polygon: [(-200.0, 140.0), (-130.0, 140.0), (-130.0, 200.0), (-200.0, 200.0)], blend: 18.0),
+        Plateau(polygon: [(-200.0, 140.0), (-130.0, 140.0), (-130.0, 200.0), (-200.0, 200.0)], blend: 30.0),
         Plateau(polygon: [(140.0, 120.0), (210.0, 120.0), (210.0, 175.0), (140.0, 175.0)], blend: 20.0),
         Plateau(polygon: [(-225.0, 4.0), (-175.0, 4.0), (-175.0, 40.0), (-225.0, 40.0)], blend: 30.0),
         Plateau(polygon: [(120.0, -235.0), (250.0, -235.0), (250.0, -175.0), (120.0, -175.0)], blend: 25.0),
         Plateau(polygon: [(-10.0, -245.0), (55.0, -245.0), (55.0, -200.0), (-10.0, -200.0)], blend: 20.0),
         Plateau(polygon: [(-255.0, -150.0), (-225.0, -150.0), (-225.0, -120.0), (-255.0, -120.0)], blend: 20.0),
         Plateau(polygon: [(-285.0, -285.0), (-215.0, -285.0), (-215.0, -225.0), (-285.0, -225.0)], blend: 15.0),
+        // The survey post's pad on the Hollow's north rim.
+        Plateau(polygon: [(92.0, -10.0), (110.0, -10.0), (110.0, 6.0), (92.0, 6.0)], blend: 12.0),
     ],
 
     roads: [
@@ -90,24 +92,27 @@
         ),
         // Village to pumping station along the south bank.
         (
-            name: "Station road", kind: Gravel, width: 5.0,
+            name: "Station road", kind: Gravel, width: 5.0, smoothing: 40.0,
             points: [(2.0, 60.0), (-60.0, 45.0), (-120.0, 30.0), (-170.0, 25.0), (-187.0, 22.5)],
         ),
         // Farm track down to the ford and up the far side to the Hollow and the rail yard.
         (
             name: "Ford track", kind: Dirt, width: 3.5, smoothing: 10.0,
-            points: [(175.0, 140.0), (160.0, 90.0), (150.0, 45.0), (150.0, 15.0), (175.0, -60.0),
-                     (190.0, -130.0), (185.0, -190.0)],
+            points: [(175.0, 140.0), (160.0, 90.0), (150.0, 45.0), (150.0, 15.0), (178.0, -12.0),
+                     (198.0, -60.0), (198.0, -110.0), (190.0, -160.0), (185.0, -190.0)],
         ),
         // Service road from the bus depot to the radio mast.
         (
-            name: "Mast road", kind: Gravel, width: 4.0, smoothing: 30.0,
-            points: [(15.0, -170.0), (-30.0, -165.0), (-75.0, -175.0), (-110.0, -170.0)],
+            name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
+            points: [(15.0, -170.0), (-2.0, -165.0), (-47.0, -134.0), (-77.0, -117.0),
+                     (-106.0, -114.0), (-131.0, -121.0), (-148.0, -135.0), (-156.0, -153.0),
+                     (-156.0, -171.0), (-149.0, -184.0), (-138.0, -191.0), (-128.0, -191.0),
+                     (-121.0, -184.0)],
         ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
         (
-            name: "Rail line", kind: Rail, width: 4.0, smoothing: 60.0,
+            name: "Rail line", kind: Rail, width: 4.0, smoothing: 90.0,
             points: [(-330.0, -150.0), (-280.0, -165.0), (-200.0, -235.0), (-120.0, -255.0),
                      (0.0, -258.0), (120.0, -245.0), (200.0, -215.0), (330.0, -200.0)],
         ),
@@ -116,9 +121,8 @@
         // pines to the mast road.
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-160.0, 140.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
-                     (-178.0, -16.0), (-178.0, -30.0), (-165.0, -70.0), (-150.0, -110.0),
-                     (-125.0, -150.0)],
+            points: [(-160.0, 140.0), (-166.0, 122.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
+                     (-178.0, -16.0), (-178.0, -30.0), (-165.0, -70.0), (-140.0, -90.0), (-110.0, -108.0)],
             bridges: [(at: (-178.0, -16.0), length: 24.0)],
         ),
     ],
@@ -175,12 +179,25 @@
         (
             name: "Eastern woods", seed: 6, density: 1.1, undergrowth: 0.5,
             mix: [(Spruce, 0.5), (Birch, 0.3), (Pine, 0.2)],
-            polygon: [(230.0, 30.0), (300.0, 40.0), (300.0, -170.0), (240.0, -170.0), (230.0, -100.0)],
+            polygon: [(230.0, 30.0), (300.0, 40.0), (300.0, -170.0), (240.0, -170.0), (212.0, -125.0),
+                      (210.0, -70.0)],
         ),
         (
             name: "Farm shelterbelt", seed: 7, density: 0.9, undergrowth: 0.4,
             mix: [(Birch, 0.6), (Spruce, 0.4)],
             polygon: [(220.0, 300.0), (300.0, 300.0), (300.0, 200.0), (230.0, 210.0)],
+        ),
+        // A spruce copse beside the district road north of the gate: the
+        // first cover out of the truck.
+        (
+            name: "Gate road copse", seed: 9, density: 1.3, undergrowth: 0.6,
+            mix: [(Spruce, 0.7), (Birch, 0.3)],
+            polygon: [(-8.0, 256.0), (36.0, 252.0), (31.0, 186.0), (-10.0, 194.0)],
+        ),
+        (
+            name: "Turn-off spruce", seed: 10, density: 1.1, undergrowth: 0.5,
+            mix: [(Spruce, 0.6), (Pine, 0.2), (Birch, 0.2)],
+            polygon: [(32.0, 206.0), (76.0, 200.0), (78.0, 160.0), (28.0, 172.0)],
         ),
         (
             name: "South gate stand", seed: 8, density: 1.2, undergrowth: 0.5,
@@ -219,8 +236,10 @@
         // crosses beside it).
         (prefab: "pump_station", at: (-200.0, 22.0), rot: 0.0),
 
-        // The Hollow: weird stuff in the bowl.
+            // The Hollow: weird stuff in the bowl, and the survey team's tower on
+        // its rim: the one thing you can see of it from the creek.
         (prefab: "anomaly_core", at: (150.0, -40.0), rot: 0.0),
+        (prefab: "ranger_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
 
         // North: bus depot, radio mast, rail yard, ranger tower, robot Gate.
         (prefab: "bus_depot", at: (25.0, -225.0), rot: 0.0),
@@ -246,7 +265,7 @@
         (kind: Offering, at: (-30.0, 110.0), name: "The well"),
         (kind: Offering, at: (230.0, -150.0), name: "The stone ring"),
         (kind: WorkSite, at: (-40.0, -60.0), name: "North bank site"),
-        (kind: WorkSite, at: (100.0, 210.0), name: "South field site"),
+        (kind: WorkSite, at: (125.0, 80.0), name: "Ford field site"),
         (kind: WorkSite, at: (-90.0, 120.0), name: "Forest clearing site"),
         (kind: Poi, at: (-165.0, 170.0), name: "Logging camp"),
         (kind: Poi, at: (180.0, 145.0), name: "Old farm"),

@@ -17,12 +17,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, blob, cube, item, ring, tube_path, wanted
+from _kit import ALONG_X, UP, blob, centred, cube, item, ring, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet
 from mathutils import Vector
 
 YB = -cube(0.3) / 2   # every dish has bulk 0.3: the floor of its cube
-ENAMEL, RIM = "Cream", "Blued"
+ENAMEL, RIM = "Enamel", "Blued"
 
 
 # --- Vessels ----------------------------------------------------------------------------------
@@ -360,7 +360,7 @@ def cook_chopped_carrot():
         y = top + 0.0013 + (0.0022 if rr < 0.007 and k % 2 else 0.0)
         r = rnd.uniform(0.0038, 0.0055)
         xf = T(x, y, z) @ RX(rnd.uniform(-0.25, 0.25)) @ RZ(rnd.uniform(-0.25, 0.25)) @ UP
-        p.cyl(r, -0.0012, 0.0012, "Yellow", segs=10, xf=xf)
+        p.cyl(r, -0.0012, 0.0012, "Orange", segs=10, xf=xf)
         p.cyl(r * 0.45, 0.0012, 0.0014, "Cream", segs=8, xf=xf)
     knife(p, 0.004, top, -0.015, 0.25)
     return [p]
@@ -432,21 +432,21 @@ def cook_salad():
     # A bowl of salad: green leaves, red tomato, orange carrot sticks and
     # rings of onion.
     wall = bowl(p)
-    fill(p, wall, YB + 0.0215, "Olive", dome=0.005)
+    fill(p, wall, YB + 0.0215, "Leaf", dome=0.005)
     rnd = random.Random(15)
     for k in range(7):
         a = 2 * math.pi * k / 7 + rnd.uniform(-0.3, 0.3)
         rr = rnd.uniform(0.006, 0.019)
         leaf = [(0.0, -0.0075), (0.0045, -0.003), (0.004, 0.004), (0.0, 0.0075), (-0.004, 0.004),
                 (-0.0045, -0.003)]
-        p.prism(leaf, -0.0004, 0.0004, "Olive", axis="y",
+        p.prism(leaf, -0.0004, 0.0004, "Leaf", axis="y",
                 xf=T(rr * math.cos(a), YB + 0.0255 - rr * 0.08, rr * math.sin(a)) @
                 RY(rnd.uniform(0, 3)) @ RX(rnd.uniform(-0.6, 0.6)) @ RZ(rnd.uniform(-0.5, 0.5)))
     bits(p, 5, "Red", 0.0, 0.0, 0.017, YB + 0.0262, 0.0055, seed=16)
     for k in range(5):
         a = rnd.uniform(0, 2 * math.pi)
         rr = rnd.uniform(0.003, 0.018)
-        p.box((0.011, 0.0024, 0.0024), (0.0, 0.0, 0.0), "Yellow",
+        p.box((0.011, 0.0024, 0.0024), (0.0, 0.0, 0.0), "Orange",
               xf=T(rr * math.cos(a), YB + 0.0262, rr * math.sin(a)) @ RY(rnd.uniform(0, 3)) @
               RZ(rnd.uniform(-0.3, 0.3)))
     for k in range(3):
@@ -475,7 +475,7 @@ def cook_soup():
     fill(p, wall, YB + 0.0215, "Red")
     blob(p, 0.006, (0.004, YB + 0.0215, -0.003), "Paper", scale=(1.0, 0.45, 0.9),
          bumps=[((1, 1, 0), 0.2), ((-1, 0.5, 0.5), 0.15)], segs=12, rings=6)
-    bits(p, 12, "Olive", -0.002, 0.002, 0.019, YB + 0.0217, 0.0028, seed=18, shape="fleck")
+    bits(p, 12, "Leaf", -0.002, 0.002, 0.019, YB + 0.0217, 0.0028, seed=18, shape="fleck")
     bits(p, 6, "Yellow", 0.0, 0.0, 0.02, YB + 0.0215, 0.0016, seed=19, shape="fleck")
     spoon(p, T(0.008, YB + 0.0225, 0.008) @ RZ(1.05) @ RX(0.2))
     return [p]
@@ -500,7 +500,7 @@ def cook_fried_rice():
     fill(p, wall, YB + 0.0235, "Rope", dome=0.011)
     grains(p, 24, "Cream", 0.0, 0.0, 0.026, YB + 0.0345, 0.011, seed=21, size=0.002)
     rnd = random.Random(22)
-    for mat, n, size in (("Yellow", 6, 0.0045), ("Olive", 7, 0.003), ("Red", 5, 0.0032)):
+    for mat, n, size in (("Yellow", 6, 0.0045), ("Leaf", 7, 0.003), ("Red", 5, 0.0032)):
         for _ in range(n):
             a = rnd.uniform(0, 2 * math.pi)
             rr = math.sqrt(rnd.uniform(0, 1)) * 0.02
@@ -574,7 +574,7 @@ def cook_omelette():
             axis="y", bevel=0.0042, segs=2, xf=RY(0.3))
     p.box((0.036, 0.0015, 0.0026), (0.0, top + 0.0083, -0.008), "Rope", bevel=0.0006, segs=1,
           xf=RY(0.3))
-    bits(p, 8, "Olive", 0.0, 0.0, 0.012, top + 0.0098, 0.0028, seed=24, shape="fleck")
+    bits(p, 8, "Leaf", 0.0, 0.0, 0.012, top + 0.0098, 0.0028, seed=24, shape="fleck")
     return [p]
 
 
@@ -726,4 +726,5 @@ for item_id, fn in (("cook_flour", cook_flour), ("cook_dough", cook_dough),
                     ("cook_bread", cook_bread), ("cook_cake", cook_cake), ("cook_mush", cook_mush),
                     ("cook_charcoal", cook_charcoal)):
     if wanted(item_id):
-        item(item_id, fn)
+        # Each dish sits on the floor of a box fitted to it (`dims`).
+        item(item_id, lambda fn=fn: centred(fn()))

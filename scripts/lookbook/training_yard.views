@@ -1,0 +1,9 @@
+# Training Yard lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+t01_gate        0,0,75,0,-3          # from the gate, up the yard
+t02_track       0,0,20,0,-3          # along the track
+t03_west        -60,0,0,270,0        # the west belt
+t04_east        60,0,-20,90,0        # the east belt
+t05_soft        30,0,-30,45,-6       # the soft ground
+t06_north       0,0,-60,180,-2       # back from the north post
+t07_belt        -85,0,40,0,0         # inside the west belt
+t08_aerial      0,25,115,0,-12       # over the yard

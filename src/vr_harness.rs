@@ -954,6 +954,112 @@ mod tests {
         assert!(drift < 0.05, "shoved {drift:.3} m leaning over a table");
     }
 
+    /// Walk up the practice house's front steps in your room, through the
+    /// open door: you end up on its floor. (The first headset session
+    /// couldn't: the capsule appeared inside the first step and was pushed
+    /// back out, pushing the room away.)
+    #[test]
+    fn walking_up_the_house_steps_in_the_room() {
+        let mut vr = Vr::new("training_yard");
+        let house = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::world::buildings::Building, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(b, _)| b.prefab == "house_plank")
+                .map(|(_, g)| g.compute_transform())
+                .expect("the practice house")
+        };
+        let start = house.transform_point(Vec3::new(0.0, 0.0, -6.0));
+        let yaw = house.rotation.to_euler(EulerRot::YXZ).0 + std::f32::consts::PI;
+        vr.stand(on_ground(&vr, start.x, start.z) + Vec3::Y * 0.05, yaw);
+        let doors: Vec<Entity> = {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &crate::world::buildings::Door, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, _, g)| g.translation().distance(house.translation) < 8.0)
+                .map(|(e, _, _)| e)
+                .collect()
+        };
+        assert!(!doors.is_empty(), "the house has a door");
+        for d in &doors {
+            vr.app.world_mut().write_message(InteractEvent::Pressed {
+                item: *d,
+                player: vr.player,
+            });
+        }
+        vr.step(120);
+        // Three and a bit metres across the room, up three steps.
+        for i in 0..=420 {
+            vr.head(Vec3::new(0.0, 1.65, -3.3 * i as f32 / 420.0));
+            vr.step(1);
+        }
+        vr.step(30);
+        let floor = house.translation.y + 0.5;
+        let foot = feet(&vr).y;
+        assert!(
+            (foot - floor).abs() < 0.08,
+            "on the house floor (feet {foot:.2}, floor {floor:.2})"
+        );
+    }
+
+    /// Stand at the yard kitchen's bench, on its 13 degree slope, and lean
+    /// in over it for ten seconds, swaying a little: you stay where you
+    /// stand. (The first headset session slid down this slope here: the
+    /// movement capsule leant in under the head, caught the bench's edge
+    /// and let go of the ground.)
+    #[test]
+    fn leaning_over_the_kitchen_bench_on_a_slope_stays_put() {
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        // The bench is beside the truck stop, its long side along z; stand
+        // east of it, facing west.
+        let stop = zone
+            .marker(&extraction_core::map::MarkerKind::TruckStop)
+            .unwrap()
+            .at;
+        let at = Vec2::new(stop[0] - 4.5 + 0.75, stop[1] - 1.0);
+        assert!(
+            zone.hm.slope_deg([at.x, at.y]) > 10.0,
+            "a slope to stand on"
+        );
+        vr.stand(
+            zone.on_ground(at.x, at.y) + Vec3::Y * 0.02,
+            std::f32::consts::FRAC_PI_2,
+        );
+        vr.step(60);
+        let before = feet(&vr);
+        let mut rng = extraction_core::noise::Rng::new(7);
+        for i in 0..=900 {
+            let t = i as f32 / 90.0;
+            let k = t.min(1.0);
+            let jitter = Vec3::new(
+                rng.range(-1.0, 1.0),
+                rng.range(-1.0, 1.0),
+                rng.range(-1.0, 1.0),
+            ) * 0.004;
+            // Leaning in and down, looking at the bench, swaying a little.
+            let at = Vec3::new(
+                (t * 2.1).sin() * 0.15,
+                1.65 - 0.2 * k + (t * 3.0).sin() * 0.02,
+                -0.4 * k + (t * 1.3).sin() * 0.075,
+            );
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_translation(at + jitter)
+                .with_rotation(Quat::from_rotation_x(-0.5 * k));
+            vr.step(1);
+        }
+        let after = feet(&vr);
+        let drift = Vec2::new(after.x - before.x, after.z - before.z).length();
+        assert!(drift < 0.05, "slid {drift:.2} m leaning over the bench");
+    }
+
     /// Everything there is to pick up in the yard starts at a standing
     /// reach: the kit in the truck's crate, on its shelf; the yard's loot
     /// on crates. Floors are for what you drop. (The first playtest spent

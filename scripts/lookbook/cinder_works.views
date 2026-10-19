@@ -1,0 +1,12 @@
+# Cinder Works lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+c01_gate        -110,0,255,10,-2     # from the insertion, up the valley
+c02_ash_row     -55,0,190,0,-3       # Ash Row
+c03_canal       -60,0,72,90,-6       # along the canal
+c04_works       0,0,40,53,4          # the works and the chimney
+c05_dead_wood   -150,0,-150,0,-2     # inside the burnt wood
+c06_wood_edge   -120,0,-220,315,0    # toward the fire lookout
+c07_slag        170,0,-60,18,-3      # the slag heaps
+c08_ash_pit     -170,0,0,270,-6      # the ash pit
+c09_sidings     75,0,-200,0,-3       # north sidings
+c10_chimney     -20,0,-100,115,6     # the chimney from the north-west
+c11_aerial      -110,45,300,15,-8    # over the gate, toward the chimney

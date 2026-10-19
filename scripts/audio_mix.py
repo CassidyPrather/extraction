@@ -43,9 +43,17 @@ RANGE_TARGETS = {
     "anomaly.burner": (20, 12), "anomaly.lift": (15, 10), "gun.dry_fire": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
+    "truck.arrive": (60, 15), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top
 OFF_LINE = 5.0           # LU from the fitted line before a cue is flagged
+# Comfort in a headset: nothing sudden may hit harder up close than your own
+# rifle does with the normal dynamics, whichever dynamics are on (a
+# one-shot's loudest variant, at the nearest it plays; set pieces at their
+# usual distance). Narrow dynamics is for a noisy room, which takes the edge
+# off a little: there, 2 LU over.
+STARTLE_OVER_SHOT = 0.0
+STARTLE_OVER_SHOT_NARROW = 2.0
 MASK_OFFSET = 6.0        # dB below the masker's spread level that still hides
 REF_DISTANCE = 5.0       # Firewheel's default reference distance
 
@@ -422,6 +430,25 @@ def run(sets, out):
         if want and (r["calm"] < want[0] or r["downpour"] < want[1]):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"heard to {r['calm']}/{r['downpour']} m, wants {want[0]}/{want[1]}")
+    # Startle: the loudest each sudden sound gets, up close.
+    def up_close(c, extra=0.0):
+        loud = max(f["momentary_max"] for f in sets[c["set"]]["files"])
+        near = falloff(c["dist"], c["reach"]) if c["role"] == "Event" else 0.0
+        return loud + c["db"] + near + extra
+    shot = next(c for c in mix if c["name"] == "gun.shot")
+    startle = []
+    for c in mix:
+        if sets[c["set"]]["type"] != "oneshot":
+            continue
+        over = up_close(c) - up_close(shot)
+        over_narrow = up_close(c, lift.get(c["role"], 0.0)) - up_close(shot)
+        startle.append(dict(cue=c["name"], up_close=round(up_close(c), 1),
+                            over_shot=round(over, 1), over_shot_narrow=round(over_narrow, 1)))
+        if c["name"] != "gun.shot" and (over > STARTLE_OVER_SHOT
+                                        or over_narrow > STARTLE_OVER_SHOT_NARROW):
+            c["flags"].append(f"startles: {over:+.1f} / {over_narrow:+.1f} LU (narrow) "
+                              "over your rifle up close")
+    startle.sort(key=lambda r: -max(r["over_shot"], r["over_shot_narrow"]))
     # A loop that starts audibly switches on as you walk up to it.
     edges = {}
     for n, (_, keep) in loop_fades().items():
@@ -431,6 +458,7 @@ def run(sets, out):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"switches on at {keep:.0f} m, {m:+.1f} dB over the wind")
     report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges,
+                  startle=startle,
                   session=dict(integrated=session, lra=lra, shares=SESSION),
                   narrow=dict(integrated=n_session, lra=n_lra,
                               scenes={n: r["integrated"] for n, r in narrow_scenes.items()}))
@@ -461,6 +489,11 @@ def run(sets, out):
     for n, r in ranges.items():
         want = f"   (wants {r['want'][0]} / {r['want'][1]})" if r.get("want") else ""
         lines.append(f"    {n:20s} {r['calm']:4d} / {r['downpour']:4d}{want}")
+    lines.append("")
+    lines.append("Loudest up close (momentary LUFS; over your rifle, normal / narrow):")
+    for r in startle[:10]:
+        lines.append(f"    {r['cue']:20s} {r['up_close']:6.1f}   {r['over_shot']:+5.1f} / "
+                     f"{r['over_shot_narrow']:+5.1f}")
     lines.append("")
     lines.append("Loops kept near you, where they start (over the wind):")
     for n, e in edges.items():

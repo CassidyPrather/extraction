@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The training yard's chimes, made from scratch (no samples): a small
-hand bell struck once for a step done, twice rising for a station done.
-Writes assets/audio/ui/chime_step.ogg and chime_station.ogg.
+"""The training yard's station chime, made from scratch (no samples): a
+small hand bell struck twice, rising, for a station done. A single step
+is the recorded `physical/chime`. Writes assets/audio/ui/chime_station.ogg.
 
     python3 scripts/make_chimes.py
 """
@@ -48,5 +48,4 @@ def write(name, samples):
 
 
 os.makedirs(OUT, exist_ok=True)
-write("chime_step.ogg", bell(1318.5, 0.7))
 write("chime_station.ogg", bell(987.8, 1.2, total=1.2) + bell(1318.5, 1.0, t0=0.18, total=1.2))

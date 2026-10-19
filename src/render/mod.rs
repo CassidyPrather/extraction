@@ -3,6 +3,7 @@
 pub mod bench;
 pub mod comfort;
 pub mod fog;
+pub mod grade;
 pub mod kitchen;
 pub mod logistics;
 pub mod materials;
@@ -13,6 +14,7 @@ pub mod screen;
 pub mod stats;
 pub mod terrain_material;
 pub mod water_material;
+pub mod world_props;
 
 use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -38,6 +40,7 @@ impl Plugin for RenderPlugin {
             logistics::LogisticsVisualsPlugin,
             comfort::ComfortPlugin,
             stats::RenderStatsPlugin,
+            world_props::WorldPropsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
@@ -128,6 +131,8 @@ pub fn camera_look(weather: &Weather) -> impl Bundle {
         Tonemapping::AgX,
         bevy::camera::Exposure { ev100: 10.6 },
         weather.fog(),
+        // The valley's grade arrives with the weather (`sky::apply_weather`).
+        bevy::render::view::ColorGrading::default(),
         Msaa::Sample4,
     )
 }

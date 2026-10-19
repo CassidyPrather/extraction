@@ -1,15 +1,32 @@
 //! What your hands feel. Game events become [`Haptic`] pulses on a side;
 //! the headset driver plays them on the controllers (flat mode and bots
-//! ignore them). Pulses are short and graded: a shot kicks the trigger
-//! hand hard and the support hand less; working the action clicks; a
-//! magazine seats with a thunk; grabbing something is a tick; being hit
-//! shakes both hands.
+//! ignore them).
+//!
+//! One scale for everything, so a pulse means the same thing wherever it
+//! comes from (`docs/AUDIO.md`, "Haptics"):
+//!
+//! - a tick (0.1-0.15) is "this is here": a hand in reach of something, a
+//!   button coming back out, letting go;
+//! - a click (0.25-0.35) is "that happened": a button pressed, a thing
+//!   seated in a pouch or holster, the action worked, a far grab caught;
+//! - a knock (0.4-0.6) is "that took force": a magazine seating, a heavy
+//!   thing taken up, a refusal;
+//! - a kick (0.6-1.0) is a shot or a hit, and only those.
+//!
+//! Taking something up is felt by its weight: a tin is a tick, a rifle a
+//! knock. Pulses on one controller in the same frame merge into one (the
+//! runtime plays only the last it was given), so a shot isn't cut short by
+//! its own casing.
+//!
+//! Index controllers barely register a pulse under about 0.1 or shorter
+//! than 10 ms, so nothing here goes below either.
 
 use bevy::prelude::*;
 use extraction_core::firearm::Event as FireEvent;
+use std::collections::HashMap;
 
-use super::{LocalPlayer, Side};
-use crate::interact::{Held, InteractEvent, Supported};
+use super::{LocalPlayer, RigHand, Side};
+use crate::interact::{Hand, Held, InteractEvent, Supported};
 use crate::weapons::GunEvent;
 
 /// A vibration on one controller.
@@ -21,13 +38,62 @@ pub struct Haptic {
     pub seconds: f32,
 }
 
+/// A step of something being taught or checked off is done (the
+/// onboarding's "that's it, next"): a soft chime and a tick in both hands.
+/// Write it from game logic; it does nothing headless.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct StepDone {
+    /// Where the chime comes from; `None` plays it in your head (not
+    /// placed), which is what a confirmation usually wants.
+    pub at: Option<Vec3>,
+    /// It finished a whole part (a training station): a fuller chime and
+    /// a longer click.
+    pub station: bool,
+}
+
+/// Write a [`StepDone`] (for systems that would rather not hold a writer).
+pub fn step_done(commands: &mut Commands, at: Option<Vec3>) {
+    commands.write_message(StepDone { at, station: false });
+}
+
 pub struct HapticsPlugin;
 
 impl Plugin for HapticsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Haptic>()
-            .add_systems(Update, (gun_haptics, hand_haptics, hurt_haptics));
+            .add_message::<StepDone>()
+            .add_systems(
+                Update,
+                (
+                    gun_haptics,
+                    hand_haptics,
+                    button_haptics,
+                    hurt_haptics,
+                    step_haptics,
+                ),
+            );
     }
+}
+
+const TICK: (f32, f32) = (0.12, 0.012);
+const CLICK: (f32, f32) = (0.3, 0.025);
+
+fn pulse(out: &mut MessageWriter<Haptic>, side: Side, (amplitude, seconds): (f32, f32)) {
+    out.write(Haptic {
+        side,
+        amplitude,
+        seconds,
+    });
+}
+
+/// Taking something up, by its weight (kg): a 50 g tin is a tick, a
+/// 1 kg pistol a click, a 3.5 kg rifle a knock.
+pub fn grab_pulse(mass: f32) -> (f32, f32) {
+    let m = mass.max(0.0);
+    (
+        (0.12 + 0.12 * (1.0 + m).log2()).clamp(0.12, 0.55),
+        (0.012 + 0.008 * m).clamp(0.012, 0.045),
+    )
 }
 
 /// Which hands hold a gun: (the one on the grip, the one supporting it).
@@ -78,56 +144,106 @@ fn gun_haptics(
     }
 }
 
+/// The local hand nearest a point (for presses, which don't say which
+/// hand did it).
+fn nearest_hand(
+    hands: &Query<(&RigHand, &Hand, &ChildOf)>,
+    player: Entity,
+    at: Vec3,
+) -> Option<Side> {
+    hands
+        .iter()
+        .filter(|(_, _, p)| p.parent() == player)
+        .min_by(|a, b| {
+            a.1.world
+                .translation
+                .distance(at)
+                .total_cmp(&b.1.world.translation.distance(at))
+        })
+        .map(|(rh, ..)| rh.side)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn hand_haptics(
     mut events: MessageReader<InteractEvent>,
     held: Query<&Held>,
+    items: Query<&crate::items::Item>,
+    catalog: Option<Res<crate::items::Catalog>>,
     locals: Query<(), With<LocalPlayer>>,
+    hands: Query<(&RigHand, &Hand, &ChildOf)>,
+    poses: Query<&GlobalTransform>,
+    buttons: Query<&crate::interact::poke::PokeButton>,
+    time: Res<Time>,
+    // What each local hand holds (a socketed or stowed item has left the
+    // hand by the time its event is read), and what's on its way to one.
+    mut in_hand: Local<HashMap<Entity, Side>>,
+    mut pulled: Local<HashMap<Entity, f32>>,
     mut out: MessageWriter<Haptic>,
 ) {
+    let now = time.elapsed_secs();
+    pulled.retain(|_, t| now - *t < 2.0);
+    let mass = |item: Entity| {
+        items
+            .get(item)
+            .ok()
+            .zip(catalog.as_ref())
+            .map_or(0.3, |(i, c)| c.get(i.kind()).mass)
+    };
     for ev in events.read() {
         match ev {
             InteractEvent::Grabbed { item, side } => {
                 let mine = held.get(*item).map_or(true, |h| locals.contains(h.player));
-                if mine {
-                    out.write(Haptic {
-                        side: *side,
-                        amplitude: 0.2,
-                        seconds: 0.02,
-                    });
+                if !mine {
+                    continue;
+                }
+                in_hand.insert(*item, *side);
+                let (a, t) = grab_pulse(mass(*item));
+                // Caught out of the air: it lands in the palm.
+                let caught = pulled.remove(item).is_some();
+                let a = if caught { (a + 0.15).min(0.6) } else { a };
+                pulse(&mut out, *side, (a, t));
+            }
+            InteractEvent::Hover { side, .. } => pulse(&mut out, *side, TICK),
+            InteractEvent::Pulled { item, side } => {
+                pulled.insert(*item, now);
+                pulse(&mut out, *side, (0.3, 0.04));
+            }
+            InteractEvent::Released { item, side, .. } => {
+                if in_hand.remove(item).is_some() {
+                    pulse(&mut out, *side, (0.1, 0.012));
                 }
             }
-            InteractEvent::Hover { side, .. } => {
-                out.write(Haptic {
-                    side: *side,
-                    amplitude: 0.08,
-                    seconds: 0.012,
-                });
+            InteractEvent::Socketed { item, .. } => {
+                if let Some(side) = in_hand.remove(item) {
+                    pulse(&mut out, side, CLICK);
+                }
             }
-            InteractEvent::Pulled { side, .. } => {
-                out.write(Haptic {
-                    side: *side,
-                    amplitude: 0.3,
-                    seconds: 0.04,
-                });
+            InteractEvent::Stowed { item } => {
+                if let Some(side) = in_hand.remove(item) {
+                    pulse(&mut out, side, (0.25, 0.02));
+                }
             }
-            InteractEvent::Pressed { player, .. } if locals.contains(*player) => {
-                // Which hand pressed isn't in the event: both feel the click.
-                for side in [crate::rig::Side::Left, crate::rig::Side::Right] {
-                    out.write(Haptic {
-                        side,
-                        amplitude: 0.25,
-                        seconds: 0.025,
-                    });
+            // A push button clicks the finger that pushed it
+            // (`button_haptics`); anything pressed with the grip (the bell
+            // cord, a door, the bench) clicks the hand nearest it.
+            InteractEvent::Pressed { item, player } if locals.contains(*player) => {
+                if buttons.iter().any(|b| b.target == *item && b.down) {
+                    continue;
+                }
+                let at = poses.get(*item).map(|g| g.translation()).ok();
+                match at.and_then(|at| nearest_hand(&hands, *player, at)) {
+                    Some(side) => pulse(&mut out, side, CLICK),
+                    None => {
+                        for side in [Side::Left, Side::Right] {
+                            pulse(&mut out, side, CLICK);
+                        }
+                    }
                 }
             }
             InteractEvent::Refused { item } => {
                 if let Ok(h) = held.get(*item) {
                     if locals.contains(h.player) {
-                        out.write(Haptic {
-                            side: h.side,
-                            amplitude: 0.4,
-                            seconds: 0.05,
-                        });
+                        pulse(&mut out, h.side, (0.4, 0.05));
                     }
                 }
             }
@@ -136,22 +252,82 @@ fn hand_haptics(
     }
 }
 
-fn hurt_haptics(
-    mut hurts: MessageReader<crate::health::Hurt>,
-    locals: Query<(), With<LocalPlayer>>,
+/// Push buttons: a click in the finger as it goes home, a lighter tick as
+/// it comes back out.
+fn button_haptics(
+    buttons: Query<(Entity, &crate::interact::poke::PokeButton, &GlobalTransform)>,
+    hands: Query<(&RigHand, &Hand, &ChildOf)>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut was: Local<HashMap<Entity, bool>>,
     mut out: MessageWriter<Haptic>,
 ) {
-    for h in hurts.read() {
-        if !locals.contains(h.player) {
+    let Some(player) = locals.iter().next() else {
+        return;
+    };
+    for (e, b, gt) in &buttons {
+        let before = was.insert(e, b.down).unwrap_or(false);
+        if before == b.down {
             continue;
         }
-        let a = (0.4 + h.amount / 40.0).min(1.0);
+        let tip = crate::interact::poke::FINGERTIP;
+        let side = hands
+            .iter()
+            .filter(|(_, _, p)| p.parent() == player)
+            .min_by(|a, b2| {
+                let d = |h: &Hand| h.world.transform_point(tip).distance(gt.translation());
+                d(a.1).total_cmp(&d(b2.1))
+            })
+            .map(|(rh, ..)| rh.side);
+        if let Some(side) = side {
+            pulse(&mut out, side, if b.down { CLICK } else { TICK });
+        }
+    }
+}
+
+/// Any harm to the local player shakes both hands, harder for more: a
+/// bullet, a fall, an anomaly, the Surge. Steady harm (bleeding, standing
+/// in a burner) pulses no faster than four times a second.
+fn hurt_haptics(
+    players: Query<&crate::health::Health, With<LocalPlayer>>,
+    time: Res<Time>,
+    mut last: Local<Option<(f32, f32)>>,
+    mut owed: Local<f32>,
+    mut quiet: Local<f32>,
+    mut out: MessageWriter<Haptic>,
+) {
+    let Some(h) = players.iter().next() else {
+        return;
+    };
+    *quiet -= time.delta_secs();
+    let (hp, since) = (h.hp, h.since_hit);
+    if let Some((was_hp, was_since)) = *last {
+        // A new hit restarts `since_hit` (steady harm keeps it near zero);
+        // bleeding only drains.
+        if since < was_since || (since < 0.1 && hp < was_hp) {
+            *owed += (was_hp - hp).max(0.5);
+        }
+    }
+    *last = Some((hp, since));
+    if *owed > 0.0 && *quiet <= 0.0 {
+        let a = hurt_amplitude(*owed);
         for side in [Side::Left, Side::Right] {
-            out.write(Haptic {
-                side,
-                amplitude: a,
-                seconds: 0.12,
-            });
+            pulse(&mut out, side, (a, 0.1));
+        }
+        *owed = 0.0;
+        *quiet = 0.25;
+    }
+}
+
+/// How hard a hit of `damage` hp shakes the hands.
+pub fn hurt_amplitude(damage: f32) -> f32 {
+    (0.45 + damage / 40.0).min(1.0)
+}
+
+fn step_haptics(mut steps: MessageReader<StepDone>, mut out: MessageWriter<Haptic>) {
+    for s in steps.read() {
+        let feel = if s.station { (0.35, 0.1) } else { (0.25, 0.04) };
+        for side in [Side::Left, Side::Right] {
+            pulse(&mut out, side, feel);
         }
     }
 }
@@ -212,5 +388,152 @@ mod tests {
             .find(|h| h.side == Side::Left)
             .expect("left hand");
         assert!(right.amplitude > left.amplitude);
+    }
+
+    /// Harm that isn't a bullet (a fall, a burner) is felt too, and steady
+    /// harm pulses no faster than four times a second.
+    #[test]
+    fn every_kind_of_harm_is_felt() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.init_resource::<Felt>().add_systems(Last, feel);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().resource_mut::<Felt>().0.clear();
+        // Thirty frames of a burner: a little harm every frame.
+        for _ in 0..30 {
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp -= 0.5;
+                h.since_hit = 0.0;
+            }
+            app.update();
+        }
+        let felt = &app.world().resource::<Felt>().0;
+        let left = felt.iter().filter(|h| h.side == Side::Left).count();
+        assert!(left >= 1, "felt: {felt:?}");
+        assert!(left <= 4, "no faster than 4 Hz over 0.5 s: {left}");
+    }
+
+    /// The scale holds: heavier is stronger, nothing an Index can't feel,
+    /// nothing but a shot or a hit at full strength.
+    #[test]
+    fn weight_grades_the_grab() {
+        let tin = grab_pulse(0.05);
+        let pistol = grab_pulse(0.8);
+        let rifle = grab_pulse(3.5);
+        assert!(tin.0 < pistol.0 && pistol.0 < rifle.0);
+        for (a, t) in [tin, pistol, rifle, grab_pulse(40.0), TICK, CLICK] {
+            assert!((0.1..0.6).contains(&a), "{a}");
+            assert!(t >= 0.01, "{t}");
+        }
+        assert!(hurt_amplitude(1.0) > CLICK.0);
+    }
+
+    fn felt_by(vr: &mut crate::vr_harness::Vr) -> Vec<Haptic> {
+        std::mem::take(&mut vr.app.world_mut().resource_mut::<Felt>().0)
+    }
+
+    /// Through the headset path: a rifle taken up is felt harder than a
+    /// magazine, in the hand that took it.
+    #[test]
+    fn a_rifle_weighs_more_in_the_hand_than_a_magazine() {
+        use crate::vr_harness::Vr;
+        let mut vr = Vr::new("training_yard");
+        vr.app.init_resource::<Felt>().add_systems(Last, feel);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(0.0, 30.0);
+        vr.stand(feet, 0.0);
+        let mut grab = |vr: &mut Vr, id: &str, dx: f32| {
+            let at = feet + Vec3::new(dx, 1.0, -0.4);
+            let item = vr.spawn(id, Transform::from_translation(at));
+            vr.app
+                .world_mut()
+                .entity_mut(item)
+                .insert(avian3d::prelude::RigidBody::Static);
+            let point = vr.point(item, |r| {
+                use crate::interact::GripRole::*;
+                matches!(r, Primary | Free)
+            });
+            vr.hand(Side::Right, point, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(3);
+            felt_by(vr);
+            vr.grip(Side::Right, 1.0);
+            vr.step(3);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(item), "{id} taken");
+            let felt = felt_by(vr);
+            vr.grip(Side::Right, 0.0);
+            vr.step(3);
+            assert!(felt.iter().all(|h| h.side == Side::Right), "{felt:?}");
+            felt.iter().map(|h| h.amplitude).fold(0.0, f32::max)
+        };
+        let mag = grab(&mut vr, "pm_mag", 0.2);
+        let rifle = grab(&mut vr, "ak74", -0.3);
+        assert!(rifle > mag + 0.1, "rifle {rifle} vs magazine {mag}");
+    }
+
+    /// A push button clicks the finger that pushed it, not both hands, and
+    /// ticks as it comes back out. (In a valley: in the training yard the
+    /// first button is also a lesson, and a lesson done is felt in both
+    /// hands.)
+    #[test]
+    fn a_button_clicks_the_finger_that_pushed_it() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::vr_harness::Vr;
+        let mut vr = Vr::new("marrow_creek");
+        vr.app.init_resource::<Felt>().add_systems(Last, feel);
+        vr.step(5);
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .next()
+            .map(|(_, gt)| gt)
+            .expect("a button");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006));
+            vr.step(1);
+        }
+        felt_by(&mut vr);
+        for k in 0..6 {
+            vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+            vr.step(1);
+        }
+        vr.step(2);
+        let pressed = felt_by(&mut vr);
+        assert!(
+            pressed
+                .iter()
+                .any(|h| h.side == Side::Right && h.amplitude >= CLICK.0),
+            "a click in the right hand: {pressed:?}"
+        );
+        assert!(
+            pressed.iter().all(|h| h.side == Side::Right),
+            "the left hand did nothing: {pressed:?}"
+        );
+        vr.move_hand(Side::Right, tip_at(0.08));
+        vr.step(3);
+        let out = felt_by(&mut vr);
+        assert!(
+            out.iter()
+                .any(|h| h.side == Side::Right && h.amplitude < CLICK.0),
+            "a tick coming out: {out:?}"
+        );
     }
 }

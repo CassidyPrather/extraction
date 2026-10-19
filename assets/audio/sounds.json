@@ -1844,6 +1844,244 @@
       }
     ]
   },
+  "machines/truck_arrive": {
+    "type": "bed",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/truck_arrive_1.ogg",
+        "seconds": 7.5,
+        "source": "fs_442528"
+      }
+    ]
+  },
+  "machines/truck_depart": {
+    "type": "bed",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/truck_depart_1.ogg",
+        "seconds": 16.0,
+        "source": "fs_567341"
+      },
+      {
+        "file": "audio/machines/truck_depart_2.ogg",
+        "seconds": 18.5,
+        "source": "fs_487161"
+      }
+    ]
+  },
+  "machines/truck_idle": {
+    "type": "loop",
+    "channels": 1,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/machines/truck_idle_1.ogg",
+        "seconds": 20.0,
+        "source": "fs_128160"
+      },
+      {
+        "file": "audio/machines/truck_idle_2.ogg",
+        "seconds": 20.0,
+        "source": "fs_487161"
+      }
+    ]
+  },
+  "physical/bandage": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/bandage_1.ogg",
+        "seconds": 0.158,
+        "source": "fs_800275"
+      },
+      {
+        "file": "audio/physical/bandage_2.ogg",
+        "seconds": 0.138,
+        "source": "fs_591195"
+      },
+      {
+        "file": "audio/physical/bandage_3.ogg",
+        "seconds": 0.782,
+        "source": "fs_133440"
+      },
+      {
+        "file": "audio/physical/bandage_4.ogg",
+        "seconds": 0.223,
+        "source": "fs_800275"
+      },
+      {
+        "file": "audio/physical/bandage_5.ogg",
+        "seconds": 0.623,
+        "source": "fs_133440"
+      }
+    ]
+  },
+  "physical/bell": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/bell_1.ogg",
+        "seconds": 1.423,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/bell_2.ogg",
+        "seconds": 1.65,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/bell_3.ogg",
+        "seconds": 0.688,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/bell_4.ogg",
+        "seconds": 0.603,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/bell_5.ogg",
+        "seconds": 0.165,
+        "source": "kenney_impact"
+      }
+    ]
+  },
+  "physical/body_hit": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/body_hit_1.ogg",
+        "seconds": 0.287,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/body_hit_2.ogg",
+        "seconds": 0.273,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/body_hit_3.ogg",
+        "seconds": 0.35,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/body_hit_4.ogg",
+        "seconds": 0.297,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/body_hit_5.ogg",
+        "seconds": 0.352,
+        "source": "kenney_impact"
+      }
+    ]
+  },
+  "physical/button": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/button_1.ogg",
+        "seconds": 0.05,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_2.ogg",
+        "seconds": 0.052,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_3.ogg",
+        "seconds": 0.06,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_4.ogg",
+        "seconds": 0.045,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_5.ogg",
+        "seconds": 0.135,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_6.ogg",
+        "seconds": 0.075,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_7.ogg",
+        "seconds": 0.142,
+        "source": "fs_737421"
+      },
+      {
+        "file": "audio/physical/button_8.ogg",
+        "seconds": 0.077,
+        "source": "fs_737421"
+      }
+    ]
+  },
+  "physical/catch": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/catch_1.ogg",
+        "seconds": 0.115,
+        "source": "fs_425254"
+      },
+      {
+        "file": "audio/physical/catch_2.ogg",
+        "seconds": 0.147,
+        "source": "fs_445673"
+      },
+      {
+        "file": "audio/physical/catch_3.ogg",
+        "seconds": 0.13,
+        "source": "fs_425254"
+      },
+      {
+        "file": "audio/physical/catch_4.ogg",
+        "seconds": 0.147,
+        "source": "fs_445673"
+      },
+      {
+        "file": "audio/physical/catch_5.ogg",
+        "seconds": 0.13,
+        "source": "fs_425254"
+      },
+      {
+        "file": "audio/physical/catch_6.ogg",
+        "seconds": 0.172,
+        "source": "fs_445673"
+      }
+    ]
+  },
+  "physical/chime": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/chime_1.ogg",
+        "seconds": 1.55,
+        "source": "fs_332518"
+      }
+    ]
+  },
   "physical/cloth": {
     "type": "oneshot",
     "channels": 1,
@@ -1959,6 +2197,33 @@
         "file": "audio/physical/door_open_3.ogg",
         "seconds": 1.5,
         "source": "fs_344360"
+      }
+    ]
+  },
+  "physical/drink": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/drink_1.ogg",
+        "seconds": 0.365,
+        "source": "fs_517173"
+      },
+      {
+        "file": "audio/physical/drink_2.ogg",
+        "seconds": 1.488,
+        "source": "fs_328010"
+      },
+      {
+        "file": "audio/physical/drink_3.ogg",
+        "seconds": 0.64,
+        "source": "fs_328010"
+      },
+      {
+        "file": "audio/physical/drink_4.ogg",
+        "seconds": 0.645,
+        "source": "fs_328010"
       }
     ]
   },
@@ -2085,6 +2350,43 @@
       }
     ]
   },
+  "physical/eat": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/eat_1.ogg",
+        "seconds": 1.518,
+        "source": "fs_398757"
+      },
+      {
+        "file": "audio/physical/eat_2.ogg",
+        "seconds": 1.498,
+        "source": "fs_836514"
+      },
+      {
+        "file": "audio/physical/eat_3.ogg",
+        "seconds": 1.595,
+        "source": "fs_398757"
+      },
+      {
+        "file": "audio/physical/eat_4.ogg",
+        "seconds": 1.515,
+        "source": "fs_836514"
+      },
+      {
+        "file": "audio/physical/eat_5.ogg",
+        "seconds": 1.185,
+        "source": "fs_398757"
+      },
+      {
+        "file": "audio/physical/eat_6.ogg",
+        "seconds": 1.6,
+        "source": "fs_836514"
+      }
+    ]
+  },
   "physical/glass_break": {
     "type": "oneshot",
     "channels": 1,
@@ -2107,6 +2409,134 @@
       }
     ]
   },
+  "physical/handle_metal": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/handle_metal_1.ogg",
+        "seconds": 0.258,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_metal_2.ogg",
+        "seconds": 0.188,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_metal_3.ogg",
+        "seconds": 0.177,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_metal_4.ogg",
+        "seconds": 0.355,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_metal_5.ogg",
+        "seconds": 0.16,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_metal_6.ogg",
+        "seconds": 1.32,
+        "source": "kenney_rpg"
+      },
+      {
+        "file": "audio/physical/handle_metal_7.ogg",
+        "seconds": 0.828,
+        "source": "kenney_rpg"
+      },
+      {
+        "file": "audio/physical/handle_metal_8.ogg",
+        "seconds": 0.75,
+        "source": "kenney_rpg"
+      }
+    ]
+  },
+  "physical/handle_plastic": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/handle_plastic_1.ogg",
+        "seconds": 0.107,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_plastic_2.ogg",
+        "seconds": 0.092,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_plastic_3.ogg",
+        "seconds": 0.152,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_plastic_4.ogg",
+        "seconds": 0.1,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_plastic_5.ogg",
+        "seconds": 0.102,
+        "source": "kenney_impact"
+      }
+    ]
+  },
+  "physical/handle_wood": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/handle_wood_1.ogg",
+        "seconds": 0.135,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_wood_2.ogg",
+        "seconds": 0.122,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_wood_3.ogg",
+        "seconds": 0.135,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_wood_4.ogg",
+        "seconds": 0.125,
+        "source": "kenney_impact"
+      },
+      {
+        "file": "audio/physical/handle_wood_5.ogg",
+        "seconds": 0.122,
+        "source": "kenney_impact"
+      }
+    ]
+  },
+  "physical/switch": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/switch_1.ogg",
+        "seconds": 0.182,
+        "source": "fs_690300"
+      },
+      {
+        "file": "audio/physical/switch_2.ogg",
+        "seconds": 0.405,
+        "source": "kenney_rpg"
+      }
+    ]
+  },
   "physical/velcro": {
     "type": "oneshot",
     "channels": 1,
@@ -2126,6 +2556,53 @@
         "file": "audio/physical/velcro_3.ogg",
         "seconds": 0.265,
         "source": "fs_570374"
+      }
+    ]
+  },
+  "physical/whoosh": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/physical/whoosh_1.ogg",
+        "seconds": 0.172,
+        "source": "fs_427979"
+      },
+      {
+        "file": "audio/physical/whoosh_2.ogg",
+        "seconds": 0.362,
+        "source": "fs_391448"
+      },
+      {
+        "file": "audio/physical/whoosh_3.ogg",
+        "seconds": 0.195,
+        "source": "fs_427979"
+      },
+      {
+        "file": "audio/physical/whoosh_4.ogg",
+        "seconds": 0.335,
+        "source": "fs_391448"
+      },
+      {
+        "file": "audio/physical/whoosh_5.ogg",
+        "seconds": 0.182,
+        "source": "fs_427979"
+      },
+      {
+        "file": "audio/physical/whoosh_6.ogg",
+        "seconds": 0.463,
+        "source": "fs_391448"
+      },
+      {
+        "file": "audio/physical/whoosh_7.ogg",
+        "seconds": 0.2,
+        "source": "fs_427979"
+      },
+      {
+        "file": "audio/physical/whoosh_8.ogg",
+        "seconds": 0.263,
+        "source": "fs_391448"
       }
     ]
   },
@@ -2163,6 +2640,18 @@
         "file": "audio/physical/zip_6.ogg",
         "seconds": 0.54,
         "source": "fs_519477"
+      }
+    ]
+  },
+  "ui/chime_station": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/ui/chime_station.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/make_chimes.py"
       }
     ]
   }

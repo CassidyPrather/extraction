@@ -31,7 +31,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Game (x, y, z) -> Blender (x, -z, y). A proper rotation (det +1).
 TO_BLENDER = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
 
-# Preview colours only; the game replaces these by name.
+# Preview colours only; the game replaces these by name (src/models.rs,
+# `MATERIAL_NAMES`: keep the two lists the same; a test checks).
 MATERIALS = {
     "Steel": ((0.42, 0.42, 0.43), 1.0, 0.35, None),
     "Blued": ((0.05, 0.055, 0.065), 0.9, 0.38, None),
@@ -62,13 +63,28 @@ MATERIALS = {
     "Olive": ((0.25, 0.27, 0.17), 0.0, 0.8, None),
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
-    "Yellow": ((0.85, 0.58, 0.12), 0.0, 0.6, None),
+    "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
+    "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
+    "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
+    "Leaf": ((0.2, 0.4, 0.1), 0.0, 0.7, None),
+    "Enamel": ((0.88, 0.88, 0.85), 0.0, 0.3, None),
+    "Worn": ((0.5, 0.5, 0.5), 1.0, 0.45, None),
     "Red": ((0.5, 0.06, 0.04), 0.0, 0.6, None),
     "Pebble": ((0.42, 0.42, 0.44), 0.0, 0.45, None),
     "Char": ((0.05, 0.045, 0.04), 0.0, 0.9, None),
     "Ember": ((0.9, 0.35, 0.08), 0.0, 0.5, (1.0, 0.35, 0.05)),
     "Paper": ((0.85, 0.83, 0.76), 0.0, 0.9, None),
     "Strange": ((0.5, 0.35, 0.8), 0.6, 0.15, (0.6, 0.35, 1.0)),
+    # World props (art/props; src/models.rs maps them).
+    "Timber": ((0.55, 0.45, 0.33), 0.0, 0.8, None),
+    "Rusty": ((0.4, 0.25, 0.15), 0.6, 0.7, None),
+    "Painted": ((0.3, 0.38, 0.35), 0.3, 0.6, None),
+    "Cast": ((0.07, 0.07, 0.07), 0.6, 0.7, None),
+    "Wool": ((0.27, 0.26, 0.23), 0.0, 0.95, None),
+    "Ticking": ((0.62, 0.6, 0.55), 0.0, 0.9, None),
+    "Plaster": ((0.62, 0.6, 0.55), 0.0, 0.9, None),
+    "Concrete": ((0.45, 0.45, 0.43), 0.0, 0.85, None),
+    "Zinc": ((0.5, 0.52, 0.53), 0.9, 0.45, None),
 }
 
 
@@ -493,6 +509,66 @@ class Part:
         faces = list({f for v in verts for f in v.link_faces})
         return self._finish_piece(verts, faces, mat, m)
 
+    def loft(self, rings, mat, xf=None, caps=True):
+        """Skin a list of closed rings (each a list of game-space points,
+        all the same length) into a tube, capping both ends."""
+        bm = self.bm
+        vr = [[bm.verts.new(p) for p in r] for r in rings]
+        m = len(rings[0])
+        faces = []
+        for a, b in zip(vr, vr[1:]):
+            for k in range(m):
+                k1 = (k + 1) % m
+                faces.append(bm.faces.new((a[k], a[k1], b[k1], b[k])))
+        if caps:
+            faces.append(bm.faces.new(list(reversed(vr[0]))))
+            faces.append(bm.faces.new(vr[-1]))
+        return self._finish_piece([v for r in vr for v in r], faces, mat, xf)
+
+    def stock(self, outline, z0, z1, mat, width, stations=40, segs=24, power=2.6, xf=None,
+              spacing=None):
+        """A rounded piece of furniture (stock, forend, grip) from its side
+        outline: cut across every few millimetres along Z, each cut a
+        superellipse filling the outline's height there. `width(z, y_mid,
+        half_height) -> (w_bottom, w_top)` gives its half widths at the
+        belly and the top; `power` (a number, or a function of z) 2 is an
+        ellipse, higher is squarer.
+        `spacing(t)` maps 0..1 to 0..1 to bunch the cuts (default even).
+        The outline must be single-valued across Z between z0 and z1."""
+        if area2(outline) < 0:
+            outline = list(reversed(outline))
+
+        def span(z):
+            ys = []
+            n = len(outline)
+            for i in range(n):
+                (za, ya), (zb, yb) = outline[i], outline[(i + 1) % n]
+                if (za - z) * (zb - z) <= 0 and za != zb:
+                    ys.append(ya + (z - za) / (zb - za) * (yb - ya))
+            return (min(ys), max(ys)) if len(ys) >= 2 else None
+
+        rings = []
+        for i in range(stations + 1):
+            t = i / stations
+            t = spacing(t) if spacing else t
+            z = z0 + (z1 - z0) * t
+            sp = span(z)
+            if sp is None:
+                continue
+            lo, hi = sp
+            yc, h = (lo + hi) / 2, (hi - lo) / 2
+            wb, wt = width(z, yc, h)
+            e = 2.0 / (power(z) if callable(power) else power)
+            ring = []
+            for k in range(segs):
+                th = 2 * math.pi * k / segs
+                c, sn = math.cos(th), math.sin(th)
+                w = wb + (wt - wb) * (sn + 1) / 2
+                ring.append(Vector((math.copysign(abs(c) ** e, c) * w,
+                                    yc + math.copysign(abs(sn) ** e, sn) * h, z)))
+            rings.append(ring)
+        return self.loft(rings, mat, xf)
+
     def cut(self, part):
         """Subtract another Part (a cutter) when the object is made."""
         self.cutters.append(part)
@@ -564,10 +640,53 @@ def box_uv(me, origin_b):
     bm.free()
 
 
-def make(part, sharp_angle=40.0):
-    """Turn a Part into a Blender object: booleans, UVs, smoothing."""
+def wear(me, mats=("Blued",), width=0.0028, turn=25.0, amount=0.45, seed=0.0):
+    """Edge wear: the narrow faces of bevels and roundings on `mats`, where
+    a face turns more than `turn` degrees from a neighbour, go to bare
+    `Worn` steel in noisy patches (`amount` of the length), the way bluing
+    rubs off a gun's edges in the hand and the holster."""
+    from mathutils import noise
+    idx = [i for i, m in enumerate(me.materials) if m and m.name in mats]
+    if not idx:
+        return
+    me.materials.append(material("Worn"))
+    worn = len(me.materials) - 1
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    cos_t = math.cos(math.radians(turn))
+    hits = []
+    for f in bm.faces:
+        if f.material_index not in idx:
+            continue
+        # Narrow: its area is small for its longest edge.
+        longest = max(e.calc_length() for e in f.edges)
+        if longest < 1e-6 or f.calc_area() / longest > width:
+            continue
+        # A strip along an edge turns across its long sides; a sliver of a
+        # flat face (booleans leave many) does not.
+        if not any(g is not f and f.normal.dot(g.normal) < cos_t
+                   for e in f.edges if e.calc_length() > 0.5 * longest
+                   for g in e.link_faces):
+            continue
+        c = f.calc_center_median()
+        if noise.noise(c * 60.0 + Vector((seed, seed, seed))) > 0.5 - amount:
+            continue
+        hits.append(f)
+    for f in hits:
+        f.material_index = worn
+    bm.to_mesh(me)
+    bm.free()
+
+
+def make(part, sharp_angle=40.0, worn=None):
+    """Turn a Part into a Blender object: booleans, UVs, smoothing, and
+    edge wear if `worn` is a dict of `wear` arguments."""
     cutters = part.cutters
     obj = _bm_to_object(part)
+    # Wear before the cuts: engraving and slots stay the plain finish.
+    if worn is not None:
+        wear(obj.data, **worn)
     for c in cutters:
         c.origin = part.origin.copy()
         cobj = _bm_to_object(c, part.name + "_cutter")
@@ -588,11 +707,11 @@ def make(part, sharp_angle=40.0):
     return obj
 
 
-def join(name, *parts):
+def join(name, *parts, worn=None):
     """Make several Parts (e.g. one with boolean cuts and one without, which
     the exact solver would mangle) and join them into one object. They
     should share an origin; the first one's is kept."""
-    objs = [make(p) if isinstance(p, Part) else p for p in parts]
+    objs = [make(p, worn=worn) if isinstance(p, Part) else p for p in parts]
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
         o.select_set(True)

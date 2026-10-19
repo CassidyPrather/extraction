@@ -9,6 +9,7 @@ use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primi
 use crate::raid::Remains;
 use crate::raid::truck::{Pressable, Stash, TRUCK_PARTS, Truck, WHEELS};
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
+use crate::render::world_props::{Blockout, SwapIn};
 use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
 
 pub struct PropVisualsPlugin;
@@ -25,7 +26,14 @@ impl Plugin for PropVisualsPlugin {
                 dress_capstone,
             ),
         )
-        .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
+        // Before propagation, from this frame's poses: posed after it, the
+        // gloves drew where the hands were a frame ago (11 ms behind at 90 Hz).
+        .add_systems(
+            PostUpdate,
+            pose_hands
+                .after(crate::rig::apply_rig_poses)
+                .before(TransformSystems::Propagate),
+        )
         .add_systems(
             Update,
             (
@@ -298,15 +306,20 @@ fn dress_containers(
 ) {
     for e in &crates {
         let planks = lib.get(Mat::Planks, &server, &mut materials);
-        commands.entity(e).insert((
+        commands.entity(e).insert(SwapIn::one("supply_crate"));
+        commands.spawn((
             Mesh3d(meshes.add(metric_box(crate::items::loot::SUPPLY_CRATE))),
             MeshMaterial3d(planks),
+            ChildOf(e),
+            Blockout,
         ));
     }
     for (e, stash, remains) in &bags {
         if stash {
             models.request(STASH_MODEL, &server);
-            commands.entity(e).insert(Undressed(STASH_MODEL));
+            commands
+                .entity(e)
+                .insert((Undressed(STASH_MODEL), SwapIn::one("stash_stand")));
             // Its stand, and the shelf the kit sits on in its top.
             let raise = crate::raid::truck::STASH_RAISE;
             let timber = lib.get(Mat::Timber, &server, &mut materials);
@@ -315,12 +328,14 @@ fn dress_containers(
                 MeshMaterial3d(timber.clone()),
                 Transform::from_xyz(0.0, -0.3 - raise * 0.5, 0.0),
                 ChildOf(e),
+                Blockout,
             ));
             commands.spawn((
                 Mesh3d(meshes.add(metric_box(Vec3::new(0.84, 0.02, 1.14)))),
                 MeshMaterial3d(timber),
                 Transform::from_xyz(0.0, 0.0, 0.0),
                 ChildOf(e),
+                Blockout,
             ));
         } else if remains {
             let bag = mat(&mut materials, Color::srgb(0.12, 0.13, 0.12), 0.6, 0.0);
@@ -726,7 +741,7 @@ fn curl_targets(
     hand: &Hand,
     grip: f32,
     trigger: f32,
-    held: &Query<(&Held, &GlobalTransform, &Grabbable)>,
+    held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
 ) -> [f32; 5] {
     // [index, middle, ring, little, thumb]
@@ -773,8 +788,9 @@ fn pose_hands(
     time: Res<Time>,
     mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
     mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
-    hands: Query<(&Hand, &GlobalTransform, &ChildOf)>,
-    held: Query<(&Held, &GlobalTransform, &Grabbable)>,
+    hands: Query<(&Hand, &Transform, &ChildOf), (Without<HandVisual>, Without<Finger>)>,
+    roots_t: Query<&Transform, (Without<Hand>, Without<HandVisual>, Without<Finger>)>,
+    held: Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: Query<&avian3d::prelude::ColliderAabb>,
     inputs: Query<&RigInput>,
     roots: Query<&ChildOf, With<Finger>>,
@@ -782,17 +798,22 @@ fn pose_hands(
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
-        let Ok((hand, gt, parent)) = hands.get(v.hand) else {
+        let Ok((hand, local, parent)) = hands.get(v.hand) else {
             continue;
         };
-        let mut pose = gt.compute_transform();
+        // The rig hand sits on the player's root; held things are loose in
+        // the world: their transforms are this frame's world poses.
+        let Ok(root) = roots_t.get(parent.parent()) else {
+            continue;
+        };
+        let mut pose = root.mul_transform(*local);
         let input = inputs.get(parent.parent()).map(|i| i.hand(v.side));
         let grip = input.map_or(0.0, |i| i.grip);
         let trigger = input.map_or(0.0, |i| i.trigger);
         if let Some(item) = hand.holding {
             if let Ok((h, igt, g)) = held.get(item) {
                 if let Some(p) = g.points.get(h.point).filter(|p| p.role != GripRole::Free) {
-                    pose = igt.mul_transform(p.local).compute_transform();
+                    pose = igt.mul_transform(p.local);
                 }
             }
         }
@@ -849,6 +870,19 @@ fn dress_camp(
     use crate::camp::{BOARD, CampProps, POST_HEIGHT, TABLE};
     use crate::render::materials::{Mat, metric_box};
     for (e, p) in &props {
+        // Boxes until the models are in (`art/props/outdoor.py`).
+        let models = match p {
+            CampProps::Table => vec![
+                ("camp_table", Transform::IDENTITY),
+                (
+                    "lantern",
+                    Transform::from_translation(Vec3::new(-0.48, TABLE.y, 0.12)),
+                ),
+            ],
+            CampProps::Board => vec![("camp_board", Transform::IDENTITY)],
+            CampProps::Post => vec![("camp_post", Transform::IDENTITY)],
+        };
+        commands.entity(e).insert(SwapIn(models));
         let mut part = |m: Mat, size: Vec3, at: Transform| {
             let material = lib.get(m, &server, &mut materials);
             commands.spawn((
@@ -856,6 +890,7 @@ fn dress_camp(
                 MeshMaterial3d(material),
                 at,
                 ChildOf(e),
+                Blockout,
             ));
         };
         match p {
@@ -901,18 +936,21 @@ fn dress_camp(
                     MeshMaterial3d(dark.clone()),
                     Transform::from_translation(lantern + Vec3::Y * 0.015),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cylinder::new(0.045, 0.13))),
                     MeshMaterial3d(glass),
                     Transform::from_translation(lantern + Vec3::Y * 0.095),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cylinder::new(0.055, 0.025))),
                     MeshMaterial3d(dark),
                     Transform::from_translation(lantern + Vec3::Y * 0.17),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     PointLight {

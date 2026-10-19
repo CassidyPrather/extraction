@@ -47,16 +47,21 @@ for lat0, lat1, sectors, rings_ in bands:
         prof = band(lat0 + GAP / 2, lat1 - GAP / 2, rings_ * 2)
         if lat1 > 89:
             prof = band(lat0 + GAP / 2, 89.9, rings_ * 2)
-        core.lathe(prof, "Shell", segs=max(3, int(sweep / 6)), xf=UP, start=a0, sweep=sweep)
+        # The lowest band's panels dark: a pale dome over a dark belly reads
+        # against fog that swallows an all-pale orb.
+        core.lathe(prof, "Dark" if lat1 < -50 else "Shell", segs=max(3, int(sweep / 6)), xf=UP,
+                   start=a0, sweep=sweep)
 # The equator band: a slightly proud ring of shell segments with dark vents.
 for k in range(12):
     a0 = 30.0 * k + 0.8
     core.lathe([(R + 0.004, -0.06), (R + 0.012, -0.03), (R + 0.012, 0.03), (R + 0.004, 0.06),
                 (R - 0.01, 0.06), (R - 0.01, -0.06)], "Shell", segs=5, xf=UP, start=a0,
                sweep=28.4, closed=True)
-    # (5 mm proud of the band: flush faces z-fight.)
+    # (5 mm proud of the band: flush faces z-fight.) Its vents glow: a ring
+    # of lights round the orb that shows from every side, and goes out when
+    # the walker dies.
     core.lathe([(R + 0.017, -0.018), (R + 0.017, 0.018), (R + 0.006, 0.018), (R + 0.006, -0.018)],
-               "Dark", segs=3, xf=UP, start=a0 + 9, sweep=10, closed=True)
+               "Glow", segs=3, xf=UP, start=a0 + 9, sweep=10, closed=True)
 # Hip collars and the ball sockets inside them.
 for i in range(4):
     a = math.pi / 4 + i * math.pi / 2
@@ -91,8 +96,8 @@ def lat_arc(r0, r1, l0, l1, n=4):
 # Dark visor housing proud of the orb, the glowing slit inside it.
 sensor.lathe(lat_arc(R - 0.01, R + 0.022, 8, 28), "Dark", segs=12, xf=UP, start=67, sweep=46,
              closed=True)
-sensor.lathe(lat_arc(R + 0.022, R + 0.026, 14.5, 21.5, 2), "Eye", segs=12, xf=UP, start=72,
-             sweep=36, closed=True)
+sensor.lathe(lat_arc(R + 0.022, R + 0.026, 13.0, 23.0, 2), "Eye", segs=14, xf=UP, start=70,
+             sweep=40, closed=True)
 # A brighter pupil in the middle of the slit.
 sensor.lathe(lat_arc(R + 0.026, R + 0.031, 15.5, 20.5, 2), "Eye", segs=3, xf=UP, start=86,
              sweep=8, closed=True)
@@ -135,13 +140,18 @@ upper.cyl(0.052, -0.055, 0.055, "Dark", segs=24, xf=T(0, UPPER, 0) @ RY(math.pi 
           chamfer=0.006)
 upper.cyl(0.04, -0.065, 0.065, "Shell", segs=24, xf=T(0, UPPER, 0) @ RY(math.pi / 2),
           chamfer=0.008)
+# A glowing ring round each knee cap: legs are where a walker is weak, and
+# a dead leg's knees go dark.
+for sx in (-1, 1):
+    upper.tube(0.036, 0.024, sx * 0.0655, sx * 0.0705, "Glow", segs=24,
+               xf=T(0, UPPER, 0) @ RY(math.pi / 2))
 
 lower = Part("leg_lower")
 shin = [(0.0, 0.03), (0.046, 0.05), (0.056, 0.12), (0.05, 0.36), (0.049, 0.37), (0.049, 0.38),
         (0.046, 0.39), (0.036, 0.5), (0.0, 0.52)]
 lower.lathe(shin, "Shell", segs=24, xf=S(0.82, 1.0, 1.0) @ UP)
 # Accent ring at the bottom of the shin shell.
-lower.lathe([(0.039, 0.47), (0.0415, 0.47), (0.0405, 0.48), (0.038, 0.48)], "Eye", segs=24,
+lower.lathe([(0.039, 0.47), (0.0415, 0.47), (0.0405, 0.48), (0.038, 0.48)], "Glow", segs=24,
             xf=S(0.82, 1.0, 1.0) @ UP, closed=True)
 lower.cyl(0.022, 0.45, LOWER - 0.03, "Dark", segs=14, xf=UP)
 lower.cyl(0.03, 0.70, 0.74, "Dark", segs=14, xf=UP, chamfer=0.006)

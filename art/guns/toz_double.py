@@ -47,9 +47,24 @@ bar.box((0.012, 0.012, 0.004), (0.0, BY + 0.0005, BREECH - 0.0025), "Steel", bev
 fi = fillet([(-0.0205, 0.004), (0.0205, 0.004), (0.023, 0.020), (-0.023, 0.020)],
             [0.006, 0.006, 0.002, 0.002], 3)
 bar.prism(fi, -0.215, -0.165, "Steel", axis="z", bevel=0.002, segs=2)
-fe = fillet([(-0.017, -0.016), (0.017, -0.016), (0.0255, 0.006), (0.0245, 0.029),
-             (-0.0245, 0.029), (-0.0255, 0.006)], [0.010, 0.010, 0.006, 0.002, 0.002, 0.006], 4)
-bar.prism(fe, -0.43, -0.212, "Wood", axis="z", bevel=0.005, segs=2)
+# The forend: a rounded splinter forend, swelling under the hand and
+# tapering to a rounded tip.
+fe = fillet([(-0.2125, 0.029), (-0.2125, -0.009), (-0.235, -0.0155), (-0.33, -0.018),
+             (-0.405, -0.0145), (-0.428, -0.004), (-0.431, 0.029)],
+            [0.0, 0.004, 0.02, 0.03, 0.012, 0.006, 0.0], 4)
+
+
+def fe_w(z, yc, h):
+    swell = 0.0016 * math.exp(-((z + 0.32) / 0.06) ** 2)
+    return (0.0175 + swell, 0.0248 + swell * 0.5)
+
+
+bar.stock(fe, -0.2126, -0.4305, "Wood", fe_w, stations=36, power=3.2)
+# A finger groove along each side.
+fc = Part("cut")
+for sx in (-1, 1):
+    fc.cyl(0.0026, -0.395, -0.255, "Wood", segs=10, xf=T(sx * 0.0262, 0.003, 0))
+bar.cut(fc)
 bar.box((0.008, 0.005, 0.014), (0.0, 0.0045, -0.205), "Steel", bevel=0.0015)  # forend latch
 # Front sling swivel on the bottom rib.
 loop = [(-0.62 + 0.009 * math.cos(a), 0.014 + 0.009 * math.sin(a))
@@ -63,9 +78,12 @@ act_prof = fillet([
     (-0.1185, 0.019), (-0.1185, 0.0525),   # standing breech face
     (-0.106, 0.0535), (-0.094, 0.050),     # fences down to the top strap
     (-0.06, 0.0455), (-0.028, 0.040),
-    (-0.028, -0.0115), (-0.06, -0.0135),   # trigger plate
+    (-0.022, 0.026), (-0.0185, 0.012),     # the rear edge rounded into the wood
+    (-0.022, -0.002), (-0.028, -0.0115),
+    (-0.06, -0.0135),                      # trigger plate
     (-0.088, -0.008), (-0.104, -0.0005), (-0.1185, 0.008),  # knuckle round the hinge pin
-], [0.0, 0.003, 0.004, 0.01, 0.01, 0.002, 0.004, 0.012, 0.012, 0.01, 0.004], 4)
+], [0.0, 0.003, 0.004, 0.01, 0.01, 0.002, 0.008, 0.008, 0.008, 0.002, 0.012, 0.012, 0.01,
+    0.004], 4)
 
 
 def act_w(z, y):
@@ -74,6 +92,23 @@ def act_w(z, y):
 
 
 act.prism(act_prof, 0, 0, "Steel", axis="x", bevel=0.003, segs=2, width=act_w)
+# Engraving on both sides of the action: a border line round the side
+# panel and a scroll of leaves in it, cut a fraction of a millimetre in.
+eng = Part("cut")
+border = fillet([(-0.111, 0.0415), (-0.064, 0.0415), (-0.064, -0.0065), (-0.088, -0.0035),
+                 (-0.103, 0.005), (-0.111, 0.014)], [0.003, 0.004, 0.004, 0.006, 0.006, 0.003], 3)
+scroll = [(-0.083 + 0.0115 * math.exp(-0.16 * a) * math.cos(a),
+           0.019 + 0.0115 * math.exp(-0.16 * a) * math.sin(a))
+          for a in [0.6 + 0.35 * i for i in range(17)]]
+leaf = catmull([(-0.096, 0.034), (-0.088, 0.038), (-0.075, 0.035), (-0.069, 0.028)], 3,
+               closed=False)
+for sx in (-1, 1):
+    side = 0.0245 * sx
+    xf = T(side, 0, 0)
+    eng.sweep(border + border[:1], section_rect(0.0024, 0.0008), "Steel", xf=xf)
+    eng.sweep(scroll, section_rect(0.0024, 0.0007), "Steel", xf=xf)
+    eng.sweep(leaf, section_rect(0.0024, 0.0007), "Steel", xf=xf)
+act.cut(eng)
 # Fences: rounded shoulders behind each barrel.
 for sx in (-1, 1):
     act.sphere(0.0135, (sx * BX, BY + 0.002, -0.1135), "Steel", segs=20, rings=10,
@@ -105,14 +140,16 @@ act.sweep(catmull([(-0.033, -0.017), (-0.0345, -0.025), (-0.032, -0.032), (-0.02
 
 # --- Stock --------------------------------------------------------------------------------
 stock_prof = [
-    (-0.029, 0.0385), (0.025, 0.0265), (0.06, 0.0215), (0.14, 0.019), (0.358, 0.006),
-    (0.366, -0.118),
+    (-0.029, 0.0385), (0.025, 0.0265), (0.06, 0.0215), (0.14, 0.019), (0.36, 0.006),
+    (0.36, -0.118),
     (0.27, -0.098), (0.14, -0.066), (0.085, -0.058), (0.062, -0.054),   # semi-pistol grip
-    (0.035, -0.032), (0.0, -0.024), (-0.029, -0.0155),
+    (0.035, -0.032), (0.0, -0.024), (-0.029, -0.0155), (-0.046, -0.010), (-0.046, 0.036),
 ]
 stock_prof = fillet(stock_prof, [0.002, 0.012, 0.02, 0.02, 0.005, 0.005, 0.05, 0.03, 0.01, 0.008,
-                                 0.012, 0.008, 0.002], 4)
-WIDTH = [(-0.03, 0.0175), (0.0, 0.0165), (0.05, 0.0172), (0.13, 0.0205), (0.37, 0.0215)]
+                                 0.012, 0.008, 0.002, 0.0, 0.0], 4)
+# The head of the stock runs on into the action, flush with its sides.
+WIDTH = [(-0.046, 0.0222), (-0.03, 0.0215), (0.0, 0.0166), (0.05, 0.0172), (0.13, 0.0205),
+         (0.37, 0.0215)]
 
 
 def lerp_table(t, table):
@@ -125,10 +162,13 @@ def lerp_table(t, table):
 
 
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.0095, segs=4,
-            width=lambda z, y: (-lerp_table(z, WIDTH), lerp_table(z, WIDTH)))
+# Rounded all over, oval through the wrist, the comb a little narrower
+# than the belly; the butt end square to the bore under its pad.
+stock.stock(stock_prof, -0.0455, 0.3595, "Wood",
+            lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
+            stations=56, power=2.4)
 # Rubber butt pad.
-pad = fillet([(0.3545, 0.0075), (0.371, 0.0055), (0.381, -0.120), (0.364, -0.1205)],
+pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
              [0.001, 0.004, 0.004, 0.001], 3)
 stock.prism(pad, -0.0215, 0.0215, "Black", axis="x", bevel=0.003, segs=2)
 # Rear sling swivel under the butt.

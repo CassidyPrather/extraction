@@ -51,6 +51,13 @@ pub struct Body {
     pub wading: f32,
     /// Afloat in deep water.
     pub swimming: bool,
+    /// Where the feet stand in the playspace (x, z). Room-scale: they
+    /// follow the head when it walks off, not when it leans; see
+    /// `follow_feet`.
+    pub feet: Option<Vec2>,
+    /// The head's standing height in the playspace, held at its highest
+    /// and slowly let go (so a bend reads as a bend).
+    pub standing: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -171,9 +178,12 @@ pub fn move_bodies(
         let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
             .with_excluded_entities(own.iter().copied().chain([entity]));
         let enc = Encumbrance::from_mass(body.carried_kg);
-        // Room-scale: you stand under your head, wherever it has walked to
-        // in the playspace. The capsule goes there, and moves from there.
-        let under = head_offset(&root, input);
+        // Room-scale: you stand where your feet are (under your head,
+        // unless you're leaning). The capsule goes there, and moves from
+        // there.
+        let feet_before = body.feet;
+        let feet_local = follow_feet(&mut body, &input.head, dt);
+        let under = root.rotation * Vec3::new(feet_local.x, 0.0, feet_local.y);
         for c in &own {
             if let Ok(mut t) = colliders.get_mut(*c) {
                 let local = Vec3::new(input.head.translation.x, 0.0, input.head.translation.z);
@@ -257,9 +267,46 @@ pub fn move_bodies(
         }
 
         root.rotate_y(input.turn);
-        let under = head_offset(&root, input);
+        let under = root.rotation * Vec3::new(feet_local.x, 0.0, feet_local.y);
+        let under_before = feet_before.map_or(under, |f| root.rotation * Vec3::new(f.x, 0.0, f.y));
 
-        let centre = root.translation + under + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        // Room-scale: where the feet walked in the room, the capsule walks
+        // too (stepping up a step, stopping at a wall) rather than
+        // appearing there. (Appearing inside a step's box, it was pushed
+        // back out: walking up a house's steps in the room pushed the room
+        // away instead.)
+        let mut centre = root.translation + under_before + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        let walked = under - under_before;
+        if !climbing && walked.length_squared() > 1e-8 {
+            let out = move_and_slide.move_and_slide(
+                &shape,
+                centre,
+                Quat::IDENTITY,
+                walked / dt.max(1e-4),
+                time.delta(),
+                &config,
+                &filter,
+                |_| MoveAndSlideHitResponse::Accept,
+            );
+            centre = match walk_over(&move_and_slide, &shape, centre, walked, &filter) {
+                // Ground you can stand on (level, a slope): exactly where
+                // the feet went.
+                Some(on) => on,
+                // A step's edge or a wall: slide, and step up if it's a
+                // step.
+                None => {
+                    let mut reached = out.position;
+                    let got = Vec3::new(reached.x - centre.x, 0.0, reached.z - centre.z);
+                    if got.length() < walked.length() * 0.5 {
+                        let up = centre + Vec3::Y * STEP_HEIGHT;
+                        if let Some(s) = try_step(&move_and_slide, &shape, up, walked, &filter) {
+                            reached = s;
+                        }
+                    }
+                    reached
+                }
+            };
+        }
         let mut grounded = false;
         let out = move_and_slide.move_and_slide(
             &shape,
@@ -390,6 +437,33 @@ fn fit_hitboxes(
 #[derive(Component)]
 pub struct HitboxHeight(pub f32);
 
+/// How far the head can lean out past the feet before they step after it.
+const LEAN: f32 = 0.35;
+/// How fast the feet come back under a head that's upright and level, m/s.
+const RECENTRE: f32 = 0.25;
+
+/// Room-scale feet: under the head when you stand straight, but staying
+/// put when you lean or bend over something (a table, a crate), and
+/// stepping after the head when it walks off further than a lean. The
+/// movement capsule stands on them. (Stood under the head itself, the
+/// capsule leant into a bench with you, caught on its edge, and slid you
+/// down the slope you stood on in the first headset session.)
+fn follow_feet(body: &mut Body, head: &Transform, dt: f32) -> Vec2 {
+    let at = Vec2::new(head.translation.x, head.translation.z);
+    body.standing = (body.standing - dt * 0.01).max(head.translation.y);
+    let feet = body.feet.get_or_insert(at);
+    let off = at - *feet;
+    if off.length() > LEAN {
+        *feet += off.normalize() * (off.length() - LEAN);
+    }
+    let level = (head.rotation * Vec3::NEG_Z).y > -0.3;
+    let upright = head.translation.y > body.standing - 0.08;
+    if level && upright {
+        *feet = feet.move_towards(at, RECENTRE * dt);
+    }
+    *feet
+}
+
 /// Where the head stands over the playspace floor, from the root, in the
 /// world's axes (zero for flat play and bots, whose heads sit over the
 /// root; the walked-off distance in room-scale VR).
@@ -404,6 +478,40 @@ pub fn standing_at(root: &GlobalTransform, input: &RigInput) -> Vec3 {
         0.0,
         input.head.translation.z,
     ))
+}
+
+/// Room-scale walking: up a step's height, across by exactly what the feet
+/// walked, and down onto ground you can stand on (level or a slope). None
+/// when something is in the way or it lands on an edge (a step's: the
+/// caller steps up onto it) or the ground falls away further than a step.
+fn walk_over(
+    ms: &MoveAndSlide,
+    shape: &Collider,
+    centre: Vec3,
+    delta: Vec3,
+    filter: &SpatialQueryFilter,
+) -> Option<Vec3> {
+    let dir = Dir3::new(delta).ok()?;
+    let cast = |from: Vec3, dir: Dir3, d: f32| {
+        ms.spatial_query.cast_shape(
+            shape,
+            from,
+            Quat::IDENTITY,
+            dir,
+            &ShapeCastConfig::from_max_distance(d),
+            filter,
+        )
+    };
+    if cast(centre, Dir3::Y, STEP_HEIGHT).is_some() {
+        return None;
+    }
+    let raised = centre + Vec3::Y * STEP_HEIGHT;
+    if cast(raised, dir, delta.length()).is_some() {
+        return None;
+    }
+    let across = raised + delta;
+    let hit = cast(across, Dir3::NEG_Y, STEP_HEIGHT * 2.0)?;
+    (hit.normal1.y > 0.65).then(|| across - Vec3::Y * (hit.distance - 0.005).max(0.0))
 }
 
 fn try_step(

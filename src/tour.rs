@@ -426,6 +426,44 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
     out
 }
 
+/// `--tour-views FILE`: one view a line, `name x,y,z,yaw,pitch`, the
+/// same numbers as `--camera` (y 0 stands you there, eyes 1.7 m up; yaw 0
+/// looks toward -Z, 90 toward +X). `#` starts a comment.
+pub fn scripted_views(zone: &Zone, file: &std::path::Path) -> Vec<View> {
+    let text = std::fs::read_to_string(file).unwrap_or_else(|e| {
+        error!("tour: can't read {}: {e}", file.display());
+        String::new()
+    });
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        let mut parts = line.split_whitespace();
+        let (Some(name), Some(cam)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let v: Vec<f32> = cam.split(',').filter_map(|s| s.parse().ok()).collect();
+        if v.len() < 5 {
+            warn!("tour: bad view line {line:?}");
+            continue;
+        }
+        let ground = zone.ground(v[0], v[2]);
+        let y = if v[1] <= 0.0 {
+            ground + 1.7
+        } else {
+            v[1].max(ground + 0.3)
+        };
+        let at = Vec3::new(v[0], y, v[2]);
+        let rot = Quat::from_euler(EulerRot::YXZ, -v[3].to_radians(), v[4].to_radians(), 0.0);
+        out.push(View {
+            file: format!("{name}.png"),
+            what: line.to_string(),
+            at: at.to_array(),
+            look: (at + rot * Vec3::NEG_Z * 10.0).to_array(),
+        });
+    }
+    out
+}
+
 fn tour(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -445,7 +483,10 @@ fn tour(
     }
     let state = &mut *state;
     let views = state.views.get_or_insert_with(|| {
-        let mut v = views(&zone);
+        let mut v = match &opts.tour_views {
+            Some(file) => scripted_views(&zone, file),
+            None => views(&zone),
+        };
         if let Some(only) = &opts.tour_only {
             v.retain(|v| v.file.contains(only.as_str()));
         }

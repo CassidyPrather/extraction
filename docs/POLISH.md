@@ -43,8 +43,9 @@ not just the instance.
 
 - **Before you finish:** `cargo test --workspace` and
   `cargo run --profile fast -- --headless --scenario all` (must print
-  `all 7 scenarios OK`). While working, run only the tests you touched;
-  the full suite takes about 7 minutes.
+  `all 8 scenarios OK`). While working, run only the tests you touched;
+  the full suite takes about 7 minutes. If it restarts your container,
+  use `cargo test --workspace -j 2 -- --test-threads=2`.
 - **Looking at things:**
   - `cargo build --profile fast`, then
     `xvfb-run -a target/fast/extraction --map <map> --data-dir <tmp>
@@ -85,9 +86,30 @@ reformatting their code.
 | Models: kit | `art/guns`, `art/mags`, `art/robots`, `art/vehicles`, `art/items`, and the Rust that places their nodes (`src/weapons` layouts, `src/robots/visuals.rs`) only where a model change needs it |
 | Visual design | `src/world/sky.rs`, `src/render/terrain_material.rs` + `assets/shaders/`, `src/world/terrain.rs` (visual), `src/world/trees.rs`, `src/render/materials.rs`, ground cover, rocks visuals, weather, post-processing, colour grading, per-valley atmosphere |
 | Map design | `assets/maps/{marrow_creek,kettle_pass,cinder_works}.ron`, map validation and lint (`crates/extraction_core/src/map*.rs`, new modules), `scripts/map_preview.py`, a map design guide in `docs/` |
+| Hands | the gloves and how they look holding things: the glove meshes and finger bones in `src/render/props.rs` (`pose_hands` and the glove builders), new `art/hands/` scripts; the poses' look, not the grab logic |
+| Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.
+
+## Shared hooks
+
+Things one workstream built for the others. Use them rather than making
+your own:
+
+- `rig::haptics::StepDone { at, station }` (or `rig::haptics::step_done`):
+  "that's done, next". Plays the step chime (`station: true`, the
+  two-bell one) and a click in both hands. Haptics follow the scale in
+  `rig::haptics`: tick, click, knock, and kick only for shots and hits.
+- `LaunchOptions::tooling()`: a run driven by a scenario, sim, bot,
+  screenshot or tour. Such runs never reopen the game.
+- `MATERIAL_NAMES` in `src/models.rs` and `MATERIALS` in `art/common.py`
+  must list the same names (a test holds them together); add new model
+  materials to both.
+
+The coordinator does every merge. Don't merge the coordinator's branch
+into yours (you can't, from a session); keep working on your own, and
+say in your report what you'd want from it.
 
 ## Handing back
 

@@ -23,7 +23,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cell_bay, cube, item, panel, ring, tube_path, wanted
+from _kit import (ALONG_X, UP, cell_bay, centred, cube, item, panel, ring, transform,
+                  tube_path, wanted)
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -120,7 +121,8 @@ def radio():
     # Belt clip on the back.
     p.box((0.02, 0.06, 0.003), (0.0, 0.0, -D / 2 - 0.0035), "Steel", bevel=0.001, segs=1)
     p.box((0.02, 0.006, 0.005), (0.0, 0.028, -D / 2 - 0.002), "Steel")
-    return [p, window]
+    # Its box takes in the aerial (`dims` in items.ron).
+    return centred([p, window])
 
 
 # --- Binoculars ---------------------------------------------------------------------------
@@ -274,8 +276,37 @@ def lead_case():
     recess = Part("recess")
     recess.box((0.05, 0.009, 0.03), (0.0, 0.035, 0.0), "Yellow")
     p.cut(recess)
+    # The warning plate: a black trefoil let into the yellow, the two a
+    # mosaic of full-thickness pieces (printed on, they'd z-fight).
+    def sector(r0, r1, a0, a1, n=8):
+        outer = [(r1 * math.cos(math.radians(a0 + (a1 - a0) * i / n)),
+                  r1 * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+        inner = [(r0 * math.cos(math.radians(a1 - (a1 - a0) * i / n)),
+                  r0 * math.sin(math.radians(a1 - (a1 - a0) * i / n))) for i in range(n + 1)]
+        return outer + inner
+
+    trefoil = [[(0.003 * math.cos(2 * math.pi * i / 14), 0.003 * math.sin(2 * math.pi * i / 14))
+                for i in range(14)]]
+    trefoil += [sector(0.0045, 0.0115, a - 30, a + 30) for a in (90, 210, 330)]
+    y0, y1 = 0.0311, 0.0355
     plate = Part("plate")
-    plate.box((0.05, 0.0044, 0.03), (0.0, 0.0333, 0.0), "Yellow")
+    plate.box((0.05, y1 - y0, 0.03), (0.0, (y0 + y1) / 2, 0.0), "Yellow")
+    holes = Part("cut")
+    for poly in trefoil:
+        holes.prism(poly, y0 - 0.001, y1 + 0.001, "Yellow", axis="y")
+    plate.cut(holes)
+    for poly in trefoil:
+        plate.prism(poly, y0, y1, "Black", axis="y")
+    # A folding bail handle on top, and the hinges along the back.
+    for sx in (-1, 1):
+        p.box((0.012, 0.008, 0.016), (sx * 0.04, 0.039, -0.035), "Steel", bevel=0.002, segs=1)
+    p.sweep([(-0.04, 0.041), (-0.04, 0.047), (-0.03, 0.05), (0.03, 0.05), (0.04, 0.047),
+             (0.04, 0.041)], [(0.0025 * math.cos(a), 0.0025 * math.sin(a)) for a in
+                              [2 * math.pi * i / 6 for i in range(6)]], "Steel",
+            xf=T(0, 0, -0.035) @ RY(math.pi / 2))
+    for sx in (-1, 1):
+        p.cyl(0.004, sx * 0.04 - 0.012, sx * 0.04 + 0.012, "Steel", segs=10,
+              xf=T(0, 0.0115, -0.057) @ RY(math.pi / 2))
     return [p, plate]
 
 
@@ -505,7 +536,8 @@ def matches():
     xf = T(0.002, yb + h + 0.0007, 0.004) @ RY(0.5)
     p.box((0.0012, 0.0012, 0.02), (0.0, 0.0, 0.0), "Cream", xf=xf)
     p.box((0.0017, 0.0017, 0.003), (0.0, 0.0, -0.0105), "Bakelite", bevel=0.0005, segs=1, xf=xf)
-    return [p]
+    # Modelled small; a real box is about 5 x 3.6 x 1.7 cm.
+    return centred(transform([p], S(2.1, 1.85, 2.0)))
 
 
 # --- Door wedge -------------------------------------------------------------------------------
@@ -535,7 +567,8 @@ def door_wedge():
                   (0.0, yb + sole + 0.0245, 0.022), (-0.012, yb + sole + 0.026, 0.024),
                   (-0.022, yb + sole + 0.024, 0.024), (-0.023, yb + sole + 0.016, 0.022),
                   (-0.0195, yb + sole + 0.012, 0.019)], 0.0011, "Rope", sides=5, closed=False)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case),

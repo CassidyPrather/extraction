@@ -48,6 +48,24 @@ pub struct DoorDef {
     pub mat: Mat,
 }
 
+/// A modelled prop (`art/props`, see `render::world_props`) drawn in place
+/// of some of a recipe's pieces. Their colliders, surfaces and loot spots
+/// stay as they are; only their boxes' meshes give way, and only once every
+/// model here has loaded. An empty `pieces` range adds the models as
+/// dressing (a window's carved surround) with nothing to replace.
+#[derive(Clone, Debug)]
+pub struct PropDef {
+    /// Model names under `models/props/`, posed in building space.
+    pub models: Vec<(&'static str, Transform)>,
+    pub pieces: std::ops::Range<usize>,
+    /// Furniture: drawn without shadows (the sun doesn't reach it) and
+    /// only near, its boxes standing in further off.
+    pub inside: bool,
+    /// Outside, whether it casts a shadow (a gate's blocks do; windows,
+    /// in their wall's shadow already, don't).
+    pub shadow: bool,
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct Geo {
     pub pieces: Vec<Piece>,
@@ -55,6 +73,7 @@ pub struct Geo {
     pub doors: Vec<DoorDef>,
     /// Warm interior lamps (rare; most of the Zone is dark).
     pub lights: Vec<Vec3>,
+    pub props: Vec<PropDef>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -115,6 +134,14 @@ pub fn wide_window(centre: f32, width: f32) -> Opening {
 #[derive(Default)]
 pub struct Builder {
     pub geo: Geo,
+    /// Set while `shell` builds outside walls: their local -Z faces out.
+    exterior: bool,
+}
+
+/// One of `n` variants for a prop at `at`, so a room's two crates differ
+/// but a rebuild picks the same.
+fn variant(at: Vec3, n: usize) -> usize {
+    ((at.x * 7.31 + at.z * 3.17 + at.y * 1.3).sin().abs() * 997.0) as usize % n
 }
 
 impl Builder {
@@ -154,6 +181,47 @@ impl Builder {
             mat,
             false,
         )
+    }
+
+    /// The pieces pushed since `from` are drawn by these models once they
+    /// load (see [`PropDef`]).
+    pub fn dress(&mut self, from: usize, models: Vec<(&'static str, Transform)>) -> &mut Self {
+        let to = self.geo.pieces.len();
+        self.geo.props.push(PropDef {
+            models,
+            pieces: from..to,
+            inside: true,
+            shadow: false,
+        });
+        self
+    }
+
+    /// As `dress`, for the building's own fabric (windows): drawn as far
+    /// as the building is, casting shadows.
+    pub fn dress_outside(
+        &mut self,
+        from: usize,
+        models: Vec<(&'static str, Transform)>,
+    ) -> &mut Self {
+        self.dress(from, models);
+        if let Some(d) = self.geo.props.last_mut() {
+            d.inside = false;
+        }
+        self
+    }
+
+    /// As `dress`, for structures standing in the open (a gate's blocks):
+    /// drawn as far as the building is, casting shadows.
+    pub fn dress_structure(
+        &mut self,
+        from: usize,
+        models: Vec<(&'static str, Transform)>,
+    ) -> &mut Self {
+        self.dress_outside(from, models);
+        if let Some(d) = self.geo.props.last_mut() {
+            d.shadow = true;
+        }
+        self
     }
 
     pub fn loot(&mut self, at: Vec3, table: &'static str) -> &mut Self {
@@ -203,6 +271,7 @@ impl Builder {
             let mid = at(o.centre, y0);
             match o.kind {
                 OpeningKind::Window => {
+                    let from = self.geo.pieces.len();
                     // The glazing bar stands proud of the glass both sides.
                     self.piece(
                         Shape::Box(Vec3::new(o.width - 0.02, 0.03, 0.04)),
@@ -218,6 +287,32 @@ impl Builder {
                         Mat::Glass,
                         false,
                     );
+                    // Modelled: a row of sashes stretched to fill the
+                    // opening, and on a timber house's outside a carved
+                    // surround.
+                    let n = (o.width / 1.0).round().max(1.0);
+                    let (uw, h) = (o.width / n, o.top - o.bottom);
+                    let centre_y = y0 + (o.bottom + o.top) * 0.5;
+                    let sashes = (0..n as usize)
+                        .map(|i| {
+                            let s = o.centre - o.width * 0.5 + uw * (i as f32 + 0.5);
+                            (
+                                "window_sash",
+                                Transform::from_translation(at(s, centre_y))
+                                    .with_rotation(rot)
+                                    .with_scale(Vec3::new(uw, h / 1.1, 1.0)),
+                            )
+                        })
+                        .collect();
+                    self.dress_outside(from, sashes);
+                    if self.exterior && matches!(mat, Mat::Planks | Mat::LogWall) {
+                        let face = at(o.centre, centre_y) + rot * Vec3::new(0.0, 0.0, -thick * 0.5);
+                        let casing = Transform::from_translation(face)
+                            .with_rotation(rot)
+                            .with_scale(Vec3::new(o.width, h / 1.1, 1.0));
+                        let here = self.geo.pieces.len();
+                        self.dress_outside(here, vec![("window_casing", casing)]);
+                    }
                     self.piece(
                         Shape::Box(Vec3::new(o.width + 0.1, 0.05, thick + 0.08)),
                         Transform::from_translation(mid + Vec3::Y * o.bottom).with_rotation(rot),
@@ -248,7 +343,12 @@ impl Builder {
                         width: o.width - 0.04,
                         height: o.top - o.bottom - 0.02,
                         yaw,
-                        mat: Mat::Planks,
+                        // Plank doors in timber walls, steel elsewhere.
+                        mat: if matches!(mat, Mat::Planks | Mat::LogWall) {
+                            Mat::Planks
+                        } else {
+                            Mat::PaintedMetal
+                        },
                     });
                 }
                 OpeningKind::Gap => {}
@@ -266,7 +366,139 @@ impl Builder {
             cursor = s1;
         }
         seg(self, cursor, len, 0.0, height);
+        if self.exterior {
+            self.exterior_trim(a, dir, rot, len, y0, height, thick, mat, &ops);
+        }
         self
+    }
+
+    /// Visual trim on an outside wall (see `shell`), so a house reads as
+    /// built rather than cut from boxes: a filler for the corner the wall
+    /// ends at (walls meet on their centre lines, which leaves a notch
+    /// outside), then by material corner boards, a drip board and door
+    /// surrounds (timber), or a cornice band and a rendered base
+    /// (masonry). A strip runs past the corner it ends at by its own depth
+    /// and starts at the corner's face where it begins, so the two that
+    /// meet at a corner never share a face.
+    #[allow(clippy::too_many_arguments)]
+    fn exterior_trim(
+        &mut self,
+        a: Vec2,
+        dir: Vec2,
+        rot: Quat,
+        len: f32,
+        y0: f32,
+        h: f32,
+        thick: f32,
+        mat: Mat,
+        ops: &[Opening],
+    ) {
+        let face = thick * 0.5;
+        // A box from s0 to s1 along the wall, ya to yb up, standing `out`
+        // from the centre line to `out + depth`.
+        let strip = |b: &mut Self, s0: f32, s1: f32, ya: f32, yb: f32, out: f32, depth: f32, m| {
+            if s1 - s0 < 0.01 {
+                return;
+            }
+            let c = a + dir * ((s0 + s1) * 0.5);
+            let centre = Vec3::new(c.x, y0 + (ya + yb) * 0.5, c.y)
+                + rot * Vec3::new(0.0, 0.0, -(out + depth * 0.5));
+            b.piece(
+                Shape::Box(Vec3::new(s1 - s0, yb - ya, depth)),
+                Transform::from_translation(centre).with_rotation(rot),
+                m,
+                false,
+            );
+        };
+        strip(self, len, len + face, 0.0, h, 0.0, face, mat);
+        let doors: Vec<(f32, f32, OpeningKind, f32)> = ops
+            .iter()
+            .filter(|o| o.kind != OpeningKind::Window)
+            .map(|o| {
+                (
+                    (o.centre - o.width * 0.5).max(0.0),
+                    (o.centre + o.width * 0.5).min(len),
+                    o.kind,
+                    o.top,
+                )
+            })
+            .collect();
+        // Runs of a strip along the wall's foot, broken at doorways by
+        // `clear` either side.
+        let runs = |end: f32, clear: f32| {
+            let mut out = Vec::new();
+            let mut s = -face;
+            for &(s0, s1, _, _) in &doors {
+                out.push((s, s0 - clear));
+                s = s1 + clear;
+            }
+            out.push((s, end));
+            out
+        };
+        match mat {
+            Mat::Planks | Mat::LogWall => {
+                let timber = Mat::Timber;
+                if mat == Mat::Planks {
+                    strip(self, -face, -face + 0.14, -0.05, h, face, 0.03, timber);
+                    let e = len + face + 0.03;
+                    strip(self, e - 0.14, e, -0.05, h, face, 0.03, timber);
+                    for (s0, s1) in runs(len + face + 0.045, 0.13) {
+                        strip(self, s0, s1, -0.04, 0.12, face, 0.045, timber);
+                    }
+                }
+                for &(s0, s1, kind, top) in &doors {
+                    if kind != OpeningKind::Door {
+                        continue;
+                    }
+                    strip(
+                        self,
+                        s0 - 0.13,
+                        s0 - 0.03,
+                        0.0,
+                        top + 0.065,
+                        face,
+                        0.035,
+                        timber,
+                    );
+                    strip(
+                        self,
+                        s1 + 0.03,
+                        s1 + 0.13,
+                        0.0,
+                        top + 0.065,
+                        face,
+                        0.035,
+                        timber,
+                    );
+                    strip(
+                        self,
+                        s0 - 0.16,
+                        s1 + 0.16,
+                        top + 0.065,
+                        top + 0.2,
+                        face,
+                        0.045,
+                        timber,
+                    );
+                }
+            }
+            Mat::Brick | Mat::Plaster => {
+                strip(
+                    self,
+                    -face,
+                    len + face + 0.04,
+                    h - 0.18,
+                    h - 0.02,
+                    face,
+                    0.04,
+                    mat,
+                );
+                for (s0, s1) in runs(len + face + 0.025, 0.06) {
+                    strip(self, s0, s1, -0.05, 0.3, face, 0.025, Mat::Concrete);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Four walls round a rectangle (centred), openings per side:
@@ -289,9 +521,11 @@ impl Builder {
             Vec2::new(x, z),
             Vec2::new(-x, z),
         ];
+        self.exterior = true;
         for i in 0..4 {
             self.wall(c[i], c[(i + 1) % 4], y0, h, thick, mat, sides[i]);
         }
+        self.exterior = false;
         self
     }
 
@@ -382,6 +616,46 @@ impl Builder {
                 false,
             );
         }
+        // Fascias along the eaves, barge boards up the gables, a cap over
+        // the ridge (see the slabs above: each is turned about Z by
+        // -side * pitch, so its +X runs down the slope on side +1).
+        let depth = d + 2.0 * overhang;
+        let (sp, cp) = pitch.sin_cos();
+        let cx = (w * 0.5 + overhang) * 0.5;
+        let cy = eave_y + rise * 0.5 - overhang * pitch.tan() * 0.5 + 0.06;
+        // Where the ridge is on a slab's top face, along its slope.
+        let u_ridge = -(cx + thick * 0.5 * sp) / cp;
+        for side in [-1.0f32, 1.0] {
+            let rot = Quat::from_rotation_z(-side * pitch);
+            let local = |u: f32, v: f32| {
+                Vec3::new(side * (cx + u * cp + v * sp), cy - u * sp + v * cp, 0.0)
+            };
+            let edge = local(slope_len * 0.5, 0.0);
+            self.piece(
+                Shape::Box(Vec3::new(0.03, 0.2, depth)),
+                Transform::from_translation(edge + Vec3::new(side * 0.01, -0.06, 0.0)),
+                Mat::Timber,
+                false,
+            );
+            for z in [-1.0f32, 1.0] {
+                self.piece(
+                    Shape::Box(Vec3::new(slope_len, 0.2, 0.03)),
+                    Transform::from_translation(
+                        local(0.0, -0.07) + Vec3::Z * z * (depth * 0.5 + 0.015),
+                    )
+                    .with_rotation(rot),
+                    Mat::Timber,
+                    false,
+                );
+            }
+            self.piece(
+                Shape::Box(Vec3::new(0.15, 0.03, depth + 0.08)),
+                Transform::from_translation(local(u_ridge + 0.07, thick * 0.5 + 0.017))
+                    .with_rotation(rot),
+                Mat::DarkMetal,
+                false,
+            );
+        }
         // Ceiling, so the attic doesn't glare.
         if ceiling {
             self.piece(
@@ -399,12 +673,35 @@ impl Builder {
             Vec3::new(w + 0.4, 0.25, d + 0.4),
             Vec3::new(0.0, y + 0.125, 0.0),
             mat,
-        )
+        );
+        // Sheet-metal coping round the edge, standing a little above the
+        // roof: the front and back pieces cover the sides' ends.
+        let (x, z) = (w * 0.5 + 0.2, d * 0.5 + 0.2);
+        for s in [-1.0f32, 1.0] {
+            self.piece(
+                Shape::Box(Vec3::new(2.0 * x + 0.08, 0.1, 0.04)),
+                Transform::from_xyz(0.0, y + 0.22, s * (z + 0.02)),
+                Mat::DarkMetal,
+                false,
+            );
+            self.piece(
+                Shape::Box(Vec3::new(0.04, 0.1, 2.0 * z)),
+                Transform::from_xyz(s * (x + 0.02), y + 0.22, 0.0),
+                Mat::DarkMetal,
+                false,
+            );
+        }
+        self
     }
 
     // --- furniture ---------------------------------------------------
+    //
+    // Each piece of furniture is boxes for its colliders and loot surfaces,
+    // drawn by its model from `art/props/furniture.py` and `crates.py` when
+    // that has loaded (the boxes otherwise).
 
     pub fn table(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(1.2, 0.05, 0.7)),
@@ -420,6 +717,10 @@ impl Builder {
                 false,
             );
         }
+        self.dress(
+            from,
+            vec![("table", Transform::from_translation(at).with_rotation(rot))],
+        );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.82, t);
         }
@@ -427,6 +728,7 @@ impl Builder {
     }
 
     pub fn shelf(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         for k in 0..4 {
             let y = 0.3 + k as f32 * 0.45;
@@ -450,10 +752,15 @@ impl Builder {
                 true,
             );
         }
-        self
+        let model = ["shelf", "shelf_metal"][variant(at, 2)];
+        self.dress(
+            from,
+            vec![(model, Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn bed(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(0.9, 0.45, 1.95)),
@@ -467,7 +774,10 @@ impl Builder {
             Mat::Canvas,
             false,
         );
-        self
+        self.dress(
+            from,
+            vec![("bed", Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn counter(
@@ -477,6 +787,7 @@ impl Builder {
         len: f32,
         loot: Option<&'static str>,
     ) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(len, 0.9, 0.6)),
@@ -484,6 +795,35 @@ impl Builder {
             Mat::Timber,
             true,
         );
+        // The model's doors face the room: towards the building's middle
+        // (behind a shop counter, that's the keeper's side).
+        let front = if (rot * Vec3::NEG_Z).dot(-at.with_y(0.0)) < 0.0 {
+            rot * Quat::from_rotation_y(std::f32::consts::PI)
+        } else {
+            rot
+        };
+        let n = (len / 0.6).round().max(1.0);
+        let w = len / n;
+        let pick = variant(at, 2);
+        let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
+            .map(|i| {
+                let x = -len * 0.5 + w * (i as f32 + 0.5);
+                let m = ["counter_cabinet", "counter_drawers"][(i + pick) % 2];
+                (
+                    m,
+                    Transform::from_translation(at + front * Vec3::X * x)
+                        .with_rotation(front)
+                        .with_scale(Vec3::new(w / 0.6, 1.0, 1.0)),
+                )
+            })
+            .collect();
+        models.push((
+            "counter_top",
+            Transform::from_translation(at)
+                .with_rotation(front)
+                .with_scale(Vec3::new(len, 1.0, 1.0)),
+        ));
+        self.dress(from, models);
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.95, t);
         }
@@ -491,6 +831,7 @@ impl Builder {
     }
 
     pub fn stove(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(0.7, 0.85, 0.6)),
@@ -504,11 +845,28 @@ impl Builder {
             Mat::DarkMetal,
             false,
         );
-        self
+        self.dress(
+            from,
+            vec![("stove", Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn crate_box(&mut self, at: Vec3, size: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         self.bx(Vec3::splat(size), at + Vec3::Y * size * 0.5, Mat::Planks);
+        // A cube either way round: turned a quarter or so for variety.
+        let k = variant(at, 8);
+        let model = ["crate_slat", "crate_army"][k % 2];
+        let turn = Quat::from_rotation_y((k / 2) as f32 * std::f32::consts::FRAC_PI_2);
+        self.dress(
+            from,
+            vec![(
+                model,
+                Transform::from_translation(at)
+                    .with_rotation(turn)
+                    .with_scale(Vec3::splat(size)),
+            )],
+        );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * (size + 0.05), t);
         }
@@ -516,6 +874,7 @@ impl Builder {
     }
 
     pub fn workbench(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
+        let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
         self.piece(
             Shape::Box(Vec3::new(2.0, 0.08, 0.8)),
@@ -529,10 +888,90 @@ impl Builder {
             Mat::RustyMetal,
             true,
         );
+        self.dress(
+            from,
+            vec![(
+                "workbench",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
+        );
         if let Some(t) = loot {
             self.loot(at + Vec3::Y * 0.98, t);
         }
         self
+    }
+
+    /// A plank chair, facing -Z (its back at +Z): solid seat and back.
+    pub fn chair(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(0.42, 0.45, 0.42)),
+            Transform::from_translation(at + Vec3::Y * 0.225).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.piece(
+            Shape::Box(Vec3::new(0.38, 0.45, 0.04)),
+            Transform::from_translation(at + rot * Vec3::new(0.0, 0.675, 0.18)).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("chair", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
+    /// A steel locker, its door on -Z.
+    pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(0.5, 1.8, 0.45)),
+            Transform::from_translation(at + Vec3::Y * 0.9).with_rotation(rot),
+            Mat::PaintedMetal,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("locker", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
+    /// A 200 l drum.
+    pub fn barrel(&mut self, at: Vec3) -> &mut Self {
+        let from = self.geo.pieces.len();
+        self.piece(
+            Shape::Cylinder(0.29, 0.88),
+            Transform::from_translation(at + Vec3::Y * 0.44),
+            Mat::PaintedMetal,
+            true,
+        );
+        let turn = Quat::from_rotation_y(variant(at, 12) as f32 * 0.5);
+        self.dress(
+            from,
+            vec![(
+                "barrel",
+                Transform::from_translation(at).with_rotation(turn),
+            )],
+        )
+    }
+
+    /// A pallet on the floor (things can stand on it).
+    pub fn pallet(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(1.2, 0.144, 0.8)),
+            Transform::from_translation(at + Vec3::Y * 0.072).with_rotation(rot),
+            Mat::Planks,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("pallet", Transform::from_translation(at).with_rotation(rot))],
+        )
     }
 
     pub fn finish(self) -> Geo {
@@ -613,7 +1052,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "factory_hall" => {
             hall(&mut b, 36.0, 20.0, 9.0, Mat::Brick, Mat::Corrugated, false);
             factory_fitout(&mut b, 36.0, 20.0, 9.0, 0.1);
-            b.crate_box(Vec3::new(-14.0, 0.1, -7.0), 0.9, Some("workshop"));
+            // On a pallet: the crate (and its loot) stand on the pallet's top.
+            b.pallet(Vec3::new(-14.0, 0.1, -7.0), 0.0);
+            b.crate_box(Vec3::new(-14.0, 0.244, -7.0), 0.9, Some("workshop"));
             b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
         }
         "chimney" => chimney(&mut b),
@@ -666,6 +1107,11 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
     b.gable_roof(w + 0.36, d + 0.36, f + h, 32.0, 0.5, roof, wall);
     // Front room.
     b.table(Vec3::new(-x * 0.4, f, -z * 0.2), 0.0, Some("house"));
+    b.chair(
+        Vec3::new(-x * 0.4 - 0.3, f, -z * 0.2 - 0.6),
+        std::f32::consts::PI,
+    );
+    b.chair(Vec3::new(-x * 0.4 + 0.25, f, -z * 0.2 + 0.6), 0.1);
     b.shelf(
         Vec3::new(x - 0.3, f, -z * 0.4),
         std::f32::consts::FRAC_PI_2,
@@ -715,6 +1161,7 @@ fn cabin(b: &mut Builder) {
     b.stove(Vec3::new(2.6, f, 2.3), 0.0);
     b.bed(Vec3::new(-2.8, f, 1.5), 0.0);
     b.table(Vec3::new(0.0, f, 0.5), 0.3, Some("kitchen"));
+    b.chair(Vec3::new(0.45, f, -0.5), std::f32::consts::PI + 0.3);
     b.shelf(Vec3::new(-1.0, f, 2.7), 0.0, Some("house"));
     b.crate_box(Vec3::new(2.8, f, -2.2), 0.6, Some("tools"));
 }
@@ -819,6 +1266,8 @@ fn barn(b: &mut Builder) {
     );
     b.crate_box(Vec3::new(4.5, f, 5.5), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
+    b.barrel(Vec3::new(5.2, f, 6.9));
+    b.barrel(Vec3::new(4.6, f, 7.2));
 }
 
 fn sawmill(b: &mut Builder) {
@@ -1081,6 +1530,11 @@ fn pump_station(b: &mut Builder) {
         &[door(3.5)],
     );
     b.table(Vec3::new(5.5, f, -3.0), 0.0, Some("tools"));
+    b.chair(Vec3::new(5.4, f, -2.35), -0.2);
+    b.locker(Vec3::new(6.6, f, -4.45), 0.0);
+    for (x, z) in [(-6.3, 4.2), (-5.6, 4.35), (-6.2, 3.55)] {
+        b.barrel(Vec3::new(x, f, z));
+    }
     b.shelf(
         Vec3::new(6.6, f, -1.0),
         std::f32::consts::FRAC_PI_2,
@@ -1320,6 +1774,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
             Vec3::new(w * 0.5 - 3.0, f, d * 0.5 - 2.5),
             0.0,
             Some("house"),
+        );
+        b.chair(Vec3::new(w * 0.5 - 3.1, f, d * 0.5 - 1.85), 0.15);
+        b.locker(
+            Vec3::new(w * 0.5 - 5.5, f, d * 0.5 - 0.45),
+            std::f32::consts::PI,
         );
         b.shelf(
             Vec3::new(w * 0.5 - 1.0, f, d * 0.5 - 0.6),
@@ -1600,19 +2059,27 @@ fn ranger_tower(b: &mut Builder) {
 fn quarantine_gate(b: &mut Builder) {
     // Concrete blocks either side of the road and the barrier arm, raised.
     for x in [-5.2, 5.2] {
+        let from = b.geo.pieces.len();
         b.bx(
             Vec3::new(1.4, 1.2, 1.4),
             Vec3::new(x, 0.6, 0.0),
             Mat::Concrete,
         );
+        b.dress_structure(from, vec![("road_block", Transform::from_xyz(x, 0.0, 0.0))]);
+        let from = b.geo.pieces.len();
         b.bx(
             Vec3::new(0.25, 3.5, 0.25),
             Vec3::new(x.signum() * 4.3, 1.75, 0.0),
             Mat::PaintedMetal,
         );
+        b.dress_structure(
+            from,
+            vec![("gate_post", Transform::from_xyz(x.signum() * 4.3, 0.0, 0.0))],
+        );
     }
     // The barrier arm, raised, pivoting on the left post: a pin through
     // the post and a counterweight below the pivot.
+    let from = b.geo.pieces.len();
     let pivot = Vec3::new(-4.3, 1.1, 0.25);
     let lean = 0.15f32;
     let dir = Vec3::new(-lean.sin(), lean.cos(), 0.0);
@@ -1634,6 +2101,13 @@ fn quarantine_gate(b: &mut Builder) {
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
         false,
+    );
+    b.dress_structure(
+        from,
+        vec![(
+            "barrier_arm",
+            Transform::from_translation(pivot).with_rotation(Quat::from_rotation_z(lean)),
+        )],
     );
 }
 
@@ -2093,7 +2567,14 @@ pub fn swing_doors(
     }
 }
 
-/// Client: meshes for buildings and doors.
+/// A building waiting for its props' models before it builds its meshes
+/// (frames waited: it gives up on a model that never arrives).
+#[derive(Component)]
+pub struct PropsPending(u32);
+
+/// Client: lights for buildings, and door leaves (their boxes until the
+/// door model is in). The meshes come once the props' models have loaded
+/// (`dress_buildings`).
 pub fn building_visuals(
     mut commands: Commands,
     buildings: Query<(Entity, &Building), Added<Building>>,
@@ -2103,37 +2584,12 @@ pub fn building_visuals(
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
 ) {
+    use crate::render::world_props::{Blockout, SwapIn};
     for (e, b) in &buildings {
         let Some(geo) = prefab(&b.prefab) else {
             continue;
         };
-        // One mesh per material per building: a house is a handful of
-        // draws, not fifty.
-        let mut merged: Vec<(Mat, Mesh)> = Vec::new();
-        for piece in &geo.pieces {
-            let mut mesh = match piece.shape {
-                Shape::Box(s) => crate::render::materials::metric_box(s),
-                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
-                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
-            };
-            let _ = mesh.generate_tangents();
-            let mesh = mesh.transformed_by(piece.at);
-            let fits = match merged.iter_mut().find(|(m, _)| *m == piece.mat) {
-                Some((_, into)) => into.merge(&mesh).is_ok(),
-                None => {
-                    merged.push((piece.mat, mesh.clone()));
-                    true
-                }
-            };
-            if !fits {
-                let mat = library.get(piece.mat, &server, &mut materials);
-                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
-            }
-        }
-        for (m, mesh) in merged {
-            let mat = library.get(m, &server, &mut materials);
-            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
-        }
+        commands.entity(e).insert(PropsPending(0));
         for l in &geo.lights {
             commands.spawn((
                 PointLight {
@@ -2150,6 +2606,16 @@ pub fn building_visuals(
     }
     for (e, d) in &doors {
         let leaf = d.0;
+        // The door models are 0.91 x 2.03; stretched to other leaves.
+        let model = if leaf.mat == Mat::PaintedMetal {
+            "door_metal"
+        } else {
+            "door_leaf"
+        };
+        commands.entity(e).insert(SwapIn(vec![(
+            model,
+            Transform::from_scale(Vec3::new(leaf.width / 0.91, leaf.height / 2.03, 1.0)),
+        )]));
         let mat = library.get(leaf.mat, &server, &mut materials);
         commands.spawn((
             Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::new(
@@ -2160,6 +2626,7 @@ pub fn building_visuals(
             MeshMaterial3d(mat),
             Transform::from_xyz(leaf.width * 0.5, leaf.height * 0.5 + 0.01, 0.0),
             ChildOf(e),
+            Blockout,
         ));
         // A ledged and braced door: two ledges and a diagonal on the
         // inside face, a knob either side.
@@ -2174,6 +2641,7 @@ pub fn building_visuals(
                 MeshMaterial3d(timber.clone()),
                 Transform::from_xyz(leaf.width * 0.5, y, 0.04),
                 ChildOf(e),
+                Blockout,
             ));
         }
         let (a, b) = (
@@ -2191,6 +2659,7 @@ pub fn building_visuals(
             Transform::from_xyz((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, 0.04)
                 .with_rotation(Quat::from_rotation_z(brace.y.atan2(brace.x))),
             ChildOf(e),
+            Blockout,
         ));
         let knob = library.get(Mat::DarkMetal, &server, &mut materials);
         for z in [-0.05, 0.08] {
@@ -2199,7 +2668,267 @@ pub fn building_visuals(
                 MeshMaterial3d(knob.clone()),
                 Transform::from_xyz(leaf.width - 0.1, 1.0, z),
                 ChildOf(e),
+                Blockout,
             ));
         }
+    }
+}
+
+/// A box whose UVs run on from its neighbours': in metres, measured from
+/// the building's origin in the box's own orientation, so the boxes of a
+/// wall either side of a window (one rotation, different places) carry
+/// the brick courses across rather than each starting the texture afresh.
+fn aligned_box(size: Vec3, at: Transform) -> Mesh {
+    use bevy::mesh::VertexAttributeValues;
+    let mut mesh = crate::render::materials::metric_box(size);
+    let offset = at.rotation.inverse() * at.translation;
+    let pos: Vec<[f32; 3]> = match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+        Some(VertexAttributeValues::Float32x3(p)) => p.clone(),
+        _ => return mesh,
+    };
+    let nrm: Vec<[f32; 3]> = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+        Some(VertexAttributeValues::Float32x3(n)) => n.clone(),
+        _ => return mesh,
+    };
+    // The same (u, v) axes per face as `metric_box`.
+    let uv: Vec<[f32; 2]> = pos
+        .iter()
+        .zip(&nrm)
+        .map(|(p, n)| {
+            let r = Vec3::from(*p) + offset;
+            let n = Vec3::from(*n);
+            let (u, v) = if n.x > 0.5 {
+                (Vec3::NEG_Z, Vec3::NEG_Y)
+            } else if n.x < -0.5 {
+                (Vec3::Z, Vec3::NEG_Y)
+            } else if n.y > 0.5 {
+                (Vec3::X, Vec3::Z)
+            } else if n.y < -0.5 {
+                (Vec3::X, Vec3::NEG_Z)
+            } else if n.z > 0.5 {
+                (Vec3::X, Vec3::NEG_Y)
+            } else {
+                (Vec3::NEG_X, Vec3::NEG_Y)
+            };
+            [r.dot(u), r.dot(v)]
+        })
+        .collect();
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    mesh
+}
+
+/// Client: a building's meshes, one per material (a house is a handful of
+/// draws, not fifty), once its props' models have loaded or failed: each
+/// prop whose models are in is merged in place of its boxes.
+pub fn dress_buildings(
+    mut commands: Commands,
+    mut pending: Query<(Entity, &Building, &mut PropsPending)>,
+    mut props: crate::render::world_props::PropModels,
+    mut cache: ResMut<crate::render::world_props::PropMeshes>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::render::world_props::Resolved;
+    for (e, b, mut wait) in &mut pending {
+        let Some(geo) = prefab(&b.prefab) else {
+            commands.entity(e).remove::<PropsPending>();
+            continue;
+        };
+        wait.0 += 1;
+        let mut loading = false;
+        let ready: Vec<bool> = geo
+            .props
+            .iter()
+            .map(
+                |d| match props.resolve_all(d.models.iter().map(|(n, _)| *n)) {
+                    Resolved::Loading => {
+                        loading = true;
+                        false
+                    }
+                    Resolved::Missing => false,
+                    Resolved::Ready => true,
+                },
+            )
+            .collect();
+        // Models load in a few frames; past ten seconds, build without.
+        if loading && wait.0 < 600 {
+            continue;
+        }
+        commands.entity(e).remove::<PropsPending>();
+        let mut skip = vec![false; geo.pieces.len()];
+        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+            for i in d.pieces.clone() {
+                skip[i] = true;
+            }
+        }
+        // Four meshes a material: the shell; its windows, which cast no
+        // shadow worth the cost (they're in the wall's own); the
+        // furniture's models, near and shadowless (the sun doesn't reach
+        // it); the furniture's boxes, further off.
+        const OUTER: usize = 0;
+        const NEAR: usize = 1;
+        const FAR: usize = 2;
+        const WINDOWS: usize = 3;
+        let mut far = vec![false; geo.pieces.len()];
+        for (d, _) in geo
+            .props
+            .iter()
+            .zip(&ready)
+            .filter(|(d, r)| **r && d.inside)
+        {
+            for i in d.pieces.clone() {
+                far[i] = true;
+            }
+        }
+        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 4] = Default::default();
+        let mut add = |group: usize, mat: Handle<StandardMaterial>, mesh: Mesh| {
+            let into = &mut merged[group];
+            let fits = match into.iter_mut().find(|(m, _)| *m == mat) {
+                Some((_, m)) => m.merge(&mesh).is_ok(),
+                None => false,
+            };
+            if !fits {
+                into.push((mat, mesh));
+            }
+        };
+        for (i, piece) in geo.pieces.iter().enumerate() {
+            if skip[i] && !far[i] {
+                continue;
+            }
+            let mut mesh = match piece.shape {
+                Shape::Box(s) => aligned_box(s, piece.at),
+                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
+                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
+            };
+            let _ = mesh.generate_tangents();
+            let mat = props.lib.get(piece.mat, &props.server, &mut materials);
+            add(
+                if far[i] { FAR } else { OUTER },
+                mat,
+                mesh.transformed_by(piece.at),
+            );
+        }
+        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+            for (name, at) in &d.models {
+                let prims = cache.get(name, &mut props, &meshes).to_vec();
+                for (mat, mesh) in prims {
+                    let mat = props.material(&mat, &mut materials);
+                    add(
+                        if d.inside {
+                            NEAR
+                        } else if d.shadow {
+                            OUTER
+                        } else {
+                            WINDOWS
+                        },
+                        mat,
+                        mesh.transformed_by(*at),
+                    );
+                }
+            }
+        }
+        // Past this the furniture is boxes (and inside a dark house, hardly
+        // seen at all); bounds-centred, as a merged mesh sits at the
+        // building's origin.
+        let range = |near: bool| {
+            let switch = 25.0..35.0;
+            if near {
+                bevy::camera::visibility::VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: switch,
+                    use_aabb: true,
+                }
+            } else {
+                bevy::camera::visibility::VisibilityRange {
+                    start_margin: switch,
+                    end_margin: 1.0e4..1.0e4,
+                    use_aabb: true,
+                }
+            }
+        };
+        let [outer, near, far, windows] = merged;
+        for (mat, mesh) in outer {
+            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
+        }
+        for (mat, mesh) in windows {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat),
+                bevy::light::NotShadowCaster,
+                ChildOf(e),
+            ));
+        }
+        for (group, near) in [(near, true), (far, false)] {
+            for (mat, mesh) in group {
+                commands.spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(mat),
+                    bevy::light::NotShadowCaster,
+                    range(near),
+                    ChildOf(e),
+                ));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every model a recipe dresses with is built (`art/props`), and
+    /// replaces only pieces of its own: a renamed or missing model would
+    /// leave the furniture as boxes without anyone noticing.
+    #[test]
+    fn every_prop_model_exists() {
+        let root = crate::asset_root_path();
+        for id in PREFABS {
+            let geo = prefab(id).unwrap();
+            for d in &geo.props {
+                assert!(
+                    d.pieces.end <= geo.pieces.len(),
+                    "{id}: a prop claims pieces past the end"
+                );
+                for (name, _) in &d.models {
+                    let p = root.join(crate::render::world_props::path(name));
+                    assert!(p.exists(), "{id}: no model {}", p.display());
+                }
+            }
+        }
+        for name in [
+            "door_metal",
+            "road_block",
+            "gate_post",
+            "barrier_arm",
+            "chair",
+            "locker",
+            "barrel",
+            "pallet",
+            "door_leaf",
+            "signpost",
+            "fence_post",
+            "supply_crate",
+            "stash_stand",
+            "camp_table",
+            "camp_board",
+            "camp_post",
+            "lantern",
+        ] {
+            let p = root.join(crate::render::world_props::path(name));
+            assert!(p.exists(), "no model {}", p.display());
+        }
+    }
+
+    /// Furniture keeps its boxes when dressed: the colliders and loot
+    /// heights the models were built round.
+    #[test]
+    fn dressing_keeps_the_boxes() {
+        let mut b = Builder::default();
+        b.table(Vec3::ZERO, 0.0, Some("house"));
+        let g = b.finish();
+        assert_eq!(g.pieces.len(), 5);
+        assert_eq!(g.props.len(), 1);
+        assert_eq!(g.props[0].pieces, 0..5);
+        assert!((g.loot[0].at.y - 0.82).abs() < 1e-6);
     }
 }

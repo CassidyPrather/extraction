@@ -81,6 +81,9 @@ pub struct LaunchOptions {
     pub camp: bool,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
+    /// Dev: the tour's views from a file instead of the placements (see
+    /// `tour::scripted_views`; the visual lookbook, `scripts/lookbook.sh`).
+    pub tour_views: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -118,6 +121,7 @@ impl Default for LaunchOptions {
             camera: None,
             tour: None,
             tour_only: None,
+            tour_views: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -142,6 +146,17 @@ impl Default for LaunchOptions {
 }
 
 impl LaunchOptions {
+    /// A run driven by tooling (a screenshot, a tour, a bot, a scenario, a
+    /// sim raid) rather than a player: it never reopens the game, whether
+    /// on another valley or on another OpenXR runtime.
+    pub fn tooling(&self) -> bool {
+        self.screenshot.is_some()
+            || self.tour.is_some()
+            || self.bot
+            || self.scenario.is_some()
+            || self.sim_run.is_some()
+    }
+
     pub fn from_args() -> Self {
         Self::parse(std::env::args().skip(1))
     }
@@ -209,6 +224,7 @@ impl LaunchOptions {
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
                 "--tour-only" => o.tour_only = Some(val()),
+                "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
                 "--gallery" => {
                     o.gallery = Some(val());
@@ -261,5 +277,23 @@ mod tests {
         assert_eq!(o.frames, 30);
         assert_eq!(o.seed, 9);
         assert_eq!(o.camera, Some((Vec3::new(1.0, 2.0, 3.0), 90.0, -10.0)));
+    }
+
+    /// The onboarding scenario calls the truck; its run must end there,
+    /// not reopen the game in the next valley.
+    #[test]
+    fn tooling_runs_are_told_apart_from_play() {
+        let parse = |a: &str| LaunchOptions::parse(a.split(' ').map(String::from));
+        for a in [
+            "--headless --scenario onboarding",
+            "--screenshot out.png",
+            "--sim-run 3",
+            "--bot",
+        ] {
+            assert!(parse(a).tooling(), "{a}");
+        }
+        for a in ["--map kettle_pass", "--flat", "--steamvr"] {
+            assert!(!parse(a).tooling(), "{a}");
+        }
     }
 }

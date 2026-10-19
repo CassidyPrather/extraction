@@ -37,6 +37,8 @@ import bpy
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from common import (Part, RX, RY, RZ, T, S, export, fillet, arc, main_guard, make, report,
                     section_rect, section_circle)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from _kit import text  # noqa: E402
 
 main_guard()
 random.seed(131)
@@ -420,6 +422,42 @@ for x in (-0.8, 0.8):
 bed.box((0.03, 0.3, 1.7), (-1.095, FLOOR + 0.82, 0.75), "Boards", bevel=0.006, segs=1)
 for z in (0.05, 0.75, 1.45):
     bed.box((0.03, 0.3, 0.03), (-1.075, FLOOR + 0.82, z), "Paint")
+
+# Kit an army truck carries in the back: a fire extinguisher in its bracket
+# on the front board, right of the stash; a first-aid box strapped to the
+# right-hand side slats behind the bench; the load limit stencilled on
+# the front board.
+EX = (0.88, FLOOR + 0.36, -1.69)
+bed.lathe([(0.0, 0.0), (0.06, 0.0), (0.065, 0.01), (0.065, 0.36), (0.055, 0.4), (0.03, 0.42),
+           (0.0, 0.42)], "Red", segs=20, xf=T(EX[0], EX[1] - 0.2, EX[2]) @ UP)
+bed.lathe([(0.0, 0.42), (0.02, 0.42), (0.02, 0.46), (0.0, 0.47)], "Brass", segs=12,
+          xf=T(EX[0], EX[1] - 0.2, EX[2]) @ UP)
+bed.box((0.012, 0.012, 0.09), (EX[0], EX[1] + 0.265, EX[2] - 0.02), "Black", bevel=0.003,
+        segs=1, xf=RX(0.4, about=(EX[0], EX[1] + 0.265, EX[2])))
+bed.sweep([(-1.69, FLOOR + 0.6), (-1.64, FLOOR + 0.55), (-1.62, FLOOR + 0.35),
+           (-1.635, FLOOR + 0.25)], [(0.008 * math.cos(a), 0.008 * math.sin(a)) for a in
+                                     [2 * math.pi * i / 6 for i in range(6)]], "Black",
+          xf=T(EX[0] + 0.05, 0, 0))
+for y in (EX[1] - 0.1, EX[1] + 0.1):
+    bed.lathe([(0.066, -0.012), (0.072, -0.012), (0.072, 0.012), (0.066, 0.012)], "Iron",
+              segs=20, xf=T(EX[0], y, EX[2]) @ UP, closed=True)
+    bed.box((0.03, 0.024, 0.07), (EX[0], y, EX[2] - 0.07), "Iron")
+# First-aid box: olive steel, a white disc with a red cross on its lid.
+FA = (1.04, FLOOR + 1.15, 1.35)
+bed.box((0.09, 0.24, 0.32), FA, "Olive", bevel=0.006, segs=1)
+bed.box((0.012, 0.03, 0.12), (FA[0] - 0.05, FA[1] + 0.09, FA[2]), "Black", bevel=0.003, segs=1)
+bed.cyl(0.07, FA[0] - 0.051, FA[0] - 0.045, "Enamel", segs=24, xf=T(0, FA[1], FA[2]) @ ALONG_X)
+L_, W_ = 0.045, 0.015
+cross = [(W_, L_), (-W_, L_), (-W_, W_), (-L_, W_), (-L_, -W_), (-W_, -W_), (-W_, -L_), (W_, -L_),
+         (W_, -W_), (L_, -W_), (L_, W_), (W_, W_)]
+bed.prism([(FA[2] + a, FA[1] + b) for a, b in cross], FA[0] - 0.057, FA[0] - 0.051, "Red",
+          axis="x")
+for z in (FA[2] - 0.1, FA[2] + 0.1):
+    bed.box((0.006, 0.42, 0.03), (FA[0] + 0.048, FA[1] + 0.12, z), "Rope")
+# "НЕ БОЛЕЕ 16 ЧЕЛ": the load limit in white, raised 5 mm off the boards
+# (flush paint would z-fight the planks).
+text(bed, "НЕ БОЛЕЕ 16 ЧЕЛ", 0.045, "Enamel", T(0.5, FLOOR + 0.27, -1.78),
+     depth=0.005)
 
 # =============================================================================
 # Canopy: canvas over hoops, roof slats, rolled rear curtain, lamp, bell pull

@@ -5,9 +5,9 @@ The keys are heavy grey data cartridges in a 0.09 x 0.03 x 0.14 box,
 connector to -Z: each stencilled with a big letter, its KEY- code and
 valley name, and a band of its own colour, so the three tell apart from
 across a table. Marrow carries the Hollow survey post's tag, Kettle is
-scorched along one edge, Cinder is gritty with ash. The watch, photo and
-chess knight have no `dims`, so each sits in a cube of side
-cbrt(bulk / 1000) -- the photograph is a small wallet print as a result.
+scorched along one edge, Cinder is gritty with ash. The watch and chess
+knight have no `dims`, so each sits in a cube of side cbrt(bulk / 1000);
+the photograph has its own flat box.
 """
 
 import math
@@ -152,29 +152,169 @@ def wristwatch():
 # --- Faded photograph -------------------------------------------------------------------------
 
 def old_photo():
-    s = cube(0.01)
-    yb = -s / 2
-    p = Part("body")
-    # A small print with a white border and a dog-eared corner: two faded
-    # figures, a woman and a man, against a pale sky.
-    t = 0.0006
-    w, d = 0.0205, 0.016
-    p.prism([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2 - 0.004), (w / 2 - 0.004, d / 2),
-             (-w / 2, d / 2)], yb, yb + t, "Paper", axis="y")
-    p.prism([(w / 2, d / 2 - 0.004), (w / 2 - 0.004, d / 2), (w / 2 - 0.0042, d / 2 - 0.0042)],
-            yb + t, yb + 2 * t, "Paper", axis="y")
-    y = yb + t
-    p.box((w - 0.003, 0.0002, d - 0.003), (0.0, y + 0.0001, 0.0), "Rope")
-    p.box((w - 0.003, 0.00025, 0.0048), (0.0, y + 0.0001, 0.0042), "Cream")
-    # The picture's top is toward +Z: sky, two heads, shoulders below.
-    for x, sc in ((-0.003, 0.9), (0.0035, 1.0)):
-        p.cyl(0.0016 * sc, y + 0.0001, y + 0.0004, "Bakelite", segs=10,
-              xf=T(x, 0, 0.0012 * sc) @ UP)
-        p.prism([(-0.0036 * sc, -d / 2 + 0.0016), (0.0036 * sc, -d / 2 + 0.0016),
-                 (0.0024 * sc, -0.0008), (-0.0024 * sc, -0.0008)], y + 0.0001, y + 0.0004,
-                "Bakelite", axis="y", xf=T(x, 0, 0))
-    p.box((0.0012, 0.0003, 0.0035), (-0.0072, y + 0.0002, 0.0035), "Wood")
-    return [p]
+    # A 9 x 12.5 cm print with a white border and one dog-eared corner: a
+    # woman and a man standing in a field by a pine, sepia gone pale, and
+    # a year written in blue ink under the picture. It lies flat on the
+    # floor of its box.
+    #
+    # Built as a mosaic of full-thickness tiles (border, sky, field,
+    # figures, tree) cut into each other, not as prints stacked on a card:
+    # stacked layers a fraction of a millimetre apart z-fight.
+    t = 0.0007
+    y0 = -0.005
+    X, Z = 0.044, 0.0615
+    FOLD = 0.0935  # the dog-ear's fold line, x + z = FOLD
+
+    def clip(poly):
+        """Cut a polygon at the fold line (the corner is folded over)."""
+        out = []
+        n = len(poly)
+        for i in range(n):
+            a, b = poly[i], poly[(i + 1) % n]
+            ia, ib = a[0] + a[1] <= FOLD + 1e-9, b[0] + b[1] <= FOLD + 1e-9
+            if ia:
+                out.append(a)
+            if ia != ib:
+                k = (FOLD - a[0] - a[1]) / ((b[0] + b[1]) - (a[0] + a[1]))
+                out.append((a[0] + k * (b[0] - a[0]), a[1] + k * (b[1] - a[1])))
+        return out
+
+    def rect(x0, x1, z0, z1):
+        return [(x0, z0), (x1, z0), (x1, z1), (x0, z1)]
+
+    def disc(cx, cz, r, n=14, wob=0.0, seed=0):
+        rnd = random.Random(seed)
+        return [(cx + r * (1 + rnd.uniform(-wob, wob)) * math.cos(2 * math.pi * i / n),
+                 cz + r * (1 + rnd.uniform(-wob, wob)) * math.sin(2 * math.pi * i / n))
+                for i in range(n)]
+
+    PX, PZ0, PZ1 = 0.039, -0.048, 0.056   # the picture; a deeper margin below
+    HORIZON = 0.012
+    sky = clip(rect(-PX, PX, HORIZON, PZ1))
+    field = rect(-PX, PX, PZ0, HORIZON)
+    # The picture's top is toward +Z (upright seen from the front, -Z).
+    def head(cx, hz, r, hair_from):
+        """A face (light) under a cap of hair (dark), split by a chord."""
+        pts = disc(cx, hz, r, n=16)
+        cut = hz + hair_from
+        face, hair = [], []
+        for i in range(len(pts)):
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            for out, keep in ((face, lambda q: q[1] <= cut), (hair, lambda q: q[1] >= cut)):
+                if keep(a):
+                    out.append(a)
+                if keep(a) != keep(b):
+                    k = (cut - a[1]) / (b[1] - a[1])
+                    out.append((a[0] + k * (b[0] - a[0]), cut))
+        return [(face, "Rope"), (hair, "Bakelite")]
+
+    # Figures: (outline, material). Every outline is a hole cut in what lies
+    # behind it, so no two tiles overlap.
+    figs = []
+    # The man, left of centre as you look at it: dark jacket, lighter
+    # trousers, short hair.
+    mx, mh, mr = 0.011, 0.026, 0.0056
+    figs += head(mx, mh, mr, 0.0012)
+    mt = mh - mr
+    figs.append((rect(mx - 0.0017, mx + 0.0017, mt - 0.0014, mt), "Rope"))
+    figs.append(([(mx - 0.0108, mt - 0.0014), (mx + 0.0108, mt - 0.0014),
+                  (mx + 0.0124, -0.0105), (mx + 0.0098, -0.0105), (mx + 0.0094, -0.009),
+                  (mx - 0.0094, -0.009), (mx - 0.0098, -0.0105), (mx - 0.0124, -0.0105)],
+                 "Bakelite"))
+    for sx in (-1, 1):
+        x0 = mx + (0.0011 if sx > 0 else -0.0074)
+        figs.append((rect(x0, x0 + 0.0063, -0.037, -0.009), "Wood"))
+        figs.append((rect(x0, x0 + 0.0063, -0.0395, -0.037), "Char"))
+    # The woman: a long-sleeved dress, hair pinned up, a light collar.
+    wx, wh, wr = -0.012, 0.0215, 0.0051
+    figs += head(wx, wh, wr, 0.0004)
+    figs.append((disc(wx - 0.0004, wh + wr + 0.0019, 0.0021, n=10), "Bakelite"))  # the bun
+    wt = wh - wr
+    figs.append((rect(wx - 0.0016, wx + 0.0016, wt - 0.0013, wt), "Rope"))
+    figs.append(([(wx - 0.0035, wt - 0.0013), (wx + 0.0035, wt - 0.0013), (wx, wt - 0.0042)],
+                  "Paper"))
+    figs.append(([(wx + 0.0035, wt - 0.0013), (wx + 0.0079, wt - 0.0013), (wx + 0.0088, 0.004),
+                  (wx + 0.0068, -0.006), (wx + 0.0118, -0.026), (wx - 0.0118, -0.026),
+                  (wx - 0.0068, -0.006), (wx - 0.0088, 0.004), (wx - 0.0079, wt - 0.0013),
+                  (wx - 0.0035, wt - 0.0013), (wx, wt - 0.0042)], "Wood"))
+    for sx in (-1, 1):
+        x0 = wx + (0.0012 if sx > 0 else -0.0038)
+        figs.append((rect(x0, x0 + 0.0026, -0.036, -0.026), "Bakelite"))
+    # A pine at the right edge: dark trunk, ragged crown.
+    figs.append((rect(-0.0322, -0.0298, -0.022, 0.026), "Bakelite"))
+    crown = []
+    for i in range(7):
+        zt = 0.026 + i * 0.0042
+        hw = 0.0072 - i * 0.0009
+        crown.append(([(-0.031 - hw, zt), (-0.031 + hw, zt), (-0.031 + hw * 0.35, zt + 0.0042),
+                       (-0.031 - hw * 0.35, zt + 0.0042)], "Bakelite"))
+    figs += crown
+    # The far treeline along the horizon, a ragged dark band behind them.
+    rnd = random.Random(9)
+    tl = [(-PX, HORIZON), (PX, HORIZON)]
+    n = 26
+    for i in range(n + 1):
+        x = PX - 2 * PX * i / n
+        tl.append((x, HORIZON + 0.0012 + rnd.uniform(0.0, 0.0018)))
+    tl = clip(tl)
+    # Its cutter reaches below the horizon, so the cut shares no face with
+    # the sky's lower edge.
+    tl_cut = [(x, z - 0.002 if z <= HORIZON else z) for x, z in tl]
+
+    # The cutters: each figure's whole silhouette, its pieces overlapping
+    # (never just touching, which the boolean solver mangles).
+    cuts = [disc(mx, mh, mr, n=16), rect(mx - 0.0017, mx + 0.0017, mt - 0.0024, mt + 0.001),
+            figs[3][0]]
+    for sx in (-1, 1):
+        x0 = mx + (0.0011 if sx > 0 else -0.0074)
+        cuts.append(rect(x0, x0 + 0.0063, -0.0395, -0.008))
+    cuts += [disc(wx, wh, wr, n=16), disc(wx - 0.0004, wh + wr + 0.0019, 0.0021, n=10),
+             rect(wx - 0.0016, wx + 0.0016, wt - 0.0023, wt + 0.001),
+             [(wx - 0.0079, wt - 0.0013), (wx + 0.0079, wt - 0.0013), (wx + 0.0088, 0.004),
+              (wx + 0.0068, -0.006), (wx + 0.0118, -0.026), (wx - 0.0118, -0.026),
+              (wx - 0.0068, -0.006), (wx - 0.0088, 0.004)]]
+    for sx in (-1, 1):
+        x0 = wx + (0.0012 if sx > 0 else -0.0038)
+        cuts.append(rect(x0, x0 + 0.0026, -0.036, -0.025))
+    cuts.append(rect(-0.0322, -0.0298, -0.022, 0.0265))
+    right, left = [], []
+    for i in range(7):
+        zt = 0.026 + i * 0.0042
+        hw = 0.0072 - i * 0.0009
+        right += [(-0.031 + hw, zt), (-0.031 + hw * 0.35, zt + 0.0042)]
+        left += [(-0.031 - hw, zt), (-0.031 - hw * 0.35, zt + 0.0042)]
+    cuts.append(right + list(reversed(left)))
+
+    def cut_by(part, polys, mat):
+        holes = Part("cut")
+        for poly in polys:
+            holes.prism(poly, y0 - 0.001, y0 + t + 0.001, mat, axis="y")
+        part.cut(holes)
+        return part
+
+    skyp = Part("sky")
+    skyp.prism(sky, y0, y0 + t, "Cream", axis="y")
+    cut_by(skyp, [tl_cut] + cuts, "Cream")
+    fieldp = Part("field")
+    fieldp.prism(field, y0, y0 + t, "Rope", axis="y")
+    cut_by(fieldp, cuts, "Rope")
+    trees = Part("treeline")
+    trees.prism(tl, y0, y0 + t, "Wood", axis="y")
+    cut_by(trees, cuts, "Wood")
+    figures = Part("figures")
+    for poly, mat in figs:
+        figures.prism(poly, y0, y0 + t, mat, axis="y")
+
+    card = Part("card")
+    card.prism(clip(rect(-X, X, -Z, Z)), y0, y0 + t, "Paper", axis="y")
+    hole = Part("cut")
+    hole.prism(rect(-PX, PX, PZ0, PZ1 + 0.01), y0 - 0.001, y0 + t + 0.001, "Paper", axis="y")
+    card.cut(hole)
+    # The folded corner lies on top, its back (plain paper) showing.
+    card.prism([(X, FOLD - X), (FOLD - Z, Z), (FOLD - Z, FOLD - X)], y0 + t, y0 + 2 * t,
+               "Paper", axis="y")
+    text(card, "1979", 0.006, "Blue", T(-0.018, y0 + t, -0.055) @ ON_TOP, depth=0.0003)
+    return [card, skyp, fieldp, trees, figures]
 
 
 # --- Chess knight -----------------------------------------------------------------------------

@@ -16,10 +16,7 @@ pub struct OnboardingVisualsPlugin;
 
 impl Plugin for OnboardingVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (dress_posts, dress_props, light_lamps, chime).chain(),
-        );
+        app.add_systems(Update, (dress_posts, dress_props, light_lamps).chain());
     }
 }
 
@@ -312,32 +309,5 @@ fn dress_props(
                 );
             }
         }
-    }
-}
-
-/// A bell for each step ticked, two for a station done (made by
-/// `scripts/make_chimes.py`). Not where the station is: in your ears, like
-/// the radio, since you may be anywhere when it counts.
-fn chime(
-    mut commands: Commands,
-    mut done: MessageReader<super::GoalDone>,
-    server: Res<AssetServer>,
-    samples: Option<Res<Assets<bevy_seedling::prelude::AudioSample>>>,
-) {
-    use bevy_seedling::prelude::*;
-    if samples.is_none() {
-        done.clear();
-        return;
-    }
-    for d in done.read() {
-        let file = if d.station_done {
-            "audio/ui/chime_station.ogg"
-        } else {
-            "audio/ui/chime_step.ogg"
-        };
-        commands.spawn(
-            SamplePlayer::new(server.load::<AudioSample>(file))
-                .with_volume(Volume::Decibels(-12.0)),
-        );
     }
 }

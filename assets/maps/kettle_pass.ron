@@ -72,13 +72,21 @@
         // Building pads.
         Plateau(polygon: [(-235.0, 150.0), (-140.0, 150.0), (-140.0, 225.0), (-235.0, 225.0)], blend: 18.0),
         Plateau(polygon: [(165.0, 215.0), (250.0, 215.0), (250.0, 262.0), (165.0, 262.0)], blend: 15.0),
-        Plateau(polygon: [(-250.0, -115.0), (-160.0, -115.0), (-160.0, -25.0), (-250.0, -25.0)], blend: 22.0),
+        // The mine yard, cut into the hill a little below its average so
+        // the roads up to it stay walkable.
+        Plateau(polygon: [(-250.0, -115.0), (-160.0, -115.0), (-160.0, -25.0), (-250.0, -25.0)], height: Some(29.0), blend: 40.0),
         Plateau(polygon: [(165.0, -235.0), (255.0, -235.0), (255.0, -165.0), (165.0, -165.0)], blend: 20.0),
         // Pads at the pass: where the truck turns, and the mast's yard.
         Plateau(polygon: [(-12.0, -282.0), (32.0, -282.0), (32.0, -244.0), (-12.0, -244.0)], blend: 14.0),
         Plateau(polygon: [(48.0, -238.0), (88.0, -238.0), (88.0, -200.0), (48.0, -200.0)], blend: 12.0),
-        Plateau(polygon: [(-70.0, -255.0), (-25.0, -255.0), (-25.0, -210.0), (-70.0, -210.0)], blend: 15.0),
+        Plateau(polygon: [(-70.0, -255.0), (-25.0, -255.0), (-25.0, -210.0), (-70.0, -210.0)], blend: 40.0),
         Plateau(polygon: [(-285.0, -285.0), (-215.0, -285.0), (-215.0, -225.0), (-285.0, -225.0)], blend: 15.0),
+        // Pads for the small places between the big ones.
+        Plateau(polygon: [(-110.0, 146.0), (-88.0, 146.0), (-88.0, 162.0), (-110.0, 162.0)], blend: 12.0),
+        Plateau(polygon: [(60.0, 206.0), (88.0, 206.0), (88.0, 234.0), (60.0, 234.0)], blend: 12.0),
+        Plateau(polygon: [(-52.0, -142.0), (-28.0, -142.0), (-28.0, -118.0), (-52.0, -118.0)], blend: 12.0),
+        Plateau(polygon: [(108.0, -148.0), (130.0, -148.0), (130.0, -128.0), (108.0, -128.0)], blend: 12.0),
+        Plateau(polygon: [(114.0, -52.0), (136.0, -52.0), (136.0, -32.0), (114.0, -32.0)], blend: 12.0),
     ],
 
     roads: [
@@ -89,7 +97,7 @@
             points: [(120.0, 330.0), (120.0, 270.0), (100.0, 200.0), (60.0, 150.0), (20.0, 110.0),
                      (-20.0, 60.0), (30.0, 20.0), (-15.0, -30.0), (40.0, -80.0), (0.0, -130.0),
                      (25.0, -185.0), (10.0, -250.0), (10.0, -330.0)],
-            bridges: [(at: (40.0, 130.0), length: 26.0)],
+            bridges: [(at: (40.0, 130.0), length: 32.0)],
         ),
         // Down the valley to the low farm.
         (
@@ -106,6 +114,13 @@
             name: "Lodge track", kind: Gravel, width: 4.0, smoothing: 20.0,
             points: [(40.0, -80.0), (100.0, -110.0), (150.0, -150.0), (200.0, -195.0)],
         ),
+        // The camp's old track: over the beck at the ford and up the east
+        // bank to the quarry. The far side of the valley from the road.
+        (
+            name: "Camp ford", kind: Dirt, width: 3.5, smoothing: 10.0,
+            points: [(195.0, 238.0), (200.0, 205.0), (205.0, 182.0), (200.0, 140.0), (185.0, 80.0),
+                     (172.0, 20.0), (170.0, -16.0)],
+        ),
         // The quarry haul road.
         (
             name: "Quarry road", kind: Dirt, width: 4.5, smoothing: 15.0,
@@ -113,25 +128,33 @@
         ),
         // The mine's own road, up from the switchbacks.
         (
-            name: "Mine road", kind: Gravel, width: 4.5, smoothing: 20.0,
+            name: "Mine road", kind: Gravel, width: 4.5, smoothing: 45.0,
             points: [(-15.0, -30.0), (-80.0, -45.0), (-140.0, -55.0), (-185.0, -60.0)],
         ),
         // The narrow-gauge railway from the mine head down the hill.
         (
-            name: "Mine railway", kind: Rail, width: 3.0, smoothing: 40.0,
-            points: [(-235.0, -55.0), (-160.0, -38.0), (-110.0, -15.0), (-80.0, 15.0)],
+            name: "Mine railway", kind: Rail, width: 3.0, smoothing: 90.0,
+            points: [(-235.0, -55.0), (-160.0, -38.0), (-110.0, -15.0), (-100.0, -6.0)],
         ),
         // The miners' old way to work: Row to the mine, over the beck.
         (
             name: "Mine path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(-55.0, 108.0), (-85.0, 95.0), (-112.0, 78.0), (-127.0, 60.0), (-113.0, 37.0),
-                     (-140.0, 10.0), (-170.0, -15.0)],
+                     (-130.0, 18.0), (-150.0, 8.0), (-180.0, 1.0), (-205.0, -10.0),
+                     (-222.0, -26.0)],
             bridges: [(at: (-120.0, 48.6), length: 30.0)],
+        ),
+        // The quarrymen's way home: round the pit's east lip and up to the
+        // lodge, the back way to the east shoulder.
+        (
+            name: "Quarrymen's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(142.0, -31.0), (170.0, -18.0), (198.0, -16.0), (222.0, -40.0), (226.0, -86.0),
+                     (226.0, -122.0), (222.0, -165.0)],
         ),
         // Up from the pass to the ranger tower on the west summit.
         (
             name: "Tower path", kind: Path, width: 1.4, shoulder: 0.8, smoothing: 4.0,
-            points: [(5.0, -215.0), (-20.0, -225.0), (-45.0, -232.0)],
+            points: [(4.0, -246.0), (-14.0, -242.0), (-32.0, -238.0), (-45.0, -233.0)],
         ),
     ],
 
@@ -234,16 +257,32 @@
         (prefab: "sawmill", at: (210.0, 240.0), rot: 0.0),
         (prefab: "log_pile", at: (180.0, 225.0), rot: 80.0),
         (prefab: "cabin_log", at: (238.0, 228.0), rot: 270.0),
+        // The sawmill's boiler stack: the one tall thing in the south, so
+        // you can find the gate again.
+        (prefab: "chimney", at: (232.0, 252.0), rot: 0.0),
+
+        // The weir cottage, on the farm lane between the Row and the farm.
+        (prefab: "house_plank", at: (-99.0, 154.0), rot: 0.0),
+        // The gatekeeper's cottage on the pass road above the gate.
+        (prefab: "house_plank", at: (76.0, 222.0), rot: 90.0),
+        (prefab: "shed", at: (66.0, 210.0), rot: 0.0),
+        // The road-menders' hut on the switchbacks.
+        (prefab: "mast_hut", at: (-40.0, -128.0), rot: 80.0),
+        (prefab: "log_pile", at: (-46.0, -138.0), rot: 10.0),
+        // The charcoal burners' hut on the lodge track.
+        (prefab: "cabin_log", at: (119.0, -138.0), rot: 40.0),
 
         // Kettle mine: the head-frame shed, wagons, pump house and hut.
         (prefab: "rail_shed", at: (-210.0, -65.0), rot: 75.0),
         (prefab: "boxcar", at: (-175.7, -42.3), rot: 103.8),
-        (prefab: "boxcar", at: (-152.8, -35.6), rot: 109.2),
+        (prefab: "boxcar", at: (-152.8, -35.5), rot: 110.3),
         (prefab: "pump_station", at: (-200.0, -100.0), rot: 90.0),
         (prefab: "mast_hut", at: (-232.0, -95.0), rot: 15.0),
 
-        // The quarry: the thing in the pit.
+        // The quarry: the thing in the pit, and the pump house on its
+        // lip that kept it dry.
         (prefab: "anomaly_core", at: (185.0, -55.0), rot: 0.0),
+        (prefab: "pump_station", at: (125.0, -42.0), rot: 330.0),
 
         // The hunting lodge on the east shoulder.
         (prefab: "cabin_log", at: (205.0, -205.0), rot: 0.0, tag: "lodge"),
@@ -273,7 +312,7 @@
         (kind: Offering, at: (-120.0, -235.0), name: "The cairn"),
         (kind: WorkSite, at: (-110.0, 20.0), name: "Beck site"),
         (kind: WorkSite, at: (110.0, 30.0), name: "Quarry road site"),
-        (kind: WorkSite, at: (-30.0, -140.0), name: "Switchback site"),
+        (kind: WorkSite, at: (75.0, -152.0), name: "Switchback site"),
         (kind: Poi, at: (0.0, 105.0), name: "Miners' Row"),
         (kind: Poi, at: (-190.0, 190.0), name: "Low farm"),
         (kind: Poi, at: (210.0, 238.0), name: "Logging camp"),
@@ -282,6 +321,10 @@
         (kind: Poi, at: (215.0, -200.0), name: "Hunting lodge"),
         (kind: Poi, at: (40.0, -225.0), name: "The pass"),
         (kind: Poi, at: (-48.0, -233.0), name: "Ranger tower"),
+        (kind: Poi, at: (-99.0, 154.0), name: "Weir cottage"),
+        (kind: Poi, at: (74.0, 218.0), name: "Gatekeeper's cottage"),
+        (kind: Poi, at: (-40.0, -130.0), name: "Switchback hut"),
+        (kind: Poi, at: (119.0, -138.0), name: "Charcoal hut"),
         (kind: ValleyKey(item: "key_kettle"), at: (193.0, -47.0), rot: 200.0, name: "Quarry blast shelter"),
         // notes:begin (generated by scripts/place_notes.py)
         (kind: Note(text: "MINE OFFICE\nThe Authority man took the quarry blast-shelter key and locked the Kettle depot key in the shelter \"for safe keeping\". Then the shelter started to burn without fire. Nobody goes up to the quarry now."), at: (-54.20, 58.30), rot: 205.2, name: "Mine office note"),
@@ -298,7 +341,7 @@
         (name: "Low farm", danger: 1, polygon: [(-245.0, 140.0), (-130.0, 140.0), (-130.0, 240.0), (-245.0, 240.0)]),
         (name: "Logging camp", danger: 1, polygon: [(160.0, 205.0), (260.0, 205.0), (260.0, 270.0), (160.0, 270.0)]),
         (name: "Kettle mine", danger: 2, polygon: [(-260.0, -125.0), (-130.0, -125.0), (-130.0, -15.0), (-260.0, -15.0)]),
-        (name: "The quarry", danger: 3, polygon: [(130.0, 0.0), (240.0, 0.0), (240.0, -110.0), (130.0, -110.0)]),
+        (name: "The quarry", danger: 3, polygon: [(110.0, 0.0), (240.0, 0.0), (240.0, -110.0), (110.0, -110.0)]),
         (name: "Hunting lodge", danger: 2, polygon: [(160.0, -240.0), (260.0, -240.0), (260.0, -160.0), (160.0, -160.0)]),
         (name: "The pass", danger: 2, polygon: [(-75.0, -285.0), (100.0, -285.0), (100.0, -190.0), (-75.0, -190.0)]),
         (name: "The Gate", danger: 3, polygon: [(-300.0, -300.0), (-200.0, -300.0), (-200.0, -200.0), (-300.0, -200.0)]),

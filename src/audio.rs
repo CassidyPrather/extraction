@@ -112,6 +112,21 @@ impl Plugin for AudioPlugin {
             .add_systems(
                 Update,
                 (
+                    button_sounds,
+                    press_sounds,
+                    far_sounds,
+                    step_sounds,
+                    truck_sounds,
+                    use_sounds,
+                    part_sounds,
+                    pack_sounds,
+                    landing_sounds,
+                    gadget_sounds,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
                     indoor_ambience,
                     attention_hum,
                     ambient_oneshots,
@@ -184,10 +199,26 @@ fn play(
     offset_db: f32,
     pitch: f64,
 ) {
+    play_at_speed(commands, bank, rng, set, at, cue, offset_db, 1.0, pitch);
+}
+
+/// [`play`], centred on `speed` (below 1 is lower and slower: heavier).
+#[allow(clippy::too_many_arguments)]
+fn play_at_speed(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Option<Vec3>,
+    cue: &str,
+    offset_db: f32,
+    speed: f64,
+    pitch: f64,
+) {
     let Some(sample) = bank.pick(set, rng) else {
         return;
     };
-    let speed = 1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch;
+    let speed = speed * (1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch);
     let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + offset_db));
     let settings = PlaybackSettings::default().with_speed(speed);
     match at {
@@ -228,19 +259,7 @@ fn footsteps(
     built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
     for s in steps.read() {
-        let p = [s.position.x, s.position.z];
-        let in_truck = trucks
-            .iter()
-            .any(|(gt, t)| t.in_bed(gt, s.position + Vec3::Y * 0.2));
-        // A floor, a deck, a stair: whatever's underfoot, if it's built.
-        let floor = underfoot(&spatial, &built, s.position);
-        let set = if in_truck {
-            "footsteps/wood"
-        } else if let Some(m) = floor {
-            footstep_set(m)
-        } else {
-            surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
-        };
+        let set = ground_set(&zone, &trucks, &spatial, &built, s.position);
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
@@ -252,6 +271,70 @@ fn footsteps(
             offset,
             0.06,
         );
+    }
+}
+
+/// The footstep set for whatever is under `at`: the truck's bed, a built
+/// floor, or the ground.
+fn ground_set(
+    zone: &Zone,
+    trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
+    spatial: &SpatialQuery,
+    built: &Query<(&GlobalTransform, &Surfaces)>,
+    at: Vec3,
+) -> &'static str {
+    let p = [at.x, at.z];
+    let in_truck = trucks
+        .iter()
+        .any(|(gt, t)| t.in_bed(gt, at + Vec3::Y * 0.2));
+    // A floor, a deck, a stair: whatever's underfoot, if it's built.
+    if in_truck {
+        "footsteps/wood"
+    } else if let Some(m) = underfoot(spatial, built, at) {
+        footstep_set(m)
+    } else {
+        surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
+    }
+}
+
+/// Coming down from a jump or a drop: both feet at once, harder the
+/// faster you fell.
+#[allow(clippy::too_many_arguments)]
+fn landing_sounds(
+    mut commands: Commands,
+    bodies: Query<(Entity, &crate::player::Body, &GlobalTransform)>,
+    zone: Res<Zone>,
+    trucks: Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &Surfaces)>,
+    mut was: Local<HashMap<Entity, (bool, f32, f32)>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, body, gt) in &bodies {
+        let before = was.insert(e, (body.grounded, body.velocity.y, body.airborne));
+        let Some((was_grounded, vy, airborne)) = before else {
+            continue;
+        };
+        if was_grounded || !body.grounded || body.swimming || airborne < 0.3 || vy > -2.5 {
+            continue;
+        }
+        let at = gt.translation();
+        let set = ground_set(&zone, &trucks, &spatial, &built, at);
+        let hard = ((-vy - 2.5) / 6.0).clamp(0.0, 1.0);
+        for _ in 0..2 {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(at),
+                "land",
+                -6.0 + 6.0 * hard,
+                0.92,
+                0.05,
+            );
+        }
     }
 }
 
@@ -367,9 +450,24 @@ fn hit_sounds(
     trees: Query<(), With<crate::world::trees::TreeTrunks>>,
     structures: Query<(), With<crate::world::structures::Structure>>,
     items: Query<(), With<crate::items::Item>>,
+    bodies: Query<(), With<crate::player::BodyCollider>>,
     built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
     for h in hits.read() {
+        // A round into you is a thump, not the ground's spray of dirt.
+        if bodies.contains(h.entity) {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/body_hit",
+                Some(h.point),
+                "hit.body",
+                0.0,
+                0.08,
+            );
+            continue;
+        }
         let made_of = built
             .get(h.entity)
             .ok()
@@ -410,6 +508,30 @@ fn hit_sounds(
     }
 }
 
+/// What taking something up sounds like: the thing in the glove. A rifle's
+/// receiver knocks, a tin clinks, a crate's slat thuds; cloth and food
+/// rustle.
+pub fn handling_set(material: crate::items::impacts::Material) -> &'static str {
+    use crate::items::impacts::Material;
+    match material {
+        Material::Metal => "physical/handle_metal",
+        Material::Wood => "physical/handle_wood",
+        Material::Plastic => "physical/handle_plastic",
+        Material::Soft => "physical/cloth",
+    }
+}
+
+/// Weight in the hand, as gain and pitch: +3 dB and about 4% lower per
+/// doubling over a kilo (a 50 g tin is a tick, a 4 kg rifle a clack).
+pub fn weight_tone(mass: f32) -> (f32, f64) {
+    let doublings = mass.max(0.03).log2();
+    (
+        (3.0 * doublings).clamp(-9.0, 5.0),
+        (1.0 - 0.04 * doublings as f64).clamp(0.85, 1.2),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn hand_sounds(
     mut commands: Commands,
     mut events: MessageReader<InteractEvent>,
@@ -417,27 +539,219 @@ fn hand_sounds(
     mut rng: ResMut<AudioRng>,
     poses: Query<&GlobalTransform>,
     sockets: Query<&crate::interact::Socket>,
+    items: Query<&crate::items::Item>,
+    bags: Query<&crate::interact::body::InBackpack>,
+    packs: Query<&crate::interact::body::Backpack>,
+    catalog: Res<crate::items::Catalog>,
 ) {
     use crate::interact::SocketKind;
+    // An item's handling sound, gain and pitch; cloth for what isn't one
+    // (the pack, a rope).
+    let feel = |item: Entity| {
+        items
+            .get(item)
+            .ok()
+            .map_or(("physical/cloth", 0.0, 1.0), |i| {
+                let def = catalog.get(i.kind());
+                let (db, speed) = weight_tone(def.mass);
+                (
+                    handling_set(crate::items::impacts::material_of(def)),
+                    db,
+                    speed,
+                )
+            })
+    };
     for ev in events.read() {
-        let (item, set, cue) = match ev {
-            InteractEvent::Grabbed { item, .. } => (*item, "physical/cloth", "hand.grab"),
-            InteractEvent::Stowed { item } => (*item, "physical/zip", "hand.stow"),
+        let (item, set, cue, db, speed) = match ev {
+            InteractEvent::Grabbed { item, .. } => {
+                let (set, db, speed) = feel(*item);
+                if items.contains(*item) {
+                    (*item, set, "hand.take", db, speed)
+                } else {
+                    (*item, set, "hand.grab", 0.0, 1.0)
+                }
+            }
+            // Letting go: the same thing, lighter, as the fingers open.
+            InteractEvent::Released { item, .. } if items.contains(*item) => {
+                let (set, db, speed) = feel(*item);
+                (*item, set, "hand.release", db, speed * 1.05)
+            }
+            // Into the pack: its zip. Into a crate, a tray or the stash:
+            // the thing set down in it.
+            InteractEvent::Stowed { item } => {
+                let into_crate = bags
+                    .get(*item)
+                    .ok()
+                    .and_then(|b| packs.get(b.bag).ok())
+                    .is_some_and(|p| !p.carried);
+                if into_crate {
+                    let (set, db, speed) = feel(*item);
+                    (*item, set, "hand.place", db, speed)
+                } else {
+                    (*item, "physical/zip", "hand.stow", 0.0, 1.0)
+                }
+            }
             // A pouch or holster takes it with a rustle (the long velcro rips
             // sounded like a motor in the first headset session); a gun's
             // magazine well has its own click (`gun.mag_insert`), and a rail
             // or cradle a small click.
             InteractEvent::Socketed { item, socket } => match sockets.get(*socket).map(|s| &s.kind)
             {
-                Ok(SocketKind::Body(_)) => (*item, "physical/cloth", "hand.socket"),
+                Ok(SocketKind::Body(_)) => (*item, "physical/cloth", "hand.socket", 0.0, 1.0),
                 Ok(SocketKind::MagWell(_)) => continue,
-                _ => (*item, "guns/safety", "hand.attach"),
+                _ => (*item, "guns/safety", "hand.attach", 0.0, 1.0),
             },
-            InteractEvent::Refused { item } => (*item, "physical/cloth", "hand.refused"),
+            InteractEvent::Refused { item } => (*item, "physical/cloth", "hand.refused", 0.0, 1.0),
             _ => continue,
         };
         let at = poses.get(item).map(|g| g.translation()).ok();
-        play(&mut commands, &bank, &mut rng.0, set, at, cue, 0.0, 0.1);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            at,
+            cue,
+            db,
+            speed,
+            0.08,
+        );
+    }
+}
+
+/// Push buttons click going in and again, lighter, coming back out.
+fn button_sounds(
+    mut commands: Commands,
+    buttons: Query<(Entity, &crate::interact::poke::PokeButton, &GlobalTransform)>,
+    mut was: Local<HashMap<Entity, bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, b, gt) in &buttons {
+        let before = was.insert(e, b.down).unwrap_or(false);
+        if before == b.down {
+            continue;
+        }
+        let (cue, speed) = if b.down {
+            ("button.in", 1.0)
+        } else {
+            ("button.out", 1.12)
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/button",
+            Some(gt.translation()),
+            cue,
+            0.0,
+            speed,
+            0.04,
+        );
+    }
+}
+
+/// Things pressed with the grip (or the flat key): the bell cord rings
+/// the truck's bell; a card, knob or lever clicks, unless its push button
+/// already did. Doors sound in `door_sounds`.
+fn press_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<InteractEvent>,
+    pressables: Query<(&crate::raid::truck::Pressable, &GlobalTransform)>,
+    buttons: Query<&crate::interact::poke::PokeButton>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::raid::truck::Pressable;
+    for ev in events.read() {
+        let InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        let Ok((kind, gt)) = pressables.get(*item) else {
+            continue;
+        };
+        let (set, cue) = match kind {
+            Pressable::BellPull => ("physical/bell", "truck.bell"),
+            Pressable::Door => continue,
+            Pressable::FoldCover => ("physical/cloth", "hand.grab"),
+            Pressable::BenchRun => ("physical/switch", "press.lever"),
+            _ if buttons.iter().any(|b| b.target == *item && b.down) => continue,
+            _ => ("physical/button", "button.in"),
+        };
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(gt.translation()),
+            cue,
+            0.0,
+            0.05,
+        );
+    }
+}
+
+/// The far grab: a whoosh that flies with the thing, and a slap into the
+/// palm when it's caught.
+fn far_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<InteractEvent>,
+    poses: Query<&GlobalTransform>,
+    time: Res<Time>,
+    mut flying: Local<HashMap<Entity, f32>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    let now = time.elapsed_secs();
+    flying.retain(|_, t| now - *t < 2.0);
+    for ev in events.read() {
+        match ev {
+            InteractEvent::Pulled { item, .. } => {
+                flying.insert(*item, now);
+                if let Some(sample) = bank.pick("physical/whoosh", &mut rng.0) {
+                    let speed = 1.0 + (rng.0.f32() as f64 - 0.5) * 0.12;
+                    commands.spawn((
+                        SamplePlayer::new(sample)
+                            .with_volume(Volume::Decibels(mix::db("far.whoosh"))),
+                        PlaybackSettings::default().with_speed(speed),
+                        Transform::default(),
+                        sample_effects![mix::spatial("far.whoosh")],
+                        ChildOf(*item),
+                    ));
+                }
+            }
+            InteractEvent::Grabbed { item, .. } if flying.remove(item).is_some() => {
+                let at = poses.get(*item).map(|g| g.translation()).ok();
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/catch",
+                    at,
+                    "far.catch",
+                    0.0,
+                    0.06,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The onboarding's "done, next": a light ding, in your head.
+fn step_sounds(
+    mut commands: Commands,
+    mut steps: MessageReader<crate::rig::haptics::StepDone>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for s in steps.read() {
+        let (set, cue) = if s.station {
+            ("ui/chime_station", "step.station")
+        } else {
+            ("physical/chime", "step.done")
+        };
+        play(&mut commands, &bank, &mut rng.0, set, s.at, cue, 0.0, 0.02);
     }
 }
 
@@ -1383,6 +1697,312 @@ fn drop_sounds(
     }
 }
 
+/// The truck's diesel, heard where it is: coming up the road to the
+/// rendezvous as it's due, idling while it waits for you, pulling away.
+/// (The truck itself moves between stops off-stage.)
+#[derive(Component)]
+struct TruckIdle;
+
+/// Seconds before the truck is due that its approach starts (about the
+/// length of `machines/truck_arrive`).
+const TRUCK_APPROACH: f32 = 6.0;
+
+#[allow(clippy::too_many_arguments)]
+fn truck_sounds(
+    mut commands: Commands,
+    raid: Res<crate::raid::Raid>,
+    zone: Res<Zone>,
+    trucks: Query<(Entity, &GlobalTransform), With<crate::raid::truck::Truck>>,
+    idles: Query<Entity, With<TruckIdle>>,
+    mut last: Local<Option<crate::raid::Phase>>,
+    mut heard_coming: Local<bool>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::raid::Phase;
+    let engine = |t: &Transform| t.transform_point(Vec3::new(0.0, 1.0, -2.0));
+    let rv_engine = |rv: usize| engine(&crate::raid::truck::rv_pose(&zone, rv));
+    let Some((truck, truck_at)) = trucks.iter().next() else {
+        return;
+    };
+    let here = engine(&truck_at.compute_transform());
+    let phase = raid.phase.clone();
+    match &phase {
+        Phase::TruckCalled { rv, eta } => {
+            if *eta <= TRUCK_APPROACH && !*heard_coming && *rv != crate::raid::SHORT_EXFIL {
+                *heard_coming = true;
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "machines/truck_arrive",
+                    Some(rv_engine(*rv)),
+                    "truck.arrive",
+                    0.0,
+                    0.02,
+                );
+            }
+        }
+        _ => *heard_coming = false,
+    }
+    let idling = matches!(phase, Phase::TruckWaiting { .. });
+    match (idling, idles.iter().next()) {
+        (true, None) => {
+            if let Some(sample) = bank.pick("machines/truck_idle", &mut rng.0) {
+                commands.spawn((
+                    TruckIdle,
+                    SamplePlayer::new(sample)
+                        .looping()
+                        .with_volume(Volume::Decibels(mix::db("truck.idle"))),
+                    PlaybackSettings::default(),
+                    Transform::from_xyz(0.0, 1.0, -2.0),
+                    sample_effects![mix::spatial("truck.idle")],
+                    ChildOf(truck),
+                ));
+            }
+        }
+        (false, Some(e)) => commands.entity(e).despawn(),
+        _ => {}
+    }
+    // Leaving: with you in the back, or without you.
+    let left_from = match (last.as_ref(), &phase) {
+        (Some(Phase::TruckWaiting { .. }), Phase::Extracting { .. }) => Some(here),
+        (Some(Phase::TruckWaiting { rv, .. }), Phase::Out) if *rv != crate::raid::SHORT_EXFIL => {
+            Some(rv_engine(*rv))
+        }
+        _ => None,
+    };
+    if let Some(at) = left_from {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/truck_depart",
+            Some(at),
+            "truck.depart",
+            0.0,
+            0.02,
+        );
+    }
+    *last = Some(phase);
+}
+
+/// What using a thing sounds like, by what it is: eating, drinking,
+/// tearing a dressing open, a switch.
+pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str, &'static str)> {
+    use extraction_core::items::Category;
+    const DRINKS: &[&str] = &[
+        "food:Water",
+        "food:Milk",
+        "food:Tea",
+        "food:MilkTea",
+        "food:HotWater",
+        "food:Soup",
+    ];
+    match def.id.as_str() {
+        "field_dressing" => Some(("physical/bandage", "use.bandage")),
+        "radio" | "deployable_cover" | "climbing_kit" | "zipline_kit" | "camera_drone" => None,
+        _ if def.category == Category::Food => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
+            ("physical/drink", "use.drink")
+        } else {
+            ("physical/eat", "use.eat")
+        }),
+        // Lights, an injector's plunger, a cloak, arming a charge.
+        _ if matches!(
+            def.category,
+            Category::Gadget | Category::Medical | Category::Firearm | Category::Attachment
+        ) || def.id.ends_with("light") =>
+        {
+            Some(("physical/switch", "use.switch"))
+        }
+        _ => None,
+    }
+}
+
+/// Using what's in your hand. The kinds of what hands held last frame are
+/// kept, because a thing eaten is gone before its message is read.
+fn use_sounds(
+    mut commands: Commands,
+    mut uses: MessageReader<crate::items::usage::UseItem>,
+    held: Query<(Entity, &crate::items::Item, &GlobalTransform), With<crate::interact::Held>>,
+    catalog: Res<crate::items::Catalog>,
+    mut kinds: Local<HashMap<Entity, (extraction_core::items::ItemKind, Vec3)>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, item, gt) in &held {
+        kinds.insert(e, (item.kind(), gt.translation()));
+    }
+    for u in uses.read() {
+        let Some((kind, at)) = kinds.get(&u.item).copied() else {
+            continue;
+        };
+        if let Some((set, cue)) = use_sound(catalog.get(kind)) {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(at),
+                cue,
+                0.0,
+                0.08,
+            );
+        }
+    }
+    kinds.retain(|e, _| held.contains(*e));
+}
+
+/// A robot losing a part: the crash of it, glass for an eye, and a groan
+/// of the frame giving up when it was the core.
+fn part_sounds(
+    mut commands: Commands,
+    mut parts: MessageReader<crate::robots::PartDestroyed>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::PartRole;
+    for p in parts.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/clank",
+            Some(p.at),
+            "robot.part",
+            0.0,
+            0.15,
+        );
+        let extra = match p.role {
+            PartRole::Sensor => Some(("physical/glass_break", "robot.glass")),
+            PartRole::Core => Some(("machines/groan", "robot.wreck")),
+            _ => None,
+        };
+        if let Some((set, cue)) = extra {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(p.at),
+                cue,
+                0.0,
+                0.1,
+            );
+        }
+    }
+}
+
+/// Your pack opening and closing: its zip.
+fn pack_sounds(
+    mut commands: Commands,
+    packs: Query<(Entity, &crate::interact::body::Backpack, &GlobalTransform)>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut was: Local<HashMap<Entity, bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, p, gt) in &packs {
+        if !p.carried || !locals.contains(p.owner) {
+            continue;
+        }
+        let before = was.insert(e, p.open);
+        if before.is_none_or(|b| b == p.open) {
+            continue;
+        }
+        let (cue, speed) = if p.open {
+            ("pack.open", 1.0)
+        } else {
+            ("pack.close", 1.1)
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/zip",
+            Some(gt.translation()),
+            cue,
+            0.0,
+            speed,
+            0.06,
+        );
+    }
+}
+
+/// The grapnel thrown, biting, coiled back up; a cover deployed and
+/// folded; the bench finishing a job.
+#[allow(clippy::too_many_arguments)]
+fn gadget_sounds(
+    mut commands: Commands,
+    grapnels: Query<(Entity, &crate::gadgets::climbing::Grapnel, &GlobalTransform)>,
+    covers: Query<(Entity, &GlobalTransform), With<crate::gadgets::CoverWall>>,
+    benches: Query<(Entity, &crate::raid::bench::Bench, &GlobalTransform)>,
+    mut grapnel_was: Local<HashMap<Entity, (u8, bool)>>,
+    mut cover_at: Local<HashMap<Entity, Vec3>>,
+    mut bench_was: Local<HashMap<Entity, bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::gadgets::climbing::Grapnel;
+    let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
+    for (e, g, gt) in &grapnels {
+        let now = match g {
+            Grapnel::Coiled => (0, false),
+            Grapnel::Ready { thrown, .. } => (1, *thrown),
+            Grapnel::Hooked { .. } => (2, false),
+        };
+        let at = gt.translation();
+        match (grapnel_was.insert(e, now), now) {
+            (Some((1, false)), (1, true)) => {
+                out.push(("physical/whoosh", "grapnel.throw", at, 0.8))
+            }
+            (Some((1, _)), (2, _)) => out.push(("impacts/metal", "grapnel.hook", at, 1.2)),
+            (Some((a, _)), (0, _)) if a != 0 => {
+                out.push(("physical/cloth", "grapnel.coil", at, 1.0))
+            }
+            _ => {}
+        }
+    }
+    let mut seen = Vec::new();
+    for (e, gt) in &covers {
+        seen.push(e);
+        if cover_at.insert(e, gt.translation()).is_none() {
+            out.push(("physical/drop_metal", "cover.deploy", gt.translation(), 0.8));
+        }
+    }
+    cover_at.retain(|e, at| {
+        let kept = seen.contains(e);
+        if !kept {
+            out.push(("physical/drop_metal", "cover.fold", *at, 1.1));
+        }
+        kept
+    });
+    for (e, b, gt) in &benches {
+        let running = b.running.is_some();
+        if bench_was.insert(e, running) == Some(true) && !running {
+            out.push((
+                "physical/bell",
+                "bench.done",
+                gt.translation() + Vec3::Y,
+                1.6,
+            ));
+        }
+    }
+    for (set, cue, at, speed) in out {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            speed,
+            0.06,
+        );
+    }
+}
+
 /// A pylon going up or coming down: servos and clanks from its mast.
 fn pylon_sounds(
     mut commands: Commands,
@@ -1423,6 +2043,49 @@ fn pylon_sounds(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// Using a thing sounds like what it is, and anything you'd eat or use
+    /// up makes a sound (silence read as "nothing happened" in VR).
+    #[test]
+    fn using_things_sounds_like_what_they_are() {
+        let catalog = crate::items::Catalog::load();
+        let sound = |id: &str| {
+            let (_, def) = catalog.0.iter().find(|(_, d)| d.id == id).expect(id);
+            use_sound(def).map(|s| s.0)
+        };
+        assert_eq!(sound("crackers"), Some("physical/eat"));
+        assert_eq!(sound("water_bottle"), Some("physical/drink"));
+        assert_eq!(sound("field_dressing"), Some("physical/bandage"));
+        assert_eq!(sound("flashlight"), Some("physical/switch"));
+        assert_eq!(sound("radio"), None, "the radio has its own");
+        let bank: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(crate::asset_root_path().join("audio/sounds.json")).unwrap(),
+        )
+        .unwrap();
+        for (_, def) in catalog.0.iter() {
+            if def.category == extraction_core::items::Category::Food {
+                assert!(use_sound(def).is_some(), "{} is eaten silently", def.id);
+            }
+            if let Some((set, _)) = use_sound(def) {
+                assert!(bank.get(set).is_some(), "{set}");
+            }
+            let handle = handling_set(crate::items::impacts::material_of(def));
+            assert!(bank.get(handle).is_some(), "{handle}");
+        }
+    }
+
+    /// Heavier sounds louder and lower, within bounds.
+    #[test]
+    fn weight_is_heard() {
+        let (tin, rifle) = (weight_tone(0.05), weight_tone(3.5));
+        assert!(tin.0 < rifle.0 && tin.1 > rifle.1);
+        for m in [0.0, 0.01, 1.0, 50.0] {
+            let (db, speed) = weight_tone(m);
+            assert!((-9.0..=5.0).contains(&db) && (0.85..=1.2).contains(&speed));
+        }
+    }
+
     /// Every sound a map asks for is in the index (a missing set plays
     /// nothing, silently).
     #[test]
