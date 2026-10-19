@@ -949,7 +949,7 @@ pub(crate) fn hold_curl(role: Option<GripRole>, trigger: f32, thinnest: f32) -> 
     match role {
         // A pistol or rifle grip: the fingers round it, the index along
         // the frame until it takes up the trigger.
-        Some(GripRole::Primary) => [0.22 + 0.33 * trigger, 0.74, 0.76, 0.78, 0.62],
+        Some(GripRole::Primary) => [0.22 + 0.18 * trigger, 0.74, 0.76, 0.78, 0.62],
         Some(GripRole::Support) => [0.55, 0.6, 0.62, 0.64, 0.5],
         Some(GripRole::Handle(_)) => [0.7, 0.72, 0.74, 0.76, 0.7],
         // Anything else: wrapped as far as its size lets the fingers
