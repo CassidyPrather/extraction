@@ -6,4 +6,4 @@ t04_east        60,0,-20,90,0        # the east belt
 t05_soft        30,0,-30,45,-6       # the soft ground
 t06_north       0,0,-60,180,-2       # back from the north post
 t07_belt        -85,0,40,0,0         # inside the west belt
-t08_aerial      0,80,130,0,-25       # over the yard
+t08_aerial      0,25,115,0,-12       # over the yard
