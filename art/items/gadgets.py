@@ -276,8 +276,37 @@ def lead_case():
     recess = Part("recess")
     recess.box((0.05, 0.009, 0.03), (0.0, 0.035, 0.0), "Yellow")
     p.cut(recess)
+    # The warning plate: a black trefoil let into the yellow, the two a
+    # mosaic of full-thickness pieces (printed on, they'd z-fight).
+    def sector(r0, r1, a0, a1, n=8):
+        outer = [(r1 * math.cos(math.radians(a0 + (a1 - a0) * i / n)),
+                  r1 * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+        inner = [(r0 * math.cos(math.radians(a1 - (a1 - a0) * i / n)),
+                  r0 * math.sin(math.radians(a1 - (a1 - a0) * i / n))) for i in range(n + 1)]
+        return outer + inner
+
+    trefoil = [[(0.003 * math.cos(2 * math.pi * i / 14), 0.003 * math.sin(2 * math.pi * i / 14))
+                for i in range(14)]]
+    trefoil += [sector(0.0045, 0.0115, a - 30, a + 30) for a in (90, 210, 330)]
+    y0, y1 = 0.0311, 0.0355
     plate = Part("plate")
-    plate.box((0.05, 0.0044, 0.03), (0.0, 0.0333, 0.0), "Yellow")
+    plate.box((0.05, y1 - y0, 0.03), (0.0, (y0 + y1) / 2, 0.0), "Yellow")
+    holes = Part("cut")
+    for poly in trefoil:
+        holes.prism(poly, y0 - 0.001, y1 + 0.001, "Yellow", axis="y")
+    plate.cut(holes)
+    for poly in trefoil:
+        plate.prism(poly, y0, y1, "Black", axis="y")
+    # A folding bail handle on top, and the hinges along the back.
+    for sx in (-1, 1):
+        p.box((0.012, 0.008, 0.016), (sx * 0.04, 0.039, -0.035), "Steel", bevel=0.002, segs=1)
+    p.sweep([(-0.04, 0.041), (-0.04, 0.047), (-0.03, 0.05), (0.03, 0.05), (0.04, 0.047),
+             (0.04, 0.041)], [(0.0025 * math.cos(a), 0.0025 * math.sin(a)) for a in
+                              [2 * math.pi * i / 6 for i in range(6)]], "Steel",
+            xf=T(0, 0, -0.035) @ RY(math.pi / 2))
+    for sx in (-1, 1):
+        p.cyl(0.004, sx * 0.04 - 0.012, sx * 0.04 + 0.012, "Steel", segs=10,
+              xf=T(0, 0.0115, -0.057) @ RY(math.pi / 2))
     return [p, plate]
 
 
