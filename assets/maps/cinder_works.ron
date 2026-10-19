@@ -109,8 +109,8 @@
         ),
         // Through the dead wood to the fire lookout.
         (
-            name: "Lookout track", kind: Dirt, width: 4.0, smoothing: 20.0,
-            points: [(5.0, -180.0), (-70.0, -178.0), (-150.0, -165.0), (-154.0, -163.0)],
+            name: "Lookout track", kind: Gravel, width: 4.0, smoothing: 20.0,
+            points: [(5.0, -180.0), (-70.0, -178.0), (-150.0, -165.0)],
         ),
         // Out to Cutter's farm.
         (

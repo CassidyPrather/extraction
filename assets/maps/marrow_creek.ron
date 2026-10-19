@@ -92,7 +92,7 @@
         ),
         // Village to pumping station along the south bank.
         (
-            name: "Station road", kind: Gravel, width: 5.0, smoothing: 40.0,
+            name: "Station road", kind: Gravel, width: 5.0,
             points: [(2.0, 60.0), (-60.0, 45.0), (-120.0, 30.0), (-170.0, 25.0), (-187.0, 22.5)],
         ),
         // Farm track down to the ford and up the far side to the Hollow and the rail yard.
