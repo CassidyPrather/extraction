@@ -55,6 +55,9 @@ pub enum Rule {
     Rhythm,
     /// A passage narrower than a body with a rifle.
     Narrow,
+    /// A supply crate (a loot marker in the open) in a wall or where the
+    /// truck appears.
+    Crate,
 }
 
 #[derive(Clone, Debug)]
@@ -1166,7 +1169,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         if let Some((i, rc)) = rects.iter().find(|(_, rc)| rc.sdf(m.at) < CRATE_ROOM) {
             find(
                 &mut r,
-                Rule::Footing,
+                Rule::Crate,
                 format!(
                     "{}'s crate is {:.1} m from the {}",
                     m.name,
@@ -1179,7 +1182,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         if let Some((rv, at)) = rvs.iter().find(|(_, at)| dist(*at, m.at) < CRATE_FROM_RV) {
             find(
                 &mut r,
-                Rule::Footing,
+                Rule::Crate,
                 format!(
                     "{}'s crate is {:.0} m from the {rv} rendezvous",
                     m.name,
