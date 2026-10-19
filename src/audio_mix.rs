@@ -71,6 +71,7 @@ pub const MUFFLE_FULL: f32 = 900.0;
 pub const MIX: &[Cue] = &[
     // Your own body and hands.
     cue!("step", "footsteps/grass", -8.0, 55.0, 1.7, Detail),
+    cue!("land", "footsteps/grass", -7.5, 65.0, 1.7, Detail),
     cue!("splash", "footsteps/water", -3.0, 70.0, 1.7, Detail),
     cue!("hand.grab", "physical/cloth", -17.0, 40.0, 0.6, Detail),
     cue!("hand.refused", "physical/cloth", -10.0, 45.0, 0.6, Signal),
@@ -90,6 +91,12 @@ pub const MIX: &[Cue] = &[
     cue!("use.eat", "physical/eat", -10.0, 50.0, 0.3, Detail),
     cue!("use.drink", "physical/drink", -13.5, 50.0, 0.3, Detail),
     cue!("use.bandage", "physical/bandage", -12.0, 60.0, 0.4, Detail),
+    cue!("grapnel.throw", "physical/whoosh", -12.0, 60.0, 2.0, Detail),
+    cue!("grapnel.hook", "impacts/metal", -8.5, 80.0, 6.0, Detail),
+    cue!("grapnel.coil", "physical/cloth", -12.0, 50.0, 0.6, Detail),
+    cue!("cover.deploy", "physical/drop_metal", -7.5, 75.0, 1.5, Detail),
+    cue!("cover.fold", "physical/drop_metal", -8.5, 70.0, 1.5, Detail),
+    cue!("bench.done", "physical/bell", -10.0, 70.0, 2.0, Detail),
     cue!("use.switch", "physical/switch", -3.5, 50.0, 0.4, Detail),
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 60.0, 0.0, Detail),
