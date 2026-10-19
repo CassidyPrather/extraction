@@ -54,6 +54,8 @@ use crate::world::{Layer, Zone};
 pub enum Goal {
     TakePistol,
     TakeRadio,
+    Turn,
+    Crouch,
     PutAway,
     Pack,
     FarGrab,
@@ -77,6 +79,8 @@ impl Goal {
         match self {
             Goal::TakePistol => "Take the pistol",
             Goal::TakeRadio => "Take the radio",
+            Goal::Turn => "Turn around",
+            Goal::Crouch => "Crouch",
             Goal::PutAway => "Holster or pocket it",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
@@ -100,6 +104,10 @@ impl Goal {
         match (self, flat) {
             (Goal::TakePistol | Goal::TakeRadio, false) => "Reach into the crate.\nSqueeze GRIP.",
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
+            (Goal::Turn, false) => "Push the right stick left\nor right.",
+            (Goal::Turn, true) => "Move the mouse round.",
+            (Goal::Crouch, false) => "Pull the right stick down\n(again to stand).",
+            (Goal::Crouch, true) => "Press C (again to stand).",
             (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
@@ -161,11 +169,19 @@ pub const STATIONS: &[Station] = &[
         tip: "Everything you own rides\nin that crate between raids.",
     },
     Station {
+        title: "GETTING ABOUT",
+        at: [-3.5, 89.0],
+        rot: 0.0,
+        goals: &[Goal::Turn, Goal::Crouch],
+        where_: "the lamp off the back of the truck",
+        tip: "Left stick walks; click\nit to run. Crouched, the\nmachines see you later.",
+    },
+    Station {
         title: "PUT IT AWAY",
         at: [3.5, 87.0],
         rot: 0.0,
         goals: &[Goal::PutAway, Goal::Pack],
-        where_: "the lamp by the tailgate",
+        where_: "the next lamp, right of the track",
         tip: "Weight slows you.\nCarry what you'll use.",
     },
     Station {
@@ -406,6 +422,7 @@ impl Plugin for OnboardingPlugin {
                         watch_guns,
                         watch_uses.before(crate::items::usage::UsageSystems),
                         watch_world,
+                        watch_moves,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -1001,6 +1018,44 @@ fn watch_uses(
     }
 }
 
+/// Turning (the right stick sideways in a headset; the view swung round
+/// in flat mode) and crouching (the toggle, or squatting for real).
+fn watch_moves(
+    mut ob: ResMut<Onboarding>,
+    mut out: MessageWriter<GoalDone>,
+    players: Query<(&crate::rig::RigInput, &Transform), With<LocalPlayer>>,
+    driver: Res<RigDriver>,
+    mut swung: Local<(Option<f32>, f32)>,
+) {
+    let Some((input, t)) = players.iter().next() else {
+        return;
+    };
+    let yaw = t.rotation.to_euler(EulerRot::YXZ).0;
+    if let Some(last) = swung.0 {
+        let d = (yaw - last + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        swung.1 += d.abs();
+    }
+    swung.0 = Some(yaw);
+    let stick = input.hand(Side::Right).stick;
+    let turned = if *driver == RigDriver::Flat {
+        swung.1 > 1.5
+    } else {
+        stick.x.abs() > 0.7
+    };
+    if ob.current().is_some_and(|i| i >= station_of(Goal::Turn)) {
+        if turned {
+            complete(&mut ob, Goal::Turn, &mut out);
+        }
+        let stick_down = *driver != RigDriver::Flat && stick.y < -0.7;
+        if input.crouch || stick_down || input.head.translation.y < 1.15 {
+            complete(&mut ob, Goal::Crouch, &mut out);
+        }
+    } else {
+        swung.1 = 0.0;
+    }
+}
+
 /// The house's door open.
 fn watch_world(
     mut ob: ResMut<Onboarding>,
@@ -1375,7 +1430,7 @@ mod tests {
                 let control = if flat {
                     ["Press", "mouse"].iter().any(|k| how.contains(k))
                 } else {
-                    ["GRIP", "TRIGGER", "Press A", "hand", "finger"]
+                    ["GRIP", "TRIGGER", "Press A", "hand", "finger", "stick"]
                         .iter()
                         .any(|k| how.contains(k))
                 };

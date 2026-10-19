@@ -2,8 +2,8 @@
 //
 // A small fenced valley, 240 m on a side, with nothing hunting in it (the
 // game turns robots off here and saves nothing). A gravel track runs north
-// from the truck past nine stations (`src/onboarding`: their posts, props
-// and the training burner are placed there, not here): the kit, putting
+// from the truck past ten stations (`src/onboarding`: their posts, props
+// and the training burner are placed there, not here): the kit, turning and crouching, putting
 // it away, a far grab, the firing line, the house, first aid, the
 // shimmer, a button, and calling the truck to the north post. Pull its
 // cord to finish, or press the card by the tailgate to skip.

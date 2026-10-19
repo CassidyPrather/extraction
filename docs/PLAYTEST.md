@@ -177,20 +177,21 @@ If any of this fails, stop and send the log: everything else depends on it.
   lit lantern beside it, saying what to do first ("Reach into the crate.
   Squeeze GRIP."). The driver says the same on your wrist. That's the
   whole start: there is nothing to read on the way.
-- The yard is **nine stations** up the gravel track. Each is a post
+- The yard is **ten stations** up the gravel track. Each is a post
   with a lantern and a board, and asks for one or two things:
 
   | # | Station | Do |
   | - | - | - |
   | 1 | Your kit (in the truck) | take the pistol and the radio out of the crate |
-  | 2 | Put it away | holster or pocket something; let go of something over your shoulder (the pack) |
-  | 3 | Out of reach | a box on a crate in a fenced pen: point, squeeze, flick back |
-  | 4 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate |
-  | 5 | The house | open the door by its edge; take the dressing off the crate inside |
-  | 6 | First aid | use a dressing: hold it, press A (or X) |
-  | 7 | The shimmer | a burner beside the track with a stone in it: don't step in (the driver shouts if you get close); far-grab the stone from the edge |
-  | 8 | Buttons | push the amber button with a fingertip |
-  | 9 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, pull the cord |
+  | 2 | Getting about | turn (right stick sideways) and crouch (right stick down, or squat) |
+  | 3 | Put it away | holster or pocket something; let go of something over your shoulder (the pack) |
+  | 4 | Out of reach | a box on a crate in a fenced pen: point, squeeze, flick back |
+  | 5 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate |
+  | 6 | The house | open the door by its edge; take the dressing off the crate inside |
+  | 7 | First aid | use a dressing: hold it, press A (or X) |
+  | 8 | The shimmer | a burner beside the track with a stone in it: don't step in (the driver shouts if you get close); far-grab the stone from the edge |
+  | 9 | Buttons | push the amber button with a fingertip |
+  | 10 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, pull the cord |
 
   The lantern is lit (warm yellow) on the station you're on, green on
   the ones done, dark ahead. Each step ticks off on its board with a
@@ -199,7 +200,7 @@ If any of this fails, stop and send the log: everything else depends on it.
   (in flat mode, the key). **Mark** any board you couldn't read, any step
   you did that didn't tick, and anywhere you didn't know where to go.
 - **Skipping.** Every post has a SKIP card; the board by the tailgate
-  lists all nine with START OVER and ON TO THE ZONE (skips the lot). The
+  lists all ten with START OVER and ON TO THE ZONE (skips the lot). The
   truck's cord ends the yard too, but before the last station it asks
   first ("Pull again and we're off"): it's within reach of where you
   start.
