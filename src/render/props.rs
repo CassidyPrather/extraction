@@ -9,6 +9,7 @@ use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primi
 use crate::raid::Remains;
 use crate::raid::truck::{Pressable, Stash, TRUCK_PARTS, Truck, WHEELS};
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
+use crate::render::world_props::{Blockout, SwapIn};
 use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
 
 pub struct PropVisualsPlugin;
@@ -298,15 +299,20 @@ fn dress_containers(
 ) {
     for e in &crates {
         let planks = lib.get(Mat::Planks, &server, &mut materials);
-        commands.entity(e).insert((
+        commands.entity(e).insert(SwapIn::one("supply_crate"));
+        commands.spawn((
             Mesh3d(meshes.add(metric_box(crate::items::loot::SUPPLY_CRATE))),
             MeshMaterial3d(planks),
+            ChildOf(e),
+            Blockout,
         ));
     }
     for (e, stash, remains) in &bags {
         if stash {
             models.request(STASH_MODEL, &server);
-            commands.entity(e).insert(Undressed(STASH_MODEL));
+            commands
+                .entity(e)
+                .insert((Undressed(STASH_MODEL), SwapIn::one("stash_stand")));
             // Its stand, and the shelf the kit sits on in its top.
             let raise = crate::raid::truck::STASH_RAISE;
             let timber = lib.get(Mat::Timber, &server, &mut materials);
@@ -315,12 +321,14 @@ fn dress_containers(
                 MeshMaterial3d(timber.clone()),
                 Transform::from_xyz(0.0, -0.3 - raise * 0.5, 0.0),
                 ChildOf(e),
+                Blockout,
             ));
             commands.spawn((
                 Mesh3d(meshes.add(metric_box(Vec3::new(0.84, 0.02, 1.14)))),
                 MeshMaterial3d(timber),
                 Transform::from_xyz(0.0, 0.0, 0.0),
                 ChildOf(e),
+                Blockout,
             ));
         } else if remains {
             let bag = mat(&mut materials, Color::srgb(0.12, 0.13, 0.12), 0.6, 0.0);
@@ -849,6 +857,19 @@ fn dress_camp(
     use crate::camp::{BOARD, CampProps, POST_HEIGHT, TABLE};
     use crate::render::materials::{Mat, metric_box};
     for (e, p) in &props {
+        // Boxes until the models are in (`art/props/outdoor.py`).
+        let models = match p {
+            CampProps::Table => vec![
+                ("camp_table", Transform::IDENTITY),
+                (
+                    "lantern",
+                    Transform::from_translation(Vec3::new(-0.48, TABLE.y, 0.12)),
+                ),
+            ],
+            CampProps::Board => vec![("camp_board", Transform::IDENTITY)],
+            CampProps::Post => vec![("camp_post", Transform::IDENTITY)],
+        };
+        commands.entity(e).insert(SwapIn(models));
         let mut part = |m: Mat, size: Vec3, at: Transform| {
             let material = lib.get(m, &server, &mut materials);
             commands.spawn((
@@ -856,6 +877,7 @@ fn dress_camp(
                 MeshMaterial3d(material),
                 at,
                 ChildOf(e),
+                Blockout,
             ));
         };
         match p {
@@ -901,18 +923,21 @@ fn dress_camp(
                     MeshMaterial3d(dark.clone()),
                     Transform::from_translation(lantern + Vec3::Y * 0.015),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cylinder::new(0.045, 0.13))),
                     MeshMaterial3d(glass),
                     Transform::from_translation(lantern + Vec3::Y * 0.095),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cylinder::new(0.055, 0.025))),
                     MeshMaterial3d(dark),
                     Transform::from_translation(lantern + Vec3::Y * 0.17),
                     ChildOf(e),
+                    Blockout,
                 ));
                 commands.spawn((
                     PointLight {

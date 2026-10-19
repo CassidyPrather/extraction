@@ -43,7 +43,7 @@ def signpost():
     w = Wear(81)
     p = Part("static")
     pz = -0.035
-    square_post(p, 0.105, 0.095, -0.3, 1.99, "Timber", cap=0.05)
+    square_post(p, 0.105, 0.095, -0.3, 1.9, "Timber", cap=0.04)
     for v in p.bm.verts:
         v.co.z += pz
     # Three boards, a frame of battens round them.
@@ -59,7 +59,7 @@ def signpost():
         bolt(p, (0.0, y, fz + 0.01), (0, 0, 1), r=0.013, h=0.006)
     # The roof: two boards over a ridge on the post.
     a = math.radians(28)
-    ridge_y, ridge_z = 1.975, -0.005
+    ridge_y, ridge_z = 1.9, -0.005
     for s in (-1, 1):
         cz = ridge_z + s * math.cos(a) * 0.065
         cy = ridge_y - math.sin(a) * 0.065

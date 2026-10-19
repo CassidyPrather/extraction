@@ -2412,3 +2412,56 @@ pub fn dress_buildings(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every model a recipe dresses with is built (`art/props`), and
+    /// replaces only pieces of its own: a renamed or missing model would
+    /// leave the furniture as boxes without anyone noticing.
+    #[test]
+    fn every_prop_model_exists() {
+        let root = crate::asset_root_path();
+        for id in PREFABS {
+            let geo = prefab(id).unwrap();
+            for d in &geo.props {
+                assert!(
+                    d.pieces.end <= geo.pieces.len(),
+                    "{id}: a prop claims pieces past the end"
+                );
+                for (name, _) in &d.models {
+                    let p = root.join(crate::render::world_props::path(name));
+                    assert!(p.exists(), "{id}: no model {}", p.display());
+                }
+            }
+        }
+        for name in [
+            "door_leaf",
+            "signpost",
+            "fence_post",
+            "supply_crate",
+            "stash_stand",
+            "camp_table",
+            "camp_board",
+            "camp_post",
+            "lantern",
+        ] {
+            let p = root.join(crate::render::world_props::path(name));
+            assert!(p.exists(), "no model {}", p.display());
+        }
+    }
+
+    /// Furniture keeps its boxes when dressed: the colliders and loot
+    /// heights the models were built round.
+    #[test]
+    fn dressing_keeps_the_boxes() {
+        let mut b = Builder::default();
+        b.table(Vec3::ZERO, 0.0, Some("house"));
+        let g = b.finish();
+        assert_eq!(g.pieces.len(), 5);
+        assert_eq!(g.props.len(), 1);
+        assert_eq!(g.props[0].pieces, 0..5);
+        assert!((g.loot[0].at.y - 0.82).abs() < 1e-6);
+    }
+}

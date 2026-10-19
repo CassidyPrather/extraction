@@ -190,14 +190,24 @@ pub fn fence_visuals(
     for run in fence_runs(&zone) {
         let len = run.a.distance(run.b);
         let n = (len / 3.0).ceil().max(1.0) as usize;
+        let along = (run.b - run.a).normalize_or(Vec2::X);
+        let yaw = Quat::from_rotation_y(-along.y.atan2(along.x));
         for i in 0..=n {
             let p = run.a.lerp(run.b, i as f32 / n as f32);
             let y = zone.ground(p.x, p.y);
-            commands.spawn((
-                Mesh3d(post.clone()),
-                MeshMaterial3d(metal.clone()),
-                Transform::from_xyz(p.x, y + 1.3, p.y),
-            ));
+            // A steel stake until the concrete post's model is in.
+            commands
+                .spawn((
+                    Transform::from_xyz(p.x, y, p.y).with_rotation(yaw),
+                    Visibility::default(),
+                    crate::render::world_props::SwapIn::one("fence_post"),
+                ))
+                .with_child((
+                    Mesh3d(post.clone()),
+                    MeshMaterial3d(metal.clone()),
+                    Transform::from_xyz(0.0, 1.3, 0.0),
+                    crate::render::world_props::Blockout,
+                ));
             if i < n {
                 let q = run.a.lerp(run.b, (i + 1) as f32 / n as f32);
                 let yq = zone.ground(q.x, q.y);

@@ -185,17 +185,24 @@ fn spawn_notes(
                         CollisionLayers::new(super::Layer::World, LayerMask::ALL),
                     ))
                     .id();
+                // A post and a board, until the signpost model is in
+                // (`art/props/outdoor.py`).
+                commands
+                    .entity(sign)
+                    .insert(crate::render::world_props::SwapIn::one("signpost"));
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.09, 1.9, 0.09))),
                     MeshMaterial3d(mat(Mat::Timber)),
                     Transform::from_xyz(0.0, 0.8, -0.03),
                     ChildOf(sign),
+                    crate::render::world_props::Blockout,
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(SIGN.x + 0.06, SIGN.y + 0.06, 0.03))),
                     MeshMaterial3d(mat(Mat::Planks)),
                     Transform::from_xyz(0.0, 1.45, 0.03),
                     ChildOf(sign),
+                    crate::render::world_props::Blockout,
                 ));
                 commands.spawn((
                     sign_panel(text),
