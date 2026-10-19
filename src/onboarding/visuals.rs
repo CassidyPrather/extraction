@@ -228,18 +228,26 @@ fn dress_props(
         };
         match p {
             Prop::FarStand => {
-                // Three crates, each turned a little on the one below.
-                let n = 3;
-                let h = super::FAR_STAND_H / n as f32;
-                for k in 0..n {
-                    let turn = Quat::from_rotation_y([0.0, 0.12, -0.08][k]);
-                    let w = 0.7 - k as f32 * 0.04;
+                // Two crates, a small one on top, each turned a little on
+                // the one below.
+                let low = super::FAR_STAND_LOW * 0.5;
+                for (k, turn) in [0.0f32, 0.1].into_iter().enumerate() {
+                    let w = 0.7 - k as f32 * 0.02;
                     part(
                         Mat::Planks,
-                        Vec3::new(w, h - 0.01, w),
-                        Transform::from_xyz(0.0, h * (k as f32 + 0.5), 0.0).with_rotation(turn),
+                        Vec3::new(w, low - 0.01, w),
+                        Transform::from_xyz(0.0, low * (k as f32 + 0.5), 0.0)
+                            .with_rotation(Quat::from_rotation_y(turn)),
                     );
                 }
+                let top = super::FAR_STAND_H - super::FAR_STAND_LOW;
+                let w = super::FAR_STAND_TOP;
+                part(
+                    Mat::Planks,
+                    Vec3::new(w, top, w),
+                    Transform::from_xyz(0.0, super::FAR_STAND_LOW + top * 0.5, 0.0)
+                        .with_rotation(Quat::from_rotation_y(-0.08)),
+                );
             }
             Prop::RangeTable => {
                 let t = super::TABLE;

@@ -238,6 +238,10 @@ pub const SHIMMER_R: f32 = 1.6;
 /// The tall stand the far-grab box sits on, and how tall.
 pub const FAR_STAND_AT: [f32; 2] = [-6.5, 79.5];
 pub const FAR_STAND_H: f32 = 2.45;
+/// Two wide crates, then a narrow one on top: its edge is close enough
+/// under the box that a hand pointing up from below sees the box.
+pub const FAR_STAND_LOW: f32 = 1.6;
+pub const FAR_STAND_TOP: f32 = 0.36;
 /// The range's table: centre, size; the shooter stands on its south side.
 pub const RANGE_TABLE_AT: [f32; 2] = [-21.0, 42.0];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
@@ -493,7 +497,7 @@ fn setup(
             // SKIP, low on the post's right, under the board.
             commands.spawn((
                 card(OnboardCard::Skip(i), "SKIP", SKIP_CARD),
-                Transform::from_xyz(0.2, BOARD_Y - SIGN.y * 0.5 - 0.14, 0.03),
+                Transform::from_xyz(0.27, BOARD_Y - SIGN.y * 0.5 - 0.14, 0.03),
                 ChildOf(post),
             ));
             (post, Transform::from_xyz(0.0, BOARD_Y, 0.04))
@@ -510,7 +514,7 @@ fn setup(
         if STATIONS[i].goals.contains(&Goal::Button) {
             commands.spawn((
                 card(OnboardCard::Push, "PUSH ME", PUSH_CARD),
-                Transform::from_xyz(-0.12, BOARD_Y - SIGN.y * 0.5 - 0.16, 0.03),
+                Transform::from_xyz(-0.3, BOARD_Y - SIGN.y * 0.5 - 0.16, 0.03),
                 ChildOf(post),
             ));
         }
@@ -583,11 +587,18 @@ fn setup(
         Transform::from_translation(stand),
         Visibility::default(),
         RigidBody::Static,
-        Collider::compound(vec![(
-            Vec3::Y * FAR_STAND_H * 0.5,
-            Quat::IDENTITY,
-            Collider::cuboid(0.7, FAR_STAND_H, 0.7),
-        )]),
+        Collider::compound(vec![
+            (
+                Vec3::Y * FAR_STAND_LOW * 0.5,
+                Quat::IDENTITY,
+                Collider::cuboid(0.7, FAR_STAND_LOW, 0.7),
+            ),
+            (
+                Vec3::Y * (FAR_STAND_LOW + FAR_STAND_H) * 0.5,
+                Quat::IDENTITY,
+                Collider::cuboid(FAR_STAND_TOP, FAR_STAND_H - FAR_STAND_LOW, FAR_STAND_TOP),
+            ),
+        ]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
     let far = spawn(
