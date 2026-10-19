@@ -48,8 +48,11 @@ and avoid repeating the last one.
 | `guns/` mechanisms | mag_insert, mag_release, slide_rack, charging_handle, bolt_open, bolt_close, stripper_clip, shotgun_open, shotgun_close, shell_insert, dry_fire, safety, casing | Glock 17 and Remington 870 foley, a Romanian AK, a Mosin-Nagant and a Remington 700 bolt, a break-action 12-gauge, brass dropped on tile and concrete. |
 | `impacts/` | metal, wood, dirt, concrete, ricochet | Target-side recordings of real hits on steel; rock and stick hits standing in for wood, dirt and stone. |
 | `physical/` | drop_metal, drop_wood, drop_plastic, drop_cardboard, zip, cloth, velcro, door_creak, door_open, door_close, glass_break | |
+| `physical/` handling | handle_metal, handle_wood, handle_plastic, button, switch, whoosh, catch, bell, chime | Light knocks of metal, wood and plastic for taking things up (Kenney); an arcade push button; a flashlight's switch; a bamboo stick and a shirt swung for the far grab; a ball caught; a struck bell for the truck; a glass tapped for the step-done ding. |
+| `physical/` body | eat, drink, bandage, body_hit | An apple bitten, crackers crunched; gulps of water; tape and cloth torn; a punch for a round into you. |
 | `ambience/` | wind_conifers, wind_mountain, wind_works, rain_light, creek, rural, room_tone (stereo loops); thunder_distant (stereo one-shots); crow, raven, jackdaw, rockfall (mono one-shots) | Loops are 15–45 s, 2 variants each. Each valley picks its wind, birds and far-off sounds in its map file (`sounds:`). |
 | `machines/` | servo, clank, groan (one-shots); drone_rotor, hum, radio_static (mono loops); radio_squelch (one-shots); siren (stereo, 60 s) | The siren is a recorded air-raid siren, for the Surge warning. |
+| `machines/` truck | truck_idle (mono loop); truck_arrive, truck_depart (mono beds) | Two diesel trucks idling; a small truck coming up the road; an old truck pulling away (a 1992 cassette recording from the Volga) and a large one grinding into gear. |
 
 ## Sources
 
@@ -194,6 +197,71 @@ rifle, and it reads as loud.
 A set's old files are deleted before it is rebuilt, so shrinking `count`
 leaves no stale variants behind.
 
+## What you hear and feel
+
+Every interaction and event in the game, the sound it makes (cue names
+from `src/audio_mix.rs`) and the pulse your hands feel
+(`src/rig/haptics.rs`). Audited 2026-10 by reading every message the game
+writes against what `audio.rs` and `haptics.rs` listen to; the "was" column
+is what it did before.
+
+| What | Sound | Haptic | Was |
+| --- | --- | --- | --- |
+| Hand in reach of something; pointing at something far | — | tick in that hand | same |
+| Taking something up | `hand.take`: a knock by what it's made of (`items::impacts::material_of`): metal, wood, plastic, or cloth for soft things; louder and lower the heavier it is (`weight_tone`) | by weight: a tin a tick, a pistol a click, a rifle a knock (`grab_pulse`) | cloth rustle for everything; one tick for everything |
+| Letting go of it | `hand.release`: the same, lighter | tick | silent, nothing |
+| Into a pouch or holster | `hand.socket` (cloth) | click in the hand that put it there | rustle, nothing |
+| Onto a rail or cradle | `hand.attach` | click | click, nothing |
+| Into your pack | `hand.stow` (zip) | click | zip, nothing |
+| Into a crate, the stash, a tray, the pod | `hand.place`: the thing set down | click | the backpack's zip |
+| Pack opened or shut | `pack.open`, `pack.close` (zip) | — | silent |
+| Pack full, refused | `hand.refused` | knock | same |
+| Push button beside a card | `button.in` as it clicks home, `button.out` as it comes back | click in the finger that pushed, tick coming out | silent; a click in both hands |
+| Card, knob or kitchen tool pressed with the grip | `button.in` | click in the nearest hand | silent; both hands |
+| Bench lever | `press.lever` | click | silent |
+| The bell cord (truck, training yard) | `truck.bell` | click | silent |
+| Far grab: the flick | `far.whoosh`, flying with the thing | click | silent |
+| Far grab: the catch | `far.catch`, a slap into the palm, then `hand.take` | the grab's pulse plus a bit | `hand.grab` |
+| Doors | `door.open`, `door.close` | click (grip press) | same, both hands |
+| Eating, drinking | `use.eat`, `use.drink` (by the food's tag) | — | silent |
+| Field dressing | `use.bandage` | — | silent |
+| A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
+| The radio | `radio.squelch`, `radio.static` | — | same |
+| Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less; the action clicks; a magazine seats with a knock | same |
+| A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
+| A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
+| The truck coming to the rendezvous | `truck.arrive`, up the road, as it's due | — | silent |
+| The truck waiting | `truck.idle` at its engine | — | silent |
+| The truck leaving, with you or without | `truck.depart` | — | silent |
+| A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
+| Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
+| Anomalies, the Surge, attention | hums, pops, cracks, the siren, the ringing | — | same |
+| Weather | rain bed with the rain; distant thunder | — | same |
+| An onboarding step done | `step.done`, a light ding | a soft pulse in both hands | (new) |
+
+**For onboarding.** Write `crate::rig::haptics::StepDone { at: None }`
+(or call `crate::rig::haptics::step_done(&mut commands, None)`) when a
+step is done. The message is registered in the game plugin, so writing
+it headless is fine; it does nothing there. Give `at` a position to
+place the ding in the world instead of in your head.
+
+**Still open.** No sound yet for: a robot noticing you (there's no
+alert event to hang it on; `Awareness` and `Brain` change every tick);
+the collector's convoy; the dirigible (no engine); the grapnel and
+zipline being rigged or packed; a cover deployed or folded; the camera
+drone's take-off and landing; the kitchen's stations (beyond the
+generic click); the bench finishing; landing from a jump. The truck
+doesn't move between stops (it is moved while you're away), so its
+sounds are placed where it would be.
+
+**Haptics.** One scale, so a pulse means the same thing wherever it comes
+from: a tick (0.1-0.15) is "this is here", a click (0.25-0.35) "that
+happened", a knock (0.4-0.6) "that took force", and only a shot or a hit
+goes past 0.6. Index controllers barely register under about 0.1 or
+10 ms, so nothing is below either. Pulses on one controller in the same
+frame merge (strongest, longest), because the runtime plays only the
+last one it is given: a shot was being cut short by its own casing.
+
 ## Checking the mix
 
 Ears are fickle, so the mix is also judged by numbers.
@@ -247,6 +315,12 @@ low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
 - **Peaks.** A cue whose asset true peak plus its gain goes over 0 dBTP
   is flagged. Loud, rare actions and events may lean on the master
   limiter (bevy_seedling's default graph ends in one) up to +3.
+- **Startle.** In a headset nothing should hit painfully. Each one-shot's
+  loudest variant, at the nearest it plays (set pieces at their usual
+  distance), may be no louder than your own rifle up close, with either
+  dynamics (narrow dynamics, for a noisy room, 2 LU more). Loops and
+  beds swell rather than strike, and aren't judged here. `mix.txt`
+  lists the ten loudest.
 - **Scenes.** Five scenes are mixed offline from the assets as the game
   plays them: a quiet walk, a downpour, a firefight in the rain,
   indoors, the Surge. Each is measured for integrated loudness, peaks,
@@ -292,6 +366,17 @@ low-pass that closes with distance (`audio_mix::MUFFLE_FULL`). Then:
   caught by the limiter); it now peaks at +0.4 dBFS (5 samples). Overall
   the game now runs from about -32 LUFS on a quiet walk to -17 LUFS in a
   firefight, with your rifle at -23 LUFS momentary.
+
+**What the startle check found** (2026-10). Several sounds that usually
+play far off were louder than your rifle when they happened near you:
+the drone's lock-on chirp by 8 LU (16 with narrow dynamics), a pylon at
+work, a walker's servos and a door giving way by 1-4 LU, the EMP's pop
+by 6. Their gains came down and their reach went up by the same amount,
+so each is as loud as before from where it usually plays and only the
+near ones are tamed. Signals that sit at your hand (dry fire, the
+radio's squelch, a glance) came down 2-3 dB, since narrow dynamics lifts
+them 5. A walker battering a door is as loud up close as at its 20 m
+(it's inside its reach), so it keeps its level and the narrow allowance.
 
 **Changing the mix.** Edit a cue's gain or reach in `src/audio_mix.rs`
 and re-run the audit (a few seconds; assets are re-measured only when
