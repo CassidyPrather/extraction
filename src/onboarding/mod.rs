@@ -56,6 +56,7 @@ pub enum Goal {
     TakeRadio,
     Turn,
     Crouch,
+    Run,
     PutAway,
     Pack,
     FarGrab,
@@ -64,8 +65,10 @@ pub enum Goal {
     Rack,
     Safety,
     HitPlate,
+    DropMag,
     OpenDoor,
     Search,
+    Wrist,
     Dressing,
     Artifact,
     Button,
@@ -81,6 +84,7 @@ impl Goal {
             Goal::TakeRadio => "Take the radio",
             Goal::Turn => "Turn around",
             Goal::Crouch => "Crouch",
+            Goal::Run => "Run",
             Goal::PutAway => "Holster or pocket it",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
@@ -89,8 +93,10 @@ impl Goal {
             Goal::Rack => "Rack the slide",
             Goal::Safety => "Safety off",
             Goal::HitPlate => "Hit a plate",
+            Goal::DropMag => "Drop the mag",
             Goal::OpenDoor => "Open the door",
             Goal::Search => "Take what's inside",
+            Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
@@ -108,6 +114,8 @@ impl Goal {
             (Goal::Turn, true) => "Move the mouse round.",
             (Goal::Crouch, false) => "Pull the right stick down\n(again to stand).",
             (Goal::Crouch, true) => "Press C (again to stand).",
+            (Goal::Run, false) => "Click the left stick and\npush it forward.",
+            (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
@@ -124,10 +132,14 @@ impl Goal {
             (Goal::Safety, true) => "Pistol in hand. Press X.",
             (Goal::HitPlate, false) => "Line up the sights.\nSqueeze TRIGGER.",
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
+            (Goal::DropMag, false) => "Press A on the gun hand.",
+            (Goal::DropMag, true) => "Pistol in hand. Press B.",
             (Goal::OpenDoor, false) => "GRIP the door by its edge\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
+            (Goal::Wrist, false) => "Raise your left hand and\nlook at the back of it.",
+            (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "Hold it. Press A or X.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
@@ -172,9 +184,9 @@ pub const STATIONS: &[Station] = &[
         title: "GETTING ABOUT",
         at: [-3.5, 89.0],
         rot: 0.0,
-        goals: &[Goal::Turn, Goal::Crouch],
+        goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
         where_: "the lamp off the back of the truck",
-        tip: "Left stick walks; click\nit to run. Crouched, the\nmachines see you later.",
+        tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
     },
     Station {
         title: "PUT IT AWAY",
@@ -202,9 +214,10 @@ pub const STATIONS: &[Station] = &[
             Goal::Rack,
             Goal::Safety,
             Goal::HitPlate,
+            Goal::DropMag,
         ],
         where_: "the range, left past the gate",
-        tip: "Out there, shots bring the\nmachines. Pick your moment.",
+        tip: "Empty, the slide stays\nback: a new mag, then B\n(flat: V) lets it go.",
     },
     Station {
         title: "THE HOUSE",
@@ -218,7 +231,7 @@ pub const STATIONS: &[Station] = &[
         title: "FIRST AID",
         at: [4.5, 8.0],
         rot: 90.0,
-        goals: &[Goal::Dressing],
+        goals: &[Goal::Wrist, Goal::Dressing],
         where_: "the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
     },
@@ -395,7 +408,7 @@ pub struct Shimmer;
 /// Board sizes: a station's (read from a few steps off), the truck's (from
 /// where you stand in the bed), the list by the tailgate.
 pub const SIGN: Vec2 = crate::world::notes::SIGN;
-pub const TRUCK_SIGN: Vec2 = Vec2::new(0.8, 0.5);
+pub const TRUCK_SIGN: Vec2 = Vec2::new(0.9, 0.62);
 pub const CHECKLIST: Vec2 = Vec2::new(0.8, 1.0);
 /// A post's board centre, and its lamp's height.
 pub const BOARD_Y: f32 = 1.55;
@@ -423,6 +436,7 @@ impl Plugin for OnboardingPlugin {
                         watch_uses.before(crate::items::usage::UsageSystems),
                         watch_world,
                         watch_moves,
+                        watch_wrist,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -521,7 +535,7 @@ fn setup(
                         index: i,
                         lamp: Lamp::Dark,
                     },
-                    Transform::from_xyz(-0.5, FLOOR + 1.62, -1.05)
+                    Transform::from_xyz(-0.36, FLOOR + 1.5, -1.05)
                         .with_rotation(Quat::from_rotation_x(-0.32)),
                     Visibility::default(),
                     ChildOf(truck),
@@ -954,6 +968,9 @@ fn watch_guns(
                 complete(&mut ob, Goal::SeatMag, &mut out)
             }
             extraction_core::firearm::Event::Chambered => complete(&mut ob, Goal::Rack, &mut out),
+            extraction_core::firearm::Event::MagazineRemoved => {
+                complete(&mut ob, Goal::DropMag, &mut out)
+            }
             extraction_core::firearm::Event::ModeChanged(m)
                 if m != extraction_core::firearm::FireMode::Safe =>
             {
@@ -1051,8 +1068,55 @@ fn watch_moves(
         if input.crouch || stick_down || input.head.translation.y < 1.15 {
             complete(&mut ob, Goal::Crouch, &mut out);
         }
+        if input.sprint && input.locomotion.y > 0.3 {
+            complete(&mut ob, Goal::Run, &mut out);
+        }
     } else {
         swung.1 = 0.0;
+    }
+}
+
+/// Where the wrist's screen rides on the left hand (`render::comfort`).
+pub const WRIST_PANEL: Vec3 = Vec3::new(-0.03, 0.015, 0.07);
+
+/// Looking at your wrist (the head's gaze on the left hand's screen, close,
+/// for a moment), or in flat mode holding H.
+fn watch_wrist(
+    mut ob: ResMut<Onboarding>,
+    mut out: MessageWriter<GoalDone>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    hands: Query<(&GlobalTransform, &crate::rig::RigHand, &ChildOf)>,
+    locals: Query<(), With<LocalPlayer>>,
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    time: Res<Time>,
+    mut held: Local<f32>,
+) {
+    if ob.is_done(Goal::Wrist) {
+        return;
+    }
+    let mut looking = keys.is_some_and(|k| k.pressed(KeyCode::KeyH));
+    for (head, owner) in &heads {
+        if !locals.contains(owner.parent()) {
+            continue;
+        }
+        let hand = hands
+            .iter()
+            .find(|(_, rh, p)| rh.side == Side::Left && p.parent() == owner.parent());
+        let Some((hand, ..)) = hand else { continue };
+        let panel = hand.transform_point(WRIST_PANEL);
+        let to = panel - head.translation();
+        let forward = head.rotation() * Vec3::NEG_Z;
+        if to.length() < 0.65 && forward.angle_between(to) < 20f32.to_radians() {
+            looking = true;
+        }
+    }
+    *held = if looking {
+        *held + time.delta_secs()
+    } else {
+        0.0
+    };
+    if *held > 0.4 {
+        complete(&mut ob, Goal::Wrist, &mut out);
     }
 }
 
@@ -1330,11 +1394,20 @@ mod tests {
     use super::*;
     use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
 
+    /// The yard's own boards hold to more than the game's floor
+    /// (`MIN_EM_DEG`): the first playtest's first complaint was signs it
+    /// couldn't read, and these are what someone new reads first.
+    const BOARD_MIN_DEG: f32 = 0.8;
+
+    fn deg(screen: &ScreenText) -> f32 {
+        (em_metres(screen) / read_from(screen)).atan().to_degrees()
+    }
+
     fn readable(screen: &ScreenText) -> Result<(), String> {
         let em = em_metres(screen);
         let at = read_from(screen);
         let deg = (em / at).atan().to_degrees();
-        if deg < MIN_EM_DEG {
+        if deg < BOARD_MIN_DEG {
             return Err(format!(
                 "{:.1} cm letters, {deg:.2} deg at {at} m: {:?}",
                 em * 100.0,
@@ -1349,6 +1422,7 @@ mod tests {
     #[test]
     fn every_board_reads_at_every_stage() {
         let mut bad = Vec::new();
+        let mut smallest = f32::MAX;
         let goals: Vec<Goal> = all_goals().collect();
         for k in 0..=goals.len() {
             for skipped in [false, true] {
@@ -1361,6 +1435,7 @@ mod tests {
                     for i in 0..STATIONS.len() {
                         let size = if i == 0 { TRUCK_SIGN } else { SIGN };
                         let s = paper(sign_text(&ob, i, flat), size);
+                        smallest = smallest.min(deg(&s));
                         if let Err(e) = readable(&s) {
                             bad.push(e);
                         }
@@ -1387,6 +1462,7 @@ mod tests {
         }
         bad.dedup();
         assert!(bad.is_empty(), "too small:\n{}", bad.join("\n"));
+        eprintln!("smallest letters: {smallest:.2} deg (minimum {BOARD_MIN_DEG})");
     }
 
     /// Everything the driver says fits the wrist whole.
@@ -1428,7 +1504,7 @@ mod tests {
                 assert!(how.lines().count() <= 2, "{g:?}: {how}");
                 assert!(how.lines().all(|l| l.len() <= 28), "{g:?}: {how}");
                 let control = if flat {
-                    ["Press", "mouse"].iter().any(|k| how.contains(k))
+                    ["Press", "mouse", "Hold"].iter().any(|k| how.contains(k))
                 } else {
                     ["GRIP", "TRIGGER", "Press A", "hand", "finger", "stick"]
                         .iter()

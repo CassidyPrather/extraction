@@ -1440,6 +1440,16 @@ mod onboarding {
         vr.head(Vec3::new(0.0, 1.0, 0.0));
         vr.step(3);
         assert!(done(&vr, Goal::Crouch), "squatting counted");
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        // Run: the left stick clicked and pushed forward (the driver turns
+        // the click into sprint).
+        {
+            let mut input = vr.app.world_mut().get_mut::<RigInput>(vr.player).unwrap();
+            input.locomotion = Vec2::Y;
+            input.sprint = true;
+        }
+        vr.step(5);
+        assert!(done(&vr, Goal::Run), "the run counted");
     }
 
     /// Station 3: let go of a thing at a pocket, and of another over the
@@ -1682,6 +1692,12 @@ mod onboarding {
         vr.trigger(Side::Right, 0.0);
         vr.step(30);
         assert!(done(&vr, Goal::HitPlate), "hit the plate at 15 m");
+        // A on the gun hand: the magazine drops out.
+        vr.primary(Side::Right, true);
+        vr.step(3);
+        vr.primary(Side::Right, false);
+        vr.step(10);
+        assert!(done(&vr, Goal::DropMag), "the mag dropped");
     }
 
     /// Station 5: a hand swings the house's door open; the find on the
@@ -1732,13 +1748,42 @@ mod onboarding {
         assert!(done(&vr, Goal::Search), "the find counted");
     }
 
-    /// Station 6: a dressing in hand, the face button.
+    /// First aid: raise the left hand and look at the back of it (the
+    /// wrist's screen); then a dressing in hand, the face button.
     #[test]
     fn station_first_aid() {
         let mut vr = Vr::first_run();
         let feet = ground(&vr, [2.0, 8.0]);
         vr.stand(feet, 0.0);
         vr.step(20);
+        // The hand low at the side: not looking at it.
+        vr.hand(
+            Side::Left,
+            feet + Vec3::new(-0.25, 0.9, 0.0),
+            Quat::IDENTITY,
+            0.0,
+            0.0,
+        );
+        vr.step(60);
+        assert!(!done(&vr, Goal::Wrist), "a hand at your side isn't a look");
+        // Raised in front of the face, the head bent to it.
+        let hand_at = feet + Vec3::new(-0.05, 1.35, -0.3);
+        let hand_rot = Quat::from_rotation_z(-0.95);
+        vr.hand(Side::Left, hand_at, hand_rot, 0.0, 0.0);
+        vr.step(2);
+        let panel = Transform::from_translation(hand_at)
+            .with_rotation(hand_rot)
+            .transform_point(crate::onboarding::WRIST_PANEL);
+        let eye = feet + Vec3::new(0.0, 1.65, 0.0);
+        let look =
+            Transform::from_translation(Vec3::new(0.0, 1.65, 0.0)).looking_to(panel - eye, Vec3::Y);
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .head = look;
+        vr.step(60);
+        assert!(done(&vr, Goal::Wrist), "the look counted");
         let d = vr.spawn(
             "field_dressing",
             Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),

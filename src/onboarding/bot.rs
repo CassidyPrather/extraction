@@ -44,6 +44,8 @@ pub(super) fn direct(
     mut ob: ResMut<Onboarding>,
     mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     world: DirectorWorld,
+    mut keys: Option<ResMut<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
     mut state: Local<Director>,
 ) {
     if opts.scenario.as_deref() != Some(SCENARIO) {
@@ -57,6 +59,22 @@ pub(super) fn direct(
     let crouch = ob.next_goal() == Some(Goal::Crouch);
     if input.crouch != crouch {
         input.crouch = crouch;
+    }
+    // H on the keyboard to check yourself (the bot plays flat).
+    if ob.next_goal() == Some(Goal::Wrist) {
+        match keys.as_mut() {
+            Some(k) => k.press(KeyCode::KeyH),
+            None => commands.insert_resource(ButtonInput::<KeyCode>::default()),
+        }
+    } else if let Some(k) = keys.as_mut() {
+        if k.pressed(KeyCode::KeyH) {
+            k.release(KeyCode::KeyH);
+        }
+    }
+    // The gun hand's A (flat: B) for the magazine release, likewise.
+    let release = ob.next_goal() == Some(Goal::DropMag) && bot.elapsed > 0.3;
+    if input.hand(Side::Right).primary != release {
+        input.hand_mut(Side::Right).primary = release;
     }
     // Only when the bot has nothing left but to idle, and a moment after
     // its last task, so what it did has had time to register.
@@ -250,6 +268,7 @@ impl DirectorWorld<'_, '_> {
                 t.push(LookAt(Vec3::new(here.x, 13.0, here.y - 10.0)));
             }
             Goal::Crouch => t.push(Wait(0.3)),
+            Goal::Run => t.extend(self.walk(here, here + Vec2::new(0.0, -6.0), 1.0)),
             Goal::PutAway => {
                 if self.holding(Side::Right).is_none() {
                     if let Some(e) = self.in_stash("pm_pistol") {
@@ -289,7 +308,12 @@ impl DirectorWorld<'_, '_> {
                     });
                 }
             }
-            Goal::FillMag | Goal::SeatMag | Goal::Rack | Goal::Safety | Goal::HitPlate => {
+            Goal::FillMag
+            | Goal::SeatMag
+            | Goal::Rack
+            | Goal::Safety
+            | Goal::HitPlate
+            | Goal::DropMag => {
                 let table = Vec2::from(super::RANGE_TABLE_AT);
                 let stand = table + Vec2::new(0.0, 0.9);
                 if here.distance(stand) > 2.0 {
@@ -327,6 +351,7 @@ impl DirectorWorld<'_, '_> {
                     }
                     Goal::Rack => t.push(Gun(crate::weapons::flat::MacroKind::Rack)),
                     Goal::Safety => t.push(Gun(crate::weapons::flat::MacroKind::Mode)),
+                    Goal::DropMag => t.push(Wait(0.6)),
                     _ => {
                         let plate = self
                             .buildings
@@ -379,6 +404,10 @@ impl DirectorWorld<'_, '_> {
                         side: Side::Right,
                     });
                 }
+            }
+            Goal::Wrist => {
+                t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
+                t.push(Wait(0.8));
             }
             Goal::Dressing => {
                 let dressing = if self.holding(Side::Right).and_then(|e| self.id(e))
