@@ -120,6 +120,8 @@ impl Plugin for AudioPlugin {
                     use_sounds,
                     part_sounds,
                     pack_sounds,
+                    landing_sounds,
+                    gadget_sounds,
                 ),
             )
             .add_systems(
@@ -257,19 +259,7 @@ fn footsteps(
     built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
     for s in steps.read() {
-        let p = [s.position.x, s.position.z];
-        let in_truck = trucks
-            .iter()
-            .any(|(gt, t)| t.in_bed(gt, s.position + Vec3::Y * 0.2));
-        // A floor, a deck, a stair: whatever's underfoot, if it's built.
-        let floor = underfoot(&spatial, &built, s.position);
-        let set = if in_truck {
-            "footsteps/wood"
-        } else if let Some(m) = floor {
-            footstep_set(m)
-        } else {
-            surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
-        };
+        let set = ground_set(&zone, &trucks, &spatial, &built, s.position);
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
@@ -281,6 +271,70 @@ fn footsteps(
             offset,
             0.06,
         );
+    }
+}
+
+/// The footstep set for whatever is under `at`: the truck's bed, a built
+/// floor, or the ground.
+fn ground_set(
+    zone: &Zone,
+    trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
+    spatial: &SpatialQuery,
+    built: &Query<(&GlobalTransform, &Surfaces)>,
+    at: Vec3,
+) -> &'static str {
+    let p = [at.x, at.z];
+    let in_truck = trucks
+        .iter()
+        .any(|(gt, t)| t.in_bed(gt, at + Vec3::Y * 0.2));
+    // A floor, a deck, a stair: whatever's underfoot, if it's built.
+    if in_truck {
+        "footsteps/wood"
+    } else if let Some(m) = underfoot(spatial, built, at) {
+        footstep_set(m)
+    } else {
+        surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
+    }
+}
+
+/// Coming down from a jump or a drop: both feet at once, harder the
+/// faster you fell.
+#[allow(clippy::too_many_arguments)]
+fn landing_sounds(
+    mut commands: Commands,
+    bodies: Query<(Entity, &crate::player::Body, &GlobalTransform)>,
+    zone: Res<Zone>,
+    trucks: Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &Surfaces)>,
+    mut was: Local<HashMap<Entity, (bool, f32, f32)>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, body, gt) in &bodies {
+        let before = was.insert(e, (body.grounded, body.velocity.y, body.airborne));
+        let Some((was_grounded, vy, airborne)) = before else {
+            continue;
+        };
+        if was_grounded || !body.grounded || body.swimming || airborne < 0.3 || vy > -2.5 {
+            continue;
+        }
+        let at = gt.translation();
+        let set = ground_set(&zone, &trucks, &spatial, &built, at);
+        let hard = ((-vy - 2.5) / 6.0).clamp(0.0, 1.0);
+        for _ in 0..2 {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(at),
+                "land",
+                -6.0 + 6.0 * hard,
+                0.92,
+                0.05,
+            );
+        }
     }
 }
 
@@ -1871,6 +1925,80 @@ fn pack_sounds(
             &mut rng.0,
             "physical/zip",
             Some(gt.translation()),
+            cue,
+            0.0,
+            speed,
+            0.06,
+        );
+    }
+}
+
+/// The grapnel thrown, biting, coiled back up; a cover deployed and
+/// folded; the bench finishing a job.
+#[allow(clippy::too_many_arguments)]
+fn gadget_sounds(
+    mut commands: Commands,
+    grapnels: Query<(Entity, &crate::gadgets::climbing::Grapnel, &GlobalTransform)>,
+    covers: Query<(Entity, &GlobalTransform), With<crate::gadgets::CoverWall>>,
+    benches: Query<(Entity, &crate::raid::bench::Bench, &GlobalTransform)>,
+    mut grapnel_was: Local<HashMap<Entity, (u8, bool)>>,
+    mut cover_at: Local<HashMap<Entity, Vec3>>,
+    mut bench_was: Local<HashMap<Entity, bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::gadgets::climbing::Grapnel;
+    let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
+    for (e, g, gt) in &grapnels {
+        let now = match g {
+            Grapnel::Coiled => (0, false),
+            Grapnel::Ready { thrown, .. } => (1, *thrown),
+            Grapnel::Hooked { .. } => (2, false),
+        };
+        let at = gt.translation();
+        match (grapnel_was.insert(e, now), now) {
+            (Some((1, false)), (1, true)) => {
+                out.push(("physical/whoosh", "grapnel.throw", at, 0.8))
+            }
+            (Some((1, _)), (2, _)) => out.push(("impacts/metal", "grapnel.hook", at, 1.2)),
+            (Some((a, _)), (0, _)) if a != 0 => {
+                out.push(("physical/cloth", "grapnel.coil", at, 1.0))
+            }
+            _ => {}
+        }
+    }
+    let mut seen = Vec::new();
+    for (e, gt) in &covers {
+        seen.push(e);
+        if cover_at.insert(e, gt.translation()).is_none() {
+            out.push(("physical/drop_metal", "cover.deploy", gt.translation(), 0.8));
+        }
+    }
+    cover_at.retain(|e, at| {
+        let kept = seen.contains(e);
+        if !kept {
+            out.push(("physical/drop_metal", "cover.fold", *at, 1.1));
+        }
+        kept
+    });
+    for (e, b, gt) in &benches {
+        let running = b.running.is_some();
+        if bench_was.insert(e, running) == Some(true) && !running {
+            out.push((
+                "physical/bell",
+                "bench.done",
+                gt.translation() + Vec3::Y,
+                1.6,
+            ));
+        }
+    }
+    for (set, cue, at, speed) in out {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
             cue,
             0.0,
             speed,

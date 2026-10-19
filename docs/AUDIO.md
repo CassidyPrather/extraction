@@ -237,6 +237,10 @@ is what it did before.
 | Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
 | Anomalies, the Surge, attention | hums, pops, cracks, the siren, the ringing | — | same |
 | Weather | rain bed with the rain; distant thunder | — | same |
+| Landing from a jump or a drop | `land`: both feet on whatever's underfoot, harder the faster you fell | — | silent |
+| The grapnel thrown, biting, coiled | `grapnel.throw`, `grapnel.hook`, `grapnel.coil` | — | silent |
+| A cover deployed, folded | `cover.deploy`, `cover.fold` | — | silent |
+| The bench finishing a job | `bench.done`, a small high bell | — | silent |
 | An onboarding step done | `step.done`, a light ding | a soft pulse in both hands | (new) |
 
 **For onboarding.** Write `crate::rig::haptics::StepDone { at: None }`
@@ -247,10 +251,9 @@ place the ding in the world instead of in your head.
 
 **Still open.** No sound yet for: a robot noticing you (there's no
 alert event to hang it on; `Awareness` and `Brain` change every tick);
-the collector's convoy; the dirigible (no engine); the grapnel and
-zipline being rigged or packed; a cover deployed or folded; the camera
-drone's take-off and landing; the kitchen's stations (beyond the
-generic click); the bench finishing; landing from a jump. The truck
+the collector's convoy; the dirigible (no engine); the zipline being
+rigged or packed; the camera drone's take-off and landing; the
+kitchen's stations (beyond the generic click). The truck
 doesn't move between stops (it is moved while you're away), so its
 sounds are placed where it would be.
 
