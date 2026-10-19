@@ -14,6 +14,7 @@ pub mod screen;
 pub mod stats;
 pub mod terrain_material;
 pub mod water_material;
+pub mod world_props;
 
 use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -39,6 +40,7 @@ impl Plugin for RenderPlugin {
             logistics::LogisticsVisualsPlugin,
             comfort::ComfortPlugin,
             stats::RenderStatsPlugin,
+            world_props::WorldPropsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

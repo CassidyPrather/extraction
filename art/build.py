@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Rebuild every procedural model: runs each script under art/guns,
-art/mags, art/robots, art/vehicles and art/items in a fresh headless
+art/mags, art/robots, art/vehicles, art/items and art/props in a fresh headless
 Blender.
 
     python3 art/build.py              # everything
@@ -20,7 +20,7 @@ BLENDER = os.environ.get("BLENDER", "blender")
 
 
 def scripts():
-    for group in ("guns", "mags", "robots", "vehicles", "items"):
+    for group in ("guns", "mags", "robots", "vehicles", "items", "props"):
         d = os.path.join(ART, group)
         if not os.path.isdir(d):
             continue
