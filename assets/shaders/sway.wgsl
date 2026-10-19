@@ -4,13 +4,23 @@
 // UV_1 carries, per vertex, how free it is to move (0 at a blade's root,
 // 1 at its tip; squared by the mesh builder) and the plant's own phase, so
 // a meadow doesn't move in step.
+//
+// Blades thicken with distance, about half a pixel a side in the headset:
+// a 2 cm blade is a pixel wide at 10 m and a fraction of one past that,
+// and a sub-pixel blade flickers in and out of the MSAA samples as the
+// head moves. Thickened, it holds its coverage and the meadow reads as a
+// soft mass instead of crawling.
 
 #import bevy_pbr::{
     mesh_functions,
     forward_io::{Vertex, VertexOutput},
     view_transformations::position_world_to_clip,
-    mesh_view_bindings::globals,
+    mesh_view_bindings::{globals, view},
 }
+
+// World metres a side per metre of distance: half a pixel at about
+// 1800 px across 100 degrees.
+const WIDEN: f32 = 0.0005;
 
 struct Sway {
     // xy: the wind's direction (world x/z), z: strength 0..1, w: gustiness.
@@ -65,6 +75,24 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         out.world_position.xyz + offset(out.world_position.xyz, vertex.uv_b.x, vertex.uv_b.y),
         1.0
     );
+#endif
+#ifdef VERTEX_UVS_A
+#ifdef VERTEX_NORMALS
+    // A blade's two edges are its strip's u = 0 and u = 1; its side runs
+    // across its lean (the normal leans out along the blade). Fern fronds
+    // sit inside an atlas, never at exactly 0 or 1.
+    if (vertex.uv.x == 0.0 || vertex.uv.x == 1.0) {
+        let lean = out.world_normal.xz + vec2<f32>(1e-4, 0.0);
+        let o = normalize(lean);
+        let side = vec3<f32>(-o.y, 0.0, o.x);
+        let dist = distance(view.world_position, out.world_position.xyz);
+        let edge = vertex.uv.x * 2.0 - 1.0;
+        out.world_position = vec4<f32>(
+            out.world_position.xyz + side * edge * WIDEN * dist,
+            1.0
+        );
+    }
+#endif
 #endif
     out.position = position_world_to_clip(out.world_position.xyz);
 #endif
