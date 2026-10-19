@@ -100,6 +100,18 @@ What changed, and worth a comment each:
   anything you still can't read, with how far away you were.
 - **Magazines** seat when their top meets the well, and the bell cord
   is easier to catch.
+- **Things look like things.** About 70 items that were plain boxes
+  (food, ammo, keys, materials, cooking) have models now.
+- **Looks.** Fixed:
+  - the flickering faces on the truck's steps and front wall (every
+    model is now checked for them);
+  - the ruled lines in the ground at forest edges (long tree shadows
+    from a low sun, and a hard leaf-litter edge);
+  - the pines' and birches' topiary crowns.
+  A burner now smokes and flickers like coals rather than glowing a
+  steady orange.
+- **Sounds.** Things dropped in grass thud into it instead of clanging;
+  pocketing a thing rustles instead of buzzing.
 - **Frame rate.** The Beyond 2 ran at 20-30 fps. The **SHARPNESS** card on
   the truck wall sets the render scale (auto is about 60% on a Beyond 2;
   takes effect next launch), as does `--render-scale 0.6`. The log says
