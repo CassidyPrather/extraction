@@ -61,6 +61,9 @@ pub struct PropDef {
     /// Furniture: drawn without shadows (the sun doesn't reach it) and
     /// only near, its boxes standing in further off.
     pub inside: bool,
+    /// Outside, whether it casts a shadow (a gate's blocks do; windows,
+    /// in their wall's shadow already, don't).
+    pub shadow: bool,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -188,6 +191,7 @@ impl Builder {
             models,
             pieces: from..to,
             inside: true,
+            shadow: false,
         });
         self
     }
@@ -202,6 +206,20 @@ impl Builder {
         self.dress(from, models);
         if let Some(d) = self.geo.props.last_mut() {
             d.inside = false;
+        }
+        self
+    }
+
+    /// As `dress`, for structures standing in the open (a gate's blocks):
+    /// drawn as far as the building is, casting shadows.
+    pub fn dress_structure(
+        &mut self,
+        from: usize,
+        models: Vec<(&'static str, Transform)>,
+    ) -> &mut Self {
+        self.dress_outside(from, models);
+        if let Some(d) = self.geo.props.last_mut() {
+            d.shadow = true;
         }
         self
     }
@@ -2036,19 +2054,27 @@ fn ranger_tower(b: &mut Builder) {
 fn quarantine_gate(b: &mut Builder) {
     // Concrete blocks either side of the road and the barrier arm, raised.
     for x in [-5.2, 5.2] {
+        let from = b.geo.pieces.len();
         b.bx(
             Vec3::new(1.4, 1.2, 1.4),
             Vec3::new(x, 0.6, 0.0),
             Mat::Concrete,
         );
+        b.dress_structure(from, vec![("road_block", Transform::from_xyz(x, 0.0, 0.0))]);
+        let from = b.geo.pieces.len();
         b.bx(
             Vec3::new(0.25, 3.5, 0.25),
             Vec3::new(x.signum() * 4.3, 1.75, 0.0),
             Mat::PaintedMetal,
         );
+        b.dress_structure(
+            from,
+            vec![("gate_post", Transform::from_xyz(x.signum() * 4.3, 0.0, 0.0))],
+        );
     }
     // The barrier arm, raised, pivoting on the left post: a pin through
     // the post and a counterweight below the pivot.
+    let from = b.geo.pieces.len();
     let pivot = Vec3::new(-4.3, 1.1, 0.25);
     let lean = 0.15f32;
     let dir = Vec3::new(-lean.sin(), lean.cos(), 0.0);
@@ -2070,6 +2096,13 @@ fn quarantine_gate(b: &mut Builder) {
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
         false,
+    );
+    b.dress_structure(
+        from,
+        vec![(
+            "barrier_arm",
+            Transform::from_translation(pivot).with_rotation(Quat::from_rotation_z(lean)),
+        )],
     );
 }
 
@@ -2728,7 +2761,13 @@ pub fn dress_buildings(
                 for (mat, mesh) in prims {
                     let mat = props.material(&mat, &mut materials);
                     add(
-                        if d.inside { NEAR } else { WINDOWS },
+                        if d.inside {
+                            NEAR
+                        } else if d.shadow {
+                            OUTER
+                        } else {
+                            WINDOWS
+                        },
                         mat,
                         mesh.transformed_by(*at),
                     );
@@ -2804,6 +2843,9 @@ mod tests {
             }
         }
         for name in [
+            "road_block",
+            "gate_post",
+            "barrier_arm",
             "chair",
             "locker",
             "barrel",

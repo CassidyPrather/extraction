@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import UP, Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, T  # noqa: E402
+from common import Part, T, fillet  # noqa: E402
 from crates import frame_battens, lid_boards, rope_handle, side_boards  # noqa: E402
 
 
@@ -170,3 +170,63 @@ prop("camp_table", camp_table_parts)
 prop("camp_board", camp_board)
 prop("camp_post", camp_post)
 prop("lantern", lantern)
+
+# --- The quarantine gate (`quarantine_gate` in src/world/buildings.rs) ------------------------
+
+def road_block():
+    """A precast foundation block, 1.4 x 1.2 x 1.4, origin under its centre:
+    chamfered, a slot along each side, two lifting loops on top, a
+    stencilled number."""
+    p = Part("static")
+    prof = fillet([(-0.7, 0.0), (0.7, 0.0), (0.7, 1.2), (-0.7, 1.2)], [0.0, 0.0, 0.04, 0.04], 2)
+    p.prism(prof, -0.7, 0.7, "Concrete", axis="z", bevel=0.03, segs=1)
+    for sx in (-1, 1):
+        # Loops of rebar, bent up out of the top.
+        x = sx * 0.4
+        pts = [(x - 0.07, 1.19), (x - 0.06, 1.27), (x, 1.3), (x + 0.06, 1.27), (x + 0.07, 1.19)]
+        for a_, b_ in zip(pts, pts[1:]):
+            rod(p, (a_[0], a_[1], 0.0), (b_[0], b_[1], 0.0), 0.012, "Rusty", segs=6)
+    p.box((0.32, 0.12, 0.004), (0.25, 0.75, -0.702), "Cream")
+    p.box((0.18, 0.08, 0.004), (0.3, 0.58, -0.702), "Cream")
+    return [p]
+
+
+def gate_post():
+    """A steel post 0.25 square, 3.5 tall, on a base plate, capped."""
+    p = Part("static")
+    p.box((0.25, 3.48, 0.25), (0.0, 1.76, 0.0), "Painted", bevel=0.006, segs=1)
+    p.box((0.42, 0.02, 0.42), (0.0, 0.01, 0.0), "Iron", bevel=0.003, segs=1)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            bolt(p, (sx * 0.17, 0.02, sz * 0.17), (0, 1, 0), r=0.014, h=0.012)
+    p.box((0.3, 0.03, 0.3), (0.0, 3.515, 0.0), "Iron", bevel=0.004, segs=1)
+    # Red and white bands at eye height.
+    for k in range(4):
+        p.box((0.258, 0.25, 0.258), (0.0, 1.0 + k * 0.25 + 0.125, 0.0),
+              "Red" if k % 2 == 0 else "Cream", bevel=0.004, segs=1)
+    return [p]
+
+
+def barrier_arm():
+    """The barrier arm in arm space: pivot at the origin, the arm up +Y
+    (the game leans it), banded red and white, a counterweight below the
+    pivot, the pin along Z."""
+    p = Part("static")
+    n = 12
+    seg = 6.0 / n
+    for k in range(n):
+        y = -0.1 + seg * (k + 0.5)
+        p.box((0.12, seg, 0.12), (0.0, y, 0.0), "Red" if k % 2 == 0 else "Cream",
+              bevel=0.006 if k in (0, n - 1) else 0.0, segs=1)
+    p.box((0.3, 0.45, 0.2), (0.0, -0.3, 0.0), "Concrete", bevel=0.02, segs=1)
+    p.cyl(0.05, -0.33, 0.09, "Iron", segs=10)
+    for z in (-0.075, 0.075):
+        p.box((0.16, 0.24, 0.012), (0.0, 0.0, z), "Iron", bevel=0.003, segs=1)
+    # A rubber end cap.
+    p.box((0.13, 0.04, 0.13), (0.0, 5.92, 0.0), "Rubber", bevel=0.01, segs=1)
+    return [p]
+
+
+prop("road_block", road_block)
+prop("gate_post", gate_post)
+prop("barrier_arm", barrier_arm)
