@@ -266,7 +266,10 @@ fn apply_weather(
     conditions: Res<super::weather::Conditions>,
     mut weather: ResMut<Weather>,
     mut height_fog: ResMut<crate::render::fog::HeightFog>,
-    mut fogs: Query<&mut DistanceFog>,
+    mut fogs: Query<(
+        &mut DistanceFog,
+        Option<&mut bevy::render::view::ColorGrading>,
+    )>,
     mut suns: Query<&mut DirectionalLight, With<Sun>>,
     mut sky_mats: ResMut<Assets<SkyMaterial>>,
     domes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
@@ -275,7 +278,7 @@ fn apply_weather(
     zone: Res<super::Zone>,
 ) {
     // New cameras (the player's, a scope's) take the weather as they appear.
-    let fresh = fogs.iter_mut().any(|f| f.is_added());
+    let fresh = fogs.iter_mut().any(|(f, _)| f.is_added());
     if !conditions.is_changed() && !fresh {
         return;
     }
@@ -305,8 +308,12 @@ fn apply_weather(
     }
     clear.0 = weather.horizon;
     ambient.brightness = 1100.0 * k;
-    for mut fog in &mut fogs {
+    let grading = crate::render::grade::Look::for_map(&zone.map.name).grading();
+    for (mut fog, grade) in &mut fogs {
         *fog = weather.fog();
+        if let Some(mut grade) = grade {
+            *grade = grading.clone();
+        }
     }
     // Under a thick sky the sun casts nothing worth drawing (and the
     // shadow passes are the dearest thing in a headset frame).

@@ -81,6 +81,9 @@ pub struct LaunchOptions {
     pub camp: bool,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
+    /// Dev: the tour's views from a file instead of the placements (see
+    /// `tour::scripted_views`; the visual lookbook, `scripts/lookbook.sh`).
+    pub tour_views: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -118,6 +121,7 @@ impl Default for LaunchOptions {
             camera: None,
             tour: None,
             tour_only: None,
+            tour_views: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -209,6 +213,7 @@ impl LaunchOptions {
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
                 "--tour-only" => o.tour_only = Some(val()),
+                "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
                 "--gallery" => {
                     o.gallery = Some(val());

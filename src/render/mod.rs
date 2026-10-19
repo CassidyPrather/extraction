@@ -3,6 +3,7 @@
 pub mod bench;
 pub mod comfort;
 pub mod fog;
+pub mod grade;
 pub mod kitchen;
 pub mod logistics;
 pub mod materials;
@@ -128,6 +129,8 @@ pub fn camera_look(weather: &Weather) -> impl Bundle {
         Tonemapping::AgX,
         bevy::camera::Exposure { ev100: 10.6 },
         weather.fog(),
+        // The valley's grade arrives with the weather (`sky::apply_weather`).
+        bevy::render::view::ColorGrading::default(),
         Msaa::Sample4,
     )
 }
