@@ -47,21 +47,20 @@ for lat0, lat1, sectors, rings_ in bands:
         prof = band(lat0 + GAP / 2, lat1 - GAP / 2, rings_ * 2)
         if lat1 > 89:
             prof = band(lat0 + GAP / 2, 89.9, rings_ * 2)
-        # The lowest band's panels dark: a pale dome over a dark belly reads
-        # against fog that swallows an all-pale orb.
-        core.lathe(prof, "Dark" if lat1 < -50 else "Shell", segs=max(3, int(sweep / 6)), xf=UP,
-                   start=a0, sweep=sweep)
+        core.lathe(prof, "Shell", segs=max(3, int(sweep / 6)), xf=UP, start=a0, sweep=sweep)
 # The equator band: a slightly proud ring of shell segments with dark vents.
 for k in range(12):
     a0 = 30.0 * k + 0.8
     core.lathe([(R + 0.004, -0.06), (R + 0.012, -0.03), (R + 0.012, 0.03), (R + 0.004, 0.06),
                 (R - 0.01, 0.06), (R - 0.01, -0.06)], "Shell", segs=5, xf=UP, start=a0,
                sweep=28.4, closed=True)
-    # (5 mm proud of the band: flush faces z-fight.) Its vents glow: a ring
-    # of lights round the orb that shows from every side, and goes out when
-    # the walker dies.
-    core.lathe([(R + 0.017, -0.018), (R + 0.017, 0.018), (R + 0.006, 0.018), (R + 0.006, -0.018)],
-               "Glow", segs=3, xf=UP, start=a0 + 9, sweep=10, closed=True)
+
+# A cyan ring of light right round the band (5 mm proud of it: flush faces
+# z-fight): at 50 m, with the orb's pale shell a few pixels against the
+# fog, the ring is what reads, from every side, and it goes out when the
+# walker dies.
+core.lathe([(R + 0.019, -0.022), (R + 0.019, 0.022), (R + 0.006, 0.022), (R + 0.006, -0.022)],
+           "Glow", segs=48, xf=UP, closed=True)
 # Hip collars and the ball sockets inside them.
 for i in range(4):
     a = math.pi / 4 + i * math.pi / 2
