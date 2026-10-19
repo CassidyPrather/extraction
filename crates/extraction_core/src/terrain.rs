@@ -31,6 +31,12 @@ pub enum Surface {
 /// A boxcar's bogie centres, metres either side of its middle.
 pub const BOGIE: f32 = 4.5;
 
+/// Past a road's end the ground rises or falls no more than this in any
+/// half metre: walkable, not a bank (the body steps 0.4 m).
+pub const ROAD_END_LEDGE: f32 = 0.35;
+/// How far past a road's edge its end blends into the land, metres.
+pub const ROAD_END_APRON: f32 = 6.0;
+
 /// Per-cell road paint: which kind of road, and how strongly (0..=255).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RoadPaint {
@@ -738,17 +744,33 @@ impl Heightmap {
             .map(|i| {
                 let a = (i - win).max(0) as usize;
                 let b = ((i + win) as usize).min(raw.len() - 1);
-                let (mut sum, mut n) = (0.0, 0);
+                // Where the window is cut short (near an end), a plain
+                // average leans to the side it has: on a slope the road
+                // would end in a cut or on a fill. A straight line fitted
+                // to the same samples, read off here, doesn't lean.
+                // (A rail bed keeps its own grade to the buffers.)
+                let short = road.kind != RoadKind::Rail
+                    && ((i - win) < 0 || (i + win) as usize > raw.len() - 1);
+                let (mut n, mut sx, mut sy, mut sxx, mut sxy) = (0.0f32, 0.0, 0.0, 0.0, 0.0);
                 for k in a..=b {
                     if !on_bridge(arc[k]) {
-                        sum += raw[k];
-                        n += 1;
+                        let x = arc[k] - arc[i as usize];
+                        n += 1.0;
+                        sx += x;
+                        sy += raw[k];
+                        sxx += x * x;
+                        sxy += x * raw[k];
                     }
                 }
-                if n > 0 {
-                    sum / n as f32
+                if n == 0.0 {
+                    return raw[i as usize];
+                }
+                let det = n * sxx - sx * sx;
+                if short && det.abs() > 1e-3 {
+                    // The fitted line's height at x = 0.
+                    (sy * sxx - sx * sxy) / det
                 } else {
-                    raw[i as usize]
+                    sy / n
                 }
             })
             .collect();
@@ -767,9 +789,16 @@ impl Heightmap {
         }
         let half_w = road.width * 0.5;
         let reach = half_w + road.shoulder;
+        // Where the road stops you walk on: its cut or fill blends back
+        // into the land over an apron, not over the shoulder, which on a
+        // slope leaves a bank (or a drop) a body can't step past.
+        let last = line.len() - 1;
+        let apron = |s: usize| (s == 0 || s == last) && !on_bridge(arc[s]);
+        let end_reach = half_w + road.shoulder.max(ROAD_END_APRON);
         // Nearest centreline sample per touched cell.
         let mut best: std::collections::HashMap<usize, (f32, usize)> = Default::default();
         for (s, p) in line.iter().enumerate() {
+            let reach = if apron(s) { end_reach } else { reach };
             let (i0, j0) = self.grid([p[0] - reach, p[1] - reach]);
             let (i1, j1) = self.grid([p[0] + reach, p[1] + reach]);
             for j in j0.floor() as usize..=(j1.ceil() as usize).min(self.n - 1) {
@@ -808,7 +837,8 @@ impl Heightmap {
                 continue;
             }
             let target = profile[s];
-            let t = 1.0 - geom::smoothstep(half_w, reach, d);
+            let outer = if apron(s) { end_reach } else { reach };
+            let t = 1.0 - geom::smoothstep(half_w, outer, d);
             // Slight camber: the crown sits a few cm above the edges.
             let crown = 0.08 * (1.0 - (d / half_w.max(0.01)).min(1.0));
             self.heights[k] += (target + crown - self.heights[k]) * t;
@@ -967,6 +997,76 @@ mod tests {
         assert_eq!(hm.surface([0.0, 30.0], false), Surface::Grass);
     }
 
+    /// Where a road stops partway up (or down) a hillside you walk on, and
+    /// the ground past its end must not stand up as the bank its grading
+    /// cut (or drop off its fill): nothing steeper than a step in any half
+    /// metre (the body steps 0.4 m; this keeps a margin).
+    #[test]
+    fn roads_end_where_you_can_walk_on() {
+        let mut map = flat_map();
+        map.features.push(TerrainFeature::Hill {
+            at: [0.0, 0.0],
+            radius: 40.0,
+            height: 10.0,
+        });
+        // Up the hill from the west and the north, down it to the east.
+        for (points, kind, width, shoulder, smoothing) in [
+            (
+                vec![[-80.0, 0.0], [-15.0, 0.0]],
+                RoadKind::Gravel,
+                4.0,
+                3.0,
+                20.0,
+            ),
+            (
+                vec![[0.0, -80.0], [0.0, -18.0]],
+                RoadKind::Path,
+                1.6,
+                1.0,
+                4.0,
+            ),
+            (
+                vec![[8.0, 30.0], [30.0, 30.0]],
+                RoadKind::Dirt,
+                3.5,
+                3.0,
+                10.0,
+            ),
+        ] {
+            map.roads.push(RoadDef {
+                name: format!("{kind:?}"),
+                kind,
+                points,
+                width,
+                shoulder,
+                smoothing,
+                bridges: vec![],
+            });
+        }
+        let hm = Heightmap::build(&map);
+        for rl in &hm.road_lines {
+            for (end, inward) in [(0, 1), (rl.points.len() - 1, rl.points.len() - 2)] {
+                let p = rl.points[end];
+                let d = geom::sub(p, rl.points[inward]);
+                let d = geom::scale(d, 1.0 / geom::len(d));
+                let at = |m: f32| geom::add(p, geom::scale(d, m));
+                let ledge = (1..=16)
+                    .map(|k| {
+                        let (a, b) = (at((k - 1) as f32 * 0.5), at(k as f32 * 0.5));
+                        (hm.height(b) - hm.height(a)).abs()
+                    })
+                    .fold(0.0, f32::max);
+                assert!(
+                    ledge <= ROAD_END_LEDGE,
+                    "{:?} road ends at ({:.0}, {:.0}) below a {ledge:.2} m ledge",
+                    rl.kind,
+                    p[0],
+                    p[1]
+                );
+            }
+        }
+    }
+
     #[test]
     fn water_fills_a_channel() {
         let mut map = flat_map();
@@ -1008,7 +1108,8 @@ mod tests {
         assert!(rms > 0.15 && most < 6.0, "rms {rms}, most {most}");
         // Round buildings the ground is the map's own. (Not quite to the
         // centimetre: a plateau or a road's grade averages the land round
-        // it, worn or not.)
+        // it, worn or not, and a road's end follows the slope it ends on;
+        // the logging road ends in Marrow Creek's sawmill, a few cm.)
         let mut moved: Vec<(f32, &str)> = map
             .placements
             .iter()
@@ -1022,7 +1123,7 @@ mod tests {
         moved.sort_by(|a, b| a.0.total_cmp(&b.0));
         let median = moved[moved.len() / 2].0;
         assert!(
-            median < 0.02 && moved.iter().all(|m| m.0 < 0.5),
+            median < 0.04 && moved.iter().all(|m| m.0 < 0.5),
             "moved: {moved:?}"
         );
     }
