@@ -304,7 +304,8 @@ fn gallery(
 /// `--gallery fp:WHAT`: the player's gloves as you'd see them, at eye
 /// height, held still: `fp:open` (both hands open), `fp:point` (the right
 /// index on the nearest push button), or `fp:<item id>` (a gun on its grip
-/// in the right hand, the left on its handguard if it has one; anything
+/// in the right hand, the left on its handguard if it has one;
+/// `fp:<gun>+handle` puts the right hand on its slide or bolt; anything
 /// else in the left fist); `fp:WHAT,ZOOM,TURN,TRIGGER` brings it all
 /// closer, turns it about the right hand and pulls the trigger. Each glove takes the curl the game gives that
 /// hold (`render::props::hold_curl`).
@@ -318,6 +319,7 @@ fn first_person_hands(
     zone: Option<Res<crate::world::Zone>>,
     catalog: Res<crate::items::Catalog>,
     grabbables: Query<&crate::interact::Grabbable>,
+    guns: Query<&crate::weapons::Gun>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     mut players: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
     mut stage: Local<u32>,
@@ -334,6 +336,12 @@ fn first_person_hands(
     };
     let Some(what) = spec.split(',').next().and_then(|s| s.strip_prefix("fp:")) else {
         return;
+    };
+    // `fp:<gun>+handle`: the right hand on its slide, charging handle or
+    // bolt instead of the grip.
+    let (what, on_handle) = match what.strip_suffix("+handle") {
+        Some(w) => (w, true),
+        None => (what, false),
     };
     *stage += 1;
     for mut v in &mut players {
@@ -453,12 +461,25 @@ fn first_person_hands(
         let item_at =
             Transform::from_matrix(level.to_matrix() * primary.local.to_matrix().inverse());
         commands.entity(item).insert(view(item_at));
-        glove(
-            &mut commands,
-            Side::Right,
-            level,
-            hold_curl(Some(GripRole::Primary), trigger, 0.0),
-        );
+        let mut curl = hold_curl(Some(GripRole::Primary), trigger, 0.0);
+        if let Ok(gun) = guns.get(item) {
+            curl[0] = crate::render::props::gun_index_curl(Side::Right, &gun.layout, trigger);
+        }
+        match grab
+            .points
+            .iter()
+            .find(|p| matches!(p.role, GripRole::Handle(_)))
+            .filter(|_| on_handle)
+        {
+            Some(handle) => glove(
+                &mut commands,
+                Side::Right,
+                Transform::from_translation((item_at * handle.local).translation)
+                    .with_rotation(level.rotation),
+                hold_curl(Some(handle.role), 0.0, 0.0),
+            ),
+            None => glove(&mut commands, Side::Right, level, curl),
+        }
         match point(GripRole::Support) {
             Some(support) => glove(
                 &mut commands,

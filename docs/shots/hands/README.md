@@ -11,3 +11,14 @@ colours), so the canvas weave on the fabric doesn't show here.
 ```bash
 scripts/shot.sh out.png 40,19.2,262,0,-25 30 --no-robots --gallery fp:pm_pistol,1.6,90
 ```
+
+`6_trigger_pulled.jpg`: PM, AK, Mosin, TOZ from the left with the trigger
+pulled (`fp:<gun>,2.2,90,1`); the index curls to each gun's own trigger
+(`render::props::gun_index_curl`). On the Mosin and TOZ the trigger sits
+5–6 cm below the index's line, which no curl reaches.
+`6b_mosin_toz_grip_lowered_rejected.jpg`: Mosin and TOZ before (left) and
+with their layout grip points lowered ~4 cm so the trigger lines up
+(right): the fist then hangs under the stock's wrist. Not kept.
+`7_handles.jpg`: the right hand working a handle (`fp:<gun>+handle`):
+the AK's charging handle, the Mosin's bolt knob (from ahead and from the
+left), the PM's slide. The handle sits inside the closed fist.
