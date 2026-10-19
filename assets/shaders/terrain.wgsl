@@ -345,13 +345,34 @@ fn fragment(
         acc = acc + cover;
     }
 
-    // A burnt valley: the ground goes to ash and scorched earth, with
-    // patches where the fire passed lighter (roads keep their own colour).
+    // Macro colour, tens of metres across: a meadow isn't one green.
+    // Straw-dry patches, lusher green ones, moss through the forest floor.
+    // (Two value-noise taps; the textures' own variation is all under a
+    // few metres, so without this a field read as one flat olive.)
+    let m1 = vnoise(wp.xz * 0.024 + vec2<f32>(31.0, 17.0));
+    let m2 = vnoise(wp.xz * 0.07 + vec2<f32>(7.0, 43.0));
+    let open_ground = (1.0 - forest) * (1.0 - rock) * (1.0 - road);
+    let straw = smoothstep(0.45, 0.75, m1 * 0.65 + m2 * 0.35);
+    let lush = smoothstep(0.5, 0.8, 1.0 - (m1 * 0.55 + m2 * 0.45));
+    var grass_tint = mix(vec3<f32>(1.0), vec3<f32>(1.4, 1.15, 0.62), straw);
+    grass_tint = mix(grass_tint, vec3<f32>(0.8, 1.03, 0.72), lush * 0.85);
+    let moss = smoothstep(0.45, 0.75, m2) * forest * (1.0 - rock);
+    albedo = albedo * mix(vec3<f32>(1.0), grass_tint, open_ground);
+    albedo = mix(albedo, albedo * vec3<f32>(0.8, 1.12, 0.72), moss * 0.7);
+
+    // A burnt valley: the ground goes to ash and charcoal, with rusty
+    // burnt soil showing through where the fire went hottest (roads keep
+    // their own colour). Brightness comes from the layers' own detail, so
+    // the ground keeps its texture.
     if (terrain.burnt > 0.5) {
         let lum = dot(albedo, vec3<f32>(0.3, 0.59, 0.11));
-        let ash = vec3<f32>(lum) * vec3<f32>(0.95, 0.88, 0.8) * 0.8;
-        let fire = 0.45 + 0.5 * smoothstep(0.3, 0.65, fbm(wp.xz * 0.025 + vec2<f32>(4.0, 2.0)));
-        albedo = mix(albedo, ash, fire * (1.0 - road));
+        let pale = smoothstep(0.35, 0.7, fbm(wp.xz * 0.025 + vec2<f32>(4.0, 2.0)));
+        let charcoal = vec3<f32>(lum) * vec3<f32>(0.62, 0.58, 0.54);
+        let ash = vec3<f32>(lum) * vec3<f32>(2.1, 2.0, 1.85);
+        let rust = vec3<f32>(lum) * vec3<f32>(1.75, 1.05, 0.62);
+        var burnt = mix(charcoal, ash, pale);
+        burnt = mix(burnt, rust, smoothstep(0.62, 0.85, m2) * (1.0 - pale) * 0.8);
+        albedo = mix(albedo, burnt, 0.9 * (1.0 - road));
     }
 
     // Wetness: darker, glossier, especially near water and on roads.
