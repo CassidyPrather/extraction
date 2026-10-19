@@ -81,7 +81,7 @@
             tags: ["polymer"],
         ),
         (
-            id: "mosin_clip", dims: Some((0.012, 0.012, 0.055)), name: "Stripper clip (7.62x54R)",
+            id: "mosin_clip", dims: Some((0.015, 0.08, 0.055)), name: "Stripper clip (7.62x54R)",
             category: Magazine, size: Tiny, mass: 0.01, bulk: 0.02,
             magazine: Some((fits: "mosin", cartridge: "7.62x54R", capacity: 5, stripper: true)),
             tags: ["metal"],

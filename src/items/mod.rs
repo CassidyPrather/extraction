@@ -265,8 +265,14 @@ fn finish_item_models(
             if node.primitives.is_empty() {
                 continue;
             }
+            // Named, so visuals can find parts (a magazine's `round_N`).
             let n = commands
-                .spawn((node.transform, Visibility::default(), ChildOf(root)))
+                .spawn((
+                    Name::new(node.name.clone()),
+                    node.transform,
+                    Visibility::default(),
+                    ChildOf(root),
+                ))
                 .id();
             spawn_primitives(&mut commands, n, &node, |name| {
                 model_mats.get(name.unwrap_or("Blued"), &mut lib, &server, &mut materials)
