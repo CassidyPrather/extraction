@@ -153,21 +153,21 @@ pub const STATIONS: &[Station] = &[
         at: [0.0, 0.0],
         rot: 0.0,
         goals: &[Goal::TakePistol, Goal::TakeRadio],
-        where_: "the crate in the truck, by your left knee",
+        where_: "the crate in the truck",
     },
     Station {
         title: "PUT IT AWAY",
         at: [3.5, 87.0],
         rot: 0.0,
         goals: &[Goal::PutAway, Goal::Pack],
-        where_: "the first lamp, off the back of the truck",
+        where_: "the lamp by the tailgate",
     },
     Station {
         title: "OUT OF REACH",
         at: [-3.0, 83.5],
         rot: 0.0,
         goals: &[Goal::FarGrab],
-        where_: "the lamp left of the track, by the tall crates",
+        where_: "the lamp by the tall crates",
     },
     Station {
         title: "THE RANGE",
@@ -180,42 +180,42 @@ pub const STATIONS: &[Station] = &[
             Goal::Safety,
             Goal::HitPlate,
         ],
-        where_: "the range: the table left of the track, past the gate",
+        where_: "the range, left past the gate",
     },
     Station {
         title: "THE HOUSE",
         at: [7.0, 27.0],
         rot: 90.0,
         goals: &[Goal::OpenDoor, Goal::Search],
-        where_: "the house, right of the track",
+        where_: "the house on the right",
     },
     Station {
         title: "FIRST AID",
         at: [4.5, 8.0],
         rot: 90.0,
         goals: &[Goal::Dressing],
-        where_: "the lamp right of the track, by the dressing station",
+        where_: "the lamp on the right",
     },
     Station {
         title: "THE SHIMMER",
         at: [4.5, -30.0],
         rot: 90.0,
         goals: &[Goal::Artifact],
-        where_: "the lamp right of the track: mind the shimmer past it",
+        where_: "the lamp on the right. Mind the shimmer",
     },
     Station {
         title: "BUTTONS",
         at: [-3.5, -50.0],
         rot: 270.0,
         goals: &[Goal::Button],
-        where_: "the lamp left of the track, further north",
+        where_: "the lamp on the left",
     },
     Station {
         title: "GOING HOME",
         at: [4.0, -64.0],
         rot: 0.0,
         goals: &[Goal::CallTruck, Goal::PullCord],
-        where_: "the last lamp, at the north post",
+        where_: "the north post, end of the track",
     },
 ];
 
@@ -390,10 +390,11 @@ impl Plugin for OnboardingPlugin {
                         watch_world,
                         press_cards,
                     ),
-                    announce,
+                    announce.after(crate::items::usage::UsageSystems),
                     (lamps, signs, checklist),
                     warn_near_anomalies,
                     hurry_the_truck,
+                    out_of_the_truck.after(crate::raid::tick_raid),
                     bot::direct,
                 )
                     .chain()
@@ -1009,11 +1010,23 @@ fn press_cards(
             Ok(OnboardCard::StartOver) => {
                 ob.done.clear();
                 ob.skipped.clear();
-                raid.say("Driver: \"From the top, then. The crate in the truck.\"");
+                raid.say(START_OVER_LINE);
             }
             _ => {}
         }
     }
+}
+
+/// What the driver says, each short enough for the wrist (three lines of
+/// 26: it shows only the newest message, and cuts a long one off).
+pub const GREET_VR: &str = "Driver: \"Kit's in the crate by your left knee. Reach in, squeeze.\"";
+pub const GREET_FLAT: &str = "Driver: \"Kit's in the crate, front left. Look at it, press E.\"";
+pub const ALL_DONE_LINE: &str = "Driver: \"That's the lot. Off to the Zone.\"";
+pub const TOO_CLOSE_LINE: &str = "Driver: \"Too close! That shimmer burns. Back out.\"";
+pub const START_OVER_LINE: &str = "Driver: \"From the top. The crate in the truck.\"";
+
+pub fn next_line(station: usize) -> String {
+    format!("Driver: \"Good. Next: {}.\"", STATIONS[station].where_)
 }
 
 /// The driver on the radio (your wrist): the opening line, and after each
@@ -1034,11 +1047,7 @@ fn announce(
     ob.age += time.delta_secs();
     if !ob.greeted && ob.age > 1.5 {
         ob.greeted = true;
-        raid.say(if flat {
-            "Driver: \"Your kit's in the crate, front left. Look at it, press E.\""
-        } else {
-            "Driver: \"Your kit's in the crate, by your left knee. Reach in and squeeze.\""
-        });
+        raid.say(if flat { GREET_FLAT } else { GREET_VR });
     }
     for d in done.read() {
         for side in Side::BOTH {
@@ -1052,11 +1061,9 @@ fn announce(
             continue;
         }
         let line = match ob.current() {
-            Some(next) if next > station_of(d.goal) => {
-                format!("Driver: \"Good. Next: {}.\"", STATIONS[next].where_)
-            }
+            Some(next) if next > station_of(d.goal) => next_line(next),
             Some(_) => continue,
-            None => "Driver: \"That's the lot. Off to the Zone.\"".to_string(),
+            None => ALL_DONE_LINE.to_string(),
         };
         raid.say(line);
     }
@@ -1170,7 +1177,7 @@ fn warn_near_anomalies(
     });
     if near && *quiet <= 0.0 {
         *quiet = 5.0;
-        raid.say("Driver: \"Too close! That shimmer burns. Step back out.\"");
+        raid.say(TOO_CLOSE_LINE);
         for side in Side::BOTH {
             haptics.write(Haptic {
                 side,
@@ -1187,6 +1194,26 @@ fn hurry_the_truck(mut raid: ResMut<Raid>) {
         Phase::TruckCalled { eta, .. } if *eta > HURRY => *eta = HURRY,
         Phase::TruckWaiting { left, .. } if *left < 60.0 => *left = crate::raid::TRUCK_WAIT,
         _ => {}
+    }
+}
+
+/// Stepping out of the truck says when the Surge is due: nothing to do
+/// with the yard, and it pushes the driver's directions off the wrist. Here
+/// the driver says where to go instead.
+fn out_of_the_truck(mut raid: ResMut<Raid>, ob: Res<Onboarding>) {
+    let Some(i) = raid
+        .log
+        .iter()
+        .position(|(t, _)| t.starts_with("Out of the truck. The Surge"))
+    else {
+        return;
+    };
+    raid.log.remove(i);
+    if let Some(next) = ob.current() {
+        raid.say(format!(
+            "Driver: \"Off you go. Next: {}.\"",
+            STATIONS[next].where_
+        ));
     }
 }
 
@@ -1257,6 +1284,31 @@ mod tests {
         }
         bad.dedup();
         assert!(bad.is_empty(), "too small:\n{}", bad.join("\n"));
+    }
+
+    /// Everything the driver says fits the wrist whole.
+    #[test]
+    fn the_driver_fits_on_the_wrist() {
+        let mut lines: Vec<String> = [
+            GREET_VR,
+            GREET_FLAT,
+            ALL_DONE_LINE,
+            TOO_CLOSE_LINE,
+            START_OVER_LINE,
+            crate::camp::YARD_CORD_LINE,
+        ]
+        .map(String::from)
+        .to_vec();
+        lines.extend((1..STATIONS.len()).map(next_line));
+        lines.extend(
+            STATIONS
+                .iter()
+                .map(|s| format!("Driver: \"Off you go. Next: {}.\"", s.where_)),
+        );
+        for l in lines {
+            let wrapped = crate::render::screen::wrap(&l, 26, usize::MAX);
+            assert!(wrapped.len() <= 3, "{} lines: {l}", wrapped.len());
+        }
     }
 
     /// Every station asks for something, and every instruction is short:

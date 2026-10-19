@@ -1284,7 +1284,10 @@ mod onboarding {
         assert!(done(&vr, Goal::TakeRadio));
         let l = lamps(&mut vr);
         assert_eq!((l[0], l[1]), (Lamp::Done, Lamp::Lit), "{l:?}");
-        assert!(said(&vr, "Next: the first lamp"), "the driver sends you on");
+        assert!(
+            said(&vr, "Next: the lamp by the tailgate"),
+            "the driver sends you on"
+        );
     }
 
     /// Station 2: let go of a thing at a pocket, and of another over the

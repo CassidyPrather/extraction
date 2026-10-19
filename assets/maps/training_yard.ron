@@ -2,10 +2,11 @@
 //
 // A small fenced valley, 240 m on a side, with nothing hunting in it (the
 // game turns robots off here and saves nothing). A gravel track runs north
-// from the truck past signed stations: kit and pockets, loading and the
-// firing line, searching a house, staying alive, the machines, artifacts,
-// and calling the truck from the far rendezvous. Pull the cord in the
-// truck to finish, or press the card by its tailgate to skip.
+// from the truck past nine stations (`src/onboarding`: their posts, props
+// and the training burner are placed there, not here): the kit, putting
+// it away, a far grab, the firing line, the house, first aid, the
+// shimmer, a button, and calling the truck to the north post. Pull its
+// cord to finish, or press the card by the tailgate to skip.
 //
 // Coordinates: [x, z] metres, origin at centre, x east, +z south.
 (
@@ -66,14 +67,7 @@
         (kind: Loot(table: "medical"), at: (5.0, 2.0), name: "Dressing station"),
         (kind: Loot(table: "food_common"), at: (25.0, -14.0), name: "Shed food"),
 
-        (kind: Sign(text: "TRAINING YARD\n\nSame as the Zone, minus the machines. Nothing here is kept.\n\nYour kit is in the crate in the truck. Grip to grab (flat: E), let go to drop (Q).\n\nOut of reach? Point at it, squeeze, flick your hand back: it comes to you."), at: (4.0, 84.0), rot: 0.0, name: "Yard sign"),
-        (kind: Sign(text: "POCKETS AND PACK\n\nHold a thing at your chest or hip and let go: it's pocketed. Over the shoulder: into the pack (flat: G stows, Tab opens the pack).\n\nWeight slows you. Carry what you'll use."), at: (-5.0, 64.0), rot: 0.0, name: "Pockets sign"),
-        (kind: Sign(text: "LOADING AND SHOOTING\n\nThumb rounds into a magazine. Seat it, pull the slide or bolt back and let go.\nFlat: B mag, R reload, V rack, X mode.\n\nTargets at 15, 30 and 60 m."), at: (-18.0, 44.0), rot: 0.0, name: "Range sign"),
-        (kind: Sign(text: "SEARCHING\n\nThings are on tables, shelves and in crates. Take hold of a door to swing it.\n\nTake what's useful; scrap and parts go to the bench in the truck."), at: (16.0, 26.0), rot: 0.0, name: "House sign"),
-        (kind: Sign(text: "STAYING ALIVE\n\nBleeding? Hold a field dressing to it (flat: U). Eat when you're slow.\n\nGo down out there and the collector comes for you and your kit. Beat it to your body."), at: (8.0, 4.0), rot: 0.0, name: "Medical sign"),
-        (kind: Sign(text: "THE MACHINES\n\nLittle flyers spot you and call the rest. Walkers come to look.\n\nShoot the eye, or keep still in cover. Pylons report what moves near them: knock them down."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
-        (kind: Sign(text: "ARTIFACTS\n\nBright stones form where the ground goes wrong. Don't walk into the shimmer.\n\nCarry one or two. Carry many and you'll hear the hum: the machines feel them too."), at: (34.0, -36.0), rot: 315.0, name: "Artifacts sign"),
-        (kind: Sign(text: "GETTING OUT\n\nCall the truck on the radio (flat: U with it in hand). It drives round to a rendezvous: two minutes, then it waits five.\n\nClimb in the back and pull the cord.\n\nHere: pull the cord at the truck when you're ready for the Zone."), at: (5.0, -66.0), rot: 0.0, name: "Rendezvous sign"),
+        (kind: Sign(text: "THE MACHINES\n\nNone in the yard. Out there, little flyers spot you and call the rest; walkers come to look.\n\nShoot the eye, or keep still in cover."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
     ],
 
     regions: [

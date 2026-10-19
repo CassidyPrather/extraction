@@ -26,6 +26,9 @@ use crate::raid::truck::{Pressable, Truck, base_pose};
 use crate::rig::LocalPlayer;
 use crate::world::{Layer, Zone};
 
+/// The yard's cord, pulled before the end.
+pub const YARD_CORD_LINE: &str = "Driver: \"Not done yet. Pull again to go.\"";
+
 /// The practice map's name.
 pub const TRAINING_YARD: &str = "training_yard";
 
@@ -315,7 +318,7 @@ fn press_camp(
             let now = time.elapsed_secs();
             if now > state.cord_until {
                 state.cord_until = now + 6.0;
-                raid.say("Driver: \"Not done yet. Pull again and we're off to the Zone.\"");
+                raid.say(YARD_CORD_LINE);
                 yard_bell = false;
             }
         }
