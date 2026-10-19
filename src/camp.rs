@@ -10,9 +10,9 @@
 //! To play, walk to the gate. Nothing else is a menu.
 //!
 //! The training yard (`assets/maps/training_yard.ron`) is where someone new
-//! starts. Its signs walk you through the kit; a card by the truck skips
-//! it, and pulling the truck's cord finishes it. Either way the driver
-//! takes you on to the Zone.
+//! starts. Its stations (`onboarding`) have you do each thing once; a card
+//! by the tailgate skips it, and pulling the truck's cord finishes it.
+//! Either way the driver takes you on to the Zone.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -25,6 +25,9 @@ use crate::raid::comfort_board::ComfortCard;
 use crate::raid::truck::{Pressable, Truck, base_pose};
 use crate::rig::LocalPlayer;
 use crate::world::{Layer, Zone};
+
+/// The yard's cord, pulled before the end.
+pub const YARD_CORD_LINE: &str = "Driver: \"Not done yet. Pull again to go.\"";
 
 /// The practice map's name.
 pub const TRAINING_YARD: &str = "training_yard";
@@ -61,6 +64,9 @@ struct CampState {
     /// NEW CAREER was pressed once; a second press before this (seconds
     /// of game time) burns the logbook.
     confirm_until: f32,
+    /// In the yard: the cord was pulled once before the end; a second
+    /// pull before this goes.
+    cord_until: f32,
 }
 
 /// Whether this session opens at the camp: a real game (or `--camp`), not
@@ -118,26 +124,8 @@ fn spawn_camp(
     if trucks.is_empty() {
         return;
     }
-    if opts.map == TRAINING_YARD {
-        // The way out of the yard: a card on a post by the tailgate.
-        let truck = base_pose(&zone);
-        let at = truck.transform_point(Vec3::new(-1.8, 0.0, 3.2));
-        let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
-        let post = commands
-            .spawn((
-                Name::new("Skip card post"),
-                Transform::from_translation(at).with_rotation(truck.rotation),
-                Visibility::default(),
-                CampProps::Post,
-            ))
-            .id();
-        commands.spawn((
-            card(CampCard::SkipYard, Vec2::new(0.34, 0.2)),
-            Transform::from_xyz(0.0, 1.35, 0.05),
-            ChildOf(post),
-        ));
-        return;
-    }
+    // (In the yard, the way out is on the training board by the tailgate:
+    // `onboarding`.)
     if !camp_wanted(&opts) {
         return;
     }
@@ -216,6 +204,19 @@ fn spawn_camp(
         state.stand = Some(pose * Transform::from_xyz(0.0, 0.0, 1.15));
         state.hold = 20;
     }
+}
+
+/// The yard's way out: ON TO THE ZONE (`onboarding` puts it up).
+pub fn skip_card() -> (
+    ScreenText,
+    CampCard,
+    Pressable,
+    Grabbable,
+    Collider,
+    CollisionLayers,
+    Visibility,
+) {
+    card(CampCard::SkipYard, Vec2::new(0.34, 0.2))
 }
 
 /// A pressable card with its words (filled in by `camp_text`).
@@ -302,14 +303,25 @@ fn press_camp(
     mut raid: ResMut<Raid>,
     mut exit: MessageWriter<AppExit>,
     mut slot: Option<ResMut<crate::persist::SaveSlot>>,
+    onboarding: Option<Res<crate::onboarding::Onboarding>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
         };
-        // In the yard, the truck's cord means "I'm done here".
-        let yard_bell =
+        // In the yard, the truck's cord means "I'm done here". Before the
+        // last station it asks first: a cord within reach of where you
+        // start is easy to pull by mistake, and it's the end of the yard.
+        let mut yard_bell =
             opts.map == TRAINING_YARD && matches!(pressables.get(*item), Ok(Pressable::BellPull));
+        if yard_bell && !onboarding.as_ref().is_none_or(|o| o.ready_to_go()) {
+            let now = time.elapsed_secs();
+            if now > state.cord_until {
+                state.cord_until = now + 6.0;
+                raid.say(YARD_CORD_LINE);
+                yard_bell = false;
+            }
+        }
         let Some(c) = cards
             .get(*item)
             .ok()

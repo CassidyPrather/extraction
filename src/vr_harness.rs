@@ -27,6 +27,16 @@ fn collect(mut events: MessageReader<InteractEvent>, mut seen: ResMut<Seen>) {
 pub struct Vr {
     pub app: App,
     pub player: Entity,
+    /// A profile of its own, removed afterwards.
+    dir: Option<std::path::PathBuf>,
+}
+
+impl Drop for Vr {
+    fn drop(&mut self) {
+        if let Some(d) = &self.dir {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
 }
 
 impl Vr {
@@ -37,6 +47,29 @@ impl Vr {
             map: map.into(),
             ..Default::default()
         };
+        Self::with(opts, None)
+    }
+
+    /// The training yard as someone new gets it: a profile of its own (so
+    /// the kit is in the crate), starting in the truck bed.
+    pub fn first_run() -> Self {
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "extraction-first-run-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: crate::camp::TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        Self::with(opts, Some(dir))
+    }
+
+    fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
         let mut app = crate::headless_app(opts, false);
         app.init_resource::<Seen>().add_systems(Update, collect);
         app.finish();
@@ -49,7 +82,7 @@ impl Vr {
             .iter(app.world())
             .next()
             .expect("a local player");
-        let mut vr = Self { app, player };
+        let mut vr = Self { app, player, dir };
         vr.head(Vec3::new(0.0, 1.65, 0.0));
         vr.step(3);
         vr
@@ -128,6 +161,24 @@ impl Vr {
             .get_mut::<RigInput>(self.player)
             .unwrap();
         input.hand_mut(side).trigger = v;
+    }
+
+    pub fn primary(&mut self, side: Side, down: bool) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).primary = down;
+    }
+
+    pub fn stick_click(&mut self, side: Side, down: bool) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).stick_click = down;
     }
 
     pub fn step(&mut self, n: usize) {
@@ -1180,5 +1231,683 @@ mod tests {
                 low.len()
             );
         }
+    }
+}
+
+/// The training yard's stations, each done by hand as in a headset: the
+/// yard has to notice every one through the real hand path.
+mod onboarding {
+    use super::*;
+    use crate::onboarding::{Goal, Lamp, OnboardCard, Onboarding, Placed, StationPost};
+    use crate::raid::truck::{FLOOR, Pressable, Stash, Truck};
+    use crate::weapons::Gun;
+
+    fn ob(vr: &Vr) -> Onboarding {
+        vr.app.world().resource::<Onboarding>().clone()
+    }
+
+    fn done(vr: &Vr, g: Goal) -> bool {
+        ob(vr).is_done(g)
+    }
+
+    fn placed(vr: &mut Vr, which: Placed) -> Entity {
+        vr.app
+            .world_mut()
+            .query::<(Entity, &Placed)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| **p == which)
+            .map(|(e, _)| e)
+            .expect("placed for the station")
+    }
+
+    fn at(vr: &Vr, e: Entity) -> Vec3 {
+        vr.app
+            .world()
+            .get::<GlobalTransform>(e)
+            .unwrap()
+            .translation()
+    }
+
+    fn ground(vr: &Vr, xz: [f32; 2]) -> Vec3 {
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(xz[0], xz[1])
+    }
+
+    /// Open hand on it, squeeze.
+    fn take(vr: &mut Vr, side: Side, item: Entity) {
+        let p = at(vr, item);
+        vr.hand(side, p, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(side, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(side).holding, Some(item), "took it");
+    }
+
+    /// Point the empty hand at it from `hand`, squeeze, flick back.
+    fn flick(vr: &mut Vr, side: Side, hand: Vec3, item: Entity) {
+        let target = at(vr, item);
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, (target - hand).normalize());
+        vr.hand(side, hand, rot, 0.0, 0.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(side).far, Some(item), "pointed at it");
+        vr.grip(side, 1.0);
+        vr.step(2);
+        let back = -(target - hand).normalize() * 0.045 + Vec3::Y * 0.01;
+        for k in 1..=4 {
+            vr.move_hand(side, hand + back * k as f32);
+            vr.step(1);
+        }
+        vr.step(90);
+    }
+
+    fn truck_pose(vr: &mut Vr) -> Transform {
+        let mut q = vr
+            .app
+            .world_mut()
+            .query_filtered::<&GlobalTransform, With<Truck>>();
+        q.iter(vr.app.world()).next().unwrap().compute_transform()
+    }
+
+    fn in_the_bed(vr: &mut Vr) -> Vec3 {
+        let truck = truck_pose(vr);
+        let feet = truck.transform_point(Vec3::new(0.3, FLOOR + 0.05, 0.6));
+        let yaw = truck.rotation.to_euler(EulerRot::YXZ).0;
+        vr.stand(feet, yaw);
+        vr.step(10);
+        feet
+    }
+
+    fn stash_item(vr: &mut Vr, id: &str) -> Entity {
+        let catalog = vr.app.world().resource::<Catalog>().clone();
+        let contents: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query_filtered::<&crate::interact::body::Backpack, With<Stash>>()
+            .iter(vr.app.world())
+            .flat_map(|b| b.contents.clone())
+            .collect();
+        contents
+            .into_iter()
+            .find(|e| {
+                vr.app
+                    .world()
+                    .get::<crate::items::Item>(*e)
+                    .is_some_and(|it| catalog.get(it.kind()).id == id)
+            })
+            .unwrap_or_else(|| panic!("{id} in the crate"))
+    }
+
+    fn card(vr: &mut Vr, which: OnboardCard) -> Entity {
+        vr.app
+            .world_mut()
+            .query::<(Entity, &OnboardCard)>()
+            .iter(vr.app.world())
+            .find(|(_, c)| **c == which)
+            .map(|(e, _)| e)
+            .expect("the card")
+    }
+
+    fn lamps(vr: &mut Vr) -> Vec<Lamp> {
+        let mut v: Vec<StationPost> = vr
+            .app
+            .world_mut()
+            .query::<&StationPost>()
+            .iter(vr.app.world())
+            .copied()
+            .collect();
+        v.sort_by_key(|p| p.index);
+        v.into_iter().map(|p| p.lamp).collect()
+    }
+
+    fn said(vr: &Vr, text: &str) -> bool {
+        vr.app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .any(|(t, _)| t.contains(text))
+    }
+
+    /// Station 1: in the bed, reach into the crate and squeeze; the pistol
+    /// and the radio each tick, and the first lamp goes from lit to done
+    /// while the second lights.
+    #[test]
+    fn station_kit_from_the_crate() {
+        let mut vr = Vr::first_run();
+        in_the_bed(&mut vr);
+        let l = lamps(&mut vr);
+        assert_eq!(l[0], Lamp::Lit, "the crate's lamp is lit first: {l:?}");
+        assert!(l[1..].iter().all(|l| *l == Lamp::Dark), "{l:?}");
+        let pistol = stash_item(&mut vr, "pm_pistol");
+        take(&mut vr, Side::Right, pistol);
+        assert!(done(&vr, Goal::TakePistol));
+        assert!(!done(&vr, Goal::TakeRadio));
+        let radio = stash_item(&mut vr, "radio");
+        take(&mut vr, Side::Left, radio);
+        vr.step(2);
+        assert!(done(&vr, Goal::TakeRadio));
+        let l = lamps(&mut vr);
+        assert_eq!((l[0], l[1]), (Lamp::Done, Lamp::Lit), "{l:?}");
+        assert!(
+            said(&vr, "Next: the lamp by the tailgate"),
+            "the driver sends you on"
+        );
+    }
+
+    /// Station 2: let go of a thing at a pocket, and of another over the
+    /// shoulder.
+    #[test]
+    fn station_put_it_away() {
+        let mut vr = Vr::first_run();
+        let feet = ground(&vr, [3.0, 70.0]);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(30);
+        let radio = vr.spawn(
+            "radio",
+            Transform::from_translation(feet + Vec3::new(0.3, 1.0, -0.4)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(radio)
+            .insert(RigidBody::Static);
+        take(&mut vr, Side::Right, radio);
+        // The nearest free body slot that takes it.
+        let slots: Vec<Vec3> = {
+            let mut q = vr.app.world_mut().query::<(
+                &crate::interact::Socket,
+                &crate::interact::SocketOwner,
+                &GlobalTransform,
+            )>();
+            q.iter(vr.app.world())
+                .filter(|(s, o, _)| {
+                    o.0 == vr.player
+                        && s.occupant.is_none()
+                        && matches!(
+                            s.kind,
+                            crate::interact::SocketKind::Body(
+                                extraction_core::inventory::SlotKind::Pocket
+                                    | extraction_core::inventory::SlotKind::Pouch
+                            )
+                        )
+                })
+                .map(|(_, _, g)| g.translation())
+                .collect()
+        };
+        assert!(!slots.is_empty(), "a pocket");
+        let from = at(&vr, radio);
+        for i in 0..=12 {
+            vr.move_hand(Side::Right, from.lerp(slots[0], i as f32 / 12.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        assert!(done(&vr, Goal::PutAway), "pocketed");
+        assert!(!done(&vr, Goal::Pack));
+
+        let kit = vr.spawn(
+            "cleaning_kit",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
+        );
+        vr.app.world_mut().entity_mut(kit).insert(RigidBody::Static);
+        take(&mut vr, Side::Right, kit);
+        let shoulder = feet + Vec3::new(0.15, 1.65, 0.12);
+        let from = at(&vr, kit);
+        for i in 0..=10 {
+            vr.move_hand(Side::Right, from.lerp(shoulder, i as f32 / 10.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        assert!(done(&vr, Goal::Pack), "into the pack");
+    }
+
+    /// Station 3: the box on top of the stand is out of reach; point,
+    /// squeeze, flick, and it's in your hand.
+    #[test]
+    fn station_out_of_reach() {
+        let mut vr = Vr::first_run();
+        let stand = crate::onboarding::FAR_STAND_AT;
+        let feet = ground(&vr, [stand[0], stand[1] + 1.6]);
+        vr.stand(feet, 0.0);
+        vr.step(60);
+        let item = placed(&mut vr, Placed::FarBox);
+        let top = at(&vr, item);
+        assert!(
+            top.y - feet.y > 2.3,
+            "out of reach ({:.2} m up)",
+            top.y - feet.y
+        );
+        flick(
+            &mut vr,
+            Side::Right,
+            feet + Vec3::new(0.2, 1.3, -0.25),
+            item,
+        );
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(item), "caught");
+        assert!(done(&vr, Goal::FarGrab));
+    }
+
+    /// Station 4, the range, all by hand: rounds into the magazine (box
+    /// and magazine touched together), the magazine up into the well, the
+    /// slide racked with the other hand's trigger, the safety off with a
+    /// stick click, and a shot that hits the 15 m plate.
+    #[test]
+    fn station_the_range() {
+        let mut vr = Vr::first_run();
+        let table = crate::onboarding::RANGE_TABLE_AT;
+        let feet = ground(&vr, [table[0], table[1] + 0.75]);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(60);
+        let near = |vr: &mut Vr, id: &str| -> Entity {
+            let catalog = vr.app.world().resource::<Catalog>().clone();
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &crate::items::Item, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, it, gt)| {
+                    catalog.get(it.kind()).id == id
+                        && gt.translation().xz().distance(Vec2::from(table)) < 1.0
+                })
+                .map(|(e, ..)| e)
+                .next()
+                .unwrap_or_else(|| panic!("a {id} on the table"))
+        };
+        let mag = near(&mut vr, "pm_mag");
+        let ammo = near(&mut vr, "ammo_9x18");
+        let gun = near(&mut vr, "pm_pistol");
+        take(&mut vr, Side::Left, mag);
+        take(&mut vr, Side::Right, ammo);
+        // Bring them together in front of the chest.
+        let (a, b) = (at(&vr, mag), at(&vr, ammo));
+        let meet = feet + Vec3::new(0.0, 1.2, -0.35);
+        for i in 0..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, a.lerp(meet - Vec3::X * 0.03, k));
+            vr.move_hand(Side::Right, b.lerp(meet + Vec3::X * 0.03, k));
+            vr.step(1);
+        }
+        vr.step(4);
+        let rounds = vr
+            .app
+            .world()
+            .get::<crate::items::Item>(mag)
+            .unwrap()
+            .rounds;
+        assert!(rounds > 0, "rounds went in ({rounds})");
+        assert!(done(&vr, Goal::FillMag));
+        // Put the box down; the pistol in the right hand.
+        vr.grip(Side::Right, 0.0);
+        vr.step(20);
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        let hold = feet + Vec3::new(0.15, 1.2, -0.35);
+        vr.move_hand(Side::Right, hold);
+        vr.step(20);
+        let well = {
+            let w = vr.app.world().get::<Gun>(gun).unwrap().magwell.unwrap();
+            at(&vr, w)
+        };
+        let from = at(&vr, mag);
+        let start = well - Vec3::Y * 0.25;
+        for i in 0..=10 {
+            vr.move_hand(Side::Left, from.lerp(start, i as f32 / 10.0));
+            vr.step(1);
+        }
+        for i in 0..=30 {
+            vr.move_hand(Side::Left, start.lerp(well, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.step(5);
+        vr.grip(Side::Left, 0.0);
+        vr.step(5);
+        assert!(done(&vr, Goal::SeatMag), "seated");
+        // Rack: the left trigger on the slide, back, and let go.
+        let slide = vr.point(gun, |r| matches!(r, GripRole::Handle(_)));
+        vr.hand(Side::Left, slide, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.trigger(Side::Left, 1.0);
+        vr.step(2);
+        let back = vr.app.world().get::<GlobalTransform>(gun).unwrap().back();
+        for i in 1..=14 {
+            vr.move_hand(Side::Left, slide + back * (0.005 * i as f32));
+            vr.step(1);
+        }
+        vr.trigger(Side::Left, 0.0);
+        vr.move_hand(Side::Left, feet + Vec3::new(-0.3, 1.0, -0.2));
+        vr.step(10);
+        assert!(done(&vr, Goal::Rack), "racked");
+        // Safety off: click the stick on the gun hand.
+        vr.stick_click(Side::Right, true);
+        vr.step(2);
+        vr.stick_click(Side::Right, false);
+        vr.step(2);
+        assert!(done(&vr, Goal::Safety), "off safe");
+        // Aim at the nearest plate and squeeze.
+        let plate = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::world::buildings::Building, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(b, _)| b.prefab == "target")
+                .map(|(_, gt)| gt.transform_point(Vec3::new(0.0, 1.2, 0.07)))
+                .min_by(|a, b| a.distance(feet).total_cmp(&b.distance(feet)))
+                .unwrap()
+        };
+        for _ in 0..4 {
+            let hand_rot = vr.hand_state(Side::Right).world.rotation;
+            let gt = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(gun)
+                .unwrap()
+                .compute_transform();
+            let rel = hand_rot.inverse() * gt.rotation;
+            let want = Transform::from_translation(gt.translation)
+                .looking_at(plate, Vec3::Y)
+                .rotation;
+            vr.hand(Side::Right, hold, want * rel.inverse(), 1.0, 0.0);
+            vr.step(15);
+        }
+        vr.trigger(Side::Right, 1.0);
+        vr.step(6);
+        vr.trigger(Side::Right, 0.0);
+        vr.step(30);
+        assert!(done(&vr, Goal::HitPlate), "hit the plate at 15 m");
+    }
+
+    /// Station 5: a hand swings the house's door open; the find on the
+    /// crate inside comes to a squeeze.
+    #[test]
+    fn station_the_house() {
+        let mut vr = Vr::first_run();
+        let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
+        let find = placed(&mut vr, Placed::HouseFind);
+        let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
+        let doors: Vec<(Entity, crate::world::buildings::DoorLeaf, GlobalTransform)> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .map(|(e, d, g)| (e, *d, *g))
+            .collect();
+        let (door, leaf, gt) = doors
+            .into_iter()
+            .min_by(|a, b| {
+                a.2.translation()
+                    .distance(doorway)
+                    .total_cmp(&b.2.translation().distance(doorway))
+            })
+            .unwrap();
+        let handle = gt.transform_point(Vec3::new(leaf.0.width - 0.12, 1.0, 0.0));
+        let outside = handle - inward * 0.6;
+        vr.stand(ground(&vr, [outside.x, outside.z]), 0.0);
+        vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(60);
+        assert!(
+            vr.app
+                .world()
+                .get::<crate::world::buildings::Door>(door)
+                .unwrap()
+                .open
+        );
+        assert!(done(&vr, Goal::OpenDoor), "the door counted");
+        // In over the threshold, to the crate.
+        let inside = doorway + inward * 0.4;
+        vr.stand(Vec3::new(inside.x, doorway.y, inside.z), 0.0);
+        vr.step(20);
+        take(&mut vr, Side::Right, find);
+        assert!(done(&vr, Goal::Search), "the find counted");
+    }
+
+    /// Station 6: a dressing in hand, the face button.
+    #[test]
+    fn station_first_aid() {
+        let mut vr = Vr::first_run();
+        let feet = ground(&vr, [2.0, 8.0]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        let d = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
+        );
+        vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
+        take(&mut vr, Side::Right, d);
+        vr.primary(Side::Right, true);
+        vr.step(3);
+        vr.primary(Side::Right, false);
+        vr.step(3);
+        assert!(done(&vr, Goal::Dressing), "the dressing counted");
+    }
+
+    /// Station 7: walk into the shimmer and the driver warns you; from its
+    /// edge, point and flick the stone out of it.
+    #[test]
+    fn station_the_shimmer() {
+        let mut vr = Vr::first_run();
+        let heart = crate::onboarding::SHIMMER_AT;
+        let r = crate::onboarding::SHIMMER_R;
+        vr.step(30);
+        let stone = placed(&mut vr, Placed::Stone);
+        // Too close.
+        vr.stand(ground(&vr, [heart[0] - r * 0.6, heart[1]]), 0.0);
+        vr.step(10);
+        assert!(said(&vr, "Too close"), "warned");
+        // Back to the edge, facing in (+X).
+        let feet = ground(&vr, [heart[0] - r - 0.8, heart[1]]);
+        vr.stand(feet, -std::f32::consts::FRAC_PI_2);
+        vr.step(60);
+        flick(
+            &mut vr,
+            Side::Right,
+            feet + Vec3::new(0.25, 1.2, 0.2),
+            stone,
+        );
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(stone), "caught");
+        assert!(done(&vr, Goal::Artifact));
+    }
+
+    /// Station 8: a fingertip on the PUSH ME card's button.
+    #[test]
+    fn station_buttons() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        let mut vr = Vr::first_run();
+        let st = &crate::onboarding::STATIONS[7];
+        vr.stand(
+            ground(&vr, [st.at[0] + 0.8, st.at[1]]),
+            std::f32::consts::FRAC_PI_2,
+        );
+        vr.step(10);
+        let target = card(&mut vr, OnboardCard::Push);
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(b, _)| b.target == target)
+            .map(|(_, gt)| gt)
+            .expect("a button on it");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..=20 {
+            vr.move_hand(
+                Side::Right,
+                tip_at(0.08 - k as f32 * (0.08 - CAP + 0.012) / 20.0),
+            );
+            vr.step(1);
+        }
+        vr.step(3);
+        assert!(done(&vr, Goal::Button), "the push counted");
+    }
+
+    /// Station 9: radio in hand at the north post, the face button; the
+    /// truck comes round in seconds; the cord in its bed ends the yard.
+    #[test]
+    fn station_going_home() {
+        let _restarts = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::take_restart();
+        let mut vr = Vr::first_run();
+        // Everything else done, as if walked through.
+        {
+            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+            o.done = crate::onboarding::all_goals()
+                .filter(|g| !matches!(g, Goal::CallTruck | Goal::PullCord))
+                .collect();
+        }
+        let st = &crate::onboarding::STATIONS[8];
+        let feet = ground(&vr, [st.at[0], st.at[1] + 1.5]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        let radio = vr.spawn(
+            "radio",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(radio)
+            .insert(RigidBody::Static);
+        take(&mut vr, Side::Right, radio);
+        vr.primary(Side::Right, true);
+        vr.step(3);
+        vr.primary(Side::Right, false);
+        vr.step(3);
+        assert!(done(&vr, Goal::CallTruck), "the call counted");
+        vr.step(((crate::onboarding::HURRY + 1.0) * 90.0) as usize);
+        assert!(
+            matches!(
+                vr.app.world().resource::<crate::raid::Raid>().phase,
+                crate::raid::Phase::TruckWaiting { .. }
+            ),
+            "the truck's here"
+        );
+        let truck = truck_pose(&mut vr);
+        assert!(
+            truck.translation.xz().distance(feet.xz()) < 25.0,
+            "at the north post"
+        );
+        in_the_bed(&mut vr);
+        let pull = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &Pressable, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(_, p, _)| **p == Pressable::BellPull)
+            .map(|(e, _, g)| (e, *g))
+            .unwrap();
+        let toggle = pull.1.transform_point(Vec3::new(0.0, -0.26, 0.0));
+        vr.hand(Side::Left, toggle, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert!(done(&vr, Goal::PullCord));
+        assert!(ob(&vr).finished());
+        let to = crate::take_restart().expect("on to the Zone");
+        assert_eq!(to.map, "marrow_creek");
+    }
+
+    /// The cord within reach of where you start asks before it ends the
+    /// yard: one pull is a question, a second goes.
+    #[test]
+    fn an_early_cord_asks_first() {
+        let _restarts = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::take_restart();
+        let mut vr = Vr::first_run();
+        in_the_bed(&mut vr);
+        let pull = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &Pressable, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(_, p, _)| **p == Pressable::BellPull)
+            .map(|(_, _, g)| *g)
+            .unwrap();
+        let toggle = pull.transform_point(Vec3::new(0.0, -0.26, 0.0));
+        let tug = |vr: &mut Vr| {
+            vr.hand(Side::Left, toggle, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(Side::Left, 1.0);
+            vr.step(3);
+            vr.grip(Side::Left, 0.0);
+            vr.step(3);
+        };
+        tug(&mut vr);
+        assert!(crate::take_restart().is_none(), "one pull only asks");
+        assert!(said(&vr, "Pull again"));
+        tug(&mut vr);
+        assert!(crate::take_restart().is_some(), "the second goes");
+    }
+
+    /// A station's SKIP card (squeezed) passes it and lights the next; the
+    /// board's START OVER puts you back at the crate. Boards say the keys in
+    /// flat mode and the controls in a headset.
+    #[test]
+    fn skip_start_over_and_the_prompts() {
+        let mut vr = Vr::first_run();
+        vr.step(5);
+        let skip = card(&mut vr, OnboardCard::Skip(2));
+        take_card(&mut vr, skip);
+        assert!(done(&vr, Goal::FarGrab) && ob(&vr).skipped.contains(&Goal::FarGrab));
+        assert_eq!(lamps(&mut vr)[2], Lamp::Done);
+        let restart = card(&mut vr, OnboardCard::StartOver);
+        take_card(&mut vr, restart);
+        assert!(ob(&vr).done.is_empty());
+        assert_eq!(lamps(&mut vr)[0], Lamp::Lit);
+
+        let text = |vr: &mut Vr| {
+            vr.app
+                .world_mut()
+                .query::<(
+                    &crate::onboarding::StationSign,
+                    &crate::raid::bench::ScreenText,
+                )>()
+                .iter(vr.app.world())
+                .find(|(s, _)| s.0 == 0)
+                .map(|(_, t)| t.text.clone())
+                .unwrap()
+        };
+        vr.step(2);
+        assert!(text(&mut vr).contains("Squeeze GRIP"), "{}", text(&mut vr));
+        vr.app.insert_resource(RigDriver::Flat);
+        vr.step(2);
+        assert!(text(&mut vr).contains("Press E"), "{}", text(&mut vr));
+    }
+
+    /// Walk up to a card and squeeze it.
+    fn take_card(vr: &mut Vr, card: Entity) {
+        let p = at(vr, card);
+        let n = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(card)
+            .unwrap()
+            .rotation()
+            * Vec3::Z;
+        vr.stand(ground(vr, [p.x + n.x * 0.5, p.z + n.z * 0.5]), 0.0);
+        vr.hand(Side::Right, p, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
     }
 }

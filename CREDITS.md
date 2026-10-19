@@ -41,6 +41,7 @@ it. Thirty seconds now versus archaeology later.
 | `assets/textures/foliage/birch_leaves/` | Composited by `scripts/fetch_assets.py` from ambientCG `LeafSet014` <https://ambientcg.com/a/LeafSet014> and `LeafSet007` <https://ambientcg.com/a/LeafSet007>; twigs procedural | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/foliage/fern/` | Poly Haven `fern_02` — <https://polyhaven.com/a/fern_02> | Rob Tuytel, Rico Cilliers | CC0 1.0 | 2026-10 |
 | `assets/textures/sky/overcast_soil_2k.hdr` | Poly Haven `overcast_soil` (2k HDR, unmodified) — <https://polyhaven.com/a/overcast_soil> | Sergej Majboroda | CC0 1.0 | 2026-10 |
+| `assets/audio/ui/chime_*.ogg` | Generated procedurally by `scripts/make_chimes.py` (no third-party source) | this project | AGPL-3.0-or-later (project's own) | 2026-10 |
 | `assets/audio/footsteps/grass_*.ogg` | Freesound "Footsteps_Mountain_Boots_Grass_Mono.wav" — <https://freesound.org/s/556042/> | Nox_Sound | CC0 1.0 | 2026-10 |
 | `assets/audio/footsteps/grass_*.ogg` | Freesound "Hiking Boot Footsteps on Grass" — <https://freesound.org/s/521587/> | Fission9 | CC0 1.0 | 2026-10 |
 | `assets/audio/footsteps/gravel_*.ogg` | Freesound "Footsteps_Mountain_Boots_Gravel_Mono.wav" — <https://freesound.org/s/556002/> | Nox_Sound | CC0 1.0 | 2026-10 |

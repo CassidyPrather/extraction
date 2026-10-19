@@ -95,6 +95,10 @@ What changed, and worth a comment each:
   an amber push button at its right: point your index finger (trigger
   off) and push it in. It clicks once and the controller ticks. Gripping
   the card still works.
+- **The training yard** is stations to do, not signs to read (below,
+  "The yard and the camp").
+- **Loading in VR.** A magazine is loaded by touching a box of rounds to
+  it, one in each hand (before, only flat mode could load one).
 - **Text.** Signposts are bigger, and every panel is checked to read
   from where you'd stand (a signpost from 3 m, a card from 1 m). Mark
   anything you still can't read, with how far away you were.
@@ -168,13 +172,37 @@ If any of this fails, stop and send the log: everything else depends on it.
 ### 1b. The yard and the camp (10 minutes)
 
 - A first launch (no career yet) opens in the **training yard**: a small
-  fenced valley with nothing hunting you and nothing kept. A gravel track
-  runs north from the truck past signed stations (kit, pockets, loading
-  and the targets, searching, staying alive, the machines, artifacts,
-  calling the truck). Do the stations; mark a sign you couldn't read or
-  that told you wrong. Pull the cord in the truck when you're done, or
-  press the card by the tailgate to skip: either way the game reopens in
-  Marrow Creek.
+  fenced valley with nothing hunting you and nothing kept. You stand in
+  the truck bed; a board hangs over the crate in front of you, with a
+  lit lantern beside it, saying what to do first ("Reach into the crate.
+  Squeeze GRIP."). The driver says the same on your wrist. That's the
+  whole start: there is nothing to read on the way.
+- The yard is **nine stations** up the gravel track. Each is a post
+  with a lantern and a board, and asks for one or two things:
+
+  | # | Station | Do |
+  | - | - | - |
+  | 1 | Your kit (in the truck) | take the pistol and the radio out of the crate |
+  | 2 | Put it away | holster or pocket something; let go of something over your shoulder (the pack) |
+  | 3 | Out of reach | a box on top of tall crates: point, squeeze, flick back |
+  | 4 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate |
+  | 5 | The house | open the door by its edge; take the dressing off the crate inside |
+  | 6 | First aid | use a dressing: hold it, press A (or X) |
+  | 7 | The shimmer | a burner beside the track with a stone in it: don't step in (the driver shouts if you get close); far-grab the stone from the edge |
+  | 8 | Buttons | push the amber button with a fingertip |
+  | 9 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, pull the cord |
+
+  The lantern is lit (warm yellow) on the station you're on, green on
+  the ones done, dark ahead. Each step ticks off on its board with a
+  bell and a buzz in both hands; finishing a station rings twice and the
+  driver says where the next one is. Every board says the control to use
+  (in flat mode, the key). **Mark** any board you couldn't read, any step
+  you did that didn't tick, and anywhere you didn't know where to go.
+- **Skipping.** Every post has a SKIP card; the board by the tailgate
+  lists all nine with START OVER and ON TO THE ZONE (skips the lot). The
+  truck's cord ends the yard too, but before the last station it asks
+  first ("Pull again and we're off"): it's within reach of where you
+  start.
 - Every later launch opens at the **camp**: you stand at a table behind
   the truck, a board on it with your career and cards to press (TRAINING
   YARD, NEW CAREER (press twice), the comfort cards, PACK UP to quit).
@@ -193,8 +221,9 @@ you queasy — climbing, the zipline, being knocked about, swimming.
 
 - The driver's note (left wall) reads; the logbook and the driver's
   request card beside it read.
-- Take the kit from the crate. Load the pistol: magazine out, rounds into
-  it from the box, magazine in, rack the slide. Then the rifle and the
+- Take the kit from the crate. Load the pistol: magazine out (A on the
+  gun hand drops it), rounds into it (touch the box of rounds to it),
+  magazine in, rack the slide, thumbstick click for the safety. Then the rifle and the
   shotgun if you have them. Does it feel like Into the Radius? Where does
   a hand fight you?
 - Reach over a shoulder for the backpack; let go of it in front of you to
@@ -264,8 +293,8 @@ whether the ending felt like one.
 - Some models are still simple, the hall's lathes among them.
 - The camp, the yard and the keys are new and have never been played
   through end to end by a person: expect rough edges in them first.
-- To see the yard again after skipping it, delete `trained` from the
-  data folder (or press NEW CAREER at camp). For a first launch without
+- To see the yard again after skipping it, press TRAINING YARD on the
+  camp's board (or START OVER on the yard's own board by the tailgate). For a first launch without
   touching your own career, run with `--data-dir` pointing at an empty
   folder.
 - Drones still decide most deaths in the sims; whether that's right is

@@ -447,6 +447,57 @@ pub fn apply_combines(
     }
 }
 
+/// How close (m) a box of rounds and a magazine held in your two hands
+/// have to come for the rounds to go in.
+pub const TOUCH: f32 = 0.12;
+
+/// VR: bring a box of rounds to a magazine, one in each hand, and the rounds
+/// go in (what flat mode's C does). Without it a headset could never load a
+/// magazine: the yard's sign said to, and nothing listened.
+fn touch_to_combine(
+    driver: Res<crate::rig::RigDriver>,
+    hands: Query<(&RigHand, &Hand, &ChildOf)>,
+    items: Query<(&Item, &GlobalTransform)>,
+    catalog: Res<Catalog>,
+    mut combine: MessageWriter<Combine>,
+    mut touching: Local<std::collections::HashSet<(Entity, Entity)>>,
+) {
+    if *driver != crate::rig::RigDriver::Xr {
+        return;
+    }
+    let mut now = std::collections::HashSet::new();
+    for (rh, h, owner) in &hands {
+        if rh.side != Side::Right {
+            continue;
+        }
+        let Some(a) = h.holding else { continue };
+        let other = hands
+            .iter()
+            .find(|(o, _, p)| o.side == Side::Left && p.parent() == owner.parent())
+            .and_then(|(_, oh, _)| oh.holding);
+        let Some(b) = other else { continue };
+        let (Ok((ia, ga)), Ok((ib, gb))) = (items.get(a), items.get(b)) else {
+            continue;
+        };
+        let (da, db) = (catalog.get(ia.kind()), catalog.get(ib.kind()));
+        let loads = |ammo: &extraction_core::items::ItemDef,
+                     mag: &extraction_core::items::ItemDef| {
+            ammo.category == Category::Ammo
+                && matches!((&ammo.cartridge, &mag.magazine), (Some(c), Some(m)) if *c == m.cartridge)
+        };
+        if !(loads(da, db) || loads(db, da)) {
+            continue;
+        }
+        if ga.translation().distance(gb.translation()) < TOUCH {
+            now.insert((a, b));
+            if !touching.contains(&(a, b)) {
+                combine.write(Combine { a, b });
+            }
+        }
+    }
+    *touching = now;
+}
+
 fn release_and_despawn(commands: &mut Commands, item: Entity, hands: &Query<(Entity, &Hand)>) {
     for (h, hand) in hands.iter() {
         if hand.holding == Some(item) {
@@ -468,7 +519,10 @@ impl Plugin for CombinePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Combine>().add_systems(
             FixedUpdate,
-            (run_macros.after(super::triggers), apply_combines),
+            (
+                run_macros.after(super::triggers),
+                (touch_to_combine, apply_combines).chain(),
+            ),
         );
     }
 }

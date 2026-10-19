@@ -23,12 +23,18 @@ pub struct UseItem {
 #[derive(Component)]
 pub struct LightOn;
 
+/// Items used this frame (consumed ones are gone after it).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct UsageSystems;
+
 pub struct UsagePlugin;
 
 impl Plugin for UsagePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<UseItem>()
-            .add_systems(Update, (vr_use_button, use_items).chain());
+        app.add_message::<UseItem>().add_systems(
+            Update,
+            (vr_use_button, use_items.in_set(UsageSystems)).chain(),
+        );
     }
 }
 

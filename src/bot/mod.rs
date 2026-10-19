@@ -75,6 +75,12 @@ pub enum Task {
         item: Entity,
         side: Side,
     },
+    /// Reach for this item from where the bot stands, without walking up
+    /// to it (what a far grab does: something up high, or in an anomaly).
+    GrabFromHere {
+        item: Entity,
+        side: Side,
+    },
     /// Walk within reach of a pressable (bell pull, button) and press it.
     Press(Entity),
     /// Walk to a door and press it if it's shut; done when it's open.
@@ -641,6 +647,30 @@ fn run_tasks(
                         bot.pending = true;
                         bot.retry = 0.0;
                     }
+                }
+            }
+            Task::GrabFromHere { item, side } => {
+                bot.walk = None;
+                if hand(side).and_then(|h| h.holding) == Some(item) {
+                    bot.next();
+                    continue;
+                }
+                if let Ok((gt, _)) = ext.placed.get(item) {
+                    bot.look = gt.translation();
+                }
+                bot.retry += dt;
+                if !bot.pending || bot.retry > 1.0 {
+                    actions.write(HandAction::Grab {
+                        player,
+                        side,
+                        item,
+                        point: None,
+                    });
+                    bot.pending = true;
+                    bot.retry = 0.0;
+                }
+                if bot.elapsed > 5.0 {
+                    bot.next();
                 }
             }
             Task::Press(item) => {

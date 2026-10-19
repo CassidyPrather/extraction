@@ -18,6 +18,7 @@ pub mod interact;
 pub mod items;
 pub mod launch;
 pub mod models;
+pub mod onboarding;
 mod perf;
 pub mod persist;
 pub mod player;
@@ -67,6 +68,7 @@ impl Plugin for GamePlugin {
                 persist::PersistPlugin,
                 anomaly::AnomalyPlugin,
                 gadgets::GadgetsPlugin,
+                onboarding::OnboardingPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
@@ -95,6 +97,7 @@ impl Plugin for ClientPlugin {
             gadgets::visuals::GadgetVisualsPlugin,
             models::ModelsPlugin,
         ))
+        .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
