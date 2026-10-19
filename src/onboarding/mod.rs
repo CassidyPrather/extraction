@@ -114,7 +114,7 @@ impl Goal {
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
-            (Goal::Crouch, false) => "Pull the right stick down\n(again to stand).",
+            (Goal::Crouch, false) => "Squat down for real (the\nstick only slows you).",
             (Goal::Crouch, true) => "Press C (again to stand).",
             (Goal::Run, false) => "Click the left stick and\npush it forward.",
             (Goal::Run, true) => "Hold Shift and W.",
@@ -283,9 +283,8 @@ pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
 pub const STUMP_H: f32 = 0.38;
 /// A beam at head height between two stacks of crates on the track, on
-/// the way to the gate: something you duck under without being asked. The
-/// beam itself has no collider (the body's capsule doesn't shrink when you
-/// crouch, so a solid one would wall the track off); the stacks do.
+/// the way to the gate: you can only get under it ducking (the body's
+/// height follows the head's), and you aren't told to.
 pub const BEAM_AT: [f32; 2] = [0.0, 79.0];
 /// The beam's underside, and the gap between the stacks.
 pub const BEAM_CLEAR: f32 = 1.35;
@@ -824,6 +823,11 @@ fn setup(
                 Vec3::new(off, BEAM_STACK.y * 0.5, 0.0),
                 Quat::IDENTITY,
                 Collider::cuboid(BEAM_STACK.x, BEAM_STACK.y, BEAM_STACK.z),
+            ),
+            (
+                Vec3::Y * (BEAM_CLEAR + 0.08),
+                Quat::IDENTITY,
+                Collider::cuboid(BEAM_GAP + 1.5, 0.16, 0.16),
             ),
         ]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
