@@ -85,6 +85,10 @@ MATERIALS = {
     "Plaster": ((0.62, 0.6, 0.55), 0.0, 0.9, None),
     "Concrete": ((0.45, 0.45, 0.43), 0.0, 0.85, None),
     "Zinc": ((0.5, 0.52, 0.53), 0.9, 0.45, None),
+    # The gloves (art/hands; src/models.rs maps them).
+    "Glove": ((0.30, 0.29, 0.23), 0.0, 0.9, None),
+    "Leather": ((0.33, 0.27, 0.2), 0.0, 0.7, None),
+    "Padding": ((0.17, 0.17, 0.16), 0.0, 0.75, None),
 }
 
 
