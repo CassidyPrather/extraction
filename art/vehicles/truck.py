@@ -234,15 +234,18 @@ for sx in (-1, 1):
     ch.box((0.4, 0.62, 0.012), (sx * 1.0, 0.57, 2.02), "Rubber")
     ch.box((0.42, 0.04, 0.04), (sx * 1.0, 0.9, 2.02), "Paint")
 # Rear steps: a hanging ladder whose treads are the step colliders' tops.
-stringer = [(1.80, 1.0), (1.80, 0.745), (2.10, 0.745), (2.10, 0.375), (2.40, 0.375), (2.40, 0.30),
-            (2.16, 0.30), (1.86, 0.62), (1.86, 0.96)]
+# Each stringer is a straight slanted bar the treads' back ends sit on (a
+# stepped outline here once crossed itself, and its cap's triangles
+# z-fought in the headset).
+stringer = [(1.81, 1.0), (1.89, 1.0), (2.45, 0.30), (2.37, 0.30)]
 for sx in (-1, 1):
     ch.prism(stringer, sx * 0.47 - 0.012, sx * 0.47 + 0.012, "Paint", axis="x")
 for y, z0, z1 in ((0.74, 1.8, 2.1), (0.37, 2.1, 2.4)):
     ch.box((0.9, 0.025, z1 - z0), (0.0, y - 0.0125, (z0 + z1) / 2), "Iron", bevel=0.004, segs=1)
-    ch.box((0.9, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.01), "Paint")
+    # The nosing lip, a hair narrower and proud of the tread's edge.
+    ch.box((0.894, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.007), "Paint")
     for k in range(5):
-        ch.box((0.1, 0.004, 0.012), (-0.32 + k * 0.16, y + 0.001, (z0 + z1) / 2), "Paint")
+        ch.box((0.1, 0.006, 0.012), (-0.32 + k * 0.16, y + 0.003, (z0 + z1) / 2), "Paint")
 
 # =============================================================================
 # Cab and bonnet
@@ -368,11 +371,13 @@ for i in range(n):
     bed.box((w - 0.008, 0.04, 3.6), (x, FLOOR - 0.02 + jitter, 0.0), "Boards", bevel=0.004,
             segs=1)
 # Steel angle round the floor, sub-frame and bearers under it.
+# (Its top just under the planks', its ends inside the sides': flush faces
+# z-fight.)
 for sx in (-1, 1):
-    bed.box((0.04, 0.12, 3.64), (sx * 1.16, FLOOR - 0.06, 0.0), "Paint")
-    bed.box((0.12, 0.14, 3.6), (sx * 0.46, 0.93, 0.0), "Paint")
+    bed.box((0.04, 0.12, 3.63), (sx * 1.16, FLOOR - 0.068, 0.0), "Paint")
+    bed.box((0.12, 0.14, 3.58), (sx * 0.46, 0.93, 0.0), "Paint")
 for z in (-1.79, 1.8):
-    bed.box((2.36, 0.12, 0.04), (0.0, FLOOR - 0.06, z), "Paint")
+    bed.box((2.35, 0.11, 0.04), (0.0, FLOOR - 0.069, z), "Paint")
 # (Full width only where no tyre comes up under the floor.)
 for z in (-1.75, -0.55):
     bed.box((2.28, 0.07, 0.07), (0.0, 1.025, z), "Paint")
@@ -385,9 +390,10 @@ for sx in (-1, 1):
     for k in range(3):
         y = FLOOR + 0.09 + k * 0.18
         bed.box((0.04, 0.17, 3.56), (sx * 1.14, y, 0.0), "Boards", bevel=0.005, segs=1)
-    bed.box((0.06, 0.03, 3.62), (sx * 1.14, FLOOR + 0.55, 0.0), "Paint", bevel=0.005, segs=1)
+    bed.box((0.06, 0.03, 3.6), (sx * 1.14, FLOOR + 0.55, 0.0), "Paint", bevel=0.005, segs=1)
     for z in STAKES:
-        bed.box((0.025, 0.56, 0.06), (sx * 1.172, FLOOR + 0.27, z), "Paint", bevel=0.004, segs=1)
+        # (Clear of the hoop legs inside and the canvas outside.)
+        bed.box((0.03, 0.56, 0.06), (sx * 1.165, FLOOR + 0.27, z), "Paint", bevel=0.004, segs=1)
     # Hinges at the bottom, latches at the ends, rope hooks along the top.
     for z in (-1.3, -0.45, 0.45, 1.3):
         bed.cyl(0.018, -0.07, 0.07, "Iron", segs=8, xf=T(sx * 1.175, FLOOR + 0.0, z))
@@ -402,7 +408,8 @@ for sx in (-1, 1):
 for k in range(3):
     y = FLOOR + 0.09 + k * 0.18
     bed.box((2.24, 0.17, 0.04), (0.0, y, -1.8), "Boards", bevel=0.005, segs=1)
-bed.box((2.3, 0.03, 0.06), (0.0, FLOOR + 0.55, -1.8), "Paint", bevel=0.005, segs=1)
+# (Thinner than the side caps it meets, so their faces don't coincide.)
+bed.box((2.3, 0.022, 0.06), (0.0, FLOOR + 0.55, -1.8), "Paint", bevel=0.005, segs=1)
 # Floor tie-down rings, recessed.
 for x in (-0.8, 0.8):
     for z in (-1.4, 1.4):
@@ -514,7 +521,8 @@ canvas_skin(cv, -1.83, 1.83)
 # Front wall of canvas, a flat panel inside the outline.
 front = canopy_profile(0.004)
 front = [(x, y) for x, y in front] + [(front[-1][0], FLOOR + 0.36)]
-cv.prism(front, -1.832, -1.815, "Canvas", axis="z")
+# (Clear of the skin's end and the bed's top cap at z -1.83.)
+cv.prism(front, -1.846, -1.837, "Canvas", axis="z")
 # A rope lacing hem along the bottom edge of each side.
 for sx in (-1, 1):
     cv.box((0.02, 0.05, 3.66), (sx * 1.203, FLOOR + 0.38, 0.0), "Canvas", bevel=0.008, segs=1)
@@ -531,7 +539,7 @@ for z in HOOPS:
              xf=T(0, 0, z) @ RY(math.pi / 2))
     # Stake pockets the hoop legs drop into.
     for sx in (-1, 1):
-        cv.box((0.05, 0.12, 0.06), (sx * 1.15, FLOOR + 0.58, z), "Paint")
+        cv.box((0.05, 0.12, 0.07), (sx * 1.15, FLOOR + 0.58, z), "Paint")
 # Roof slats (timber) and side slats lashed to the hoops.
 for x in (-0.6, 0.0, 0.6):
     cv.box((0.07, 0.025, 3.6), (x, 3.118, 0.0), "Boards", bevel=0.005, segs=1)
