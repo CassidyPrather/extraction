@@ -326,7 +326,7 @@ fn stream_cover(
                 base: StandardMaterial {
                     base_color: Color::srgb(0.85, 0.9, 0.78),
                     base_color_texture: Some(fern_tex),
-                    alpha_mode: AlphaMode::Mask(0.45),
+                    alpha_mode: AlphaMode::AlphaToCoverage,
                     perceptual_roughness: 0.8,
                     reflectance: 0.2,
                     double_sided: true,

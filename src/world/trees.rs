@@ -187,7 +187,9 @@ fn spawn_forests(
             materials.add(StandardMaterial {
                 base_color: tint,
                 base_color_texture: Some(tex),
-                alpha_mode: AlphaMode::Mask(0.45),
+                // Alpha to coverage: the 4x MSAA smooths the cards' cut
+                // edges, where an alpha test leaves them to crawl.
+                alpha_mode: AlphaMode::AlphaToCoverage,
                 perceptual_roughness: 0.8,
                 reflectance: 0.2,
                 double_sided: true,
