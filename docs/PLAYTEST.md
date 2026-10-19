@@ -184,7 +184,7 @@ If any of this fails, stop and send the log: everything else depends on it.
   | - | - | - |
   | 1 | Your kit (in the truck) | take the pistol and the radio out of the crate |
   | 2 | Put it away | holster or pocket something; let go of something over your shoulder (the pack) |
-  | 3 | Out of reach | a box on top of tall crates: point, squeeze, flick back |
+  | 3 | Out of reach | a box on a crate in a fenced pen: point, squeeze, flick back |
   | 4 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate |
   | 5 | The house | open the door by its edge; take the dressing off the crate inside |
   | 6 | First aid | use a dressing: hold it, press A (or X) |

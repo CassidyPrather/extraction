@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod hints;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -78,7 +79,7 @@ impl Goal {
             Goal::TakeRadio => "Take the radio",
             Goal::PutAway => "Holster or pocket it",
             Goal::Pack => "Something in the pack",
-            Goal::FarGrab => "Fetch the box up top",
+            Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
             Goal::SeatMag => "Mag into the pistol",
             Goal::Rack => "Rack the slide",
@@ -104,7 +105,7 @@ impl Goal {
             (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
             (Goal::FarGrab, false) => "Point at it. Squeeze GRIP.\nFlick your hand back.",
-            (Goal::FarGrab, true) => "Look up at it. Press E.",
+            (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
             (Goal::FillMag, false) => "Mag in one hand, box in\nthe other. Touch them.",
             (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press C.",
             (Goal::SeatMag, false) => "Pistol in one hand. Push\nthe mag up into the grip.",
@@ -144,6 +145,9 @@ pub struct Station {
     pub goals: &'static [Goal],
     /// Where it is, for the driver sending you on to it.
     pub where_: &'static str,
+    /// What's worth knowing, shown once it's done (you have time to read
+    /// then): what the old yard's signs said.
+    pub tip: &'static str,
 }
 
 /// The stations, in order, from the truck north up the track.
@@ -154,6 +158,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::TakePistol, Goal::TakeRadio],
         where_: "the crate in the truck",
+        tip: "Everything you own rides\nin that crate between raids.",
     },
     Station {
         title: "PUT IT AWAY",
@@ -161,18 +166,20 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::PutAway, Goal::Pack],
         where_: "the lamp by the tailgate",
+        tip: "Weight slows you.\nCarry what you'll use.",
     },
     Station {
         title: "OUT OF REACH",
         at: [-3.0, 83.5],
         rot: 0.0,
         goals: &[Goal::FarGrab],
-        where_: "the lamp by the tall crates",
+        where_: "the lamp by the pen",
+        tip: "Works on anything loose\nup to five metres off.",
     },
     Station {
         title: "THE RANGE",
-        at: [-14.0, 46.0],
-        rot: 0.0,
+        at: [-17.0, 47.0],
+        rot: 315.0,
         goals: &[
             Goal::FillMag,
             Goal::SeatMag,
@@ -181,6 +188,7 @@ pub const STATIONS: &[Station] = &[
             Goal::HitPlate,
         ],
         where_: "the range, left past the gate",
+        tip: "Out there, shots bring the\nmachines. Pick your moment.",
     },
     Station {
         title: "THE HOUSE",
@@ -188,6 +196,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::OpenDoor, Goal::Search],
         where_: "the house on the right",
+        tip: "Scrap and parts go to the\nbench in the truck.",
     },
     Station {
         title: "FIRST AID",
@@ -195,6 +204,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::Dressing],
         where_: "the lamp on the right",
+        tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
     },
     Station {
         title: "THE SHIMMER",
@@ -202,6 +212,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
+        tip: "Throw a bolt in first. Carry\nmany stones and the\nmachines feel them too.",
     },
     Station {
         title: "BUTTONS",
@@ -209,6 +220,7 @@ pub const STATIONS: &[Station] = &[
         rot: 270.0,
         goals: &[Goal::Button],
         where_: "the lamp on the left",
+        tip: "Any card with a button\ndoes something: settings,\nthe route, terminals.",
     },
     Station {
         title: "GOING HOME",
@@ -216,6 +228,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::CallTruck, Goal::PullCord],
         where_: "the north post, end of the track",
+        tip: "Out there the truck takes\ntwo minutes, waits five.",
     },
 ];
 
@@ -235,15 +248,16 @@ pub fn station_of(goal: Goal) -> usize {
 /// Where the training burner sits (its heart: the stone), and its size.
 pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
-/// The tall stand the far-grab box sits on, and how tall.
+/// The pen the far-grab box sits in.
 pub const FAR_STAND_AT: [f32; 2] = [-6.5, 79.5];
-pub const FAR_STAND_H: f32 = 2.45;
-/// Two wide crates, then a narrow one on top: its edge is close enough
-/// under the box that a hand pointing up from below sees the box.
-pub const FAR_STAND_LOW: f32 = 1.6;
-pub const FAR_STAND_TOP: f32 = 0.36;
+/// A crate at chest height in the middle of a fenced pen: plain to see,
+/// no way to walk up to it. (On top of a tall stack it was out of reach
+/// all right, and out of sight from below too.)
+pub const PEN_HALF: f32 = 1.8;
+pub const PEN_FENCE: f32 = 1.1;
+pub const FAR_CRATE: Vec3 = Vec3::new(0.55, 0.95, 0.55);
 /// The range's table: centre, size; the shooter stands on its south side.
-pub const RANGE_TABLE_AT: [f32; 2] = [-21.0, 42.0];
+pub const RANGE_TABLE_AT: [f32; 2] = [-25.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
 /// A crate at the last station with a spare radio on it.
 pub const HOME_CRATE_AT: [f32; 2] = [5.5, -63.0];
@@ -336,7 +350,7 @@ pub enum OnboardCard {
 /// Props the client dresses (`visuals`).
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum Prop {
-    /// The stack of crates the far-grab box sits on.
+    /// The fenced pen the far-grab box sits in.
     FarStand,
     /// The range's table.
     RangeTable,
@@ -371,7 +385,7 @@ pub const CHECKLIST: Vec2 = Vec2::new(0.8, 1.0);
 pub const BOARD_Y: f32 = 1.55;
 pub const LAMP_Y: f32 = 2.32;
 pub const SKIP_CARD: Vec2 = Vec2::new(0.22, 0.09);
-pub const PUSH_CARD: Vec2 = Vec2::new(0.3, 0.12);
+pub const PUSH_CARD: Vec2 = Vec2::new(0.36, 0.15);
 
 pub struct OnboardingPlugin;
 
@@ -379,7 +393,11 @@ impl Plugin for OnboardingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
-            .add_systems(PostStartup, (setup, bot_in_the_bed).run_if(in_yard))
+            .add_plugins(hints::HintsPlugin)
+            .add_systems(
+                PostStartup,
+                (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
+            )
             .add_systems(
                 Update,
                 (
@@ -441,6 +459,23 @@ fn paper(text: String, size: Vec2) -> ScreenText {
         size,
         style: ScreenStyle::Paper,
     }
+}
+
+/// `EXTRACTION_YARD_AT=N` (a dev aid, for screenshots of station N lit):
+/// the stations before N start done.
+fn dev_start_at(mut ob: ResMut<Onboarding>) {
+    let Some(n) = std::env::var("EXTRACTION_YARD_AT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    else {
+        return;
+    };
+    ob.done = STATIONS
+        .iter()
+        .take(n.saturating_sub(1))
+        .flat_map(|s| s.goals.iter().copied())
+        .collect();
+    ob.greeted = true;
 }
 
 /// Posts, boards, the range table, the far stand, the house's find, the
@@ -515,7 +550,7 @@ fn setup(
         if STATIONS[i].goals.contains(&Goal::Button) {
             commands.spawn((
                 card(OnboardCard::Push, "PUSH ME", PUSH_CARD),
-                Transform::from_xyz(-0.3, BOARD_Y - SIGN.y * 0.5 - 0.16, 0.03),
+                Transform::from_xyz(-0.27, BOARD_Y - SIGN.y * 0.5 - 0.17, 0.03),
                 ChildOf(post),
             ));
         }
@@ -579,33 +614,43 @@ fn setup(
         }
     };
 
-    // Out of reach: crates stacked taller than an arm, a box of rounds on
-    // top (the range wants it).
+    // Out of reach: a box of rounds (the range wants it) on a crate in a
+    // fenced pen.
     let stand = ground(&zone, FAR_STAND_AT);
+    let h = PEN_HALF;
+    let rail =
+        |at: Vec3, size: Vec3| (at, Quat::IDENTITY, Collider::cuboid(size.x, size.y, size.z));
     commands.spawn((
-        Name::new("Far stand"),
+        Name::new("Far pen"),
         Prop::FarStand,
         Transform::from_translation(stand),
         Visibility::default(),
         RigidBody::Static,
         Collider::compound(vec![
-            (
-                Vec3::Y * FAR_STAND_LOW * 0.5,
-                Quat::IDENTITY,
-                Collider::cuboid(0.7, FAR_STAND_LOW, 0.7),
+            rail(
+                Vec3::new(0.0, PEN_FENCE * 0.5, h),
+                Vec3::new(2.0 * h, PEN_FENCE, 0.08),
             ),
-            (
-                Vec3::Y * (FAR_STAND_LOW + FAR_STAND_H) * 0.5,
-                Quat::IDENTITY,
-                Collider::cuboid(FAR_STAND_TOP, FAR_STAND_H - FAR_STAND_LOW, FAR_STAND_TOP),
+            rail(
+                Vec3::new(0.0, PEN_FENCE * 0.5, -h),
+                Vec3::new(2.0 * h, PEN_FENCE, 0.08),
             ),
+            rail(
+                Vec3::new(h, PEN_FENCE * 0.5, 0.0),
+                Vec3::new(0.08, PEN_FENCE, 2.0 * h),
+            ),
+            rail(
+                Vec3::new(-h, PEN_FENCE * 0.5, 0.0),
+                Vec3::new(0.08, PEN_FENCE, 2.0 * h),
+            ),
+            rail(Vec3::Y * FAR_CRATE.y * 0.5, FAR_CRATE),
         ]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
     let far = spawn(
         &mut commands,
         "ammo_9x18",
-        Transform::from_translation(stand + Vec3::Y * (FAR_STAND_H + 0.06)),
+        Transform::from_translation(stand + Vec3::Y * (FAR_CRATE.y + 0.04)),
     );
     if let Some(e) = far {
         commands.entity(e).insert(Placed::FarBox);
@@ -1100,13 +1145,16 @@ pub fn sign_text(ob: &Onboarding, i: usize, flat: bool) -> String {
         };
         t += &format!("{mark}{}\n", g.label());
     }
-    t += "\n";
     match next {
-        Some(g) => t += g.how(flat),
+        Some(g) => {
+            t += "\n";
+            t += g.how(flat);
+        }
         None => {
-            t += "DONE.";
+            // Done: the steps are ticked off; what's worth knowing instead.
+            t = format!("{}  {}\n\nDONE.\n\n{}", i + 1, st.title, st.tip);
             if i + 1 < STATIONS.len() {
-                t += " Follow the\nnext lamp.";
+                t += "\n\nNext: the lit lamp.";
             }
         }
     }
@@ -1315,6 +1363,10 @@ mod tests {
     /// a couple of lines, with the control named.
     #[test]
     fn instructions_are_short_and_name_the_control() {
+        for st in STATIONS {
+            assert!(st.tip.lines().count() <= 3, "{}", st.tip);
+            assert!(st.tip.lines().all(|l| l.len() <= 28), "{}", st.tip);
+        }
         for g in all_goals() {
             for flat in [false, true] {
                 let how = g.how(flat);

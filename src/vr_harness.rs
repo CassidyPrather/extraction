@@ -1236,6 +1236,14 @@ mod tests {
 
 /// The training yard's stations, each done by hand as in a headset: the
 /// yard has to notice every one through the real hand path.
+fn tests_feet(vr: &Vr) -> Vec3 {
+    vr.app
+        .world()
+        .get::<Transform>(vr.player)
+        .unwrap()
+        .translation
+}
+
 mod onboarding {
     use super::*;
     use crate::onboarding::{Goal, Lamp, OnboardCard, Onboarding, Placed, StationPost};
@@ -1464,22 +1472,35 @@ mod onboarding {
         assert!(done(&vr, Goal::Pack), "into the pack");
     }
 
-    /// Station 3: the box on top of the stand is out of reach; point,
-    /// squeeze, flick, and it's in your hand.
+    /// Station 3: the box in the pen is out of reach (the fence keeps you
+    /// off it); point, squeeze, flick, and it's in your hand.
     #[test]
     fn station_out_of_reach() {
         let mut vr = Vr::first_run();
-        let stand = crate::onboarding::FAR_STAND_AT;
-        let feet = ground(&vr, [stand[0], stand[1] + 1.6]);
+        let pen = crate::onboarding::FAR_STAND_AT;
+        let feet = ground(&vr, [pen[0], pen[1] + crate::onboarding::PEN_HALF + 0.35]);
         vr.stand(feet, 0.0);
         vr.step(60);
         let item = placed(&mut vr, Placed::FarBox);
-        let top = at(&vr, item);
-        assert!(
-            top.y - feet.y > 2.3,
-            "out of reach ({:.2} m up)",
-            top.y - feet.y
-        );
+        let box_at = at(&vr, item);
+        let reach = box_at.xz().distance(feet.xz());
+        assert!(reach > 1.5, "out of reach ({reach:.2} m off)");
+        // Walking at it gets you no closer than the fence.
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::Y;
+        vr.step(120);
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::ZERO;
+        vr.step(10);
+        let feet = super::tests_feet(&vr);
+        let reach = box_at.xz().distance(feet.xz());
+        assert!(reach > 1.5, "the fence holds you off ({reach:.2} m)");
         flick(
             &mut vr,
             Side::Right,
@@ -1890,6 +1911,27 @@ mod onboarding {
         vr.app.insert_resource(RigDriver::Flat);
         vr.step(2);
         assert!(text(&mut vr).contains("Press E"), "{}", text(&mut vr));
+    }
+
+    /// Out in a valley too: a squeeze on a pistol that's on safe gets told
+    /// how to take it off, instead of nothing happening.
+    #[test]
+    fn a_trigger_on_safe_says_why() {
+        let mut vr = Vr::new("marrow_creek");
+        let feet = ground(&vr, [0.0, 300.0]);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        let gun = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(0.15, 1.1, -0.35)),
+        );
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(10);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        assert!(said(&vr, "Safety's on. Click the stick"), "told why");
     }
 
     /// Walk up to a card and squeeze it.

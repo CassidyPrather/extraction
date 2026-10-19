@@ -265,9 +265,9 @@ impl DirectorWorld<'_, '_> {
             Goal::FarGrab => {
                 if let Some((e, at)) = self.placed(Placed::FarBox) {
                     t.extend(self.free_hands());
-                    // Down off the truck and round to the stand's front.
-                    let stand = Vec2::from(super::FAR_STAND_AT);
-                    let front = stand + Vec2::new(0.0, 1.4);
+                    // Down off the truck and round to the pen's fence.
+                    let pen = Vec2::from(super::FAR_STAND_AT);
+                    let front = pen + Vec2::new(0.0, super::PEN_HALF + 0.4);
                     t.extend(self.go(here, front, 0.4));
                     t.push(LookAt(at));
                     t.push(GrabFromHere {
