@@ -1,6 +1,8 @@
 """Gadgets: flashlight, power cell, compass, field radio, binoculars, EMP
-grenade, EMP trap, map case. Writes assets/models/items/<id>.glb for each
-(item space: see _kit.py).
+grenade, EMP trap, map case, camera drone, lead-lined case, cloak
+generator, deployable cover, climbing and zipline kits, matches, door
+wedge. Writes assets/models/items/<id>.glb for each (item space: see
+_kit.py).
 
 Built round what src/gadgets/ hangs on them:
 
@@ -11,6 +13,8 @@ Built round what src/gadgets/ hangs on them:
 - map_case: the game draws the map sheet (0.28 m square) at y 0.006,
   between the backing board and the clear sleeve.
 - binoculars: the eye goes at (0, 0, 0.1).
+- cloak_generator: like the flashlight, a power cell seats standing up at
+  (0, 0, 0.02), here in the open bay between the base and the emitter.
 """
 
 import math
@@ -19,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cell_bay, cube, item, wanted
+from _kit import ALONG_X, UP, cell_bay, cube, item, panel, ring, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -94,12 +98,17 @@ def radio():
     y0, y1 = -0.085, 0.045
     body = fillet([(-W / 2, y0), (W / 2, y0), (W / 2, y1), (-W / 2, y1)], 0.006, 3)
     p.prism(body, -D / 2, D / 2, "Paint", axis="z", bevel=0.004, segs=2)
-    # Speaker grille and a little tuning window on the front (+Z).
+    # Speaker grille and a little tuning window on the front (+Z), the
+    # window set flush into a recess cut for it.
     for k in range(6):
         p.box((0.04, 0.003, 0.002), (0.0, -0.06 + k * 0.007, D / 2 + 0.0005), "Black")
-    p.box((0.046, 0.022, 0.002), (0.0, 0.02, D / 2), "Black", bevel=0.001, segs=1)
-    p.box((0.04, 0.016, 0.001), (0.0, 0.02, D / 2 + 0.0012), "Cream")
-    p.box((0.0012, 0.014, 0.0008), (0.006, 0.02, D / 2 + 0.002), "LampRed")
+    recess = Part("recess")
+    recess.box((0.046, 0.022, 0.009), (0.0, 0.02, D / 2), "Black")
+    p.cut(recess)
+    window = Part("window")
+    panel(window, "z", -0.023, 0.023, 0.009, 0.031, D / 2 - 0.0042, D / 2 + 0.0004, "Black",
+          [(-0.02, 0.02, 0.012, 0.028, "Cream")])
+    window.box((0.0012, 0.014, 0.0008), (0.006, 0.02, D / 2 + 0.0008), "LampRed")
     # Knobs on top, the rubber antenna, push-to-talk on the side.
     for x, r in ((-0.018, 0.007), (0.0, 0.0055)):
         p.cyl(r, y1, y1 + 0.012, "Black", segs=14, xf=T(x, 0, 0) @ UP, chamfer=0.0015)
@@ -111,7 +120,7 @@ def radio():
     # Belt clip on the back.
     p.box((0.02, 0.06, 0.003), (0.0, 0.0, -D / 2 - 0.0035), "Steel", bevel=0.001, segs=1)
     p.box((0.02, 0.006, 0.005), (0.0, 0.028, -D / 2 - 0.002), "Steel")
-    return [p]
+    return [p, window]
 
 
 # --- Binoculars ---------------------------------------------------------------------------
@@ -207,14 +216,14 @@ def map_case():
     # Backing board under the map (the sheet is at y 0.006, 0.28 m square).
     board = fillet([(-0.15, -0.15), (0.15, -0.15), (0.15, 0.15), (-0.15, 0.15)], 0.012, 3)
     p.prism(board, -0.004, 0.0045, "Olive", axis="y", bevel=0.0015, segs=1)
-    # Clear sleeve over it, a stitched border round the window.
-    p.prism(fillet([(-0.142, -0.142), (0.142, -0.142), (0.142, 0.142), (-0.142, 0.142)], 0.006,
-                   2), 0.0068, 0.0073, "Clear", axis="y")
+    # Clear sleeve over it inside a stitched border round the window. The
+    # sleeve stands 3 mm off the board so the two never fight.
+    p.box((0.276, 0.0004, 0.276), (0.0, 0.0077, 0.0), "Clear")
     for sx in (-1, 1):
-        p.box((0.012, 0.0035, 0.3), (sx * 0.144, 0.0062, 0.0), "Olive", bevel=0.001, segs=1)
-        p.box((0.276, 0.0035, 0.012), (0.0, 0.0062, sx * 0.144), "Olive", bevel=0.001, segs=1)
+        p.box((0.012, 0.0038, 0.3), (sx * 0.144, 0.0064, 0.0), "Olive", bevel=0.001, segs=1)
+        p.box((0.276, 0.0038, 0.012), (0.0, 0.0064, sx * 0.144), "Olive", bevel=0.001, segs=1)
     # A press stud flap on one edge, and a pencil in a loop.
-    p.box((0.06, 0.004, 0.03), (0.0, 0.006, 0.158), "Olive", bevel=0.0015, segs=1)
+    p.box((0.06, 0.004, 0.022), (0.0, 0.006, 0.161), "Olive", bevel=0.0015, segs=1)
     p.cyl(0.004, 0.006, 0.0095, "Steel", segs=10, xf=T(0, 0, 0.162) @ UP)
     p.cyl(0.0035, -0.12, 0.07, "Yellow", segs=6, xf=T(0.155, 0.006, 0.0))
     p.lathe([(0.0, 0.07), (0.0035, 0.07), (0.0, 0.085)], "Planks", segs=6,
@@ -262,11 +271,277 @@ def lead_case():
     p.box((0.113, 0.003, 0.113), (0.0, 0.0115, 0.0), "Black")
     for sx in (-1, 1):
         p.box((0.018, 0.026, 0.008), (sx * 0.03, 0.008, 0.057), "Steel", bevel=0.002, segs=1)
-    p.box((0.05, 0.002, 0.03), (0.0, 0.0355, 0.0), "Yellow")
+    recess = Part("recess")
+    recess.box((0.05, 0.009, 0.03), (0.0, 0.035, 0.0), "Yellow")
+    p.cut(recess)
+    plate = Part("plate")
+    plate.box((0.05, 0.0044, 0.03), (0.0, 0.0333, 0.0), "Yellow")
+    return [p, plate]
+
+
+# --- Cloak generator ---------------------------------------------------------------------------
+
+def cloak_generator():
+    yb = -0.15
+    p = Part("body")
+    # A squat olive field set: a heavy base with its control panel, an open
+    # bay in the middle where a power cell stands between two contacts at
+    # (0, 0, 0.02), and the emitter on top: stacked copper coils round a
+    # mast with a glowing tip.
+    plan = fillet([(-0.115, -0.115), (0.115, -0.115), (0.115, 0.115), (-0.115, 0.115)], 0.025, 3)
+    for x in (-0.09, 0.09):
+        for z in (-0.09, 0.09):
+            p.cyl(0.012, yb, yb + 0.006, "Rubber", segs=12, xf=T(x, 0, z) @ UP)
+    p.prism(plan, yb + 0.006, -0.044, "Paint", axis="y", bevel=0.008, segs=2)
+    # Control panel standing off the front, its dials part of its face.
+    panel(p, "z", -0.07, 0.07, -0.13, -0.07, -0.122, -0.113, "Black",
+          [(-0.06, -0.01, -0.115, -0.106, "Glow"), (0.018, 0.058, -0.124, -0.078, "Cream"),
+           (0.034, 0.042, -0.122, -0.092, "Black")])
+    p.cyl(0.004, -0.124, -0.1215, "Steel", segs=8, xf=T(-0.04, -0.088, 0.0))
+    p.box((0.003, 0.012, 0.003), (0.0, 0.0, 0.0), "Steel", xf=T(-0.04, -0.082, -0.1228) @ RX(-0.2))
+    p.sphere(0.0045, (-0.015, -0.088, -0.1205), "LampRed", segs=10, rings=5)
+    for sx in (-1, 1):
+        tube_path(p, [(sx * 0.11, -0.075, -0.045), (sx * 0.1205, -0.075, -0.035),
+                      (sx * 0.1205, -0.075, 0.035), (sx * 0.11, -0.075, 0.045)], 0.004, "Steel",
+                  sides=6, closed=False)
+    # The open bay: four posts, the cell's seat and the contact over it.
+    for x in (-0.096, 0.096):
+        for z in (-0.096, 0.096):
+            p.box((0.018, 0.088, 0.018), (x, 0.0, z), "Paint", bevel=0.003, segs=1)
+    p.box((0.034, 0.0115, 0.034), (0.0, -0.03825, 0.02), "Dark", bevel=0.002, segs=1)
+    p.cyl(0.0075, -0.0325, -0.0302, "Steel", segs=12, xf=T(0, 0, 0.02) @ UP)
+    p.box((0.034, 0.0115, 0.034), (0.0, 0.03825, 0.02), "Dark", bevel=0.002, segs=1)
+    p.cyl(0.0045, 0.0302, 0.0325, "Steel", segs=12, xf=T(0, 0, 0.02) @ UP)
+    for k in range(4):
+        y = 0.0302 + 0.0006 * k
+        ring(p, 0.004, 0.0005, "Steel", xf=T(0, y, 0.02) @ UP, segs=8, sides=3)
+    for mat, pts in (("Red", [(0.017, -0.036, 0.03), (0.06, -0.041, 0.06), (0.087, -0.03, 0.087)]),
+                     ("Black", [(-0.017, -0.036, 0.03), (-0.06, -0.041, 0.06),
+                                (-0.087, -0.03, 0.087)]),
+                     ("Copper", [(0.017, 0.036, 0.025), (0.06, 0.04, 0.06), (0.087, 0.03, 0.087)])):
+        tube_path(p, pts, 0.002, mat, sides=5, closed=False)
+    # Upper housing with a glowing band round it.
+    band = fillet([(-0.111, -0.111), (0.111, -0.111), (0.111, 0.111), (-0.111, 0.111)], 0.022, 3)
+    p.prism(plan, 0.044, 0.058, "Paint", axis="y", bevel=0.005, segs=2)
+    p.prism(band, 0.058, 0.064, "Glow", axis="y")
+    p.prism(plan, 0.064, 0.08, "Paint", axis="y", bevel=0.005, segs=2)
+    # Emitter.
+    p.lathe([(0.0, 0.08), (0.082, 0.08), (0.085, 0.083), (0.083, 0.088), (0.0, 0.088)], "Dark",
+            segs=28, xf=UP)
+    for R, y in ((0.074, 0.096), (0.059, 0.109), (0.044, 0.121)):
+        ring(p, R, 0.0042, "Copper", xf=T(0, y, 0) @ UP, segs=24, sides=5)
+    for k in range(3):
+        a = 2 * math.pi * k / 3 + 0.5
+        p.box((0.006, 0.042, 0.006), (0.0, 0.0, 0.0), "Dark",
+              xf=RY(a) @ T(0.059, 0.105, 0.0) @ RZ(0.4))
+    p.cyl(0.007, 0.088, 0.136, "Steel", segs=12, xf=UP)
+    p.sphere(0.012, (0.0, 0.137, 0.0), "Glow", segs=14, rings=7)
     return [p]
 
 
-for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case)):
+# --- Deployable cover --------------------------------------------------------------------------
+
+def deployable_cover():
+    yb = -0.06
+    p = Part("body")
+    # A ballistic panel folded in two on a piano hinge, a vision slit in
+    # its hood, the legs strapped flat on top and a carry handle.
+    for k in range(2):
+        p.box((0.58, 0.022, 0.48), (0.0, yb + 0.011 + k * 0.0225, -0.004), "Paint", bevel=0.004,
+              segs=2)
+    for k in range(7):
+        x0 = -0.28 + k * 0.08
+        p.cyl(0.0115, x0 + 0.002, x0 + 0.078, "Steel" if k % 2 else "Iron", segs=12,
+              xf=T(0, yb + 0.0225, 0.238) @ ALONG_X @ T(0, 0, -0.0))
+    p.cyl(0.004, -0.29, 0.29, "Steel", segs=8, xf=T(0, yb + 0.0225, 0.238) @ ALONG_X)
+    # Vision slit: a hood standing off the top leaf, dark in its mouth.
+    top = yb + 0.0445
+    p.box((0.16, 0.012, 0.05), (-0.07, top + 0.006, -0.17), "Paint", bevel=0.003, segs=1)
+    p.box((0.13, 0.006, 0.006), (-0.07, top + 0.0055, -0.1955), "Black")
+    # Straps across, the folded legs on them, buckles.
+    for x in (-0.2, 0.2):
+        p.box((0.03, 0.004, 0.484), (x, top + 0.002, -0.004), "Olive")
+        p.box((0.034, 0.006, 0.02), (x, top + 0.007, -0.15), "Steel", bevel=0.001, segs=1)
+    for z in (-0.12, 0.13):
+        p.cyl(0.0085, -0.26, 0.26, "Iron", segs=12, xf=T(0, top + 0.0125, z) @ ALONG_X,
+              chamfer=0.002)
+        for sx in (-1, 1):
+            p.box((0.012, 0.004, 0.04), (sx * 0.262, top + 0.006, z), "Iron", bevel=0.001, segs=1)
+    # Carry handle.
+    for sx in (-1, 1):
+        p.box((0.012, 0.03, 0.02), (sx * 0.06, top + 0.019, 0.005), "Steel", bevel=0.002, segs=1)
+    p.cyl(0.009, -0.07, 0.07, "Rubber", segs=12, xf=T(0, top + 0.034, 0.005) @ ALONG_X)
+    # Rubber bumpers on the front corners.
+    for sx in (-1, 1):
+        p.box((0.04, 0.046, 0.01), (sx * 0.27, yb + 0.023, -0.2455), "Rubber", bevel=0.003, segs=1)
+    return [p]
+
+
+# --- Climbing kit -------------------------------------------------------------------------------
+
+def climbing_kit():
+    s = cube(4.0)
+    yb = -s / 2
+    p = Part("body")
+    # A coil of rope bound in three places, a webbing harness on it, and
+    # the four-tined grapnel lying across the top tied to the rope's end.
+    for k, (x, z) in enumerate(((0.0, 0.0), (0.003, -0.002), (-0.002, 0.003))):
+        ring(p, 0.052, 0.0082, "Rope", xf=T(x, yb + 0.0082 + k * 0.0145, z) @ UP, segs=24,
+             sides=7)
+    for k in range(3):
+        a = 2 * math.pi * k / 3 + 0.4
+        p.lathe([(0.0125, -0.003), (0.0145, -0.003), (0.0145, 0.003), (0.0125, 0.003)], "Rope",
+                segs=12, closed=True, xf=RY(a) @ T(0.052, yb + 0.0227, 0.0) @ S(1.0, 1.55, 1.0))
+    # Harness: a waist belt and a leg loop of olive webbing, a buckle.
+    p.lathe([(0.0395, -0.008), (0.0415, -0.008), (0.0415, 0.008), (0.0395, 0.008)], "Olive",
+            segs=24, closed=True,
+            xf=T(-0.012, yb + 0.055, 0.006) @ RX(0.12) @ S(1.15, 1.0, 0.75) @ UP)
+    p.lathe([(0.0215, -0.007), (0.0235, -0.007), (0.0235, 0.007), (0.0215, 0.007)], "Olive",
+            segs=18, closed=True, xf=T(0.034, yb + 0.054, -0.03) @ RZ(0.2) @ UP)
+    p.box((0.012, 0.018, 0.006), (0.0, 0.0, 0.0), "Steel", bevel=0.001, segs=1,
+          xf=T(-0.012, yb + 0.055, -0.0365) @ RX(0.12))
+    ring(p, 0.009, 0.0016, "Steel", xf=T(0.008, yb + 0.066, -0.04) @ S(1.0, 1.6, 1.0) @ RY(0.3),
+         segs=14, sides=5)
+    # Grapnel: shank, eye, four tines.
+    gy, gz = yb + 0.071, 0.012
+    p.cyl(0.0055, -0.048, 0.036, "Iron", segs=10, xf=T(0, gy, gz) @ ALONG_X)
+    ring(p, 0.0085, 0.0025, "Iron", xf=T(-0.057, gy, gz) @ ALONG_X @ RY(math.pi / 2), segs=12,
+         sides=5)
+    for k in range(4):
+        ph = math.pi / 4 + k * math.pi / 2
+        c, sn = math.cos(ph), math.sin(ph)
+        pts = [(x, gy + r * c, gz + r * sn) for x, r in
+               ((0.034, 0.0), (0.043, 0.008), (0.047, 0.019), (0.043, 0.028), (0.033, 0.032))]
+        tube_path(p, pts, 0.0038, "Iron", sides=6, closed=False)
+        tip = pts[-1]
+        p.lathe([(0.0, 0.0), (0.0038, 0.0), (0.0, 0.007)], "Iron", segs=6,
+                xf=T(*tip) @ RY(-math.pi / 2) @ RZ(0.0))
+    p.lathe([(0.0, -0.002), (0.008, -0.002), (0.009, 0.004), (0.006, 0.008), (0.0, 0.008)],
+            "Iron", segs=10, xf=T(0.036, gy, gz) @ ALONG_X)
+    tube_path(p, [(-0.064, gy, gz), (-0.07, gy - 0.008, gz + 0.01), (-0.066, yb + 0.05, 0.03),
+                  (-0.052, yb + 0.042, 0.036)], 0.0062, "Rope", sides=8, closed=False)
+    return [p]
+
+
+# --- Zipline kit --------------------------------------------------------------------------------
+
+def zipline_kit():
+    s = cube(4.5)
+    yb = -s / 2
+    p = Part("body")
+    # A cable drum on its side with a crank, the trolley clipped on top,
+    # and the two ground anchors strapped alongside.
+    cy = yb + 0.058
+    drum = T(0, cy, 0) @ ALONG_X
+    for sx in (-1, 1):
+        p.lathe([(0.0, 0.0), (0.056, 0.0), (0.058, 0.002), (0.058, 0.004), (0.056, 0.006),
+                 (0.0, 0.006)], "Paint", segs=28,
+                xf=drum @ T(0, 0, sx * 0.034 - (0.006 if sx < 0 else 0.0)))
+    wave = [(0.0, -0.034)]
+    for k in range(17):
+        z = -0.034 + 0.068 * k / 16
+        wave.append((0.048 if k % 2 == 0 else 0.0496, z))
+    wave.append((0.0, 0.034))
+    p.lathe(wave, "Steel", segs=24, xf=drum)
+    p.cyl(0.006, -0.048, 0.048, "Steel", segs=10, xf=drum)
+    # Crank on +X.
+    p.box((0.005, 0.034, 0.008), (0.045, cy - 0.014, 0.0), "Iron", bevel=0.001, segs=1)
+    p.cyl(0.0048, 0.044, 0.064, "Black", segs=10, xf=T(0, cy - 0.028, 0) @ ALONG_X)
+    # Ground anchors: tapered spikes with an eye, along the -X side.
+    for x in (-0.07, -0.055):
+        xf = T(x, yb + 0.0065, 0.0)
+        p.lathe([(0.0, -0.075), (0.002, -0.07), (0.0055, -0.02), (0.0065, 0.06), (0.0, 0.06)],
+                "Iron", segs=8, xf=xf)
+        ring(p, 0.008, 0.0022, "Iron", xf=xf @ T(0, -0.0043, 0.068) @ UP, segs=10, sides=5)
+    for z in (-0.04, 0.03):
+        p.box((0.034, 0.004, 0.012), (-0.0625, yb + 0.0145, z), "Olive")
+    # Trolley on top: side plates, two wheels, a carabiner and a grip.
+    ty = cy + 0.0515
+    for sx in (-1, 1):
+        p.box((0.004, 0.032, 0.04), (sx * 0.0095, ty + 0.016, 0.0), "Steel", bevel=0.001, segs=1)
+    for z in (-0.01, 0.01):
+        p.cyl(0.0095, -0.0075, 0.0075, "Black", segs=14, xf=T(0, ty + 0.022, z) @ ALONG_X)
+    p.cyl(0.0022, -0.012, 0.012, "Steel", segs=6, xf=T(0, ty + 0.022, -0.01) @ ALONG_X)
+    p.cyl(0.0022, -0.012, 0.012, "Steel", segs=6, xf=T(0, ty + 0.022, 0.01) @ ALONG_X)
+    ring(p, 0.01, 0.002, "Steel", xf=T(0.0, ty + 0.002, 0.028) @ S(1.0, 1.0, 1.6) @ UP,
+         segs=14, sides=5)
+    p.cyl(0.0085, -0.035, 0.035, "Rubber", segs=12, xf=T(0, cy + 0.06, -0.045) @ ALONG_X)
+    tube_path(p, [(0.0, ty + 0.002, 0.04), (0.0, cy + 0.06, -0.035)], 0.0018, "Olive", sides=4,
+              closed=False)
+    tube_path(p, [(0.0, cy + 0.049, 0.012), (0.0, ty + 0.012, 0.0), (0.0, ty + 0.03, -0.022)],
+              0.0016, "Steel", sides=5, closed=False)
+    return [p]
+
+
+# --- Matches ----------------------------------------------------------------------------------
+
+def matches():
+    s = cube(0.02)
+    yb = -s / 2
+    p = Part("body")
+    # A wood-veneer matchbox, the tray slid half out on the red heads,
+    # striker strips down both sides, a printed label, one match loose.
+    w, h = 0.017, 0.0085
+    z0, z1 = -0.0065, 0.0135
+    t = 0.0006
+    zc = (z0 + z1) / 2
+    p.box((w, t, z1 - z0), (0.0, yb + t / 2, zc), "Boards")
+    panel(p, "y", -w / 2, w / 2, z0, z1, yb + h - t, yb + h, "Paper",
+          [(-0.0068, 0.0068, -0.0045, 0.0115, "Yellow"), (-0.004, 0.004, -0.0005, 0.0075, "Red")])
+    for sx in (-1, 1):
+        p.box((t, h - 2 * t, z1 - z0), (sx * (w - t) / 2, yb + h / 2, zc), "Bakelite")
+    # The tray: what shows of it, out of the -Z end.
+    tw = w - 2 * t - 0.0004
+    p.box((tw, t, 0.0085), (0.0, yb + t + t / 2, -0.0095), "Boards")
+    p.box((tw, h - 2 * t - 0.0004, t), (0.0, yb + h / 2, -0.0132), "Boards")
+    for sx in (-1, 1):
+        p.box((t, h - 2 * t - 0.0006, 0.0085), (sx * (tw - t) / 2, yb + h / 2 - 0.0002, -0.0095),
+              "Boards")
+    for k in range(7):
+        x = -0.0055 + k * 0.0018
+        y = yb + 2 * t + 0.0008 + (0.0012 if k % 2 else 0.0)
+        p.box((0.0012, 0.0012, 0.022), (x, y, 0.0), "Cream")
+        p.box((0.0017, 0.0017, 0.003), (x, y, -0.011), "Red", bevel=0.0005, segs=1)
+    xf = T(0.002, yb + h + 0.0007, 0.004) @ RY(0.5)
+    p.box((0.0012, 0.0012, 0.02), (0.0, 0.0, 0.0), "Cream", xf=xf)
+    p.box((0.0017, 0.0017, 0.003), (0.0, 0.0, -0.0105), "Bakelite", bevel=0.0005, segs=1, xf=xf)
+    return [p]
+
+
+# --- Door wedge -------------------------------------------------------------------------------
+
+def door_wedge():
+    s = cube(0.15)
+    yb = -s / 2
+    p = Part("body")
+    # A chunky yellow plastic wedge on a black rubber sole, grip ridges up
+    # its slope and a cord loop through its heel.
+    sole = 0.0035
+    prof = [(-0.026, 0.0), (0.026, 0.0), (0.026, 0.02), (0.022, 0.0235), (0.015, 0.024),
+            (-0.026, 0.003)]
+    p.prism(fillet([(z, yb + sole + y) for z, y in prof], [0.001, 0.002, 0.003, 0.003, 0.004,
+                                                          0.001], 2),
+            -0.019, 0.019, "Yellow", axis="x", bevel=0.0009, segs=2)
+    p.box((0.038, sole, 0.052), (0.0, yb + sole / 2, 0.0), "Rubber", bevel=0.0008, segs=1)
+    ang = math.atan2(0.021, 0.041)
+    for k in range(6):
+        z = -0.019 + k * 0.0068
+        y = yb + sole + 0.003 + (z + 0.026) * math.tan(ang)
+        p.box((0.034, 0.0028, 0.0022), (0.0, 0.0, 0.0), "Yellow",
+              xf=T(0.0, y + 0.0006, z) @ RX(ang))
+    p.cyl(0.0035, -0.0195, 0.0195, "Black", segs=10, xf=T(0, yb + sole + 0.012, 0.019) @ ALONG_X)
+    tube_path(p, [(0.0195, yb + sole + 0.012, 0.019), (0.023, yb + sole + 0.016, 0.022),
+                  (0.022, yb + sole + 0.024, 0.024), (0.012, yb + sole + 0.026, 0.024),
+                  (0.0, yb + sole + 0.0245, 0.022), (-0.012, yb + sole + 0.026, 0.024),
+                  (-0.022, yb + sole + 0.024, 0.024), (-0.023, yb + sole + 0.016, 0.022),
+                  (-0.0195, yb + sole + 0.012, 0.019)], 0.0011, "Rope", sides=5, closed=False)
+    return [p]
+
+
+for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case),
+                    ("cloak_generator", cloak_generator), ("deployable_cover", deployable_cover),
+                    ("climbing_kit", climbing_kit), ("zipline_kit", zipline_kit),
+                    ("matches", matches), ("door_wedge", door_wedge)):
     if wanted(item_id):
         item(item_id, fn)
 

@@ -1,7 +1,8 @@
 """Medical and maintenance supplies: field dressing, regen injector,
-cleaning kit, gun oil, spare parts. Writes assets/models/items/<id>.glb
-for each (item space: see _kit.py). Things without `dims` are a cube of
-side cbrt(bulk / 1000); each model rests on that cube's floor.
+cleaning kit, gun oil, spare parts, multitool, fuel can. Writes
+assets/models/items/<id>.glb for each (item space: see _kit.py). Things
+without `dims` are a cube of side cbrt(bulk / 1000); each model rests on
+that cube's floor.
 """
 
 import math
@@ -10,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cube, item, wanted
+from _kit import ALONG_X, UP, cube, item, ring, text, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -25,14 +26,19 @@ def pillow(p, hx, hy, hz, y, mat, r=0.006):
 def field_dressing():
     s = cube(0.1)
     p = Part("body")
-    # A rubberised packet with a paper label and a red tear-strip.
+    # A rubberised packet with a paper label and a red tear-strip. The
+    # label sits in a recess cut for it, flush, not on the rubber.
     y = -s / 2 + 0.012
     pillow(p, s / 2 - 0.001, 0.012, s / 2 - 0.003, y, "Olive", r=0.008)
-    p.box((0.03, 0.0008, 0.026), (0.0, y + 0.012, 0.002), "Paper")
-    p.box((0.016, 0.0009, 0.003), (-0.003, y + 0.0125, -0.005), "Red")
-    p.box((0.016, 0.0009, 0.002), (-0.003, y + 0.0125, 0.0), "Red")
     p.box((s - 0.01, 0.003, 0.004), (0.0, y, -s / 2 + 0.003), "Red")
-    return [p]
+    recess = Part("recess")
+    recess.box((0.026, 0.009, 0.019), (0.0, y + 0.012, 0.0005), "Paper")
+    p.cut(recess)
+    label = Part("label")
+    label.box((0.026, 0.0042, 0.019), (0.0, y + 0.0101, 0.0005), "Paper")
+    label.box((0.016, 0.0009, 0.003), (-0.003, y + 0.0124, -0.005), "Red")
+    label.box((0.016, 0.0009, 0.002), (-0.003, y + 0.0124, 0.0), "Red")
+    return [p, label]
 
 
 # --- Regen injector ---------------------------------------------------------------------------
@@ -106,7 +112,7 @@ def spare_parts():
     # A small tin with its lid on, and on it a recoil spring, an extractor
     # and a few pins, tied with wire.
     tin = fillet([(-0.026, -0.02), (0.026, -0.02), (0.026, 0.02), (-0.026, 0.02)], 0.005, 2)
-    p.prism(tin, yb, yb + 0.018, "Blued", axis="y", bevel=0.0015, segs=1)
+    p.prism(tin, yb, yb + 0.014, "Blued", axis="y", bevel=0.0015, segs=1)
     lid = fillet([(-0.0265, -0.0205), (0.0265, -0.0205), (0.0265, 0.0205), (-0.0265, 0.0205)],
                  0.0055, 2)
     p.prism(lid, yb + 0.014, yb + 0.02, "Blued", axis="y", bevel=0.0015, segs=1)
@@ -129,8 +135,83 @@ def spare_parts():
     return [p]
 
 
+# --- Multitool --------------------------------------------------------------------------------
+
+def multitool():
+    s = cube(0.1)
+    yb = -s / 2
+    p = Part("body")
+    # A folding pliers tool lying closed: two steel handle channels with
+    # black grip inlays, the pliers' jaws out at the front, the knife blade
+    # swung half open.
+    for sx in (-1, 1):
+        p.box((0.0072, 0.006, 0.03), (sx * 0.0038, yb + 0.003, 0.007), "Steel", bevel=0.0008,
+              segs=1)
+        p.box((0.0012, 0.0036, 0.022), (sx * 0.0078, yb + 0.003, 0.008), "Black", bevel=0.0003,
+              segs=1)
+        jaw = [(0.0, -0.007), (0.0055, -0.007), (0.0035, -0.0175), (0.0014, -0.0222),
+               (0.0, -0.0222)]
+        p.prism([(sx * x, z) for x, z in jaw], yb + 0.001, yb + 0.005, "Steel", axis="y",
+                xf=T(0.0, 0.0, -0.007) @ RY(sx * 0.07) @ T(0.0, 0.0, 0.007))
+        for k in range(3):
+            p.box((0.0016, 0.0042, 0.0008), (sx * 0.0012, yb + 0.003, -0.012 - k * 0.0025), "Dark",
+                  xf=RY(sx * 0.07))
+    p.cyl(0.0024, yb + 0.0002, yb + 0.0058, "Steel", segs=12, xf=T(0, 0, -0.0072) @ UP)
+    for z in (0.0, 0.019):
+        p.cyl(0.0014, yb + 0.0058, yb + 0.0064, "Steel", segs=8, xf=T(0.0038, 0, z) @ UP)
+        p.cyl(0.0014, yb + 0.0058, yb + 0.0064, "Steel", segs=8, xf=T(-0.0038, 0, z) @ UP)
+    blade = [(0.0, -0.0026), (0.0155, -0.0026), (0.0192, 0.0004), (0.0, 0.0028)]
+    p.prism(blade, yb + 0.0062, yb + 0.007, "Steel", axis="y", xf=T(0.0038, 0, 0.019) @ RY(0.25))
+    ring(p, 0.003, 0.0007, "Steel", xf=T(0.0, yb + 0.003, 0.0195) @ RX(math.pi / 2), segs=10,
+         sides=4)
+    return [p]
+
+
+# --- Fuel can ---------------------------------------------------------------------------------
+
+def fuel_can():
+    p = Part("body")
+    # A ten-litre olive jerrycan: pressed X ribs on both flanks, a welded
+    # seam round its middle, three handles on top, a cam-lever spout cap on
+    # the cut-off front corner, the fuel stencilled front and back.
+    yb = -0.175
+    prof = [(-0.145, yb), (0.145, yb), (0.145, yb + 0.33), (-0.1, yb + 0.33), (-0.145, yb + 0.29)]
+    p.prism(fillet(prof, 0.015, 3), -0.075, 0.075, "Paint", axis="x", bevel=0.01, segs=2)
+    seam = [(-0.1485, yb + 0.0035), (0.1485, yb + 0.0035), (0.1485, yb + 0.3335),
+            (-0.1015, yb + 0.3335), (-0.1485, yb + 0.2915)]
+    p.prism(fillet(seam, 0.017, 3), -0.002, 0.002, "Paint", axis="x")
+    # X ribs: one bar corner to corner, the other in two halves either side.
+    ang = math.atan2(0.25, 0.22)
+    L = math.hypot(0.25, 0.22)
+    yc = yb + 0.16
+    for sx in (-1, 1):
+        x = sx * 0.0775
+        p.box((0.0055, 0.024, L), (x, 0.0, 0.0), "Paint", bevel=0.002, segs=1,
+              xf=T(0, yc, 0) @ RX(ang))
+        for sz in (-1, 1):
+            p.box((0.0055, 0.024, L / 2 - 0.022), (x, 0.0, sz * (L / 4 + 0.011)), "Paint",
+                  bevel=0.002, segs=1, xf=T(0, yc, 0) @ RX(-ang))
+    # Handles on top.
+    top = yb + 0.33
+    for x in (-0.035, 0.0, 0.035):
+        tube_path(p, [(x, top - 0.002, -0.005), (x, top + 0.011, 0.008), (x, top + 0.011, 0.1),
+                      (x, top - 0.002, 0.113)], 0.0055, "Paint", sides=6, closed=False)
+    # Spout and cap, square to the cut-off corner.
+    xf = T(0.0, yb + 0.3078, -0.1205) @ RX(-0.835) @ UP
+    p.cyl(0.016, -0.004, 0.009, "Steel", segs=16, xf=xf)
+    p.lathe([(0.0, 0.009), (0.02, 0.009), (0.021, 0.011), (0.021, 0.019), (0.018, 0.022),
+             (0.0, 0.022)], "Paint", segs=18, xf=xf)
+    p.box((0.008, 0.006, 0.04), (0.0, 0.0, 0.0), "Steel", bevel=0.0015, segs=1,
+          xf=xf @ T(0.0, 0.0, 0.025) @ RX(math.pi / 2) @ T(0.0, 0.0, 0.004))
+    for sz, z in ((-1, -0.145), (1, 0.145)):
+        text(p, "ДТ", 0.045, "Cream", T(0.0, yb + 0.13, z) @ (RY(math.pi) if sz < 0 else T()),
+             depth=0.0035)
+    return [p]
+
+
 for item_id, fn in (("field_dressing", field_dressing), ("regen_injector", regen_injector),
                     ("cleaning_kit", cleaning_kit), ("gun_oil", gun_oil),
-                    ("spare_parts", spare_parts)):
+                    ("spare_parts", spare_parts), ("multitool", multitool),
+                    ("fuel_can", fuel_can)):
     if wanted(item_id):
         item(item_id, fn)

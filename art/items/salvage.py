@@ -1,10 +1,10 @@
 """Robot salvage and artifacts. Writes assets/models/items/<id>.glb for
-each (item space: see _kit.py; none of these have `dims`, so each sits in
-a cube of side cbrt(bulk / 1000)).
+each (item space: see _kit.py). The gun pod has `dims` (barrel to -Z);
+the rest have none, so each sits in a cube of side cbrt(bulk / 1000).
 
 Salvage is in the robots' look (pale shell, dark joints): the rotor
-assembly, servo, sensor eye and robot cell. Artifacts are small wrong
-things: the featherstone (a pebble with glowing veins), the hearth (a dark
+assembly, servo, sensor eye, robot cell and a walker's gun pod. Artifacts
+are small wrong things: the featherstone (a pebble with glowing veins), the hearth (a dark
 lump split over a glowing core), the glass eye (a clear orb with an iris
 inside) and the aegis knot (a trefoil tangle of copper).
 """
@@ -13,59 +13,10 @@ import math
 import os
 import sys
 
-import bmesh
-from mathutils import Vector
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cube, item, wanted
+from _kit import ALONG_X, UP, blob, cube, item, ring, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet
-
-
-def blob(p, r, centre, mat, scale=(1, 1, 1), bumps=(), segs=20, rings=10):
-    """A sphere pushed about by a few smooth bumps: (direction, amount)."""
-    bm = p.bm
-    res = bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=r)
-    verts = res["verts"]
-    for v in verts:
-        n = v.co.normalized()
-        d = 0.0
-        for (dx, dy, dz), amt in bumps:
-            dd = Vector((dx, dy, dz)).normalized()
-            d += amt * max(0.0, n.dot(dd)) ** 2
-        v.co = v.co * (1.0 + d)
-        v.co = Vector((v.co.x * scale[0], v.co.y * scale[1], v.co.z * scale[2])) + Vector(centre)
-    faces = list({f for v in verts for f in v.link_faces})
-    p._finish_piece(verts, faces, mat)
-
-
-def tube_path(p, pts, r, mat, sides=8, closed=True):
-    """A round tube along a 3D polyline."""
-    bm = p.bm
-    n = len(pts)
-    rings = []
-    for i in range(n):
-        a = Vector(pts[i - 1] if closed or i > 0 else pts[i])
-        b = Vector(pts[(i + 1) % n] if closed or i < n - 1 else pts[i])
-        t = (b - a).normalized()
-        up = Vector((0, 1, 0)) if abs(t.y) < 0.9 else Vector((1, 0, 0))
-        u = t.cross(up).normalized()
-        w = t.cross(u).normalized()
-        c = Vector(pts[i])
-        rings.append([bm.verts.new(c + (u * math.cos(2 * math.pi * k / sides) +
-                                        w * math.sin(2 * math.pi * k / sides)) * r)
-                      for k in range(sides)])
-    faces = []
-    last = n if closed else n - 1
-    for i in range(last):
-        ra, rb = rings[i], rings[(i + 1) % n]
-        for k in range(sides):
-            k1 = (k + 1) % sides
-            faces.append(bm.faces.new((ra[k], ra[k1], rb[k1], rb[k])))
-    if not closed:
-        faces.append(bm.faces.new(rings[0]))
-        faces.append(bm.faces.new(list(reversed(rings[-1]))))
-    p._finish_piece([v for r_ in rings for v in r_], faces, mat)
 
 
 # --- Salvage ----------------------------------------------------------------------------------
@@ -160,6 +111,82 @@ def robot_cell():
     return [p]
 
 
+def robot_gunpod():
+    p = Part("body")
+    # A walker's gun turret torn off its mount, barrel to -Z: the pale
+    # shell with dark vents and a dead sensor bar, the barrel in its ribbed
+    # shroud and muzzle brake, the feed chute with a stub of belt, the
+    # ripped mount and wires under it. Someone has tied a rope sling on and
+    # wired out the trigger solenoid's lever.
+    yb = -0.125
+    side = [(0.5, -0.09), (0.535, -0.01), (0.47, 0.08), (0.0, 0.083), (-0.13, 0.055),
+            (-0.15, -0.01), (-0.12, -0.09)]
+    p.prism(fillet(side, [0.03, 0.04, 0.05, 0.05, 0.04, 0.03, 0.03], 4), -0.085, 0.085, "Shell",
+            axis="x", bevel=0.022, segs=2)
+    for sx in (-1, 1):
+        for i in range(4):
+            p.box((0.01, 0.06, 0.016), (sx * 0.084, 0.0, 0.1 + i * 0.045), "Dark", bevel=0.003,
+                  segs=1)
+        p.box((0.01, 0.004, 0.42), (sx * 0.085, -0.055, 0.2), "Dark")
+    p.box((0.1, 0.022, 0.03), (0.0, 0.0, 0.0), "Dark", bevel=0.006, segs=1,
+          xf=T(0.0, 0.065, -0.095) @ RX(0.2))
+    p.box((0.07, 0.007, 0.004), (0.0, 0.0, -0.0175), "Lens", xf=T(0.0, 0.065, -0.095) @ RX(0.2))
+    # Barrel, shroud, brake.
+    by = -0.005
+    bx = T(0.0, by, 0.0)
+    p.lathe([(0.0, -0.165), (0.04, -0.165), (0.046, -0.15), (0.046, -0.12), (0.0, -0.12)], "Dark",
+            segs=24, xf=bx)
+    p.tube(0.022, 0.008, -0.5, -0.16, "Dark", segs=16, xf=bx, chamfer=0.002)
+    for i in range(5):
+        z0 = -0.25 - i * 0.03
+        p.tube(0.03, 0.02, z0 - 0.012, z0, "Dark", segs=16, xf=bx, chamfer=0.003)
+    p.tube(0.032, 0.009, -0.55, -0.498, "Dark", segs=16, xf=bx, chamfer=0.004)
+    for sx in (-1, 1):
+        for z in (-0.538, -0.518):
+            p.box((0.006, 0.014, 0.012), (sx * 0.03, by, z), "Black")
+    # Feed chute on the right flank and the belt stub hanging from it.
+    p.box((0.024, 0.07, 0.09), (0.096, -0.02, 0.27), "Dark", bevel=0.004, segs=1)
+    for k in range(3):
+        y = -0.062 - k * 0.0135
+        p.box((0.012, 0.009, 0.034), (0.096, y, 0.27), "Bakelite")
+        p.lathe([(0.0, 0.0), (0.0038, 0.0), (0.0038, 0.008), (0.0, 0.014)], "Steel", segs=6,
+                xf=T(0.096, y, 0.253) @ RY(math.pi))
+        for z in (0.258, 0.282):
+            p.box((0.016, 0.011, 0.005), (0.096, y, z), "Dark")
+    # The torn mount under it: a stub of bracket, bolts, a snapped ram,
+    # wires hanging.
+    p.box((0.09, 0.045, 0.12), (0.0, yb + 0.0225, 0.22), "Dark", bevel=0.004, segs=1)
+    for sx in (-1, 1):
+        p.box((0.008, 0.03, 0.07), (0.0, 0.0, 0.0), "Dark",
+              xf=T(sx * 0.05, yb + 0.022, 0.2) @ RZ(sx * 0.35) @ RX(0.1))
+        for z in (0.18, 0.26):
+            p.cyl(0.006, 0.045, 0.051, "Steel", segs=6,
+                  xf=T(0, yb + 0.028, z) @ RY(sx * math.pi / 2))
+    p.cyl(0.011, 0.1, 0.165, "Steel", segs=12, xf=T(0.0, yb + 0.02, 0.0) @ RX(-0.12))
+    p.lathe([(0.0, 0.098), (0.012, 0.098), (0.0135, 0.1), (0.008, 0.096), (0.0, 0.092)], "Steel",
+            segs=10, xf=T(0.0, yb + 0.02, 0.0) @ RX(-0.12))
+    for mat, pts in (("Red", [(0.02, yb + 0.03, 0.28), (0.035, yb + 0.012, 0.3),
+                              (0.03, yb + 0.003, 0.33), (0.045, yb + 0.004, 0.36)]),
+                     ("Black", [(-0.015, yb + 0.03, 0.282), (-0.03, yb + 0.01, 0.31),
+                                (-0.022, yb + 0.003, 0.345)]),
+                     ("Yellow", [(0.0, yb + 0.03, 0.28), (0.006, yb + 0.006, 0.31),
+                                 (0.018, yb + 0.004, 0.33)])):
+        tube_path(p, pts, 0.003, mat, sides=6, closed=False)
+    # Rope sling: tied round the shroud, over the top, to a lug at the back.
+    ring(p, 0.034, 0.004, "Rope", xf=T(0.0, by, -0.33), segs=16, sides=6)
+    p.box((0.02, 0.03, 0.016), (0.0, 0.066, 0.49), "Steel", bevel=0.003, segs=1)
+    tube_path(p, [(0.0, by + 0.036, -0.33), (0.0, 0.05, -0.22), (0.0, 0.08, -0.08),
+                  (0.0, 0.093, 0.1), (0.0, 0.093, 0.33), (0.0, 0.085, 0.47)], 0.0055, "Rope",
+              sides=6, closed=False)
+    # The trigger: a solenoid lever hanging out of the belly, wired.
+    p.box((0.008, 0.032, 0.012), (0.0, 0.0, 0.0), "Steel", bevel=0.002, segs=1,
+          xf=T(0.03, -0.1, 0.43) @ RX(0.25))
+    p.cyl(0.009, -0.012, 0.012, "Copper", segs=12, xf=T(0.03, -0.085, 0.45) @ ALONG_X)
+    tube_path(p, [(0.03, -0.085, 0.462), (0.04, -0.1, 0.48), (0.05, -0.095, 0.5)], 0.0025, "Red",
+              sides=5, closed=False)
+    return [p]
+
+
 # --- Artifacts --------------------------------------------------------------------------------
 
 def art_featherstone():
@@ -230,6 +257,7 @@ def art_aegis():
 
 for item_id, fn in (("rotor_assembly", rotor_assembly), ("servo", servo),
                     ("sensor_eye", sensor_eye), ("robot_cell", robot_cell),
+                    ("robot_gunpod", robot_gunpod),
                     ("art_featherstone", art_featherstone), ("art_hearth", art_hearth),
                     ("art_glasseye", art_glasseye), ("art_aegis", art_aegis)):
     if wanted(item_id):
