@@ -83,7 +83,10 @@ fn vertex(v: Vertex) -> VertexOutput {
     out.ash = rain.wind.y;
     // Fade near the box edge (no popping) and right at the eye.
     let d = length(p) / (box_size * 0.5);
-    out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * smoothstep(0.4, 1.5, length(p));
+    // (Ash fades further out: a flake drifting past the eye was a big
+    // pale blot in the headset.)
+    let near = select(smoothstep(0.4, 1.5, length(p)), smoothstep(1.0, 3.0, length(p)), rain.wind.y > 0.5);
+    out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * near;
     // Thin the field out with intensity: drop a fraction of streaks.
     let keep = fract(sin(dot(v.position.xz, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     if (keep > rain.params.x || sheltered(centre)) {
