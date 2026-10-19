@@ -48,8 +48,35 @@ impl Default for Look {
 impl Look {
     /// The look for a map, by its name.
     pub fn for_map(name: &str) -> Self {
-        let base = Self::default();
+        // AgX greys the overcast out on its way to the screen; every valley
+        // gets some saturation and a little contrast back. Temperature only
+        // nudges: the air's own colour is the fog's and the sky's job (a
+        // grade strong enough to tint the valley read as a photo filter).
+        let base = Self {
+            saturation: 1.25,
+            contrast: 1.12,
+            ..default()
+        };
         let mut look = match name {
+            // High, rocky and cold: cooler, a touch harder, less green.
+            "Kettle Pass" => Self {
+                temperature: -0.008,
+                saturation: 1.15,
+                contrast: 1.16,
+                ..base
+            },
+            // Burnt: warm and drained, the ash greying everything out.
+            "Cinder Works" => Self {
+                temperature: 0.012,
+                saturation: 1.0,
+                contrast: 1.1,
+                ..base
+            },
+            // The practice ground: a shade brighter and kinder, to read.
+            "Training Yard" => Self {
+                exposure: 0.15,
+                ..base
+            },
             _ => base,
         };
         if let Ok(s) = std::env::var("EXTRACTION_LOOK") {

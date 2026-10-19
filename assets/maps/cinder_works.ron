@@ -30,7 +30,7 @@
     rim: (width: 70.0, height: 14.0),
     fence_inset: 38.0,
     // Ash-brown air, and ash still drifting down when it isn't raining.
-    haze: Some((1.12, 0.95, 0.80)),
+    haze: Some((1.18, 0.96, 0.76)),
     ash: 0.6,
     // Wind through scaffolding and sheet roofs; jackdaws in the chimneys.
     sounds: (

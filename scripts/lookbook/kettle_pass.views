@@ -9,4 +9,4 @@ k07_pines       180,0,-120,90,0      # east slope pines
 k08_pass        10,0,-245,180,-6     # from the pass, back down the valley
 k09_lodge       210,0,-190,34,-2     # the hunting lodge
 k10_summit      -120,0,-235,90,-6    # summit vista, east
-k11_aerial      120,130,330,0,-16    # high over the gate
+k11_aerial      120,45,300,350,-6    # over the gate, up toward the pass
