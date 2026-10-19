@@ -191,6 +191,18 @@ def render(dump, px_size=1400, heat=None, title=None, dim=0.0):
     d = ImageDraw.Draw(img)
     f_small = font(max(11, args.px // 110))
     f_big = font(max(14, args.px // 60))
+    # Trees and blocking rocks, as `map-dump` scattered them.
+    tpath = os.path.join(args.dump, "trees.f32")
+    if os.path.exists(tpath):
+        for x, z in np.fromfile(tpath, dtype="<f4").reshape(-1, 2):
+            tx, ty = px((x, z))
+            d.ellipse([tx - 1.5, ty - 1.5, tx + 1.5, ty + 1.5], fill=(90, 160, 80))
+    rpath = os.path.join(args.dump, "rocks.f32")
+    if os.path.exists(rpath):
+        for x, z, r in np.fromfile(rpath, dtype="<f4").reshape(-1, 3):
+            rx, ry = px((x, z))
+            rr = max(1.0, r * s)
+            d.ellipse([rx - rr, ry - rr, rx + rr, ry + rr], fill=(150, 150, 140))
     # Bridges.
     for b in meta["bridges"]:
         d.line([px(b[0]), px(b[1])], fill=(200, 190, 170), width=max(3, int(6 * s)))

@@ -139,6 +139,19 @@ fn main() {
     j += &bridges.join(",");
     j += "]}";
     std::fs::write(format!("{out}/map.json"), j).unwrap();
+    // Trees (x, z) and rocks big enough to block (x, z, radius), for the
+    // preview to dot in.
+    let trees: Vec<f32> = extraction_core::forest::scatter_trees(&map, &hm)
+        .iter()
+        .flat_map(|t| [t.pos[0], t.pos[2]])
+        .collect();
+    write_f32("trees.f32", &trees);
+    let rocks: Vec<f32> = extraction_core::rocks::scatter_rocks(&map, &hm)
+        .iter()
+        .filter(|r| r.radius >= extraction_core::rocks::SOLID_RADIUS)
+        .flat_map(|r| [r.pos[0], r.pos[2], r.radius])
+        .collect();
+    write_f32("rocks.f32", &rocks);
     let lint = extraction_core::map_lint::lint(&map, &hm);
     std::fs::write(format!("{out}/routes.json"), lint.routes_json()).unwrap();
     std::fs::write(format!("{out}/lint.json"), lint.findings_json()).unwrap();

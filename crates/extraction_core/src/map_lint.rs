@@ -170,10 +170,13 @@ pub const ROUTE_GRADE: f32 = 16.0;
 pub const GRADE_RUN: f32 = 10.0;
 /// The steepest a road may climb along its centreline over [`GRADE_RUN`]
 /// metres, as a percentage: asphalt and gravel, then dirt tracks and
-/// footpaths (rail beds are held to [`RAIL_GRADE`]).
-pub const ROAD_GRADE: f32 = 12.0;
+/// footpaths (rail beds are held to [`RAIL_GRADE`]: steep for a main
+/// line, ordinary for a narrow-gauge mine line).
+pub const ROAD_GRADE: f32 = 14.0;
 pub const TRACK_GRADE: f32 = 22.0;
-pub const RAIL_GRADE: f32 = 4.0;
+pub const RAIL_GRADE: f32 = 6.0;
+/// Road grades count from this far inside the fence.
+pub const FENCE_MARGIN: f32 = 12.0;
 /// Narrowest footpath, and narrowest other road, metres.
 pub const PATH_WIDTH: f32 = 1.4;
 pub const ROAD_WIDTH: f32 = 3.0;
@@ -235,8 +238,9 @@ pub const REGION_MARK: f32 = 6.0;
 
 // ---- Cover -----------------------------------------------------------------
 
-/// Cover counts within this distance of where you stand, metres.
-pub const COVER_REACH: f32 = 15.0;
+/// Cover counts within this distance of where you stand, metres: a dash
+/// of five seconds or so when a drone chirps its lock.
+pub const COVER_REACH: f32 = 25.0;
 /// Longest stretch of a main route with no cover within reach.
 pub const COVER_GAP: f32 = 60.0;
 /// A rock big enough to crouch behind: horizontal radius and height.
@@ -279,8 +283,13 @@ pub const CHOICE_APART: f32 = 30.0;
 pub const CHOICE_ENDS: f32 = 90.0;
 /// And is at most this much longer.
 pub const CHOICE_DETOUR: f32 = 1.6;
-/// Rendezvous points at least this far apart.
-pub const RV_APART: f32 = 200.0;
+/// Rendezvous points at least this far apart, and from the insertion.
+pub const RV_APART: f32 = 180.0;
+pub const RV_FAR: f32 = 350.0;
+/// The truck parks on a rendezvous: nothing placed within this of it, and
+/// the ground under it no steeper than [`RV_LEVEL`] degrees.
+pub const TRUCK_ROOM: f32 = 8.0;
+pub const RV_LEVEL: f32 = 12.0;
 
 // ---- Render load -------------------------------------------------------------
 
@@ -553,9 +562,10 @@ fn walk_height(hm: &Heightmap, p: P2) -> f32 {
     hm.height(p)
 }
 
-/// Whether a point is inside the quarantine fence (the playable valley).
+/// Whether a point is inside the quarantine fence (the playable valley),
+/// by [`FENCE_MARGIN`]: a road's last metres climb the rim to the fence.
 fn inside_fence(map: &MapDef, p: P2) -> bool {
-    let half = map.half() - map.fence_inset;
+    let half = map.half() - map.fence_inset - FENCE_MARGIN;
     p[0].abs() <= half && p[1].abs() <= half
 }
 
@@ -590,6 +600,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     let comfy = crate::map_nav::zone_grid(map, hm, COMFORT_SLOPE);
     let walk_seen = flood(&walk, ins);
     let comfy_seen = flood(&comfy, ins);
+    // Main routes keep to ground no steeper than a route may climb, as a
+    // player picking the easy way would.
+    let gentle = crate::map_nav::zone_grid(map, hm, ROUTE_GRADE);
     let rects: Vec<(usize, Rect)> = map
         .placements
         .iter()
@@ -664,7 +677,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .collect();
     let mut routes = Vec::new();
     for (name, at) in &rvs {
-        match comfy.path(ins, *at) {
+        match gentle.path(ins, *at) {
             Some(p) => routes.push(Route {
                 to: name.to_string(),
                 length: path_length(&p),
@@ -673,7 +686,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             None => find(
                 &mut r,
                 Rule::Comfort,
-                format!("no comfortable route to {name}"),
+                format!("no route to {name} over ground under {ROUTE_GRADE}°"),
                 *at,
             ),
         }
@@ -1319,6 +1332,38 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
 
     // -- Route choice ---------------------------------------------------------------
+    for (name, at) in &rvs {
+        if dist(*at, ins) < RV_FAR {
+            find(
+                &mut r,
+                Rule::Choice,
+                format!("{name} is {:.0} m from the insertion", dist(*at, ins)),
+                *at,
+            );
+        }
+        if let Some((_, rc)) = rects.iter().find(|(_, rc)| rc.sdf(*at) < TRUCK_ROOM) {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "no room for the truck at {name}: a building {:.0} m off",
+                    rc.sdf(*at).max(0.0)
+                ),
+                *at,
+            );
+        }
+        if hm.slope_deg(*at) > RV_LEVEL {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "the truck parks on a {:.0}° slope at {name}",
+                    hm.slope_deg(*at)
+                ),
+                *at,
+            );
+        }
+    }
     for (i, (a, pa)) in rvs.iter().enumerate() {
         for (b, pb) in rvs.iter().skip(i + 1) {
             if dist(*pa, *pb) < RV_APART {
@@ -1333,7 +1378,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for route in &routes {
         let end = *route.points.last().unwrap();
-        let mut g = comfy.clone();
+        let mut g = gentle.clone();
         for p in route.points.iter().step_by(2) {
             if dist(*p, ins) < CHOICE_ENDS || dist(*p, end) < CHOICE_ENDS {
                 continue;
