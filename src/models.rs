@@ -233,6 +233,7 @@ impl ModelMaterials {
             "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
+            "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
             "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),
             "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
             // Printed and painted colours. A true yellow (yolk, butter, the

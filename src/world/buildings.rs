@@ -1252,11 +1252,20 @@ fn barn(b: &mut Builder) {
         Mat::Planks,
     );
     // Hay bales, a cart, a workbench.
-    for (x, z) in [(-4.0, 4.0), (-4.0, 5.3), (-2.9, 4.6), (-4.0, 4.6)] {
+    for (i, (x, z)) in [(-4.0, 4.0), (-4.0, 5.3), (-2.9, 4.6), (-4.0, 4.6)]
+        .into_iter()
+        .enumerate()
+    {
+        let from = b.geo.pieces.len();
         b.bx(
             Vec3::new(1.1, 0.6, 0.5),
             Vec3::new(x, f + 0.3, z),
             Mat::Canvas,
+        );
+        let turn = Quat::from_rotation_y(std::f32::consts::PI * (i % 2) as f32);
+        b.dress(
+            from,
+            vec![("hay_bale", Transform::from_xyz(x, f, z).with_rotation(turn))],
         );
     }
     b.workbench(
@@ -2896,6 +2905,7 @@ mod tests {
             }
         }
         for name in [
+            "hay_bale",
             "door_metal",
             "road_block",
             "gate_post",
