@@ -303,11 +303,7 @@ fn apply_weather(
     weather.zenith = scale(base.zenith);
     weather.visibility = conditions.visibility;
     weather.sun_lux = conditions.sun;
-    let mut fog = HeightFogTarget {
-        density: conditions.ground_fog,
-        ..cloud_cap(&zone.map, conditions.kind)
-    };
-    fog.apply(&mut height_fog);
+    valley_air(&zone.map, &conditions).apply(&mut height_fog);
     clear.0 = weather.horizon;
     ambient.brightness = 1100.0 * k;
     let grading = crate::render::grade::Look::for_map(&zone.map.name).grading();
@@ -342,6 +338,7 @@ fn apply_weather(
 /// What the weather and the valley want of the ground fog.
 struct HeightFogTarget {
     density: f32,
+    base: f32,
     cap_density: f32,
     cap_base: f32,
 }
@@ -352,6 +349,7 @@ impl HeightFogTarget {
     fn apply(&mut self, fog: &mut crate::render::fog::HeightFog) {
         let want = crate::render::fog::HeightFog {
             density: self.density,
+            base: self.base,
             cap_density: self.cap_density,
             cap_base: self.cap_base,
             ..*fog
@@ -362,28 +360,33 @@ impl HeightFogTarget {
     }
 }
 
-/// Cloud sitting on the tops, where a valley has tops: Kettle Pass's
-/// summits go into it and the pass is in its skirts (see
-/// `docs/ART_DIRECTION.md`). Lower and thicker in murk, lifted in a
+/// The valley's ground fog under this weather: how thick, and from what
+/// height it pools (16 m suits the three valleys; the Training Yard lies
+/// lower and was under it whole). Where a valley has tops, cloud sits on
+/// them: Kettle Pass's summits go into it and the pass is in its skirts
+/// (see `docs/ART_DIRECTION.md`), lower and thicker in murk, lifted in a
 /// clearing spell.
-fn cloud_cap(
+fn valley_air(
     map: &extraction_core::map::MapDef,
-    kind: super::weather::WeatherKind,
+    conditions: &super::weather::Conditions,
 ) -> HeightFogTarget {
     use super::weather::WeatherKind;
-    let (density, lift) = match map.name.as_str() {
-        "Kettle Pass" => (0.009, 52.0),
-        _ => (0.0, 0.0),
+    let (ground, base, cap, lift) = match map.name.as_str() {
+        "Kettle Pass" => (1.0, 16.0, 0.009, 52.0),
+        // The practice ground is kinder: you should see what you're shown.
+        "Training Yard" => (0.55, 8.0, 0.0, 0.0),
+        _ => (1.0, 16.0, 0.0, 0.0),
     };
-    let (k, dz) = match kind {
+    let (k, dz) = match conditions.kind {
         WeatherKind::PeaSouper => (1.4, -8.0),
         WeatherKind::Downpour => (1.2, -4.0),
         WeatherKind::Clearing => (0.5, 12.0),
         WeatherKind::Drizzle => (1.0, 0.0),
     };
     HeightFogTarget {
-        density: 0.0,
-        cap_density: density * k,
+        density: conditions.ground_fog * ground,
+        base,
+        cap_density: cap * k,
         cap_base: map.base_height + lift + dz,
     }
 }
