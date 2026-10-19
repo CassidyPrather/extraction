@@ -38,7 +38,7 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Turning, 1.62, -1.25),
             (ComfortCard::Vignette, 1.44, -1.25),
             (ComfortCard::Sound, 1.80, -1.25),
-            (ComfortCard::Sharpness, 1.62, -0.93),
+            (ComfortCard::Sharpness, 1.62, -0.85),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),

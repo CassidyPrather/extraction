@@ -17,6 +17,7 @@
 pub mod body;
 pub mod far;
 pub mod flat;
+pub mod poke;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -263,6 +264,7 @@ impl Plugin for InteractPlugin {
                     track_hands.in_set(InteractSystems::Track),
                     (
                         grip_from_input,
+                        poke::poke_buttons,
                         far::far_grab,
                         apply_hand_actions,
                         seat_on_contact,
@@ -273,6 +275,7 @@ impl Plugin for InteractPlugin {
                 ),
             )
             .add_observer(held_layers)
+            .add_observer(poke::mount_button)
             .add_observer(unheld_layers)
             .add_plugins(body::BodyPlugin);
     }

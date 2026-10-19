@@ -161,7 +161,9 @@ fn spawn_kitchen(mut commands: Commands, zone: Res<Zone>) {
                 ScreenText {
                     text: String::new(),
                     size: Vec2::new(0.26, 0.09),
-                    style: ScreenStyle::Paper,
+                    // A label strip: a few words, big (paper is set for a
+                    // page of lines, and came out 6 mm high).
+                    style: ScreenStyle::Card,
                 },
                 Transform::from_xyz(0.0, 0.32, -0.25),
                 Visibility::default(),

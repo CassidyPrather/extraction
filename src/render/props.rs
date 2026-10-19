@@ -26,7 +26,16 @@ impl Plugin for PropVisualsPlugin {
             ),
         )
         .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
-        .add_systems(Update, (tint_gloves, far_cue, body_casts_no_shadow));
+        .add_systems(
+            Update,
+            (
+                tint_gloves,
+                far_cue,
+                body_casts_no_shadow,
+                dress_buttons,
+                push_caps,
+            ),
+        );
     }
 }
 
@@ -496,6 +505,73 @@ fn tint_gloves(
             } else {
                 LinearRgba::BLACK
             };
+        }
+    }
+}
+
+/// A push button's moving cap (see `interact::poke`).
+#[derive(Component)]
+struct ButtonCap;
+
+/// A dark collar on the wall and an amber cap standing proud of it.
+fn dress_buttons(
+    mut commands: Commands,
+    buttons: Query<Entity, Added<crate::interact::poke::PokeButton>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut looks: Local<
+        Option<(
+            Handle<Mesh>,
+            Handle<Mesh>,
+            Handle<StandardMaterial>,
+            Handle<StandardMaterial>,
+        )>,
+    >,
+) {
+    use crate::interact::poke::{BUTTON_R, CAP};
+    for e in &buttons {
+        let (collar, cap, dark, amber) = looks
+            .get_or_insert_with(|| {
+                (
+                    meshes.add(Cylinder::new(BUTTON_R + 0.008, 0.008)),
+                    meshes.add(Cylinder::new(BUTTON_R, CAP)),
+                    mat(&mut materials, Color::srgb(0.06, 0.06, 0.06), 0.6, 0.6),
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.85, 0.45, 0.08),
+                        emissive: LinearRgba::rgb(0.12, 0.05, 0.0),
+                        perceptual_roughness: 0.4,
+                        ..default()
+                    }),
+                )
+            })
+            .clone();
+        // Cylinders stand along Y; the button faces +Z.
+        let face = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+        commands.spawn((
+            Mesh3d(collar),
+            MeshMaterial3d(dark),
+            Transform::from_xyz(0.0, 0.0, 0.004).with_rotation(face),
+            ChildOf(e),
+        ));
+        commands.spawn((
+            ButtonCap,
+            Mesh3d(cap),
+            MeshMaterial3d(amber),
+            Transform::from_xyz(0.0, 0.0, CAP * 0.5).with_rotation(face),
+            ChildOf(e),
+        ));
+    }
+}
+
+fn push_caps(
+    buttons: Query<(&crate::interact::poke::PokeButton, &Children)>,
+    mut caps: Query<&mut Transform, With<ButtonCap>>,
+) {
+    for (button, children) in &buttons {
+        for c in children.iter() {
+            if let Ok(mut t) = caps.get_mut(c) {
+                t.translation.z = crate::interact::poke::CAP * 0.5 - button.depth;
+            }
         }
     }
 }

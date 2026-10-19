@@ -541,13 +541,18 @@ fn ride_player(
 
 /// The headset's eyes get the game's look (fog, exposure, tonemapping),
 /// which the backend's cameras don't come with, and a near plane close
-/// enough for iron sights.
+/// enough for iron sights. The left eye is where shadow detail is measured
+/// from: with no camera drawing to the window, Bevy would otherwise take
+/// whichever camera is oldest (an impostor or scope camera, anywhere).
 fn dress_eyes(
     mut commands: Commands,
-    mut eyes: Query<(Entity, &mut Projection), Added<XrCamera>>,
+    mut eyes: Query<(Entity, &XrCamera, &mut Projection), Added<XrCamera>>,
     weather: Res<crate::world::sky::Weather>,
 ) {
-    for (e, mut projection) in &mut eyes {
+    for (e, eye, mut projection) in &mut eyes {
+        if eye.0 == 0 {
+            commands.entity(e).insert(bevy::camera::ShadowLodOrigin);
+        }
         if let Projection::Custom(custom) = &mut *projection {
             if let Some(p) = custom.get_mut::<bevy_mod_xr::camera::XrProjection>() {
                 p.near = crate::render::NEAR_CLIP;

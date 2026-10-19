@@ -572,6 +572,173 @@ mod tests {
             .expect("a holster")
     }
 
+    /// No button sits on another panel: each is beside its own card, clear
+    /// of its neighbours' faces (in the truck, by the yard's tailgate).
+    #[test]
+    fn buttons_sit_clear_of_other_panels() {
+        use crate::interact::poke::{BUTTON_R, PokeButton};
+        use crate::raid::bench::ScreenText;
+        let mut vr = Vr::new("training_yard");
+        vr.step(5);
+        let world = vr.app.world_mut();
+        let buttons: Vec<(Entity, Vec3)> = world
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(world)
+            .map(|(b, gt)| (b.target, gt.translation()))
+            .collect();
+        let panels: Vec<(Entity, GlobalTransform, Vec2)> = world
+            .query::<(Entity, &GlobalTransform, &ScreenText)>()
+            .iter(world)
+            .map(|(e, gt, s)| (e, *gt, s.size))
+            .collect();
+        assert!(buttons.len() >= 5, "buttons: {}", buttons.len());
+        let mut clashes = Vec::new();
+        for (target, at) in &buttons {
+            for (e, gt, size) in &panels {
+                if e == target {
+                    continue;
+                }
+                let p = gt.affine().inverse().transform_point3(*at);
+                let reach = BUTTON_R + 0.012;
+                if p.z.abs() < 0.06
+                    && p.x.abs() < size.x * 0.5 + reach
+                    && p.y.abs() < size.y * 0.5 + reach
+                {
+                    clashes.push(format!("{target} button on {e} at {p:.3?}"));
+                }
+            }
+        }
+        assert!(clashes.is_empty(), "{clashes:#?}");
+    }
+
+    /// Every panel's letters, as fitted to it, are big enough to read from
+    /// where you'd read it (`render::screen::read_from`): the first headset
+    /// session couldn't read the signs.
+    #[test]
+    fn every_panel_reads_from_where_you_stand() {
+        use crate::raid::bench::ScreenText;
+        use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+        let mut small = Vec::new();
+        let mut seen = 0;
+        for map in [
+            "training_yard",
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+        ] {
+            let dir =
+                std::env::temp_dir().join(format!("extraction-text-{map}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                data_dir: Some(dir.clone()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..60 {
+                app.update();
+            }
+            // Signs, notes and terminals are put up by the client: take them
+            // from the map.
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let mut panels = crate::world::notes::marker_panels(&zone.map);
+            let mut q = app.world_mut().query::<(Option<&Name>, &ScreenText)>();
+            panels.extend(
+                q.iter(app.world())
+                    .map(|(name, s)| (name.map_or("panel".into(), |n| n.to_string()), s.clone())),
+            );
+            for (name, screen) in &panels {
+                if screen.text.trim().is_empty() {
+                    continue;
+                }
+                seen += 1;
+                let em = em_metres(screen);
+                let at = read_from(screen);
+                let deg = (em / at).atan().to_degrees();
+                if deg < MIN_EM_DEG {
+                    small.push(format!(
+                        "{map}: {} ({:.2}x{:.2} m): {:.1} cm letters, {deg:.2} deg at {at} m: {:?}",
+                        name,
+                        screen.size.x,
+                        screen.size.y,
+                        em * 100.0,
+                        screen.text.lines().next().unwrap_or("")
+                    ));
+                }
+            }
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+        assert!(seen > 20, "panels seen: {seen}");
+        assert!(small.is_empty(), "too small to read:\n{}", small.join("\n"));
+    }
+
+    /// A finger on the VIGNETTE card's button: held just short of the cap
+    /// nothing happens; pushed in, it clicks once and the setting moves on.
+    #[test]
+    fn a_fingertip_pushes_a_button() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::raid::comfort_board::ComfortCard;
+        let mut vr = Vr::new("training_yard");
+        vr.step(5);
+        let card = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &ComfortCard)>()
+            .iter(vr.app.world())
+            .find(|(_, c)| **c == ComfortCard::Vignette)
+            .map(|(e, _)| e)
+            .expect("the vignette card");
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(b, _)| b.target == card)
+            .map(|(_, gt)| gt)
+            .expect("a button on it");
+        let before = vr
+            .app
+            .world()
+            .get_resource::<crate::rig::comfort::Comfort>()
+            .map(|c| c.vignette);
+        // Finger pointing into the wall at the button.
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006 + 0.0));
+            vr.step(1);
+        }
+        // Resting on the cap, not pushing: no click.
+        vr.move_hand(Side::Right, tip_at(CAP + 0.009));
+        vr.step(3);
+        assert!(!vr.pressed().contains(&card), "a touch isn't a press");
+        // Pushed home.
+        for k in 0..6 {
+            vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+            vr.step(1);
+        }
+        vr.step(2);
+        assert_eq!(
+            vr.pressed().iter().filter(|e| **e == card).count(),
+            1,
+            "one click"
+        );
+        let after = vr
+            .app
+            .world()
+            .get_resource::<crate::rig::comfort::Comfort>()
+            .map(|c| c.vignette);
+        if before.is_some() {
+            assert_ne!(before, after, "the setting moved on");
+        }
+    }
+
     /// Something on the ground three metres off: point at it, squeeze,
     /// flick the hand back, and it's in your hand. Pointing away from it,
     /// the same flick does nothing.

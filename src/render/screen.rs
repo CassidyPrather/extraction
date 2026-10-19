@@ -170,6 +170,67 @@ fn fit_font(text: &str, px: Vec2, max: f32) -> f32 {
     max.min(by_height).min(by_width).max(6.0)
 }
 
+/// A panel's pixels per metre, its size in pixels, and its style's
+/// largest font (px).
+fn panel(screen: &ScreenText) -> (f32, u32, u32, f32) {
+    // Small panels (a wrist readout) still need enough pixels for text.
+    let ppm = PX_PER_M.max(420.0 / screen.size.x.max(1e-3));
+    let w = (screen.size.x * ppm).round().max(16.0) as u32;
+    let h = (screen.size.y * ppm).round().max(16.0) as u32;
+    let font = h as f32
+        / match screen.style {
+            ScreenStyle::Lcd => 16.0,
+            ScreenStyle::Paper | ScreenStyle::Crt => 14.0,
+            ScreenStyle::Card => 4.5,
+        };
+    (ppm, w, h, font)
+}
+
+/// How tall the panel's letters come out (the em, in metres) once its text
+/// is fitted: what decides whether it can be read, and from how far.
+pub fn em_metres(screen: &ScreenText) -> f32 {
+    let (ppm, w, h, font) = panel(screen);
+    fit_font(&screen.text, Vec2::new(w as f32, h as f32), font) / ppm
+}
+
+/// `text` wrapped to whichever line length gives it the biggest letters on
+/// a panel of this size and style (a long sign wraps wide, a short one
+/// narrow).
+pub fn wrap_to_fit(text: &str, size: Vec2, style: ScreenStyle) -> String {
+    let mut best = (0.0, text.to_string());
+    for columns in 12..=60 {
+        let wrapped = wrap_lines(text, columns);
+        let em = em_metres(&ScreenText {
+            text: wrapped.clone(),
+            size,
+            style,
+        });
+        // Only a real gain beats a narrower wrap (shorter lines read easier).
+        if em > best.0 + 1e-4 {
+            best = (em, wrapped);
+        }
+    }
+    best.1
+}
+
+/// The smallest letters (em, as an angle at the eye) a headset shows
+/// legibly. A Beyond 2 at the auto render scale has about 20 pixels a
+/// degree; 0.6 degrees is a 12-pixel em.
+pub const MIN_EM_DEG: f32 = 0.6;
+
+/// Where a panel is read from (m): a signpost from a few steps off, your
+/// wrist from your face, everything else (cards, notes, screens) from
+/// about a metre.
+pub fn read_from(screen: &ScreenText) -> f32 {
+    if screen.style == ScreenStyle::Paper && screen.size.x >= 0.7 {
+        3.0
+    } else if screen.size.x < 0.1 {
+        0.45
+    } else {
+        1.0
+    }
+}
+
 fn build_screens(
     mut commands: Commands,
     screens: Query<(Entity, &ScreenText), Added<ScreenText>>,
@@ -179,34 +240,27 @@ fn build_screens(
     mut drawings: ResMut<Drawings>,
 ) {
     for (e, screen) in &screens {
-        // Small panels (a wrist readout) still need enough pixels for text.
-        let ppm = PX_PER_M.max(420.0 / screen.size.x.max(1e-3));
-        let w = (screen.size.x * ppm).round().max(16.0) as u32;
-        let h = (screen.size.y * ppm).round().max(16.0) as u32;
-        let (bg, fg, emissive, font) = match screen.style {
+        let (_, w, h, font) = panel(screen);
+        let (bg, fg, emissive) = match screen.style {
             ScreenStyle::Lcd => (
                 Color::srgb(0.03, 0.025, 0.01),
                 Color::srgb(1.0, 0.68, 0.22),
                 true,
-                h as f32 / 16.0,
             ),
             ScreenStyle::Paper => (
                 Color::srgb(0.78, 0.75, 0.66),
                 Color::srgb(0.16, 0.15, 0.17),
                 false,
-                h as f32 / 14.0,
             ),
             ScreenStyle::Card => (
                 Color::srgb(0.8, 0.77, 0.66),
                 Color::srgb(0.14, 0.13, 0.15),
                 false,
-                h as f32 / 4.5,
             ),
             ScreenStyle::Crt => (
                 Color::srgb(0.01, 0.03, 0.015),
                 Color::srgb(0.35, 1.0, 0.45),
                 true,
-                h as f32 / 14.0,
             ),
         };
         let mut image = Image::new_fill(

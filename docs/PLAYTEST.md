@@ -90,6 +90,14 @@ What changed, and worth a comment each:
   they come down only if you crouch right down. Reach over your
   shoulder and grip to take the pack off; let go of a thing over your
   shoulder and it goes in the pack. Your own body no longer shades you.
+- **Buttons.** Every card that does something (the truck's comfort
+  cards, the route and request cards, terminals, the camp's choices) has
+  an amber push button at its right: point your index finger (trigger
+  off) and push it in. It clicks once and the controller ticks. Gripping
+  the card still works.
+- **Text.** Signposts are bigger, and every panel is checked to read
+  from where you'd stand (a signpost from 3 m, a card from 1 m). Mark
+  anything you still can't read, with how far away you were.
 - **Magazines** seat when their top meets the well, and the bell cord
   is easier to catch.
 - **Frame rate.** The Beyond 2 ran at 20-30 fps. The **SHARPNESS** card on

@@ -45,6 +45,60 @@ impl Terminal {
 /// Paper size, metres: a sheet you can read leaning over a table.
 pub const NOTE: Vec2 = Vec2::new(0.24, 0.32);
 
+pub fn note_panel(text: &str) -> ScreenText {
+    ScreenText {
+        text: crate::render::screen::wrap_to_fit(text, NOTE, ScreenStyle::Paper),
+        size: NOTE,
+        style: ScreenStyle::Paper,
+    }
+}
+
+/// A signpost's board, big enough to read from a few steps off (the first
+/// headset session couldn't read the 0.74 m ones).
+pub const SIGN: Vec2 = Vec2::new(1.0, 0.7);
+
+pub fn sign_panel(text: &str) -> ScreenText {
+    ScreenText {
+        text: crate::render::screen::wrap_to_fit(text, SIGN, ScreenStyle::Paper),
+        size: SIGN,
+        style: ScreenStyle::Paper,
+    }
+}
+
+pub fn terminal_panel(text: String) -> ScreenText {
+    ScreenText {
+        text,
+        size: Vec2::new(0.34, 0.26),
+        style: ScreenStyle::Crt,
+    }
+}
+
+/// Every panel a map's markers put up (each terminal page as it shows),
+/// named for a report.
+pub fn marker_panels(map: &extraction_core::map::MapDef) -> Vec<(String, ScreenText)> {
+    let mut out = Vec::new();
+    for m in &map.markers {
+        match &m.kind {
+            MarkerKind::Note { text } => out.push((format!("note {}", m.name), note_panel(text))),
+            MarkerKind::Sign { text } => out.push((format!("sign {}", m.name), sign_panel(text))),
+            MarkerKind::Terminal { pages } => {
+                for page in 0..pages.len() {
+                    let term = Terminal {
+                        pages: pages.clone(),
+                        page,
+                    };
+                    out.push((
+                        format!("terminal {} page {}", m.name, page + 1),
+                        terminal_panel(term.screen()),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The top of whatever is built under (x, z) that something could rest on
 /// (a floor, a table, a shelf: no higher than `reach` above the building's
 /// footing, so not its roof), or the ground.
@@ -107,11 +161,7 @@ fn spawn_notes(
                 let y = rest_height(&zone, m.at[0], m.at[1], 2.2 + m.y);
                 commands.spawn((
                     Name::new("Note"),
-                    ScreenText {
-                        text: crate::render::screen::wrap_lines(text, 24),
-                        size: NOTE,
-                        style: ScreenStyle::Paper,
-                    },
+                    note_panel(text),
                     // Lying face up, its top edge away from whoever reads
                     // it from the marker's facing.
                     Transform::from_xyz(m.at[0], y + 0.004, m.at[1])
@@ -142,17 +192,13 @@ fn spawn_notes(
                     ChildOf(sign),
                 ));
                 commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(0.8, 0.56, 0.03))),
+                    Mesh3d(meshes.add(Cuboid::new(SIGN.x + 0.06, SIGN.y + 0.06, 0.03))),
                     MeshMaterial3d(mat(Mat::Planks)),
                     Transform::from_xyz(0.0, 1.45, 0.03),
                     ChildOf(sign),
                 ));
                 commands.spawn((
-                    ScreenText {
-                        text: crate::render::screen::wrap_lines(text, 34),
-                        size: Vec2::new(0.74, 0.5),
-                        style: ScreenStyle::Paper,
-                    },
+                    sign_panel(text),
                     Transform::from_xyz(0.0, 1.45, 0.05),
                     Visibility::default(),
                     ChildOf(sign),
@@ -195,11 +241,7 @@ fn spawn_notes(
                 commands.spawn((
                     Name::new("Terminal screen"),
                     term,
-                    ScreenText {
-                        text,
-                        size: Vec2::new(0.34, 0.26),
-                        style: ScreenStyle::Crt,
-                    },
+                    terminal_panel(text),
                     Pressable::Terminal,
                     Grabbable {
                         points: vec![GrabPoint::free()],
