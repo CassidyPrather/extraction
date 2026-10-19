@@ -375,6 +375,18 @@ fn first_person_hands(
     let mut glove = |commands: &mut Commands, side: Side, at: Transform, curl: [f32; 5]| {
         let h = spawn_hand(commands, &mut meshes, &mut materials, side, curl);
         commands.entity(h).insert(view(at));
+        // The left wrist's display, as the game mounts it.
+        if side == Side::Left {
+            commands.spawn((
+                crate::raid::bench::ScreenText {
+                    text: "SURGE 12m  14.2kg\nHP 100".into(),
+                    size: Vec2::new(0.075, 0.045),
+                    style: crate::raid::bench::ScreenStyle::Lcd,
+                },
+                crate::render::props::wrist_mount(),
+                ChildOf(h),
+            ));
+        }
     };
     // Late enough for a map's cards and buttons to be up.
     if *stage == 15 {

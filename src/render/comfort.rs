@@ -161,11 +161,9 @@ fn add_wrist_panel(
                 size: Vec2::new(0.075, 0.045),
                 style: ScreenStyle::Lcd,
             },
-            // On the back of the wrist (the hand's palm faces inward, so
-            // that's its outer side, -X), tilted up toward the eyes, like a
-            // watch: turn the wrist to read it.
-            Transform::from_xyz(-0.03, 0.015, 0.07)
-                .with_rotation(Quat::from_rotation_z(0.95) * Quat::from_rotation_x(-1.2)),
+            // On the back of the wrist, on the glove's display housing, like
+            // a watch: turn the wrist to read it.
+            crate::render::props::wrist_mount(),
             Visibility::default(),
         ));
     }

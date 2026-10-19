@@ -749,6 +749,17 @@ fn glove_frame(side: Side) -> Transform {
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }
 
+/// Where the wrist display lies on the left glove, in the hand's frame:
+/// flat over the housing on the cuff's back (`art/hands/gloves.py`), its
+/// text running from the fingers to the elbow, so it reads level with the
+/// forearm held across the chest like a watch.
+pub(crate) fn wrist_mount() -> Transform {
+    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(
+        &Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
+    ));
+    glove_frame(Side::Left) * on_glove
+}
+
 /// A joint's turn, its finger curled `c`.
 fn joint_rotation(side: Side, finger: usize, joint: usize, c: f32) -> Quat {
     if joint == 0 {
