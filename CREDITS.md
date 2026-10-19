@@ -202,6 +202,32 @@ it. Thirty seconds now versus archaeology later.
 | `assets/audio/machines/radio_squelch_*.ogg` | Freesound "End radio transmission" — <https://freesound.org/s/47646/> | ReadeOnly | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/siren_*.ogg` | Freesound "Alarm, Air Raid Siren, Test, Devonport, Sony PCM M-10.wav" — <https://freesound.org/s/336640/> | audiojacked | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/siren_*.ogg` | Freesound "Air Raid Siren Alarm" — <https://freesound.org/s/412171/> | Poligonstudio | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/handle_metal_*.ogg` | Kenney "Impact Sounds 1.0" (impactMetal_light_000.ogg, impactMetal_light_001.ogg, impactMetal_light_002.ogg, impactMetal_light_003.ogg, impactMetal_light_004.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/handle_metal_*.ogg` | Kenney "RPG Audio" (metalPot1.ogg, metalPot2.ogg, metalPot3.ogg) — <https://kenney.nl/assets/rpg-audio> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/handle_wood_*.ogg` | Kenney "Impact Sounds 1.0" (impactWood_light_000.ogg, impactWood_light_001.ogg, impactWood_light_002.ogg, impactWood_light_003.ogg, impactWood_light_004.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/handle_plastic_*.ogg` | Kenney "Impact Sounds 1.0" (impactGeneric_light_000.ogg, impactGeneric_light_001.ogg, impactGeneric_light_002.ogg, impactGeneric_light_003.ogg, impactGeneric_light_004.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/button_*.ogg` | Freesound "Arcade button presses" — <https://freesound.org/s/737421/> | Sadiquecat | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/whoosh_*.ogg` | Freesound "Short Whoosh, 13x" — <https://freesound.org/s/427979/> | Kinoton | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/whoosh_*.ogg` | Freesound "Shirt Whoosh 1.wav" — <https://freesound.org/s/391448/> | saturdaysoundguy | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/catch_*.ogg` | Freesound "Ball Catching .wav" — <https://freesound.org/s/425254/> | TOMRORYPARSONS | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/catch_*.ogg` | Freesound "skin_pat_catch_hand_slap.wav" — <https://freesound.org/s/445673/> | CrownieYT | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/bell_*.ogg` | Kenney "Impact Sounds 1.0" (impactBell_heavy_000.ogg, impactBell_heavy_001.ogg, impactBell_heavy_002.ogg, impactBell_heavy_003.ogg, impactBell_heavy_004.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/chime_*.ogg` | Freesound "simple ding.mp3" — <https://freesound.org/s/332518/> | achinverma | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/eat_*.ogg` | Freesound "apple - bite & chew.wav" — <https://freesound.org/s/398757/> | Anthousai | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/eat_*.ogg` | Freesound "eating_something_crunchy" — <https://freesound.org/s/836514/> | hobomechanistic | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/drink_*.ogg` | Freesound "Drinking.wav" — <https://freesound.org/s/517173/> | craigglenday | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/drink_*.ogg` | Freesound "Gulping Water." — <https://freesound.org/s/328010/> | Koolwhip | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/bandage_*.ogg` | Freesound "Tape Bandages Rip" — <https://freesound.org/s/800275/> | SecureSubset | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/bandage_*.ogg` | Freesound "Cloth Rip Fast" — <https://freesound.org/s/591195/> | Rudmer_Rotteveel | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/bandage_*.ogg` | Freesound "cloth_ripping.wav" — <https://freesound.org/s/133440/> | reg7783 | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/body_hit_*.ogg` | Kenney "Impact Sounds 1.0" (impactPunch_medium_000.ogg, impactPunch_medium_001.ogg, impactPunch_medium_002.ogg, impactPunch_medium_003.ogg, impactPunch_medium_004.ogg) — <https://kenney.nl/assets/impact-sounds> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/switch_*.ogg` | Freesound "Flashlight Switch Click" — <https://freesound.org/s/690300/> | Ralph0o7 | CC0 1.0 | 2026-10 |
+| `assets/audio/physical/switch_*.ogg` | Kenney "RPG Audio" (metalClick.ogg) — <https://kenney.nl/assets/rpg-audio> | Kenney (kenney.nl) | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/truck_idle_*.ogg` | Freesound "Diesel Truck Idling Front.wav" — <https://freesound.org/s/128160/> | ibirdfilm | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/truck_idle_*.ogg` | Freesound "R19-48-Old Large Truck Start Idle Out.wav" — <https://freesound.org/s/487161/> | craigsmith | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/truck_arrive_*.ogg` | Freesound "small truck passes by" — <https://freesound.org/s/442528/> | AdrianoAnjos | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/truck_depart_*.ogg` | Freesound "Truck drives away old engine RUSSIA 920526.flac" — <https://freesound.org/s/567341/> | TRP | CC0 1.0 | 2026-10 |
+| `assets/audio/machines/truck_depart_*.ogg` | Freesound "R19-48-Old Large Truck Start Idle Out.wav" — <https://freesound.org/s/487161/> | craigsmith | CC0 1.0 | 2026-10 |
 
 The texture rows are produced by `scripts/fetch_assets.py`. The exact source
 files (URL, sha256) and the processing recipe for each output are recorded in

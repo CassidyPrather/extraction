@@ -745,14 +745,25 @@ fn play_haptics(
     let Some(a) = actions else {
         return;
     };
+    // The runtime plays only the last pulse it's given per controller, so
+    // a frame's pulses merge: the strongest, for the longest.
+    let mut merged: [Option<(f32, f32)>; 2] = [None, None];
     for p in pulses.read() {
-        let path = match p.side {
+        let m = &mut merged[p.side as usize];
+        let (a, t) = m.unwrap_or((0.0, 0.0));
+        *m = Some((a.max(p.amplitude), t.max(p.seconds)));
+    }
+    for (side, m) in [Side::Left, Side::Right].into_iter().zip(merged) {
+        let Some((amplitude, seconds)) = m else {
+            continue;
+        };
+        let path = match side {
             Side::Left => a.left,
             Side::Right => a.right,
         };
         let vib = openxr::HapticVibration::new()
-            .amplitude(p.amplitude.clamp(0.0, 1.0))
-            .duration(openxr::Duration::from_nanos((p.seconds * 1e9) as i64))
+            .amplitude(amplitude.clamp(0.0, 1.0))
+            .duration(openxr::Duration::from_nanos((seconds * 1e9) as i64))
             .frequency(openxr::FREQUENCY_UNSPECIFIED);
         if let Err(e) = a.haptic.apply_feedback(&session, path, &vib) {
             debug!("haptics: {e}");
