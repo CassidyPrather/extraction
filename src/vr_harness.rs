@@ -2059,6 +2059,23 @@ mod onboarding {
         assert!(said(&vr, "Safety's on. Click the stick"), "told why");
     }
 
+    /// On the track to the gate, a beam at head height between two stacks
+    /// of crates: standing tall under it isn't noticed, ducking is.
+    #[test]
+    fn ducking_under_the_beam_is_noticed() {
+        let mut vr = Vr::first_run();
+        let beam = crate::onboarding::BEAM_AT;
+        let feet = ground(&vr, beam);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        vr.step(10);
+        assert!(!ob(&vr).ducked, "standing tall isn't ducking");
+        vr.head(Vec3::new(0.0, 1.15, -0.1));
+        vr.step(5);
+        assert!(ob(&vr).ducked, "the duck was noticed");
+        assert!(said(&vr, "Mind your head"));
+    }
+
     /// Walk up to a card and squeeze it.
     fn take_card(vr: &mut Vr, card: Entity) {
         let p = at(vr, card);

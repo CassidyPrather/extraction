@@ -282,6 +282,15 @@ pub fn station_of(goal: Goal) -> usize {
 pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
 pub const STUMP_H: f32 = 0.38;
+/// A beam at head height between two stacks of crates on the track, on
+/// the way to the gate: something you duck under without being asked. The
+/// beam itself has no collider (the body's capsule doesn't shrink when you
+/// crouch, so a solid one would wall the track off); the stacks do.
+pub const BEAM_AT: [f32; 2] = [0.0, 79.0];
+/// The beam's underside, and the gap between the stacks.
+pub const BEAM_CLEAR: f32 = 1.35;
+pub const BEAM_GAP: f32 = 2.2;
+const BEAM_STACK: Vec3 = Vec3::new(0.8, BEAM_CLEAR, 0.8);
 /// A snare on the way in, nothing in it: you can't see where it ends until
 /// something sets it off. Throw a thing in first.
 pub const SNARE_AT: [f32; 2] = [9.0, -31.5];
@@ -313,6 +322,8 @@ pub struct Onboarding {
     pub age: f32,
     /// The opening line has been said.
     pub greeted: bool,
+    /// Ducked under the low beam on the track (noticed, not asked for).
+    pub ducked: bool,
 }
 
 impl Onboarding {
@@ -400,6 +411,8 @@ pub enum Prop {
     BoardPost,
     /// A burnt stump the burner's stone sits on, out of the grass.
     Stump,
+    /// Two stacks of crates across the track with a beam over the gap.
+    LowBeam,
 }
 
 /// Things put out for a goal.
@@ -455,6 +468,7 @@ impl Plugin for OnboardingPlugin {
                         watch_moves,
                         watch_wrist,
                         watch_probe,
+                        watch_duck,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -790,6 +804,30 @@ fn setup(
             }
         }
     }
+
+    // The low beam on the track.
+    let at = ground(&zone, BEAM_AT);
+    let off = (BEAM_GAP + BEAM_STACK.x) * 0.5;
+    commands.spawn((
+        Name::new("Low beam"),
+        Prop::LowBeam,
+        Transform::from_translation(at),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![
+            (
+                Vec3::new(-off, BEAM_STACK.y * 0.5, 0.0),
+                Quat::IDENTITY,
+                Collider::cuboid(BEAM_STACK.x, BEAM_STACK.y, BEAM_STACK.z),
+            ),
+            (
+                Vec3::new(off, BEAM_STACK.y * 0.5, 0.0),
+                Quat::IDENTITY,
+                Collider::cuboid(BEAM_STACK.x, BEAM_STACK.y, BEAM_STACK.z),
+            ),
+        ]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
 
     // Going home: a spare radio on a crate, for whoever left theirs.
     let size = Vec3::new(0.6, 0.7, 0.5);
@@ -1212,6 +1250,37 @@ fn watch_probe(
     }
 }
 
+/// Under the beam with your head below it: noticed, with a click and a
+/// word from the driver. (Not a step: it's for whoever does it anyway.)
+fn watch_duck(
+    mut ob: ResMut<Onboarding>,
+    players: Query<(&crate::rig::RigInput, &Transform), With<LocalPlayer>>,
+    zone: Res<Zone>,
+    mut raid: ResMut<Raid>,
+    mut steps: MessageWriter<StepDone>,
+) {
+    if ob.ducked {
+        return;
+    }
+    let Some((input, t)) = players.iter().next() else {
+        return;
+    };
+    let head = t.transform_point(input.head.translation);
+    let rel = head.xz() - Vec2::from(BEAM_AT);
+    let under = rel.x.abs() < BEAM_GAP * 0.5 && rel.y.abs() < 0.5;
+    let low = head.y - zone.ground(head.x, head.z) < BEAM_CLEAR - 0.05;
+    if under && low {
+        ob.ducked = true;
+        raid.say(DUCK_LINE);
+        steps.write(StepDone {
+            at: None,
+            station: false,
+        });
+    }
+}
+
+pub const DUCK_LINE: &str = "Driver: \"Mind your head. That's it.\"";
+
 /// The house's door open.
 fn watch_world(
     mut ob: ResMut<Onboarding>,
@@ -1566,6 +1635,7 @@ mod tests {
             ALL_DONE_LINE,
             TOO_CLOSE_LINE,
             START_OVER_LINE,
+            DUCK_LINE,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)

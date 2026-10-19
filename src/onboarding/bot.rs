@@ -248,7 +248,7 @@ impl DirectorWorld<'_, '_> {
     /// Up the track to a point: along the gravel (x = 0), then across.
     fn go(&self, from: Vec2, to: Vec2, within: f32) -> Vec<Task> {
         let mut t = Vec::new();
-        let on_track = |p: Vec2| Vec2::new(1.0, p.y);
+        let on_track = |p: Vec2| Vec2::new(0.0, p.y);
         let mut at = from;
         if from.distance(to) > 6.0 {
             t.extend(self.walk(at, on_track(from), 1.5));
