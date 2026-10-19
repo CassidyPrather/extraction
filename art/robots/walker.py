@@ -54,7 +54,8 @@ for k in range(12):
     core.lathe([(R + 0.004, -0.06), (R + 0.012, -0.03), (R + 0.012, 0.03), (R + 0.004, 0.06),
                 (R - 0.01, 0.06), (R - 0.01, -0.06)], "Shell", segs=5, xf=UP, start=a0,
                sweep=28.4, closed=True)
-    core.lathe([(R + 0.0125, -0.018), (R + 0.0125, 0.018), (R + 0.006, 0.018), (R + 0.006, -0.018)],
+    # (5 mm proud of the band: flush faces z-fight.)
+    core.lathe([(R + 0.017, -0.018), (R + 0.017, 0.018), (R + 0.006, 0.018), (R + 0.006, -0.018)],
                "Dark", segs=3, xf=UP, start=a0 + 9, sweep=10, closed=True)
 # Hip collars and the ball sockets inside them.
 for i in range(4):
@@ -99,8 +100,11 @@ sensor.lathe(lat_arc(R + 0.026, R + 0.031, 15.5, 20.5, 2), "Eye", segs=3, xf=UP,
 # --- Turret -----------------------------------------------------------------------------------
 TURRET = (0.0, 0.46, 0.0)
 turret = Part("turret", origin=TURRET)
+# (Every corner rounder than the 0.02 bevel: a tighter one folds the
+# bevelled side's outline over itself, and the folded side z-fights.)
 side = fillet([(0.19, 0.405), (0.205, 0.462), (0.16, 0.517), (-0.07, 0.519), (-0.185, 0.48),
-               (-0.198, 0.44), (-0.165, 0.405)], [0.01, 0.025, 0.03, 0.03, 0.02, 0.01, 0.01], 4)
+               (-0.198, 0.44), (-0.165, 0.405)], [0.022, 0.025, 0.03, 0.03, 0.022, 0.022, 0.022],
+              4)
 turret.prism(side, -0.078, 0.078, "Shell", axis="x", bevel=0.02, segs=3)
 # Dark vents on the flanks and a sensor bar on the nose.
 for sx in (-1, 1):

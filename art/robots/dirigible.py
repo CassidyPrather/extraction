@@ -127,8 +127,8 @@ def tail_cell(p):
         rud = fillet([(7.4, r_at(7.4) - 0.1), (7.9, r_at(7.9) - 0.1), (8.05, 2.45),
                       (7.6, 2.5)], 0.05, 2)
         p.prism(rud, -0.035, 0.035, "Dark", axis="x", xf=rot)
-        # Tip light.
-        p.box((0.06, 0.05, 0.5), (0.0, 2.72, 6.95), "Eye", bevel=0.015, segs=1,
+        # Tip light. (5 mm wider a side than the fin tip: flush faces z-fight.)
+        p.box((0.07, 0.05, 0.5), (0.0, 2.72, 6.95), "Eye", bevel=0.015, segs=1,
               xf=rot)
 
 

@@ -226,7 +226,8 @@ ch.cyl(0.1, -1.95, -1.25, "Iron", segs=14, xf=T(0.42, 0.42, 0), chamfer=0.02)
 ch.cyl(0.035, -1.25, -0.6, "Iron", segs=8, xf=T(0.42, 0.42, 0))
 
 # Rear: cross-member with tail lamps, a tow pintle, mud flaps.
-ch.box((2.26, 0.14, 0.1), (0.0, 0.92, 1.87), "Paint")
+# (Its underside hangs 6 mm below the rails' top flanges: flush faces z-fight.)
+ch.box((2.26, 0.148, 0.1), (0.0, 0.916, 1.87), "Paint")
 for sx in (-1, 1):
     ch.box((0.2, 0.12, 0.06), (sx * 0.92, 0.84, 1.92), "Iron", bevel=0.01, segs=1)
     ch.box((0.08, 0.06, 0.01), (sx * 0.96, 0.84, 1.952), "LampRed", bevel=0.004, segs=1)

@@ -158,8 +158,11 @@ upper.prism([(x * 1.05, y + (y - 0.0755) * 0.04) for x, y in upper_sec], -0.244,
             axis="z", bevel=0.0008, segs=1)
 
 # --- Stock ------------------------------------------------------------------------------
+# (Corners hidden in the receiver and the butt plate stay sharp: a rounding
+# tighter than the 8 mm bevel folds the bevelled side's outline over itself,
+# and the folded side z-fights.)
 stock_prof = fillet([(0.019, 0.0765), (0.30, 0.036), (0.30, -0.086), (0.255, -0.080),
-                     (0.025, 0.004), (0.019, 0.022)], [0.002, 0.004, 0.004, 0.02, 0.01, 0.002], 4)
+                     (0.025, 0.004), (0.019, 0.022)], [0.0, 0.0, 0.0, 0.02, 0.01, 0.0], 4)
 
 
 def stock_w(z, y):

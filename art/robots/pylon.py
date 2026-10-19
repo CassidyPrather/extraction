@@ -29,7 +29,8 @@ reset()
 
 core = Part("core", origin=(0.0, 0.6, 0.0))
 # Plinth and feet.
-core.box((1.06, 0.1, 1.06), (0.0, 0.05, 0.0), "Dark", bevel=0.02, segs=1)
+# (The plinth stands 5 mm up on the feet: flush bottoms z-fight.)
+core.box((1.06, 0.095, 1.06), (0.0, 0.0525, 0.0), "Dark", bevel=0.02, segs=1)
 for sx in (-1, 1):
     for sz in (-1, 1):
         core.box((0.16, 0.06, 0.16), (sx * 0.42, 0.03, sz * 0.42), "Steel", bevel=0.01, segs=1)
@@ -42,11 +43,12 @@ for a in range(4):
     xf = RY(a * math.pi / 2)
     for k in range(5):
         core.box((0.5, 0.025, 0.02), (0.0, 0.25 + k * 0.08, 0.505), "Dark", xf=xf)
-# Hazard stripes down the corners.
+# Hazard stripes down the corners. (5 mm proud of the rounded corner's
+# middle facet: flush faces z-fight.)
 for a in range(4):
     xf = RY(a * math.pi / 2 + math.pi / 4)
     for k in range(3):
-        core.box((0.09, 0.06, 0.02), (0.0, 0.25 + k * 0.14, 0.675), "Warn", xf=xf)
+        core.box((0.09, 0.06, 0.02), (0.0, 0.25 + k * 0.14, 0.68), "Warn", xf=xf)
 # The mast collar on the lid.
 core.cyl(0.2, 1.2, 1.26, "Dark", segs=20, xf=UP, chamfer=0.01)
 core.tube(0.16, 0.13, 1.26, 1.3, "Steel", segs=20, xf=UP)

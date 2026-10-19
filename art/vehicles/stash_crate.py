@@ -43,8 +43,9 @@ for k in range(3):
 # Corner posts inside, battens outside across the boards.
 for sx in (-1, 1):
     for sz in (-1, 1):
-        c.box((0.05, Y1 - Y0 - 0.04, 0.05), (sx * (W / 2 - 0.047), (Y0 + Y1) / 2 + 0.02,
-                                              sz * (D / 2 - 0.047)), "Boards", bevel=0.004, segs=1)
+        # (Down 6 mm past the floor boards' undersides: flush faces z-fight.)
+        c.box((0.05, Y1 - Y0 - 0.034, 0.05), (sx * (W / 2 - 0.047), (Y0 + Y1) / 2 + 0.017,
+                                               sz * (D / 2 - 0.047)), "Boards", bevel=0.004, segs=1)
         # Steel corner plates top and bottom, with bolt heads.
         for y in (Y0 + 0.07, Y1 - 0.05):
             c.box((0.006, 0.1, 0.1), (sx * (W / 2 + 0.003), y, sz * (D / 2 - 0.05)), "Iron")
