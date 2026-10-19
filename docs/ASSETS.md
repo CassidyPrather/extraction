@@ -183,13 +183,13 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 
 | Script | Output | Tris |
 | --- | --- | --- |
-| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 6.8k |
-| `art/guns/ak74.py` | `models/guns/ak74.glb` | 10.2k |
-| `art/guns/mosin.py` | `models/guns/mosin.glb` | 9.8k |
-| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 6.5k |
-| `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 0.3k to 1.2k |
-| `art/robots/drone.py` | `models/robots/drone.glb` | 7.2k |
-| `art/robots/walker.py` | `models/robots/walker.glb` | 14.3k |
+| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 7.1k |
+| `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.6k |
+| `art/guns/mosin.py` | `models/guns/mosin.glb` | 12.5k |
+| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 14.9k |
+| `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 3.9k (with their visible rounds) |
+| `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
+| `art/robots/walker.py` | `models/robots/walker.glb` | 14.8k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 14.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 24.6k (wheel once) |
