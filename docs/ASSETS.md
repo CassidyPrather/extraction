@@ -192,8 +192,9 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.8k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 14.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
-| `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 24.6k (wheel once) |
+| `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
+| `art/vehicles/bench.py` | `models/vehicles/bench.glb` (the bed's workbench) | 5.3k |
 | `art/items/attachments.py` | `models/items/<item id>.glb`: scope, side rail, weapon light, laser, artifact adapter | 0.3k to 3k |
 | `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
@@ -252,8 +253,22 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   palette. The truck and the kit use `Paint` (olive over the peeling-paint
   scan), `Canvas`, `Planks`, `Iron` (dark metal), `Glass`, `Rubber`,
   `Lens`, `Clear`, `Copper`, `Olive`, `Cream`, `Paper`, `Rope`, `Red`,
-  `Yellow`, `Pebble`, `Char`, and the emissive `Lamp`, `LampRed`, `Glow`,
-  `Warn`, `Ember` and `Strange`.
+  `Yellow` (a true yellow), `Orange`, `Blue`, `Leaf` (green), `Enamel`
+  (white enamel and white paint), `Worn` (bare steel where bluing or
+  paint has rubbed off), `Pebble`, `Char`, and the emissive `Lamp`,
+  `LampRed`, `Glow`, `Warn`, `Ember` and `Strange`. `MATERIAL_NAMES` in
+  `src/models.rs` lists them; tests check every exported model uses only
+  those names (anything else renders grey) and that `art/common.py`'s
+  palette lists the same. On robots `Glow` is a brighter cyan (it has to
+  carry through fog) and, like `Eye`, goes dark when its part dies.
+- **Rounds in magazines.** A magazine model's `round_N` objects are the
+  rounds you can see (the top ones in the lips, all five in a clip);
+  `show_mag_rounds` shows round N only while the magazine holds N or
+  more.
+- **Items fit their box.** An item model sits on the floor of its `dims`
+  box and doesn't stick out of it; anything flat or long has `dims`
+  rather than a bulk cube (`every_item_model_fits_its_box` checks).
+  `_kit.centred` moves a model's bounds onto the box.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.
@@ -274,10 +289,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   partial `sweep` for panels.
 - `sweep`: a section along a path, for trigger guards and loops.
 - `box` and `sphere`.
-- `cut`: an exact boolean, applied when the object is made.
+- `stock`: furniture lofted from a side outline, each cut across it a
+  superellipse filling the outline's height (`width` gives the half
+  widths at belly and top, `power` how square), for stocks, forends and
+  grips that are round, not slab-sided.
+- `cut`: an exact boolean, applied when the object is made. It drops
+  cuts much shallower than half a millimetre, so engrave 0.6 mm deep.
+  Lettering: `text` from `art/items/_kit.py` into a cutter Part.
 
 The 2D helpers are `fillet` (round a polygon's corners), `catmull` and
-`arc`. `make` applies the cuts, UVs, sharp edges and weighted normals.
+`arc`. `make` applies the cuts, UVs, sharp edges and weighted normals,
+and with `worn={...}` edge wear first (`wear`: the narrow faces of
+bevels on `Blued`, or the materials you name, go to `Worn` in noisy
+patches).
 `join` merges Parts into one object. Keep cuts on their own Part and
 join afterwards: the exact solver drops open pieces, such as a swept
 trigger guard, from the mesh it cuts.
