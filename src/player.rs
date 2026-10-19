@@ -23,6 +23,8 @@ const GRAVITY: f32 = 9.81;
 const JUMP_SPEED: f32 = 3.6;
 const CAPSULE_RADIUS: f32 = 0.28;
 const CAPSULE_HEIGHT: f32 = 1.75;
+/// The lowest the body goes: crouched as low as a kneel.
+const MIN_HEIGHT: f32 = 0.9;
 const STEP_HEIGHT: f32 = 0.4;
 /// Deeper water than this and you float, head and shoulders out.
 pub const FLOAT_DEPTH: f32 = 1.3;
@@ -58,6 +60,11 @@ pub struct Body {
     /// The head's standing height in the playspace, held at its highest
     /// and slowly let go (so a bend reads as a bend).
     pub standing: f32,
+    /// How tall the body is right now (m; 0 before the first tick): it
+    /// follows the head down at once, and back up only where there's room
+    /// above. What moves you and what gets shot are both this tall, so you
+    /// can duck under a beam, a fallen trunk or a low doorway for real.
+    pub height: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -148,8 +155,40 @@ pub fn spawn_player(commands: &mut Commands, feet: Vec3, yaw_deg: f32, local: bo
     root.id()
 }
 
-fn capsule() -> Collider {
-    Collider::capsule(CAPSULE_RADIUS, CAPSULE_HEIGHT - 2.0 * CAPSULE_RADIUS)
+fn capsule(height: f32) -> Collider {
+    Collider::capsule(CAPSULE_RADIUS, height - 2.0 * CAPSULE_RADIUS)
+}
+
+/// How tall the body can be this tick, standing on `base`: as tall as the
+/// head wants (a little over its eyes), but rising only into room there is.
+fn body_height(
+    ms: &MoveAndSlide,
+    body: &Body,
+    head_y: f32,
+    base: Vec3,
+    filter: &SpatialQueryFilter,
+) -> f32 {
+    let want = (head_y + 0.12).clamp(MIN_HEIGHT, CAPSULE_HEIGHT);
+    let was = if body.height > 0.0 {
+        body.height
+    } else {
+        return want;
+    };
+    if want <= was + 1e-3 {
+        return want;
+    }
+    let room = ms
+        .spatial_query
+        .cast_shape(
+            &capsule(was),
+            base + Vec3::Y * was * 0.5,
+            Quat::IDENTITY,
+            Dir3::Y,
+            &ShapeCastConfig::from_max_distance(want - was),
+            filter,
+        )
+        .map_or(want - was, |hit| (hit.distance - 0.01).max(0.0));
+    was + room
 }
 
 pub fn move_bodies(
@@ -171,7 +210,6 @@ pub fn move_bodies(
     mut steps: MessageWriter<Footstep>,
 ) {
     let dt = time.delta_secs();
-    let shape = capsule();
     let config = MoveAndSlideConfig::default();
     for (entity, input, mut body, mut root, children, climbing) in &mut bodies {
         let own: Vec<Entity> = children.iter().filter(|c| colliders.contains(*c)).collect();
@@ -275,7 +313,16 @@ pub fn move_bodies(
         // appearing there. (Appearing inside a step's box, it was pushed
         // back out: walking up a house's steps in the room pushed the room
         // away instead.)
-        let mut centre = root.translation + under_before + Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        let height = body_height(
+            &move_and_slide,
+            &body,
+            input.head.translation.y,
+            root.translation + under_before,
+            &filter,
+        );
+        body.height = height;
+        let shape = capsule(height);
+        let mut centre = root.translation + under_before + Vec3::Y * height * 0.5;
         let walked = under - under_before;
         if !climbing && walked.length_squared() > 1e-8 {
             let out = move_and_slide.move_and_slide(
@@ -378,7 +425,7 @@ pub fn move_bodies(
         body.grounded = grounded;
         body.velocity = velocity;
         let moved = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z).length();
-        root.translation = new_centre - under - Vec3::Y * CAPSULE_HEIGHT * 0.5;
+        root.translation = new_centre - under - Vec3::Y * height * 0.5;
 
         if swimming {
             // Strokes: the water's own sound, slower than steps.
@@ -406,16 +453,18 @@ pub fn move_bodies(
     }
 }
 
-/// What gets shot is as tall as you are standing right now: duck behind a
-/// wall for real and the capsule ducks with you. (Moving uses the full
-/// capsule; this is the one bullets and robots meet.)
+/// What gets shot is as tall as the body is ([`Body::height`]): duck behind
+/// a wall for real and the capsule ducks with you.
 fn fit_hitboxes(
     mut commands: Commands,
-    players: Query<(&RigInput, &Children), With<Player>>,
+    players: Query<(&Body, &Children), With<Player>>,
     mut colliders: Query<(Entity, &mut Transform, &mut HitboxHeight), With<BodyCollider>>,
 ) {
-    for (input, children) in &players {
-        let want = (input.head.translation.y + 0.12).clamp(0.9, CAPSULE_HEIGHT);
+    for (body, children) in &players {
+        if body.height <= 0.0 {
+            continue;
+        }
+        let want = body.height;
         for c in children.iter() {
             let Ok((e, mut t, mut h)) = colliders.get_mut(c) else {
                 continue;

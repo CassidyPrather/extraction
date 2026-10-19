@@ -479,6 +479,101 @@ mod tests {
         assert_eq!(vr.hand_state(Side::Right).holding, None);
     }
 
+    /// Where the feet stand, in the world (the head may lean past them).
+    fn body_at(vr: &mut Vr) -> Vec3 {
+        let root = *vr.app.world().get::<Transform>(vr.player).unwrap();
+        let body = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap();
+        let feet = body.feet.unwrap_or_default();
+        root.transform_point(Vec3::new(feet.x, 0.0, feet.y))
+    }
+
+    /// A beam across your way at 1.35 m: walking at it standing, you stop;
+    /// ducking, you pass under; standing up beneath it, the body stays
+    /// under it. (The training yard wanted a beam to duck under and had to
+    /// leave it without a collider: the body was 1.75 m tall however low
+    /// your head went.)
+    #[test]
+    fn duck_under_a_beam() {
+        let mut vr = Vr::new("marrow_creek");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let start = zone.on_ground(0.0, 200.0);
+        vr.stand(start + Vec3::Y * 0.05, 0.0);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        vr.step(30);
+        let from = body_at(&mut vr);
+        // Facing -Z; the beam 1 m ahead, its underside 1.35 m over the
+        // ground there.
+        let beam_z = from.z - 1.0;
+        let ground = zone.on_ground(from.x, beam_z).y;
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(4.0, 0.2, 0.3),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_xyz(from.x, ground + 1.35 + 0.1, beam_z),
+        ));
+        vr.step(2);
+        let walk = |vr: &mut Vr, head_y: f32| {
+            for i in 0..=200 {
+                vr.head(Vec3::new(0.0, head_y, -2.0 * i as f32 / 200.0));
+                vr.step(1);
+            }
+            vr.step(10);
+        };
+        walk(&mut vr, 1.65);
+        let stood = body_at(&mut vr);
+        assert!(
+            stood.z > beam_z + 0.2,
+            "standing, the beam stops you ({:.2} vs beam at {beam_z:.2})",
+            stood.z
+        );
+        // Back to the start (the feet with it), crouch, and go again.
+        vr.head(Vec3::new(0.0, 1.0, 0.0));
+        vr.app
+            .world_mut()
+            .get_mut::<crate::player::Body>(vr.player)
+            .unwrap()
+            .feet = None;
+        vr.stand(start + Vec3::Y * 0.05, 0.0);
+        vr.step(30);
+        walk(&mut vr, 1.0);
+        let ducked = body_at(&mut vr);
+        assert!(
+            ducked.z < beam_z - 0.5,
+            "ducking, you pass under ({:.2} vs beam at {beam_z:.2})",
+            ducked.z
+        );
+        // Back under it (the feet follow the head to within a lean of
+        // it), and stand up there.
+        vr.head(Vec3::new(0.0, 1.0, -0.65));
+        vr.step(60);
+        let under = body_at(&mut vr);
+        assert!(
+            (under.z - beam_z).abs() < 0.2,
+            "under the beam ({:.2})",
+            under.z
+        );
+        vr.head(Vec3::new(0.0, 1.65, -0.65));
+        vr.step(30);
+        let h = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap()
+            .height;
+        assert!(h < 1.36, "the body stays under the beam ({h:.2} m tall)");
+        let after = body_at(&mut vr);
+        assert!(
+            (after.y - under.y).abs() < 0.05,
+            "and on the ground ({:.2} -> {:.2})",
+            under.y,
+            after.y
+        );
+    }
+
     /// The steepest walkable open ground near `around`.
     fn slope_near(vr: &Vr, around: Vec2) -> (Vec2, f32) {
         let zone = vr.app.world().resource::<crate::world::Zone>();
