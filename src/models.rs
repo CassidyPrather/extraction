@@ -153,6 +153,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Dark", "Rotor", "Lens", "Clear", "Lamp", "LampRed", "Glow", "Warn", "Eye", "Strange",
     // World props (art/props).
     "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking", "Zinc", "Straw",
+    // The gloves (art/hands).
+    "Glove", "Leather", "Padding",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -234,6 +236,24 @@ impl ModelMaterials {
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
+            // The gloves: the canvas scan's weave, fine, under olive-drab
+            // nylon, a tan synthetic leather palm and charcoal padding. Dark
+            // as worn gloves are, but never black (ART_DIRECTION: values).
+            "Glove" | "Leather" | "Padding" => {
+                let (c, rough) = match name {
+                    "Glove" => (Color::srgb(0.30, 0.29, 0.23), 0.9),
+                    "Leather" => (Color::srgb(0.33, 0.27, 0.2), 0.7),
+                    _ => (Color::srgb(0.17, 0.17, 0.16), 0.8),
+                };
+                derive(Mat::Canvas, &move |m| {
+                    m.base_color_texture = None;
+                    m.base_color = c;
+                    m.metallic = 0.0;
+                    m.metallic_roughness_texture = None;
+                    m.perceptual_roughness = rough;
+                    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(6.0));
+                })
+            }
             "Rubber" => flat(materials, Color::srgb(0.07, 0.07, 0.07), 0.0, 0.88),
             "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
             // Printed and painted colours. A true yellow (yolk, butter, the

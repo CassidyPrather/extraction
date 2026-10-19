@@ -10,8 +10,15 @@ pub struct DevPlugin;
 
 impl Plugin for DevPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FrameCount>()
-            .add_systems(Update, (count_frames, screenshot_when_ready, gallery));
+        app.init_resource::<FrameCount>().add_systems(
+            Update,
+            (
+                count_frames,
+                screenshot_when_ready,
+                gallery,
+                first_person_hands,
+            ),
+        );
     }
 }
 
@@ -220,6 +227,8 @@ fn gallery(
                     );
                 }
             }
+            // `first_person_hands` has these.
+            s if s.starts_with("fp:") => {}
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -289,5 +298,187 @@ fn gallery(
             });
             false
         });
+    }
+}
+
+/// `--gallery fp:WHAT`: the player's gloves as you'd see them, at eye
+/// height, held still: `fp:open` (both hands open), `fp:point` (the right
+/// index on the nearest push button), or `fp:<item id>` (a gun on its grip
+/// in the right hand, the left on its handguard if it has one; anything
+/// else in the left fist); `fp:WHAT,ZOOM,TURN` brings it all closer and
+/// turns it about the right hand. Each glove takes the curl the game gives that
+/// hold (`render::props::hold_curl`).
+///
+/// ```text
+/// scripts/shot.sh target/shots/fp.png 40,0,262,0,-10 20 --gallery fp:ak74
+/// ```
+fn first_person_hands(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+    grabbables: Query<&crate::interact::Grabbable>,
+    buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
+    mut players: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
+    mut stage: Local<u32>,
+    mut waiting: Local<Option<(Entity, Transform)>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::interact::GripRole;
+    use crate::render::props::{POINTING, hold_curl, spawn_hand};
+    use crate::rig::Side;
+    let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
+    else {
+        return;
+    };
+    let Some(what) = spec.split(',').next().and_then(|s| s.strip_prefix("fp:")) else {
+        return;
+    };
+    *stage += 1;
+    for mut v in &mut players {
+        *v = Visibility::Hidden;
+    }
+    let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+    let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    let fwd = rot * Vec3::NEG_Z;
+    let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+    let right = flat.cross(Vec3::Y);
+    // `fp:WHAT,ZOOM` brings everything ZOOM times closer, for a close look.
+    let zoom: f32 = spec
+        .split(',')
+        .nth(1)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(1.0);
+    // `fp:WHAT,ZOOM,TURN` turns it all TURN degrees about the right hand,
+    // to see a grip from the side.
+    let turn: f32 = spec
+        .split(',')
+        .nth(2)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(0.0);
+    let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
+    let view = move |t: Transform| {
+        let q = Quat::from_rotation_y(turn.to_radians());
+        Transform::from_translation(pivot + q * (t.translation - pivot))
+            .with_rotation(q * t.rotation)
+    };
+    // Hands out in front at about a forearm's reach, low, pointing ahead
+    // and a little down and in, as they rest on a controller.
+    let rest = |side: Side| {
+        let s = side.sign();
+        let at = eye + (flat * 0.36 + right * (0.15 * s) - Vec3::Y * 0.27) / zoom;
+        let aim = Quat::from_axis_angle(Vec3::Y, -0.18 * s) * Quat::from_axis_angle(right, -0.1);
+        Transform::from_translation(at)
+            .with_rotation(aim * Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation)
+    };
+    let mut glove = |commands: &mut Commands, side: Side, at: Transform, curl: [f32; 5]| {
+        let h = spawn_hand(commands, &mut meshes, &mut materials, side, curl);
+        commands.entity(h).insert(view(at));
+        // The left wrist's display, as the game mounts it.
+        if side == Side::Left {
+            commands.spawn((
+                crate::raid::bench::ScreenText {
+                    text: "SURGE 12m  14.2kg\nHP 100".into(),
+                    size: Vec2::new(0.075, 0.045),
+                    style: crate::raid::bench::ScreenStyle::Lcd,
+                },
+                crate::render::props::wrist_mount(),
+                ChildOf(h),
+            ));
+        }
+    };
+    // Late enough for a map's cards and buttons to be up.
+    if *stage == 15 {
+        match what {
+            "open" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
+                glove(&mut commands, Side::Right, rest(Side::Right), [0.0; 5]);
+            }
+            "point" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+                let mut at = rest(Side::Right);
+                if let Some(b) = buttons.iter().min_by(|a, b| {
+                    let d = |g: &GlobalTransform| g.translation().distance(eye);
+                    d(a).total_cmp(&d(b))
+                }) {
+                    // Fingertip a centimetre off the cap, pressing straight in.
+                    let normal = b.rotation() * Vec3::Z;
+                    at.rotation = Transform::IDENTITY.looking_to(-normal, Vec3::Y).rotation;
+                    at.translation = b.translation() + normal * 0.012
+                        - at.rotation * crate::interact::poke::FINGERTIP;
+                }
+                glove(&mut commands, Side::Right, at, POINTING);
+            }
+            id => {
+                let Some(kind) = catalog.kind(id) else {
+                    warn!("gallery: no item {id}");
+                    return;
+                };
+                let e = crate::items::spawn_item(
+                    &mut commands,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: rest(Side::Left),
+                        condition: 1.0,
+                    },
+                );
+                commands.entity(e).insert(RigidBody::Static);
+                // A gun is held level, a hand's width right of centre.
+                let level = Transform::from_translation(
+                    eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom,
+                )
+                .looking_to(flat, Vec3::Y);
+                *waiting = Some((e, level));
+            }
+        }
+    }
+    // Put the item in the hands once its grab points are there.
+    let Some((item, level)) = *waiting else {
+        return;
+    };
+    let Ok(grab) = grabbables.get(item) else {
+        return;
+    };
+    *waiting = None;
+    let point = |role: GripRole| grab.points.iter().find(|p| p.role == role);
+    if let Some(primary) = point(GripRole::Primary) {
+        let item_at =
+            Transform::from_matrix(level.to_matrix() * primary.local.to_matrix().inverse());
+        commands.entity(item).insert(view(item_at));
+        glove(
+            &mut commands,
+            Side::Right,
+            level,
+            hold_curl(Some(GripRole::Primary), 0.0, 0.0),
+        );
+        match point(GripRole::Support) {
+            Some(support) => glove(
+                &mut commands,
+                Side::Left,
+                item_at * support.local,
+                hold_curl(Some(GripRole::Support), 0.0, 0.0),
+            ),
+            None => glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]),
+        }
+    } else {
+        // Upright in the left fist (round the hand's origin, as a grip is),
+        // the right open.
+        let thinnest = catalog.kind(what).map_or(0.04, |k| {
+            let def = catalog.get(k);
+            def.dims.map_or((def.bulk / 1000.0).cbrt(), |d| {
+                d.into_iter().fold(f32::MAX, f32::min)
+            })
+        });
+        let hand = rest(Side::Left);
+        commands.entity(item).insert(view(hand));
+        glove(
+            &mut commands,
+            Side::Left,
+            hand,
+            hold_curl(None, 0.0, thinnest),
+        );
+        glove(&mut commands, Side::Right, rest(Side::Right), [0.15; 5]);
     }
 }

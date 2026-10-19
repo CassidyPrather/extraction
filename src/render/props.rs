@@ -22,6 +22,7 @@ impl Plugin for PropVisualsPlugin {
                 (dress_truck, dress_containers, finish_models).chain(),
                 dress_slots,
                 spawn_hand_visuals,
+                dress_gloves,
                 dress_camp,
                 dress_capstone,
             ),
@@ -467,7 +468,11 @@ const FINGER_BONES: [[f32; 3]; 5] = [
 ];
 /// Full-curl bend per joint, radians (knuckle, middle, tip).
 const JOINT_BEND: [f32; 3] = [1.4, 1.65, 1.1];
-const THUMB_BEND: [f32; 3] = [0.7, 0.9, 0.0];
+/// The thumb's second joint only: its first swings (`finger_aim`).
+const THUMB_BEND: [f32; 3] = [0.0, 0.9, 0.0];
+/// The thumb's curl on a pistol grip (`hold_curl`), where it lies along
+/// the far side of the frame.
+const THUMB_ON_GRIP: f32 = 0.62;
 
 fn spawn_hand_visuals(
     mut commands: Commands,
@@ -487,18 +492,25 @@ fn spawn_hand_visuals(
             rh.side,
             [0.0; 5],
         );
-        commands.entity(root).insert(HandVisual {
-            hand: e,
-            side: rh.side,
-            curl: [0.0; 5],
-        });
+        commands.entity(root).insert((
+            HandVisual {
+                hand: e,
+                side: rh.side,
+                curl: [0.0; 5],
+            },
+            PlayerGlove,
+        ));
     }
 }
+
+/// The local player's gloves (the gallery hides them to show its own).
+#[derive(Component)]
+pub(crate) struct PlayerGlove;
 
 /// A glove's own material, tinted while the hand is in reach of something
 /// it could take.
 #[derive(Component)]
-struct GloveMaterial(Handle<StandardMaterial>);
+struct GloveMaterial(Vec<Handle<StandardMaterial>>);
 
 fn tint_gloves(
     visuals: Query<(&HandVisual, &GloveMaterial)>,
@@ -514,12 +526,14 @@ fn tint_gloves(
         if lit.insert(v.hand, on) == Some(on) {
             continue;
         }
-        if let Some(mut m) = materials.get_mut(&glove.0) {
-            m.emissive = if on {
-                LinearRgba::rgb(0.06, 0.16, 0.08)
-            } else {
-                LinearRgba::BLACK
-            };
+        for h in &glove.0 {
+            if let Some(mut m) = materials.get_mut(h) {
+                m.emissive = if on {
+                    LinearRgba::rgb(0.06, 0.16, 0.08)
+                } else {
+                    LinearRgba::BLACK
+                };
+            }
         }
     }
 }
@@ -651,13 +665,117 @@ fn far_cue(
     }
 }
 
-/// The glove's mesh and fingers, rolled onto the hand's frame (see
+/// The glove's palm and fingers, rolled onto the hand's frame (see
 /// `spawn_hand`).
 #[derive(Component)]
 struct GloveModel;
 
+/// Where a glove's modelled parts go, and the boxes it wears until (or
+/// unless) its model is in.
+#[derive(Component)]
+struct GloveParts {
+    model: Entity,
+    joints: Vec<((usize, usize), Entity)>,
+    boxes: Vec<Entity>,
+}
+
+/// The glove models (`art/hands/gloves.py`), built in the frame
+/// `spawn_hand` builds its joints in.
+fn glove_model(side: Side) -> &'static str {
+    match side {
+        Side::Left => "models/hands/glove_left.glb",
+        Side::Right => "models/hands/glove_right.glb",
+    }
+}
+
+/// A finger's first joint on the (unrolled) glove: fingers point along -Z
+/// from the palm's front edge and curl toward its underside (-Y); the index
+/// is on the thumb's side.
+fn finger_root(side: Side, finger: usize) -> Vec3 {
+    let thumb_side = -side.sign();
+    if finger == 4 {
+        Vec3::new(0.038 * thumb_side, -0.008, -0.005)
+    } else {
+        let x = (0.03 - finger as f32 * 0.02) * thumb_side;
+        Vec3::new(x, 0.0, -0.048)
+    }
+}
+
+/// How far the fingers spread from the index as the hand opens, radians per
+/// finger. The index doesn't turn, so a pointing finger ends on
+/// `interact::poke::FINGERTIP`.
+const FAN: f32 = 0.04;
+
+/// A finger's first joint's turn, curled `c` (0 open, 1 closed): its aim
+/// and then its curl.
+fn finger_aim(side: Side, finger: usize, c: f32) -> Quat {
+    let thumb_side = -side.sign();
+    let curl = Quat::from_rotation_x(-JOINT_BEND[0] * c);
+    if finger == 4 {
+        // The thumb swings rather than bends at its root: out beside the
+        // index when open, down along the far side of a grip, across the
+        // fingers in a fist; its pad turned toward them.
+        let t = |x: f32, y: f32, z: f32| Vec3::new(x * thumb_side, y, z);
+        let (open, grip, fist) = (
+            t(0.45, -0.25, -0.86),
+            t(-0.15, -0.55, -0.82),
+            t(-0.75, -0.45, -0.5),
+        );
+        let d = if c < THUMB_ON_GRIP {
+            open.lerp(grip, c / THUMB_ON_GRIP)
+        } else {
+            grip.lerp(fist, (c - THUMB_ON_GRIP) / (1.0 - THUMB_ON_GRIP))
+        };
+        Quat::from_rotation_arc(Vec3::NEG_Z, d.normalize())
+            * Quat::from_rotation_z(-0.6 * thumb_side)
+    } else {
+        Quat::from_rotation_y(finger as f32 * FAN * (1.0 - c) * thumb_side) * curl
+    }
+}
+
+/// Where a held grip runs through the closed glove (unrolled): inside the
+/// fingers' wrap, against the palm under the knuckles.
+const GRIP: Vec3 = Vec3::new(0.0, -0.028, -0.041);
+
+/// The glove on the hand. The hand's frame points -Z with +Y up (a hand
+/// holding a pistol: see `rig::xr`), so the palm faces inward and the thumb
+/// up: the glove is built palm-down and rolled onto its side (the first
+/// real headset showed the backs of the hands with palms facing each
+/// other). Its origin is the controller's grip, the middle of the fist, so
+/// the glove sits with `GRIP` there: centred on the palm, a gun's grip went
+/// through the palm and the fingers closed on air beside it.
+fn glove_frame(side: Side) -> Transform {
+    let roll = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2 * side.sign());
+    Transform::from_translation(roll * -GRIP).with_rotation(roll)
+}
+
+/// Where the wrist display lies on the left glove, in the hand's frame:
+/// flat over the housing on the cuff's back (`art/hands/gloves.py`), its
+/// text running from the fingers to the elbow, so it reads level with the
+/// forearm held across the chest like a watch.
+pub(crate) fn wrist_mount() -> Transform {
+    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(
+        &Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
+    ));
+    glove_frame(Side::Left) * on_glove
+}
+
+/// A joint's turn, its finger curled `c`.
+fn joint_rotation(side: Side, finger: usize, joint: usize, c: f32) -> Quat {
+    if joint == 0 {
+        return finger_aim(side, finger, c);
+    }
+    let bend = if finger == 4 {
+        THUMB_BEND[joint]
+    } else {
+        JOINT_BEND[joint]
+    };
+    Quat::from_rotation_x(-bend * c)
+}
+
 /// A glove: the palm at the root, joints below it. Without a tracked hand
-/// (the gallery's), it keeps the curl it's given.
+/// (the gallery's), it keeps the curl it's given. It wears boxes until its
+/// model (`glove_model`) is in, and keeps them if it never comes.
 pub(crate) fn spawn_hand(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -665,7 +783,7 @@ pub(crate) fn spawn_hand(
     side: Side,
     curl: [f32; 5],
 ) -> Entity {
-    let glove = mat(materials, Color::srgb(0.1, 0.1, 0.09), 0.8, 0.0);
+    let glove = mat(materials, Color::srgb(0.2, 0.2, 0.17), 0.85, 0.0);
     let palm = meshes.add(Cuboid::new(0.085, 0.03, 0.1));
     let root = commands
         .spawn((
@@ -674,66 +792,174 @@ pub(crate) fn spawn_hand(
                 side,
                 curl,
             },
-            GloveMaterial(glove.clone()),
+            GloveMaterial(vec![glove.clone()]),
             Transform::default(),
             Visibility::default(),
         ))
         .id();
-    // The hand's frame points -Z with +Y up (a hand holding a pistol: see
-    // `rig::xr`), so the palm faces inward and the thumb up. The model is
-    // built palm-down and rolled onto its side here; the first real
-    // headset showed the backs of the hands with palms facing each other.
     let model = commands
         .spawn((
             GloveModel,
-            Mesh3d(palm),
-            MeshMaterial3d(glove.clone()),
-            Transform::from_rotation(Quat::from_rotation_z(
-                -std::f32::consts::FRAC_PI_2 * side.sign(),
-            )),
+            glove_frame(side),
             Visibility::default(),
             ChildOf(root),
         ))
         .id();
-    // Fingers point along -Z from the palm's front edge and curl toward its
-    // underside (-Y). The index is on the thumb's side.
-    let thumb_side = -side.sign();
+    let mut boxes = vec![
+        commands
+            .spawn((
+                Mesh3d(palm),
+                MeshMaterial3d(glove.clone()),
+                Transform::default(),
+                ChildOf(model),
+            ))
+            .id(),
+    ];
+    let mut joints = Vec::new();
     for finger in 0..5 {
-        let at = if finger == 4 {
-            Vec3::new(0.038 * thumb_side, -0.008, -0.005)
-        } else {
-            let x = (0.03 - finger as f32 * 0.02) * thumb_side;
-            Vec3::new(x, 0.0, -0.048)
-        };
         let mut parent = model;
-        let mut offset = at;
+        let mut offset = finger_root(side, finger);
         for (joint, len) in FINGER_BONES[finger].iter().enumerate() {
             if *len <= 0.0 {
                 break;
             }
             let radius = if finger == 4 { 0.0105 } else { 0.009 } * (1.0 - joint as f32 * 0.1);
             let seg = meshes.add(Capsule3d::new(radius, (len - radius).max(0.004)));
+            let rotation = joint_rotation(side, finger, joint, curl[finger]);
             let j = commands
                 .spawn((
                     Finger { finger, joint },
-                    Transform::from_translation(offset),
+                    Transform::from_translation(offset).with_rotation(rotation),
                     Visibility::default(),
                     ChildOf(parent),
                 ))
                 .id();
+            joints.push(((finger, joint), j));
             // The bone itself, laid along the joint's -Z.
-            commands.spawn((
-                Mesh3d(seg),
-                MeshMaterial3d(glove.clone()),
-                Transform::from_xyz(0.0, 0.0, -len * 0.5)
-                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-                ChildOf(j),
-            ));
+            boxes.push(
+                commands
+                    .spawn((
+                        Mesh3d(seg),
+                        MeshMaterial3d(glove.clone()),
+                        Transform::from_xyz(0.0, 0.0, -len * 0.5)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                        ChildOf(j),
+                    ))
+                    .id(),
+            );
             parent = j;
             offset = Vec3::new(0.0, 0.0, -len);
         }
     }
+    commands.entity(root).insert(GloveParts {
+        model,
+        joints,
+        boxes,
+    });
     root
+}
+
+/// A node anywhere under `nodes`, by name.
+fn find_node<'a>(
+    nodes: &'a [crate::models::ModelNode],
+    name: &str,
+) -> Option<&'a crate::models::ModelNode> {
+    nodes.iter().find_map(|n| {
+        (n.name == name)
+            .then_some(n)
+            .or_else(|| find_node(&n.children, name))
+    })
+}
+
+/// Swaps a glove's boxes for its model once it's loaded: the palm onto the
+/// glove, each segment onto its joint (the joints keep their own
+/// transforms; the model's are only its rest pose). The glove gets its own
+/// copies of its materials, so `tint_gloves` lights one hand at a time.
+fn dress_gloves(
+    mut commands: Commands,
+    mut gloves: Query<(Entity, &HandVisual, &GloveParts, &mut GloveMaterial)>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+    gltfs: Res<Assets<Gltf>>,
+    nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, v, parts, mut glove_mat) in &mut gloves {
+        let path = glove_model(v.side);
+        let model = match models.request(path, &server) {
+            None => None,
+            Some(h) => match Models::state(&h, &server, &gltfs) {
+                ModelState::Loading => continue,
+                ModelState::Failed => {
+                    warn!("{path} failed to load; using boxes");
+                    None
+                }
+                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+            },
+        };
+        commands.entity(e).remove::<GloveParts>();
+        let Some(model) = model else {
+            continue;
+        };
+        let Some(palm) = find_node(&model, "palm") else {
+            warn!("{path} has no palm; using boxes");
+            continue;
+        };
+        let mut own: Vec<(String, Handle<StandardMaterial>)> = Vec::new();
+        let mut mat = |name: Option<&str>| {
+            let name = name.unwrap_or("Glove");
+            if let Some((_, h)) = own.iter().find(|(n, _)| n == name) {
+                return h.clone();
+            }
+            let shared = model_mats.get(name, &mut lib, &server, &mut materials);
+            let copy = materials.get(&shared).cloned().unwrap_or_default();
+            let h = materials.add(copy);
+            own.push((name.to_owned(), h.clone()));
+            h
+        };
+        crate::models::spawn_primitives(&mut commands, parts.model, palm, &mut mat);
+        for &((finger, joint), j) in &parts.joints {
+            match find_node(&model, &format!("finger_{finger}_{joint}")) {
+                Some(node) => crate::models::spawn_primitives(&mut commands, j, node, &mut mat),
+                None => warn!("{path} has no finger_{finger}_{joint}"),
+            }
+        }
+        for b in &parts.boxes {
+            commands.entity(*b).despawn();
+        }
+        glove_mat.0 = own.into_iter().map(|(_, h)| h).collect();
+    }
+}
+
+/// A finger pointed: the index out, bent a little so its tip comes in line
+/// with the grip (on `interact::poke::FINGERTIP`), the others closed.
+pub(crate) const POINTING: [f32; 5] = [0.134, 0.9, 0.92, 0.95, 0.65];
+
+/// How near a push button an empty hand's fingertip must come for the hand
+/// to point, metres.
+const POINT_REACH: f32 = 0.2;
+
+/// How far each finger curls (index, middle, ring, little, thumb) round
+/// what it holds by a point of `role`, with the trigger pulled `trigger`;
+/// `thinnest` is the held thing's smallest size, for anything held free.
+pub(crate) fn hold_curl(role: Option<GripRole>, trigger: f32, thinnest: f32) -> [f32; 5] {
+    match role {
+        // A pistol or rifle grip: the fingers round it, the index along
+        // the frame until it takes up the trigger.
+        Some(GripRole::Primary) => [0.22 + 0.33 * trigger, 0.74, 0.76, 0.78, 0.62],
+        Some(GripRole::Support) => [0.55, 0.6, 0.62, 0.64, 0.5],
+        Some(GripRole::Handle(_)) => [0.7, 0.72, 0.74, 0.76, 0.7],
+        // Anything else: wrapped as far as its size lets the fingers
+        // close (a round pinched, a can held round, a box flat-handed).
+        _ => {
+            let wrap = (0.95 - thinnest * 5.0).clamp(0.25, 0.9);
+            let index = (wrap + 0.25 * trigger).min(0.95);
+            [index, wrap, wrap, wrap, (wrap * 0.85).max(0.35)]
+        }
+    }
 }
 
 /// How far each finger wants to curl, given what the hand is doing.
@@ -750,30 +976,17 @@ fn curl_targets(
             .get(item)
             .ok()
             .and_then(|(h, _, g)| g.points.get(h.point).map(|p| p.role));
-        return match role {
-            // A pistol or rifle grip: the fingers round it, the index along
-            // the frame until it takes up the trigger.
-            Some(GripRole::Primary) => [0.22 + 0.33 * trigger, 0.74, 0.76, 0.78, 0.62],
-            Some(GripRole::Support) => [0.55, 0.6, 0.62, 0.64, 0.5],
-            Some(GripRole::Handle(_)) => [0.7, 0.72, 0.74, 0.76, 0.7],
-            // Anything else: wrapped as far as its size lets the fingers
-            // close (a round pinched, a can held round, a box flat-handed).
-            _ => {
-                let t = bounds
-                    .get(item)
-                    .map(|b| {
-                        let s = b.max - b.min;
-                        s.x.min(s.y).min(s.z)
-                    })
-                    .unwrap_or(0.06);
-                let wrap = (0.95 - t * 5.0).clamp(0.25, 0.9);
-                let index = (wrap + 0.25 * trigger).min(0.95);
-                [index, wrap, wrap, wrap, (wrap * 0.85).max(0.35)]
-            }
-        };
+        let thinnest = bounds
+            .get(item)
+            .map(|b| {
+                let s = b.max - b.min;
+                s.x.min(s.y).min(s.z)
+            })
+            .unwrap_or(0.06);
+        return hold_curl(role, trigger, thinnest);
     }
     if hand.supporting.is_some() {
-        return [0.55, 0.6, 0.62, 0.64, 0.5];
+        return hold_curl(Some(GripRole::Support), trigger, 0.0);
     }
     if hand.handle.is_some() {
         return [0.72, 0.74, 0.76, 0.78, 0.7];
@@ -795,6 +1008,7 @@ fn pose_hands(
     inputs: Query<&RigInput>,
     roots: Query<&ChildOf, With<Finger>>,
     models: Query<&ChildOf, With<GloveModel>>,
+    buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -818,7 +1032,20 @@ fn pose_hands(
             }
         }
         *t = pose;
-        let target = curl_targets(hand, grip, trigger, &held, &bounds);
+        let mut target = curl_targets(hand, grip, trigger, &held, &bounds);
+        // An empty hand reaching for a push button points at it, so the
+        // finger the button feels is the one you see.
+        let tip = pose.transform_point(crate::interact::poke::FINGERTIP);
+        if hand.holding.is_none()
+            && hand.handle.is_none()
+            && hand.supporting.is_none()
+            && buttons
+                .iter()
+                .any(|b| b.translation().distance_squared(tip) < POINT_REACH * POINT_REACH)
+        {
+            target = POINTING;
+            target[0] += (1.0 - POINTING[0]) * trigger;
+        }
         for (c, want) in v.curl.iter_mut().zip(target) {
             *c += (want - *c) * ease;
         }
@@ -835,25 +1062,7 @@ fn pose_hands(
         let Ok((v, _)) = visuals.get(up) else {
             continue;
         };
-        let c = v.curl[f.finger];
-        let bend = if f.finger == 4 {
-            THUMB_BEND[f.joint]
-        } else {
-            JOINT_BEND[f.joint]
-        };
-        let curl = Quat::from_rotation_x(-bend * c);
-        ft.rotation = if f.joint == 0 {
-            let thumb_side = -v.side.sign();
-            let aim = if f.finger == 4 {
-                Quat::from_rotation_y(0.75 * thumb_side) * Quat::from_rotation_z(-0.6 * thumb_side)
-            } else {
-                // Fingers fan a little as they open.
-                Quat::from_rotation_y((1.5 - f.finger as f32) * 0.06 * (1.0 - c) * thumb_side)
-            };
-            aim * curl
-        } else {
-            curl
-        };
+        ft.rotation = joint_rotation(v.side, f.finger, f.joint, v.curl[f.finger]);
     }
 }
 
@@ -1202,5 +1411,227 @@ fn dress_capstone(
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod glove_tests {
+    use super::*;
+
+    /// A node of a .glb: its name, local transform, children and, for a
+    /// mesh, its POSITION bounds.
+    struct Node {
+        name: String,
+        local: Transform,
+        children: Vec<usize>,
+        bounds: Option<(Vec3, Vec3)>,
+    }
+
+    fn glb_nodes(side: Side) -> Vec<Node> {
+        let path = crate::asset_root_path().join(glove_model(side));
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (run art/build.py gloves)", path.display()));
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        let v3 = |v: &serde_json::Value, d: Vec3| {
+            v.as_array().map_or(d, |a| {
+                Vec3::new(
+                    a[0].as_f64().unwrap() as f32,
+                    a[1].as_f64().unwrap() as f32,
+                    a[2].as_f64().unwrap() as f32,
+                )
+            })
+        };
+        json["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| {
+                let r = n["rotation"].as_array().map_or(Quat::IDENTITY, |a| {
+                    let f = |i: usize| a[i].as_f64().unwrap() as f32;
+                    Quat::from_xyzw(f(0), f(1), f(2), f(3))
+                });
+                let bounds = n["mesh"].as_u64().and_then(|m| {
+                    let prims = json["meshes"][m as usize]["primitives"].as_array()?;
+                    let mut b: Option<(Vec3, Vec3)> = None;
+                    for p in prims {
+                        let acc =
+                            &json["accessors"][p["attributes"]["POSITION"].as_u64()? as usize];
+                        let (lo, hi) = (v3(&acc["min"], Vec3::ZERO), v3(&acc["max"], Vec3::ZERO));
+                        b = Some(b.map_or((lo, hi), |(a, c)| (a.min(lo), c.max(hi))));
+                    }
+                    b
+                });
+                Node {
+                    name: n["name"].as_str().unwrap_or_default().to_owned(),
+                    local: Transform::from_translation(v3(&n["translation"], Vec3::ZERO))
+                        .with_rotation(r),
+                    children: n["children"]
+                        .as_array()
+                        .map(|c| c.iter().map(|i| i.as_u64().unwrap() as usize).collect())
+                        .unwrap_or_default(),
+                    bounds,
+                }
+            })
+            .collect()
+    }
+
+    /// Both gloves have the palm and every finger segment, each with a mesh,
+    /// hung in a chain at the joints `spawn_hand` makes: the game puts each
+    /// segment on its own joint, so a model built to other joints would
+    /// come apart at the knuckles.
+    #[test]
+    fn every_glove_segment_is_modelled_at_its_joint() {
+        for side in [Side::Left, Side::Right] {
+            let nodes = glb_nodes(side);
+            let find = |name: &str| {
+                nodes
+                    .iter()
+                    .position(|n| n.name == name)
+                    .unwrap_or_else(|| panic!("{side:?} glove has no {name}"))
+            };
+            let palm = find("palm");
+            assert!(nodes[palm].bounds.is_some(), "{side:?} palm has no mesh");
+            for (finger, bones) in FINGER_BONES.iter().enumerate() {
+                let mut parent = palm;
+                for (joint, _) in bones.iter().enumerate().filter(|(_, l)| **l > 0.0) {
+                    let name = format!("finger_{finger}_{joint}");
+                    let i = find(&name);
+                    let n = &nodes[i];
+                    assert!(n.bounds.is_some(), "{side:?} {name} has no mesh");
+                    assert!(
+                        nodes[parent].children.contains(&i),
+                        "{side:?} {name} isn't hung on {}",
+                        nodes[parent].name
+                    );
+                    let want = if joint == 0 {
+                        finger_root(side, finger)
+                    } else {
+                        Vec3::new(0.0, 0.0, -bones[joint - 1])
+                    };
+                    assert!(
+                        n.local.translation.distance(want) < 2e-4,
+                        "{side:?} {name} at {} but its joint is at {want}",
+                        n.local.translation
+                    );
+                    let rest = joint_rotation(side, finger, joint, 0.0);
+                    assert!(
+                        n.local.rotation.dot(rest).abs() > 0.9999,
+                        "{side:?} {name} rests turned {:?}, its joint {rest:?}",
+                        n.local.rotation
+                    );
+                    parent = i;
+                }
+            }
+        }
+    }
+
+    /// The modelled index finger, pointing, ends where a push button feels
+    /// the fingertip (`poke::FINGERTIP`): the button goes in when the glove
+    /// touches it, not a centimetre before or after.
+    #[test]
+    fn pointing_index_ends_on_the_poke_fingertip() {
+        for side in [Side::Left, Side::Right] {
+            let nodes = glb_nodes(side);
+            let (lo, hi) = nodes
+                .iter()
+                .find(|n| n.name == "finger_0_2")
+                .and_then(|n| n.bounds)
+                .expect("index tip");
+            // The segment's far end, on its axis.
+            let tip = Vec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, lo.z);
+            let mut at = glove_frame(side);
+            let mut offset = finger_root(side, 0);
+            for joint in 0..3 {
+                at = at
+                    * Transform::from_translation(offset).with_rotation(joint_rotation(
+                        side,
+                        0,
+                        joint,
+                        POINTING[0],
+                    ));
+                offset = Vec3::new(0.0, 0.0, -FINGER_BONES[0][joint]);
+            }
+            let got = at.transform_point(tip);
+            let want = crate::interact::poke::FINGERTIP;
+            assert!(
+                got.distance(want) < 0.0015,
+                "{side:?} index tip at {got}, the poke feels {want}"
+            );
+        }
+    }
+
+    /// An empty hand whose fingertip comes near a push button points at it
+    /// (and still closes its index with the trigger); away from buttons the
+    /// grip closes the whole hand as before.
+    #[test]
+    fn an_empty_hand_points_at_a_near_button() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, pose_hands);
+        let player = app
+            .world_mut()
+            .spawn((Transform::default(), RigInput::default()))
+            .id();
+        let hand = app
+            .world_mut()
+            .spawn((Hand::default(), Transform::default(), ChildOf(player)))
+            .id();
+        let glove = app
+            .world_mut()
+            .spawn((
+                HandVisual {
+                    hand,
+                    side: Side::Right,
+                    curl: [0.0; 5],
+                },
+                Transform::default(),
+            ))
+            .id();
+        let button = app
+            .world_mut()
+            .spawn((
+                crate::interact::poke::PokeButton {
+                    target: Entity::PLACEHOLDER,
+                    depth: 0.0,
+                    down: false,
+                },
+                GlobalTransform::from_translation(
+                    crate::interact::poke::FINGERTIP + Vec3::Z * -0.05,
+                ),
+            ))
+            .id();
+        let settle = |app: &mut App| {
+            for _ in 0..200 {
+                app.update();
+            }
+            app.world().get::<HandVisual>(glove).unwrap().curl
+        };
+        app.world_mut()
+            .get_mut::<RigInput>(player)
+            .unwrap()
+            .hand_mut(Side::Right)
+            .grip = 1.0;
+        let near = settle(&mut app);
+        for (got, want) in near.iter().zip(POINTING) {
+            assert!(
+                (got - want).abs() < 0.05,
+                "by a button the hand curls {near:?}, not {POINTING:?}"
+            );
+        }
+        app.world_mut()
+            .get_mut::<GlobalTransform>(button)
+            .unwrap()
+            .clone_from(&GlobalTransform::from_translation(Vec3::new(
+                0.0, 0.0, -1.0,
+            )));
+        let far = settle(&mut app);
+        assert!(
+            far[0] > 0.9,
+            "away from buttons the grip closes the index too: {far:?}"
+        );
     }
 }
