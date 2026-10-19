@@ -92,9 +92,16 @@ What changed, and worth a comment each:
   shoulder and it goes in the pack. Your own body no longer shades you.
 - **Buttons.** Every card that does something (the truck's comfort
   cards, the route and request cards, terminals, the camp's choices) has
-  an amber push button at its right: point your index finger (trigger
-  off) and push it in. It clicks once and the controller ticks. Gripping
+  an amber push button at its right: bring an empty hand to it (the
+  glove points by itself) and push it in. It clicks once and the controller ticks. Gripping
   the card still works.
+- **Gloves.** Modelled work gloves instead of black boxes, and they now
+  close round what they hold: the grip sits in the fist where the
+  controller's handle is (before, it went through the palm). The index
+  rests along the frame and comes down on the trigger as you pull. The
+  wrist readout sits on a housing on the left cuff. Mark anything that
+  looks wrong in your hand, especially a hand that sits too far forward
+  or back on its grip.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
@@ -226,6 +233,11 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   magazine in, rack the slide, thumbstick click for the safety. Then the rifle and the
   shotgun if you have them. Does it feel like Into the Radius? Where does
   a hand fight you?
+- Rifle hand: on the Mosin and the TOZ, does the gun sit right in your
+  hand? The index finger rides just above the trigger guard there (the
+  pistol's and AK's reach their triggers). More rake on those grips would
+  bring it down, but it also changes where the rifle points against the
+  controller, so say how it feels before we change it.
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.
