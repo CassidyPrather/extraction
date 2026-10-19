@@ -10,7 +10,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import Part, RX, RY, T, export, fillet, join, main_guard, report
+from common import Part, RX, RY, T, export, fillet, join, main_guard, make, report
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from ammo import C9, cartridge  # noqa: E402
 
 main_guard()
 
@@ -30,17 +33,25 @@ cut.box((0.02, 0.012, 0.02), (0, 0.0525, -0.012), "Blued",
 # Round-count holes on both sides.
 for i in range(4):
     cut.cyl(0.0016, -0.01, 0.01, "Blued", segs=10, xf=T(0, -0.025 + i * 0.016, 0.004) @ RY(math.pi / 2))
+# The slot between the lips the top round shows through, down to the
+# follower.
+cut.box((0.0056, 0.012, 0.022), (0.0, 0.0495, 0.001), "Blued")
 body.cut(cut)
 
 rest = Part("rest")
 # Follower showing between the lips.
-rest.box((0.0062, 0.003, 0.02), (0, 0.0435, 0.0005), "Black", bevel=0.0008, segs=1)
+rest.box((0.0056, 0.003, 0.02), (0, 0.042, 0.001), "Black", bevel=0.0008, segs=1)
 # Base plate with the heel lip the catch bites on.
 base = fillet([(-0.0076, -0.0158), (0.0076, -0.0158), (0.0076, 0.0162), (-0.0076, 0.0162)],
               [0.006, 0.006, 0.0025, 0.0025], 4)
 rest.prism(base, -0.05, -0.046, "Blued", axis="y", bevel=0.0009, segs=2)
 rest.box((0.0085, 0.006, 0.0035), (0, -0.046, 0.0162), "Blued", bevel=0.0009, segs=1)
 
-join("static_mag", body, rest)
+# The top round, bullet forward; the game shows it while there's one.
+rnd = Part("round_1")
+cartridge(rnd, C9, T(0.0, 0.0458, 0.0128), segs=12, base=False)
+make(rnd)
+
+join("static_mag", body, rest, worn={})
 report()
 export("assets/models/mags/pm_mag.glb")

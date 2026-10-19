@@ -31,6 +31,7 @@ impl Plugin for GunVisualsPlugin {
                 finish_gun_models,
                 animate_parts,
                 seat_mag_visuals,
+                show_mag_rounds,
             )
                 .chain()
                 .before(TransformSystems::Propagate),
@@ -313,5 +314,89 @@ fn seat_mag_visuals(
                 }
             }
         }
+    }
+}
+
+/// A magazine model's `round_N` nodes (the rounds you see in its lips, or
+/// standing in a clip) show while it holds N rounds or more.
+fn show_mag_rounds(
+    mags: Query<(&Item, &Children), With<Mag>>,
+    roots: Query<&Children, With<ItemModelRoot>>,
+    mut nodes: Query<(&Name, &mut Visibility)>,
+) {
+    for (item, children) in &mags {
+        for root in children.iter().filter_map(|c| roots.get(c).ok()) {
+            for node in root.iter() {
+                let Ok((name, mut vis)) = nodes.get_mut(node) else {
+                    continue;
+                };
+                let Some(n) = name
+                    .as_str()
+                    .strip_prefix("round_")
+                    .and_then(|n| n.parse::<u32>().ok())
+                else {
+                    continue;
+                };
+                let want = if item.rounds >= n {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                };
+                if *vis != want {
+                    *vis = want;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemState};
+
+    /// A clip with three rounds shows its first three, not the last two;
+    /// emptied, it shows none.
+    #[test]
+    fn a_magazine_shows_the_rounds_it_holds() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let mut state = ItemState::fresh(&cat, cat.expect("mosin_clip"), 1.0);
+        state.rounds = 3;
+        let mut app = App::new();
+        app.add_systems(Update, show_mag_rounds);
+        let mag = app
+            .world_mut()
+            .spawn((
+                Item(state),
+                Mag {
+                    family: "mosin".into(),
+                    capacity: 5,
+                    height: 0.08,
+                },
+            ))
+            .id();
+        let root = app.world_mut().spawn((ItemModelRoot, ChildOf(mag))).id();
+        let rounds: Vec<Entity> = (1..=5)
+            .map(|n| {
+                app.world_mut()
+                    .spawn((
+                        Name::new(format!("round_{n}")),
+                        Visibility::default(),
+                        ChildOf(root),
+                    ))
+                    .id()
+            })
+            .collect();
+        let shown = |app: &App| -> Vec<bool> {
+            rounds
+                .iter()
+                .map(|e| *app.world().get::<Visibility>(*e).unwrap() != Visibility::Hidden)
+                .collect()
+        };
+        app.update();
+        assert_eq!(shown(&app), [true, true, true, false, false]);
+        app.world_mut().get_mut::<Item>(mag).unwrap().0.rounds = 0;
+        app.update();
+        assert_eq!(shown(&app), [false; 5]);
     }
 }

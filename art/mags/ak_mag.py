@@ -7,11 +7,16 @@ banana curve runs forward toward the bottom; the top face is level, so the
 gun's model seat (`magwell` in ak74.glb) needs no tilt.
 """
 
+import math
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import Part, RX, T, catmull, export, fillet, join, main_guard, report
+from common import Part, RX, RY, T, catmull, export, fillet, join, main_guard, make, report
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from ammo import C545, cartridge  # noqa: E402
+from _kit import text  # noqa: E402
 
 main_guard()
 
@@ -38,15 +43,32 @@ body.prism(fillet([(-0.0215, TOP - 0.010), (-0.014, TOP - 0.012), (-0.014, TOP -
                    (-0.0205, TOP - 0.0035)], 0.0012, 2), -0.006, 0.006, "Polymer", axis="x",
            bevel=0.0006, segs=1)
 body.box((0.012, 0.006, 0.006), (0, TOP - 0.022, 0.045), "Polymer", bevel=0.0012, segs=1)
-# Feed lips (steel) and the follower between them.
-lips = fillet([(-0.0075, -0.012), (0.0075, -0.012), (0.0075, 0.038), (-0.0075, 0.038)],
-              [0.003, 0.003, 0.002, 0.002], 3)
-body.prism(lips, TOP - 0.004, TOP, "Steel", axis="y", bevel=0.0006, segs=1)
-body.box((0.006, 0.004, 0.032), (0.0, TOP - 0.004, 0.012), "Black", bevel=0.0008, segs=1)
+# Steel feed lips, curled in over the rounds, open between; the follower
+# deep in the gap shows when it's empty.
+for sx in (-1, 1):
+    lip = fillet([(sx * 0.0042, TOP - 0.0055), (sx * 0.0078, TOP - 0.0055), (sx * 0.0078, TOP),
+                  (sx * 0.0058, TOP), (sx * 0.0042, TOP - 0.0022)], 0.0007, 2)
+    body.prism(lip, -0.010, 0.038, "Steel", axis="z")
+body.box((0.0084, 0.006, 0.042), (0.0, TOP - 0.0125, 0.013), "Black", bevel=0.0008, segs=1)
 # Floor plate with its tab at the back.
 fp = fillet([(-0.056, -0.096), (0.006, -0.1), (0.008, -0.094), (-0.054, -0.088)], 0.0015, 2)
 body.prism(fp, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
 
-join("static_mag", body)
+# The mouth between the lips, down to the follower, and the moulding
+# mark on the right side, 0.6 mm deep.
+mouth = Part("cut")
+mouth.box((0.0084, 0.03, 0.05), (0.0, TOP - 0.0125 + 0.015, 0.013), "Polymer")
+side = T(0.0118 - 0.0006, 0, 0) @ RY(math.pi / 2)
+text(mouth, "6Л23", 0.0052, "Polymer", side @ T(0.013, -0.062, 0.0), depth=0.0012)
+body.cut(mouth)
+
+# The top two rounds, staggered, bullets forward. The game shows round N
+# only while the magazine holds N or more.
+for n, (x, y) in enumerate(((0.0024, TOP - 0.0032), (-0.0024, TOP - 0.0072)), 1):
+    rnd = Part(f"round_{n}")
+    cartridge(rnd, C545, T(x, y, 0.0375), segs=12, base=False)
+    make(rnd, worn=None)
+
+join("static_mag", body, worn={})
 report()
 export("assets/models/mags/ak_mag.glb")

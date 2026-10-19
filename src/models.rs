@@ -143,6 +143,16 @@ fn convert(
     })
 }
 
+/// Every material name [`ModelMaterials::get`] knows; any other name renders
+/// a flat grey. `art/common.py` must list the same names (a test checks it,
+/// and that every exported model uses only these).
+pub const MATERIAL_NAMES: &[&str] = &[
+    "Blued", "Wood", "Polymer", "Shell", "Steel", "Bakelite", "Black", "Brass", "Paint", "Canvas",
+    "Planks", "Boards", "Iron", "Glass", "Rubber", "Rope", "Yellow", "Orange", "Blue", "Leaf",
+    "Enamel", "Worn", "Red", "Pebble", "Char", "Ember", "Cream", "Paper", "Olive", "Copper",
+    "Dark", "Rotor", "Lens", "Clear", "Lamp", "LampRed", "Glow", "Warn", "Eye", "Strange",
+];
+
 /// The game's materials for the model material names: the scanned PBR sets
 /// from the [`MaterialLibrary`] where they exist, flat colours otherwise.
 #[derive(Resource, Default)]
@@ -209,7 +219,16 @@ impl ModelMaterials {
             "Glass" => lib.get(Mat::Glass, server, materials),
             "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),
             "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
-            "Yellow" => flat(materials, Color::srgb(0.85, 0.58, 0.12), 0.0, 0.6),
+            // Printed and painted colours. A true yellow (yolk, butter, the
+            // 12-gauge carton), an orange for carrots and hazard paint.
+            "Yellow" => flat(materials, Color::srgb(0.9, 0.74, 0.16), 0.0, 0.55),
+            "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
+            "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
+            "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
+            // White enamel: mugs, bowls, the kettle, labels' white print.
+            "Enamel" => flat(materials, Color::srgb(0.88, 0.88, 0.85), 0.0, 0.3),
+            // Bare steel showing through worn bluing, on gun edges.
+            "Worn" => flat(materials, Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
             "Red" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
             "Pebble" => flat(materials, Color::srgb(0.42, 0.42, 0.44), 0.0, 0.45),
             "Char" => flat(materials, Color::srgb(0.05, 0.045, 0.04), 0.0, 0.9),
@@ -219,6 +238,7 @@ impl ModelMaterials {
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
             "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
+            "Rotor" => flat(materials, Color::srgb(0.06, 0.06, 0.065), 0.3, 0.45),
             "Lens" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.05, 0.07, 0.1),
                 metallic: 0.3,
@@ -245,11 +265,14 @@ impl ModelMaterials {
                 clearcoat: 1.0,
                 ..default()
             }),
-            _ => materials.add(StandardMaterial {
-                base_color: Color::srgb(0.3, 0.3, 0.3),
-                perceptual_roughness: 0.6,
-                ..default()
-            }),
+            _ => {
+                warn!("model material {name:?} is not mapped; drawing it grey");
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.3, 0.3),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                })
+            }
         };
         self.cache.insert(name.to_owned(), h.clone());
         h
@@ -306,5 +329,198 @@ impl Plugin for ModelsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Models>()
             .init_resource::<ModelMaterials>();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MATERIAL_NAMES;
+    use std::path::Path;
+
+    /// The material names in a .glb's JSON chunk.
+    fn glb_materials(path: &Path) -> Vec<String> {
+        let bytes = std::fs::read(path).unwrap();
+        assert_eq!(&bytes[0..4], b"glTF", "{} is not a glb", path.display());
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        json["materials"]
+            .as_array()
+            .map(|ms| {
+                ms.iter()
+                    .filter_map(|m| m["name"].as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Every material a model uses is one the game maps: an unknown name
+    /// renders flat grey (how "Yellow" once came out orange and "Glow"
+    /// came out dark went unnoticed).
+    #[test]
+    fn every_model_material_is_mapped() {
+        let root = crate::asset_root_path().join("models");
+        let mut checked = 0;
+        let mut bad = Vec::new();
+        for dir in std::fs::read_dir(&root).unwrap() {
+            let dir = dir.unwrap().path();
+            if !dir.is_dir() {
+                continue;
+            }
+            for f in std::fs::read_dir(&dir).unwrap() {
+                let f = f.unwrap().path();
+                if f.extension().is_some_and(|e| e == "glb") {
+                    checked += 1;
+                    for m in glb_materials(&f) {
+                        if !MATERIAL_NAMES.contains(&m.as_str()) {
+                            bad.push(format!("{}: {m}", f.display()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 50, "only {checked} models found under {root:?}");
+        assert!(
+            bad.is_empty(),
+            "unmapped model materials:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// A model's bounds in its own space: every mesh node's POSITION
+    /// accessor bounds, through the node's translation, rotation and scale.
+    fn glb_bounds(path: &Path) -> Option<(bevy::math::Vec3, bevy::math::Vec3)> {
+        use bevy::math::{Quat, Vec3};
+        let bytes = std::fs::read(path).unwrap();
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        let f = |v: &serde_json::Value, i: usize, d: f32| {
+            v.get(i).and_then(|x| x.as_f64()).map_or(d, |x| x as f32)
+        };
+        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for node in json["nodes"].as_array()? {
+            let Some(mesh) = node["mesh"].as_u64() else {
+                continue;
+            };
+            let t = &node["translation"];
+            let r = &node["rotation"];
+            let sc = &node["scale"];
+            let at = Vec3::new(f(t, 0, 0.0), f(t, 1, 0.0), f(t, 2, 0.0));
+            let rot = Quat::from_xyzw(f(r, 0, 0.0), f(r, 1, 0.0), f(r, 2, 0.0), f(r, 3, 1.0));
+            let scale = Vec3::new(f(sc, 0, 1.0), f(sc, 1, 1.0), f(sc, 2, 1.0));
+            for prim in json["meshes"][mesh as usize]["primitives"].as_array()? {
+                let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64()? as usize];
+                let (a, b) = (&acc["min"], &acc["max"]);
+                for k in 0..8 {
+                    let c = Vec3::new(
+                        if k & 1 == 0 {
+                            f(a, 0, 0.0)
+                        } else {
+                            f(b, 0, 0.0)
+                        },
+                        if k & 2 == 0 {
+                            f(a, 1, 0.0)
+                        } else {
+                            f(b, 1, 0.0)
+                        },
+                        if k & 4 == 0 {
+                            f(a, 2, 0.0)
+                        } else {
+                            f(b, 2, 0.0)
+                        },
+                    );
+                    let w = at + rot * (scale * c);
+                    lo = lo.min(w);
+                    hi = hi.max(w);
+                }
+            }
+        }
+        (lo.x <= hi.x).then_some((lo, hi))
+    }
+
+    /// Every item model fits the box its collider is (`dims`, or a cube of
+    /// its bulk): it doesn't stick out of it, rests on its floor rather
+    /// than floating above or sinking into the ground, and a flat or long
+    /// thing has `dims` of its own instead of a cube it rattles about in
+    /// (a photograph once lay in a 2 cm cube as a postage stamp).
+    #[test]
+    fn every_item_model_fits_its_box() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models");
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for (_, def) in cat.iter() {
+            let dir = match def.category {
+                // Guns are placed by their layouts, not their boxes.
+                Category::Firearm => continue,
+                Category::Magazine => "mags",
+                _ => "items",
+            };
+            let path = root.join(dir).join(format!("{}.glb", def.id));
+            let Some((lo, hi)) = path.exists().then(|| glb_bounds(&path)).flatten() else {
+                continue;
+            };
+            checked += 1;
+            let size = bevy::math::Vec3::from(def.size_m());
+            let ext = hi - lo;
+            let id = &def.id;
+            // Attachments are drawn from their mount point, their clamps
+            // hanging below it; only the size rule applies loosely.
+            if def.category != Category::Attachment {
+                for (i, axis) in ["x", "y", "z"].iter().enumerate() {
+                    if ext[i] > size[i] * 1.2 + 0.006 {
+                        bad.push(format!(
+                            "{id}: {axis} {:.3} m in a {:.3} m box",
+                            ext[i], size[i]
+                        ));
+                    }
+                }
+                let gap = lo.y + size.y / 2.0;
+                if gap.abs() > 0.006 {
+                    let how = if gap > 0.0 { "floats" } else { "sinks" };
+                    bad.push(format!(
+                        "{id}: {how} {:.3} m off its box's floor",
+                        gap.abs()
+                    ));
+                }
+            }
+            if def.dims.is_none() && ext.min_element() < 0.5 * ext.max_element() {
+                bad.push(format!(
+                    "{id}: {:.3} x {:.3} x {:.3} m in a cube: give it dims",
+                    ext.x, ext.y, ext.z
+                ));
+            }
+        }
+        assert!(checked > 80, "only {checked} item models found");
+        assert!(
+            bad.is_empty(),
+            "item models that don't fit their boxes:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// The art kit's preview palette names the same materials as the game.
+    #[test]
+    fn art_palette_matches_the_game() {
+        let common = crate::asset_root_path()
+            .parent()
+            .unwrap()
+            .join("art/common.py");
+        let Ok(src) = std::fs::read_to_string(&common) else {
+            return; // a packaged build has no art/
+        };
+        let start = src.find("MATERIALS = {").expect("MATERIALS in common.py");
+        let end = start + src[start..].find("\n}").unwrap();
+        let mut art: Vec<&str> = src[start..end]
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('"')?.split('"').next())
+            .collect();
+        let mut game: Vec<&str> = MATERIAL_NAMES.to_vec();
+        art.sort();
+        game.sort();
+        assert_eq!(
+            art, game,
+            "art/common.py MATERIALS vs src/models.rs MATERIAL_NAMES"
+        );
     }
 }

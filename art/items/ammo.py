@@ -289,10 +289,12 @@ def robot_ammo_belt():
     return [p]
 
 
-for item_id, fn in (("round_9x18", round_9x18), ("round_545", round_545),
-                    ("round_762r", round_762r), ("shell_12ga", shell_12ga),
-                    ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
-                    ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
-                    ("robot_ammo_belt", robot_ammo_belt)):
-    if wanted(item_id):
-        item(item_id, fn)
+# The magazine scripts import the cartridges from here; build only when run.
+if __name__ == "__main__":
+    for item_id, fn in (("round_9x18", round_9x18), ("round_545", round_545),
+                        ("round_762r", round_762r), ("shell_12ga", shell_12ga),
+                        ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
+                        ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
+                        ("robot_ammo_belt", robot_ammo_belt)):
+        if wanted(item_id):
+            item(item_id, fn)

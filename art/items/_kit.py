@@ -37,6 +37,23 @@ def item(item_id, build):
     export(f"assets/models/items/{item_id}.glb")
 
 
+def transform(parts, m):
+    """Apply a game-space matrix to whole Parts (and their cutters)."""
+    for p in parts:
+        for q in [p] + p.cutters:
+            bmesh.ops.transform(q.bm, matrix=m, verts=q.bm.verts)
+    return parts
+
+
+def centred(parts):
+    """Move Parts so their joint bounds are centred on the origin, as the
+    item's `dims` box is (so the model rests on the box's floor)."""
+    vs = [v.co for p in parts for v in p.bm.verts]
+    lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+    hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
+    return transform(parts, T(*(-(lo + hi) / 2)))
+
+
 def wanted(item_id):
     """Scripts can be run for just some items: `-- id1 id2`."""
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []

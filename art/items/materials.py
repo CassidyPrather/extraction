@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, FRONT, UP, cube, item, panel, ring, text, tube_path, wanted
+from _kit import ALONG_X, FRONT, UP, centred, cube, item, panel, ring, text, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, arc, fillet
 
 
@@ -68,7 +68,8 @@ def scrap_metal():
                   closed=True)
         tube_path(p, [(x, yb + 0.033, 0.0), (x + 0.004, yb + 0.037, 0.002),
                       (x + 0.007, yb + 0.036, 0.004)], 0.0007, "Steel", sides=4, closed=False)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 # --- Salvaged electronics ---------------------------------------------------------------------
@@ -152,7 +153,8 @@ def polymer():
     p.box((0.011, 0.0005, 0.016), (0.0, 0.0, 0.0), "Paper", xf=xf)
     for k in range(3):
         p.box((0.007, 0.0002, 0.0008), (0.0, 0.0004, -0.004 + k * 0.003), "Black", xf=xf)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 # --- Powder tin -------------------------------------------------------------------------------
@@ -193,7 +195,8 @@ def powder():
         p.box((0.0007, 0.0052, 0.0007), (0.0, yb + 0.054, 0.0), "Steel",
               xf=T(-0.011, 0, 0) @ RY(2 * math.pi * k / 16) @ T(0.0077, 0, 0))
     p.tube(0.0071, 0.0066, yb + 0.0496, yb + 0.0512, "Red", segs=14, xf=T(-0.011, 0, 0) @ UP)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 # --- Brass cases ------------------------------------------------------------------------------

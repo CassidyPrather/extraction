@@ -12,6 +12,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from common import (Part, RX, RY, RZ, T, S, catmull, empty, export, fillet, join, main_guard,
                     make, report, section_rect, section_circle)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from _kit import text  # noqa: E402
 
 main_guard()
 
@@ -40,6 +42,15 @@ for sx in (-1, 1):
               scale=(1, 0.42, 1.25))
 # Magazine opening underneath.
 rc.box((0.026, 0.02, 0.064), (0, RX_Y0, -0.124), "Blued")
+# Stampings cut 0.4 mm into the steel: the selector's АВ (auto) and ОД
+# (single) on the right, under its lever's travel, and the serial and
+# year on the left above the magazine well.
+RIGHT = T(RX_HW - 0.0004, 0, 0) @ RY(math.pi / 2)
+LEFT = T(-RX_HW + 0.0004, 0, 0) @ RY(-math.pi / 2)
+text(rc, "АВ", 0.0042, "Blued", RIGHT @ T(0.1035, 0.037, 0.0), depth=0.0008)
+text(rc, "ОД", 0.0042, "Blued", RIGHT @ T(0.083, 0.0275, 0.0), depth=0.0008)
+text(rc, "ВЛ 3317", 0.0034, "Blued", LEFT @ T(-0.05, 0.063, 0.0), depth=0.0008)
+text(rc, "1984", 0.0034, "Blued", LEFT @ T(-0.05, 0.057, 0.0), depth=0.0008)
 recv.cut(rc)
 
 parts_static = Part("static_misc")
@@ -74,6 +85,13 @@ def grip_w(z, y):
 
 grip = Part("grip")
 grip.prism(grip_prof, 0, 0, "Polymer", axis="x", bevel=0.004, segs=3, width=grip_w)
+# Moulded grooves down both sides, along the grip's rake.
+gc = Part("cut")
+for sx in (-1, 1):
+    for dz in (0.006, 0.0135, 0.021, 0.0285):
+        gc.box((0.0024, 0.056, 0.0018), (sx * 0.0156, -0.036, dz), "Polymer", bevel=0.0006,
+               segs=1, xf=RX(-0.274, about=(0, -0.036, dz)))
+grip.cut(gc)
 # Grip screw head at the base.
 grip.cyl(0.004, -0.0935, -0.091, "Blued", segs=12, xf=T(0, 0, 0.034) @ RX(-math.pi / 2))
 
@@ -120,8 +138,29 @@ barrel.prism(rs, -0.0135, 0.0135, "Blued", axis="x", bevel=0.0012, segs=2)
 barrel.prism([(-0.229, 0.0985), (-0.176, 0.1015), (-0.176, 0.1045), (-0.229, 0.1005)],
              -0.0065, 0.0065, "Blued", axis="x", bevel=0.0005, segs=1)
 barrel.box((0.017, 0.006, 0.008), (0, 0.1008, -0.206), "Blued", bevel=0.001)  # slider
-barrel.prism([(-0.179, 0.104), (-0.173, 0.104), (-0.173, 0.1085), (-0.179, 0.1085)], -0.0065, 0.0065,
-             "Blued", axis="x", bevel=0.0004, segs=1)  # notch plate
+# The notch plate, its U-notch framing the front post; range marks
+# graduated along the leaf.
+notch = [(-0.0065, 0.104), (0.0065, 0.104), (0.0065, 0.1088), (0.0011, 0.1088), (0.0011, 0.1074),
+         (0.0, 0.1066), (-0.0011, 0.1074), (-0.0011, 0.1088), (-0.0065, 0.1088)]
+barrel.prism(fillet(notch, [0.0005, 0.0005, 0.0005, 0.0003, 0.0, 0.0006, 0.0, 0.0003, 0.0005], 2),
+             -0.179, -0.173, "Blued", axis="z")
+for k in range(9):
+    z = -0.2245 + k * 0.0052
+    y = 0.0985 + (z + 0.229) / 0.053 * 0.003 + 0.0045
+    w = 0.008 if k % 2 == 0 else 0.0045
+    barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
+# The rear handguard retainer band and its locking lever on the right.
+barrel.prism(fillet([(-0.0225, 0.020), (0.0225, 0.020), (0.0225, 0.072), (-0.0225, 0.072)],
+                    [0.006, 0.006, 0.004, 0.004], 3), -0.2445, -0.2325, "Blued", axis="z",
+             bevel=0.0008, segs=1)
+barrel.box((0.0035, 0.022, 0.006), (0.0238, 0.044, -0.2405), "Blued", bevel=0.0008,
+           xf=RX(-0.35, about=(0.0238, 0.044, -0.2405)))
+barrel.cyl(0.0032, 0.0225, 0.027, "Blued", segs=10,
+           xf=T(0, 0.0545, -0.2445) @ RY(math.pi / 2), chamfer=0.0006)
+# Front sling swivel on the left of the gas block.
+sling = [(-0.461 + 0.0075 * math.cos(a), 0.045 - 0.0075 * math.sin(a))
+         for a in [math.pi * i / 8 for i in range(9)]]
+barrel.sweep(sling, section_rect(0.0025, 0.0025, 0.0007), "Steel", xf=T(-0.0145, 0, 0))
 # Cleaning rod under the barrel.
 barrel.cyl(0.0031, -0.62, -0.24, "Steel", segs=8, xf=T(0, 0.040, 0))
 barrel.box((0.009, 0.007, 0.006), (0, 0.040, -0.623), "Steel", bevel=0.0015)
@@ -219,9 +258,9 @@ trig.sweep(catmull([(-0.031, 0.024), (-0.0345, 0.016), (-0.0345, 0.010), (-0.031
            "Blued")
 
 # --- Build --------------------------------------------------------------------------------
-join("static", recv, parts_static, grip, barrel, brake, lower, upper, stock, butt)
+join("static", recv, parts_static, grip, barrel, brake, lower, upper, stock, butt, worn={})
 for p in (carrier, selector, trig):
-    make(p)
+    make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, -0.69))
 empty("pt_sight", (0.0, 0.104, 0.0))

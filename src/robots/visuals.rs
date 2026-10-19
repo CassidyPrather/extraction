@@ -43,6 +43,9 @@ struct RobotMats {
     eye: Handle<StandardMaterial>,
     eye_dead: Handle<StandardMaterial>,
     rotor: Handle<StandardMaterial>,
+    /// Cyan running lights on weak points (rotors, knees, vents): brighter
+    /// than the kit's `Glow`, to carry through fog at 30-80 m.
+    glow: Handle<StandardMaterial>,
 }
 
 /// A spinning rotor disc (visual only).
@@ -108,6 +111,11 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             alpha_mode: AlphaMode::Blend,
             ..default()
         }),
+        glow: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.1, 0.4, 0.5),
+            emissive: LinearRgba::rgb(1.2, 7.0, 9.0),
+            ..default()
+        }),
     }
 }
 
@@ -137,7 +145,9 @@ fn request_models(
 }
 
 /// The robot model's material for a name; robot materials stay the
-/// hand-tuned ones, except the shell, which takes the scanned set if any.
+/// hand-tuned ones (the eye, so it can be dimmed), the rest by name from
+/// [`ModelMaterials`] (the shell takes the scanned set, the pylon's glow
+/// and hazard paint keep their colours).
 fn robot_material(
     name: Option<&str>,
     m: &RobotMats,
@@ -147,9 +157,10 @@ fn robot_material(
     materials: &mut Assets<StandardMaterial>,
 ) -> Handle<StandardMaterial> {
     match name {
-        Some("Shell") => model_mats.get("Shell", lib, server, materials),
         Some("Eye") => m.eye.clone(),
-        _ => m.dark.clone(),
+        Some("Glow") => m.glow.clone(),
+        Some(name) => model_mats.get(name, lib, server, materials),
+        None => m.dark.clone(),
     }
 }
 
@@ -351,7 +362,7 @@ fn dress_parts(
 
 /// Hangs a model node's meshes on `parent`, at `at` (the node's own
 /// translation is its part's spawn offset, which the part already has).
-/// Emissive meshes are marked as eyes of `part`.
+/// Emissive meshes (`Eye`, `Glow`) are marked as eyes of `part`.
 fn attach(
     commands: &mut Commands,
     parent: Entity,
@@ -373,7 +384,8 @@ fn attach(
             MeshMaterial3d(mat(p.material.as_deref())),
             ChildOf(holder),
         ));
-        if p.material.as_deref() == Some("Eye") {
+        // Eyes and glowing seams go dark with their part.
+        if matches!(p.material.as_deref(), Some("Eye" | "Glow")) {
             ec.insert(Eye { part });
         }
     }

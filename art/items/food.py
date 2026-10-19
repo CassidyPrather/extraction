@@ -120,11 +120,11 @@ def condensed_milk():
     # The squat tin of sweetened condensed milk: white label, blue bands,
     # the word round it front and back.
     y1 = yb + 0.052
-    rl = labelled_tin(p, 0.0345, yb, y1, "Paper", "Blued")
+    rl = labelled_tin(p, 0.0345, yb, y1, "Paper", "Blue")
     for k in range(2):
-        text_round(p, "МОЛОКО", 0.009, "Blued", rl + 0.0001, yb + 0.026, at=k * math.pi)
-    band(p, rl - 0.0001, rl + 0.0002, yb + 0.0145, yb + 0.0165, "Blued")
-    band(p, rl - 0.0001, rl + 0.0002, yb + 0.036, yb + 0.038, "Blued")
+        text_round(p, "МОЛОКО", 0.009, "Blue", rl + 0.0001, yb + 0.026, at=k * math.pi)
+    band(p, rl - 0.0001, rl + 0.0002, yb + 0.0145, yb + 0.0165, "Blue")
+    band(p, rl - 0.0001, rl + 0.0002, yb + 0.036, yb + 0.038, "Blue")
     text(p, "1983", 0.006, "Steel", T(0.0, y1 - 0.0015, 0.008) @ ON_TOP, depth=0.0005)
     return [p]
 
@@ -169,18 +169,18 @@ def carrot():
     rnd = random.Random(3)
     for (x, y, z), a in lay:
         xf = T(x, y, z) @ RY(a) @ ALONG_X
-        p.lathe(prof, "Yellow", segs=10, xf=xf)
+        p.lathe(prof, "Orange", segs=10, xf=xf)
         # Growth rings, and a few leaf stalks off the crown.
         for zr in (-0.004, 0.006, 0.016):
             r = 0.0104 - 0.00016 * zr * 100
-            p.tube(r + 0.0003, r - 0.0004, zr, zr + 0.0008, "Yellow", segs=10, xf=xf)
+            p.tube(r + 0.0003, r - 0.0004, zr, zr + 0.0008, "Orange", segs=10, xf=xf)
         for k in range(3):
             ang = 2 * math.pi * k / 3 + rnd.uniform(-0.3, 0.3)
             dy, dz = math.cos(ang) * 0.005, math.sin(ang) * 0.005
             pts = [(x - 0.0145, y, z), (x - 0.02, y + dy * 0.6, z + dz * 0.6),
                    (x - 0.027, y + dy, z + dz)]
-            tube_path(p, pts, 0.001, "Olive", sides=4, closed=False)
-            blob(p, 0.003, (x - 0.027, y + dy, z + dz), "Olive", scale=(1.0, 0.5, 1.4), segs=6,
+            tube_path(p, pts, 0.001, "Leaf", sides=4, closed=False)
+            blob(p, 0.003, (x - 0.027, y + dy, z + dz), "Leaf", scale=(1.0, 0.5, 1.4), segs=6,
                  rings=3)
     ring(p, 0.0185, 0.001, "Rope", xf=T(-0.0135, yb + 0.0185, 0.0) @ ALONG_X @ S(1.0, 1.0, 1.0),
          segs=16, sides=4)
@@ -448,11 +448,11 @@ def salt_packet():
     p.box((w, h, d - 0.008), (0.0, yb + h / 2, 0.0), "Paper")
     for sz in (-1, 1):
         panel(p, "z", -w / 2, w / 2, yb, yb + h, sz * (d / 2 - 0.004), sz * d / 2, "Paper",
-              [(-w / 2, w / 2, yb + 0.00475, yb + 0.00725, "Blued"),
+              [(-w / 2, w / 2, yb + 0.00475, yb + 0.00725, "Blue"),
                (-w / 2, w / 2, yb + 0.0089, yb + 0.0101, "Red"),
-               (-w / 2, w / 2, yb + 0.02575, yb + 0.02825, "Blued")])
+               (-w / 2, w / 2, yb + 0.02575, yb + 0.02825, "Blue")])
         rot = FRONT if sz < 0 else T()
-        text(p, "СОЛЬ", 0.008, "Blued", T(0.0, yb + 0.017, sz * d / 2) @ rot, depth=0.0004)
+        text(p, "СОЛЬ", 0.008, "Blue", T(0.0, yb + 0.017, sz * d / 2) @ rot, depth=0.0004)
     p.box((0.008, 0.0016, 0.005), (0.008, yb + h + 0.0006, 0.0), "Steel", bevel=0.0004, segs=1)
     return [p]
 
