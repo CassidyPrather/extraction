@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod hints;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -144,6 +145,9 @@ pub struct Station {
     pub goals: &'static [Goal],
     /// Where it is, for the driver sending you on to it.
     pub where_: &'static str,
+    /// What's worth knowing, shown once it's done (you have time to read
+    /// then): what the old yard's signs said.
+    pub tip: &'static str,
 }
 
 /// The stations, in order, from the truck north up the track.
@@ -154,6 +158,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::TakePistol, Goal::TakeRadio],
         where_: "the crate in the truck",
+        tip: "Everything you own rides\nin that crate between raids.",
     },
     Station {
         title: "PUT IT AWAY",
@@ -161,6 +166,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::PutAway, Goal::Pack],
         where_: "the lamp by the tailgate",
+        tip: "Weight slows you.\nCarry what you'll use.",
     },
     Station {
         title: "OUT OF REACH",
@@ -168,11 +174,12 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::FarGrab],
         where_: "the lamp by the tall crates",
+        tip: "Works on anything loose\nup to five metres off.",
     },
     Station {
         title: "THE RANGE",
-        at: [-14.0, 46.0],
-        rot: 0.0,
+        at: [-17.0, 47.0],
+        rot: 315.0,
         goals: &[
             Goal::FillMag,
             Goal::SeatMag,
@@ -181,6 +188,7 @@ pub const STATIONS: &[Station] = &[
             Goal::HitPlate,
         ],
         where_: "the range, left past the gate",
+        tip: "Out there, shots bring the\nmachines. Pick your moment.",
     },
     Station {
         title: "THE HOUSE",
@@ -188,6 +196,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::OpenDoor, Goal::Search],
         where_: "the house on the right",
+        tip: "Scrap and parts go to the\nbench in the truck.",
     },
     Station {
         title: "FIRST AID",
@@ -195,6 +204,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::Dressing],
         where_: "the lamp on the right",
+        tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
     },
     Station {
         title: "THE SHIMMER",
@@ -202,6 +212,7 @@ pub const STATIONS: &[Station] = &[
         rot: 90.0,
         goals: &[Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
+        tip: "Throw a bolt in first. Carry\nmany stones and the\nmachines feel them too.",
     },
     Station {
         title: "BUTTONS",
@@ -209,6 +220,7 @@ pub const STATIONS: &[Station] = &[
         rot: 270.0,
         goals: &[Goal::Button],
         where_: "the lamp on the left",
+        tip: "Any card with a button\ndoes something: settings,\nthe route, terminals.",
     },
     Station {
         title: "GOING HOME",
@@ -216,6 +228,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::CallTruck, Goal::PullCord],
         where_: "the north post, end of the track",
+        tip: "Out there the truck takes\ntwo minutes, waits five.",
     },
 ];
 
@@ -243,7 +256,7 @@ pub const FAR_STAND_H: f32 = 2.45;
 pub const FAR_STAND_LOW: f32 = 1.6;
 pub const FAR_STAND_TOP: f32 = 0.36;
 /// The range's table: centre, size; the shooter stands on its south side.
-pub const RANGE_TABLE_AT: [f32; 2] = [-21.0, 42.0];
+pub const RANGE_TABLE_AT: [f32; 2] = [-25.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
 /// A crate at the last station with a spare radio on it.
 pub const HOME_CRATE_AT: [f32; 2] = [5.5, -63.0];
@@ -371,7 +384,7 @@ pub const CHECKLIST: Vec2 = Vec2::new(0.8, 1.0);
 pub const BOARD_Y: f32 = 1.55;
 pub const LAMP_Y: f32 = 2.32;
 pub const SKIP_CARD: Vec2 = Vec2::new(0.22, 0.09);
-pub const PUSH_CARD: Vec2 = Vec2::new(0.3, 0.12);
+pub const PUSH_CARD: Vec2 = Vec2::new(0.36, 0.15);
 
 pub struct OnboardingPlugin;
 
@@ -379,7 +392,11 @@ impl Plugin for OnboardingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
-            .add_systems(PostStartup, (setup, bot_in_the_bed).run_if(in_yard))
+            .add_plugins(hints::HintsPlugin)
+            .add_systems(
+                PostStartup,
+                (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
+            )
             .add_systems(
                 Update,
                 (
@@ -441,6 +458,23 @@ fn paper(text: String, size: Vec2) -> ScreenText {
         size,
         style: ScreenStyle::Paper,
     }
+}
+
+/// `EXTRACTION_YARD_AT=N` (a dev aid, for screenshots of station N lit):
+/// the stations before N start done.
+fn dev_start_at(mut ob: ResMut<Onboarding>) {
+    let Some(n) = std::env::var("EXTRACTION_YARD_AT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    else {
+        return;
+    };
+    ob.done = STATIONS
+        .iter()
+        .take(n.saturating_sub(1))
+        .flat_map(|s| s.goals.iter().copied())
+        .collect();
+    ob.greeted = true;
 }
 
 /// Posts, boards, the range table, the far stand, the house's find, the
@@ -515,7 +549,7 @@ fn setup(
         if STATIONS[i].goals.contains(&Goal::Button) {
             commands.spawn((
                 card(OnboardCard::Push, "PUSH ME", PUSH_CARD),
-                Transform::from_xyz(-0.3, BOARD_Y - SIGN.y * 0.5 - 0.16, 0.03),
+                Transform::from_xyz(-0.27, BOARD_Y - SIGN.y * 0.5 - 0.17, 0.03),
                 ChildOf(post),
             ));
         }
@@ -1102,13 +1136,16 @@ pub fn sign_text(ob: &Onboarding, i: usize, flat: bool) -> String {
         };
         t += &format!("{mark}{}\n", g.label());
     }
-    t += "\n";
     match next {
-        Some(g) => t += g.how(flat),
+        Some(g) => {
+            t += "\n";
+            t += g.how(flat);
+        }
         None => {
-            t += "DONE.";
+            // Done: the steps are ticked off; what's worth knowing instead.
+            t = format!("{}  {}\n\nDONE.\n\n{}", i + 1, st.title, st.tip);
             if i + 1 < STATIONS.len() {
-                t += " Follow the\nnext lamp.";
+                t += "\n\nNext: the lit lamp.";
             }
         }
     }
@@ -1315,6 +1352,10 @@ mod tests {
     /// a couple of lines, with the control named.
     #[test]
     fn instructions_are_short_and_name_the_control() {
+        for st in STATIONS {
+            assert!(st.tip.lines().count() <= 3, "{}", st.tip);
+            assert!(st.tip.lines().all(|l| l.len() <= 28), "{}", st.tip);
+        }
         for g in all_goals() {
             for flat in [false, true] {
                 let how = g.how(flat);

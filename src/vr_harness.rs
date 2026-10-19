@@ -1786,6 +1786,27 @@ mod onboarding {
         assert!(text(&mut vr).contains("Press E"), "{}", text(&mut vr));
     }
 
+    /// Out in a valley too: a squeeze on a pistol that's on safe gets told
+    /// how to take it off, instead of nothing happening.
+    #[test]
+    fn a_trigger_on_safe_says_why() {
+        let mut vr = Vr::new("marrow_creek");
+        let feet = ground(&vr, [0.0, 300.0]);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        let gun = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(0.15, 1.1, -0.35)),
+        );
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(10);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        assert!(said(&vr, "Safety's on. Click the stick"), "told why");
+    }
+
     /// Walk up to a card and squeeze it.
     fn take_card(vr: &mut Vr, card: Entity) {
         let p = at(vr, card);
