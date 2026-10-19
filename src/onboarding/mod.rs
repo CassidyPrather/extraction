@@ -65,8 +65,10 @@ pub enum Goal {
     Rack,
     Safety,
     HitPlate,
+    DropMag,
     OpenDoor,
     Search,
+    Wrist,
     Dressing,
     Artifact,
     Button,
@@ -91,8 +93,10 @@ impl Goal {
             Goal::Rack => "Rack the slide",
             Goal::Safety => "Safety off",
             Goal::HitPlate => "Hit a plate",
+            Goal::DropMag => "Drop the mag",
             Goal::OpenDoor => "Open the door",
             Goal::Search => "Take what's inside",
+            Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
@@ -128,10 +132,14 @@ impl Goal {
             (Goal::Safety, true) => "Pistol in hand. Press X.",
             (Goal::HitPlate, false) => "Line up the sights.\nSqueeze TRIGGER.",
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
+            (Goal::DropMag, false) => "Press A on the gun hand.",
+            (Goal::DropMag, true) => "Pistol in hand. Press B.",
             (Goal::OpenDoor, false) => "GRIP the door by its edge\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
+            (Goal::Wrist, false) => "Raise your left hand and\nlook at the back of it.",
+            (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "Hold it. Press A or X.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
@@ -206,9 +214,10 @@ pub const STATIONS: &[Station] = &[
             Goal::Rack,
             Goal::Safety,
             Goal::HitPlate,
+            Goal::DropMag,
         ],
         where_: "the range, left past the gate",
-        tip: "Out there, shots bring the\nmachines. Pick your moment.",
+        tip: "Empty, the slide stays\nback: a new mag, then B\n(flat: V) lets it go.",
     },
     Station {
         title: "THE HOUSE",
@@ -222,7 +231,7 @@ pub const STATIONS: &[Station] = &[
         title: "FIRST AID",
         at: [4.5, 8.0],
         rot: 90.0,
-        goals: &[Goal::Dressing],
+        goals: &[Goal::Wrist, Goal::Dressing],
         where_: "the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
     },
@@ -427,6 +436,7 @@ impl Plugin for OnboardingPlugin {
                         watch_uses.before(crate::items::usage::UsageSystems),
                         watch_world,
                         watch_moves,
+                        watch_wrist,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -958,6 +968,9 @@ fn watch_guns(
                 complete(&mut ob, Goal::SeatMag, &mut out)
             }
             extraction_core::firearm::Event::Chambered => complete(&mut ob, Goal::Rack, &mut out),
+            extraction_core::firearm::Event::MagazineRemoved => {
+                complete(&mut ob, Goal::DropMag, &mut out)
+            }
             extraction_core::firearm::Event::ModeChanged(m)
                 if m != extraction_core::firearm::FireMode::Safe =>
             {
@@ -1060,6 +1073,50 @@ fn watch_moves(
         }
     } else {
         swung.1 = 0.0;
+    }
+}
+
+/// Where the wrist's screen rides on the left hand (`render::comfort`).
+pub const WRIST_PANEL: Vec3 = Vec3::new(-0.03, 0.015, 0.07);
+
+/// Looking at your wrist (the head's gaze on the left hand's screen, close,
+/// for a moment), or in flat mode holding H.
+fn watch_wrist(
+    mut ob: ResMut<Onboarding>,
+    mut out: MessageWriter<GoalDone>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    hands: Query<(&GlobalTransform, &crate::rig::RigHand, &ChildOf)>,
+    locals: Query<(), With<LocalPlayer>>,
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    time: Res<Time>,
+    mut held: Local<f32>,
+) {
+    if ob.is_done(Goal::Wrist) {
+        return;
+    }
+    let mut looking = keys.is_some_and(|k| k.pressed(KeyCode::KeyH));
+    for (head, owner) in &heads {
+        if !locals.contains(owner.parent()) {
+            continue;
+        }
+        let hand = hands
+            .iter()
+            .find(|(_, rh, p)| rh.side == Side::Left && p.parent() == owner.parent());
+        let Some((hand, ..)) = hand else { continue };
+        let panel = hand.transform_point(WRIST_PANEL);
+        let to = panel - head.translation();
+        let forward = head.rotation() * Vec3::NEG_Z;
+        if to.length() < 0.65 && forward.angle_between(to) < 20f32.to_radians() {
+            looking = true;
+        }
+    }
+    *held = if looking {
+        *held + time.delta_secs()
+    } else {
+        0.0
+    };
+    if *held > 0.4 {
+        complete(&mut ob, Goal::Wrist, &mut out);
     }
 }
 
