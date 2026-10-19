@@ -521,7 +521,8 @@ class Part:
         outline: cut across every few millimetres along Z, each cut a
         superellipse filling the outline's height there. `width(z, y_mid,
         half_height) -> (w_bottom, w_top)` gives its half widths at the
-        belly and the top; `power` 2 is an ellipse, higher is squarer.
+        belly and the top; `power` (a number, or a function of z) 2 is an
+        ellipse, higher is squarer.
         `spacing(t)` maps 0..1 to 0..1 to bunch the cuts (default even).
         The outline must be single-valued across Z between z0 and z1."""
         if area2(outline) < 0:
@@ -537,7 +538,6 @@ class Part:
             return (min(ys), max(ys)) if len(ys) >= 2 else None
 
         rings = []
-        e = 2.0 / power
         for i in range(stations + 1):
             t = i / stations
             t = spacing(t) if spacing else t
@@ -548,6 +548,7 @@ class Part:
             lo, hi = sp
             yc, h = (lo + hi) / 2, (hi - lo) / 2
             wb, wt = width(z, yc, h)
+            e = 2.0 / (power(z) if callable(power) else power)
             ring = []
             for k in range(segs):
                 th = 2 * math.pi * k / segs
@@ -629,10 +630,53 @@ def box_uv(me, origin_b):
     bm.free()
 
 
-def make(part, sharp_angle=40.0):
-    """Turn a Part into a Blender object: booleans, UVs, smoothing."""
+def wear(me, mats=("Blued",), width=0.0028, turn=25.0, amount=0.45, seed=0.0):
+    """Edge wear: the narrow faces of bevels and roundings on `mats`, where
+    a face turns more than `turn` degrees from a neighbour, go to bare
+    `Worn` steel in noisy patches (`amount` of the length), the way bluing
+    rubs off a gun's edges in the hand and the holster."""
+    from mathutils import noise
+    idx = [i for i, m in enumerate(me.materials) if m and m.name in mats]
+    if not idx:
+        return
+    me.materials.append(material("Worn"))
+    worn = len(me.materials) - 1
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    cos_t = math.cos(math.radians(turn))
+    hits = []
+    for f in bm.faces:
+        if f.material_index not in idx:
+            continue
+        # Narrow: its area is small for its longest edge.
+        longest = max(e.calc_length() for e in f.edges)
+        if longest < 1e-6 or f.calc_area() / longest > width:
+            continue
+        # A strip along an edge turns across its long sides; a sliver of a
+        # flat face (booleans leave many) does not.
+        if not any(g is not f and f.normal.dot(g.normal) < cos_t
+                   for e in f.edges if e.calc_length() > 0.5 * longest
+                   for g in e.link_faces):
+            continue
+        c = f.calc_center_median()
+        if noise.noise(c * 60.0 + Vector((seed, seed, seed))) > 0.5 - amount:
+            continue
+        hits.append(f)
+    for f in hits:
+        f.material_index = worn
+    bm.to_mesh(me)
+    bm.free()
+
+
+def make(part, sharp_angle=40.0, worn=None):
+    """Turn a Part into a Blender object: booleans, UVs, smoothing, and
+    edge wear if `worn` is a dict of `wear` arguments."""
     cutters = part.cutters
     obj = _bm_to_object(part)
+    # Wear before the cuts: engraving and slots stay the plain finish.
+    if worn is not None:
+        wear(obj.data, **worn)
     for c in cutters:
         c.origin = part.origin.copy()
         cobj = _bm_to_object(c, part.name + "_cutter")
@@ -653,11 +697,11 @@ def make(part, sharp_angle=40.0):
     return obj
 
 
-def join(name, *parts):
+def join(name, *parts, worn=None):
     """Make several Parts (e.g. one with boolean cuts and one without, which
     the exact solver would mangle) and join them into one object. They
     should share an origin; the first one's is kept."""
-    objs = [make(p) if isinstance(p, Part) else p for p in parts]
+    objs = [make(p, worn=worn) if isinstance(p, Part) else p for p in parts]
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
         o.select_set(True)

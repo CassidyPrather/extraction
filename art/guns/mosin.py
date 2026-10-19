@@ -25,8 +25,8 @@ stock_prof = [
     (-0.866, 0.037), (-0.20, 0.037),          # forend top (barrel channel edge)
     (-0.19, 0.031), (-0.012, 0.031),          # under the receiver
     (0.004, 0.030), (0.035, 0.0215),          # wrist top, down to the comb
-    (0.322, 0.0145),                          # heel
-    (0.329, -0.107),                          # toe
+    (0.326, 0.0145),                          # heel
+    (0.326, -0.107),                          # toe
     (0.24, -0.090), (0.11, -0.060), (0.045, -0.038), (0.0, -0.031),  # belly to wrist
     (-0.05, -0.027), (-0.20, -0.026),         # under the magazine
     (-0.60, -0.020), (-0.858, -0.011), (-0.868, 0.004),
@@ -56,8 +56,23 @@ def stock_w(z, y):
     return (-k, k)
 
 
+def stock_wt(z, yc, h):
+    k = lerp_table(z, WIDTH)
+    # The butt's belly a little narrower than its comb; the forend's top
+    # as wide as the channel the barrel lies in.
+    belly = k - (0.003 if z > 0.06 else 0.0)
+    return (belly, k * (0.96 if z < -0.19 else 0.9))
+
+
+def stock_power(z):
+    # Square-shouldered under the barrel and receiver, oval through the
+    # wrist and the butt.
+    return 3.6 if z < -0.03 else 2.5
+
+
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.0085, segs=4, width=stock_w)
+stock.stock(stock_prof, -0.8675, 0.3285, "Wood", stock_wt, stations=110, segs=24,
+            power=stock_power)
 sc = Part("cut")
 # Sling slots through the butt and the forend.
 sc.prism(fillet([(0.15, -0.037), (0.19, -0.044), (0.19, -0.052), (0.15, -0.045)], 0.004, 2),
@@ -68,8 +83,8 @@ stock.cut(sc)
 
 # Steel butt plate.
 furn = Part("furniture")
-bp = fillet([(0.318, 0.0175), (0.3245, 0.0145), (0.3315, -0.107), (0.3255, -0.1095),
-             (0.322, -0.097)], [0.0, 0.002, 0.003, 0.002, 0.0], 2)
+bp = fillet([(0.322, 0.0175), (0.3335, 0.0145), (0.3335, -0.107), (0.3275, -0.1095),
+             (0.322, -0.105)], [0.0, 0.002, 0.003, 0.002, 0.0], 2)
 furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
 
 # Upper handguard over the barrel.
@@ -111,6 +126,15 @@ barrel.prism(rs, -0.0145, 0.0145, "Blued", axis="x", bevel=0.0012, segs=2)
 barrel.prism([(-0.247, 0.0705), (-0.166, 0.0790), (-0.166, 0.0825), (-0.247, 0.0735)],
              -0.0065, 0.0065, "Blued", axis="x", bevel=0.0005, segs=1)
 barrel.box((0.019, 0.0075, 0.009), (0, 0.0775, -0.205), "Blued", bevel=0.0012)  # slider
+# Range marks along the leaf, every other one long.
+for k in range(12):
+    z = -0.243 + k * 0.0064
+    y = 0.0735 + (z + 0.247) / 0.081 * 0.009
+    if abs(z + 0.205) < 0.007:
+        continue  # under the slider
+    w = 0.0075 if k % 2 == 0 else 0.004
+    barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn",
+               xf=RX(-math.atan2(0.009, 0.081), about=(0, y, z)))
 barrel.prism([(-0.170, 0.081), (-0.164, 0.081), (-0.164, 0.0855), (-0.170, 0.0855)],
              -0.006, 0.006, "Blued", axis="x", bevel=0.0004, segs=1)  # notch plate
 nc = Part("cut")
@@ -120,7 +144,7 @@ barrel.cut(nc)
 # --- Receiver -------------------------------------------------------------------------
 recv = Part("receiver")
 # Hexagonal receiver ring.
-hexa = [(0.0172 * math.cos(math.radians(30 + 60 * i)), BORE + 0.0172 * math.sin(math.radians(30 + 60 * i)))
+hexa = [(0.0172 * math.cos(math.radians(60 * i)), BORE + 0.0172 * math.sin(math.radians(60 * i)))
         for i in range(6)]
 recv.prism(fillet(hexa, 0.0015, 1), -0.208, -0.168, "Blued", axis="z", bevel=0.0012, segs=1)
 # The receiver body: a round tube around the bolt, flattened underneath.
@@ -183,9 +207,9 @@ trig = Part("trigger", origin=(0.0, -0.005, -0.04))
 trig.sweep(catmull([(-0.044, -0.020), (-0.0445, -0.030), (-0.042, -0.039), (-0.037, -0.044)], 3,
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 
-join("static", stock, furn, barrel, recv, mag)
+join("static", stock, furn, barrel, recv, mag, worn={})
 for p in (bolt, trig):
-    make(p)
+    make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.085, -0.02))

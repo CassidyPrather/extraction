@@ -12,6 +12,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from common import (Part, RX, RY, T, catmull, empty, export, fillet, join, main_guard, make, report,
                     section_rect)
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
+from _kit import text  # noqa: E402
+
 main_guard()
 
 BORE_Y = 0.062
@@ -23,7 +26,7 @@ SLIDE_HW = 0.014
 slide = Part("bolt_slide", origin=(0.0, BORE_Y, 0.0))
 sec = fillet(
     [(-SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y1), (-SLIDE_HW, SLIDE_Y1)],
-    [0.0008, 0.0008, 0.0105, 0.0105], 5)
+    [0.0024, 0.0024, 0.0105, 0.0105], 5)  # (fillets no tighter than the bevel: see _slab)
 slide.prism(sec, SLIDE_Z0, SLIDE_Z1, "Blued", axis="z", bevel=0.0022, segs=2)
 # Rear sight: a block with a square notch, dovetailed into the slide.
 slide.prism(fillet([(0.012, 0.0755), (0.024, 0.0755), (0.0235, 0.0815), (0.0145, 0.0815)], 0.0008, 2),
@@ -45,6 +48,12 @@ for i in range(11):
     for sx in (-1, 1):
         cut.box((0.0024, 0.019, 0.0011), (sx * SLIDE_HW, 0.0585, z), "Blued",
                 xf=RX(-0.12, about=(0, 0.0585, z)))
+# The serial and year engraved on the left of the slide.
+# (0.6 mm deep: the exact boolean drops cuts much shallower than half a
+# millimetre.)
+LEFT = T(-SLIDE_HW + 0.0006, 0, 0) @ RY(-math.pi / 2)
+text(cut, "ГТ 3051", 0.0032, "Blued", LEFT @ T(-0.083, 0.0585, 0.0), depth=0.0012)
+text(cut, "1959", 0.0032, "Blued", LEFT @ T(-0.083, 0.0535, 0.0), depth=0.0012)
 slide.cut(cut)
 
 # --- Barrel (static; shows at the muzzle and through the port) ---------------
@@ -172,8 +181,8 @@ for i in range(3):
 
 # --- Build ------------------------------------------------------------------------
 for p in (slide, trig, safety):
-    make(p)
-join("static_frame", static, hammer_p)
+    make(p, worn={})
+join("static_frame", static, hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
 empty("pt_muzzle", (0.0, BORE_Y, -0.13))
