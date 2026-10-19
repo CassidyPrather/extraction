@@ -149,7 +149,7 @@ pub fn flat_driving(driver: Res<RigDriver>) -> bool {
 }
 
 /// Copies rig input poses onto the head and hand entities.
-fn apply_rig_poses(
+pub(crate) fn apply_rig_poses(
     rigs: Query<(&RigInput, &Children)>,
     mut heads: Query<&mut Transform, (With<RigHead>, Without<RigHand>)>,
     mut hands: Query<(&RigHand, &mut Transform), Without<RigHead>>,

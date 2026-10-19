@@ -25,7 +25,14 @@ impl Plugin for PropVisualsPlugin {
                 dress_capstone,
             ),
         )
-        .add_systems(PostUpdate, pose_hands.after(TransformSystems::Propagate))
+        // Before propagation, from this frame's poses: posed after it, the
+        // gloves drew where the hands were a frame ago (11 ms behind at 90 Hz).
+        .add_systems(
+            PostUpdate,
+            pose_hands
+                .after(crate::rig::apply_rig_poses)
+                .before(TransformSystems::Propagate),
+        )
         .add_systems(
             Update,
             (
@@ -726,7 +733,7 @@ fn curl_targets(
     hand: &Hand,
     grip: f32,
     trigger: f32,
-    held: &Query<(&Held, &GlobalTransform, &Grabbable)>,
+    held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
 ) -> [f32; 5] {
     // [index, middle, ring, little, thumb]
@@ -773,8 +780,9 @@ fn pose_hands(
     time: Res<Time>,
     mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
     mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
-    hands: Query<(&Hand, &GlobalTransform, &ChildOf)>,
-    held: Query<(&Held, &GlobalTransform, &Grabbable)>,
+    hands: Query<(&Hand, &Transform, &ChildOf), (Without<HandVisual>, Without<Finger>)>,
+    roots_t: Query<&Transform, (Without<Hand>, Without<HandVisual>, Without<Finger>)>,
+    held: Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: Query<&avian3d::prelude::ColliderAabb>,
     inputs: Query<&RigInput>,
     roots: Query<&ChildOf, With<Finger>>,
@@ -782,17 +790,22 @@ fn pose_hands(
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
-        let Ok((hand, gt, parent)) = hands.get(v.hand) else {
+        let Ok((hand, local, parent)) = hands.get(v.hand) else {
             continue;
         };
-        let mut pose = gt.compute_transform();
+        // The rig hand sits on the player's root; held things are loose in
+        // the world: their transforms are this frame's world poses.
+        let Ok(root) = roots_t.get(parent.parent()) else {
+            continue;
+        };
+        let mut pose = root.mul_transform(*local);
         let input = inputs.get(parent.parent()).map(|i| i.hand(v.side));
         let grip = input.map_or(0.0, |i| i.grip);
         let trigger = input.map_or(0.0, |i| i.trigger);
         if let Some(item) = hand.holding {
             if let Ok((h, igt, g)) = held.get(item) {
                 if let Some(p) = g.points.get(h.point).filter(|p| p.role != GripRole::Free) {
-                    pose = igt.mul_transform(p.local).compute_transform();
+                    pose = igt.mul_transform(p.local);
                 }
             }
         }
