@@ -127,31 +127,31 @@
         // Rail attachments
         // ---------------------------------------------------------------
         (
-            id: "weapon_light", dims: Some((0.03, 0.03, 0.09)), name: "Weapon light",
+            id: "weapon_light", dims: Some((0.041, 0.047, 0.093)), name: "Weapon light",
             description: "Clamps to a rail. Takes one cell.",
             category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0, mount: Some(Rail),
             tags: ["electronics", "metal"],
         ),
         (
-            id: "laser_module", dims: Some((0.025, 0.025, 0.06)), name: "Laser module",
+            id: "laser_module", dims: Some((0.041, 0.047, 0.07)), name: "Laser module",
             description: "A red dot on the world, wherever your muzzle points.",
             category: Attachment, size: Small, mass: 0.08, bulk: 0.08, mount: Some(Rail),
             tags: ["electronics"],
         ),
         (
-            id: "pu_scope", dims: Some((0.035, 0.045, 0.27)), name: "3.5x scope",
+            id: "pu_scope", dims: Some((0.045, 0.049, 0.271)), name: "3.5x scope",
             description: "Old-pattern fixed-power sniper scope with a side mount.",
             category: Attachment, size: Medium, mass: 0.27, bulk: 0.4, mount: Some(Dovetail),
             tags: ["glass", "metal"],
         ),
         (
-            id: "side_rail", dims: Some((0.02, 0.012, 0.1)), name: "Side-mount rail",
+            id: "side_rail", dims: Some((0.027, 0.013, 0.1)), name: "Side-mount rail",
             description: "Bolts onto a dovetail and gives you a short rail.",
             category: Attachment, size: Small, mass: 0.15, bulk: 0.1, mount: Some(Dovetail),
             tags: ["metal"],
         ),
         (
-            id: "artifact_adapter", dims: Some((0.04, 0.04, 0.09)), name: "Artifact adapter",
+            id: "artifact_adapter", dims: Some((0.05, 0.04, 0.09)), name: "Artifact adapter",
             description: "A cradle of copper coil and bad ideas. Holds an artifact against a muzzle.",
             category: Attachment, size: Small, mass: 0.35, bulk: 0.2, mount: Some(Muzzle),
             tags: ["electronics", "metal"],
@@ -172,17 +172,17 @@
             tags: ["electronics"],
         ),
         (
-            id: "compass", dims: Some((0.05, 0.03, 0.05)), name: "Compass",
+            id: "compass", dims: Some((0.066, 0.03, 0.057)), name: "Compass",
             category: Gadget, size: Tiny, mass: 0.06, bulk: 0.03,
             tags: ["metal", "glass"],
         ),
         (
-            id: "map_case", dims: Some((0.3, 0.008, 0.3)), name: "Map case",
+            id: "map_case", dims: Some((0.32, 0.008, 0.344)), name: "Map case",
             description: "Your hand-drawn map of the valley, in a scuffed plastic sleeve.",
             category: Gadget, size: Small, mass: 0.1, bulk: 0.2,
         ),
         (
-            id: "radio", dims: Some((0.07, 0.17, 0.04)), name: "Field radio",
+            id: "radio", dims: Some((0.069, 0.214, 0.045)), name: "Field radio",
             description: "Calls the truck. Picks up the robots' chatter, if you know where to listen.",
             category: Gadget, size: Small, mass: 0.45, bulk: 0.4,
             tags: ["electronics"],
@@ -241,11 +241,11 @@
             tags: ["metal"],
         ),
         (
-            id: "matches", name: "Matches",
+            id: "matches", dims: Some((0.036, 0.019, 0.055)), name: "Matches",
             category: Gadget, size: Tiny, mass: 0.02, bulk: 0.02,
         ),
         (
-            id: "door_wedge", name: "Door wedge",
+            id: "door_wedge", dims: Some((0.048, 0.031, 0.052)), name: "Door wedge",
             description: "Jams a door shut. Robots have to go around, or through.",
             category: Gadget, size: Small, mass: 0.25, bulk: 0.15,
             tags: ["polymer"],
@@ -255,11 +255,11 @@
         // Medical
         // ---------------------------------------------------------------
         (
-            id: "field_dressing", name: "Field dressing",
+            id: "field_dressing", dims: Some((0.045, 0.025, 0.045)), name: "Field dressing",
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
-            id: "regen_injector", name: "Regen injector",
+            id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Regen injector",
             description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
         ),
@@ -284,32 +284,32 @@
         (id: "crackers", name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
 
         // Cooked and prepared (made at the camp kitchen; see raid/kitchen.rs).
-        (id: "cook_flour", name: "Flour", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Flour", "prepared"]),
-        (id: "cook_dough", name: "Dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Dough", "prepared"]),
-        (id: "cook_risen_dough", name: "Risen dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RisenDough", "prepared"]),
-        (id: "cook_batter", name: "Batter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Batter", "prepared"]),
-        (id: "cook_butter", name: "Butter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Butter", "prepared"]),
-        (id: "cook_hot_water", name: "Hot water", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:HotWater", "prepared"]),
-        (id: "cook_chopped_carrot", name: "Chopped carrot", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedCarrot", "prepared"]),
-        (id: "cook_chopped_onion", name: "Chopped onion", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedOnion", "prepared"]),
-        (id: "cook_chopped_tomato", name: "Chopped tomato", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedTomato", "prepared"]),
-        (id: "cook_soaked_beans", name: "Soaked beans", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SoakedBeans", "prepared"]),
-        (id: "cook_tea", name: "Tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Tea", "cooked"]),
-        (id: "cook_milk_tea", name: "Milk tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:MilkTea", "cooked"]),
-        (id: "cook_salad", name: "Salad", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Salad", "cooked"]),
-        (id: "cook_boiled_egg", name: "Boiled egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:BoiledEgg", "cooked"]),
-        (id: "cook_steamed_rice", name: "Steamed rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SteamedRice", "cooked"]),
-        (id: "cook_soup", name: "Soup", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Soup", "cooked"]),
-        (id: "cook_custard", name: "Custard", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Custard", "cooked"]),
-        (id: "cook_rice_pudding", name: "Rice pudding", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RicePudding", "cooked"]),
-        (id: "cook_fried_egg", name: "Fried egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedEgg", "cooked"]),
-        (id: "cook_omelette", name: "Omelette", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Omelette", "cooked"]),
-        (id: "cook_pancake", name: "Pancake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Pancake", "cooked"]),
-        (id: "cook_fried_rice", name: "Fried rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedRice", "cooked"]),
-        (id: "cook_bread", name: "Bread", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Bread", "cooked"]),
-        (id: "cook_cake", name: "Cake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Cake", "cooked"]),
-        (id: "cook_mush", name: "Mush", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Mush", "waste"]),
-        (id: "cook_charcoal", name: "Something burnt", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Charcoal", "waste"]),
+        (id: "cook_flour", dims: Some((0.063, 0.034, 0.063)), name: "Flour", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Flour", "prepared"]),
+        (id: "cook_dough", dims: Some((0.064, 0.025, 0.063)), name: "Dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Dough", "prepared"]),
+        (id: "cook_risen_dough", dims: Some((0.063, 0.04, 0.063)), name: "Risen dough", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RisenDough", "prepared"]),
+        (id: "cook_batter", dims: Some((0.063, 0.048, 0.063)), name: "Batter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Batter", "prepared"]),
+        (id: "cook_butter", dims: Some((0.063, 0.024, 0.063)), name: "Butter", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Butter", "prepared"]),
+        (id: "cook_hot_water", dims: Some((0.061, 0.064, 0.05)), name: "Hot water", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:HotWater", "prepared"]),
+        (id: "cook_chopped_carrot", dims: Some((0.067, 0.013, 0.046)), name: "Chopped carrot", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedCarrot", "prepared"]),
+        (id: "cook_chopped_onion", dims: Some((0.065, 0.031, 0.043)), name: "Chopped onion", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedOnion", "prepared"]),
+        (id: "cook_chopped_tomato", dims: Some((0.064, 0.018, 0.043)), name: "Chopped tomato", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:ChoppedTomato", "prepared"]),
+        (id: "cook_soaked_beans", dims: Some((0.063, 0.027, 0.063)), name: "Soaked beans", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SoakedBeans", "prepared"]),
+        (id: "cook_tea", dims: Some((0.05, 0.065, 0.039)), name: "Tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Tea", "cooked"]),
+        (id: "cook_milk_tea", dims: Some((0.053, 0.046, 0.042)), name: "Milk tea", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:MilkTea", "cooked"]),
+        (id: "cook_salad", dims: Some((0.063, 0.031, 0.063)), name: "Salad", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Salad", "cooked"]),
+        (id: "cook_boiled_egg", dims: Some((0.067, 0.024, 0.067)), name: "Boiled egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:BoiledEgg", "cooked"]),
+        (id: "cook_steamed_rice", dims: Some((0.063, 0.052, 0.063)), name: "Steamed rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:SteamedRice", "cooked"]),
+        (id: "cook_soup", dims: Some((0.063, 0.046, 0.063)), name: "Soup", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Soup", "cooked"]),
+        (id: "cook_custard", dims: Some((0.059, 0.028, 0.059)), name: "Custard", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Custard", "cooked"]),
+        (id: "cook_rice_pudding", dims: Some((0.063, 0.027, 0.063)), name: "Rice pudding", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:RicePudding", "cooked"]),
+        (id: "cook_fried_egg", dims: Some((0.065, 0.015, 0.049)), name: "Fried egg", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedEgg", "cooked"]),
+        (id: "cook_omelette", dims: Some((0.067, 0.014, 0.067)), name: "Omelette", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Omelette", "cooked"]),
+        (id: "cook_pancake", dims: Some((0.067, 0.022, 0.067)), name: "Pancake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Pancake", "cooked"]),
+        (id: "cook_fried_rice", dims: Some((0.063, 0.036, 0.063)), name: "Fried rice", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:FriedRice", "cooked"]),
+        (id: "cook_bread", dims: Some((0.036, 0.041, 0.058)), name: "Bread", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Bread", "cooked"]),
+        (id: "cook_cake", dims: Some((0.067, 0.035, 0.067)), name: "Cake", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Cake", "cooked"]),
+        (id: "cook_mush", dims: Some((0.066, 0.062, 0.051)), name: "Mush", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Mush", "waste"]),
+        (id: "cook_charcoal", dims: Some((0.067, 0.05, 0.067)), name: "Something burnt", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Charcoal", "waste"]),
 
         // ---------------------------------------------------------------
         // Tools and maintenance
@@ -325,13 +325,13 @@
             category: Tool, size: Small, mass: 0.15, bulk: 0.12,
         ),
         (
-            id: "spare_parts", name: "Firearm spare parts",
+            id: "spare_parts", dims: Some((0.053, 0.03, 0.042)), name: "Firearm spare parts",
             description: "Springs, pins, an extractor. Brings a worn gun back toward its best.",
             category: Tool, size: Small, mass: 0.3, bulk: 0.2,
             tags: ["metal"],
         ),
         (
-            id: "multitool", name: "Multitool",
+            id: "multitool", dims: Some((0.068, 0.016, 0.1)), name: "Multitool",
             category: Tool, size: Small, mass: 0.25, bulk: 0.1,
             tags: ["metal"],
         ),
@@ -345,10 +345,10 @@
         // ---------------------------------------------------------------
         // Materials (bench inputs)
         // ---------------------------------------------------------------
-        (id: "scrap_metal", name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
+        (id: "scrap_metal", dims: Some((0.072, 0.038, 0.057)), name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
         (id: "electronics", name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
-        (id: "polymer", name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
-        (id: "powder", name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
+        (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
+        (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
 
         // ---------------------------------------------------------------
@@ -372,7 +372,7 @@
             tags: ["electronics", "glass"],
         ),
         (
-            id: "robot_cell", name: "Robot power cell",
+            id: "robot_cell", dims: Some((0.067, 0.049, 0.085)), name: "Robot power cell",
             category: RobotPart, size: Small, mass: 0.9, bulk: 0.5, battery_wh: 120.0,
             tags: ["electronics"],
         ),
@@ -387,7 +387,7 @@
         // Artifacts. Every one draws attention while carried.
         // ---------------------------------------------------------------
         (
-            id: "art_featherstone", name: "Featherstone",
+            id: "art_featherstone", dims: Some((0.036, 0.021, 0.03)), name: "Featherstone",
             description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
             category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
@@ -402,7 +402,7 @@
             category: Artifact, size: Tiny, mass: 0.1, bulk: 0.04, attention: 0.9,
         ),
         (
-            id: "art_aegis", name: "Aegis knot",
+            id: "art_aegis", dims: Some((0.047, 0.027, 0.044)), name: "Aegis knot",
             description: "A tangle of something like copper. While you carry it, the first hit always glances.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
         ),
@@ -429,7 +429,7 @@
         // Curios: no use but to keep, or to offer.
         // ---------------------------------------------------------------
         (id: "wristwatch", name: "Stopped wristwatch", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
-        (id: "old_photo", name: "Faded photograph", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
+        (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
         (id: "chess_piece", name: "Wooden chess knight", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
     ],
 )

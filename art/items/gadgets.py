@@ -23,7 +23,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cell_bay, cube, item, panel, ring, tube_path, wanted
+from _kit import (ALONG_X, UP, cell_bay, centred, cube, item, panel, ring, transform,
+                  tube_path, wanted)
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -120,7 +121,8 @@ def radio():
     # Belt clip on the back.
     p.box((0.02, 0.06, 0.003), (0.0, 0.0, -D / 2 - 0.0035), "Steel", bevel=0.001, segs=1)
     p.box((0.02, 0.006, 0.005), (0.0, 0.028, -D / 2 - 0.002), "Steel")
-    return [p, window]
+    # Its box takes in the aerial (`dims` in items.ron).
+    return centred([p, window])
 
 
 # --- Binoculars ---------------------------------------------------------------------------
@@ -505,7 +507,8 @@ def matches():
     xf = T(0.002, yb + h + 0.0007, 0.004) @ RY(0.5)
     p.box((0.0012, 0.0012, 0.02), (0.0, 0.0, 0.0), "Cream", xf=xf)
     p.box((0.0017, 0.0017, 0.003), (0.0, 0.0, -0.0105), "Bakelite", bevel=0.0005, segs=1, xf=xf)
-    return [p]
+    # Modelled small; a real box is about 5 x 3.6 x 1.7 cm.
+    return centred(transform([p], S(2.1, 1.85, 2.0)))
 
 
 # --- Door wedge -------------------------------------------------------------------------------
@@ -535,7 +538,8 @@ def door_wedge():
                   (0.0, yb + sole + 0.0245, 0.022), (-0.012, yb + sole + 0.026, 0.024),
                   (-0.022, yb + sole + 0.024, 0.024), (-0.023, yb + sole + 0.016, 0.022),
                   (-0.0195, yb + sole + 0.012, 0.019)], 0.0011, "Rope", sides=5, closed=False)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case),

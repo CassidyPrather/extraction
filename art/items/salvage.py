@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, blob, cube, item, ring, tube_path, wanted
+from _kit import ALONG_X, UP, blob, centred, cube, item, ring, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet
 
 
@@ -108,7 +108,8 @@ def robot_cell():
     for x, mat in ((-0.014, "Red"), (0.014, "Black")):
         p.cyl(0.004, 0.039, 0.046, mat, segs=10, xf=T(x, 0.006, 0), chamfer=0.001)
     p.box((0.024, 0.006, 0.006), (0.0, 0.023, 0.0), "Dark", bevel=0.002, segs=1)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 def robot_gunpod():
@@ -205,7 +206,8 @@ def art_featherstone():
         tube_path(p, [(x * 0.98, y * 0.3 + 0.002 * math.sin(i), z * 0.98)
                       for i, (x, y, z) in enumerate(pts)], 0.0007, "Strange", sides=4,
                   closed=False)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 def art_hearth():
@@ -252,7 +254,8 @@ def art_aegis():
                      y * k + 0.0028 * math.sin(q)))
     tube_path(p, pts, 0.0034, "Copper", sides=8)
     tube_path(p, pts2, 0.0009, "Strange", sides=4)
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 for item_id, fn in (("rotor_assembly", rotor_assembly), ("servo", servo),

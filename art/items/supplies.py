@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cube, item, ring, text, tube_path, wanted
+from _kit import ALONG_X, UP, centred, cube, item, ring, text, transform, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -38,7 +38,8 @@ def field_dressing():
     label.box((0.026, 0.0042, 0.019), (0.0, y + 0.0101, 0.0005), "Paper")
     label.box((0.016, 0.0009, 0.003), (-0.003, y + 0.0124, -0.005), "Red")
     label.box((0.016, 0.0009, 0.002), (-0.003, y + 0.0124, 0.0), "Red")
-    return [p, label]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p, label])
 
 
 # --- Regen injector ---------------------------------------------------------------------------
@@ -58,7 +59,8 @@ def regen_injector():
     p.lathe([(0.0, 0.019), (0.0072, 0.019), (0.0072, 0.026), (0.006, 0.028), (0.0, 0.028)],
             "Yellow", segs=16, xf=ax)
     p.box((0.002, 0.006, 0.014), (0.0, y + 0.008, -0.004), "Black", bevel=0.0005, segs=1)
-    return [p]
+    # Modelled stubby; a real auto-injector is a 13 cm pen.
+    return centred(transform([p], S(1.35, 1.35, 2.6)))
 
 
 # --- Cleaning kit -----------------------------------------------------------------------------
@@ -132,7 +134,8 @@ def spare_parts():
     # Binding wire round the lot.
     for x in (-0.018, 0.018):
         p.box((0.0012, 0.0012, 0.042), (x, yb + 0.0207, 0.0), "Steel")
-    return [p]
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 # --- Multitool --------------------------------------------------------------------------------
@@ -164,7 +167,8 @@ def multitool():
     p.prism(blade, yb + 0.0062, yb + 0.007, "Steel", axis="y", xf=T(0.0038, 0, 0.019) @ RY(0.25))
     ring(p, 0.003, 0.0007, "Steel", xf=T(0.0, yb + 0.003, 0.0195) @ RX(math.pi / 2), segs=10,
          sides=4)
-    return [p]
+    # Modelled small; a real folding pliers tool is about 10 cm closed.
+    return centred(transform([p], S(2.2, 2.2, 2.2)))
 
 
 # --- Fuel can ---------------------------------------------------------------------------------
