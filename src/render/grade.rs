@@ -52,9 +52,13 @@ impl Look {
         // gets some saturation and a little contrast back. Temperature only
         // nudges: the air's own colour is the fog's and the sky's job (a
         // grade strong enough to tint the valley read as a photo filter).
+        // The blacks lift a little: under the spruce the frame went near
+        // black (a hole, in a headset), and the art direction wants the
+        // forest floor's texture readable.
         let base = Self {
             saturation: 1.25,
             contrast: 1.12,
+            shadow_lift: 0.003,
             ..default()
         };
         let mut look = match name {

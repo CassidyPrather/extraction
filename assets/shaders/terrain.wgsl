@@ -330,6 +330,12 @@ fn fragment(
             l.rough = max(l.rough, 0.85);
         } else {
             l = sample_layer(i, wp.xz);
+            // The forest floor sits in the trees' shade, lit by the sky
+            // alone: at the scan's own albedo it went near black in a
+            // headset. Lighter needle litter keeps it readable.
+            if (i == 1u) {
+                l.albedo = l.albedo * 1.4;
+            }
         }
         // Height-aware blending: each layer covers the ones below it where
         // its own height wins.
@@ -361,7 +367,7 @@ fn fragment(
     grass_tint = mix(grass_tint, vec3<f32>(0.86, 1.02, 0.78), lush * 0.8);
     let moss = smoothstep(0.45, 0.75, m2) * forest * (1.0 - rock) * off_road;
     albedo = albedo * mix(vec3<f32>(1.0), grass_tint, open_ground);
-    albedo = mix(albedo, albedo * vec3<f32>(0.8, 1.12, 0.72), moss * 0.7);
+    albedo = mix(albedo, albedo * vec3<f32>(0.88, 1.1, 0.8), moss * 0.7);
 
     // A burnt valley: the ground goes to ash and charcoal, with rusty
     // burnt soil showing through where the fire went hottest (roads keep
