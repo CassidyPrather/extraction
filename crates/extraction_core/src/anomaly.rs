@@ -79,6 +79,19 @@ pub fn placeable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
     })
 }
 
+/// Margin an anomaly keeps from the edge of any road or path, metres.
+pub const ROAD_MARGIN: f32 = 1.0;
+
+/// Whether an anomaly of `radius` at `p` keeps off every road and path:
+/// the road is the safe, exposed way, and a shimmer across it is a trap
+/// nobody walking it would see coming.
+pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
+    hm.road_lines.iter().all(|rl| {
+        let (d, _, _) = geom::polyline_closest(&rl.points, p);
+        d > rl.width * 0.5 + radius + ROAD_MARGIN
+    })
+}
+
 /// The anomalies of a Surge cycle.
 pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<AnomalySpec> {
     let mut rng = Rng::new(seed ^ 0xA70A ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -95,7 +108,8 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
                 let kind = AnomalyKind::ALL[rng.below(3)];
                 let (lo, hi) = kind.radius_range();
                 let radius = rng.range(lo, hi);
-                if !placeable(map, hm, p) || !fits(out, p, radius) {
+                if !placeable(map, hm, p) || !clear_of_roads(hm, p, radius) || !fits(out, p, radius)
+                {
                     continue;
                 }
                 let artifact = rng.chance(chance).then(|| {
@@ -161,6 +175,7 @@ mod tests {
             let all = layout(&map, &hm, 7, cycle);
             for (i, a) in all.iter().enumerate() {
                 assert!(placeable(&map, &hm, a.at), "{a:?}");
+                assert!(clear_of_roads(&hm, a.at, a.radius), "{a:?} reaches a road");
                 for b in &all[i + 1..] {
                     assert!(
                         geom::dist(a.at, b.at) > a.radius + b.radius,
