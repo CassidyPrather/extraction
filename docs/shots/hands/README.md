@@ -19,3 +19,6 @@ pulled (`fp:<gun>,2.2,90,1`); the index curls to each gun's own trigger
 `6b_mosin_toz_grip_lowered_rejected.jpg`: Mosin and TOZ before (left) and
 with their layout grip points lowered ~4 cm so the trigger lines up
 (right): the fist then hangs under the stock's wrist. Not kept.
+`7_handles.jpg`: the right hand working a handle (`fp:<gun>+handle`):
+the AK's charging handle, the Mosin's bolt knob (from ahead and from the
+left), the PM's slide. The handle sits inside the closed fist.
