@@ -229,11 +229,17 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
 }
 
 /// The tangent for world-space UVs (u along +X, v along +Z) on ground with
-/// normal `n`: +X made perpendicular to the normal. The handedness is the
-/// same everywhere the ground faces up, and is what mikktspace gives these
-/// UVs (see the test).
+/// normal `n`: the way the surface goes as u grows, `(1, dh/dx, 0)`. (Not
+/// +X pushed flat onto the surface: on a slope facing between the axes
+/// that leans toward Z, by 30 degrees on the steepest banks.) The
+/// handedness is the same everywhere the ground faces up, and is what
+/// mikktspace gives these UVs (see the test).
 fn uv_tangent(n: Vec3) -> [f32; 4] {
-    let t = (Vec3::X - n * n.x).normalize_or(Vec3::X);
+    let t = if n.y > 1e-3 {
+        Vec3::new(n.y, -n.x, 0.0).normalize()
+    } else {
+        (Vec3::X - n * n.x).normalize_or(Vec3::X)
+    };
     [t.x, t.y, t.z, 1.0]
 }
 

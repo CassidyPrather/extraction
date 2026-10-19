@@ -151,6 +151,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Planks", "Boards", "Iron", "Glass", "Rubber", "Rope", "Yellow", "Orange", "Blue", "Leaf",
     "Enamel", "Worn", "Red", "Pebble", "Char", "Ember", "Cream", "Paper", "Olive", "Copper",
     "Dark", "Rotor", "Lens", "Clear", "Lamp", "LampRed", "Glow", "Warn", "Eye", "Strange",
+    // World props (art/props).
+    "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking", "Zinc",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets

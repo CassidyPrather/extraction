@@ -46,11 +46,14 @@ pub struct StepDone {
     /// Where the chime comes from; `None` plays it in your head (not
     /// placed), which is what a confirmation usually wants.
     pub at: Option<Vec3>,
+    /// It finished a whole part (a training station): a fuller chime and
+    /// a longer click.
+    pub station: bool,
 }
 
 /// Write a [`StepDone`] (for systems that would rather not hold a writer).
 pub fn step_done(commands: &mut Commands, at: Option<Vec3>) {
-    commands.write_message(StepDone { at });
+    commands.write_message(StepDone { at, station: false });
 }
 
 pub struct HapticsPlugin;
@@ -321,9 +324,10 @@ pub fn hurt_amplitude(damage: f32) -> f32 {
 }
 
 fn step_haptics(mut steps: MessageReader<StepDone>, mut out: MessageWriter<Haptic>) {
-    for _ in steps.read() {
+    for s in steps.read() {
+        let feel = if s.station { (0.35, 0.1) } else { (0.25, 0.04) };
         for side in [Side::Left, Side::Right] {
-            pulse(&mut out, side, (0.25, 0.04));
+            pulse(&mut out, side, feel);
         }
     }
 }
@@ -479,12 +483,14 @@ mod tests {
     }
 
     /// A push button clicks the finger that pushed it, not both hands, and
-    /// ticks as it comes back out.
+    /// ticks as it comes back out. (In a valley: in the training yard the
+    /// first button is also a lesson, and a lesson done is felt in both
+    /// hands.)
     #[test]
     fn a_button_clicks_the_finger_that_pushed_it() {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         use crate::vr_harness::Vr;
-        let mut vr = Vr::new("training_yard");
+        let mut vr = Vr::new("marrow_creek");
         vr.app.init_resource::<Felt>().add_systems(Last, feel);
         vr.step(5);
         let button = *vr

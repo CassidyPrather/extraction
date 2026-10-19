@@ -2642,5 +2642,17 @@
         "source": "fs_519477"
       }
     ]
+  },
+  "ui/chime_station": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/ui/chime_station.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/make_chimes.py"
+      }
+    ]
   }
 }

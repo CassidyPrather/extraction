@@ -41,7 +41,7 @@ use crate::launch::LaunchOptions;
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::raid::truck::{FLOOR, Pressable, Stash, Truck, base_pose};
 use crate::raid::{Phase, RadioCall, Raid};
-use crate::rig::haptics::Haptic;
+use crate::rig::haptics::{Haptic, StepDone};
 use crate::rig::{LocalPlayer, RigDriver, Side};
 use crate::weapons::ballistics::Hit;
 use crate::weapons::{Gun, GunEvent};
@@ -1030,12 +1030,13 @@ pub fn next_line(station: usize) -> String {
 }
 
 /// The driver on the radio (your wrist): the opening line, and after each
-/// station, where the next one is. Both hands buzz at each tick.
+/// station, where the next one is. Each tick chimes and clicks both hands
+/// ([`StepDone`]).
 fn announce(
     mut done: MessageReader<GoalDone>,
     mut ob: ResMut<Onboarding>,
     mut raid: ResMut<Raid>,
-    mut haptics: MessageWriter<Haptic>,
+    mut steps: MessageWriter<StepDone>,
     time: Res<Time>,
     driver: Res<RigDriver>,
     players: Query<(), With<LocalPlayer>>,
@@ -1050,13 +1051,10 @@ fn announce(
         raid.say(if flat { GREET_FLAT } else { GREET_VR });
     }
     for d in done.read() {
-        for side in Side::BOTH {
-            haptics.write(Haptic {
-                side,
-                amplitude: if d.station_done { 0.7 } else { 0.45 },
-                seconds: if d.station_done { 0.15 } else { 0.06 },
-            });
-        }
+        steps.write(StepDone {
+            at: None,
+            station: d.station_done,
+        });
         if !d.station_done {
             continue;
         }
@@ -1178,10 +1176,12 @@ fn warn_near_anomalies(
     if near && *quiet <= 0.0 {
         *quiet = 5.0;
         raid.say(TOO_CLOSE_LINE);
+        // A knock, not a kick: kicks are for shots and hits
+        // (`rig::haptics`).
         for side in Side::BOTH {
             haptics.write(Haptic {
                 side,
-                amplitude: 0.9,
+                amplitude: 0.55,
                 seconds: 0.25,
             });
         }

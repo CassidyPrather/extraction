@@ -692,16 +692,12 @@ fn step_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     for s in steps.read() {
-        play(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "physical/chime",
-            s.at,
-            "step.done",
-            0.0,
-            0.02,
-        );
+        let (set, cue) = if s.station {
+            ("ui/chime_station", "step.station")
+        } else {
+            ("physical/chime", "step.done")
+        };
+        play(&mut commands, &bank, &mut rng.0, set, s.at, cue, 0.0, 0.02);
     }
 }
 
