@@ -209,6 +209,13 @@ fine on a monitor makes people sick or tired in a headset.
   mountain road), tracks and
   footpaths 22%, rail beds 6% (a mine line's grade) (`ROAD_GRADE`, `TRACK_GRADE`, `RAIL_GRADE`),
   from 12 m inside the fence (`FENCE_MARGIN`: roads climb the rim to it). Switchback up a hill rather than straight at it.
+- **Road ends**: where a road stops you walk on, so the ground meets it:
+  within 0.6 m three metres on (`END_STEP`, `END_REACH`), and no rise
+  over 0.35 m in any half metre for eight (`LEDGE`, `END_WALK`). A graded
+  road cut into a slope otherwise ends at a bank you can't step up (the
+  sims found one at the foot of Cinder Works' slag heap, and no bot ever
+  reached the field above it). Roads that end on another road or at a
+  door are exempt. End a road where it's at grade, or run it on to a door.
 - **Steps**: the body steps up 0.4 m (`player.rs` `STEP_HEIGHT`). Stairs
   and kerbs are the prefabs' job (the building fit gauge in
   `extraction_core::fit` holds plinths to the ground); the map must not

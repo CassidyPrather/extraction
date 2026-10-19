@@ -100,7 +100,7 @@
         // The slag road, out to the heaps.
         (
             name: "Slag road", kind: Dirt, width: 5.0, smoothing: 15.0,
-            points: [(32.0, -60.0), (110.0, -100.0), (165.0, -135.0)],
+            points: [(32.0, -60.0), (110.0, -100.0), (150.0, -126.0)],
         ),
         // The yard road along the north bank to the works yard.
         (
@@ -109,8 +109,8 @@
         ),
         // Through the dead wood to the fire lookout.
         (
-            name: "Lookout track", kind: Gravel, width: 4.0, smoothing: 20.0,
-            points: [(5.0, -180.0), (-70.0, -178.0), (-150.0, -165.0)],
+            name: "Lookout track", kind: Dirt, width: 4.0, smoothing: 20.0,
+            points: [(5.0, -180.0), (-70.0, -178.0), (-150.0, -165.0), (-154.0, -163.0)],
         ),
         // Out to Cutter's farm.
         (
@@ -142,7 +142,7 @@
         // The towpath along the south bank.
         (
             name: "Towpath", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
-            points: [(-250.0, 74.0), (-150.0, 70.0), (-40.0, 67.0), (10.0, 66.0)],
+            points: [(-250.0, 74.0), (-150.0, 70.0), (-40.0, 67.0), (8.0, 72.0)],
         ),
     ],
 
@@ -186,6 +186,11 @@
             name: "Bridge alders", seed: 82, density: 1.1, undergrowth: 0.6,
             mix: [(Birch, 0.7), (Spruce, 0.3)],
             polygon: [(-48.0, 110.0), (34.0, 104.0), (42.0, 76.0), (-44.0, 80.0)],
+        ),
+        (
+            name: "North bank alders", seed: 83, density: 1.0, undergrowth: 0.5,
+            mix: [(Birch, 0.6), (Spruce, 0.4)],
+            polygon: [(-2.0, 46.0), (52.0, 42.0), (54.0, 14.0), (0.0, 18.0)],
         ),
         (
             name: "Ash Row birches", seed: 77, density: 0.3, undergrowth: 0.3,
@@ -255,7 +260,7 @@
         // The north sidings: a wagon left on the spur, a hut, and the
         // engine shed you can see from the works.
         (prefab: "boxcar", at: (60.0, -240.0), rot: 15.0),
-        (prefab: "rail_shed", at: (52.0, -263.0), rot: 15.0),
+        (prefab: "rail_shed", at: (52.0, -263.0), rot: 195.0),
         (prefab: "mast_hut", at: (95.0, -238.0), rot: 350.0),
 
         // The thing in the slag.

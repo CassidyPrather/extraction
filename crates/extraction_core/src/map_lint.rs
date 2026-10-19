@@ -175,6 +175,14 @@ pub const GRADE_RUN: f32 = 10.0;
 pub const ROAD_GRADE: f32 = 14.0;
 pub const TRACK_GRADE: f32 = 22.0;
 pub const RAIL_GRADE: f32 = 6.0;
+/// Past a road's end (this far on), the ground is within this height of
+/// the road: a graded road cut into a slope otherwise ends in a bank.
+pub const END_REACH: f32 = 3.0;
+pub const END_STEP: f32 = 0.6;
+/// And walking on [`END_WALK`] metres, no rise steeper than [`LEDGE`] in
+/// half a metre (35°: a bank, not a slope).
+pub const END_WALK: f32 = 8.0;
+pub const LEDGE: f32 = 0.35;
 /// Road grades count from this far inside the fence.
 pub const FENCE_MARGIN: f32 = 12.0;
 /// Narrowest footpath, and narrowest other road, metres.
@@ -744,6 +752,53 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 format!("{} climbs {:.0}% (limit {limit}%)", def.name, worst.0),
                 worst.1,
             );
+        }
+        // Where a road stops, you walk on: the ground past its end must meet
+        // its surface, not stand up as the bank its grading cut.
+        for (end, inward) in [(0usize, 1usize), (rl.points.len() - 1, rl.points.len() - 2)] {
+            let p = rl.points[end];
+            let dir = geom::sub(p, rl.points[inward]);
+            let l = geom::len(dir).max(1e-3);
+            let at = |d: f32| geom::add(p, geom::scale(dir, d / l));
+            let door = rects.iter().any(|(_, rc)| rc.sdf(p) < END_REACH + 2.0);
+            // A road that ends on another road joins it.
+            let joins = hm.road_lines.iter().any(|o| {
+                o.road != rl.road && polyline_closest(&o.points, p).0 < o.width * 0.5 + 2.0
+            });
+            if door || joins || !inside_fence(map, at(END_WALK)) || rl.on_bridge(end as f32) {
+                continue;
+            }
+            let step = hm.height(at(END_REACH)) - rl.heights[end];
+            // And no ledge further on: a bank the grading left a few metres
+            // past the end is as much a wall.
+            let ledge = (1..=(END_WALK / 0.5) as usize)
+                .map(|k| {
+                    (hm.height(at(k as f32 * 0.5)) - hm.height(at((k - 1) as f32 * 0.5))).abs()
+                })
+                .fold(0.0, f32::max);
+            if ledge > LEDGE {
+                find(
+                    &mut r,
+                    Rule::Grade,
+                    format!(
+                        "{} ends below a {:.1} m ledge (in half a metre)",
+                        def.name, ledge
+                    ),
+                    p,
+                );
+            } else if step.abs() > END_STEP {
+                find(
+                    &mut r,
+                    Rule::Grade,
+                    format!(
+                        "{} ends in a {:.1} m {}",
+                        def.name,
+                        step.abs(),
+                        if step > 0.0 { "bank" } else { "drop" }
+                    ),
+                    p,
+                );
+            }
         }
         let min = if rl.kind == RoadKind::Path {
             PATH_WIDTH
