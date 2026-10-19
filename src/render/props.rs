@@ -942,6 +942,76 @@ pub(crate) const POINTING: [f32; 5] = [0.134, 0.9, 0.92, 0.95, 0.65];
 /// to point, metres.
 const POINT_REACH: f32 = 0.2;
 
+/// The index's curl on a gun's grip, its trigger pulled `trigger`: from
+/// lying along the frame to where its tip meets the gun's own trigger (the
+/// layout's `Trigger` part, seen from its grip), so each gun's trigger
+/// takes the finger's crease or pad rather than one curl for all.
+pub(crate) fn gun_index_curl(
+    side: Side,
+    gun: &crate::weapons::layout::GunLayout,
+    trigger: f32,
+) -> f32 {
+    let rest = hold_curl(Some(GripRole::Primary), 0.0, 0.0)[0];
+    let Some(part) = gun
+        .parts
+        .iter()
+        .find(|p| p.moves == crate::weapons::layout::Moves::Trigger)
+    else {
+        return hold_curl(Some(GripRole::Primary), trigger, 0.0)[0];
+    };
+    // The trigger in the unrolled glove's frame, where the index curls in
+    // its own (y, z) plane.
+    let in_hand = gun
+        .grip
+        .compute_affine()
+        .inverse()
+        .transform_point3(part.at.translation);
+    let at = glove_frame(side)
+        .compute_affine()
+        .inverse()
+        .transform_point3(in_hand);
+    let goal = Vec2::new(at.y, at.z);
+    let miss = |c: f32| index_miss(side, c, goal);
+    let reach = (0..=100)
+        .map(|i| i as f32 / 100.0)
+        .min_by(|a, b| miss(*a).total_cmp(&miss(*b)))
+        .unwrap_or(rest);
+    rest + (reach - rest) * trigger
+}
+
+/// How far the index's last two segments, curled `c`, pass from `p` in the
+/// unrolled glove's (y, z) plane: a trigger sits in the finger's crease or
+/// under its pad, not at its very tip.
+fn index_miss(side: Side, c: f32, p: Vec2) -> f32 {
+    let root = finger_root(side, 0);
+    let mut at = Vec2::new(root.y, root.z);
+    let mut a = 0.0;
+    let mut miss = f32::MAX;
+    for (joint, (bend, len)) in JOINT_BEND.iter().zip(FINGER_BONES[0]).enumerate() {
+        a += bend * c;
+        let next = at - Vec2::new(a.sin(), a.cos()) * len;
+        if joint > 0 {
+            miss = miss.min(Segment2 { a: at, b: next }.distance(p));
+        }
+        at = next;
+    }
+    miss
+}
+
+#[derive(Clone, Copy)]
+struct Segment2 {
+    a: Vec2,
+    b: Vec2,
+}
+
+impl Segment2 {
+    fn distance(self, p: Vec2) -> f32 {
+        let d = self.b - self.a;
+        let t = ((p - self.a).dot(d) / d.length_squared()).clamp(0.0, 1.0);
+        (self.a + d * t).distance(p)
+    }
+}
+
 /// How far each finger curls (index, middle, ring, little, thumb) round
 /// what it holds by a point of `role`, with the trigger pulled `trigger`;
 /// `thinnest` is the held thing's smallest size, for anything held free.
@@ -965,10 +1035,12 @@ pub(crate) fn hold_curl(role: Option<GripRole>, trigger: f32, thinnest: f32) -> 
 /// How far each finger wants to curl, given what the hand is doing.
 fn curl_targets(
     hand: &Hand,
+    side: Side,
     grip: f32,
     trigger: f32,
     held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
+    guns: &Query<&crate::weapons::Gun>,
 ) -> [f32; 5] {
     // [index, middle, ring, little, thumb]
     if let Some(item) = hand.holding {
@@ -983,7 +1055,13 @@ fn curl_targets(
                 s.x.min(s.y).min(s.z)
             })
             .unwrap_or(0.06);
-        return hold_curl(role, trigger, thinnest);
+        let mut curl = hold_curl(role, trigger, thinnest);
+        if role == Some(GripRole::Primary) {
+            if let Ok(gun) = guns.get(item) {
+                curl[0] = gun_index_curl(side, &gun.layout, trigger);
+            }
+        }
+        return curl;
     }
     if hand.supporting.is_some() {
         return hold_curl(Some(GripRole::Support), trigger, 0.0);
@@ -1009,6 +1087,7 @@ fn pose_hands(
     roots: Query<&ChildOf, With<Finger>>,
     models: Query<&ChildOf, With<GloveModel>>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
+    guns: Query<&crate::weapons::Gun>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -1032,7 +1111,7 @@ fn pose_hands(
             }
         }
         *t = pose;
-        let mut target = curl_targets(hand, grip, trigger, &held, &bounds);
+        let mut target = curl_targets(hand, v.side, grip, trigger, &held, &bounds, &guns);
         // An empty hand reaching for a push button points at it, so the
         // finger the button feels is the one you see.
         let tip = pose.transform_point(crate::interact::poke::FINGERTIP);
@@ -1633,5 +1712,35 @@ mod glove_tests {
             far[0] > 0.9,
             "away from buttons the grip closes the index too: {far:?}"
         );
+    }
+
+    /// With the trigger pulled, the index of the hand on each gun's grip
+    /// comes down on that gun's own trigger.
+    #[test]
+    fn a_pulled_index_meets_each_guns_trigger() {
+        use crate::weapons::layout::{Moves, layout};
+        for id in ["pm_pistol", "ak74", "mosin", "toz_double"] {
+            let gun = layout(id).unwrap();
+            let trigger = gun
+                .parts
+                .iter()
+                .find(|p| p.moves == Moves::Trigger)
+                .unwrap();
+            let c = gun_index_curl(Side::Right, &gun, 1.0);
+            // The trigger in the unrolled glove, against the curled index
+            // (about 8 mm in radius), in its plane: how high the trigger sits
+            // is the grip's business, not the finger's.
+            let in_hand = gun
+                .grip
+                .compute_affine()
+                .inverse()
+                .transform_point3(trigger.at.translation);
+            let at = glove_frame(Side::Right)
+                .compute_affine()
+                .inverse()
+                .transform_point3(in_hand);
+            let miss = index_miss(Side::Right, c, Vec2::new(at.y, at.z));
+            assert!(miss < 0.012, "{id}: the index misses the trigger by {miss}");
+        }
     }
 }

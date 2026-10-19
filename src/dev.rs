@@ -318,6 +318,7 @@ fn first_person_hands(
     zone: Option<Res<crate::world::Zone>>,
     catalog: Res<crate::items::Catalog>,
     grabbables: Query<&crate::interact::Grabbable>,
+    guns: Query<&crate::weapons::Gun>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     mut players: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
     mut stage: Local<u32>,
@@ -453,12 +454,11 @@ fn first_person_hands(
         let item_at =
             Transform::from_matrix(level.to_matrix() * primary.local.to_matrix().inverse());
         commands.entity(item).insert(view(item_at));
-        glove(
-            &mut commands,
-            Side::Right,
-            level,
-            hold_curl(Some(GripRole::Primary), trigger, 0.0),
-        );
+        let mut curl = hold_curl(Some(GripRole::Primary), trigger, 0.0);
+        if let Ok(gun) = guns.get(item) {
+            curl[0] = crate::render::props::gun_index_curl(Side::Right, &gun.layout, trigger);
+        }
+        glove(&mut commands, Side::Right, level, curl);
         match point(GripRole::Support) {
             Some(support) => glove(
                 &mut commands,
