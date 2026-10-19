@@ -55,6 +55,9 @@ pub enum Rule {
     Rhythm,
     /// A passage narrower than a body with a rifle.
     Narrow,
+    /// A supply crate (a loot marker in the open) in a wall or where the
+    /// truck appears.
+    Crate,
 }
 
 #[derive(Clone, Debug)]
@@ -294,6 +297,10 @@ pub const RV_FAR: f32 = 350.0;
 /// The truck parks on a rendezvous: nothing placed within this of it, and
 /// the ground under it no steeper than [`RV_LEVEL`] degrees.
 pub const TRUCK_ROOM: f32 = 8.0;
+/// A supply crate (a loot marker in the open) stands this far clear of
+/// buildings, and this far from a rendezvous.
+pub const CRATE_ROOM: f32 = 1.5;
+pub const CRATE_FROM_RV: f32 = 10.0;
 pub const RV_LEVEL: f32 = 12.0;
 
 // ---- Render load -------------------------------------------------------------
@@ -1149,6 +1156,38 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 &mut r,
                 Rule::Footing,
                 format!("{} is on a {:.0}° slope", m.name, hm.slope_deg(m.at)),
+                m.at,
+            );
+        }
+    }
+    // A loot marker in the open gets a supply crate: solid, so clear of
+    // walls and of where the truck appears.
+    for m in &map.markers {
+        if !matches!(m.kind, MarkerKind::Loot { .. }) || m.y >= 0.3 {
+            continue;
+        }
+        if let Some((i, rc)) = rects.iter().find(|(_, rc)| rc.sdf(m.at) < CRATE_ROOM) {
+            find(
+                &mut r,
+                Rule::Crate,
+                format!(
+                    "{}'s crate is {:.1} m from the {}",
+                    m.name,
+                    rc.sdf(m.at),
+                    map.placements[*i].prefab
+                ),
+                m.at,
+            );
+        }
+        if let Some((rv, at)) = rvs.iter().find(|(_, at)| dist(*at, m.at) < CRATE_FROM_RV) {
+            find(
+                &mut r,
+                Rule::Crate,
+                format!(
+                    "{}'s crate is {:.0} m from the {rv} rendezvous",
+                    m.name,
+                    dist(*at, m.at)
+                ),
                 m.at,
             );
         }
