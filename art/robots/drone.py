@@ -39,7 +39,12 @@ prof = [(0.0, 0.066), (0.06, 0.064), (0.062, 0.0615), (0.064, 0.0635), (0.12, 0.
         (0.124, 0.051), (0.127, 0.0535), (0.175, 0.038), (0.205, 0.018), (0.213, 0.004),
         (0.211, -0.006), (0.204, -0.008), (0.2, -0.012), (0.17, -0.032), (0.11, -0.05),
         (0.0, -0.056)]
-core.lathe(prof, "Shell", segs=48, xf=S(0.96, 1.0, 1.1) @ UP)
+# Pale above, dark below: from under it, in fog, it reads as a dark
+# saucer, not a pale smudge.
+top = [p for p in prof if p[1] >= -0.012]
+belly = [p for p in prof if p[1] <= -0.012]
+core.lathe(top + [(0.0, -0.012)], "Shell", segs=48, xf=S(0.96, 1.0, 1.1) @ UP)
+core.lathe([(0.0, -0.012)] + belly, "Dark", segs=48, xf=S(0.96, 1.0, 1.1) @ UP)
 # Dark equator seam band.
 core.lathe([(0.2095, -0.0075), (0.2125, -0.0075), (0.2125, 0.0005), (0.2095, 0.0005)], "Dark",
            segs=48, xf=S(0.96, 1.0, 1.1) @ UP, closed=True)
@@ -98,9 +103,12 @@ gun.box((0.012, 0.006, 0.006), (0.0, GUN[1] + 0.024, GUN[2] - 0.12), "Eye", beve
 rotor = Part("rotor", origin=ROTOR)
 at = T(*ROTOR)
 # Duct ring: an aerofoil section revolved, lip rounded on top.
-duct = [(0.148, -0.024), (0.162, -0.026), (0.170, -0.012), (0.171, 0.012), (0.166, 0.028),
-        (0.156, 0.034), (0.148, 0.028)]
+# Its lower lip dark, like the body's belly.
+duct = [(0.148, -0.012), (0.170, -0.012), (0.171, 0.012), (0.166, 0.028), (0.156, 0.034),
+        (0.148, 0.028)]
 rotor.lathe(duct, "Shell", segs=48, xf=at @ UP, closed=True)
+rotor.lathe([(0.148, -0.024), (0.162, -0.026), (0.170, -0.012), (0.148, -0.012)], "Dark",
+            segs=48, xf=at @ UP, closed=True)
 # Motor pod and three struts to the ring.
 rotor.lathe([(0.0, -0.03), (0.022, -0.028), (0.034, -0.012), (0.034, 0.016), (0.028, 0.024),
              (0.0, 0.026)], "Dark", segs=24, xf=at @ UP)
@@ -108,9 +116,10 @@ for k in range(3):
     a = math.radians(30 + 120 * k)
     rotor.box((0.118, 0.008, 0.012), (0.091, -0.016, 0.0), "Dark", bevel=0.003, segs=1,
               xf=at @ RY(a))
-# A glow strip on the outside of the duct, facing away from the body.
-rotor.lathe([(0.1705, -0.004), (0.1735, -0.004), (0.1735, 0.004), (0.1705, 0.004)], "Eye",
-            segs=10, xf=at @ UP, closed=True, start=-60.0, sweep=30.0)  # centred on +x+z
+# A glowing ring round the duct's waist: four of them mark the rotors out
+# from far off, and each goes dark when its rotor is shot away.
+rotor.lathe([(0.1705, -0.005), (0.176, -0.005), (0.176, 0.005), (0.1705, 0.005)], "Glow",
+            segs=48, xf=at @ UP, closed=True)
 
 # --- Propeller --------------------------------------------------------------------------
 BLADES = (ARM, 0.07, ARM)

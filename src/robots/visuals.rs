@@ -43,6 +43,9 @@ struct RobotMats {
     eye: Handle<StandardMaterial>,
     eye_dead: Handle<StandardMaterial>,
     rotor: Handle<StandardMaterial>,
+    /// Cyan running lights on weak points (rotors, knees, vents): brighter
+    /// than the kit's `Glow`, to carry through fog at 30-80 m.
+    glow: Handle<StandardMaterial>,
 }
 
 /// A spinning rotor disc (visual only).
@@ -108,6 +111,11 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             alpha_mode: AlphaMode::Blend,
             ..default()
         }),
+        glow: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.1, 0.4, 0.5),
+            emissive: LinearRgba::rgb(1.2, 7.0, 9.0),
+            ..default()
+        }),
     }
 }
 
@@ -150,6 +158,7 @@ fn robot_material(
 ) -> Handle<StandardMaterial> {
     match name {
         Some("Eye") => m.eye.clone(),
+        Some("Glow") => m.glow.clone(),
         Some(name) => model_mats.get(name, lib, server, materials),
         None => m.dark.clone(),
     }
