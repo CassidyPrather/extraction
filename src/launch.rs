@@ -237,6 +237,11 @@ impl LaunchOptions {
         if o.mirror {
             o.flat = false;
         }
+        // The onboarding run is the training yard's.
+        if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
+            o.map = crate::camp::TRAINING_YARD.into();
+            o.map_explicit = true;
+        }
         o
     }
 }

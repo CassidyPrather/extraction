@@ -28,6 +28,7 @@ pub const NAMES: &[&str] = &[
     "pack_mule",
     "drone_duel",
     "walker_hunt",
+    crate::onboarding::bot::SCENARIO,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -240,6 +241,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::Wrecked(1)),
             ]
         }
+        crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         _ => return None,
     })
 }
@@ -254,7 +256,12 @@ impl Plugin for ScenarioPlugin {
     }
 }
 
-fn spawn_targets(mut commands: Commands, zone: Res<Zone>) {
+fn spawn_targets(mut commands: Commands, zone: Res<Zone>, opts: Res<LaunchOptions>) {
+    // Bare colliders, drawn by nothing: only for the drills, or they stand
+    // invisible on every valley's road out of the truck.
+    if opts.scenario.is_none() {
+        return;
+    }
     for i in 0..TARGET_DISTANCES.len() {
         let p = target_point(&zone, i);
         commands.spawn((

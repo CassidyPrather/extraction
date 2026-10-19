@@ -258,7 +258,9 @@ fn load_save(
         // The yard keeps nothing, but the sign says your kit is in the
         // crate, so it is (the first playtest found it empty, and a pile of
         // every gun in the game on the ground instead).
-        if opts.map == crate::camp::TRAINING_YARD && owns_profile(&opts) {
+        // (The onboarding bot's run too: it starts at the crate.)
+        let first_run = opts.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO);
+        if opts.map == crate::camp::TRAINING_YARD && (owns_profile(&opts) || first_run) {
             commands.insert_resource(Restore {
                 save: fresh_save(&opts.map),
                 zone: false,
