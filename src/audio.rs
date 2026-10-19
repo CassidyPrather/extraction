@@ -1919,6 +1919,49 @@ fn pylon_sounds(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// Using a thing sounds like what it is, and anything you'd eat or use
+    /// up makes a sound (silence read as "nothing happened" in VR).
+    #[test]
+    fn using_things_sounds_like_what_they_are() {
+        let catalog = crate::items::Catalog::load();
+        let sound = |id: &str| {
+            let (_, def) = catalog.0.iter().find(|(_, d)| d.id == id).expect(id);
+            use_sound(def).map(|s| s.0)
+        };
+        assert_eq!(sound("crackers"), Some("physical/eat"));
+        assert_eq!(sound("water_bottle"), Some("physical/drink"));
+        assert_eq!(sound("field_dressing"), Some("physical/bandage"));
+        assert_eq!(sound("flashlight"), Some("physical/switch"));
+        assert_eq!(sound("radio"), None, "the radio has its own");
+        let bank: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(crate::asset_root_path().join("audio/sounds.json")).unwrap(),
+        )
+        .unwrap();
+        for (_, def) in catalog.0.iter() {
+            if def.category == extraction_core::items::Category::Food {
+                assert!(use_sound(def).is_some(), "{} is eaten silently", def.id);
+            }
+            if let Some((set, _)) = use_sound(def) {
+                assert!(bank.get(set).is_some(), "{set}");
+            }
+            let handle = handling_set(crate::items::impacts::material_of(def));
+            assert!(bank.get(handle).is_some(), "{handle}");
+        }
+    }
+
+    /// Heavier sounds louder and lower, within bounds.
+    #[test]
+    fn weight_is_heard() {
+        let (tin, rifle) = (weight_tone(0.05), weight_tone(3.5));
+        assert!(tin.0 < rifle.0 && tin.1 > rifle.1);
+        for m in [0.0, 0.01, 1.0, 50.0] {
+            let (db, speed) = weight_tone(m);
+            assert!((-9.0..=5.0).contains(&db) && (0.85..=1.2).contains(&speed));
+        }
+    }
+
     /// Every sound a map asks for is in the index (a missing set plays
     /// nothing, silently).
     #[test]

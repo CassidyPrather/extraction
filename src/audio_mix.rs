@@ -270,7 +270,11 @@ mod tests {
         }
         // Every lower-case literal in audio.rs without a slash is a cue
         // name, bar a few it matches on (gun ids, prefabs, JSON keys).
-        let code = include_str!("audio.rs");
+        // (Its tests name items, not cues.)
+        let code = include_str!("audio.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
         const NOT_CUES: &[&str] = &[
             "pm_pistol",
             "ak74",

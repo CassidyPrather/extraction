@@ -298,9 +298,10 @@ fn hurt_haptics(
     *quiet -= time.delta_secs();
     let (hp, since) = (h.hp, h.since_hit);
     if let Some((was_hp, was_since)) = *last {
-        // A new hit restarts `since_hit`; bleeding only drains.
-        if since < was_since {
-            *owed += (was_hp - hp).max(1.0);
+        // A new hit restarts `since_hit` (steady harm keeps it near zero);
+        // bleeding only drains.
+        if since < was_since || (since < 0.1 && hp < was_hp) {
+            *owed += (was_hp - hp).max(0.5);
         }
     }
     *last = Some((hp, since));
@@ -385,6 +386,38 @@ mod tests {
         assert!(right.amplitude > left.amplitude);
     }
 
+    /// Harm that isn't a bullet (a fall, a burner) is felt too, and steady
+    /// harm pulses no faster than four times a second.
+    #[test]
+    fn every_kind_of_harm_is_felt() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.init_resource::<Felt>().add_systems(Last, feel);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().resource_mut::<Felt>().0.clear();
+        // Thirty frames of a burner: a little harm every frame.
+        for _ in 0..30 {
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp -= 0.5;
+                h.since_hit = 0.0;
+            }
+            app.update();
+        }
+        let felt = &app.world().resource::<Felt>().0;
+        let left = felt.iter().filter(|h| h.side == Side::Left).count();
+        assert!(left >= 1, "felt: {felt:?}");
+        assert!(left <= 4, "no faster than 4 Hz over 0.5 s: {left}");
+    }
+
     /// The scale holds: heavier is stronger, nothing an Index can't feel,
     /// nothing but a shot or a hit at full strength.
     #[test]
@@ -443,5 +476,58 @@ mod tests {
         let mag = grab(&mut vr, "pm_mag", 0.2);
         let rifle = grab(&mut vr, "ak74", -0.3);
         assert!(rifle > mag + 0.1, "rifle {rifle} vs magazine {mag}");
+    }
+
+    /// A push button clicks the finger that pushed it, not both hands, and
+    /// ticks as it comes back out.
+    #[test]
+    fn a_button_clicks_the_finger_that_pushed_it() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::vr_harness::Vr;
+        let mut vr = Vr::new("training_yard");
+        vr.app.init_resource::<Felt>().add_systems(Last, feel);
+        vr.step(5);
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .next()
+            .map(|(_, gt)| gt)
+            .expect("a button");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006));
+            vr.step(1);
+        }
+        felt_by(&mut vr);
+        for k in 0..6 {
+            vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+            vr.step(1);
+        }
+        vr.step(2);
+        let pressed = felt_by(&mut vr);
+        assert!(
+            pressed
+                .iter()
+                .any(|h| h.side == Side::Right && h.amplitude >= CLICK.0),
+            "a click in the right hand: {pressed:?}"
+        );
+        assert!(
+            pressed.iter().all(|h| h.side == Side::Right),
+            "the left hand did nothing: {pressed:?}"
+        );
+        vr.move_hand(Side::Right, tip_at(0.08));
+        vr.step(3);
+        let out = felt_by(&mut vr);
+        assert!(
+            out.iter()
+                .any(|h| h.side == Side::Right && h.amplitude < CLICK.0),
+            "a tick coming out: {out:?}"
+        );
     }
 }
