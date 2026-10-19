@@ -927,6 +927,10 @@ fn dress_gloves(
 /// with the grip (on `interact::poke::FINGERTIP`), the others closed.
 pub(crate) const POINTING: [f32; 5] = [0.134, 0.9, 0.92, 0.95, 0.65];
 
+/// How near a push button an empty hand's fingertip must come for the hand
+/// to point, metres.
+const POINT_REACH: f32 = 0.2;
+
 /// How far each finger curls (index, middle, ring, little, thumb) round
 /// what it holds by a point of `role`, with the trigger pulled `trigger`;
 /// `thinnest` is the held thing's smallest size, for anything held free.
@@ -993,6 +997,7 @@ fn pose_hands(
     inputs: Query<&RigInput>,
     roots: Query<&ChildOf, With<Finger>>,
     models: Query<&ChildOf, With<GloveModel>>,
+    buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -1016,7 +1021,20 @@ fn pose_hands(
             }
         }
         *t = pose;
-        let target = curl_targets(hand, grip, trigger, &held, &bounds);
+        let mut target = curl_targets(hand, grip, trigger, &held, &bounds);
+        // An empty hand reaching for a push button points at it, so the
+        // finger the button feels is the one you see.
+        let tip = pose.transform_point(crate::interact::poke::FINGERTIP);
+        if hand.holding.is_none()
+            && hand.handle.is_none()
+            && hand.supporting.is_none()
+            && buttons
+                .iter()
+                .any(|b| b.translation().distance_squared(tip) < POINT_REACH * POINT_REACH)
+        {
+            target = POINTING;
+            target[0] += (1.0 - POINTING[0]) * trigger;
+        }
         for (c, want) in v.curl.iter_mut().zip(target) {
             *c += (want - *c) * ease;
         }
@@ -1530,5 +1548,79 @@ mod glove_tests {
                 "{side:?} index tip at {got}, the poke feels {want}"
             );
         }
+    }
+
+    /// An empty hand whose fingertip comes near a push button points at it
+    /// (and still closes its index with the trigger); away from buttons the
+    /// grip closes the whole hand as before.
+    #[test]
+    fn an_empty_hand_points_at_a_near_button() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, pose_hands);
+        let player = app
+            .world_mut()
+            .spawn((Transform::default(), RigInput::default()))
+            .id();
+        let hand = app
+            .world_mut()
+            .spawn((Hand::default(), Transform::default(), ChildOf(player)))
+            .id();
+        let glove = app
+            .world_mut()
+            .spawn((
+                HandVisual {
+                    hand,
+                    side: Side::Right,
+                    curl: [0.0; 5],
+                },
+                Transform::default(),
+            ))
+            .id();
+        let button = app
+            .world_mut()
+            .spawn((
+                crate::interact::poke::PokeButton {
+                    target: Entity::PLACEHOLDER,
+                    depth: 0.0,
+                    down: false,
+                },
+                GlobalTransform::from_translation(
+                    crate::interact::poke::FINGERTIP + Vec3::Z * -0.05,
+                ),
+            ))
+            .id();
+        let settle = |app: &mut App| {
+            for _ in 0..200 {
+                app.update();
+            }
+            app.world().get::<HandVisual>(glove).unwrap().curl
+        };
+        app.world_mut()
+            .get_mut::<RigInput>(player)
+            .unwrap()
+            .hand_mut(Side::Right)
+            .grip = 1.0;
+        let near = settle(&mut app);
+        for (got, want) in near.iter().zip(POINTING) {
+            assert!(
+                (got - want).abs() < 0.05,
+                "by a button the hand curls {near:?}, not {POINTING:?}"
+            );
+        }
+        app.world_mut()
+            .get_mut::<GlobalTransform>(button)
+            .unwrap()
+            .clone_from(&GlobalTransform::from_translation(Vec3::new(
+                0.0, 0.0, -1.0,
+            )));
+        let far = settle(&mut app);
+        assert!(
+            far[0] > 0.9,
+            "away from buttons the grip closes the index too: {far:?}"
+        );
     }
 }

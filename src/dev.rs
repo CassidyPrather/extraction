@@ -376,7 +376,8 @@ fn first_person_hands(
         let h = spawn_hand(commands, &mut meshes, &mut materials, side, curl);
         commands.entity(h).insert(view(at));
     };
-    if *stage == 3 {
+    // Late enough for a map's cards and buttons to be up.
+    if *stage == 15 {
         match what {
             "open" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
