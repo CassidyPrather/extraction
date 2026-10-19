@@ -416,12 +416,23 @@ fn hand_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     poses: Query<&GlobalTransform>,
+    sockets: Query<&crate::interact::Socket>,
 ) {
+    use crate::interact::SocketKind;
     for ev in events.read() {
         let (item, set, cue) = match ev {
             InteractEvent::Grabbed { item, .. } => (*item, "physical/cloth", "hand.grab"),
             InteractEvent::Stowed { item } => (*item, "physical/zip", "hand.stow"),
-            InteractEvent::Socketed { item, .. } => (*item, "physical/velcro", "hand.socket"),
+            // A pouch or holster takes it with a rustle (the long velcro rips
+            // sounded like a motor in the first headset session); a gun's
+            // magazine well has its own click (`gun.mag_insert`), and a rail
+            // or cradle a small click.
+            InteractEvent::Socketed { item, socket } => match sockets.get(*socket).map(|s| &s.kind)
+            {
+                Ok(SocketKind::Body(_)) => (*item, "physical/cloth", "hand.socket"),
+                Ok(SocketKind::MagWell(_)) => continue,
+                _ => (*item, "guns/safety", "hand.attach"),
+            },
             InteractEvent::Refused { item } => (*item, "physical/cloth", "hand.refused"),
             _ => continue,
         };
@@ -1309,23 +1320,56 @@ fn splash_sounds(
     }
 }
 
-/// Things you drop land with a sound that depends on what they're made of,
-/// louder the harder they hit (`items::impacts`).
+/// Things you drop land with a sound that depends on what they're made of
+/// and what they land on, louder the harder they hit (`items::impacts`).
+/// On a floor, a crate or a rock you hear the thing; in grass, leaves or
+/// mud you hear the ground take it (a magazine in the grass clanged like a
+/// pan in the first headset session), with a faint clink for metal dropped
+/// hard.
 fn drop_sounds(
     mut commands: Commands,
     mut impacts: MessageReader<crate::items::impacts::ItemImpact>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
-    use crate::items::impacts::Material;
+    use crate::items::impacts::{Material, soft};
     for i in impacts.read() {
+        let offset = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
+        let on_built = underfoot(&spatial, &built, i.at).is_some();
+        if !on_built && soft(i.ground) {
+            let ground = surface_set(i.ground.unwrap_or(Surface::Grass));
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                ground,
+                Some(i.at),
+                "drop",
+                offset - 4.0,
+                0.1,
+            );
+            if i.material == Material::Metal && i.speed > 4.0 {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/drop_metal",
+                    Some(i.at),
+                    "drop",
+                    offset - 14.0,
+                    0.1,
+                );
+            }
+            continue;
+        }
         let set = match i.material {
             Material::Metal => "physical/drop_metal",
             Material::Wood => "physical/drop_wood",
             Material::Plastic => "physical/drop_plastic",
             Material::Soft => "physical/drop_cardboard",
         };
-        let offset = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
         play(
             &mut commands,
             &bank,

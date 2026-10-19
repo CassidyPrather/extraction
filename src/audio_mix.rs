@@ -75,7 +75,8 @@ pub const MIX: &[Cue] = &[
     cue!("hand.grab", "physical/cloth", -17.0, 40.0, 0.6, Detail),
     cue!("hand.refused", "physical/cloth", -10.0, 45.0, 0.6, Signal),
     cue!("hand.stow", "physical/zip", -15.0, 55.0, 0.6, Detail),
-    cue!("hand.socket", "physical/velcro", -14.0, 60.0, 0.6, Detail),
+    cue!("hand.socket", "physical/cloth", -15.0, 50.0, 0.6, Detail),
+    cue!("hand.attach", "guns/safety", -9.0, 55.0, 0.6, Detail),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
