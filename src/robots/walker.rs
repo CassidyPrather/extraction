@@ -8,7 +8,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::nav::{NavGrid, Obstacle};
+use extraction_core::nav::NavGrid;
 use std::sync::Arc;
 
 use super::{
@@ -105,82 +105,15 @@ fn rest_offset(i: usize) -> Vec3 {
     Vec3::new(a.cos() * FOOT_RADIUS, 0.0, a.sin() * FOOT_RADIUS)
 }
 
-/// Navigation for ground robots: terrain, structures and tree trunks.
+/// Navigation for ground robots: terrain, structures and tree trunks
+/// (`extraction_core::map_nav`, which the map lint checks routes on too).
 pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
     let started = std::time::Instant::now();
-    let mut g = NavGrid::from_heightmap(&zone.hm, 2.0, 32.0);
-    for p in &zone.map.placements {
-        let f = crate::world::structures::footprint(&p.prefab);
-        g.block(
-            Obstacle::Rect {
-                at: p.at,
-                half: [f.x * 0.5, f.z * 0.5],
-                yaw: p.rot.to_radians(),
-            },
-            0.6,
-        );
-    }
-    for t in crate::world::trees::scatter_trees(&zone) {
-        g.block(
-            Obstacle::Circle {
-                at: [t.pos.x, t.pos.z],
-                radius: 0.3 * t.scale,
-            },
-            0.5,
-        );
-    }
-    for r in crate::world::rocks::rocks(&zone) {
-        if r.radius >= extraction_core::rocks::SOLID_RADIUS {
-            g.block(
-                Obstacle::Circle {
-                    at: [r.pos[0], r.pos[2]],
-                    radius: r.radius * 0.9,
-                },
-                0.5,
-            );
-        }
-    }
-    for f in &zone.map.forests {
-        g.scale_cost_in(&f.polygon, 1.6);
-    }
-    // Bridges are walkable even though the creek under them isn't; the
-    // bank beneath and beside a deck isn't (no headroom under it, rails
-    // along it): the way is along the deck, following its curve.
-    for rl in &zone.hm.road_lines {
-        let half = if matches!(rl.kind, extraction_core::map::RoadKind::Path) {
-            0.9
-        } else {
-            rl.width * 0.5 + 0.4
-        };
-        for (a, b) in &rl.bridges {
-            let at = |s: f32| extraction_core::geom::polyline_at(&rl.points, s).0;
-            let mut s = *a + 1.0;
-            while s < *b - 1.0 {
-                g.block(
-                    Obstacle::Circle {
-                        at: at(s),
-                        radius: half,
-                    },
-                    0.6,
-                );
-                s += 1.0;
-            }
-            // Waypoints follow the deck's own line.
-            let mut lane = Vec::new();
-            let mut s = *a - 3.0;
-            while s <= *b + 3.0 {
-                lane.push(at(s));
-                s += 1.0;
-            }
-            g.lanes.push(lane);
-            // Out past where the blocking reaches, onto the road.
-            let mut s = *a - 5.0;
-            while s < *b + 5.0 {
-                g.open_line(at(s), at((s + 2.0).min(*b + 5.0)), 1);
-                s += 2.0;
-            }
-        }
-    }
+    let g = extraction_core::map_nav::zone_grid(
+        &zone.map,
+        &zone.hm,
+        extraction_core::map_nav::MAX_SLOPE,
+    );
     info!(
         "navigation grid built in {:.0} ms",
         started.elapsed().as_secs_f32() * 1000.0

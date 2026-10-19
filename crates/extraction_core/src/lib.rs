@@ -17,6 +17,8 @@ pub mod inventory;
 pub mod items;
 pub mod loot;
 pub mod map;
+pub mod map_lint;
+pub mod map_nav;
 pub mod nav;
 pub mod noise;
 pub mod rocks;
