@@ -77,11 +77,15 @@ install_system_packages() {
     # libasound2-dev: macroquad's native audio links -lasound.
     # binaryen: wasm-opt, which scripts/build-web.sh uses to shrink the wasm.
     # xvfb: a virtual display, for GUI-only operations (xvfb-run blender ...).
+    # clang + mold: the linker .cargo/config.toml asks for (Bevy links fast).
+    # libudev-dev: Bevy's gamepad support links -ludev.
+    # mesa-vulkan-drivers: software Vulkan, for headless screenshots.
     # The X/GL libraries are what the official Blender build expects to find
     # even in background mode; the GIMP AppImage bundles its own.
     apt_install \
         ca-certificates curl git xz-utils build-essential pkg-config \
         libasound2-dev binaryen xvfb \
+        clang mold libudev-dev mesa-vulkan-drivers \
         libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
         libsm6 libice6 libgl1 libegl1 libglu1-mesa \
         || warn "apt-get install of the base packages failed"
