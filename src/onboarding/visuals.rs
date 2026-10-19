@@ -231,26 +231,42 @@ fn dress_props(
         };
         match p {
             Prop::FarStand => {
-                // Two crates, a small one on top, each turned a little on
-                // the one below.
-                let low = super::FAR_STAND_LOW * 0.5;
-                for (k, turn) in [0.0f32, 0.1].into_iter().enumerate() {
-                    let w = 0.7 - k as f32 * 0.02;
-                    part(
-                        Mat::Planks,
-                        Vec3::new(w, low - 0.01, w),
-                        Transform::from_xyz(0.0, low * (k as f32 + 0.5), 0.0)
-                            .with_rotation(Quat::from_rotation_y(turn)),
-                    );
-                }
-                let top = super::FAR_STAND_H - super::FAR_STAND_LOW;
-                let w = super::FAR_STAND_TOP;
+                // A crate in a pen of posts and two rails a side.
+                let c = super::FAR_CRATE;
                 part(
                     Mat::Planks,
-                    Vec3::new(w, top, w),
-                    Transform::from_xyz(0.0, super::FAR_STAND_LOW + top * 0.5, 0.0)
-                        .with_rotation(Quat::from_rotation_y(-0.08)),
+                    c,
+                    Transform::from_xyz(0.0, c.y * 0.5, 0.0)
+                        .with_rotation(Quat::from_rotation_y(0.15)),
                 );
+                let h = super::PEN_HALF;
+                let f = super::PEN_FENCE;
+                for (x, z) in [
+                    (-h, -h),
+                    (h, -h),
+                    (-h, h),
+                    (h, h),
+                    (0.0, h),
+                    (0.0, -h),
+                    (h, 0.0),
+                    (-h, 0.0),
+                ] {
+                    part(
+                        Mat::Timber,
+                        Vec3::new(0.09, f + 0.08, 0.09),
+                        Transform::from_xyz(x, (f + 0.08) * 0.5, z),
+                    );
+                }
+                for y in [f * 0.5, f - 0.04] {
+                    for (along_x, at) in [(true, h), (true, -h), (false, h), (false, -h)] {
+                        let (size, pos) = if along_x {
+                            (Vec3::new(2.0 * h, 0.07, 0.04), Vec3::new(0.0, y, at))
+                        } else {
+                            (Vec3::new(0.04, 0.07, 2.0 * h), Vec3::new(at, y, 0.0))
+                        };
+                        part(Mat::Timber, size, Transform::from_translation(pos));
+                    }
+                }
             }
             Prop::RangeTable => {
                 let t = super::TABLE;

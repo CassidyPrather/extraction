@@ -79,7 +79,7 @@ impl Goal {
             Goal::TakeRadio => "Take the radio",
             Goal::PutAway => "Holster or pocket it",
             Goal::Pack => "Something in the pack",
-            Goal::FarGrab => "Fetch the box up top",
+            Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
             Goal::SeatMag => "Mag into the pistol",
             Goal::Rack => "Rack the slide",
@@ -105,7 +105,7 @@ impl Goal {
             (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
             (Goal::FarGrab, false) => "Point at it. Squeeze GRIP.\nFlick your hand back.",
-            (Goal::FarGrab, true) => "Look up at it. Press E.",
+            (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
             (Goal::FillMag, false) => "Mag in one hand, box in\nthe other. Touch them.",
             (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press C.",
             (Goal::SeatMag, false) => "Pistol in one hand. Push\nthe mag up into the grip.",
@@ -173,7 +173,7 @@ pub const STATIONS: &[Station] = &[
         at: [-3.0, 83.5],
         rot: 0.0,
         goals: &[Goal::FarGrab],
-        where_: "the lamp by the tall crates",
+        where_: "the lamp by the pen",
         tip: "Works on anything loose\nup to five metres off.",
     },
     Station {
@@ -248,13 +248,14 @@ pub fn station_of(goal: Goal) -> usize {
 /// Where the training burner sits (its heart: the stone), and its size.
 pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
-/// The tall stand the far-grab box sits on, and how tall.
+/// The pen the far-grab box sits in.
 pub const FAR_STAND_AT: [f32; 2] = [-6.5, 79.5];
-pub const FAR_STAND_H: f32 = 2.45;
-/// Two wide crates, then a narrow one on top: its edge is close enough
-/// under the box that a hand pointing up from below sees the box.
-pub const FAR_STAND_LOW: f32 = 1.6;
-pub const FAR_STAND_TOP: f32 = 0.36;
+/// A crate at chest height in the middle of a fenced pen: plain to see,
+/// no way to walk up to it. (On top of a tall stack it was out of reach
+/// all right, and out of sight from below too.)
+pub const PEN_HALF: f32 = 1.8;
+pub const PEN_FENCE: f32 = 1.1;
+pub const FAR_CRATE: Vec3 = Vec3::new(0.55, 0.95, 0.55);
 /// The range's table: centre, size; the shooter stands on its south side.
 pub const RANGE_TABLE_AT: [f32; 2] = [-25.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
@@ -349,7 +350,7 @@ pub enum OnboardCard {
 /// Props the client dresses (`visuals`).
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum Prop {
-    /// The stack of crates the far-grab box sits on.
+    /// The fenced pen the far-grab box sits in.
     FarStand,
     /// The range's table.
     RangeTable,
@@ -613,33 +614,43 @@ fn setup(
         }
     };
 
-    // Out of reach: crates stacked taller than an arm, a box of rounds on
-    // top (the range wants it).
+    // Out of reach: a box of rounds (the range wants it) on a crate in a
+    // fenced pen.
     let stand = ground(&zone, FAR_STAND_AT);
+    let h = PEN_HALF;
+    let rail =
+        |at: Vec3, size: Vec3| (at, Quat::IDENTITY, Collider::cuboid(size.x, size.y, size.z));
     commands.spawn((
-        Name::new("Far stand"),
+        Name::new("Far pen"),
         Prop::FarStand,
         Transform::from_translation(stand),
         Visibility::default(),
         RigidBody::Static,
         Collider::compound(vec![
-            (
-                Vec3::Y * FAR_STAND_LOW * 0.5,
-                Quat::IDENTITY,
-                Collider::cuboid(0.7, FAR_STAND_LOW, 0.7),
+            rail(
+                Vec3::new(0.0, PEN_FENCE * 0.5, h),
+                Vec3::new(2.0 * h, PEN_FENCE, 0.08),
             ),
-            (
-                Vec3::Y * (FAR_STAND_LOW + FAR_STAND_H) * 0.5,
-                Quat::IDENTITY,
-                Collider::cuboid(FAR_STAND_TOP, FAR_STAND_H - FAR_STAND_LOW, FAR_STAND_TOP),
+            rail(
+                Vec3::new(0.0, PEN_FENCE * 0.5, -h),
+                Vec3::new(2.0 * h, PEN_FENCE, 0.08),
             ),
+            rail(
+                Vec3::new(h, PEN_FENCE * 0.5, 0.0),
+                Vec3::new(0.08, PEN_FENCE, 2.0 * h),
+            ),
+            rail(
+                Vec3::new(-h, PEN_FENCE * 0.5, 0.0),
+                Vec3::new(0.08, PEN_FENCE, 2.0 * h),
+            ),
+            rail(Vec3::Y * FAR_CRATE.y * 0.5, FAR_CRATE),
         ]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
     let far = spawn(
         &mut commands,
         "ammo_9x18",
-        Transform::from_translation(stand + Vec3::Y * (FAR_STAND_H + 0.06)),
+        Transform::from_translation(stand + Vec3::Y * (FAR_CRATE.y + 0.04)),
     );
     if let Some(e) = far {
         commands.entity(e).insert(Placed::FarBox);
