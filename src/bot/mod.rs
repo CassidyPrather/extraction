@@ -243,7 +243,9 @@ fn drive_bots(
                 .get(c)
                 .is_ok_and(|(rh, h)| rh.side == Side::Left && h.supporting.is_some())
         });
-        let eye = Vec3::new(0.0, 1.68, 0.0);
+        // Crouched, the head comes down as flat mode's C does (and the
+        // body with it).
+        let eye = Vec3::new(0.0, if input.crouch { 1.05 } else { 1.68 }, 0.0);
         let world_eye = root.translation + eye;
         let to = (bot.look - world_eye).normalize_or(Vec3::NEG_Z);
         // Turn the body toward the target's bearing, smoothly.

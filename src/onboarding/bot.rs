@@ -69,7 +69,10 @@ pub(super) fn direct(
     state.last = Some(at);
     // The crouch toggle, as the stick or C would: down for its step, up
     // after.
-    let crouch = ob.next_goal() == Some(Goal::Crouch);
+    // And through the gap under the low beam (C lowers a flat player).
+    let beam = root.translation.xz() - Vec2::from(super::BEAM_AT);
+    let under_beam = beam.x.abs() < super::BEAM_GAP && beam.y.abs() < 2.0;
+    let crouch = ob.next_goal() == Some(Goal::Crouch) || under_beam;
     if input.crouch != crouch {
         input.crouch = crouch;
     }
@@ -104,6 +107,9 @@ pub(super) fn direct(
             if skipped == 0 {
                 bot.passed += 1;
                 bot.log.push(format!("PASS all {n} steps noticed"));
+                if ob.ducked {
+                    bot.log.push("ducked under the beam (noticed)".into());
+                }
                 bot.log.push(format!(
                     "the yard took {:.0} s and {:.0} m on foot",
                     time.elapsed_secs(),

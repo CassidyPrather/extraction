@@ -2155,18 +2155,42 @@ mod onboarding {
     }
 
     /// On the track to the gate, a beam at head height between two stacks
-    /// of crates: standing tall under it isn't noticed, ducking is.
+    /// of crates: walking at it upright, you're stopped; ducked, you go
+    /// under, and it's noticed.
     #[test]
-    fn ducking_under_the_beam_is_noticed() {
+    fn ducking_under_the_beam() {
         let mut vr = Vr::first_run();
         let beam = crate::onboarding::BEAM_AT;
-        let feet = ground(&vr, beam);
-        vr.stand(feet, 0.0);
+        // South of it, facing north along the track.
+        vr.stand(ground(&vr, [beam[0], beam[1] + 2.0]), 0.0);
         vr.head(Vec3::new(0.0, 1.65, 0.0));
-        vr.step(10);
+        vr.step(20);
+        let walk = |vr: &mut Vr, frames: usize| {
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::Y;
+            vr.step(frames);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::ZERO;
+            vr.step(5);
+        };
+        walk(&mut vr, 240);
+        let z = super::tests_feet(&vr).z;
+        assert!(
+            z > beam[1] + 0.2,
+            "upright, the beam stops you (feet at z {z:.2})"
+        );
         assert!(!ob(&vr).ducked, "standing tall isn't ducking");
-        vr.head(Vec3::new(0.0, 1.15, -0.1));
-        vr.step(5);
+        vr.head(Vec3::new(0.0, 1.1, 0.0));
+        vr.step(20);
+        walk(&mut vr, 240);
+        let z = super::tests_feet(&vr).z;
+        assert!(z < beam[1] - 0.5, "ducked, you go under (feet at z {z:.2})");
         assert!(ob(&vr).ducked, "the duck was noticed");
         assert!(said(&vr, "Mind your head"));
     }
