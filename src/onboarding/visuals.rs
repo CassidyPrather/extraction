@@ -291,6 +291,43 @@ fn dress_props(
                     Transform::from_xyz(0.0, size.y * 0.5, 0.0),
                 );
             }
+            Prop::LowBeam => {
+                // Two stacks of crates, a beam laid across them at head
+                // height, a rag tied on it.
+                let gap = super::BEAM_GAP;
+                let clear = super::BEAM_CLEAR;
+                let off = (gap + 0.8) * 0.5;
+                let h = clear * 0.5;
+                for x in [-off, off] {
+                    for (k, turn) in [0.0f32, 0.12].into_iter().enumerate() {
+                        part(
+                            Mat::Planks,
+                            Vec3::new(0.78, h - 0.01, 0.78),
+                            Transform::from_xyz(x, h * (k as f32 + 0.5), 0.0)
+                                .with_rotation(Quat::from_rotation_y(turn)),
+                        );
+                    }
+                }
+                part(
+                    Mat::Timber,
+                    Vec3::new(gap + 1.5, 0.16, 0.16),
+                    Transform::from_xyz(0.0, clear + 0.08, 0.0),
+                );
+                part(
+                    Mat::Canvas,
+                    Vec3::new(0.08, 0.3, 0.01),
+                    Transform::from_xyz(0.3, clear - 0.15 + 0.08, 0.09),
+                );
+            }
+            Prop::Stump => {
+                let material = lib.get(Mat::BarkPine, &server, &mut materials);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.17, super::STUMP_H))),
+                    MeshMaterial3d(material),
+                    Transform::from_xyz(0.0, super::STUMP_H * 0.5, 0.0),
+                    ChildOf(e),
+                ));
+            }
             Prop::BoardPost => {
                 part(
                     Mat::Timber,

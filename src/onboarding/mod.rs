@@ -70,6 +70,7 @@ pub enum Goal {
     Search,
     Wrist,
     Dressing,
+    Probe,
     Artifact,
     Button,
     CallTruck,
@@ -98,6 +99,7 @@ impl Goal {
             Goal::Search => "Take what's inside",
             Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
+            Goal::Probe => "Throw a part in first",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
             Goal::CallTruck => "Call the truck",
@@ -142,6 +144,8 @@ impl Goal {
             (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "Hold it. Press A or X.",
             (Goal::Dressing, true) => "Hold it. Press U.",
+            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
+            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
             (Goal::Artifact, true) => "From the edge: look at\nit. Press E.",
             (Goal::Button, false) => "Point a finger, TRIGGER\noff. Push the amber cap.",
@@ -206,7 +210,7 @@ pub const STATIONS: &[Station] = &[
     },
     Station {
         title: "THE RANGE",
-        at: [-17.0, 47.0],
+        at: [-6.0, 47.5],
         rot: 315.0,
         goals: &[
             Goal::FillMag,
@@ -239,9 +243,9 @@ pub const STATIONS: &[Station] = &[
         title: "THE SHIMMER",
         at: [4.5, -30.0],
         rot: 90.0,
-        goals: &[Goal::Artifact],
+        goals: &[Goal::Probe, Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
-        tip: "Throw a bolt in first. Carry\nmany stones and the\nmachines feel them too.",
+        tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
     },
     Station {
         title: "BUTTONS",
@@ -277,6 +281,22 @@ pub fn station_of(goal: Goal) -> usize {
 /// Where the training burner sits (its heart: the stone), and its size.
 pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
+pub const STUMP_H: f32 = 0.38;
+/// A beam at head height between two stacks of crates on the track, on
+/// the way to the gate: something you duck under without being asked. The
+/// beam itself has no collider (the body's capsule doesn't shrink when you
+/// crouch, so a solid one would wall the track off); the stacks do.
+pub const BEAM_AT: [f32; 2] = [0.0, 79.0];
+/// The beam's underside, and the gap between the stacks.
+pub const BEAM_CLEAR: f32 = 1.35;
+pub const BEAM_GAP: f32 = 2.2;
+const BEAM_STACK: Vec3 = Vec3::new(0.8, BEAM_CLEAR, 0.8);
+/// A snare on the way in, nothing in it: you can't see where it ends until
+/// something sets it off. Throw a thing in first.
+pub const SNARE_AT: [f32; 2] = [9.0, -31.5];
+pub const SNARE_R: f32 = 1.8;
+/// The crate of spare parts to throw, by the shimmer's post.
+pub const PARTS_CRATE_AT: [f32; 2] = [4.6, -28.4];
 /// The pen the far-grab box sits in.
 pub const FAR_STAND_AT: [f32; 2] = [-6.5, 79.5];
 /// A crate at chest height in the middle of a fenced pen: plain to see,
@@ -286,7 +306,7 @@ pub const PEN_HALF: f32 = 1.8;
 pub const PEN_FENCE: f32 = 1.1;
 pub const FAR_CRATE: Vec3 = Vec3::new(0.55, 0.95, 0.55);
 /// The range's table: centre, size; the shooter stands on its south side.
-pub const RANGE_TABLE_AT: [f32; 2] = [-25.5, 43.5];
+pub const RANGE_TABLE_AT: [f32; 2] = [-13.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
 /// A crate at the last station with a spare radio on it.
 pub const HOME_CRATE_AT: [f32; 2] = [5.5, -63.0];
@@ -302,6 +322,8 @@ pub struct Onboarding {
     pub age: f32,
     /// The opening line has been said.
     pub greeted: bool,
+    /// Ducked under the low beam on the track (noticed, not asked for).
+    pub ducked: bool,
 }
 
 impl Onboarding {
@@ -387,6 +409,10 @@ pub enum Prop {
     Crate(Vec3),
     /// The board by the tailgate, on its post.
     BoardPost,
+    /// A burnt stump the burner's stone sits on, out of the grass.
+    Stump,
+    /// Two stacks of crates across the track with a beam over the gap.
+    LowBeam,
 }
 
 /// Things put out for a goal.
@@ -401,9 +427,13 @@ pub enum Placed {
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct Doorway(pub Vec3);
 
-/// The training burner.
+/// The training anomalies.
 #[derive(Component)]
 pub struct Shimmer;
+
+/// The one you find with a thrown part.
+#[derive(Component)]
+pub struct Probed;
 
 /// Board sizes: a station's (read from a few steps off), the truck's (from
 /// where you stand in the bed), the list by the tailgate.
@@ -437,6 +467,8 @@ impl Plugin for OnboardingPlugin {
                         watch_world,
                         watch_moves,
                         watch_wrist,
+                        watch_probe,
+                        watch_duck,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -773,6 +805,30 @@ fn setup(
         }
     }
 
+    // The low beam on the track.
+    let at = ground(&zone, BEAM_AT);
+    let off = (BEAM_GAP + BEAM_STACK.x) * 0.5;
+    commands.spawn((
+        Name::new("Low beam"),
+        Prop::LowBeam,
+        Transform::from_translation(at),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![
+            (
+                Vec3::new(-off, BEAM_STACK.y * 0.5, 0.0),
+                Quat::IDENTITY,
+                Collider::cuboid(BEAM_STACK.x, BEAM_STACK.y, BEAM_STACK.z),
+            ),
+            (
+                Vec3::new(off, BEAM_STACK.y * 0.5, 0.0),
+                Quat::IDENTITY,
+                Collider::cuboid(BEAM_STACK.x, BEAM_STACK.y, BEAM_STACK.z),
+            ),
+        ]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
+
     // Going home: a spare radio on a crate, for whoever left theirs.
     let size = Vec3::new(0.6, 0.7, 0.5);
     let at = ground(&zone, HOME_CRATE_AT);
@@ -802,6 +858,7 @@ fn setup(
     let mut keep_clear: Vec<Vec2> = STATIONS.iter().skip(1).map(|s| Vec2::from(s.at)).collect();
     keep_clear.extend([
         Vec2::from(SHIMMER_AT),
+        Vec2::from(SNARE_AT),
         Vec2::from(FAR_STAND_AT),
         Vec2::from(RANGE_TABLE_AT),
     ]);
@@ -820,6 +877,43 @@ fn setup(
         }
     }
     commands.spawn((
+        Name::new("Training snare"),
+        Shimmer,
+        Probed,
+        Anomaly {
+            kind: extraction_core::anomaly::AnomalyKind::Snare,
+            radius: SNARE_R,
+            charge: 1.0,
+            bloom: None,
+        },
+        Transform::from_translation(ground(&zone, SNARE_AT)),
+        Visibility::default(),
+    ));
+    let size = Vec3::new(0.5, 0.75, 0.45);
+    let at = ground(&zone, PARTS_CRATE_AT);
+    commands.spawn((
+        Name::new("Parts crate"),
+        Prop::Crate(size),
+        Transform::from_translation(at),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::Y * size.y * 0.5,
+            Quat::IDENTITY,
+            Collider::cuboid(size.x, size.y, size.z),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
+    for k in 0..3 {
+        spawn(
+            &mut commands,
+            "spare_parts",
+            Transform::from_translation(
+                at + Vec3::new(-0.12 + k as f32 * 0.12, size.y + 0.04, 0.0),
+            ),
+        );
+    }
+    commands.spawn((
         Name::new("Training burner"),
         Shimmer,
         Anomaly {
@@ -831,10 +925,24 @@ fn setup(
         Transform::from_translation(heart),
         Visibility::default(),
     ));
+    // On a burnt stump: on the ground the grass hid it.
+    commands.spawn((
+        Name::new("Burnt stump"),
+        Prop::Stump,
+        Transform::from_translation(heart),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::Y * STUMP_H * 0.5,
+            Quat::IDENTITY,
+            Collider::cylinder(0.17, STUMP_H),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
     if let Some(e) = spawn(
         &mut commands,
         "art_hearth",
-        Transform::from_translation(heart + Vec3::Y * 0.4),
+        Transform::from_translation(heart + Vec3::Y * (STUMP_H + 0.06)),
     ) {
         commands.entity(e).insert(Placed::Stone);
     }
@@ -1119,6 +1227,59 @@ fn watch_wrist(
         complete(&mut ob, Goal::Wrist, &mut out);
     }
 }
+
+/// The snare on the way in went off with you outside it: something
+/// thrown found it.
+fn watch_probe(
+    mut ob: ResMut<Onboarding>,
+    mut out: MessageWriter<GoalDone>,
+    mut events: MessageReader<crate::anomaly::AnomalyEvent>,
+    snares: Query<(&Anomaly, &GlobalTransform), With<Probed>>,
+    players: Query<&GlobalTransform, With<LocalPlayer>>,
+) {
+    for ev in events.read() {
+        let Ok((a, gt)) = snares.get(ev.anomaly) else {
+            continue;
+        };
+        let clear = players
+            .iter()
+            .all(|p| p.translation().xz().distance(gt.translation().xz()) > a.radius + 0.3);
+        if ev.what == crate::anomaly::AnomalyAct::Discharge && clear {
+            complete(&mut ob, Goal::Probe, &mut out);
+        }
+    }
+}
+
+/// Under the beam with your head below it: noticed, with a click and a
+/// word from the driver. (Not a step: it's for whoever does it anyway.)
+fn watch_duck(
+    mut ob: ResMut<Onboarding>,
+    players: Query<(&crate::rig::RigInput, &Transform), With<LocalPlayer>>,
+    zone: Res<Zone>,
+    mut raid: ResMut<Raid>,
+    mut steps: MessageWriter<StepDone>,
+) {
+    if ob.ducked {
+        return;
+    }
+    let Some((input, t)) = players.iter().next() else {
+        return;
+    };
+    let head = t.transform_point(input.head.translation);
+    let rel = head.xz() - Vec2::from(BEAM_AT);
+    let under = rel.x.abs() < BEAM_GAP * 0.5 && rel.y.abs() < 0.5;
+    let low = head.y - zone.ground(head.x, head.z) < BEAM_CLEAR - 0.05;
+    if under && low {
+        ob.ducked = true;
+        raid.say(DUCK_LINE);
+        steps.write(StepDone {
+            at: None,
+            station: false,
+        });
+    }
+}
+
+pub const DUCK_LINE: &str = "Driver: \"Mind your head. That's it.\"";
 
 /// The house's door open.
 fn watch_world(
@@ -1474,6 +1635,7 @@ mod tests {
             ALL_DONE_LINE,
             TOO_CLOSE_LINE,
             START_OVER_LINE,
+            DUCK_LINE,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)

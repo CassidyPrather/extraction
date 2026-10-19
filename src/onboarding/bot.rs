@@ -36,6 +36,9 @@ pub struct Director {
     goal: Option<Goal>,
     tries: u32,
     reported: bool,
+    /// Metres walked so far, and where the bot was last frame.
+    walked: f32,
+    last: Option<Vec2>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -47,6 +50,7 @@ pub(super) fn direct(
     mut keys: Option<ResMut<ButtonInput<KeyCode>>>,
     mut commands: Commands,
     mut state: Local<Director>,
+    time: Res<Time>,
 ) {
     if opts.scenario.as_deref() != Some(SCENARIO) {
         return;
@@ -54,6 +58,15 @@ pub(super) fn direct(
     let Some((player, mut bot, root, mut input)) = bots.iter_mut().next() else {
         return;
     };
+    // How far it's walked: the yard's length, and where it doubles back.
+    let at = root.translation.xz();
+    if let Some(last) = state.last {
+        let step = at.distance(last);
+        if step < 2.0 {
+            state.walked += step;
+        }
+    }
+    state.last = Some(at);
     // The crouch toggle, as the stick or C would: down for its step, up
     // after.
     let crouch = ob.next_goal() == Some(Goal::Crouch);
@@ -91,6 +104,11 @@ pub(super) fn direct(
             if skipped == 0 {
                 bot.passed += 1;
                 bot.log.push(format!("PASS all {n} steps noticed"));
+                bot.log.push(format!(
+                    "the yard took {:.0} s and {:.0} m on foot",
+                    time.elapsed_secs(),
+                    state.walked
+                ));
             } else {
                 bot.failed += 1;
                 bot.log.push(format!(
@@ -106,7 +124,11 @@ pub(super) fn direct(
     } else {
         state.goal = Some(goal);
         state.tries = 0;
-        bot.log.push(format!("{goal:?}"));
+        bot.log.push(format!(
+            "{goal:?} ({:.0} s, {:.0} m)",
+            time.elapsed_secs(),
+            state.walked
+        ));
     }
     if state.tries >= 3 {
         // Stuck: skip it, as a person would with the SKIP card, and fail.
@@ -226,7 +248,7 @@ impl DirectorWorld<'_, '_> {
     /// Up the track to a point: along the gravel (x = 0), then across.
     fn go(&self, from: Vec2, to: Vec2, within: f32) -> Vec<Task> {
         let mut t = Vec::new();
-        let on_track = |p: Vec2| Vec2::new(1.0, p.y);
+        let on_track = |p: Vec2| Vec2::new(0.0, p.y);
         let mut at = from;
         if from.distance(to) > 6.0 {
             t.extend(self.walk(at, on_track(from), 1.5));
@@ -426,6 +448,28 @@ impl DirectorWorld<'_, '_> {
                 }
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Use(Side::Right));
+            }
+            Goal::Probe => {
+                t.extend(self.free_hands());
+                let crate_at = Vec2::from(super::PARTS_CRATE_AT);
+                if let Some(e) = self.loose("spare_parts", crate_at) {
+                    t.extend(self.go(here, crate_at + Vec2::new(-1.0, 0.0), 0.6));
+                    t.push(Grab {
+                        item: e,
+                        side: Side::Right,
+                    });
+                    let snare = Vec2::from(super::SNARE_AT);
+                    let from = snare + Vec2::new(-(super::SNARE_R + 1.5), 0.5);
+                    t.push(WalkTo {
+                        to: from,
+                        within: 0.5,
+                    });
+                    t.push(Throw {
+                        side: Side::Right,
+                        at: Vec3::new(snare.x, self.zone.ground(snare.x, snare.y) + 0.8, snare.y),
+                    });
+                    t.push(Wait(1.0));
+                }
             }
             Goal::Artifact => {
                 if let Some((e, at)) = self.placed(Placed::Stone) {
