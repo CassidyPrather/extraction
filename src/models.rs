@@ -297,6 +297,27 @@ impl ModelMaterials {
     }
 }
 
+impl ModelMaterials {
+    /// A variant of `base` made once under `key` by `f` (a robot's lit
+    /// shell): cached like the named materials.
+    pub fn derived(
+        &mut self,
+        key: &str,
+        materials: &mut Assets<StandardMaterial>,
+        base: &Handle<StandardMaterial>,
+        f: impl FnOnce(&mut StandardMaterial),
+    ) -> Handle<StandardMaterial> {
+        if let Some(h) = self.cache.get(key) {
+            return h.clone();
+        }
+        let mut m = materials.get(base).cloned().unwrap_or_default();
+        f(&mut m);
+        let h = materials.add(m);
+        self.cache.insert(key.to_owned(), h.clone());
+        h
+    }
+}
+
 fn flat(
     materials: &mut Assets<StandardMaterial>,
     c: Color,
