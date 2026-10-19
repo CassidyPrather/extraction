@@ -303,9 +303,11 @@ fn apply_weather(
     weather.zenith = scale(base.zenith);
     weather.visibility = conditions.visibility;
     weather.sun_lux = conditions.sun;
-    if (height_fog.density - conditions.ground_fog).abs() > 1e-6 {
-        height_fog.density = conditions.ground_fog;
-    }
+    let mut fog = HeightFogTarget {
+        density: conditions.ground_fog,
+        ..cloud_cap(&zone.map, conditions.kind)
+    };
+    fog.apply(&mut height_fog);
     clear.0 = weather.horizon;
     ambient.brightness = 1100.0 * k;
     let grading = crate::render::grade::Look::for_map(&zone.map.name).grading();
@@ -334,5 +336,54 @@ fn apply_weather(
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
         }
+    }
+}
+
+/// What the weather and the valley want of the ground fog.
+struct HeightFogTarget {
+    density: f32,
+    cap_density: f32,
+    cap_base: f32,
+}
+
+impl HeightFogTarget {
+    /// Only touches the resource when something changed: each change
+    /// re-patches the shader.
+    fn apply(&mut self, fog: &mut crate::render::fog::HeightFog) {
+        let want = crate::render::fog::HeightFog {
+            density: self.density,
+            cap_density: self.cap_density,
+            cap_base: self.cap_base,
+            ..*fog
+        };
+        if want != *fog {
+            *fog = want;
+        }
+    }
+}
+
+/// Cloud sitting on the tops, where a valley has tops: Kettle Pass's
+/// summits go into it and the pass is in its skirts (see
+/// `docs/ART_DIRECTION.md`). Lower and thicker in murk, lifted in a
+/// clearing spell.
+fn cloud_cap(
+    map: &extraction_core::map::MapDef,
+    kind: super::weather::WeatherKind,
+) -> HeightFogTarget {
+    use super::weather::WeatherKind;
+    let (density, lift) = match map.name.as_str() {
+        "Kettle Pass" => (0.009, 52.0),
+        _ => (0.0, 0.0),
+    };
+    let (k, dz) = match kind {
+        WeatherKind::PeaSouper => (1.4, -8.0),
+        WeatherKind::Downpour => (1.2, -4.0),
+        WeatherKind::Clearing => (0.5, 12.0),
+        WeatherKind::Drizzle => (1.0, 0.0),
+    };
+    HeightFogTarget {
+        density: 0.0,
+        cap_density: density * k,
+        cap_base: map.base_height + lift + dz,
     }
 }

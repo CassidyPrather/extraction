@@ -159,6 +159,16 @@ fn robot_material(
     match name {
         Some("Eye") => m.eye.clone(),
         Some("Glow") => m.glow.clone(),
+        Some("Shell") => {
+            // The scanned shell with a faint glow of its own: under the
+            // overcast it lit to about the fog's own value, and a robot
+            // has to stand out pale against the forest at 30-60 m
+            // (docs/ART_DIRECTION.md: shell 150-200).
+            let base = model_mats.get("Shell", lib, server, materials);
+            model_mats.derived("RobotShell", materials, &base, |mat| {
+                mat.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
+            })
+        }
         Some(name) => model_mats.get(name, lib, server, materials),
         None => m.dark.clone(),
     }

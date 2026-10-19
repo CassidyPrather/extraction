@@ -189,8 +189,8 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 14.9k |
 | `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 3.9k (with their visible rounds) |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
-| `art/robots/walker.py` | `models/robots/walker.glb` | 14.8k |
-| `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 14.5k |
+| `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
+| `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 16.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
@@ -200,7 +200,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
 | `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench, chair, locker | 0.1k to 1.8k |
-| `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet | 0.8k to 2.9k |
+| `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet, hay_bale | 0.3k to 2.9k |
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 

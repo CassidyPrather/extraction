@@ -152,7 +152,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Enamel", "Worn", "Red", "Pebble", "Char", "Ember", "Cream", "Paper", "Olive", "Copper",
     "Dark", "Rotor", "Lens", "Clear", "Lamp", "LampRed", "Glow", "Warn", "Eye", "Strange",
     // World props (art/props).
-    "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking", "Zinc",
+    "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking", "Zinc", "Straw",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -233,7 +233,8 @@ impl ModelMaterials {
             "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
-            "Rubber" => flat(materials, Color::srgb(0.035, 0.035, 0.035), 0.0, 0.88),
+            "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
+            "Rubber" => flat(materials, Color::srgb(0.07, 0.07, 0.07), 0.0, 0.88),
             "Rope" => flat(materials, Color::srgb(0.55, 0.47, 0.32), 0.0, 0.9),
             // Printed and painted colours. A true yellow (yolk, butter, the
             // 12-gauge carton), an orange for carrots and hazard paint.
@@ -248,7 +249,7 @@ impl ModelMaterials {
             "Worn" => flat(materials, Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
             "Red" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
             "Pebble" => flat(materials, Color::srgb(0.42, 0.42, 0.44), 0.0, 0.45),
-            "Char" => flat(materials, Color::srgb(0.05, 0.045, 0.04), 0.0, 0.9),
+            "Char" => flat(materials, Color::srgb(0.1, 0.092, 0.085), 0.0, 0.9),
             "Ember" => glow(materials, Color::srgb(0.9, 0.35, 0.08), (6.0, 1.8, 0.25)),
             "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
             "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
@@ -292,6 +293,27 @@ impl ModelMaterials {
             }
         };
         self.cache.insert(name.to_owned(), h.clone());
+        h
+    }
+}
+
+impl ModelMaterials {
+    /// A variant of `base` made once under `key` by `f` (a robot's lit
+    /// shell): cached like the named materials.
+    pub fn derived(
+        &mut self,
+        key: &str,
+        materials: &mut Assets<StandardMaterial>,
+        base: &Handle<StandardMaterial>,
+        f: impl FnOnce(&mut StandardMaterial),
+    ) -> Handle<StandardMaterial> {
+        if let Some(h) = self.cache.get(key) {
+            return h.clone();
+        }
+        let mut m = materials.get(base).cloned().unwrap_or_default();
+        f(&mut m);
+        let h = materials.add(m);
+        self.cache.insert(key.to_owned(), h.clone());
         h
     }
 }

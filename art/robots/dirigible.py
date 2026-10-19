@@ -80,6 +80,20 @@ def cell(i):
     for z in zs(sa + 0.5, sb - 0.5, 2):
         p.box((0.05, 0.03, 0.5), (0.0, r_at(z) + 0.085, z), "Eye", bevel=0.01, segs=1,
               xf=RX(-math.atan2(r_at(z + 0.1) - r_at(z - 0.1), 0.2), about=(0, r_at(z) + 0.085, z)))
+    # Running lights: cyan lamps in rows along the belly and both flanks,
+    # seen from below at 80 m as dotted lines the length of the ship. Each
+    # cell's go out when the cell is shot down.
+    la, lb = max(z0 + 0.4, -6.9), min(z1 - 0.4, 6.4)
+    n = max(1, int((lb - la) / 0.9))
+    for j in range(n + 1):
+        z = la + (lb - la) * j / n
+        slope = -math.atan2(r_at(z + 0.1) - r_at(z - 0.1), 0.2)
+        for ang in (-90.0, -25.0, -155.0):
+            a = math.radians(ang)
+            rr = r_at(z) + 0.02
+            at = (rr * math.cos(a), rr * math.sin(a), z)
+            p.box((0.16, 0.06, 0.42), (0.0, 0.0, 0.0), "Glow", bevel=0.02, segs=1,
+                  xf=T(*at) @ RZ(a + math.pi / 2) @ RX(slope))
     # A seam band at each end of the cell (where it meets the next).
     for z in (z0, z1):
         if Z0 < z < Z1:
