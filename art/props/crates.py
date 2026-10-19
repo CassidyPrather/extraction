@@ -25,7 +25,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import UP, Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, T, section_circle  # noqa: E402
+from common import Part, T, fillet, section_circle  # noqa: E402
 
 T_BOARD = 0.022
 
@@ -281,6 +281,22 @@ def pallet():
     return [p]
 
 
+def hay_bale():
+    """A small square bale, 1.1 x 0.6 x 0.5 (origin under its centre),
+    soft-edged and a little lumpy, tied with two twines."""
+    p = Part("static")
+    w = Wear(71)
+    prof = fillet([(-0.25, 0.0), (0.25, 0.0), (0.25, 0.6), (-0.25, 0.6)], 0.06, 3)
+    p.prism(prof, -0.55, 0.55, "Straw", axis="x", bevel=0.05, segs=2)
+    for x in (-0.28, 0.28):
+        x += w.j(0.02)
+        tw = fillet([(-0.254, -0.004), (0.254, -0.004), (0.254, 0.604), (-0.254, 0.604)],
+                    0.06, 3)
+        # A twine band: the outline swept thin across X.
+        p.prism(tw, x - 0.006, x + 0.006, "Rope", axis="x")
+    return [p]
+
+
 if __name__ == "__main__":
     prop("crate_slat", crate_slat)
     prop("crate_army", crate_army)
@@ -288,3 +304,4 @@ if __name__ == "__main__":
     prop("stash_stand", stash_stand)
     prop("barrel", barrel)
     prop("pallet", pallet)
+    prop("hay_bale", hay_bale)
