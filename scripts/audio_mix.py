@@ -43,7 +43,7 @@ RANGE_TARGETS = {
     "anomaly.burner": (20, 12), "anomaly.lift": (15, 10), "gun.dry_fire": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
-    "truck.arrive": (60, 15), "truck.idle": (150, 50), "hit.body": (2, 1),
+    "truck.arrive": (60, 15), "robot.notice": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top
 OFF_LINE = 5.0           # LU from the fitted line before a cue is flagged

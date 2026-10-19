@@ -110,6 +110,16 @@ pub struct Awareness {
     pub can_see_target: bool,
 }
 
+/// A robot's suspicion just rose past [`NOTICED`]: it has noticed someone
+/// (for its tell, a sound; the robot itself acts on [`Awareness`]).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Noticed {
+    pub robot: Entity,
+    pub at: Vec3,
+}
+
+pub const NOTICED: f32 = 0.6;
+
 #[derive(Component, Debug, Clone)]
 pub struct Senses {
     pub sight: f32,
@@ -164,6 +174,7 @@ pub struct RobotsPlugin;
 impl Plugin for RobotsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<PartDestroyed>()
+            .add_message::<Noticed>()
             .add_message::<Noise>()
             .add_plugins((
                 drone::DronePlugin,
@@ -256,6 +267,7 @@ pub(crate) fn perceive(
     time: Res<Time>,
     cloaks: Res<crate::gadgets::Cloaks>,
     conditions: Res<crate::world::weather::Conditions>,
+    mut noticed: MessageWriter<Noticed>,
 ) {
     let dt = time.delta_secs();
     let noises: Vec<Noise> = noises.read().cloned().collect();
@@ -287,6 +299,7 @@ pub(crate) fn perceive(
             .unwrap_or(true);
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
+        let was = aware.suspicion;
         aware.can_see_target = false;
         if has_eyes {
             for (pe, pgt, _) in &players {
@@ -343,6 +356,12 @@ pub(crate) fn perceive(
                     }
                 }
             }
+        }
+        if was < NOTICED && aware.suspicion >= NOTICED {
+            noticed.write(Noticed {
+                robot: robot_e,
+                at: eye,
+            });
         }
     }
 }
@@ -430,4 +449,57 @@ pub fn part_bundle(
         at,
         Visibility::default(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Resource, Default)]
+    struct Heard(Vec<Noticed>);
+
+    fn hear(mut n: MessageReader<Noticed>, mut heard: ResMut<Heard>) {
+        heard.0.extend(n.read().copied());
+    }
+
+    /// A noise close by makes a robot notice, once: the tell plays as its
+    /// suspicion passes the mark, not every tick it stays there.
+    #[test]
+    fn a_robot_notices_once() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.init_resource::<Heard>().add_systems(Last, hear);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let at = Vec3::new(0.0, 500.0, 0.0);
+        let robot = app
+            .world_mut()
+            .spawn((
+                Robot {
+                    kind: RobotKind::Drone,
+                    wrecked: false,
+                },
+                Senses {
+                    sight: 0.0,
+                    fov_deg: 90.0,
+                    hearing: 1.0,
+                    eye: Vec3::ZERO,
+                },
+                Awareness::default(),
+                Transform::from_translation(at),
+                GlobalTransform::from_translation(at),
+            ))
+            .id();
+        for _ in 0..5 {
+            app.world_mut().write_message(Noise {
+                at: at + Vec3::X,
+                radius: 50.0,
+                source: None,
+            });
+            app.update();
+        }
+        let heard = &app.world().resource::<Heard>().0;
+        assert_eq!(heard.len(), 1, "{heard:?}");
+        assert_eq!(heard[0].robot, robot);
+    }
 }

@@ -122,6 +122,9 @@ impl Plugin for AudioPlugin {
                     pack_sounds,
                     landing_sounds,
                     gadget_sounds,
+                    notice_sounds,
+                    convoy_sounds,
+                    dirigible_loops,
                 ),
             )
             .add_systems(
@@ -2000,6 +2003,108 @@ fn gadget_sounds(
             speed,
             0.06,
         );
+    }
+}
+
+/// A robot noticing you: the whirr of its head snapping round. Each robot
+/// at most every few seconds, however its suspicion wavers.
+fn notice_sounds(
+    mut commands: Commands,
+    mut noticed: MessageReader<crate::robots::Noticed>,
+    time: Res<Time>,
+    mut last: Local<HashMap<Entity, f32>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    let now = time.elapsed_secs();
+    for n in noticed.read() {
+        if last.get(&n.robot).is_some_and(|t| now - t < 8.0) {
+            continue;
+        }
+        last.insert(n.robot, now);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/servo",
+            Some(n.at),
+            "robot.notice",
+            0.0,
+            1.35,
+            0.05,
+        );
+    }
+}
+
+/// The collector's convoy: the clank of a load taken on, the groan of the
+/// walker setting off through the Gate.
+fn convoy_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::robots::collector::ConvoyEvent>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::collector::ConvoyEvent;
+    for ev in events.read() {
+        let (robot, set, cue) = match ev {
+            ConvoyEvent::Loaded { robot } => (*robot, "machines/clank", "convoy.loaded"),
+            ConvoyEvent::Delivered { robot } => (*robot, "machines/groan", "convoy.delivered"),
+        };
+        let at = positions
+            .get(robot)
+            .ok()
+            .map(|g| g.translation() + Vec3::Y * 2.0);
+        play(&mut commands, &bank, &mut rng.0, set, at, cue, 0.0, 0.15);
+    }
+}
+
+/// A dirigible's engines: a slow, low throb overhead, quickening as it
+/// moves, gone when it's wrecked.
+#[derive(Component)]
+struct DirigibleLoop;
+
+fn dirigible_loops(
+    mut commands: Commands,
+    ships: Query<(
+        Entity,
+        &crate::robots::dirigible::Dirigible,
+        &Robot,
+        Option<&Children>,
+    )>,
+    loops: Query<Entity, With<DirigibleLoop>>,
+    mut settings: Query<&mut PlaybackSettings, With<DirigibleLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, d, robot, children) in &ships {
+        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match (existing, robot.wrecked) {
+            (Some(l), true) => commands.entity(l).despawn(),
+            (Some(l), false) => {
+                if let Ok(mut s) = settings.get_mut(l) {
+                    let speed = 0.4 + (d.velocity.length() as f64 / 8.0).min(1.0) * 0.15;
+                    if (s.speed - speed).abs() > 0.01 {
+                        s.speed = speed;
+                    }
+                }
+            }
+            (None, false) => {
+                if let Some(sample) = bank.pick("machines/drone_rotor", &mut rng.0) {
+                    commands.spawn((
+                        DirigibleLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("dirigible.engine"))),
+                        PlaybackSettings::default().with_speed(0.4),
+                        Transform::default(),
+                        sample_effects![mix::spatial("dirigible.engine")],
+                        ChildOf(e),
+                    ));
+                }
+            }
+            (None, true) => {}
+        }
     }
 }
 
