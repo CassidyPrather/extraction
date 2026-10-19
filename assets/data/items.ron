@@ -387,12 +387,12 @@
         // Artifacts. Every one draws attention while carried.
         // ---------------------------------------------------------------
         (
-            id: "art_featherstone", dims: Some((0.036, 0.021, 0.03)), name: "Featherstone",
+            id: "art_featherstone", dims: Some((0.036, 0.031, 0.03)), name: "Featherstone",
             description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
             category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
         (
-            id: "art_hearth", name: "Hearth",
+            id: "art_hearth", dims: Some((0.053, 0.054, 0.054)), name: "Hearth",
             description: "A warm, faintly humming lump. Power gadgets plugged into it never run down.",
             category: Artifact, size: Small, mass: 0.8, bulk: 0.3, attention: 1.2,
         ),
@@ -402,7 +402,7 @@
             category: Artifact, size: Tiny, mass: 0.1, bulk: 0.04, attention: 0.9,
         ),
         (
-            id: "art_aegis", dims: Some((0.047, 0.027, 0.044)), name: "Aegis knot",
+            id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
             description: "A tangle of something like copper. While you carry it, the first hit always glances.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
         ),

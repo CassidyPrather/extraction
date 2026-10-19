@@ -4,13 +4,16 @@ the rest have none, so each sits in a cube of side cbrt(bulk / 1000).
 
 Salvage is in the robots' look (pale shell, dark joints): the rotor
 assembly, servo, sensor eye, robot cell and a walker's gun pod. Artifacts
-are small wrong things: the featherstone (a pebble with glowing veins), the hearth (a dark
-lump split over a glowing core), the glass eye (a clear orb with an iris
-inside) and the aegis knot (a trefoil tangle of copper).
+are small wrong things: the featherstone (a pebble with glowing veins and
+a ring of light hanging over it), the hearth (a crust of charcoal plates
+cracked over a burning core), the glass eye (an eye with a violet iris
+floating in a clear orb) and the aegis knot (a trefoil of copper wound
+with light, a bead on each lobe).
 """
 
 import math
 import os
+import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -190,56 +193,124 @@ def robot_gunpod():
 
 # --- Artifacts --------------------------------------------------------------------------------
 
+def crust(p, r, plates, gap, thick, mat, seed, rough=0.16, edge=None):
+    """A lumpy shell of `plates` thick plates over a core: an icosphere of
+    radius r roughened by noise, split into patches round random seeds,
+    each patch drawn in a little from its neighbours (`gap`, a fraction)
+    and given `thick`ness inward, so whatever is underneath shows through
+    the cracks between them. With `edge`, the plates' broken edges and
+    undersides are that material (glowing, for the hearth)."""
+    import bmesh
+    from mathutils import Vector, noise
+    rnd = random.Random(seed)
+    tmp = bmesh.new()
+    bmesh.ops.create_icosphere(tmp, subdivisions=4, radius=r)
+    off = Vector((seed * 3.1, seed * 1.7, seed * 0.3))
+    for v in tmp.verts:
+        v.co *= 1.0 + rough * noise.noise(v.co * (3.0 / r) + off)
+    seeds = []
+    while len(seeds) < plates:
+        d = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1)))
+        if d.length > 1e-3:
+            seeds.append(d.normalized())
+    groups = [[] for _ in seeds]
+    for f in tmp.faces:
+        c = f.calc_center_median().normalized()
+        groups[max(range(plates), key=lambda i: c.dot(seeds[i]))].append(f)
+    bm = p.bm
+    for faces in groups:
+        if not faces:
+            continue
+        verts = {v for f in faces for v in f.verts}
+        centre = sum((v.co for v in verts), Vector()) / len(verts)
+        outer, inner = {}, {}
+        for v in verts:
+            o = centre + (v.co - centre) * (1.0 - gap)
+            outer[v] = bm.verts.new(o)
+            inner[v] = bm.verts.new(o * (1.0 - thick / o.length))
+        new_faces, broken = [], []
+        fs = set(faces)
+        for f in faces:
+            new_faces.append(bm.faces.new([outer[v] for v in f.verts]))
+            broken.append(bm.faces.new([inner[v] for v in reversed(f.verts)]))
+            for loop in f.loops:
+                e = loop.edge
+                if sum(1 for g in e.link_faces if g in fs) == 1:
+                    a_, b_ = loop.vert, loop.link_loop_next.vert
+                    broken.append(bm.faces.new((outer[b_], outer[a_], inner[a_], inner[b_])))
+        p._finish_piece(list(outer.values()) + list(inner.values()), new_faces + broken, mat)
+        if edge:
+            mi = p._mi(edge)
+            for f in broken:
+                f.material_index = mi
+    tmp.free()
+
+
 def art_featherstone():
-    s = cube(0.05)
     p = Part("body")
-    # A smooth grey pebble, flattened, with faint glowing veins on it.
+    # A smooth grey pebble, flattened, faint glowing veins on it, and over
+    # it a thin ring of light hanging on three glowing threads, as if
+    # something were holding it up from above.
     blob(p, 0.017, (0.0, 0.0, 0.0), "Pebble", scale=(1.0, 0.62, 0.82),
          bumps=[((1, 0.2, 0.3), 0.08), ((-0.5, -0.3, -1), 0.1), ((0.2, 1, -0.4), -0.05)])
     for k, (a, b) in enumerate(((0.2, 1.9), (2.4, 4.0), (4.5, 5.9))):
         pts = []
         for i in range(7):
             t = a + (b - a) * i / 6
-            y = 0.0035 * math.sin(t * 3 + k)
-            pts.append((0.0171 * math.cos(t) * 1.0, 0.0105 * 0.98 + y * 0.0 - 0.0005 + 0.0,
+            pts.append((0.0171 * math.cos(t), 0.0100 + 0.0006 * math.sin(i + k),
                         0.0171 * 0.82 * math.sin(t)))
-        tube_path(p, [(x * 0.98, y * 0.3 + 0.002 * math.sin(i), z * 0.98)
-                      for i, (x, y, z) in enumerate(pts)], 0.0007, "Strange", sides=4,
-                  closed=False)
+        tube_path(p, [(x * 0.98, y * 0.3, z * 0.98) for x, y, z in pts], 0.0007, "Strange",
+                  sides=4, closed=False)
+    HY = 0.019
+    ring(p, 0.0115, 0.0007, "Strange", xf=T(0.0, HY, 0.0) @ UP, segs=36, sides=6)
+    for k in range(3):
+        a = 2 * math.pi * k / 3 + 0.4
+        tube_path(p, [(0.004 * math.cos(a), 0.0085, 0.004 * math.sin(a)),
+                      (0.008 * math.cos(a), 0.0145, 0.008 * math.sin(a)),
+                      (0.0108 * math.cos(a), HY, 0.0108 * math.sin(a))], 0.00035, "Strange",
+                  sides=4, closed=False)
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p])
 
 
 def art_hearth():
-    s = cube(0.3)
     p = Part("body")
-    # A glowing core showing through the splits of a dark, rough lump.
-    p.sphere(0.022, (0.0, 0.0, 0.0), "Ember", segs=16, rings=8)
-    chunks = [((0.012, 0.006, 0.004), (1, 0.4, 0.2)), ((-0.011, 0.008, -0.004), (-1, 0.5, -0.2)),
-              ((0.002, -0.012, 0.008), (0.1, -1, 0.5)), ((-0.004, 0.0, 0.014), (-0.2, 0.1, 1)),
-              ((0.006, 0.004, -0.014), (0.3, 0.2, -1)), ((0.0, 0.016, 0.0), (0, 1, 0))]
-    for c, d in chunks:
-        blob(p, 0.0152, c, "Char", bumps=[(d, 0.25), ((d[1], d[2], d[0]), -0.15)], segs=12,
-             rings=7, scale=(1.0, 0.9, 1.0))
-    return [p]
+    # A crust of charcoal plates, cracked apart over a core that burns
+    # inside it: the light comes out of the cracks.
+    p.sphere(0.0205, (0.0, 0.0, 0.0), "Ember", segs=20, rings=10)
+    crust(p, 0.026, 13, 0.13, 0.0045, "Char", seed=5, edge="Ember")
+    # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
 
 
 def art_glasseye():
-    s = cube(0.04)
     p = Part("body")
-    # A clear orb with an iris and pupil floating inside it.
-    p.sphere(0.0165, (0.0, 0.0, 0.0), "Clear", segs=24, rings=12)
-    p.lathe([(0.0, -0.006), (0.004, -0.0062), (0.0085, -0.0058), (0.0105, -0.005),
-             (0.0105, -0.004), (0.0, -0.004)], "Strange", segs=24)
-    p.cyl(0.0038, -0.0066, -0.0056, "Black", segs=16)
-    p.sphere(0.0125, (0.0, 0.0, 0.0012), "Paper", segs=16, rings=8, scale=(1, 1, 0.55))
+    # A clear orb with an eye floating inside it: a white ball, its iris a
+    # ring of fine violet fibres round a black pupil, looking out of the
+    # front (-Z).
+    p.sphere(0.0165, (0.0, 0.0, 0.0), "Clear", segs=28, rings=14)
+    p.sphere(0.0118, (0.0, 0.0, 0.0012), "Enamel", segs=20, rings=10, scale=(1, 1, 0.62))
+    # Fibres: thin wedges from the pupil's edge to the iris's, each a
+    # little raised and turned so the ring catches the light.
+    for k in range(18):
+        a = 2 * math.pi * k / 18
+        r0, r1 = 0.0034, 0.0086
+        w0, w1 = 0.0006, 0.0013
+        c, s_ = math.cos(a), math.sin(a)
+        ux, uy = -s_, c
+        quad = [(c * r0 + ux * w0, s_ * r0 + uy * w0), (c * r1 + ux * w1, s_ * r1 + uy * w1),
+                (c * r1 - ux * w1, s_ * r1 - uy * w1), (c * r0 - ux * w0, s_ * r0 - uy * w0)]
+        p.prism(quad, -0.0068 - 0.0003 * (k % 2), -0.0054, "Strange", axis="z")
+    ring(p, 0.0088, 0.0006, "Black", xf=T(0.0, 0.0, -0.0058), segs=28, sides=5)
+    p.cyl(0.0034, -0.0071, -0.0052, "Black", segs=18)
     return [p]
 
 
 def art_aegis():
     s = cube(0.2)
     p = Part("body")
-    # A trefoil knot of copper wire, a second finer strand round it.
+    # A trefoil knot of copper wire, a finer glowing strand wound round it,
+    # and a bead of light on each lobe.
     pts, pts2 = [], []
     n = 72
     for i in range(n):
@@ -254,6 +325,12 @@ def art_aegis():
                      y * k + 0.0028 * math.sin(q)))
     tube_path(p, pts, 0.0034, "Copper", sides=8)
     tube_path(p, pts2, 0.0009, "Strange", sides=4)
+    for i in (0, 24, 48):
+        t = 2 * math.pi * (i + 6) / n
+        k = 0.0072
+        c = ((math.sin(t) + 2 * math.sin(2 * t)) * k, -math.sin(3 * t) * k * 1.4,
+             (math.cos(t) - 2 * math.cos(2 * t)) * k)
+        p.sphere(0.0046, c, "Strange", segs=14, rings=7)
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p])
 
