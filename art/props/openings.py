@@ -100,13 +100,11 @@ def window_sash():
         s = 0.04
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         for xx in (x0 + s / 2, x1 - s / 2):
-            p.box((s, y1 - y0, 0.04), (xx, cy, -0.01), "Painted", bevel=0.003, segs=1)
+            p.box((s, y1 - y0, 0.04), (xx, cy, -0.01), "Painted")
         for yy in (y0 + s / 2, y1 - s / 2):
-            p.box((x1 - x0 - 2 * s + 0.004, s, 0.04), (cx, yy, -0.01), "Painted", bevel=0.003,
-                  segs=1)
+            p.box((x1 - x0 - 2 * s + 0.004, s, 0.04), (cx, yy, -0.01), "Painted")
         if bar:
-            p.box((x1 - x0 - 2 * s + 0.004, 0.025, 0.03), (cx, cy + 0.06, -0.01), "Painted",
-                  bevel=0.002, segs=1)
+            p.box((x1 - x0 - 2 * s + 0.004, 0.025, 0.03), (cx, cy + 0.06, -0.01), "Painted")
         # The pane, in its middle.
         p.box((x1 - x0 - 2 * s + 0.006, y1 - y0 - 2 * s + 0.006, 0.004), (cx, cy, -0.01),
               "Glass")
