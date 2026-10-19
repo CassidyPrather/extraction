@@ -1170,36 +1170,46 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                 };
                 lin(v, v * 0.98, v * 0.94)
             });
-            let crown_base = h * 0.45;
-            let blobs = 6 + rng.below(4);
+            // One loose, narrow oval crown of hanging twigs: many small
+            // clusters scattered through it, each a dark core with lighter
+            // drooping cards round it. (A few big solid blobs strung up the
+            // trunk looked like topiary in the first headset session.)
+            let crown_base = h * 0.4;
+            let top = h * 1.02;
+            let width = rng.range(1.7, 2.5);
+            let clusters = 14 + rng.below(5);
             // Late summer: a few birches are starting to turn.
             let turned = rng.range(0.0, 0.4);
-            for b in 0..blobs {
-                let t = b as f32 / blobs as f32;
+            for b in 0..clusters {
+                let t = ((b as f32 + rng.range(0.0, 1.0)) / clusters as f32).min(0.98);
+                let y = crown_base + t * (top - crown_base);
+                // Widest a third of the way up, closing to a point at the top.
+                let envelope = width * (std::f32::consts::PI * (0.12 + 0.88 * t)).sin().powf(0.7);
                 let a = rng.range(0.0, std::f32::consts::TAU);
-                let y = crown_base + t * (h - crown_base) * 0.95;
-                let off = Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(0.5, 1.6);
+                let off = Vec3::new(a.cos(), 0.0, a.sin()) * envelope * rng.range(0.35, 1.0);
                 let c = Vec3::new(0.0, y, 0.0) + lean * (y / h).powi(2) + off;
-                let rad = Vec3::splat(rng.range(1.0, 1.7)) * Vec3::new(1.0, 0.8, 1.0);
+                let rad = Vec3::splat(rng.range(0.5, 0.85)) * Vec3::new(1.0, 0.8, 1.0);
                 let yellow = (turned + rng.range(-0.2, 0.2)).clamp(0.0, 1.0);
                 // A branch out to the cluster, with leaves hanging off it.
-                let on_trunk = Vec3::new(0.0, c.y - 0.8, 0.0) + lean * (c.y / h).powi(2);
-                trunk.tube(&[(on_trunk, 0.05), (c + Vec3::Y * 0.5, 0.02)], 5, |_, _| {
-                    lin(0.7, 0.68, 0.64)
-                });
-                for _ in 0..6 {
+                let on_trunk = Vec3::new(0.0, c.y - 0.7, 0.0) + lean * (c.y / h).powi(2);
+                trunk.tube(
+                    &[(on_trunk, 0.035), (c + Vec3::Y * 0.3, 0.012)],
+                    5,
+                    |_, _| lin(0.7, 0.68, 0.64),
+                );
+                for _ in 0..5 {
                     let a = crng.range(0.0, tau);
                     let out = Vec3::new(a.cos(), 0.0, a.sin());
                     let base = c
-                        + out * rad.x * crng.range(0.2, 0.8)
-                        + Vec3::Y * rad.y * crng.range(0.0, 0.7);
-                    let along = (out * 0.35 - Vec3::Y) * crng.range(1.2, 1.9);
+                        + out * rad.x * crng.range(0.3, 1.1)
+                        + Vec3::Y * rad.y * crng.range(0.0, 0.9);
+                    let along = (out * 0.35 - Vec3::Y) * crng.range(1.0, 1.6);
                     let across = Vec3::new(-out.z, 0.0, out.x);
-                    cards.card(base, along, across, 1.3, BIRCH_LEAVES, c, true);
-                    cards.card(base, along, out, 1.0, BIRCH_LEAVES, c, true);
+                    cards.card(base, along, across, 1.1, BIRCH_LEAVES, c, true);
+                    cards.card(base, along, out, 0.9, BIRCH_LEAVES, c, true);
                 }
                 crown.blob(c, rad, rng.next_u64() as u32, move |_, l| {
-                    let s = 0.65 + 0.5 * l;
+                    let s = 0.45 + 0.35 * l;
                     let g = Vec3::new(0.22, 0.28, 0.10);
                     let y = Vec3::new(0.62, 0.48, 0.12);
                     let c = g.lerp(y, yellow) * s;

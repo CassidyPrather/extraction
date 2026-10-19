@@ -164,7 +164,7 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
             let slope = hm.slope_deg(p);
             let rock = smooth(28.0, 42.0, slope);
             let wet = hm.wet[hm.idx(i, j)];
-            let forest = if zone.in_forest(p[0], p[1]) { 1.0 } else { 0.0 };
+            let forest = zone.forest_cover(p[0], p[1]);
             colors.push([wet.max(0.15 * rock), rock, road_w, forest]);
         }
     }
@@ -209,6 +209,11 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
             indices.extend_from_slice(&[a, c, b, b, c, d, a, b, c, b, d, c]);
         }
     }
+    // The UVs are world x and z, so the tangent is +X laid onto the ground
+    // everywhere. Generated per chunk instead, the tangents at a chunk's
+    // edge only saw its own side, and every chunk border showed as a ruled
+    // line in the ground's lighting.
+    let tangents: Vec<[f32; 4]> = normals.iter().map(|n| uv_tangent(Vec3::from(*n))).collect();
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -219,10 +224,55 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, uv1)
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
     .with_inserted_indices(Indices::U32(indices));
-    if let Err(e) = mesh.generate_tangents() {
-        warn!("terrain tangents: {e}");
-    }
+    mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
     mesh
+}
+
+/// The tangent for world-space UVs (u along +X, v along +Z) on ground with
+/// normal `n`: +X made perpendicular to the normal. The handedness is the
+/// same everywhere the ground faces up, and is what mikktspace gives these
+/// UVs (see the test).
+fn uv_tangent(n: Vec3) -> [f32; 4] {
+    let t = (Vec3::X - n * n.x).normalize_or(Vec3::X);
+    [t.x, t.y, t.z, 1.0]
+}
+
+#[cfg(test)]
+mod tangent_tests {
+    use super::*;
+
+    /// Away from its edges a chunk's generated tangents are right; the
+    /// analytic ones match them there (and so are right at the edges too).
+    #[test]
+    fn analytic_tangents_match_generated_ones_inside_a_chunk() {
+        let zone = Zone::load("marrow_creek");
+        let mut mesh = chunk_mesh(&zone, 64, 64, 128, 128, 1);
+        let ours: Vec<[f32; 4]> = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x4(v)) => v.clone(),
+            _ => panic!("tangents"),
+        };
+        mesh.generate_tangents().unwrap();
+        let theirs = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x4(v)) => v.clone(),
+            _ => panic!("tangents"),
+        };
+        let w = 65;
+        let (mut worst, mut sum, mut count) = (1.0f32, 0.0f32, 0.0f32);
+        for j in 2..w - 2 {
+            for i in 2..w - 2 {
+                let k = j * w + i;
+                let (a, b) = (Vec4::from(ours[k]), Vec4::from(theirs[k]));
+                assert_eq!(a.w, b.w, "handedness at {i},{j}");
+                let cos = a.truncate().dot(b.truncate().normalize());
+                worst = worst.min(cos);
+                sum += cos;
+                count += 1.0;
+            }
+        }
+        // (mikktspace averages faces; on steep cells it leans a few degrees.)
+        assert!(worst > 0.95, "directions agree: worst cos {worst}");
+        assert!(sum / count > 0.995, "on average: cos {}", sum / count);
+    }
 }
 
 fn smooth(e0: f32, e1: f32, x: f32) -> f32 {

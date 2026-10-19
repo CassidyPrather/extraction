@@ -60,6 +60,24 @@ impl Zone {
             .find(|m| std::mem::discriminant(&m.kind) == std::mem::discriminant(kind))
     }
 
+    /// How much forest floor covers the ground here, 0 to 1: all of it well
+    /// inside a forest, easing out over a few metres across the edge, and
+    /// the edge itself wandering a few metres either way. (Taken straight
+    /// from the polygon, the leaf litter met the grass in a ruled line.)
+    pub fn forest_cover(&self, x: f32, z: f32) -> f32 {
+        use extraction_core::geom::{point_in_polygon, polygon_edge_distance, smoothstep};
+        let wander = extraction_core::noise::fbm(x * 0.045, z * 0.045, 0xF0E5, 3, 0.5) * 6.0;
+        self.map
+            .forests
+            .iter()
+            .map(|f| {
+                let d = polygon_edge_distance(&f.polygon, [x, z]);
+                let inside = point_in_polygon(&f.polygon, [x, z]);
+                smoothstep(-2.0, 3.0, if inside { d } else { -d } + wander)
+            })
+            .fold(0.0, f32::max)
+    }
+
     /// Whether a forest polygon covers this point.
     pub fn in_forest(&self, x: f32, z: f32) -> bool {
         self.map

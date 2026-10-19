@@ -46,9 +46,12 @@ impl Default for Weather {
             horizon: Color::srgb(0.50, 0.53, 0.55),
             zenith: Color::srgb(0.34, 0.37, 0.41),
             visibility: 320.0,
-            // Low in the south-west, behind the cloud.
-            sun_dir: Vec3::new(0.45, -0.38, 0.62).normalize(),
-            sun_lux: 1600.0,
+            // High in the south-west, behind the cloud. (Low, its crisp
+            // shadows ran twice a tree's height across the meadows: in the
+            // headset, the forest edges' shadows read as ruled lines on the
+            // ground.)
+            sun_dir: Vec3::new(0.35, -0.8, 0.5).normalize(),
+            sun_lux: 1350.0,
         }
     }
 }

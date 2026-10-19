@@ -239,7 +239,7 @@ fn footsteps(
         } else if let Some(m) = floor {
             footstep_set(m)
         } else {
-            surface_set(zone.hm.surface(p, zone.in_forest(p[0], p[1])))
+            surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
         };
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(

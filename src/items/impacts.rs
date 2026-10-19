@@ -98,7 +98,7 @@ fn detect_impacts(
                 let at = gt.translation();
                 let ground = zone.as_ref().and_then(|z| {
                     (at.y - z.ground(at.x, at.z) < 0.2)
-                        .then(|| z.hm.surface([at.x, at.z], z.in_forest(at.x, at.z)))
+                        .then(|| z.hm.surface([at.x, at.z], z.forest_cover(at.x, at.z) > 0.5))
                 });
                 out.write(ItemImpact {
                     item: e,
