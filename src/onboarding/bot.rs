@@ -250,6 +250,7 @@ impl DirectorWorld<'_, '_> {
                 t.push(LookAt(Vec3::new(here.x, 13.0, here.y - 10.0)));
             }
             Goal::Crouch => t.push(Wait(0.3)),
+            Goal::Run => t.extend(self.walk(here, here + Vec2::new(0.0, -6.0), 1.0)),
             Goal::PutAway => {
                 if self.holding(Side::Right).is_none() {
                     if let Some(e) = self.in_stash("pm_pistol") {

@@ -1440,6 +1440,16 @@ mod onboarding {
         vr.head(Vec3::new(0.0, 1.0, 0.0));
         vr.step(3);
         assert!(done(&vr, Goal::Crouch), "squatting counted");
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        // Run: the left stick clicked and pushed forward (the driver turns
+        // the click into sprint).
+        {
+            let mut input = vr.app.world_mut().get_mut::<RigInput>(vr.player).unwrap();
+            input.locomotion = Vec2::Y;
+            input.sprint = true;
+        }
+        vr.step(5);
+        assert!(done(&vr, Goal::Run), "the run counted");
     }
 
     /// Station 3: let go of a thing at a pocket, and of another over the

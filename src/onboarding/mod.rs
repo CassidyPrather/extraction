@@ -56,6 +56,7 @@ pub enum Goal {
     TakeRadio,
     Turn,
     Crouch,
+    Run,
     PutAway,
     Pack,
     FarGrab,
@@ -81,6 +82,7 @@ impl Goal {
             Goal::TakeRadio => "Take the radio",
             Goal::Turn => "Turn around",
             Goal::Crouch => "Crouch",
+            Goal::Run => "Run",
             Goal::PutAway => "Holster or pocket it",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
@@ -108,6 +110,8 @@ impl Goal {
             (Goal::Turn, true) => "Move the mouse round.",
             (Goal::Crouch, false) => "Pull the right stick down\n(again to stand).",
             (Goal::Crouch, true) => "Press C (again to stand).",
+            (Goal::Run, false) => "Click the left stick and\npush it forward.",
+            (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
@@ -172,9 +176,9 @@ pub const STATIONS: &[Station] = &[
         title: "GETTING ABOUT",
         at: [-3.5, 89.0],
         rot: 0.0,
-        goals: &[Goal::Turn, Goal::Crouch],
+        goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
         where_: "the lamp off the back of the truck",
-        tip: "Left stick walks; click\nit to run. Crouched, the\nmachines see you later.",
+        tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
     },
     Station {
         title: "PUT IT AWAY",
@@ -395,7 +399,7 @@ pub struct Shimmer;
 /// Board sizes: a station's (read from a few steps off), the truck's (from
 /// where you stand in the bed), the list by the tailgate.
 pub const SIGN: Vec2 = crate::world::notes::SIGN;
-pub const TRUCK_SIGN: Vec2 = Vec2::new(0.8, 0.5);
+pub const TRUCK_SIGN: Vec2 = Vec2::new(0.9, 0.62);
 pub const CHECKLIST: Vec2 = Vec2::new(0.8, 1.0);
 /// A post's board centre, and its lamp's height.
 pub const BOARD_Y: f32 = 1.55;
@@ -521,7 +525,7 @@ fn setup(
                         index: i,
                         lamp: Lamp::Dark,
                     },
-                    Transform::from_xyz(-0.5, FLOOR + 1.62, -1.05)
+                    Transform::from_xyz(-0.36, FLOOR + 1.5, -1.05)
                         .with_rotation(Quat::from_rotation_x(-0.32)),
                     Visibility::default(),
                     ChildOf(truck),
@@ -1051,6 +1055,9 @@ fn watch_moves(
         if input.crouch || stick_down || input.head.translation.y < 1.15 {
             complete(&mut ob, Goal::Crouch, &mut out);
         }
+        if input.sprint && input.locomotion.y > 0.3 {
+            complete(&mut ob, Goal::Run, &mut out);
+        }
     } else {
         swung.1 = 0.0;
     }
@@ -1330,11 +1337,20 @@ mod tests {
     use super::*;
     use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
 
+    /// The yard's own boards hold to more than the game's floor
+    /// (`MIN_EM_DEG`): the first playtest's first complaint was signs it
+    /// couldn't read, and these are what someone new reads first.
+    const BOARD_MIN_DEG: f32 = 0.8;
+
+    fn deg(screen: &ScreenText) -> f32 {
+        (em_metres(screen) / read_from(screen)).atan().to_degrees()
+    }
+
     fn readable(screen: &ScreenText) -> Result<(), String> {
         let em = em_metres(screen);
         let at = read_from(screen);
         let deg = (em / at).atan().to_degrees();
-        if deg < MIN_EM_DEG {
+        if deg < BOARD_MIN_DEG {
             return Err(format!(
                 "{:.1} cm letters, {deg:.2} deg at {at} m: {:?}",
                 em * 100.0,
@@ -1349,6 +1365,7 @@ mod tests {
     #[test]
     fn every_board_reads_at_every_stage() {
         let mut bad = Vec::new();
+        let mut smallest = f32::MAX;
         let goals: Vec<Goal> = all_goals().collect();
         for k in 0..=goals.len() {
             for skipped in [false, true] {
@@ -1361,6 +1378,7 @@ mod tests {
                     for i in 0..STATIONS.len() {
                         let size = if i == 0 { TRUCK_SIGN } else { SIGN };
                         let s = paper(sign_text(&ob, i, flat), size);
+                        smallest = smallest.min(deg(&s));
                         if let Err(e) = readable(&s) {
                             bad.push(e);
                         }
@@ -1387,6 +1405,7 @@ mod tests {
         }
         bad.dedup();
         assert!(bad.is_empty(), "too small:\n{}", bad.join("\n"));
+        eprintln!("smallest letters: {smallest:.2} deg (minimum {BOARD_MIN_DEG})");
     }
 
     /// Everything the driver says fits the wrist whole.
@@ -1428,7 +1447,7 @@ mod tests {
                 assert!(how.lines().count() <= 2, "{g:?}: {how}");
                 assert!(how.lines().all(|l| l.len() <= 28), "{g:?}: {how}");
                 let control = if flat {
-                    ["Press", "mouse"].iter().any(|k| how.contains(k))
+                    ["Press", "mouse", "Hold"].iter().any(|k| how.contains(k))
                 } else {
                     ["GRIP", "TRIGGER", "Press A", "hand", "finger", "stick"]
                         .iter()
