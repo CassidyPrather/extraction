@@ -305,8 +305,8 @@ fn gallery(
 /// height, held still: `fp:open` (both hands open), `fp:point` (the right
 /// index on the nearest push button), or `fp:<item id>` (a gun on its grip
 /// in the right hand, the left on its handguard if it has one; anything
-/// else in the left fist); `fp:WHAT,ZOOM,TURN` brings it all closer and
-/// turns it about the right hand. Each glove takes the curl the game gives that
+/// else in the left fist); `fp:WHAT,ZOOM,TURN,TRIGGER` brings it all
+/// closer, turns it about the right hand and pulls the trigger. Each glove takes the curl the game gives that
 /// hold (`render::props::hold_curl`).
 ///
 /// ```text
@@ -355,6 +355,12 @@ fn first_person_hands(
     let turn: f32 = spec
         .split(',')
         .nth(2)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(0.0);
+    // `fp:WHAT,ZOOM,TURN,TRIGGER` pulls the gun hand's trigger (0..1).
+    let trigger: f32 = spec
+        .split(',')
+        .nth(3)
         .and_then(|z| z.parse().ok())
         .unwrap_or(0.0);
     let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
@@ -451,7 +457,7 @@ fn first_person_hands(
             &mut commands,
             Side::Right,
             level,
-            hold_curl(Some(GripRole::Primary), 0.0, 0.0),
+            hold_curl(Some(GripRole::Primary), trigger, 0.0),
         );
         match point(GripRole::Support) {
             Some(support) => glove(
