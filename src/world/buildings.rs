@@ -2582,11 +2582,14 @@ pub fn dress_buildings(
                 skip[i] = true;
             }
         }
-        // Three meshes a material: the shell and its windows; the
-        // furniture's models, near; the furniture's boxes, further off.
+        // Four meshes a material: the shell; its windows, which cast no
+        // shadow worth the cost (they're in the wall's own); the
+        // furniture's models, near and shadowless (the sun doesn't reach
+        // it); the furniture's boxes, further off.
         const OUTER: usize = 0;
         const NEAR: usize = 1;
         const FAR: usize = 2;
+        const WINDOWS: usize = 3;
         let mut far = vec![false; geo.pieces.len()];
         for (d, _) in geo
             .props
@@ -2598,7 +2601,7 @@ pub fn dress_buildings(
                 far[i] = true;
             }
         }
-        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 3] = Default::default();
+        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 4] = Default::default();
         let mut add = |group: usize, mat: Handle<StandardMaterial>, mesh: Mesh| {
             let into = &mut merged[group];
             let fits = match into.iter_mut().find(|(m, _)| *m == mat) {
@@ -2632,7 +2635,7 @@ pub fn dress_buildings(
                 for (mat, mesh) in prims {
                     let mat = props.material(&mat, &mut materials);
                     add(
-                        if d.inside { NEAR } else { OUTER },
+                        if d.inside { NEAR } else { WINDOWS },
                         mat,
                         mesh.transformed_by(*at),
                     );
@@ -2658,9 +2661,17 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [outer, near, far] = merged;
+        let [outer, near, far, windows] = merged;
         for (mat, mesh) in outer {
             commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
+        }
+        for (mat, mesh) in windows {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat),
+                bevy::light::NotShadowCaster,
+                ChildOf(e),
+            ));
         }
         for (group, near) in [(near, true), (far, false)] {
             for (mat, mesh) in group {
