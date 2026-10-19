@@ -32,4 +32,6 @@ for s in "${SHOTS[@]}"; do
   # That station's lamp lit, the ones before it done.
   EXTRACTION_YARD_AT=${name%%[_b]*} scripts/shot.sh "$OUT/$name.png" "$cam" 40 \
     --map training_yard --data-dir "$DATA" --no-robots --weather clearing
+  # Kept as JPEG: a dozen PNGs are 20 MB in the repository.
+  ffmpeg -loglevel error -y -i "$OUT/$name.png" -q:v 3 "$OUT/$name.jpg" && rm "$OUT/$name.png"
 done
