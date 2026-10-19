@@ -42,6 +42,13 @@ pub struct HeightFog {
     pub patchiness: f32,
     /// Bank drift speed (m/s).
     pub drift: f32,
+    /// Cloud on the tops: extinction per metre at `cap_base`, thickening
+    /// upward (0: none). A valley's high ground goes into the cloud.
+    pub cap_density: f32,
+    /// World height (m) where `cap_density` applies.
+    pub cap_base: f32,
+    /// How fast the cap thickens going up (1/m).
+    pub cap_rise: f32,
 }
 
 impl Default for HeightFog {
@@ -52,6 +59,9 @@ impl Default for HeightFog {
             falloff: 0.2,
             patchiness: 0.75,
             drift: 0.6,
+            cap_density: 0.0,
+            cap_base: 100.0,
+            cap_rise: 0.08,
         }
     }
 }
@@ -69,6 +79,9 @@ const HF_BASE: f32 = {base:.3};
 const HF_FALLOFF: f32 = {falloff:.5};
 const HF_PATCHY: f32 = {patchy:.3};
 const HF_DRIFT: f32 = {drift:.4};
+const HF_CAP: f32 = {cap:.6};
+const HF_CAP_BASE: f32 = {cap_base:.3};
+const HF_CAP_RISE: f32 = {cap_rise:.5};
 
 fn hf_hash(p: vec2<f32>) -> f32 {{
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -110,6 +123,17 @@ fn extraction_height_fog(
     if (abs(k) > 1e-3) {{
         depth = start * len * (1.0 - exp(-k)) / k;
     }}
+    // The cap: density * exp(rise * (y - cap base)), the same integral
+    // the other way up (a few ALU; nothing when the valley has none).
+    if (HF_CAP > 0.0) {{
+        let cs = HF_CAP * exp(clamp(HF_CAP_RISE * (cam.y - HF_CAP_BASE), -30.0, 8.0));
+        let ck = clamp(HF_CAP_RISE * ray.y, -30.0, 30.0);
+        var cd = cs * len;
+        if (abs(ck) > 1e-3) {{
+            cd = cs * len * (exp(ck) - 1.0) / ck;
+        }}
+        depth = depth + cd;
+    }}
     let amount = 1.0 - exp(-max(depth, 0.0));
     let fog_color = fog_params.base_color.rgb * 1.06
         + scattering * fog_params.directional_light_color.rgb * fog_params.directional_light_color.a;
@@ -122,6 +146,9 @@ fn extraction_height_fog(
         falloff = f.falloff,
         patchy = f.patchiness.clamp(0.0, 1.0),
         drift = f.drift,
+        cap = f.cap_density.max(0.0),
+        cap_base = f.cap_base,
+        cap_rise = f.cap_rise,
     )
 }
 
