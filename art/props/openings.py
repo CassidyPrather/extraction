@@ -28,7 +28,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, T, fillet  # noqa: E402
+from common import RX, Part, T, fillet  # noqa: E402
+
+UP_Z = RX(-math.pi / 2)  # a cylinder's axis (Z) -> +Y
 
 DW, DH = 0.91, 2.03
 
@@ -155,3 +157,39 @@ def window_casing():
 prop("door_leaf", door_leaf)
 prop("window_sash", window_sash)
 prop("window_casing", window_casing)
+
+def door_metal():
+    """A steel door for masonry and metal buildings, in door space like
+    `door_leaf`: a sheet leaf in an angle frame, pressed stiffening ribs on
+    the front (-Z), barrel hinges at the hinge line, a lever handle and
+    lock, a kick plate worn bright."""
+    p = Part("static")
+    y0, y1 = 0.01, 0.01 + DH
+    p.box((DW, DH, 0.04), (DW / 2, (y0 + y1) / 2, 0.0), "Painted", bevel=0.004, segs=1)
+    # Ribs pressed out of the front face: a frame and a cross.
+    rz = -0.022
+    ys = (y0 + 0.27, (y0 + y1) / 2, y1 - 0.1)
+    for y in ys:
+        p.box((DW - 0.11, 0.05, 0.006), (DW / 2, y, rz), "Painted", bevel=0.002, segs=1)
+    # Uprights between them, stopping a millimetre short (no shared faces).
+    for ya, yb in zip(ys, ys[1:]):
+        for x in (0.08, DW - 0.08):
+            h = yb - ya - 0.052
+            p.box((0.05, h, 0.006), (x, (ya + yb) / 2, rz), "Painted", bevel=0.002, segs=1)
+    # Barrel hinges on the hinge line.
+    for y in (y0 + 0.25, y1 - 0.25):
+        p.cyl(0.016, y - 0.07, y + 0.07, "Iron", segs=10, xf=T(0.0, 0.0, -0.01) @ UP_Z)
+    # Lever handle and the lock cylinder, both faces.
+    hx, hy = DW - 0.09, 1.0
+    for s_ in (-1, 1):
+        z = s_ * 0.02
+        p.box((0.04, 0.16, 0.006), (hx, hy - 0.03, z + s_ * 0.003), "Zinc", bevel=0.001, segs=1)
+        rod(p, (hx, hy, z), (hx, hy, z + s_ * 0.05), 0.008, "Zinc", segs=8)
+        rod(p, (hx, hy, z + s_ * 0.05), (hx - 0.12, hy, z + s_ * 0.05), 0.009, "Zinc", segs=8)
+        p.cyl(0.012, 0.0, 0.006, "Brass", segs=10, xf=T(hx, hy - 0.09, z + s_ * 0.006))
+    # A kick plate along the bottom of the front.
+    p.box((DW - 0.06, 0.18, 0.004), (DW / 2, y0 + 0.11, -0.022), "Zinc")
+    return [p]
+
+
+prop("door_metal", door_metal)

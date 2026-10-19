@@ -343,7 +343,12 @@ impl Builder {
                         width: o.width - 0.04,
                         height: o.top - o.bottom - 0.02,
                         yaw,
-                        mat: Mat::Planks,
+                        // Plank doors in timber walls, steel elsewhere.
+                        mat: if matches!(mat, Mat::Planks | Mat::LogWall) {
+                            Mat::Planks
+                        } else {
+                            Mat::PaintedMetal
+                        },
                     });
                 }
                 OpeningKind::Gap => {}
@@ -2601,9 +2606,14 @@ pub fn building_visuals(
     }
     for (e, d) in &doors {
         let leaf = d.0;
-        // The plank door model is 0.91 x 2.03; stretched to other leaves.
+        // The door models are 0.91 x 2.03; stretched to other leaves.
+        let model = if leaf.mat == Mat::PaintedMetal {
+            "door_metal"
+        } else {
+            "door_leaf"
+        };
         commands.entity(e).insert(SwapIn(vec![(
-            "door_leaf",
+            model,
             Transform::from_scale(Vec3::new(leaf.width / 0.91, leaf.height / 2.03, 1.0)),
         )]));
         let mat = library.get(leaf.mat, &server, &mut materials);
@@ -2662,6 +2672,49 @@ pub fn building_visuals(
             ));
         }
     }
+}
+
+/// A box whose UVs run on from its neighbours': in metres, measured from
+/// the building's origin in the box's own orientation, so the boxes of a
+/// wall either side of a window (one rotation, different places) carry
+/// the brick courses across rather than each starting the texture afresh.
+fn aligned_box(size: Vec3, at: Transform) -> Mesh {
+    use bevy::mesh::VertexAttributeValues;
+    let mut mesh = crate::render::materials::metric_box(size);
+    let offset = at.rotation.inverse() * at.translation;
+    let pos: Vec<[f32; 3]> = match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+        Some(VertexAttributeValues::Float32x3(p)) => p.clone(),
+        _ => return mesh,
+    };
+    let nrm: Vec<[f32; 3]> = match mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
+        Some(VertexAttributeValues::Float32x3(n)) => n.clone(),
+        _ => return mesh,
+    };
+    // The same (u, v) axes per face as `metric_box`.
+    let uv: Vec<[f32; 2]> = pos
+        .iter()
+        .zip(&nrm)
+        .map(|(p, n)| {
+            let r = Vec3::from(*p) + offset;
+            let n = Vec3::from(*n);
+            let (u, v) = if n.x > 0.5 {
+                (Vec3::NEG_Z, Vec3::NEG_Y)
+            } else if n.x < -0.5 {
+                (Vec3::Z, Vec3::NEG_Y)
+            } else if n.y > 0.5 {
+                (Vec3::X, Vec3::Z)
+            } else if n.y < -0.5 {
+                (Vec3::X, Vec3::NEG_Z)
+            } else if n.z > 0.5 {
+                (Vec3::X, Vec3::NEG_Y)
+            } else {
+                (Vec3::NEG_X, Vec3::NEG_Y)
+            };
+            [r.dot(u), r.dot(v)]
+        })
+        .collect();
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
+    mesh
 }
 
 /// Client: a building's meshes, one per material (a house is a handful of
@@ -2743,7 +2796,7 @@ pub fn dress_buildings(
                 continue;
             }
             let mut mesh = match piece.shape {
-                Shape::Box(s) => crate::render::materials::metric_box(s),
+                Shape::Box(s) => aligned_box(s, piece.at),
                 Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
                 Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
             };
@@ -2843,6 +2896,7 @@ mod tests {
             }
         }
         for name in [
+            "door_metal",
             "road_block",
             "gate_post",
             "barrier_arm",
