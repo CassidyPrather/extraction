@@ -357,7 +357,7 @@ fn fragment(
     let open_ground = (1.0 - forest) * (1.0 - rock) * off_road;
     let straw = smoothstep(0.45, 0.75, m1 * 0.65 + m2 * 0.35);
     let lush = smoothstep(0.5, 0.8, 1.0 - (m1 * 0.55 + m2 * 0.45));
-    var grass_tint = mix(vec3<f32>(1.0), vec3<f32>(1.4, 1.15, 0.62), straw);
+    var grass_tint = mix(vec3<f32>(1.0), vec3<f32>(1.25, 1.08, 0.74), straw * 0.9);
     grass_tint = mix(grass_tint, vec3<f32>(0.86, 1.02, 0.78), lush * 0.8);
     let moss = smoothstep(0.45, 0.75, m2) * forest * (1.0 - rock) * off_road;
     albedo = albedo * mix(vec3<f32>(1.0), grass_tint, open_ground);
