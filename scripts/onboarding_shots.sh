@@ -24,6 +24,7 @@ SHOTS=(
   "7_first_aid 2,0,8,90,-6"
   "8_the_shimmer 2,0,-30,90,-6"
   "8b_the_shimmer_beyond 3.5,0,-31.5,60,-12"
+  "8c_the_stone 9.2,0,-36,90,-28"
   "9_buttons -1.2,0,-50,270,-8"
   "10_going_home 4,0,-61.6,0,-6"
 )

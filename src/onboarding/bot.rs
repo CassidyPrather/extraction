@@ -427,6 +427,28 @@ impl DirectorWorld<'_, '_> {
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Use(Side::Right));
             }
+            Goal::Probe => {
+                t.extend(self.free_hands());
+                let crate_at = Vec2::from(super::PARTS_CRATE_AT);
+                if let Some(e) = self.loose("spare_parts", crate_at) {
+                    t.extend(self.go(here, crate_at + Vec2::new(-1.0, 0.0), 0.6));
+                    t.push(Grab {
+                        item: e,
+                        side: Side::Right,
+                    });
+                    let snare = Vec2::from(super::SNARE_AT);
+                    let from = snare + Vec2::new(-(super::SNARE_R + 1.5), 0.5);
+                    t.push(WalkTo {
+                        to: from,
+                        within: 0.5,
+                    });
+                    t.push(Throw {
+                        side: Side::Right,
+                        at: Vec3::new(snare.x, self.zone.ground(snare.x, snare.y) + 0.8, snare.y),
+                    });
+                    t.push(Wait(1.0));
+                }
+            }
             Goal::Artifact => {
                 if let Some((e, at)) = self.placed(Placed::Stone) {
                     t.extend(self.free_hands());

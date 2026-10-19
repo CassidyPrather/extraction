@@ -1797,6 +1797,47 @@ mod onboarding {
         assert!(done(&vr, Goal::Dressing), "the dressing counted");
     }
 
+    /// The shimmer: a part thrown by hand (grip, swing, open) sets off the
+    /// snare on the way in, from outside it.
+    #[test]
+    fn station_shimmer_throw_a_part_first() {
+        let mut vr = Vr::first_run();
+        vr.step(30);
+        let snare = crate::onboarding::SNARE_AT;
+        let r = crate::onboarding::SNARE_R;
+        // West of it, facing it (+X).
+        let feet = ground(&vr, [snare[0] - r - 1.6, snare[1]]);
+        vr.stand(feet, -std::f32::consts::FRAC_PI_2);
+        vr.step(20);
+        let part = vr.spawn(
+            "spare_parts",
+            Transform::from_translation(feet + Vec3::new(0.3, 1.0, 0.3)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(part)
+            .insert(RigidBody::Static);
+        take(&mut vr, Side::Right, part);
+        vr.app
+            .world_mut()
+            .entity_mut(part)
+            .insert(RigidBody::Dynamic);
+        // Back by the shoulder, then a quick swing forward and up; open.
+        let start = feet + Vec3::new(-0.1, 1.5, 0.3);
+        vr.move_hand(Side::Right, start);
+        vr.step(10);
+        for k in 1..=6 {
+            vr.move_hand(
+                Side::Right,
+                start + Vec3::new(0.11, 0.025, -0.01) * k as f32,
+            );
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(120);
+        assert!(done(&vr, Goal::Probe), "the thrown part found the snare");
+    }
+
     /// Station 7: walk into the shimmer and the driver warns you; from its
     /// edge, point and flick the stone out of it.
     #[test]

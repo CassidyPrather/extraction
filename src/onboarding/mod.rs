@@ -70,6 +70,7 @@ pub enum Goal {
     Search,
     Wrist,
     Dressing,
+    Probe,
     Artifact,
     Button,
     CallTruck,
@@ -98,6 +99,7 @@ impl Goal {
             Goal::Search => "Take what's inside",
             Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
+            Goal::Probe => "Throw a part in first",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
             Goal::CallTruck => "Call the truck",
@@ -142,6 +144,8 @@ impl Goal {
             (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "Hold it. Press A or X.",
             (Goal::Dressing, true) => "Hold it. Press U.",
+            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
+            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
             (Goal::Artifact, true) => "From the edge: look at\nit. Press E.",
             (Goal::Button, false) => "Point a finger, TRIGGER\noff. Push the amber cap.",
@@ -239,9 +243,9 @@ pub const STATIONS: &[Station] = &[
         title: "THE SHIMMER",
         at: [4.5, -30.0],
         rot: 90.0,
-        goals: &[Goal::Artifact],
+        goals: &[Goal::Probe, Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
-        tip: "Throw a bolt in first. Carry\nmany stones and the\nmachines feel them too.",
+        tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
     },
     Station {
         title: "BUTTONS",
@@ -277,6 +281,13 @@ pub fn station_of(goal: Goal) -> usize {
 /// Where the training burner sits (its heart: the stone), and its size.
 pub const SHIMMER_AT: [f32; 2] = [12.0, -36.0];
 pub const SHIMMER_R: f32 = 1.6;
+pub const STUMP_H: f32 = 0.38;
+/// A snare on the way in, nothing in it: you can't see where it ends until
+/// something sets it off. Throw a thing in first.
+pub const SNARE_AT: [f32; 2] = [9.0, -31.5];
+pub const SNARE_R: f32 = 1.8;
+/// The crate of spare parts to throw, by the shimmer's post.
+pub const PARTS_CRATE_AT: [f32; 2] = [4.6, -28.4];
 /// The pen the far-grab box sits in.
 pub const FAR_STAND_AT: [f32; 2] = [-6.5, 79.5];
 /// A crate at chest height in the middle of a fenced pen: plain to see,
@@ -387,6 +398,8 @@ pub enum Prop {
     Crate(Vec3),
     /// The board by the tailgate, on its post.
     BoardPost,
+    /// A burnt stump the burner's stone sits on, out of the grass.
+    Stump,
 }
 
 /// Things put out for a goal.
@@ -401,9 +414,13 @@ pub enum Placed {
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct Doorway(pub Vec3);
 
-/// The training burner.
+/// The training anomalies.
 #[derive(Component)]
 pub struct Shimmer;
+
+/// The one you find with a thrown part.
+#[derive(Component)]
+pub struct Probed;
 
 /// Board sizes: a station's (read from a few steps off), the truck's (from
 /// where you stand in the bed), the list by the tailgate.
@@ -437,6 +454,7 @@ impl Plugin for OnboardingPlugin {
                         watch_world,
                         watch_moves,
                         watch_wrist,
+                        watch_probe,
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
@@ -802,6 +820,7 @@ fn setup(
     let mut keep_clear: Vec<Vec2> = STATIONS.iter().skip(1).map(|s| Vec2::from(s.at)).collect();
     keep_clear.extend([
         Vec2::from(SHIMMER_AT),
+        Vec2::from(SNARE_AT),
         Vec2::from(FAR_STAND_AT),
         Vec2::from(RANGE_TABLE_AT),
     ]);
@@ -820,6 +839,43 @@ fn setup(
         }
     }
     commands.spawn((
+        Name::new("Training snare"),
+        Shimmer,
+        Probed,
+        Anomaly {
+            kind: extraction_core::anomaly::AnomalyKind::Snare,
+            radius: SNARE_R,
+            charge: 1.0,
+            bloom: None,
+        },
+        Transform::from_translation(ground(&zone, SNARE_AT)),
+        Visibility::default(),
+    ));
+    let size = Vec3::new(0.5, 0.75, 0.45);
+    let at = ground(&zone, PARTS_CRATE_AT);
+    commands.spawn((
+        Name::new("Parts crate"),
+        Prop::Crate(size),
+        Transform::from_translation(at),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::Y * size.y * 0.5,
+            Quat::IDENTITY,
+            Collider::cuboid(size.x, size.y, size.z),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
+    for k in 0..3 {
+        spawn(
+            &mut commands,
+            "spare_parts",
+            Transform::from_translation(
+                at + Vec3::new(-0.12 + k as f32 * 0.12, size.y + 0.04, 0.0),
+            ),
+        );
+    }
+    commands.spawn((
         Name::new("Training burner"),
         Shimmer,
         Anomaly {
@@ -831,10 +887,24 @@ fn setup(
         Transform::from_translation(heart),
         Visibility::default(),
     ));
+    // On a burnt stump: on the ground the grass hid it.
+    commands.spawn((
+        Name::new("Burnt stump"),
+        Prop::Stump,
+        Transform::from_translation(heart),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::Y * STUMP_H * 0.5,
+            Quat::IDENTITY,
+            Collider::cylinder(0.17, STUMP_H),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
     if let Some(e) = spawn(
         &mut commands,
         "art_hearth",
-        Transform::from_translation(heart + Vec3::Y * 0.4),
+        Transform::from_translation(heart + Vec3::Y * (STUMP_H + 0.06)),
     ) {
         commands.entity(e).insert(Placed::Stone);
     }
@@ -1117,6 +1187,28 @@ fn watch_wrist(
     };
     if *held > 0.4 {
         complete(&mut ob, Goal::Wrist, &mut out);
+    }
+}
+
+/// The snare on the way in went off with you outside it: something
+/// thrown found it.
+fn watch_probe(
+    mut ob: ResMut<Onboarding>,
+    mut out: MessageWriter<GoalDone>,
+    mut events: MessageReader<crate::anomaly::AnomalyEvent>,
+    snares: Query<(&Anomaly, &GlobalTransform), With<Probed>>,
+    players: Query<&GlobalTransform, With<LocalPlayer>>,
+) {
+    for ev in events.read() {
+        let Ok((a, gt)) = snares.get(ev.anomaly) else {
+            continue;
+        };
+        let clear = players
+            .iter()
+            .all(|p| p.translation().xz().distance(gt.translation().xz()) > a.radius + 0.3);
+        if ev.what == crate::anomaly::AnomalyAct::Discharge && clear {
+            complete(&mut ob, Goal::Probe, &mut out);
+        }
     }
 }
 

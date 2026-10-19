@@ -291,6 +291,15 @@ fn dress_props(
                     Transform::from_xyz(0.0, size.y * 0.5, 0.0),
                 );
             }
+            Prop::Stump => {
+                let material = lib.get(Mat::BarkPine, &server, &mut materials);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.17, super::STUMP_H))),
+                    MeshMaterial3d(material),
+                    Transform::from_xyz(0.0, super::STUMP_H * 0.5, 0.0),
+                    ChildOf(e),
+                ));
+            }
             Prop::BoardPost => {
                 part(
                     Mat::Timber,
