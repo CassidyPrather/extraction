@@ -1090,7 +1090,7 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
             }
         }
         TreeSpecies::Pine => {
-            let h = rng.range(17.0, 24.0);
+            let h = rng.range(15.0, 21.0);
             let lean = Vec3::new(rng.range(-0.4, 0.4), 0.0, rng.range(-0.4, 0.4));
             let rings: Vec<(Vec3, f32)> = (0..=8)
                 .map(|k| {
@@ -1109,31 +1109,38 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                 let c = a.lerp(b, ((t - 0.35) * 2.5).clamp(0.0, 1.0));
                 lin(c.x, c.y, c.z)
             });
-            let crown_base = h * rng.range(0.62, 0.72);
-            let blobs = 5 + rng.below(3);
-            for b in 0..blobs {
-                let t = b as f32 / blobs as f32;
+            // A broad, ragged umbrella: clumps of needles out on long limbs
+            // at uneven heights, mostly near the top. (A few big balls
+            // stacked up the trunk read as topiary in the first headset
+            // session.)
+            let crown_base = h * rng.range(0.48, 0.58);
+            let clumps = 13 + rng.below(5);
+            for _ in 0..clumps {
+                let t = rng.range(0.0, 1.0).powf(0.6);
                 let a = rng.range(0.0, std::f32::consts::TAU);
-                let y = crown_base + t * (h - crown_base);
-                let off = Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(0.6, 1.8) * (1.0 - t * 0.6);
+                let y = crown_base + t * (h - crown_base) * 0.97;
+                let reach = rng.range(1.2, 3.6) * (1.0 - t * 0.55);
+                let off = Vec3::new(a.cos(), 0.0, a.sin()) * reach;
                 let c = Vec3::new(0.0, y, 0.0) + lean * (y / h).powi(2) + off;
                 let rad = Vec3::new(
-                    rng.range(1.5, 2.2),
-                    rng.range(1.3, 1.9),
-                    rng.range(1.5, 2.2),
-                ) * (1.0 - t * 0.35);
-                crown.blob(c, rad, rng.next_u64() as u32, |_, l| {
-                    let s = 0.7 + 0.5 * l;
+                    rng.range(1.2, 1.9),
+                    rng.range(0.8, 1.2),
+                    rng.range(1.2, 1.9),
+                ) * (1.0 - t * 0.3);
+                crown.blob(c, rad * 0.8, rng.next_u64() as u32, |_, l| {
+                    let s = 0.55 + 0.45 * l;
                     lin(0.12 * s, 0.16 * s, 0.09 * s)
                 });
-                // A limb out to the cluster, and needle cards round it.
-                let on_trunk = Vec3::new(0.0, c.y - 0.6, 0.0) + lean * (c.y / h).powi(2);
-                trunk.tube(&[(on_trunk, 0.07), (c, 0.03)], 5, |_, _| {
+                // A limb out to the clump, rising a little, and needle
+                // cards round it.
+                let on_trunk =
+                    Vec3::new(0.0, c.y - 0.3 - reach * 0.25, 0.0) + lean * (c.y / h).powi(2);
+                trunk.tube(&[(on_trunk, 0.06), (c, 0.025)], 5, |_, _| {
                     lin(0.5, 0.32, 0.2)
                 });
-                for _ in 0..22 {
+                for _ in 0..14 {
                     let a = crng.range(0.0, tau);
-                    let dir = Vec3::new(a.cos(), crng.range(-0.3, 0.8), a.sin()).normalize();
+                    let dir = Vec3::new(a.cos(), crng.range(-0.2, 0.7), a.sin()).normalize();
                     let len = rad.x * crng.range(0.9, 1.3);
                     cards.cross_cards(
                         c - dir * len * 0.3,

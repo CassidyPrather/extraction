@@ -1,6 +1,8 @@
 //! How anomalies look: a lift is a slow column of circling leaves and grit
 //! over a flattened ring; a burner is a charred patch shedding embers under
-//! an orange glow you can see through the fog; a snare is a knot of blue
+//! a coal-red glow that flickers under a column of smoke (a steady orange
+//! glow read as a tutorial marker in the first headset session); a snare
+//! is a knot of blue
 //! arcs that lashes out when something touches it. Plus the glass eye's
 //! x-ray, which shows robots through walls while you hold it to your eye.
 
@@ -33,6 +35,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 (
                     dress_anomalies,
                     animate_motes,
+                    animate_smoke,
                     snare_arcs,
                     react_to_events,
                     xray_parts,
@@ -55,6 +58,15 @@ struct Mote {
 struct Glow {
     base: f32,
     flash: f32,
+    /// How deep its flicker goes (0 steady, 1 down to dark).
+    flicker: f32,
+}
+
+/// A puff of a burner's smoke: rises, swells and drifts off.
+#[derive(Component)]
+struct Smoke {
+    seed: f32,
+    radius: f32,
 }
 
 #[derive(Component)]
@@ -83,6 +95,7 @@ struct AnomalyAssets {
     scorch: Handle<StandardMaterial>,
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
+    smoke: Handle<StandardMaterial>,
 }
 
 /// A soft round alpha falloff, for ground marks.
@@ -181,7 +194,7 @@ fn assets(
         segment: meshes.add(Cuboid::new(0.012, 0.012, 1.0)),
         scorch: ground(
             Color::srgba(0.02, 0.018, 0.015, 0.92),
-            LinearRgba::rgb(0.25, 0.05, 0.0),
+            LinearRgba::rgb(0.14, 0.02, 0.0),
             materials,
         ),
         flattened: ground(
@@ -194,6 +207,15 @@ fn assets(
             LinearRgba::rgb(0.0, 0.02, 0.06),
             materials,
         ),
+        smoke: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.13, 0.12, 0.11, 0.3),
+            base_color_texture: Some(radial.clone()),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        }),
     };
     a
 }
@@ -286,14 +308,28 @@ fn dress_anomalies(
             }
             match anomaly.kind {
                 AnomalyKind::Burner => {
+                    for _ in 0..10 {
+                        c.spawn((
+                            Smoke {
+                                seed: rng.f32() * 100.0,
+                                radius: r,
+                            },
+                            Mesh3d(a.quad.clone()),
+                            MeshMaterial3d(a.smoke.clone()),
+                            Transform::from_scale(Vec3::ZERO),
+                            NotShadowCaster,
+                            near.clone(),
+                        ));
+                    }
                     c.spawn((
                         Glow {
-                            base: 60_000.0,
+                            base: 35_000.0,
                             flash: 0.0,
+                            flicker: 0.6,
                         },
                         PointLight {
-                            color: Color::srgb(1.0, 0.45, 0.15),
-                            intensity: 60_000.0,
+                            color: Color::srgb(1.0, 0.32, 0.08),
+                            intensity: 35_000.0,
                             range: r * 4.0 + 4.0,
                             shadow_maps_enabled: false,
                             ..default()
@@ -306,6 +342,7 @@ fn dress_anomalies(
                         Glow {
                             base: 4_000.0,
                             flash: 0.0,
+                            flicker: 0.15,
                         },
                         PointLight {
                             color: Color::srgb(0.45, 0.65, 1.0),
@@ -353,6 +390,46 @@ fn eye_position(
             .find(|(_, p)| locals.contains(p.parent()))
             .map(|(g, _)| g.translation())
     })
+}
+
+fn animate_smoke(
+    mut puffs: Query<(&Smoke, &mut Transform, &ChildOf)>,
+    anomalies: Query<&GlobalTransform, With<Anomaly>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
+    locals: Query<(), With<LocalPlayer>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    time: Res<Time>,
+) {
+    let t = time.elapsed_secs();
+    let eye = eye_position(&heads, &locals, &cams);
+    for (p, mut tf, parent) in &mut puffs {
+        let Ok(origin) = anomalies.get(parent.parent()) else {
+            continue;
+        };
+        let o = origin.translation();
+        if eye.is_some_and(|e| e.distance(o) > 95.0) {
+            continue;
+        }
+        let s = p.seed;
+        let fr = |k: f32| (s * k).fract().abs();
+        // Each puff lives eight to twelve seconds, rising five metres,
+        // swelling and leaning off downwind as it goes.
+        let life = (t / (8.0 + 4.0 * fr(1.9)) + fr(6.1)).fract();
+        let a = s * std::f32::consts::TAU;
+        let start = Vec3::new(a.cos(), 0.0, a.sin()) * p.radius * 0.5 * fr(3.7);
+        let drift = Vec3::new(0.8, 0.0, 0.5) * life * life * 2.5;
+        let local = start + drift + Vec3::Y * (0.4 + life * 5.0);
+        // Swells, then thins out to nothing at the top.
+        let size = (0.6 + life * 2.2) * (1.0 - life).sqrt();
+        tf.translation = local;
+        tf.scale = Vec3::splat(size);
+        if let Some(e) = eye {
+            tf.rotation = Transform::from_translation(o + local)
+                .looking_at(e, Vec3::Y)
+                .rotation
+                * Quat::from_rotation_z(s + t * 0.1);
+        }
+    }
 }
 
 fn animate_motes(
@@ -523,7 +600,12 @@ fn react_to_events(
     let dt = time.delta_secs();
     for (mut g, mut light) in &mut glows {
         g.flash = (g.flash - dt * g.flash.max(1.0) * 3.0).max(0.0);
-        let flicker = 0.85 + 0.1 * (t * 13.0).sin() * (t * 7.3).sin() + 0.05 * (t * 31.0).sin();
+        // Coals: slow surges with quick gutters on top.
+        let wave = 0.5
+            + 0.3 * (t * 2.3).sin() * (t * 0.9).sin()
+            + 0.15 * (t * 13.0).sin() * (t * 7.3).sin()
+            + 0.05 * (t * 31.0).sin();
+        let flicker = 1.0 - g.flicker * (1.0 - wave.clamp(0.0, 1.0));
         light.intensity = g.base * flicker * (1.0 + g.flash);
     }
 }
