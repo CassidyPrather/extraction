@@ -152,6 +152,7 @@ fn spawn_forests(
     mut images: ResMut<Assets<Image>>,
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
+    zone: Res<Zone>,
     mut done: Local<bool>,
 ) {
     if *done || trees.is_empty() {
@@ -240,8 +241,9 @@ fn spawn_forests(
             let b = bark(s, &mut library, &mut materials);
             for v in 0..VARIANTS {
                 let seed = 1000 + v as u64 * 17 + s as u64 * 101;
-                let m = build_tree(s, seed, textured, false);
-                let far = build_tree(s, seed, textured, true);
+                let burnt = zone.map.ash > 0.0;
+                let m = build_tree(s, seed, textured, false, burnt);
+                let far = build_tree(s, seed, textured, true, burnt);
                 let card_mat = match s {
                     TreeSpecies::Birch => leaves.clone(),
                     _ => needles.clone(),
@@ -977,7 +979,15 @@ pub struct TreeMeshes {
 /// so scanned bark shows through.
 /// `coarse` is the far LOD: the same tree (the same random draws), with
 /// fewer sides, rings and whorls, and no twigs.
-fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> TreeMeshes {
+/// `burnt`: the valley burned (`MapDef::ash`); dead wood is charred and
+/// the pines that lived through it are scorched round the foot.
+fn build_tree(
+    species: TreeSpecies,
+    seed: u64,
+    textured: bool,
+    coarse: bool,
+    burnt: bool,
+) -> TreeMeshes {
     let mut rng = Rng::new(seed);
     let mut crng = Rng::new(seed ^ 0xCA2D);
     let mut trunk = MeshBuilder {
@@ -1103,12 +1113,23 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                     )
                 })
                 .collect();
-            trunk.tube(&rings, 7, |p, _| {
+            // (Its own generator: the tree's shape is the same burnt or not.)
+            let scorch = if burnt {
+                Rng::new(seed ^ 0x5C02).range(1.0, 2.6)
+            } else {
+                0.0
+            };
+            trunk.tube(&rings, 7, |p, a| {
                 // Grey-brown below, the orange "fox" bark of a Scots pine above.
                 let t = (p.y / h).clamp(0.0, 1.0);
-                let a = Vec3::new(0.24, 0.20, 0.17);
-                let b = Vec3::new(0.55, 0.32, 0.18);
-                let c = a.lerp(b, ((t - 0.35) * 2.5).clamp(0.0, 1.0));
+                let lo = Vec3::new(0.24, 0.20, 0.17);
+                let hi = Vec3::new(0.55, 0.32, 0.18);
+                let mut c = lo.lerp(hi, ((t - 0.35) * 2.5).clamp(0.0, 1.0));
+                // Fire-blackened round the foot, higher on one side.
+                let line = scorch * (0.75 + 0.35 * a.sin());
+                if p.y < line {
+                    c *= 0.22;
+                }
                 lin(c.x, c.y, c.z)
             });
             // A broad, ragged umbrella: clumps of needles out on long limbs
@@ -1246,8 +1267,25 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                     (Vec3::new(0.0, t * h, 0.0) + lean * t, 0.2 * (1.0 - t * 0.6))
                 })
                 .collect();
-            trunk.tube(&rings, 6, |p, _| {
+            // Dead wood weathers silver; in a burnt valley it's charcoal
+            // from the foot up to a ragged line, and soot-dark above.
+            let char_line = if burnt {
+                Rng::new(seed ^ 0xC4A2).range(1.5, 4.5)
+            } else {
+                0.0
+            };
+            let s = seed as u32;
+            trunk.tube(&rings, 6, |p, a| {
                 let v = 0.36 + 0.06 * (p.y * 3.1).sin();
+                if burnt {
+                    let rag = extraction_core::noise::perlin(a * 1.5, p.y * 0.8, s) * 1.2;
+                    if p.y < char_line + rag {
+                        let c = 0.05 + 0.03 * (p.y * 7.0 + a * 3.0).sin().abs();
+                        return lin(c, c * 0.95, c * 0.9);
+                    }
+                    let v = v * 0.62;
+                    return lin(v, v * 0.95, v * 0.88);
+                }
                 lin(v, v * 0.97, v * 0.93)
             });
             // Broken branch stubs.
@@ -1257,8 +1295,9 @@ fn build_tree(species: TreeSpecies, seed: u64, textured: bool, coarse: bool) -> 
                 let dir = Vec3::new(a.cos(), rng.range(-0.1, 0.5), a.sin()).normalize();
                 let start = Vec3::new(0.0, y, 0.0) + lean * (y / h);
                 let len = rng.range(0.6, 2.2);
+                let v = if burnt { 0.1 } else { 0.33 };
                 trunk.tube(&[(start, 0.06), (start + dir * len, 0.02)], 4, |_, _| {
-                    lin(0.33, 0.32, 0.30)
+                    lin(v, v * 0.97, v * 0.91)
                 });
             }
         }

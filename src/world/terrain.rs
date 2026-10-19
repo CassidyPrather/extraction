@@ -25,7 +25,8 @@ pub struct TerrainVisualsPlugin;
 impl Plugin for TerrainVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_terrain_meshes)
-            .add_systems(PostUpdate, fog_cull);
+            .add_systems(PostUpdate, fog_cull)
+            .add_systems(Update, wet_with_weather);
     }
 }
 
@@ -66,6 +67,33 @@ fn fog_cull(
             *r = want;
         }
     }
+}
+
+/// The ground is as wet as the weather: soaked and dark in a downpour,
+/// drying in a clearing spell. (A uniform: no recompile.)
+fn wet_with_weather(
+    conditions: Res<super::weather::Conditions>,
+    chunks: Query<&MeshMaterial3d<TerrainMaterial>, With<TerrainChunk>>,
+    mut materials: ResMut<Assets<TerrainMaterial>>,
+    mut done: Local<Option<super::weather::WeatherKind>>,
+) {
+    use super::weather::WeatherKind;
+    if *done == Some(conditions.kind) {
+        return;
+    }
+    let Some(handle) = chunks.iter().next() else {
+        return;
+    };
+    let wet = match conditions.kind {
+        WeatherKind::Downpour => 0.8,
+        WeatherKind::PeaSouper => 0.45,
+        WeatherKind::Clearing => 0.18,
+        WeatherKind::Drizzle => 0.35,
+    };
+    if let Some(mut m) = materials.get_mut(&handle.0) {
+        m.extension.params.wetness = wet;
+    }
+    *done = Some(conditions.kind);
 }
 
 fn spawn_terrain_meshes(
