@@ -119,3 +119,21 @@ on uncovered sky; the terrain shader is the one to watch.
   without rebuilding (keys in `src/render/grade.rs`).
 - Before and after shots of the bigger changes are in
   `docs/shots/visual-design/`.
+
+## What the current look costs
+
+Per-pixel work is estimated from the shaders (the software renderer
+can't time a GPU); geometry is from `EXTRACTION_RENDER_STATS=1`.
+
+| Change | Where | Cost |
+| - | - | - |
+| Per-valley grade, shadow lift | tonemapping pass | None: the pass already runs |
+| Sky deck | sky pixels only | 2D value noise, ~8 octaves plus 2 warp taps; cheaper than the old 10 3D octaves |
+| Water reflection | water pixels | A few ALU; the PBR specular it replaces is dropped |
+| Terrain macro colour, burn | every terrain pixel | 2 value-noise taps (~10 ALU), against 9 texture taps per layer already |
+| Cloud on the tops | every lit pixel, Kettle Pass only | A second closed-form fog integral (~10 ALU); compiled out elsewhere |
+| Alpha to coverage on foliage | foliage | Same pass and cost as the alpha test it replaces; shadow casters cut at 0.05 |
+| Grass widening | grass vertices | ~10 ALU a vertex; no new geometry |
+| Fuller pine crowns | pine near LOD | Densest pine view: tris drawn 321k to 332k, shadow 261k to 287k, draw calls unchanged |
+| Weather wetness, sky weight | uniforms | None |
+| Charred trees, tuft spread | vertex colour, geometry layout | None |
