@@ -375,6 +375,28 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   them rare again. Flat mode's rack key tap-racks, or strips, racks and
   reloads on a double feed.
 
+### What a round does, grenades, blades
+
+- **Through and off things** (`extraction_core::firearm_terminal`): a
+  round's energy (its bullet's mass by cartridge, its speed now) against
+  each material's cost per millimetre, thin things at their real
+  thickness, a longer path at a slant. Pistols and buckshot stop in a
+  plank wall; rifles go through planks, plaster and tin; only the Mosin
+  through a log wall; brick, concrete, rock, earth and robot plate stop
+  everything. Grazing a hard face (under about 20 degrees) mostly turns
+  the round, keeping 60% of its speed. The range test
+  (`weapons/range.rs`) fires every gun at every material to hold it.
+- **Grenades** (RGD-5, F-1): the other hand's trigger pulls the ring; the
+  gripping hand holds the spoon, safe while it holds; let go (or B to
+  cook) and the spoon flies, 3.6-3.8 s. A pinned grenade never goes off.
+  Fragments are real rounds (cover stops them, concrete turns them), the
+  blast hurts and shoves what it can see, falling off within 5 m; robots
+  hear it 160 m off.
+- **Blades**: a knife, the Mosin's fixed bayonet and the SKS's folding
+  one (A). Harm from the point's speed along the blade or across the
+  edge, nothing below about 1.5 m/s; eyes take double, joints half again,
+  a robot's core and plate a fraction.
+
 ### Gadgets and attachments
 
 Things go where they physically fit (`gadgets/mod.rs`): the AK and the
