@@ -8518,5 +8518,5 @@
 <circle cx='439.2' cy='358.2' r='4' fill='#d4a017'/>
 <circle cx='403.2' cy='324.6' r='4' fill='#5a5650'/>
 <text x='420.0' y='333.0' fill='#1d1c1a' text-anchor='middle'>overflow +</text>
-<text x='8' y='798' fill='#e8e2d0'>Service tunnel (tunnel_cinder): floor -6.5 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp; lamp * on, ~ flickering, x dead, + on the power</text>
+<text x='8' y='798' fill='#e8e2d0'>Service tunnel (tunnel_cinder): floor -6.5 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

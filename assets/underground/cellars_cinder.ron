@@ -1,0 +1,83 @@
+// Cinder Works: the furnace cellars under the hall, where the furnace
+// was fed (format: crates/extraction_core/src/underground.rs; design:
+// docs/UNDERGROUND.md, "Signature sites"). No lamps: the glow of the hot
+// passages. Vent the flue to pass it; ride the charging crane over the
+// ash pit to the far ledge.
+(
+    name: "The furnace cellars",
+    style: Service,
+    floor: -7.0,
+    corridor_height: 2.6,
+    rooms: [
+        // The stair's foot: the charging floor, cold now.
+        (id: "stair_foot", at: (0.0, 12.0), size: (6.0, 4.0), height: 3.0, props: [
+            (kind: Barrel, at: (2.4, 1.3)),
+            (kind: Cart, at: (-1.8, 0.9)),
+        ]),
+        // The flue passage: too hot to cross till it's vented.
+        (id: "flue_passage", at: (0.0, 24.0), size: (3.0, 16.0), height: 3.0),
+        // The vent room: the flue's damper lever.
+        (id: "vent_room", at: (9.0, 20.0), size: (4.0, 4.0), height: 2.6, props: [
+            (kind: Machine, at: (-0.6, 1.2)),
+        ]),
+        // The burner gallery: hot, and the Burners breed here.
+        (id: "burner_gallery", at: (-10.0, 24.0), size: (6.0, 8.0), height: 3.0, props: [
+            (kind: Rubble, at: (-1.8, -2.6)),
+            (kind: Crate, at: (-1.8, 2.8), loot: Some("tools")),
+        ]),
+        // The coal store, behind the flue.
+        (id: "coal_store", at: (10.0, 30.0), size: (4.0, 4.0), height: 2.6, props: [
+            (kind: Shelf, at: (1.6, 0.6), rot: 270.0, loot: Some("workshop")),
+            (kind: Pallet, at: (-0.6, 1.2)),
+        ]),
+        // The near ledge over the ash pit: the crane's home.
+        (id: "near_ledge", at: (0.0, 38.0), size: (8.0, 4.0), height: 4.0, props: [
+            (kind: Barrel, at: (-1.6, -1.5)),
+        ]),
+        // The ash pit: six metres down, still hot enough to kill.
+        (id: "ash_pit", at: (0.0, 46.0), size: (8.0, 12.0), floor: Some(-13.0), height: 10.0, pit: true),
+        // The far ledge: where the furnace's charge was sorted.
+        (id: "far_ledge", at: (0.0, 54.0), size: (8.0, 4.0), height: 4.0, props: [
+            (kind: Crate, at: (-2.8, 0.6), loot: Some("weapons_rare")),
+            (kind: SmallCrate, at: (-1.2, 1.3), loot: Some("curio")),
+        ]),
+    ],
+    links: [
+        (from: "stair_foot", to: "flue_passage", width: 2.0),
+        (from: "stair_foot", to: "vent_room", via: [(9.0, 12.0)], doors: To),
+        (from: "stair_foot", to: "burner_gallery", via: [(-10.0, 12.0)], doors: To),
+        (from: "flue_passage", to: "coal_store", via: [(0.0, 30.0)], doors: To),
+        (from: "flue_passage", to: "near_ledge", width: 2.0),
+        (from: "burner_gallery", to: "near_ledge", via: [(-10.0, 38.0)]),
+    ],
+    heat: [
+        (room: Some("flue_passage"), level: 1.2),
+        (room: Some("burner_gallery"), level: 0.45),
+        (room: Some("ash_pit"), level: 1.5),
+    ],
+    vents: [
+        // The flue's damper, in the vent room.
+        (room: "vent_room", at: (1.75, 0.8), rot: 270.0, zones: [0]),
+        // The gallery's, on the charging floor.
+        (room: "stair_foot", at: (-2.75, -0.8), rot: 90.0, zones: [1]),
+    ],
+    // The charging crane, along the ledges' east side; a lever on each.
+    crane: Some((
+        from: (2.9, 38.0),
+        to: (2.9, 54.0),
+        y: -3.6,
+        drop: 1.6,
+        levers: [("near_ledge", (3.75, -1.0), 270.0), ("far_ledge", (3.75, -1.0), 270.0)],
+    )),
+    anomalies: [
+        (kind: "Burner", room: "burner_gallery", at: (1.6, 1.4), radius: 1.0),
+        (kind: "Burner", room: "ash_pit", at: (0.0, 0.0), radius: 2.0),
+    ],
+    patrol: ["stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
+    crawlers: 1,
+    portals: [
+        (),
+        // The ash hoist's stair, up from the burner gallery to the yard.
+        (at: (-26.0, 24.0), rot: 270.0, y: 0.0),
+    ],
+)

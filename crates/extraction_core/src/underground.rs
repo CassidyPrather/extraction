@@ -155,6 +155,9 @@ pub struct Room {
     /// Its own floor, site y (a deeper level); the layout's otherwise.
     #[serde(default)]
     pub floor: Option<f32>,
+    /// A pit: its edges drop straight to its floor (no stepping in).
+    #[serde(default)]
+    pub pit: bool,
     /// The power stage its `Lamp::Powered` lamp is on.
     #[serde(default)]
     pub stage: usize,
@@ -271,6 +274,15 @@ pub struct Layout {
     /// Particular things left about (by catalog id), every cycle.
     #[serde(default)]
     pub items: Vec<ItemSpot>,
+    /// Hot rooms and corridors: `level` 1 burns like a Burner's heart.
+    #[serde(default)]
+    pub heat: Vec<HeatZone>,
+    /// Levers that open a vent and cool zones of `heat`.
+    #[serde(default)]
+    pub vents: Vec<Vent>,
+    /// A travelling crane: its hook runs from `from` to `to`.
+    #[serde(default)]
+    pub crane: Option<CraneDef>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -338,6 +350,43 @@ pub struct Pocket {
     pub room: Option<String>,
     #[serde(default)]
     pub link: Option<(String, String)>,
+}
+
+/// Heat over a room's or a corridor's floor.
+#[derive(Clone, Debug, Deserialize)]
+pub struct HeatZone {
+    #[serde(default)]
+    pub room: Option<String>,
+    #[serde(default)]
+    pub link: Option<(String, String)>,
+    /// 0 cool; 1 a Burner's heart: you don't cross it.
+    pub level: f32,
+}
+
+/// Heat at or over this, nothing crosses.
+pub const SCORCHING: f32 = 1.0;
+
+/// A vent lever on a room's wall (facing the turned -Z), cooling `zones`
+/// (indexes into `heat`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Vent {
+    pub room: String,
+    pub at: P2,
+    #[serde(default)]
+    pub rot: f32,
+    pub zones: Vec<usize>,
+}
+
+/// A crane: its carriage runs a straight line `from` -> `to` (site
+/// space) under the roof at `y`; its hook hangs `drop` below; its levers
+/// (on room walls, as vents are) send it the other way.
+#[derive(Clone, Debug, Deserialize)]
+pub struct CraneDef {
+    pub from: P2,
+    pub to: P2,
+    pub y: f32,
+    pub drop: f32,
+    pub levers: Vec<(String, P2, f32)>,
 }
 
 /// A catalog item lying in a room, `y` over its floor (on a bench, say).
@@ -531,7 +580,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 6] = [
+pub const SITES: [(&str, &str); 7] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -555,6 +604,10 @@ pub const SITES: [(&str, &str); 6] = [
     (
         "deep_kettle",
         include_str!("../../../assets/underground/deep_kettle.ron"),
+    ),
+    (
+        "cellars_cinder",
+        include_str!("../../../assets/underground/cellars_cinder.ron"),
     ),
 ];
 
@@ -745,6 +798,10 @@ pub struct Raster {
     pub basin: Vec<Option<u16>>,
     /// The gas pocket each cell's air belongs to, if it's bad.
     pub gas: Vec<Option<u16>>,
+    /// The heat zone each cell's in, if it's hot.
+    pub heat: Vec<Option<u16>>,
+    /// Whether each cell's in a pit (its edges drop, not step).
+    pub pit: Vec<bool>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -800,6 +857,8 @@ impl Raster {
             water: vec![0.0; nx * nz],
             basin: vec![None; nx * nz],
             gas: vec![None; nx * nz],
+            heat: vec![None; nx * nz],
+            pit: vec![false; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -1024,6 +1083,32 @@ impl Raster {
                 }
             }
         }
+        for (z, zone) in l.heat.iter().enumerate() {
+            let room = zone
+                .room
+                .as_ref()
+                .and_then(|id| l.rooms.iter().position(|r| &r.id == id));
+            let link = zone.link.as_ref().and_then(|(a, b)| {
+                l.links
+                    .iter()
+                    .position(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a))
+            });
+            for c in 0..r.cells.len() {
+                let mine = match r.cells[c] {
+                    Cell::Room(k) => room == Some(k as usize),
+                    Cell::Hall(k) => link == Some(k as usize),
+                    _ => false,
+                };
+                if mine {
+                    r.heat[c] = Some(z as u16);
+                }
+            }
+        }
+        for c in 0..r.cells.len() {
+            if let Cell::Room(k) = r.cells[c] {
+                r.pit[c] = l.rooms[k as usize].pit;
+            }
+        }
         for (g, pocket) in l.gas.iter().enumerate() {
             let room = pocket
                 .room
@@ -1170,6 +1255,11 @@ impl Raster {
 
     /// The floor under a site-space point, if it's an open cell.
     /// The basin a site point's water belongs to, if any.
+    pub fn heat_at(&self, p: P2) -> Option<u16> {
+        self.cell_of(p)
+            .and_then(|(i, j)| self.heat[j * self.nx + i])
+    }
+
     pub fn gas_at(&self, p: P2) -> Option<u16> {
         self.cell_of(p).and_then(|(i, j)| self.gas[j * self.nx + i])
     }
@@ -1472,6 +1562,43 @@ pub fn check(l: &Layout) -> Vec<String> {
             _ => {}
         }
     }
+    for (z, zone) in l.heat.iter().enumerate() {
+        if !r.heat.contains(&Some(z as u16)) {
+            bad.push(format!("heat zone {z} over no room or corridor: {zone:?}"));
+        }
+    }
+    let on_wall = |room: &str, at: P2, rot: f32, what: &str, bad: &mut Vec<String>| match l
+        .rooms
+        .iter()
+        .find(|r| r.id == room)
+    {
+        None => bad.push(format!("a {what} in no room `{room}`")),
+        Some(rm) => {
+            let p = add(rm.at, at);
+            if !r.at(p).open() || !r.at(add(p, turn([0.0, -0.9], rot))).flat() {
+                bad.push(format!(
+                    "{room}: its {what} is in the rock or faces the wall"
+                ));
+            }
+        }
+    };
+    for v in &l.vents {
+        on_wall(&v.room, v.at, v.rot, "vent", &mut bad);
+        if v.zones.iter().any(|z| *z >= l.heat.len()) {
+            bad.push(format!("{}: a vent for no heat zone", v.room));
+        }
+    }
+    if let Some(c) = &l.crane {
+        for (room, at, rot) in &c.levers {
+            on_wall(room, *at, *rot, "crane lever", &mut bad);
+        }
+        for p in [c.from, c.to] {
+            match (r.floor_at(p), r.roof_at(p)) {
+                (Some(f), Some(roof)) if c.y - c.drop > f && c.y < roof => {}
+                _ => bad.push(format!("the crane's hook can't hang at {p:?}")),
+            }
+        }
+    }
     for it in &l.items {
         match l.rooms.iter().find(|r| r.id == it.room) {
             Some(room) if r.at(add(room.at, it.at)).open() => {}
@@ -1552,7 +1679,7 @@ pub fn check(l: &Layout) -> Vec<String> {
                     continue;
                 }
                 let d = (r.floors[c] - r.floors[b * r.nx + a]).abs();
-                if d > STEP_RISE + 0.01 {
+                if d > STEP_RISE + 0.01 && !r.pit[c] && !r.pit[b * r.nx + a] {
                     bad.push(format!("a step of {d:.2} m at {:?}", r.centre(i, j)));
                     break 'steps;
                 }
@@ -1707,6 +1834,12 @@ pub fn plan_svg(id: &str) -> Option<String> {
                 _ if r.water[j * r.nx + i] >= DEEP => "#2e6f8e",
                 _ if r.water[j * r.nx + i] > 0.0 => "#6fa3b8",
                 _ if r.gas[j * r.nx + i].is_some() => "#a8b44c",
+                _ if r.heat[j * r.nx + i]
+                    .is_some_and(|z| l.heat[z as usize].level >= SCORCHING) =>
+                {
+                    "#b5402a"
+                }
+                _ if r.heat[j * r.nx + i].is_some() => "#d9875a",
                 Cell::Room(_) => "#b9b3a6",
                 Cell::Hall(_) => "#8f8a80",
                 Cell::Stair(_) => "#6f8fa6",
@@ -1790,6 +1923,34 @@ pub fn plan_svg(id: &str) -> Option<String> {
             );
         }
     }
+    // The crane's run (orange), its levers (L), vents (D: dampers).
+    if let Some(c) = &l.crane {
+        let ((x1, y1), (x2, y2)) = (px(c.from), px(c.to));
+        out += &format!(
+            "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#e67e22' stroke-width='5'/>\n\
+             <circle cx='{x1:.1}' cy='{y1:.1}' r='6' fill='#e67e22'/>\n"
+        );
+        for (room, at, _) in &c.levers {
+            if let Some(rm) = l.rooms.iter().find(|r| &r.id == room) {
+                let (x, y) = px(add(rm.at, *at));
+                out += &format!("<text x='{x:.1}' y='{y:.1}' fill='#e67e22'>L</text>\n");
+            }
+        }
+    }
+    for v in &l.vents {
+        if let Some(rm) = l.rooms.iter().find(|r| r.id == v.room) {
+            let (x, y) = px(add(rm.at, v.at));
+            out += &format!(
+                "<rect x='{:.1}' y='{:.1}' width='9' height='9' fill='#d9875a' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#d9875a'>D {:?}</text>\n",
+                x - 4.5,
+                y - 4.5,
+                x + 7.0,
+                y + 4.0,
+                v.zones
+            );
+        }
+    }
     // Rails (brown), carts on them (C), shoring (S).
     for rail in &l.rails {
         for w in rail.windows(2) {
@@ -1867,7 +2028,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp; lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,
