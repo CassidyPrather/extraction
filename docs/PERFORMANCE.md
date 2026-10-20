@@ -147,10 +147,15 @@ Shared tools for the next ones (in `render::budget`):
 
 ## Where it stands
 
-The gauges need the game's own textures (`scripts/fetch_assets.py`):
-without them the trees are an untextured fallback with no cards and no
-impostors, a different and heavier game (1.1M triangles at the Kettle
-Pass gate), and the gauges say so and skip rather than count it.
+Without the game's own textures (`scripts/fetch_assets.py` not run) the
+trees are an untextured fallback with no cards and no impostors. A
+playtest has run from a bare checkout, so it holds the budget too: it
+draws no near crowns (their material dissolves within 74 m, where cards
+would be, so they were over a million triangles unseen), switches to the
+far LOD at 75 m, and a pine's or birch's far crown is one coarse blob.
+Worst fallback view: 549k triangles. The gauges print which path they
+measured (`foliage fetched` / `FALLBACK`), and so does the session log
+(`forest: foliage ...`).
 
 The gauges at every lookbook view of the four valleys (GPU-less client,
 one eye), in clear weather (the furthest you see, so the most drawn;
