@@ -86,6 +86,9 @@
     anomalies: [
         (kind: "Snare", room: "generator", at: (-1.2, 1.5), radius: 0.9),
     ],
+    // Resident maintenance crawlers walk this round (robots::indoor).
+    patrol: ["hall", "command", "armoury", "command", "hall", "plant", "generator", "dorm", "mess"],
+    crawlers: 2,
     portals: [
         (),
         (at: (0.0, 60.0), rot: 180.0, y: 0.6),

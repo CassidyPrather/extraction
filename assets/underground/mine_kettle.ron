@@ -64,6 +64,9 @@
     anomalies: [
         (kind: "Lift", room: "stope", at: (0.0, 0.0), radius: 2.6),
     ],
+    // Resident maintenance crawlers walk this round (robots::indoor).
+    patrol: ["station", "main_drive", "east_crosscut", "sump", "main_drive", "west_crosscut", "stope", "refuge"],
+    crawlers: 1,
     portals: [
         (),
         (at: (0.0, 58.0), rot: 180.0, y: 0.4),

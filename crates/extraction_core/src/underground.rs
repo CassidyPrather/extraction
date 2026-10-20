@@ -205,6 +205,12 @@ pub struct Layout {
     /// Anomalies that live down here, every cycle.
     #[serde(default)]
     pub anomalies: Vec<Hazard>,
+    /// The resident crawlers' round: room ids in walking order (they
+    /// path between them), and how many walk it.
+    #[serde(default)]
+    pub patrol: Vec<String>,
+    #[serde(default)]
+    pub crawlers: u32,
 }
 
 /// An anomaly in a room: `kind` names an `anomaly::AnomalyKind` (Lift,
@@ -796,6 +802,14 @@ pub fn check(l: &Layout) -> Vec<String> {
                 }
             }
         }
+    }
+    for id in &l.patrol {
+        if !l.rooms.iter().any(|r| &r.id == id) {
+            bad.push(format!("a patrol through no room `{id}`"));
+        }
+    }
+    if l.crawlers > 0 && l.patrol.len() < 2 {
+        bad.push("crawlers with no round to walk".into());
     }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {

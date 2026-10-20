@@ -949,6 +949,89 @@ pub fn spawn_anomalies(world: &mut World) {
     }
 }
 
+/// Logic, once the sites are built: tells the robots where it's dark and
+/// where the lamps are (`senses::Lighting`), and registers each site's
+/// resident crawlers with their round (`robots::indoor::IndoorSites`).
+#[allow(clippy::type_complexity)]
+pub fn register_residents(
+    buildings: Query<(Entity, &super::buildings::Building, &Transform)>,
+    doors: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
+    lighting: Option<ResMut<crate::robots::senses::Lighting>>,
+    residents: Option<ResMut<crate::robots::indoor::IndoorSites>>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return;
+    }
+    *done = true;
+    let (Some(mut lighting), Some(mut residents)) = (lighting, residents) else {
+        return;
+    };
+    let plans = crate::sim::indoor::plan_buildings(&buildings, &doors);
+    for plan in plans.into_iter().filter(|p| ug::is_site(&p.name)) {
+        let (Some(l), Some(r)) = (ug::layout(&plan.name), ug::raster(&plan.name)) else {
+            continue;
+        };
+        let xf = plan.xf;
+        // Dark: the site's rooms and stairs, from under the floor to just
+        // under the ground (the kiosks are lit like any building).
+        let lo = Vec2::from(r.origin);
+        let hi = lo + Vec2::new(r.nx as f32, r.nz as f32) * ug::CELL;
+        let (y0, y1) = (r.floor - 0.5, -0.3);
+        let centre = Vec3::new((lo.x + hi.x) * 0.5, (y0 + y1) * 0.5, (lo.y + hi.y) * 0.5);
+        lighting.dark.push((
+            xf * Transform::from_translation(centre),
+            Vec3::new((hi.x - lo.x) * 0.5, (y1 - y0) * 0.5, (hi.y - lo.y) * 0.5),
+        ));
+        for room in l
+            .rooms
+            .iter()
+            .filter(|room| matches!(room.lamp, ug::Lamp::Steady | ug::Lamp::Flicker))
+            .take(LAMP_BUDGET)
+        {
+            let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+            lighting
+                .lamps
+                .push((xf.transform_point(at), room.size[0].max(room.size[1]) + 4.0));
+        }
+        if l.crawlers == 0 {
+            continue;
+        }
+        // Their grid is the site's, without the ground round the kiosks:
+        // residents stay below.
+        let mut grid = plan.grid.clone();
+        let mut floors = plan.levels.clone().unwrap_or_default();
+        for (k, out) in plan.outside.iter().enumerate() {
+            if *out {
+                grid.cost[k] = extraction_core::nav::BLOCKED;
+                if let Some(f) = floors.get_mut(k) {
+                    *f = f32::NAN;
+                }
+            }
+        }
+        let patrol: Vec<Vec3> = l
+            .patrol
+            .iter()
+            .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
+            .filter_map(|room| grid.nearest_walkable(room.at))
+            .map(|p| xf.transform_point(Vec3::new(p[0], r.floor, p[1])))
+            .collect();
+        let Some(&spawn) = patrol.first() else {
+            continue;
+        };
+        residents.sites.push(crate::robots::indoor::IndoorSite {
+            nav: crate::robots::indoor::LocalNav {
+                grid: std::sync::Arc::new(grid),
+                xf,
+                floors: Some(std::sync::Arc::new(floors)),
+            },
+            patrol,
+            spawn,
+            crawlers: l.crawlers,
+        });
+    }
+}
+
 /// Client: the sites' emergency lamps, and the daylight taken away below
 /// ground.
 pub struct UndergroundVisualsPlugin;
@@ -1418,6 +1501,182 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The robots know each site is dark and where its lamps are, and the
+    /// site's resident crawlers come out on their round, below ground, and
+    /// walk it.
+    #[test]
+    fn crawlers_walk_their_rounds_in_the_dark() {
+        use crate::robots::indoor::Crawler;
+        use crate::robots::senses::Lighting;
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let opts = LaunchOptions {
+                robots: true,
+                map: map.to_string(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            let zone = app.world().resource::<Zone>().clone();
+            let (site, xf) = sites_on(&app).remove(0);
+            let l = ug::layout(&site.id).unwrap();
+            let r = ug::raster(&site.id).unwrap();
+            {
+                let lighting = app.world().resource::<Lighting>();
+                for room in &l.rooms {
+                    let at = xf.transform_point(Vec3::new(room.at[0], r.floor + 1.5, room.at[1]));
+                    assert!(lighting.in_dark(at), "{map} {}: not dark", room.id);
+                    let lit = lighting.lamplight(at);
+                    match room.lamp {
+                        ug::Lamp::Steady | ug::Lamp::Flicker => {
+                            assert!(lit > 0.2, "{map} {}: its lamp lights it {lit}", room.id)
+                        }
+                        _ => {}
+                    }
+                }
+                let ground = xf.transform_point(Vec3::new(0.0, 1.5, -6.0));
+                assert!(!lighting.in_dark(ground), "{map}: dark out on the surface");
+            }
+            let where_ = |app: &mut App| -> Vec<Vec3> {
+                app.world_mut()
+                    .query_filtered::<&Transform, With<Crawler>>()
+                    .iter(app.world())
+                    .map(|t| t.translation)
+                    .collect()
+            };
+            let start = where_(&mut app);
+            assert_eq!(start.len(), l.crawlers as usize, "{map}: crawlers out");
+            for _ in 0..90 * 40 {
+                app.update();
+            }
+            let end = where_(&mut app);
+            assert_eq!(end.len(), start.len(), "{map}: a crawler went missing");
+            let moved = start
+                .iter()
+                .zip(&end)
+                .map(|(a, b)| a.xz().distance(b.xz()))
+                .fold(0.0, f32::max);
+            assert!(
+                moved > 3.0,
+                "{map}: no crawler walked its round ({moved:.1} m)"
+            );
+            for p in &end {
+                assert!(
+                    floor_under(&zone, *p + Vec3::Y * 0.3).is_some()
+                        && p.y < zone.ground(p.x, p.z) - 2.0,
+                    "{map}: a crawler out of the site at {p:?}"
+                );
+            }
+        }
+    }
+
+    /// In the mine's unlit main drive, 10 m in front of a crawler, you're
+    /// nothing; a torch on you, and it has you. (The site's own dark and
+    /// grid, as registered at build.)
+    #[test]
+    fn underground_a_crawler_sees_you_by_your_torch() {
+        use crate::robots::Awareness;
+        use bevy::ecs::world::CommandQueue;
+        let mut app = app("kettle_pass");
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let site = app
+            .world()
+            .resource::<crate::robots::indoor::IndoorSites>()
+            .sites
+            .first()
+            .expect("the mine registered")
+            .clone();
+        let (placed, xf) = sites_on(&app).remove(0);
+        let r = ug::raster(&placed.id).unwrap();
+        let at = |x: f32, z: f32| xf.transform_point(Vec3::new(x, r.floor, z));
+        let (them, me) = (at(-0.4, 25.5), at(-0.4, 15.0));
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = me + Vec3::Y * 0.05;
+        let mut queue = CommandQueue::default();
+        let crawler = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::robots::indoor::spawn_crawler(&mut c, &zone, &site, them, vec![])
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..90 * 6 {
+            app.update();
+            let aware = app.world().get::<Awareness>(crawler).unwrap();
+            // (It may hear you land on the concrete; it can't see you.)
+            assert!(!aware.can_see_target, "in the dark: {aware:?}");
+        }
+        // A lit torch at the head, pointed at the crawler.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let mut queue = CommandQueue::default();
+        let (torch, cell) = {
+            let mut c = Commands::new(&mut queue, app.world());
+            let mut spawn = |id: &str| {
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind(id).unwrap(),
+                        transform: Transform::from_translation(me + Vec3::Y * 1.5),
+                        condition: 1.0,
+                    },
+                )
+            };
+            (spawn("flashlight"), spawn("power_cell"))
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        let socket = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::SocketOwner)>()
+            .iter(app.world())
+            .find(|(_, o)| o.0 == torch)
+            .map(|(e, _)| e)
+            .expect("the torch's cell socket");
+        {
+            let mut q = bevy::ecs::system::SystemState::<(
+                Commands,
+                Query<&mut crate::interact::Socket>,
+            )>::new(app.world_mut());
+            let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
+            let mut s = sockets.get_mut(socket).unwrap();
+            crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+            q.apply(app.world_mut());
+        }
+        app.world_mut()
+            .entity_mut(torch)
+            .insert(RigidBody::Kinematic);
+        app.world_mut().write_message(crate::items::usage::UseItem {
+            player: Entity::PLACEHOLDER,
+            item: torch,
+        });
+        let aim =
+            Transform::from_translation(me + Vec3::Y * 1.5).looking_at(them + Vec3::Y, Vec3::Y);
+        let mut seen = false;
+        for _ in 0..90 * 5 {
+            *app.world_mut().get_mut::<Transform>(torch).unwrap() = aim;
+            app.update();
+            seen |= app
+                .world()
+                .get::<Awareness>(crawler)
+                .unwrap()
+                .can_see_target;
+        }
+        assert!(seen, "the torch gave you away");
     }
 
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
