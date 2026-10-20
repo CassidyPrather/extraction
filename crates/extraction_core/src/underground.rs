@@ -1055,11 +1055,21 @@ mod tests {
     }
 
     /// Every layout parses and is fit to build: rooms reached from the
-    /// entrance, stairs that land somewhere, nothing in the rock.
+    /// entrance, stairs that land somewhere, nothing in the rock, every
+    /// loot table one that exists.
     #[test]
     fn every_layout_is_sound() {
+        let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
+        let tables = crate::loot::LootTables::from_ron(crate::loot::BUILTIN_LOOT, &cat).unwrap();
         for (id, _) in SITES {
             let l = layout(id).unwrap();
+            for room in &l.rooms {
+                for p in &room.props {
+                    if let Some(t) = &p.loot {
+                        assert!(tables.has(t), "{id} {}: no loot table `{t}`", room.id);
+                    }
+                }
+            }
             let bad = check(l);
             assert!(bad.is_empty(), "{id}:\n{}", bad.join("\n"));
             let r = raster(id).unwrap();

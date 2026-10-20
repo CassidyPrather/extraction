@@ -157,5 +157,13 @@
         "starter_cache": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 1.0, condition: (0.7, 0.8)),
         ]),
+        // The Marrow shelter's armoury, near the gate: mostly ammunition,
+        // now and then a worn pistol (assets/underground/bunker_marrow.ron).
+        "shelter_armoury": (rolls: (1, 2), entries: [
+            Table(name: "ammo_common", weight: 6.0),
+            Item(id: "pm_mag", weight: 1.0, condition: (0.3, 0.9)),
+            Item(id: "pm_pistol", weight: 0.5, condition: (0.3, 0.7)),
+            Nothing(weight: 2.0),
+        ]),
     },
 )

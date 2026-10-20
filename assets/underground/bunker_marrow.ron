@@ -54,9 +54,10 @@
             (kind: Cabinet, at: (2.65, 1.5), rot: 90.0),
             (kind: Shelf, at: (2.6, -1.4), rot: 90.0, loot: Some("ammo_common")),
         ]),
-        // The armoury, past the command post: the best of it.
+        // The armoury, past the command post: near the gate, so modest
+        // (the rare guns are deeper in the other valleys' sites).
         (id: "armoury", at: (12.0, 33.0), size: (5.0, 5.0), lamp: Dead, props: [
-            (kind: Shelf, at: (2.1, 0.0), rot: 90.0, loot: Some("weapons_rare")),
+            (kind: Shelf, at: (2.1, 0.0), rot: 90.0, loot: Some("shelter_armoury")),
             (kind: Crate, at: (-1.4, 1.4), loot: Some("ammo_common")),
             (kind: SmallCrate, at: (-1.6, -1.6), loot: Some("medical")),
             (kind: Locker, at: (0.4, 2.2), rot: 180.0),
