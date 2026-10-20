@@ -668,10 +668,11 @@ fn spend_attention(
         let dist = director.rng.range(18.0, 35.0);
         let side = Vec3::new(-dir.z, 0.0, dir.x) * director.rng.range(-6.0, 6.0);
         let p = here + dir * dist + side;
-        if extraction_core::anomaly::placeable(&zone.map, &zone.hm, [p.x, p.z]) {
-            let kind = AnomalyKind::ALL[director.rng.below(AnomalyKind::ALL.len())];
-            let (lo, hi) = kind.radius_range();
-            let radius = director.rng.range(lo, hi);
+        let kind = AnomalyKind::ALL[director.rng.below(AnomalyKind::ALL.len())];
+        let (lo, hi) = kind.radius_range();
+        let radius = director.rng.range(lo, hi);
+        // The same ground as the Surge's own: never by a building or a road.
+        if extraction_core::anomaly::bloom_ok(&zone.map, &zone.hm, [p.x, p.z], kind, radius) {
             let at = zone.on_ground(p.x, p.z);
             world_cmds.queue(move |world: &mut World| {
                 let e = spawn_anomaly(world, kind, at, radius, Some(BLOOM_LIFE));
