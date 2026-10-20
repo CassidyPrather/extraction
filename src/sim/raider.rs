@@ -76,6 +76,12 @@ pub struct Traits {
     /// How likely it is to get out of sight when a drone chirps its
     /// lock-on (`robots::drone::DroneLock`).
     pub duck: f32,
+    /// Crouches (and so creeps) within this of a robot it can see that
+    /// isn't fighting it (0: never). See [`sneak`].
+    pub sneak_range: f32,
+    /// Throws junk past a walker at its post to send it looking the other
+    /// way.
+    pub distract: bool,
 }
 
 impl Traits {
@@ -98,6 +104,8 @@ impl Traits {
             max_kg: 26.0,
             heat: 1.6,
             duck: 0.75,
+            sneak_range: 35.0,
+            distract: false,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -126,6 +134,8 @@ impl Traits {
                 max_kg: 18.0,
                 heat: 1.0,
                 duck: 0.9,
+                sneak_range: 45.0,
+                distract: true,
                 ..base
             },
             "reckless" => Traits {
@@ -142,6 +152,7 @@ impl Traits {
                 max_kg: 34.0,
                 heat: f32::INFINITY,
                 duck: 0.3,
+                sneak_range: 0.0,
                 ..base
             },
             _ => base,
@@ -283,6 +294,11 @@ pub struct Raider {
     kg: f32,
     /// Attention from the artifacts it carries.
     heat: f32,
+    /// Crouched since (raid seconds), when it is.
+    crouched_since: Option<f32>,
+    /// When it last froze for a searching robot, or threw a distraction.
+    froze_at: f32,
+    distracted_at: f32,
 }
 
 impl Raider {
@@ -440,6 +456,9 @@ pub fn attach_raider(
                 hp: 100.0,
                 kg: 0.0,
                 heat: 0.0,
+                crouched_since: None,
+                froze_at: -99.0,
+                distracted_at: -99.0,
             },
         ));
     }
@@ -667,6 +686,7 @@ pub fn think(
             &Health,
             &crate::player::Body,
             &Children,
+            &mut crate::rig::RigInput,
         ),
         With<LocalPlayer>,
     >,
@@ -676,7 +696,7 @@ pub fn think(
 ) {
     let dt = scene.time.delta_secs();
     let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
-    for (me, mut bot, mut r, tf, health, body, children) in &mut bots {
+    for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
         if r.stage == Stage::Done || health.down {
             continue;
@@ -730,6 +750,7 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
+            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1074,6 +1095,116 @@ fn react_to_robots(
     }
     tasks.extend([Task::Support, Task::Shoot { target, shots: 4 }]);
     bot.replace(tasks);
+}
+
+/// Moving like a careful player near robots (`robots::senses`: crouched
+/// is harder to see, crouched footsteps carry a third as far, and crouching
+/// slows the body to a creep):
+/// - **crouch** within `sneak_range` of a robot it can see that isn't
+///   fighting it, or near where a robot is looking for someone;
+/// - **freeze** a few seconds, crouched and still, when a robot that's
+///   onto something is investigating or searching close by;
+/// - **distract** (the cautious): throw junk well past a walker at its post
+///   that hasn't noticed it, so it walks off to look the other way.
+///
+/// Never in a fight, never with the truck waiting, never hurrying home hurt.
+fn sneak(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+    input: &mut crate::rig::RigInput,
+) {
+    let hurrying = bot.sprint
+        || r.combat.is_some()
+        || r.act == Act::Board
+        || matches!(scene.raid.phase, Phase::TruckWaiting { .. })
+        || (r.stage == Stage::Extract && r.hp < 50.0);
+    let mut wary = false;
+    let mut freeze = false;
+    let mut calm_walker: Option<Vec3> = None;
+    if r.traits.sneak_range > 0.0 && !hurrying {
+        for (_, robot, gt, aware, brain, job) in &scene.robots {
+            if robot.wrecked || job.kind == JobKind::Collect {
+                continue;
+            }
+            let at = gt.translation();
+            let d = at.distance(eye);
+            let hunting = match brain {
+                Brain::Investigate { at: look, .. } | Brain::Search { at: look, .. } => Some(*look),
+                _ => None,
+            };
+            let near_look = hunting.is_some_and(|l| l.xz().distance(eye.xz()) < 25.0);
+            if matches!(brain, Brain::Engage) && aware.target == Some(me) {
+                continue;
+            }
+            if d > r.traits.sneak_range && !near_look {
+                continue;
+            }
+            let seen = scene.visible(eye, at);
+            wary |= seen || near_look;
+            if seen && d < 30.0 && hunting.is_some() && aware.suspicion < 0.55 {
+                freeze = true;
+            }
+            // (A thrown bolt carries 18 m or so: past a walker 11 m off.)
+            if seen
+                && d < 11.0
+                && robot.kind == crate::robots::RobotKind::Walker
+                && matches!(brain, Brain::Working { .. })
+                && aware.suspicion < 0.2
+            {
+                calm_walker = Some(at);
+            }
+        }
+    }
+    if wary != input.crouch {
+        input.crouch = wary;
+        if wary {
+            r.crouched_since = Some(r.clock);
+        } else if let Some(t) = r.crouched_since.take() {
+            log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
+        }
+    }
+    if freeze && r.clock - r.froze_at > 10.0 {
+        r.froze_at = r.clock;
+        let secs = r.rng.range(2.0, 4.0);
+        log.event(
+            "freeze",
+            json!({"secs": round(secs, 1), "x": round(eye.x, 1), "z": round(eye.z, 1)}),
+        );
+        r.interrupted = true;
+        bot.replace([Task::Wait(secs)]);
+        return;
+    }
+    if let Some(w) = calm_walker.filter(|_| r.traits.distract && r.clock - r.distracted_at > 60.0) {
+        let Some(item) = junk(r, scene) else {
+            return;
+        };
+        let away = (w.xz() - eye.xz()).normalize_or(Vec2::X);
+        let to = w.xz() + away * 7.0;
+        if !r.grid.walkable([to.x, to.y]) {
+            return;
+        }
+        r.distracted_at = r.clock;
+        log.event(
+            "distract",
+            json!({"x": round(to.x, 1), "z": round(to.y, 1), "walker_dist": round(w.distance(eye), 0)}),
+        );
+        r.interrupted = true;
+        bot.replace([
+            Task::Grab {
+                item,
+                side: Side::Left,
+            },
+            Task::Throw {
+                side: Side::Left,
+                at: scene.zone.on_ground(to.x, to.y),
+            },
+            Task::Wait(2.0),
+        ]);
+    }
 }
 
 /// A drone chirped its lock on this bot: get somewhere it can't see, if

@@ -83,6 +83,8 @@ pub struct CalledOut {
     pub at: Vec3,
     /// How many heard it.
     pub heard: usize,
+    /// Who it noticed, if it was a player.
+    pub about: Option<Entity>,
 }
 
 pub struct SearchPlugin;
@@ -94,7 +96,8 @@ impl Plugin for SearchPlugin {
             .add_message::<LostYou>()
             .add_message::<CalledOut>()
             .add_systems(FixedUpdate, call_out.after(super::perceive))
-            .add_systems(FixedPostUpdate, announce);
+            .add_systems(FixedPostUpdate, announce)
+            .add_systems(Update, wrist_lines);
     }
 }
 
@@ -336,6 +339,7 @@ fn call_out(
             robot: n.robot,
             at: me,
             heard,
+            about: target,
         });
         // The chatter carries to a radio you have on you.
         if heard > 0 && (*radio_at == 0.0 || now - *radio_at > RADIO_COOLDOWN) {
@@ -344,6 +348,73 @@ fn call_out(
                 *radio_at = now;
             }
         }
+    }
+}
+
+/// A line on the wrist only within this of you (m)...
+pub const LINE_NEAR: f32 = 30.0;
+/// ...at most once a minute per robot (s)...
+pub const LINE_PER_ROBOT: f32 = 60.0;
+/// ...and once in this long, all told (s).
+pub const LINE_ANY: f32 = 20.0;
+
+/// What the wrist says when a robot close by gives up on you, or calls
+/// the others about you. The words are Story's (`raid::lines`); the `n`th
+/// line of each pool, in turn.
+fn line(lost: bool, n: u32) -> &'static str {
+    // At merge: `crate::raid::lines::pick(LOST_YOU | CALLED_OUT, n)`.
+    const LOST_YOU: [&str; 1] = ["The whirr fades. It's stopped looking."];
+    const CALLED_OUT: [&str; 1] = ["Chirps answer each other close by."];
+    let pool: &[&str] = if lost { &LOST_YOU } else { &CALLED_OUT };
+    pool[n as usize % pool.len()]
+}
+
+/// Says, rarely, when a robot close by that was after you gives up, or
+/// calls the others about you.
+#[allow(clippy::too_many_arguments)]
+fn wrist_lines(
+    mut lost: MessageReader<LostYou>,
+    mut called: MessageReader<CalledOut>,
+    players: Query<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>,
+    aware: Query<&Awareness>,
+    raid: Option<ResMut<crate::raid::Raid>>,
+    time: Res<Time>,
+    mut said: Local<(std::collections::HashMap<Entity, f32>, f32, u32)>,
+) {
+    let events: Vec<(bool, Entity, Vec3, Option<Entity>)> = lost
+        .read()
+        .map(|l| {
+            (
+                true,
+                l.robot,
+                l.at,
+                aware.get(l.robot).ok().and_then(|a| a.target),
+            )
+        })
+        .chain(called.read().map(|c| (false, c.robot, c.at, c.about)))
+        .collect();
+    let (Some(mut raid), Ok((me, gt))) = (raid, players.single()) else {
+        return;
+    };
+    if raid.phase == crate::raid::Phase::AtBase {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let (per_robot, last, n) = &mut *said;
+    for (is_lost, robot, at, about) in events {
+        if about != Some(me)
+            || at.distance(gt.translation()) > LINE_NEAR
+            || (*last > 0.0 && now - *last < LINE_ANY)
+            || per_robot
+                .get(&robot)
+                .is_some_and(|t| now - t < LINE_PER_ROBOT)
+        {
+            continue;
+        }
+        raid.say(line(is_lost, *n));
+        *n += 1;
+        *last = now;
+        per_robot.insert(robot, now);
     }
 }
 
