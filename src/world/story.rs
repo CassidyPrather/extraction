@@ -24,6 +24,9 @@ pub struct Lead {
 const M: &str = "marrow_creek";
 const K: &str = "kettle_pass";
 const C: &str = "cinder_works";
+/// The fourth valley (`claude/polish-fourth-valley`): its notes are
+/// written; the tests read them once its map is in.
+const S: &str = "sallow_reservoir";
 
 pub const THREAD: &[Lead] = &[
     // Marrow Creek: where it started.
@@ -46,6 +49,21 @@ pub const THREAD: &[Lead] = &[
         map: M,
         note: "Credit book",
         mentions: &[(M, "Village"), (M, "Village note"), (M, "Survey log")],
+    },
+    Lead {
+        map: M,
+        note: "Cabin tally",
+        mentions: &[(M, "Logging camp"), (M, "Foreman's note")],
+    },
+    Lead {
+        map: K,
+        note: "Burner's note",
+        mentions: &[(K, "Charcoal hut")],
+    },
+    Lead {
+        map: C,
+        note: "Woodward's book",
+        mentions: &[(C, "Woodward's cabin")],
     },
     Lead {
         map: M,
@@ -443,6 +461,77 @@ pub const THREAD: &[Lead] = &[
         note: "Mast terminal",
         mentions: &[(K, "Mast terminal")],
     },
+    // The signature sites below (Underground's).
+    Lead {
+        map: M,
+        note: "Pump log, below",
+        mentions: &[(M, "Pumping station"), (M, "Pump station note")],
+    },
+    Lead {
+        map: K,
+        note: "Novakova's note",
+        mentions: &[(K, "The pass"), (K, "Mine yard")],
+    },
+    Lead {
+        map: C,
+        note: "Sorter's chit",
+        mentions: &[(C, "The works")],
+    },
+    // Sallow Reservoir: the water works, and the village it drowned.
+    Lead {
+        map: S,
+        note: "Sallow gate log",
+        mentions: &[(S, "New Sallow"), (S, "Keeper's cottages")],
+    },
+    Lead {
+        map: S,
+        note: "Keeper's note",
+        mentions: &[(S, "Old Sallow"), (S, "The churchyard")],
+    },
+    Lead {
+        map: S,
+        note: "Valve log",
+        mentions: &[
+            (S, "Draw-off tower"),
+            (S, "The causeway"),
+            (S, "The upper arm"),
+        ],
+    },
+    Lead {
+        map: S,
+        note: "Supply terminal",
+        mentions: &[(M, "Village"), (C, "The works")],
+    },
+    Lead {
+        map: S,
+        note: "Gauge book",
+        mentions: &[(S, "The catchwater"), (S, "Keeper's note")],
+    },
+    Lead {
+        map: S,
+        note: "Club notice",
+        mentions: &[(S, "The upper arm")],
+    },
+    Lead {
+        map: S,
+        note: "Toll board",
+        mentions: &[(S, "The causeway"), (S, "New Sallow")],
+    },
+    Lead {
+        map: S,
+        note: "Stock terminal",
+        mentions: &[(M, "Bus depot"), (S, "The sorting ground")],
+    },
+    Lead {
+        map: S,
+        note: "Tower book",
+        mentions: &[(S, "Valve house"), (S, "Keeper's note")],
+    },
+    Lead {
+        map: S,
+        note: "Shop note",
+        mentions: &[(S, "New Sallow"), (S, "Keeper's note")],
+    },
 ];
 
 /// One beat of the thread across the career (`docs/LORE.md`, "The arc"):
@@ -645,6 +734,20 @@ mod tests {
     use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
     use extraction_core::map::{MapDef, MarkerKind};
 
+    /// The valleys whose maps are in: the three, and the fourth once it's
+    /// merged.
+    fn valleys() -> Vec<&'static str> {
+        VALLEYS
+            .into_iter()
+            .chain([S].into_iter().filter(|n| {
+                crate::asset_root_path()
+                    .join("maps")
+                    .join(format!("{n}.ron"))
+                    .exists()
+            }))
+            .collect()
+    }
+
     fn map(name: &str) -> MapDef {
         let text = std::fs::read_to_string(
             crate::asset_root_path()
@@ -692,7 +795,7 @@ mod tests {
     #[test]
     fn every_note_fits_its_paper() {
         let mut small = Vec::new();
-        for name in VALLEYS.iter().chain(&["training_yard"]) {
+        for name in valleys().into_iter().chain(["training_yard"]) {
             let mut panels = crate::world::notes::marker_panels(&map(name));
             for n in scene_notes(name) {
                 panels.push((n.name.clone(), crate::world::notes::note_panel(&n.text)));
@@ -726,7 +829,7 @@ mod tests {
                 );
             }
         }
-        for name in VALLEYS {
+        for name in valleys() {
             for m in &map(name).markers {
                 let MarkerKind::Terminal { pages } = &m.kind else {
                     continue;
@@ -749,7 +852,7 @@ mod tests {
     /// its map, and every place it names is there to be found.
     #[test]
     fn the_thread_points_at_real_places() {
-        let maps: Vec<(&str, MapDef)> = VALLEYS.iter().map(|n| (*n, map(n))).collect();
+        let maps: Vec<(&str, MapDef)> = valleys().into_iter().map(|n| (n, map(n))).collect();
         let get = |n: &str| &maps.iter().find(|(m, _)| *m == n).expect(n).1;
         let mut problems = Vec::new();
         for (name, m) in &maps {
@@ -760,7 +863,11 @@ mod tests {
                 }
             }
         }
-        for lead in THREAD {
+        let loaded = |n: &str| maps.iter().any(|(m, _)| *m == n);
+        for lead in THREAD
+            .iter()
+            .filter(|l| loaded(l.map) && l.mentions.iter().all(|(m, _)| loaded(m)))
+        {
             if !worded(lead.map, get(lead.map)).contains(&lead.note) {
                 problems.push(format!("{}: no note \"{}\"", lead.map, lead.note));
             }
@@ -783,7 +890,7 @@ mod tests {
     /// in another valley: finding the words is how you find the keys.
     #[test]
     fn every_key_is_written_down_twice() {
-        for name in VALLEYS {
+        for name in valleys() {
             for m in &map(name).markers {
                 if !matches!(m.kind, MarkerKind::ValleyKey { .. }) {
                     continue;
@@ -807,7 +914,7 @@ mod tests {
     #[test]
     fn no_game_words_in_the_zone() {
         const BANNED: [&str; 6] = ["loot", "quest", "spawn", "respawn", "hp", "xp"];
-        for name in VALLEYS {
+        for name in valleys() {
             let texts = map(name)
                 .markers
                 .iter()

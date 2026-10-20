@@ -163,7 +163,8 @@ fn break_up(
             Option<&super::anim::Gait>,
             Has<super::collector::Collector>,
         ),
-        Without<Broken>,
+        // (The heavy falls in its own way and stays: `heavy`.)
+        (Without<Broken>, Without<super::heavy::Heavy>),
     >,
     parts: Query<(
         &RobotPart,

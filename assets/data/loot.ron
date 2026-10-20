@@ -53,6 +53,8 @@
             Item(id: "ammo_762x39_tracer", weight: 0.3),
             Item(id: "ammo_762r_tracer", weight: 0.2),
             Item(id: "ammo_12ga_slug", weight: 0.4),
+            // Spent cases, kept for re-packing.
+            Item(id: "brass", weight: 1.5),
         ]),
         "weapons_rare": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 3.0, condition: (0.3, 0.9)),
@@ -69,16 +71,16 @@
             Item(id: "ammo_762r_ap", weight: 0.15),
         ]),
         "tools": (rolls: (1, 2), entries: [
-            Item(id: "multitool", weight: 1.0),
+            Item(id: "multitool", weight: 0.6),
             Item(id: "cleaning_kit", weight: 1.0),
             Item(id: "gun_oil", weight: 1.5),
             Item(id: "spare_parts", weight: 0.8),
             Item(id: "power_cell", weight: 2.0),
-            Item(id: "flashlight", weight: 1.0),
+            Item(id: "flashlight", weight: 0.6),
             Item(id: "matches", weight: 1.0),
-            Item(id: "door_wedge", weight: 0.8),
+            Item(id: "door_wedge", weight: 0.6),
             Item(id: "bolt", weight: 2.0),
-            Item(id: "knife", weight: 0.5),
+            Item(id: "knife", weight: 0.3),
             Nothing(weight: 2.0),
         ]),
         "workshop": (rolls: (2, 4), entries: [
@@ -88,6 +90,10 @@
             Item(id: "polymer", weight: 1.0),
             Item(id: "fuel_can", weight: 0.4),
             Item(id: "bolt", weight: 2.0),
+            Item(id: "powder", weight: 0.8),
+            Item(id: "brass", weight: 0.6),
+            // A servo off something someone took apart.
+            Item(id: "servo", weight: 0.3, condition: (0.3, 0.9)),
             Nothing(weight: 2.0),
         ]),
         "medical": (rolls: (1, 2), entries: [
@@ -96,7 +102,7 @@
             Nothing(weight: 2.0),
         ]),
         "gadgets": (rolls: (1, 1), entries: [
-            Item(id: "compass", weight: 2.0),
+            Item(id: "compass", weight: 1.0),
             Item(id: "radio", weight: 1.0),
             Item(id: "binoculars", weight: 1.0),
             Item(id: "emp_grenade", weight: 1.0),
@@ -113,6 +119,8 @@
             Item(id: "artifact_adapter", weight: 0.15),
             Item(id: "lead_case", weight: 0.3),
             Item(id: "detector", weight: 0.8),
+            Item(id: "detector_sweep", weight: 0.35),
+            Item(id: "detector_bear", weight: 0.12),
         ]),
         "house": (rolls: (1, 3), entries: [
             Table(name: "kitchen", weight: 4.0),
@@ -143,7 +151,7 @@
             Item(id: "sensor_eye", weight: 1.0, condition: (0.2, 0.9)),
             Item(id: "robot_cell", weight: 1.2, condition: (0.1, 0.8)),
             Item(id: "scrap_metal", weight: 2.0),
-            Item(id: "robot_gunpod", weight: 0.3, condition: (0.2, 0.7)),
+            Item(id: "robot_gunpod", weight: 0.5, condition: (0.2, 0.7)),
             Item(id: "robot_ammo_belt", weight: 1.0),
         ]),
         "dirigible_wreck": (rolls: (5, 8), entries: [

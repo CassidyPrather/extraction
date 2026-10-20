@@ -63,6 +63,7 @@ fn jobs_persist_across_save_and_load() {
             region: "The quarry".into(),
             at: None,
             place: None,
+            overnight: false,
         });
     }
     save_now(&mut a);
@@ -185,6 +186,7 @@ fn a_recover_job_puts_a_recorder_out_and_takes_it_home() {
         region: region.into(),
         at: None,
         place: None,
+        overnight: false,
     });
     for _ in 0..3 {
         app.update();
@@ -363,6 +365,7 @@ fn the_longest_job_and_career_page_still_read() {
             region: "The slag heaps".into(),
             at: None,
             place: Some(long.into()),
+            overnight: false,
         });
     }
     {
@@ -543,6 +546,7 @@ fn a_recover_job_can_send_you_underground() {
         region: name.clone(),
         at: None,
         place: None,
+        overnight: false,
     });
     for _ in 0..40 {
         app.update();
