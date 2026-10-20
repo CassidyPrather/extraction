@@ -101,6 +101,7 @@ pub fn wells(
                         shooter: None,
                         mass_g: 0.0,
                         load: Default::default(),
+                        blow: None,
                     });
                 }
                 continue;

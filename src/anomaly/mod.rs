@@ -432,6 +432,7 @@ fn burners(
                     shooter: None,
                     mass_g: 0.0,
                     load: Default::default(),
+                    blow: None,
                 });
             }
         }
@@ -538,6 +539,7 @@ fn snares(
                     shooter: None,
                     mass_g: 0.0,
                     load: Default::default(),
+                    blow: None,
                 });
             } else if let Ok((rb, mut f)) = bodies.get_mut(t) {
                 if *rb == RigidBody::Dynamic {

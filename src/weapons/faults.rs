@@ -88,6 +88,7 @@ fn fault_feel(
                     shooter: None,
                     mass_g: 0.0,
                     load: Default::default(),
+                    blow: None,
                 });
             }
         }
