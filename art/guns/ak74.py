@@ -266,5 +266,8 @@ empty("pt_muzzle", (0.0, BORE, -0.69))
 empty("pt_sight", (0.0, 0.104, 0.0))
 empty("magwell", (0.0, 0.031, -0.139))
 
+# Where a sling attaches: the front swivel on the gas block's left, the loop on the stock's left.
+empty("pt_sling_front", (-0.0145, 0.039, -0.461))
+empty("pt_sling_rear", (-0.022, -0.06, 0.269))
 report()
 export("assets/models/guns/ak74.glb")
