@@ -201,6 +201,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Ticking",
     "Zinc",
     "Straw",
+    "Brick",
+    "Corrugated",
+    "Shingles",
     // The gloves (art/hands).
     "Glove",
     "Leather",
@@ -277,6 +280,9 @@ impl ModelMaterials {
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
+            "Brick" => lib.get(Mat::Brick, server, materials),
+            "Corrugated" => lib.get(Mat::Corrugated, server, materials),
+            "Shingles" => lib.get(Mat::Shingles, server, materials),
             // Cast iron: the gun-metal scan's relief, dull and dark.
             "Cast" => derive(Mat::GunMetal, &|m| {
                 m.base_color = Color::srgb(0.32, 0.31, 0.3);

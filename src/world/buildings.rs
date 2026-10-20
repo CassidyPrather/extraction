@@ -136,6 +136,9 @@ pub struct Builder {
     pub geo: Geo,
     /// Set while `shell` builds outside walls: their local -Z faces out.
     exterior: bool,
+    /// How far above the ground in front of a door the floor can stand
+    /// (the building is lifted that much on a slope: `map::prefab_lift`).
+    pub drop: f32,
 }
 
 /// One of `n` variants for a prop at `at`, so a room's two crates differ
@@ -368,6 +371,14 @@ impl Builder {
         seg(self, cursor, len, 0.0, height);
         if self.exterior {
             self.exterior_trim(a, dir, rot, len, y0, height, thick, mat, &ops);
+            let steps = if mat == Mat::LogWall {
+                Mat::Timber
+            } else {
+                Mat::Concrete
+            };
+            for o in ops.iter().filter(|o| o.kind != OpeningKind::Window) {
+                self.door_steps(a, dir, rot, o.centre, o.width, y0, steps);
+            }
         }
         self
     }
@@ -547,22 +558,43 @@ impl Builder {
     }
 
     /// Steps up to a door on the front (-Z) at x.
-    pub fn front_steps(&mut self, x: f32, front_z: f32, floor_y: f32, mat: Mat) -> &mut Self {
-        let n = (floor_y / 0.18).ceil().max(1.0) as usize;
-        let rise = floor_y / n as f32;
-        // Each step runs a metre into the ground: a building lifted on a
-        // slope (`map::prefab_lift`) mustn't leave its steps hanging.
-        let sunk = 1.0;
+    /// Steps up to an outside doorway, `width` wide, centred `s` along the
+    /// wall from `a` (direction `dir`, turned `rot`, outside its local -Z),
+    /// to a floor `y0` above the footing. The flight carries on down past
+    /// the footing as far as the building can stand above the ground
+    /// (`drop`), the steps below the ground buried where it's level, so
+    /// the first riser is never more than one step. Each step is wider
+    /// than the one above by a tread either side: it's climbed one riser
+    /// at a time from in front or from either side (from beside a flight
+    /// of equal steps, the ground is a whole flight lower).
+    #[allow(clippy::too_many_arguments)]
+    fn door_steps(&mut self, a: Vec2, dir: Vec2, rot: Quat, s: f32, width: f32, y0: f32, mat: Mat) {
+        // Not up a tower (a cabin's door opens onto its own landing), nor
+        // where the floor is as good as the ground.
+        let low = y0 + self.drop;
+        if y0 > 1.0 || low < 0.12 {
+            return;
+        }
+        // Risers of 0.17 down from the floor, until one is at or below
+        // the lowest the ground can be.
+        let (rise, tread) = (0.17, 0.3);
+        let n = (low / rise - 1e-3).ceil().max(1.0) as usize;
+        let sunk = 1.0 + self.drop;
+        let base = a + dir * s;
+        let out = rot * Vec3::NEG_Z;
         for k in 0..n {
-            let top = rise * (k + 1) as f32;
-            let out = (n - k) as f32 * 0.3;
-            self.bx(
-                Vec3::new(1.4, top + sunk, 0.3),
-                Vec3::new(x, (top - sunk) * 0.5, front_z - out + 0.15),
+            // k = 0 is the top step.
+            let top = -rise * k as f32;
+            let reach = (k + 1) as f32 * tread;
+            let w = width + 0.4 + 2.0 * tread * k as f32;
+            let c = Vec3::new(base.x, y0 + (top - sunk) * 0.5, base.y) + out * (reach * 0.5);
+            self.piece(
+                Shape::Box(Vec3::new(w, top + sunk, reach)),
+                Transform::from_translation(c).with_rotation(rot),
                 mat,
+                true,
             );
         }
-        self
     }
 
     /// A pitched roof along Z (ridge runs front to back).
@@ -981,7 +1013,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 23] = [
+pub const PREFABS: [&str; 27] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1005,10 +1037,17 @@ pub const PREFABS: [&str; 23] = [
     "factory_hall",
     "chimney",
     "target",
+    "water_tower",
+    "headframe",
+    "signal_box",
+    "steeple",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
-    let mut b = Builder::default();
+    let mut b = Builder {
+        drop: extraction_core::map::prefab_lift(id),
+        ..Default::default()
+    };
     match id {
         "house_plank" => house(&mut b, 8.0, 7.0, Mat::Planks, Mat::Shingles),
         "farmhouse" => house(&mut b, 10.0, 8.0, Mat::Planks, Mat::Corrugated),
@@ -1058,6 +1097,10 @@ pub fn prefab(id: &str) -> Option<Geo> {
             b.crate_box(Vec3::new(-12.8, 0.1, -7.0), 0.7, Some("gadgets"));
         }
         "chimney" => chimney(&mut b),
+        "water_tower" => water_tower(&mut b),
+        "headframe" => headframe(&mut b),
+        "signal_box" => signal_box(&mut b),
+        "steeple" => steeple(&mut b),
         "target" => target(&mut b),
         _ => return None,
     }
@@ -1083,7 +1126,6 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
             &[window(d * 0.5)],
         ],
     );
-    b.front_steps(0.0, -z, f, Mat::Concrete);
     // Partition: front room / back rooms, and back rooms split left/right.
     let pz = z - d * 0.42;
     b.wall(
@@ -1148,7 +1190,6 @@ fn cabin(b: &mut Builder) {
             &[],
         ],
     );
-    b.front_steps(-1.5, -d * 0.5, f, Mat::Timber);
     b.gable_roof(
         w + 0.5,
         d + 0.5,
@@ -1183,7 +1224,6 @@ fn shop(b: &mut Builder) {
             &[window(3.5)],
         ],
     );
-    b.front_steps(0.0, -d * 0.5, f, Mat::Concrete);
     b.wall(
         Vec2::new(-4.5, 1.6),
         Vec2::new(4.5, 1.6),
@@ -1191,14 +1231,16 @@ fn shop(b: &mut Builder) {
         h,
         0.12,
         Mat::Plaster,
-        &[door(6.5)],
+        // Between the shelves either side, not behind one.
+        &[door(5.5)],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
     b.counter(Vec3::new(-1.0, f, -0.4), 0.0, 3.0, Some("food_common"));
     for x in [-3.6, -2.2, 2.4, 3.8] {
         b.shelf(Vec3::new(x, f, 1.2), 0.0, Some("food_common"));
     }
-    b.crate_box(Vec3::new(-3.0, f, 2.6), 0.7, Some("food_common"));
+    // In the corner, clear of the back door (at x -3).
+    b.crate_box(Vec3::new(-3.9, f, 2.6), 0.7, Some("food_common"));
     b.crate_box(Vec3::new(-2.0, f, 2.7), 0.6, Some("tools"));
     b.shelf(Vec3::new(3.0, f, 3.0), 0.0, Some("medical"));
 }
@@ -1268,8 +1310,9 @@ fn barn(b: &mut Builder) {
             vec![("hay_bale", Transform::from_xyz(x, f, z).with_rotation(turn))],
         );
     }
+    // Along the side wall between its door (z -4) and window (z 3).
     b.workbench(
-        Vec3::new(5.0, f, -3.0),
+        Vec3::new(5.0, f, 0.5),
         std::f32::consts::FRAC_PI_2,
         Some("workshop"),
     );
@@ -1511,7 +1554,6 @@ fn pump_station(b: &mut Builder) {
             &[door(5.0)],
         ],
     );
-    b.front_steps(0.0, -d * 0.5, f, Mat::Concrete);
     b.flat_roof(w, d, f + h, Mat::Concrete);
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
@@ -1812,6 +1854,141 @@ fn mast_hut(b: &mut Builder) {
     b.flat_roof(w, d, f + h, Mat::Concrete);
     b.counter(Vec3::new(1.2, f, 1.4), 0.0, 2.2, Some("gadgets"));
     b.shelf(Vec3::new(-1.8, f, 1.5), 0.0, Some("tools"));
+}
+
+// --- Landmarks: tall silhouettes each valley can be told by (models in
+// `art/props/landmarks.py`, which fill these colliders; the pieces are
+// their blockouts too).
+
+/// A pillar of a given shape standing on y0.
+fn column(b: &mut Builder, shape: Shape, y0: f32, mat: Mat) {
+    let h = match shape {
+        Shape::Box(s) => s.y,
+        Shape::Cylinder(_, h) => h,
+        Shape::Prism(s) => s.y,
+    };
+    b.piece(
+        shape,
+        Transform::from_xyz(0.0, y0 + h * 0.5, 0.0),
+        mat,
+        true,
+    );
+}
+
+/// A brick water tower with a steel tank, 18 m to its finial.
+fn water_tower(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    column(b, Shape::Cylinder(2.05, 0.7), -0.3, Mat::Concrete);
+    column(b, Shape::Cylinder(1.8, 11.6), 0.4, Mat::Brick);
+    column(b, Shape::Cylinder(2.95, 0.5), 12.0, Mat::PaintedMetal);
+    column(b, Shape::Cylinder(2.5, 3.5), 12.5, Mat::PaintedMetal);
+    column(b, Shape::Cylinder(1.3, 1.4), 16.0, Mat::RustyMetal);
+    b.dress_structure(from, vec![("water_tower", Transform::IDENTITY)]);
+}
+
+/// A quarry's steel headframe over its shaft, sheave wheels on top.
+fn headframe(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(Vec3::new(4.4, 0.4, 4.4), Vec3::ZERO, Mat::Concrete);
+    for (x, z) in [(-1.4, -1.4), (1.4, -1.4), (-1.4, 1.4), (1.4, 1.4)] {
+        b.bx(
+            Vec3::new(0.3, 15.8, 0.3),
+            Vec3::new(x, 8.1, z),
+            Mat::RustyMetal,
+        );
+    }
+    for side in [-1.0f32, 1.0] {
+        let (a, c) = (
+            Vec3::new(side * 1.4, 15.0, 1.4),
+            Vec3::new(side * 2.3, 0.0, 7.0),
+        );
+        let d = c - a;
+        b.piece(
+            Shape::Box(Vec3::new(0.32, d.length(), 0.32)),
+            Transform::from_translation((a + c) * 0.5)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, d.normalize())),
+            Mat::RustyMetal,
+            true,
+        );
+    }
+    b.bx(
+        Vec3::new(3.6, 0.15, 3.6),
+        Vec3::new(0.0, 16.075, 0.0),
+        Mat::PaintedMetal,
+    );
+    b.piece(
+        Shape::Box(Vec3::new(1.8, 3.0, 2.9)),
+        Transform::from_xyz(0.0, 17.6, 0.0),
+        Mat::DarkMetal,
+        false,
+    );
+    b.dress_structure(from, vec![("headframe", Transform::IDENTITY)]);
+}
+
+/// A railway signal box: brick below, a glazed cab up its outside stair.
+fn signal_box(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(4.0, 3.0, 3.0),
+        Vec3::new(0.0, 1.5, 0.0),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(4.3, 0.15, 3.3),
+        Vec3::new(0.0, 3.075, 0.0),
+        Mat::Concrete,
+    );
+    b.bx(
+        Vec3::new(3.9, 2.25, 2.9),
+        Vec3::new(0.0, 4.275, 0.0),
+        Mat::Planks,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(4.8, 1.25, 3.8)),
+        Transform::from_xyz(0.0, 5.4, 0.0),
+        Mat::Corrugated,
+        true,
+    );
+    // The stair as a ramp under its treads, and its landing.
+    let (a, c) = (Vec3::new(2.5, 0.0, -1.5), Vec3::new(2.5, 3.0, 0.5));
+    let d = c - a;
+    b.piece(
+        Shape::Box(Vec3::new(0.9, 0.08, d.length())),
+        Transform::from_translation((a + c) * 0.5 - Vec3::Y * 0.1)
+            .with_rotation(Quat::from_rotation_x(-d.y.atan2(d.z))),
+        Mat::Planks,
+        true,
+    );
+    b.bx(
+        Vec3::new(0.9, 0.1, 1.1),
+        Vec3::new(2.5, 2.99, 0.95),
+        Mat::Planks,
+    );
+    b.dress_structure(from, vec![("signal_box", Transform::IDENTITY)]);
+}
+
+/// A chapel's bell tower: brick, a whitewashed belfry, an onion dome.
+fn steeple(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(4.2, 0.5, 4.2),
+        Vec3::new(0.0, 0.25, 0.0),
+        Mat::Concrete,
+    );
+    b.bx(
+        Vec3::new(4.0, 7.6, 4.0),
+        Vec3::new(0.0, 4.3, 0.0),
+        Mat::Brick,
+    );
+    column(b, Shape::Cylinder(1.9, 4.3), 8.0, Mat::Plaster);
+    column(b, Shape::Cylinder(1.5, 4.7), 12.3, Mat::PaintedMetal);
+    b.piece(
+        Shape::Box(Vec3::new(0.1, 2.0, 0.1)),
+        Transform::from_xyz(0.0, 18.0, 0.0),
+        Mat::RustyMetal,
+        false,
+    );
+    b.dress_structure(from, vec![("steeple", Transform::IDENTITY)]);
 }
 
 /// A works chimney: a tapering brick stack banded with iron, a red lamp
@@ -2136,7 +2313,6 @@ fn guard_booth(b: &mut Builder) {
         Mat::PaintedMetal,
         [&[door(1.1)], &[window(1.1)], &[window(1.1)], &[window(1.1)]],
     );
-    b.front_steps(0.0, -1.1, f, Mat::Concrete);
     b.bx(
         Vec3::new(2.6, 0.15, 2.6),
         Vec3::new(0.0, f + 2.5, 0.0),
@@ -2926,6 +3102,22 @@ mod tests {
         ] {
             let p = root.join(crate::render::world_props::path(name));
             assert!(p.exists(), "no model {}", p.display());
+        }
+    }
+
+    /// Every piece of every recipe has a real, positive size and a finite
+    /// pose (a negative box gave the colliders a NaN mass).
+    #[test]
+    fn every_piece_is_sound() {
+        for id in PREFABS {
+            for (i, p) in prefab(id).unwrap().pieces.iter().enumerate() {
+                let ok = match p.shape {
+                    Shape::Box(s) | Shape::Prism(s) => s.is_finite() && s.min_element() > 0.0,
+                    Shape::Cylinder(r, h) => r > 0.0 && h > 0.0,
+                } && p.at.translation.is_finite()
+                    && p.at.rotation.is_finite();
+                assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
+            }
         }
     }
 

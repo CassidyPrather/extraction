@@ -87,6 +87,9 @@ MATERIALS = {
     "Concrete": ((0.45, 0.45, 0.43), 0.0, 0.85, None),
     "Zinc": ((0.5, 0.52, 0.53), 0.9, 0.45, None),
     "Straw": ((0.58, 0.5, 0.3), 0.0, 0.95, None),
+    "Brick": ((0.45, 0.25, 0.2), 0.0, 0.85, None),
+    "Corrugated": ((0.4, 0.3, 0.25), 0.6, 0.6, None),
+    "Shingles": ((0.2, 0.2, 0.2), 0.0, 0.85, None),
     # The gloves (art/hands; src/models.rs maps them).
     "Glove": ((0.30, 0.29, 0.23), 0.0, 0.9, None),
     "Leather": ((0.33, 0.27, 0.2), 0.0, 0.7, None),
