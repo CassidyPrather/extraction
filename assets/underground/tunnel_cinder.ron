@@ -64,6 +64,9 @@
         (from: "tunnel_b", to: "workshop", doors: To),
         (from: "switch_room", to: "overflow", doors: To),
         (from: "overflow", to: "workshop"),
+        // A culvert from the stair hall to the pump room, under the
+        // tunnel: chest deep.
+        (from: "stair_hall", to: "pump_room", via: [(-10.0, 10.0)]),
     ],
     anomalies: [
         (kind: "Snare", room: "overflow", at: (0.3, 0.3), radius: 1.2),
@@ -75,6 +78,10 @@
     // throw it and the vault and the overflow chamber light, and the
     // overflow chamber's door opens.
     power: Some((kind: Breaker, room: "cable_vault", at: (2.2, 0.5), rot: 270.0, doors: ["overflow"])),
+    floods: [
+        (link: Some(("stair_hall", "pump_room")), depth: 1.1),
+        (room: Some("overflow"), depth: 0.7),
+    ],
     portals: [
         (),
         (at: (10.0, 53.0), rot: 180.0, y: 0.0),

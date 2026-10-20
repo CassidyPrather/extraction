@@ -216,7 +216,27 @@ pub struct Layout {
     pub crawlers: u32,
     #[serde(default)]
     pub power: Option<PowerDef>,
+    /// Flooded rooms and corridors.
+    #[serde(default)]
+    pub floods: Vec<Flood>,
 }
+
+/// Standing water over a room's or a corridor's floor: slow to wade, loud,
+/// and over [`DEEP`] the crawlers won't go in.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Flood {
+    /// A room by id...
+    #[serde(default)]
+    pub room: Option<String>,
+    /// ... or a corridor by its ends (as its link names them).
+    #[serde(default)]
+    pub link: Option<(String, String)>,
+    /// Water over the floor, metres.
+    pub depth: f32,
+}
+
+/// Water deeper than this is a wall to the walkers (as on the surface).
+pub const DEEP: f32 = 0.9;
 
 /// The site's power: a breaker board or a generator somewhere awkward.
 /// Switching it on lights the `Lamp::Powered` rooms, lets the powered
@@ -459,6 +479,8 @@ pub struct Raster {
     pub cells: Vec<Cell>,
     /// Ceiling height over the floor, flat cells (stairs: 0).
     pub ceil: Vec<f32>,
+    /// Water over the floor, flat cells (0: dry).
+    pub water: Vec<f32>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -506,6 +528,7 @@ impl Raster {
             nz,
             cells: vec![Cell::Rock; nx * nz],
             ceil: vec![0.0; nx * nz],
+            water: vec![0.0; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -548,9 +571,24 @@ impl Raster {
             let n = pts.len();
             let from_door = matches!(link.doors, Doors::From | Doors::Both);
             let to_door = matches!(link.doors, Doors::To | Doors::Both);
+            // Each end's leg that leaves its room (a via point can be
+            // inside the room).
+            let inside = |room: &Room, p: P2| {
+                (p[0] - room.at[0]).abs() < room.size[0] * 0.5
+                    && (p[1] - room.at[1]).abs() < room.size[1] * 0.5
+            };
+            let leaving = |room: &Room, path: Vec<P2>| -> (P2, P2) {
+                path.windows(2)
+                    .find(|w| !inside(room, w[1]))
+                    .map_or((path[1], path[0]), |w| (w[1], w[0]))
+            };
+            let rev: Vec<P2> = pts.iter().rev().copied().collect();
+            let (fo, fi) = leaving(&l.rooms[a], pts.clone());
+            let (to, ti) = leaving(&l.rooms[b], rev);
+            let _ = n;
             for (room, outer, inner, door) in [
-                (&l.rooms[a], pts[1], pts[0], from_door),
-                (&l.rooms[b], pts[n - 2], pts[n - 1], to_door),
+                (&l.rooms[a], fo, fi, from_door),
+                (&l.rooms[b], to, ti, to_door),
             ] {
                 if let Some(mut d) = r.mouth(room, outer, inner, link.width) {
                     d.room = Some(if std::ptr::eq(room, &l.rooms[a]) {
@@ -573,6 +611,27 @@ impl Raster {
                 Cell::Room(k as u16),
                 room.height,
             );
+        }
+        for f in &l.floods {
+            let link = f.link.as_ref().and_then(|(a, b)| {
+                l.links
+                    .iter()
+                    .position(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a))
+            });
+            let room = f
+                .room
+                .as_ref()
+                .and_then(|id| l.rooms.iter().position(|r| &r.id == id));
+            for (c, cell) in r.cells.iter().enumerate() {
+                let wet = match *cell {
+                    Cell::Room(k) => room == Some(k as usize),
+                    Cell::Hall(k) => link == Some(k as usize),
+                    _ => false,
+                };
+                if wet {
+                    r.water[c] = f.depth;
+                }
+            }
         }
         // Stairs: from the kiosk down to the first flat cell ahead.
         for (k, p) in l.portals.iter().enumerate() {
@@ -685,6 +744,12 @@ impl Raster {
 
     pub fn get(&self, i: usize, j: usize) -> Cell {
         self.cells[j * self.nx + i]
+    }
+
+    /// Water over the floor at a site-space point (0: dry).
+    pub fn water_at(&self, p: P2) -> f32 {
+        self.cell_of(p)
+            .map_or(0.0, |(i, j)| self.water[j * self.nx + i])
     }
 
     /// The floor under a site-space point, if it's an open cell.
@@ -872,6 +937,29 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    for f in &l.floods {
+        let found = match (&f.room, &f.link) {
+            (Some(id), None) => l.rooms.iter().any(|r| &r.id == id),
+            (None, Some((a, b))) => l
+                .links
+                .iter()
+                .any(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a)),
+            _ => false,
+        };
+        if !found {
+            bad.push(format!("a flood in no one room or corridor: {f:?}"));
+        }
+        if !(0.2..=1.6).contains(&f.depth) {
+            bad.push(format!("a flood {} m deep", f.depth));
+        }
+    }
+    // Room to breathe over the water (a head afloat stands 0.35 m out).
+    for (c, w) in r.water.iter().enumerate() {
+        if *w > 0.0 && r.ceil[c] - w < 0.8 {
+            bad.push(format!("water {w} m deep under a {} m ceiling", r.ceil[c]));
+            break;
+        }
+    }
     for id in &l.patrol {
         if !l.rooms.iter().any(|r| &r.id == id) {
             bad.push(format!("a patrol through no room `{id}`"));
@@ -1021,6 +1109,8 @@ pub fn plan_svg(id: &str) -> Option<String> {
         for i in 0..r.nx {
             let colour = match r.get(i, j) {
                 Cell::Rock => continue,
+                _ if r.water[j * r.nx + i] >= DEEP => "#2e6f8e",
+                _ if r.water[j * r.nx + i] > 0.0 => "#6fa3b8",
                 Cell::Room(_) => "#b9b3a6",
                 Cell::Hall(_) => "#8f8a80",
                 Cell::Stair(_) => "#6f8fa6",
@@ -1132,7 +1222,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,

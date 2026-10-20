@@ -973,6 +973,7 @@ impl Plugin for UndergroundPlugin {
                 wire_power,
                 throw_switches.after(wire_power),
                 generator_hum,
+                splashing,
             ),
         );
     }
@@ -1146,6 +1147,34 @@ fn throw_switches(
     }
 }
 
+/// Wading underground is loud: the water slops off the walls. (Footsteps
+/// are heard as ever; this is the splashing on top, every half second
+/// you move in it.)
+fn splashing(
+    zone: Res<Zone>,
+    bodies: Query<(Entity, &crate::player::Body, &GlobalTransform)>,
+    time: Res<Time>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut wait: Local<f32>,
+) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 0.5;
+    for (e, body, gt) in &bodies {
+        let moving = Vec2::new(body.velocity.x, body.velocity.z).length() > 0.4;
+        if body.wading < 0.2 || !moving || floor_under(&zone, gt.translation()).is_none() {
+            continue;
+        }
+        noise.write(crate::robots::Noise {
+            at: gt.translation(),
+            radius: if body.swimming { 20.0 } else { 16.0 },
+            source: Some(e),
+        });
+    }
+}
+
 /// A running generator is heard all round it, every few seconds.
 fn generator_hum(
     sites: Query<&SitePower>,
@@ -1233,6 +1262,15 @@ pub fn register_residents(
                 }
             }
         }
+        // Nor into deep water, as on the surface.
+        for j in 0..grid.n {
+            for i in 0..grid.n {
+                let c = grid.centre(i, j);
+                if r.water_at(c) >= ug::DEEP {
+                    grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
+                }
+            }
+        }
         let patrol: Vec<Vec3> = l
             .patrol
             .iter()
@@ -1264,7 +1302,14 @@ impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (light_lamps, flicker, torch, near_doors_only, show_below),
+            (
+                light_lamps,
+                flicker,
+                torch,
+                near_doors_only,
+                show_below,
+                water_surfaces,
+            ),
         )
         .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
@@ -1351,6 +1396,48 @@ fn light_lamps(
                     },
                     Transform::from_xyz(0.0, 0.03, 0.0),
                 ));
+        }
+    }
+}
+
+/// Client: the flooded rooms' and corridors' water, a dark still surface
+/// (it moves only when you do: the splashing is sound).
+fn water_surfaces(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, b) in &buildings {
+        let Some(r) = ug::raster(&b.prefab) else {
+            continue;
+        };
+        if r.water.iter().all(|w| *w <= 0.0) {
+            continue;
+        }
+        let water = materials.add(StandardMaterial {
+            base_color: Color::srgba(0.05, 0.075, 0.07, 0.9),
+            perceptual_roughness: 0.06,
+            reflectance: 0.7,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+        let class = |i: usize, j: usize| {
+            let w = r.water[j * r.nx + i];
+            (w > 0.0).then(|| (w * 100.0).round() as i32)
+        };
+        for (lo, hi, depth) in rects(r, class) {
+            let y = r.floor + depth as f32 / 100.0;
+            let (size, centre) = rect_box(r, lo, hi, y - 0.01, y);
+            commands.spawn((
+                Name::new("Flood"),
+                Mesh3d(meshes.add(Plane3d::default().mesh().size(size.x, size.z))),
+                MeshMaterial3d(water.clone()),
+                bevy::light::NotShadowCaster,
+                Below,
+                Transform::from_xyz(centre.x, y, centre.z),
+                ChildOf(e),
+            ));
         }
     }
 }
@@ -1654,6 +1741,27 @@ fn no_rain_below(
             }
         }
     }
+}
+
+/// Inside a site (below the ground, on its floor): `Some`, with the water
+/// over the floor there, if any (world y of its surface). Outside every
+/// site: `None`, and the ground's own water applies.
+pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
+    for site in ug::placed(&zone.map) {
+        let Some(r) = ug::raster(&site.id) else {
+            continue;
+        };
+        let local = site.to_site([feet.x, feet.z]);
+        let Some(f) = r.floor_at(local) else { continue };
+        let footing = zone.hm.footing(&site.id, site.at, site.rot);
+        let floor = footing + f;
+        if feet.y > floor - 0.5 && feet.y < floor + 4.5 && floor < zone.ground(feet.x, feet.z) - 0.5
+        {
+            let w = r.water_at(local);
+            return Some((w > 0.0).then_some(floor + w));
+        }
+    }
+    None
 }
 
 /// Where the floor is under a world point, if it's inside an underground
