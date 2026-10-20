@@ -99,6 +99,9 @@ MATERIALS = {
     "Skin": ((0.62, 0.45, 0.36), 0.0, 0.6, None),
     "Nail": ((0.75, 0.62, 0.55), 0.0, 0.35, None),
     "DarkWool": ((0.14, 0.14, 0.15), 0.0, 0.95, None),
+    # Animals (art/animals; src/models.rs maps them).
+    "Feather": ((0.03, 0.03, 0.036), 0.0, 0.45, None),
+    "Beak": ((0.3, 0.3, 0.31), 0.0, 0.55, None),
 }
 
 

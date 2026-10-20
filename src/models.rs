@@ -213,6 +213,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Skin",
     "Nail",
     "DarkWool",
+    // Animals (art/animals).
+    "Feather",
+    "Beak",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -300,6 +303,9 @@ impl ModelMaterials {
             "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
+            // Animals: a rook's black with a sheen, its bare grey bill.
+            "Feather" => flat(materials, Color::srgb(0.035, 0.035, 0.042), 0.0, 0.45),
+            "Beak" => flat(materials, Color::srgb(0.3, 0.3, 0.31), 0.0, 0.55),
             // The gloves: the canvas scan's weave, fine, under olive-drab
             // nylon, a tan synthetic leather palm and charcoal padding. Dark
             // as worn gloves are, but never black (ART_DIRECTION: values).
