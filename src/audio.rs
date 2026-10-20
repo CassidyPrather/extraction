@@ -1369,8 +1369,47 @@ fn anomaly_sounds(
     mut emps: MessageReader<crate::gadgets::EmpBlast>,
     mut offerings: MessageReader<crate::anomaly::offering::OfferingTaken>,
     mut harpoons: MessageReader<crate::robots::grappler::Harpoon>,
+    mut blinked: MessageReader<crate::anomaly::mirrors::Blinked>,
+    mut arcs: MessageReader<crate::anomaly::ArcStrike>,
     positions: Query<&GlobalTransform>,
 ) {
+    // Blinked: the air rushing in where it was, the pop where it is now.
+    for b in blinked.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/whoosh",
+            Some(b.from),
+            "anomaly.blink_air",
+            0.0,
+            0.1,
+        );
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "anomaly/mirror_blink",
+            Some(b.to),
+            "anomaly.blink",
+            0.0,
+            0.05,
+        );
+    }
+    // A snare's arc to what it struck: a short, sharp crack there.
+    for a in arcs.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "anomaly/surge_crack",
+            Some(a.to),
+            "anomaly.arc",
+            0.0,
+            2.2,
+            0.1,
+        );
+    }
     for h in harpoons.read() {
         let at = positions.get(h.from).ok().map(|g| g.translation());
         play(
@@ -1419,7 +1458,8 @@ fn anomaly_sounds(
             AnomalyAct::Pop => ("anomaly/lift_pop", "anomaly.pop", 1.0),
             AnomalyAct::Bloom => ("anomaly/surge_crack", "anomaly.bloom", 0.6),
             AnomalyAct::Flare => continue,
-            AnomalyAct::Blink => ("anomaly/mirror_blink", "anomaly.blink", 1.0),
+            // Each thing blinked sounds at both ends (`Blinked`, below).
+            AnomalyAct::Blink => continue,
             AnomalyAct::Reveal => ("anomaly/reveal", "anomaly.reveal", 1.0),
             // A well crushing something: the thing's metal giving (recorded,
             // slowed), under the knot's deep whump.
@@ -2698,8 +2738,8 @@ fn detector_sounds(
 }
 
 /// A site's power coming on: a breaker's lever clanks home; a generator
-/// is pulled (a whirr of cord) and runs, a diesel's idle by the switch,
-/// for as long as it's on.
+/// is pulled (a whirr of cord) and runs by the switch for as long as it's
+/// on (`machines/generator`, synthesised until a recording can be had).
 #[derive(Component)]
 struct GeneratorLoop;
 
@@ -2708,62 +2748,64 @@ fn power_sounds(
     sites: Query<(Entity, &crate::world::underground::SitePower)>,
     switches: Query<(&GlobalTransform, Option<&Children>)>,
     loops: Query<Entity, With<GeneratorLoop>>,
-    mut was: Local<HashMap<Entity, bool>>,
+    mut was: Local<HashMap<(Entity, usize), bool>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     use extraction_core::underground::PowerKind;
     for (site, power) in &sites {
-        let before = was.insert(site, power.on).unwrap_or(false);
-        let Ok((gt, children)) = switches.get(power.switch) else {
-            continue;
-        };
-        let at = gt.translation();
-        if power.on && !before {
-            match power.kind {
-                PowerKind::Breaker => play_at_speed(
-                    &mut commands,
-                    &bank,
-                    &mut rng.0,
-                    "machines/clank",
-                    Some(at),
-                    "power.breaker",
-                    0.0,
-                    0.8,
-                    0.05,
-                ),
-                PowerKind::Generator => play_at_speed(
-                    &mut commands,
-                    &bank,
-                    &mut rng.0,
-                    "physical/whoosh",
-                    Some(at),
-                    "power.pull",
-                    0.0,
-                    0.7,
-                    0.05,
-                ),
-            }
-        }
-        let running = power.on && power.kind == PowerKind::Generator;
-        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
-        match (running, existing) {
-            (true, None) => {
-                if let Some(sample) = bank.pick("machines/truck_idle", &mut rng.0) {
-                    commands.spawn((
-                        GeneratorLoop,
-                        SamplePlayer::new(sample)
-                            .looping()
-                            .with_volume(Volume::Decibels(mix::db("power.generator"))),
-                        PlaybackSettings::default().with_speed(1.25),
-                        Transform::default(),
-                        spatial_fx("power.generator"),
-                        ChildOf(power.switch),
-                    ));
+        for (stage, power) in power.stages.iter().enumerate() {
+            let before = was.insert((site, stage), power.on).unwrap_or(false);
+            let Ok((gt, children)) = switches.get(power.switch) else {
+                continue;
+            };
+            let at = gt.translation();
+            if power.on && !before {
+                match power.kind {
+                    PowerKind::Breaker => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "machines/clank",
+                        Some(at),
+                        "power.breaker",
+                        0.0,
+                        0.8,
+                        0.05,
+                    ),
+                    PowerKind::Generator => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "physical/whoosh",
+                        Some(at),
+                        "power.pull",
+                        0.0,
+                        0.7,
+                        0.05,
+                    ),
                 }
             }
-            (false, Some(l)) => commands.entity(l).despawn(),
-            _ => {}
+            let running = power.on && power.kind == PowerKind::Generator;
+            let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+            match (running, existing) {
+                (true, None) => {
+                    if let Some(sample) = bank.pick("machines/generator", &mut rng.0) {
+                        commands.spawn((
+                            GeneratorLoop,
+                            SamplePlayer::new(sample)
+                                .looping()
+                                .with_volume(Volume::Decibels(mix::db("power.generator"))),
+                            PlaybackSettings::default(),
+                            Transform::default(),
+                            spatial_fx("power.generator"),
+                            ChildOf(power.switch),
+                        ));
+                    }
+                }
+                (false, Some(l)) => commands.entity(l).despawn(),
+                _ => {}
+            }
         }
     }
 }

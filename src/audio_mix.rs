@@ -170,7 +170,7 @@ pub const MIX: &[Cue] = &[
     // Underground power.
     cue!("power.breaker", "machines/clank", -6.0, 90.0, 3.0, Action),
     cue!("power.pull", "physical/whoosh", -10.0, 70.0, 2.0, Detail),
-    cue!("power.generator", "machines/truck_idle", -10.0, 85.0, 8.0, Signal, 6.0),
+    cue!("power.generator", "machines/generator", -24.0, 85.0, 8.0, Signal, 6.0),
     // The truck.
     cue!("truck.arrive", "machines/truck_arrive", -6.0, 85.0, 30.0, Signal, 15.0),
     cue!("truck.idle", "machines/truck_idle", -9.0, 75.0, 15.0, Signal, 10.0),
@@ -190,6 +190,8 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.well", "anomaly/well_drone", -6.0, 70.0, 8.0, Signal),
     cue!("anomaly.mirror", "anomaly/mirror_shimmer", -6.0, 60.0, 8.0, Signal),
     cue!("anomaly.blink", "anomaly/mirror_blink", -8.5, 95.0, 8.0, Action, 7.0),
+    cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
+    cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
     cue!("anomaly.reveal", "anomaly/reveal", -24.0, 65.0, 8.0, Signal),
     cue!("anomaly.crush", "machines/groan", -8.5, 95.0, 8.0, Action, 7.0),
     cue!("detector.click", "machines/detector_click", -8.0, 60.0, 0.4, Signal),

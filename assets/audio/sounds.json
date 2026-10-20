@@ -1839,6 +1839,18 @@
       }
     ]
   },
+  "machines/generator": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/machines/generator.ogg",
+        "seconds": 7.5,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "machines/groan": {
     "type": "oneshot",
     "channels": 1,
