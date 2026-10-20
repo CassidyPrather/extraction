@@ -21,6 +21,10 @@ Each line fits the wrist (3 lines of 26 characters) and uses no game words.
 | Pack full | something won't go in | leave the worst of it |
 | Worn gun | a gun in hand under half condition | it'll jam; the bench, when you're back |
 | Bleeding | hit, and bleeding (faster than 0.1 HP a second) | dressing on it now, or you'll drop |
+| Detector | the detector ticking fast near you | faster means nearer; sweep it slow |
+| Revealed | a thrown thing shows one up | that's how you find them; bolts are cheap |
+| Fold | through a fold, somewhere else | stop; look before you step |
+| Well | in a well's pull (the anomalies send it) | back out the way you came, now |
 | First death | waking in the truck | what came back (the crate, counted) and what didn't (what you carried, counted, where you fell); beat their convoy there |
 | Convoy took it / kit recovered | the first time each way | gone through the Gate / that's how you get it back |
 | Note pinned | first note read (Story's board) | he keeps copies, board in the back |
