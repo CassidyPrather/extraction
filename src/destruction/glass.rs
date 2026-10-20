@@ -461,13 +461,14 @@ fn sweep_rounds(
 fn sweep_movers(
     mut commands: Commands,
     items: Query<
-        (Entity, &GlobalTransform),
+        (Entity, &GlobalTransform, Option<&crate::interact::Held>),
         (
             With<crate::items::Item>,
             Without<crate::interact::body::InBackpack>,
         ),
     >,
-    hands: Query<(Entity, &GlobalTransform), With<crate::interact::Hand>>,
+    hands: Query<(Entity, &GlobalTransform, &crate::rig::RigHand), With<crate::interact::Hand>>,
+    mut felt: MessageWriter<crate::rig::haptics::Haptic>,
     robots: Query<(&crate::robots::Robot, &GlobalTransform)>,
     mut panes: Query<&mut Pane>,
     grid: Res<PaneGrid>,
@@ -482,8 +483,13 @@ fn sweep_movers(
     }
     let dt = time.delta_secs().max(1e-4);
     let mut seen = HashMap::with_capacity(last.len());
-    let mut hits: Vec<(Entity, Vec3, Vec3)> = Vec::new();
-    for (e, gt) in items.iter().chain(hands.iter()) {
+    // (pane, where, push, the hand that did it)
+    let mut hits: Vec<(Entity, Vec3, Vec3, Option<crate::rig::Side>)> = Vec::new();
+    let movers = items
+        .iter()
+        .map(|(e, gt, held)| (e, gt, held.map(|h| h.side)))
+        .chain(hands.iter().map(|(e, gt, h)| (e, gt, Some(h.side))));
+    for (e, gt, side) in movers {
         let now = gt.translation();
         seen.insert(e, now);
         let Some(was) = last.get(&e).copied() else {
@@ -500,7 +506,7 @@ fn sweep_movers(
                 continue;
             }
             if let Some(x) = pane.crossing(was, now, 0.05) {
-                hits.push((pe, x, v * 0.5));
+                hits.push((pe, x, v * 0.5, side));
             }
         }
     }
@@ -521,13 +527,21 @@ fn sweep_movers(
                     continue;
                 }
                 if let Some(x) = pane.touching(p, 0.4 * s) {
-                    hits.push((pe, x, (x - p).normalize_or_zero() * 2.0));
+                    hits.push((pe, x, (x - p).normalize_or_zero() * 2.0, None));
                 }
             }
         }
     }
-    for (pe, x, push) in hits {
+    for (pe, x, push, side) in hits {
         if let Ok(mut pane) = panes.get_mut(pe) {
+            // Glass giving way on your fist or what's in it: a hit's kick.
+            if let (Some(side), None) = (side, pane.broken) {
+                felt.write(crate::rig::haptics::Haptic {
+                    side,
+                    amplitude: 0.65,
+                    seconds: 0.04,
+                });
+            }
             shatter(
                 &mut commands,
                 &mut pool,

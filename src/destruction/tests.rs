@@ -949,11 +949,28 @@ fn a_knife_driven_through_a_pane_breaks_it_and_a_slow_push_doesnt() {
         vr.app.world().get::<Pane>(pane).unwrap().broken.is_none(),
         "a slow push doesn't break glass"
     );
-    // Driven through.
+    // Driven through: it breaks, and the hand feels it give.
+    #[derive(Resource, Default)]
+    struct Felt(Vec<crate::rig::haptics::Haptic>);
+    vr.app.init_resource::<Felt>().add_systems(
+        Update,
+        |mut h: MessageReader<crate::rig::haptics::Haptic>, mut f: ResMut<Felt>| {
+            f.0.extend(h.read().copied())
+        },
+    );
     thrust(&mut vr, grip, dir, 4.5, 0.75);
     assert!(
         vr.app.world().get::<Pane>(pane).unwrap().broken.is_some(),
         "a knife driven through breaks it"
+    );
+    assert!(
+        vr.app
+            .world()
+            .resource::<Felt>()
+            .0
+            .iter()
+            .any(|h| h.side == crate::rig::Side::Right && h.amplitude >= 0.6),
+        "a kick in the right hand"
     );
 }
 
@@ -992,4 +1009,24 @@ fn a_knife_stabbed_into_a_crate_breaks_it_open() {
         "the crate gave way"
     );
     assert!(stabs >= 2, "after a few stabs ({stabs})");
+}
+
+#[test]
+fn shards_come_to_rest_and_sleep() {
+    // Bodies asleep cost the solver nothing: a window's worth on the
+    // floor must settle, not jitter for their whole life.
+    let mut app = app(None);
+    let (_, at, out) = open_pane(&mut app);
+    shoot(&mut app, at + out * 2.0, at, 700.0, 7.9, 40.0);
+    run(&mut app, 90 * 5);
+    let (asleep, all) = app
+        .world_mut()
+        .query::<(&Debris, Has<Sleeping>)>()
+        .iter(app.world())
+        .fold((0, 0), |(s, n), (_, z)| (s + z as usize, n + 1));
+    assert!(all > 3, "shards still lying there ({all})");
+    assert!(
+        asleep * 10 >= all * 8,
+        "{asleep} of {all} asleep after five seconds"
+    );
 }
