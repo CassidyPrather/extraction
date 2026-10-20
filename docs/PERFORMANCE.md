@@ -320,6 +320,19 @@ cheap, wrecks and blooms add a few entities. The two hitches were:
   bunker's 250, every house 20-50, each plank house the same bake again.
   It's baked once a prefab on the async pool now (`buildings::Bake`).
 
+- **Flung debris.** In Kettle Pass a wrecked walker's leg, caught
+  between its joints and the slope, was thrown at up to 680 m/s and
+  1500 rad/s; avian's speculative contacts then reach metres ahead, and
+  the leg touched 15,220 ground-triangle contact points in one tick (20
+  ms of contact solving, 54 ms frame, 3.0-3.4x the median in four runs).
+  Debris is now capped at 25 m/s and 40 rad/s (it's thrown at a few
+  m/s): 22 ms, 1.6x. Why the joints fling it is the Robots workstream's
+  to find.
+
+Kettle Pass and Cinder Works hold the same ceilings (`SPIKE_MAP`): their
+events are all 1.2-2.6x the median, loading's worst after the second
+frame 79 and 102 ms.
+
 Still there: the first frame (Startup: building the Zone, terrain and
 rock meshes, 6.7 s on one thread) runs before the app submits a frame, so
 the headset shows its own loading indicator; and frame 2 (215 ms: first
