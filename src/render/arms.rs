@@ -1,0 +1,339 @@
+//! Forearms and sleeves: the local player's arms from a shoulder estimated
+//! on the body to the glove's cuff, bent at the elbow by two-bone IK, so a
+//! look at a gun or the wrist display shows your sleeves, not gloves
+//! floating at the end of nothing.
+//!
+//! Only a look: nothing collides or casts a shadow (like the rest of the
+//! body, see `props::body_casts_no_shadow`). The shoulders ride the torso
+//! anchor (`interact::body::Torso`, where the rig's straps are), dropping
+//! with the head when you bend over; the elbow hangs down and out and is
+//! kept out of the body.
+
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::prelude::*;
+
+use crate::interact::body::Torso;
+use crate::models::ModelMaterials;
+use crate::render::materials::MaterialLibrary;
+use crate::render::props::{GlovePose, HandVisual, PlayerGlove, glove_frame};
+use crate::rig::{RigInput, Side};
+
+/// Shoulder to elbow, and elbow to the sleeve's hem at the wrist, metres.
+pub const UPPER: f32 = 0.29;
+pub const FOREARM: f32 = 0.25;
+/// The shoulder joint in the torso's frame (origin mid-chest, -Z ahead),
+/// on the right; mirrored for the left.
+const SHOULDER: Vec3 = Vec3::new(0.17, 0.12, 0.03);
+/// Eyes to shoulders, for when the head drops below the torso's height.
+const SHOULDER_BELOW_EYES: f32 = 0.26;
+/// The body the elbow keeps out of: a column this wide round the neck.
+const BODY_R: f32 = 0.19;
+/// Where the sleeve's hem sits on the unrolled glove: just past the cuff's
+/// end, over it, round the wrist's centre.
+const HEM: Vec3 = Vec3::new(0.0, -0.0034, 0.1);
+const SLEEVE_WRIST_R: f32 = 0.047;
+const SLEEVE_ELBOW_R: f32 = 0.052;
+const SLEEVE_SHOULDER_R: f32 = 0.058;
+
+pub struct ArmsPlugin;
+
+impl Plugin for ArmsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, grow_arms).add_systems(
+            PostUpdate,
+            pose_arms
+                .after(GlovePose)
+                .before(TransformSystems::Propagate),
+        );
+    }
+}
+
+/// One of the local player's arms, following its glove.
+#[derive(Component)]
+struct Arm {
+    glove: Entity,
+    side: Side,
+    upper: Entity,
+    forearm: Entity,
+    elbow: Entity,
+    shoulder: Entity,
+}
+
+/// Where the elbow goes, given the shoulder, the wrist, which way the elbow
+/// should point (`hint`) and the body's column (its axis in x, z): the
+/// shoulder (moved toward the wrist if the arm can't reach) and the elbow.
+pub fn arm_joints(shoulder: Vec3, wrist: Vec3, hint: Vec3, body: Vec2) -> (Vec3, Vec3) {
+    let mut s = shoulder;
+    let reach = UPPER + FOREARM - 0.002;
+    let to = wrist - s;
+    let d = to.length();
+    if d > reach {
+        // Out of reach: the shoulder comes forward (a lean), the arm straight.
+        s = wrist - to / d * reach;
+    }
+    let to = wrist - s;
+    let d = to.length().max(0.02);
+    let dir = to / d;
+    let along = (UPPER * UPPER - FOREARM * FOREARM + d * d) / (2.0 * d);
+    let up = (UPPER * UPPER - along * along).max(0.0).sqrt();
+    let mut bend = hint - dir * hint.dot(dir);
+    if bend.length_squared() < 1e-6 {
+        bend = dir.any_orthonormal_vector();
+    }
+    let mut elbow = s + dir * along + bend.normalize() * up;
+    // Never into the body: out of the column round the neck, sideways.
+    let flat = Vec2::new(elbow.x, elbow.z) - body;
+    if flat.length() < BODY_R {
+        let out = if flat.length_squared() > 1e-8 {
+            flat.normalize()
+        } else {
+            Vec2::new(hint.x, hint.z).normalize_or(Vec2::X)
+        };
+        let fixed = body + out * BODY_R;
+        elbow.x = fixed.x;
+        elbow.z = fixed.y;
+    }
+    (s, elbow)
+}
+
+/// A sleeve: a tapered tube along -Z from its open hem (z 0, radius `r0`,
+/// a lip turned in) to z -1 (radius `r1`, closed: the elbow's ball covers
+/// it), with a couple of soft folds. Stretched along Z to the bone.
+fn sleeve_mesh(r0: f32, r1: f32, hem: bool) -> Mesh {
+    const SEG: usize = 16;
+    const RINGS: usize = 14;
+    let mut pos = Vec::new();
+    let mut nrm = Vec::new();
+    let mut uv = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    let ring = |pos: &mut Vec<[f32; 3]>,
+                nrm: &mut Vec<[f32; 3]>,
+                uv: &mut Vec<[f32; 2]>,
+                r: f32,
+                z: f32,
+                inward: bool| {
+        for k in 0..=SEG {
+            let a = k as f32 / SEG as f32 * std::f32::consts::TAU;
+            let (sn, c) = a.sin_cos();
+            pos.push([c * r, sn * r, z]);
+            let n = if inward { [-c, -sn, 0.0] } else { [c, sn, 0.0] };
+            nrm.push(n);
+            uv.push([a * r, -z * 0.25]);
+        }
+    };
+    let mut rings = 0u32;
+    if hem {
+        // The lip: inside the hem, turned back out to it.
+        ring(&mut pos, &mut nrm, &mut uv, r0 - 0.004, -0.04, true);
+        ring(&mut pos, &mut nrm, &mut uv, r0 - 0.004, 0.0, true);
+        rings += 2;
+    }
+    for i in 0..=RINGS {
+        let t = i as f32 / RINGS as f32;
+        let fold =
+            0.0025 * (t * std::f32::consts::PI * 5.0).sin() * (t * std::f32::consts::PI).sin();
+        ring(
+            &mut pos,
+            &mut nrm,
+            &mut uv,
+            r0 + (r1 - r0) * t + fold,
+            -t,
+            false,
+        );
+        rings += 1;
+    }
+    // Consecutive rings joined (with a hem, the lip's mouth meets the outer
+    // hem in a flat ring facing the hand).
+    let row = (SEG + 1) as u32;
+    for rr in 0..rings - 1 {
+        for k in 0..SEG as u32 {
+            let a = rr * row + k;
+            let b = a + row;
+            idx.extend_from_slice(&[a, b, a + 1, a + 1, b, b + 1]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
+
+fn grow_arms(
+    mut commands: Commands,
+    gloves: Query<(Entity, &HandVisual), Added<PlayerGlove>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    for (glove, v) in &gloves {
+        let jacket = model_mats.get("Canvas", &mut lib, &server, &mut materials);
+        let mut part = |commands: &mut Commands, mesh: Mesh| {
+            commands
+                .spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(jacket.clone()),
+                    Transform::default(),
+                    Visibility::Hidden,
+                    bevy::light::NotShadowCaster,
+                    ArmPart,
+                ))
+                .id()
+        };
+        let forearm = part(
+            &mut commands,
+            sleeve_mesh(SLEEVE_WRIST_R, SLEEVE_ELBOW_R, true),
+        );
+        let upper = part(
+            &mut commands,
+            sleeve_mesh(SLEEVE_ELBOW_R, SLEEVE_SHOULDER_R, false),
+        );
+        let elbow = part(
+            &mut commands,
+            Sphere::new(SLEEVE_ELBOW_R + 0.001).mesh().uv(16, 10),
+        );
+        let shoulder = part(
+            &mut commands,
+            Sphere::new(SLEEVE_SHOULDER_R).mesh().uv(16, 10),
+        );
+        commands.spawn((
+            Name::new(format!("{:?} arm", v.side)),
+            Arm {
+                glove,
+                side: v.side,
+                upper,
+                forearm,
+                elbow,
+                shoulder,
+            },
+        ));
+    }
+}
+
+/// Lays each arm from its shoulder to its glove's cuff, from this frame's
+/// glove pose (so it runs after `pose_hands`, before propagation).
+#[allow(clippy::type_complexity)]
+fn pose_arms(
+    arms: Query<&Arm>,
+    gloves: Query<(&HandVisual, &Transform, &Visibility), Without<ArmPart>>,
+    hands: Query<&ChildOf, With<crate::interact::Hand>>,
+    players: Query<(&Transform, &RigInput, &Children), (Without<HandVisual>, Without<ArmPart>)>,
+    torsos: Query<&Transform, (With<Torso>, Without<HandVisual>, Without<ArmPart>)>,
+    mut parts: Query<(&mut Transform, &mut Visibility), (With<ArmPart>, Without<HandVisual>)>,
+) {
+    for arm in &arms {
+        let Ok((v, glove, glove_vis)) = gloves.get(arm.glove) else {
+            continue;
+        };
+        let player = hands.get(v.hand).ok().map(|p| p.parent());
+        let Some((root, input, children)) = player.and_then(|p| players.get(p).ok()) else {
+            continue;
+        };
+        let Some(torso) = children.iter().find_map(|c| torsos.get(c).ok()) else {
+            continue;
+        };
+        let torso = root.mul_transform(*torso);
+        let head = root.mul_transform(input.head);
+        let s = v.side.sign();
+        let mut shoulder = torso.transform_point(SHOULDER * Vec3::new(s, 1.0, 1.0));
+        shoulder.y = shoulder.y.min(head.translation.y - SHOULDER_BELOW_EYES);
+        let hint = torso.rotation * Vec3::new(0.6 * s, -1.0, 0.3).normalize();
+        let hem = glove.mul_transform(glove_frame(arm.side));
+        let wrist = hem.transform_point(HEM);
+        let axis = Vec2::new(torso.translation.x, torso.translation.z);
+        let (shoulder, elbow) = arm_joints(shoulder, wrist, hint, axis);
+        let show = if *glove_vis == Visibility::Hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        // A bone from `a` toward `b`: the sleeve's -Z along it, its up kept
+        // near the glove's so the folds don't spin.
+        let bone = |a: Vec3, b: Vec3| {
+            let len = a.distance(b).max(0.01);
+            let mut t = Transform::from_translation(a).looking_at(b, hem.rotation * Vec3::Y);
+            t.scale = Vec3::new(1.0, 1.0, len);
+            t
+        };
+        for (e, t) in [
+            (arm.forearm, bone(wrist, elbow)),
+            (arm.upper, bone(elbow, shoulder)),
+            (arm.elbow, Transform::from_translation(elbow)),
+            (arm.shoulder, Transform::from_translation(shoulder)),
+        ] {
+            if let Ok((mut pt, mut vis)) = parts.get_mut(e) {
+                *pt = t;
+                *vis = show;
+            }
+        }
+    }
+}
+
+/// A piece of a sleeve.
+#[derive(Component)]
+struct ArmPart;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BODY: Vec2 = Vec2::ZERO;
+
+    /// In reach, the bones keep their lengths, the elbow bends the way it's
+    /// told (down and out), and it stays out of the body.
+    #[test]
+    fn the_elbow_bends_down_and_out_and_keeps_out_of_the_body() {
+        let shoulder = Vec3::new(0.17, 1.42, 0.03);
+        let hint = Vec3::new(0.6, -1.0, 0.3).normalize();
+        for wrist in [
+            Vec3::new(0.15, 1.1, -0.35),  // gun hand, low and ahead
+            Vec3::new(0.0, 1.3, -0.3),    // across in front
+            Vec3::new(0.05, 1.45, -0.25), // the left wrist up to read (mirrored)
+            Vec3::new(0.25, 1.0, -0.1),   // hanging by the hip
+        ] {
+            let (s, e) = arm_joints(shoulder, wrist, hint, BODY);
+            assert_eq!(s, shoulder, "{wrist}: in reach, the shoulder stays");
+            assert!(
+                (e.distance(s) - UPPER).abs() < 0.03
+                    || Vec2::new(e.x, e.z).length() >= BODY_R - 1e-4,
+                "{wrist}: upper arm {}",
+                e.distance(s)
+            );
+            let mid = (s + wrist) / 2.0;
+            assert!(
+                (e - mid).dot(hint) > 0.0,
+                "{wrist}: elbow {e} not down and out"
+            );
+            assert!(
+                Vec2::new(e.x, e.z).length() >= BODY_R - 1e-4,
+                "{wrist}: elbow {e} in the body"
+            );
+        }
+    }
+
+    /// A hand out of reach pulls the shoulder after it; the arm runs
+    /// straight to the wrist and the forearm still ends there.
+    #[test]
+    fn out_of_reach_the_arm_runs_straight() {
+        let shoulder = Vec3::new(0.17, 1.42, 0.03);
+        let wrist = Vec3::new(0.3, 1.3, -0.9);
+        let (s, e) = arm_joints(shoulder, wrist, Vec3::NEG_Y, BODY);
+        assert!(s.distance(wrist) <= UPPER + FOREARM + 1e-3);
+        assert!(
+            (e.distance(wrist) - FOREARM).abs() < 0.01,
+            "forearm {}",
+            e.distance(wrist)
+        );
+        assert!(
+            (e.distance(s) - UPPER).abs() < 0.01,
+            "upper {}",
+            e.distance(s)
+        );
+    }
+}

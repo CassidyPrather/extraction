@@ -17,6 +17,12 @@ impl Surfaces {
     /// world point. Of pieces equally close, the one on top: a floor's
     /// boards lie on its concrete plinth.
     pub fn at(&self, gt: &GlobalTransform, p: Vec3) -> Option<Mat> {
+        self.piece_at(gt, p).map(|(.., m)| m)
+    }
+
+    /// The piece at (or within a few centimetres of) a world point, as
+    /// [`Self::at`] picks it: its half extents, pose and material.
+    pub fn piece_at(&self, gt: &GlobalTransform, p: Vec3) -> Option<(Vec3, Transform, Mat)> {
         const PAD: f32 = 0.08;
         let local = gt.affine().inverse().transform_point3(p);
         self.0
@@ -26,10 +32,10 @@ impl Surfaces {
                 let out = (q - *half).max(Vec3::ZERO).length();
                 let top = t.translation.y + half.y;
                 // Centimetres apart counts as the same distance.
-                (out <= PAD).then_some(((out * 50.0).round() as i32, -top, *m))
+                (out <= PAD).then_some(((out * 50.0).round() as i32, -top, (*half, *t, *m)))
             })
             .min_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)))
-            .map(|(.., m)| m)
+            .map(|(.., piece)| piece)
     }
 }
 

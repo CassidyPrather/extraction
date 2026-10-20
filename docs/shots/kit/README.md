@@ -9,3 +9,8 @@ mount), `3_full_straight_down`, `4_pack_open` (`kit+pack`: the pack hung
 open in front, lid thrown back, the inside showing). `5_rig_preview` and
 `6_pack_preview` are the models on their own (one slot piece of each
 kind; the game draws it on every slot of that kind). Untextured renders.
+`7_bent_over_full.jpg` (`--gallery kit+stoop`): the head dropped 0.35 m
+and forward 0.25 m, looking down, as you bend to your belt; the torso
+keeps its standing height, so the rig stays and the head comes down over
+it. `8_pack_on_back.jpg` (`kit+behind`): the camera behind and above the
+player: the pack on its back, the sleeves reaching forward to the gloves.

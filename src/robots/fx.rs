@@ -1,4 +1,5 @@
-//! Damage you can see: sparks where a robot is hit, a badly shot-up part
+//! Damage you can see (the hit itself is Weapon feel's, `weapons::impacts`,
+//! by part): a badly shot-up part
 //! that keeps sputtering, a smoking core, and a wreck that smoulders (a
 //! low orange glow and a thread of dark smoke) for a couple of minutes.
 //!
@@ -26,7 +27,9 @@ impl Plugin for RobotFxPlugin {
         app.add_systems(
             Update,
             (
-                hit_sparks,
+                wreck_trails,
+                wreck_impacts,
+                drag_sparks,
                 sputter,
                 light_wrecks,
                 smoulder,
@@ -173,32 +176,6 @@ fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: 
         Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
         NotShadowCaster,
     ));
-}
-
-/// A shot that strikes a robot throws sparks off the point it hit.
-#[allow(clippy::too_many_arguments)]
-fn hit_sparks(
-    mut commands: Commands,
-    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
-    parts: Query<(), With<RobotPart>>,
-    sparks: Query<(), With<Spark>>,
-    existing: Option<Res<FxAssets>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut dice: Local<Dice>,
-) {
-    let mut count = sparks.iter().len();
-    let mut a = None;
-    for hit in hits.read() {
-        if !parts.contains(hit.entity) || count >= MAX_SPARKS {
-            continue;
-        }
-        let a =
-            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
-        let n = 6 + (hit.damage / 10.0).min(6.0) as usize;
-        burst(&mut commands, a, &mut dice, hit.point, hit.normal, n, 4.5);
-        count += n;
-    }
 }
 
 /// A part shot below a third keeps sparking now and then; a core shot
@@ -548,6 +525,109 @@ fn zap_arcs(
         arc.left -= dt;
         if arc.left <= 0.0 {
             commands.entity(e).despawn();
+        }
+    }
+}
+
+/// A drone going down trails dark smoke.
+fn wreck_trails(
+    mut commands: Commands,
+    falling: Query<(Entity, &GlobalTransform), With<super::wreck::Spiral>>,
+    puffs: Query<(), With<Puff>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut next: Local<std::collections::HashMap<Entity, f32>>,
+    time: Res<Time>,
+    mut dice: Local<Dice>,
+) {
+    let dt = time.delta_secs();
+    next.retain(|e, _| falling.contains(*e));
+    let mut n = puffs.iter().len();
+    for (e, gt) in &falling {
+        let t = next.entry(e).or_insert(0.0);
+        *t -= dt;
+        if *t > 0.0 || n >= MAX_PUFFS {
+            continue;
+        }
+        *t = 0.05;
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
+        n += 1;
+    }
+}
+
+/// A wreck hitting the ground: a burst of sparks and a puff of dust.
+#[allow(clippy::too_many_arguments)]
+fn wreck_impacts(
+    mut commands: Commands,
+    mut impacts: MessageReader<super::wreck::WreckImpact>,
+    sparks: Query<(), With<Spark>>,
+    puffs: Query<(), With<Puff>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let (mut ns, mut np) = (sparks.iter().len(), puffs.iter().len());
+    for imp in impacts.read() {
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        if ns < MAX_SPARKS {
+            burst(&mut commands, &a, &mut dice, imp.at, Vec3::Y, 10, 5.0);
+            ns += 10;
+        }
+        for _ in 0..4 {
+            if np >= MAX_PUFFS {
+                break;
+            }
+            let at = imp.at + dice.signed() * Vec3::new(0.6, 0.1, 0.6) * imp.size
+                - Vec3::Y * 0.3 * imp.size;
+            puff(&mut commands, &a, &mut dice, at, false, 0.6 * imp.size);
+            np += 1;
+        }
+    }
+}
+
+/// A dead leg dragging along the ground as its walker limps throws sparks.
+#[allow(clippy::too_many_arguments)]
+fn drag_sparks(
+    mut commands: Commands,
+    walkers: Query<(&super::walker::Walker, &super::walker::LegPoses)>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+    time: Res<Time>,
+) {
+    let mut n = sparks.iter().len();
+    let dt = time.delta_secs();
+    for (w, poses) in &walkers {
+        let speed = w.velocity.length();
+        if speed < 0.3 {
+            continue;
+        }
+        for (i, f) in w.feet.iter().enumerate() {
+            if f.alive || n >= MAX_SPARKS {
+                continue;
+            }
+            // About six a second at a walk, a few at a time.
+            if dice.f() > dt * 6.0 * speed {
+                continue;
+            }
+            let foot = poses.0[i][2];
+            let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+            let back = -w.velocity.normalize_or_zero();
+            burst(
+                &mut commands,
+                &a,
+                &mut dice,
+                foot,
+                back + Vec3::Y * 0.6,
+                3,
+                2.5,
+            );
+            n += 3;
         }
     }
 }

@@ -59,6 +59,7 @@
             Item(id: "flashlight", weight: 1.0),
             Item(id: "matches", weight: 1.0),
             Item(id: "door_wedge", weight: 0.8),
+            Item(id: "bolt", weight: 2.0),
             Nothing(weight: 2.0),
         ]),
         "workshop": (rolls: (2, 4), entries: [
@@ -67,6 +68,7 @@
             Item(id: "electronics", weight: 1.5),
             Item(id: "polymer", weight: 1.0),
             Item(id: "fuel_can", weight: 0.4),
+            Item(id: "bolt", weight: 2.0),
             Nothing(weight: 2.0),
         ]),
         "medical": (rolls: (1, 2), entries: [
@@ -91,6 +93,7 @@
             Item(id: "zipline_kit", weight: 0.2),
             Item(id: "artifact_adapter", weight: 0.15),
             Item(id: "lead_case", weight: 0.3),
+            Item(id: "detector", weight: 0.8),
         ]),
         "house": (rolls: (1, 3), entries: [
             Table(name: "kitchen", weight: 4.0),

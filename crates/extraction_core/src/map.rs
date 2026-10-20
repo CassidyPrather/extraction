@@ -312,6 +312,9 @@ pub enum MarkerKind {
     Terminal { pages: Vec<String> },
     /// Where this valley's depot key lies until someone takes it home.
     ValleyKey { item: String },
+    /// A standing anomaly that the Surge never moves: `kind` names an
+    /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
+    Anomaly { kind: String, radius: f32 },
 }
 
 impl MarkerKind {

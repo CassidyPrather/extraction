@@ -24,10 +24,19 @@ impl Plugin for SkyPlugin {
             })
             .add_message::<SurgeFlash>()
             .add_systems(Startup, spawn_sky)
-            .add_systems(Update, (apply_weather, surge_atmosphere).chain())
+            .add_systems(
+                Update,
+                (apply_weather, surge_atmosphere)
+                    .chain()
+                    .in_set(WeatherLook),
+            )
             .add_systems(PostUpdate, follow_camera_with_dome);
     }
 }
+
+/// The systems that set the look from the weather (the eyes adapt after).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WeatherLook;
 
 /// Global atmosphere settings, shared by the sky, the fog and the lights.
 #[derive(Resource, Clone, Debug)]
@@ -38,6 +47,15 @@ pub struct Weather {
     pub visibility: f32,
     pub sun_dir: Vec3,
     pub sun_lux: f32,
+    /// The calm hour's sun and sky light (the Surge mixes from these).
+    pub sun_color: Color,
+    pub ambient_color: Color,
+    pub ambient: f32,
+    /// The low sun's glow along the horizon on its side (linear rgb,
+    /// strength in w), and the fog's scattering toward it.
+    pub glow: Vec4,
+    /// How much of the sun's smear shows through the deck (the hour's).
+    pub sun_through: f32,
 }
 
 impl Default for Weather {
@@ -52,6 +70,11 @@ impl Default for Weather {
             // ground.)
             sun_dir: Vec3::new(0.35, -0.8, 0.5).normalize(),
             sun_lux: 1350.0,
+            sun_color: Color::srgb(0.92, 0.93, 0.95),
+            ambient_color: Color::srgb(0.62, 0.68, 0.76),
+            ambient: 1100.0,
+            glow: Vec4::ZERO,
+            sun_through: 1.0,
         }
     }
 }
@@ -60,7 +83,18 @@ impl Weather {
     pub fn fog(&self) -> DistanceFog {
         DistanceFog {
             color: self.horizon,
-            directional_light_color: Color::srgba(0.75, 0.72, 0.65, 0.25),
+            // Toward the sun the fog lights up: faintly through the deck by
+            // day, warm along a low sun's side of the valley.
+            directional_light_color: if self.glow.w > 0.0 {
+                Color::linear_rgba(
+                    self.glow.x,
+                    self.glow.y,
+                    self.glow.z,
+                    0.25 + 0.35 * self.glow.w,
+                )
+            } else {
+                Color::srgba(0.75, 0.72, 0.65, 0.25)
+            },
             directional_light_exponent: 12.0,
             falloff: FogFalloff::from_visibility_squared(self.visibility),
         }
@@ -75,6 +109,8 @@ pub struct SkyParams {
     /// x: how heavy the deck is (0 broken and high, 1 the reference
     /// overcast, more is lower and darker), y: how much scud runs under it.
     pub cloud: Vec4,
+    /// A low sun's glow on its side of the horizon: rgb, strength in w.
+    pub glow: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -116,6 +152,7 @@ fn spawn_sky(
                 zenith: to_vec4(weather.zenith),
                 sun_dir: (-weather.sun_dir).extend(1.0),
                 cloud: Vec4::new(1.0, 1.0, 0.0, 0.0),
+                glow: Vec4::ZERO,
             },
         })),
         Transform::IDENTITY,
@@ -233,7 +270,7 @@ fn surge_atmosphere(
             let z = zenith.to_linear();
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
-            mat.params.sun_dir.w = 1.0 - 0.9 * s;
+            mat.params.sun_dir.w = (1.0 - 0.9 * s) * weather.sun_through;
         }
     }
     for mut fog in &mut fogs {
@@ -242,18 +279,10 @@ fn surge_atmosphere(
     }
     for mut sun in &mut suns {
         sun.illuminance = weather.sun_lux * (1.0 - 0.6 * s) + 9000.0 * state.flash;
-        sun.color = mix(
-            Color::srgb(0.92, 0.93, 0.95),
-            Color::srgb(1.0, 0.75, 0.85),
-            s,
-        );
+        sun.color = mix(weather.sun_color, Color::srgb(1.0, 0.75, 0.85), s);
     }
-    ambient.color = mix(
-        Color::srgb(0.62, 0.68, 0.76),
-        Color::srgb(0.70, 0.52, 0.66),
-        s,
-    );
-    ambient.brightness = 1100.0 * (1.0 - 0.35 * s) + 2500.0 * state.flash;
+    ambient.color = mix(weather.ambient_color, Color::srgb(0.70, 0.52, 0.66), s);
+    ambient.brightness = weather.ambient * (1.0 - 0.35 * s) + 2500.0 * state.flash;
 }
 
 #[derive(Default)]
@@ -274,12 +303,13 @@ fn apply_weather(
         &mut DistanceFog,
         Option<&mut bevy::render::view::ColorGrading>,
     )>,
-    mut suns: Query<&mut DirectionalLight, With<Sun>>,
+    mut suns: Query<(&mut DirectionalLight, &mut Transform), With<Sun>>,
     mut sky_mats: ResMut<Assets<SkyMaterial>>,
     domes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<GlobalAmbientLight>,
     zone: Res<super::Zone>,
+    mut adapt: ResMut<crate::render::grade::Adaptation>,
 ) {
     // New cameras (the player's, a scope's) take the weather as they appear.
     let fresh = fogs.iter_mut().any(|(f, _)| f.is_added());
@@ -295,38 +325,62 @@ fn apply_weather(
         super::weather::WeatherKind::Drizzle => 1.0,
     };
     let haze = zone.map.haze.unwrap_or([1.0; 3]);
-    let scale = |c: Color| {
+    let hour = HourLook::of(conditions.hour);
+    let light = conditions.light;
+    let scale = |c: Color, tint: Vec3| {
         let l = c.to_linear();
         Color::linear_rgb(
-            l.red * k * haze[0],
-            l.green * k * haze[1],
-            l.blue * k * haze[2],
+            l.red * k * haze[0] * tint.x * light,
+            l.green * k * haze[1] * tint.y * light,
+            l.blue * k * haze[2] * tint.z * light,
         )
     };
-    weather.horizon = scale(base.horizon);
-    weather.zenith = scale(base.zenith);
+    weather.horizon = scale(base.horizon, hour.horizon);
+    weather.zenith = scale(base.zenith, hour.zenith);
     weather.visibility = conditions.visibility;
     weather.sun_lux = conditions.sun;
+    weather.sun_dir = hour.sun_dir.unwrap_or(base.sun_dir);
+    weather.sun_color = hour.sun_color;
+    weather.ambient_color = hour.ambient_color;
+    weather.ambient = base.ambient * k * light;
+    weather.sun_through = conditions.hour.sun();
+    // The glow needs a sun to come from: thick weather smothers it.
+    let through = match conditions.kind {
+        super::weather::WeatherKind::Clearing => 1.0,
+        super::weather::WeatherKind::Drizzle => 0.6,
+        super::weather::WeatherKind::PeaSouper => 0.3,
+        super::weather::WeatherKind::Downpour => 0.2,
+    };
+    weather.glow = hour.glow * Vec4::new(light, light, light, through);
     valley_air(&zone.map, &conditions).apply(&mut height_fog);
     clear.0 = weather.horizon;
-    ambient.brightness = 1100.0 * k;
-    let grading = crate::render::grade::Look::for_map(&zone.map.name).grading();
+    ambient.brightness = weather.ambient;
+    ambient.color = weather.ambient_color;
+    let look = crate::render::grade::Look::for_map(&zone.map.name);
+    adapt.base = look.exposure;
+    let grading = look.grading();
     for (mut fog, grade) in &mut fogs {
         *fog = weather.fog();
         if let Some(mut grade) = grade {
             *grade = grading.clone();
         }
     }
-    // Under a thick sky the sun casts nothing worth drawing (and the
-    // shadow passes are the dearest thing in a headset frame).
+    // Under a thick sky, or with the sun all but gone, it casts nothing
+    // worth drawing (and the shadow passes are the dearest thing in a
+    // headset frame).
     let shadows = !matches!(
         conditions.kind,
         super::weather::WeatherKind::PeaSouper | super::weather::WeatherKind::Downpour
-    );
-    for mut sun in &mut suns {
+    ) && weather.sun_lux > 300.0;
+    for (mut sun, mut xf) in &mut suns {
         sun.illuminance = weather.sun_lux;
+        sun.color = weather.sun_color;
         if sun.shadow_maps_enabled != shadows {
             sun.shadow_maps_enabled = shadows;
+        }
+        let want = Transform::IDENTITY.looking_to(weather.sun_dir, Vec3::Y);
+        if xf.rotation != want.rotation {
+            *xf = want;
         }
     }
     for m in &domes {
@@ -335,12 +389,73 @@ fn apply_weather(
             let z = weather.zenith.to_linear();
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
+            mat.params.sun_dir = (-weather.sun_dir).extend(weather.sun_through);
+            mat.params.glow = weather.glow;
             mat.params.cloud = match conditions.kind {
                 super::weather::WeatherKind::Downpour => Vec4::new(1.35, 1.6, 0.0, 0.0),
                 super::weather::WeatherKind::PeaSouper => Vec4::new(1.1, 0.3, 0.0, 0.0),
                 super::weather::WeatherKind::Clearing => Vec4::new(0.45, 0.5, 0.0, 0.0),
                 super::weather::WeatherKind::Drizzle => Vec4::new(1.0, 1.0, 0.0, 0.0),
             };
+        }
+    }
+}
+
+/// What an hour does to the sky and its light (`weather::Hour`). Colours
+/// multiply the day's (linear); the light's strength is the hour's
+/// `light`, applied with them.
+struct HourLook {
+    horizon: Vec3,
+    zenith: Vec3,
+    /// None: the day's sun, high behind the cloud.
+    sun_dir: Option<Vec3>,
+    sun_color: Color,
+    ambient_color: Color,
+    glow: Vec4,
+}
+
+impl HourLook {
+    fn of(hour: super::weather::Hour) -> Self {
+        use super::weather::Hour;
+        match hour {
+            Hour::Day => Self {
+                horizon: Vec3::ONE,
+                zenith: Vec3::ONE,
+                sun_dir: None,
+                sun_color: Color::srgb(0.92, 0.93, 0.95),
+                ambient_color: Color::srgb(0.62, 0.68, 0.76),
+                glow: Vec4::ZERO,
+            },
+            // Low in the east, pale gold through the cloud; the air cool
+            // and milky. (About 20 degrees up: lower, its shadows ran in
+            // ruled lines across the meadows.)
+            Hour::Dawn => Self {
+                horizon: Vec3::new(1.06, 1.02, 1.0),
+                zenith: Vec3::new(0.9, 0.95, 1.08),
+                sun_dir: Some(Vec3::new(-0.92, -0.34, -0.18).normalize()),
+                sun_color: Color::srgb(1.0, 0.9, 0.78),
+                ambient_color: Color::srgb(0.66, 0.69, 0.76),
+                glow: Vec4::new(1.0, 0.82, 0.66, 0.7),
+            },
+            // Low in the west, the cloud lit amber from under on that side,
+            // the rest of the sky going blue-grey.
+            Hour::Dusk => Self {
+                horizon: Vec3::new(1.22, 0.95, 0.8),
+                zenith: Vec3::new(0.8, 0.84, 1.08),
+                sun_dir: Some(Vec3::new(0.9, -0.34, 0.27).normalize()),
+                sun_color: Color::srgb(1.0, 0.72, 0.5),
+                ambient_color: Color::srgb(0.6, 0.6, 0.74),
+                glow: Vec4::new(1.0, 0.52, 0.3, 1.0),
+            },
+            // Moonless under cloud: what light there is, blue.
+            Hour::Night => Self {
+                horizon: Vec3::new(0.7, 0.8, 1.1),
+                zenith: Vec3::new(0.6, 0.7, 1.1),
+                sun_dir: None,
+                sun_color: Color::srgb(0.6, 0.7, 0.9),
+                ambient_color: Color::srgb(0.5, 0.58, 0.8),
+                glow: Vec4::ZERO,
+            },
         }
     }
 }

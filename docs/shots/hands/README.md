@@ -26,3 +26,7 @@ left), the PM's slide. The handle sits inside the closed fist.
 headset with `SIMULATED_HANDS=1` (Monado patched with
 `scripts/monado-simulated-hands.patch`): the gloves' fingers follow the
 runtime's `XR_EXT_hand_tracking` joints, each finger at its own curl.
+`9_sleeves_monado.jpg`: the same headset view with forearms and sleeves
+(`render::arms`: two-bone IK from a shoulder on the torso to the glove's
+cuff, elbow down and out). `9b_sleeves_flat.jpg`: flat mode, whose own
+hand pose turns the cuffs sideways, so the wrists bend hard there.

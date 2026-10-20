@@ -139,6 +139,16 @@
                      (196.0, 76.0), (195.0, 50.0), (194.0, 21.0)],
             bridges: [(at: (195.0, 50.0), length: 26.0)],
         ),
+        // Off the slag road to the chimney and its strongbox.
+        (
+            name: "Chimney path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(82.0, -84.0), (94.0, -66.0), (102.0, -51.0)],
+        ),
+        // From the lookout track's end up to the tower's door.
+        (
+            name: "Lookout path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-150.0, -165.0), (-158.0, -160.0), (-168.0, -161.0), (-174.0, -166.0)],
+        ),
         // The towpath along the south bank.
         (
             name: "Towpath", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
@@ -283,6 +293,9 @@
         (kind: RobotGate, at: (250.0, -255.0), rot: 315.0, name: "The Gate"),
         (kind: ArtifactField, at: (200.0, -150.0), name: "The slag heaps"),
         (kind: ArtifactField, at: (-200.0, 0.0), name: "The ash pit"),
+        // Standing anomalies: they lie here every cycle (Anomalies).
+        (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
         (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
         (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
         (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),

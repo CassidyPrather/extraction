@@ -1288,6 +1288,13 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Snare => {
                         ("anomaly/snare_buzz", "anomaly.snare")
                     }
+                    // Placeholders until they get their own (Anomalies).
+                    extraction_core::anomaly::AnomalyKind::Well => {
+                        ("anomaly/lift_hum", "anomaly.lift")
+                    }
+                    extraction_core::anomaly::AnomalyKind::Mirror => {
+                        ("anomaly/snare_buzz", "anomaly.snare")
+                    }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
@@ -1382,6 +1389,9 @@ fn anomaly_sounds(
             AnomalyAct::Pop => ("anomaly/lift_pop", "anomaly.pop", 1.0),
             AnomalyAct::Bloom => ("anomaly/surge_crack", "anomaly.bloom", 0.6),
             AnomalyAct::Flare => continue,
+            // Placeholders until they get their own (Anomalies).
+            AnomalyAct::Blink => ("anomaly/lift_pop", "anomaly.pop", 1.8),
+            AnomalyAct::Reveal | AnomalyAct::Crush => continue,
         };
         let Some(sample) = bank.pick(set, &mut rng.0) else {
             continue;

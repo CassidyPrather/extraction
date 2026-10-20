@@ -388,7 +388,7 @@ fn card_text(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::progression::{Progression, lines};
+    use crate::progression::Progression;
 
     pub(crate) fn app() -> App {
         let opts = crate::LaunchOptions {

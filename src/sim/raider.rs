@@ -557,6 +557,17 @@ pub struct Scene<'w, 's> {
     anomalies: Query<'w, 's, (Entity, &'static Anomaly, &'static GlobalTransform)>,
     trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    /// Underground sites' power: doors held shut, and the switches.
+    power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    power_switches: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::underground::PowerSwitch,
+            &'static GlobalTransform,
+        ),
+    >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
@@ -1470,7 +1481,9 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
         let at = gt.translation().xz();
         if at.distance(here) < 30.0 {
             r.known.insert(e);
-            new.push((at, a.radius));
+            // The berth a careful walker gives it: a well's pull and a
+            // mirror's far side reach past its edge.
+            new.push((at, a.kind.danger_radius(a.radius)));
         }
     }
     if new.is_empty() || !r.traits.avoid_anomalies {
@@ -1688,13 +1701,20 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
+    let mut in_door: Option<(f32, Vec2)> = None;
     let solid = has_no_floor(plan);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
         let d = c.distance(goal);
-        let reach = reaches_with(plan, solid, c, goal);
-        if best.is_none_or(|b| d < b.0) && reach {
-            best = Some((d, c));
+        // Not in a doorway if anywhere else will do: the door leaf swings
+        // through it, and a bot standing there to reach in is shut out by
+        // its own door.
+        if reaches_with(plan, solid, c, goal) {
+            let doorway = plan.doors.iter().any(|d| seg_dist(d.a, d.b, c) < DOOR_KEEP);
+            let slot = if doorway { &mut in_door } else { &mut best };
+            if slot.is_none_or(|b| d < b.0) {
+                *slot = Some((d, c));
+            }
         }
         for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
             let (ni, nj) = (i as i64 + di, j as i64 + dj);
@@ -1708,7 +1728,9 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
             }
         }
     }
-    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+    best.filter(|b| b.0 < 2.0)
+        .or(in_door.filter(|b| b.0 < 2.0))
+        .map(|b| b.1)
 }
 
 /// Whether a bot standing at `from` (building-local) can reach `goal`:
@@ -1747,6 +1769,9 @@ fn clear_reach(g: &extraction_core::nav::NavGrid, from: Vec2, goal: Vec2) -> boo
     let n = ((d - SHELF).max(0.0) / 0.1).ceil() as usize;
     (0..=n).all(|k| g.walkable(from.lerp(goal, (k as f32 * 0.1 / d).min(1.0)).to_array()))
 }
+
+/// How far from a doorway a bot stands to reach for something, metres.
+const DOOR_KEEP: f32 = 0.9;
 
 /// How deep a shelf, table or crate may be between a bot and what's on it.
 const SHELF: f32 = 1.1;
@@ -1846,6 +1871,15 @@ fn raid_step(
                     Some(item) => {
                         r.act = Act::Take(s, item);
                         if let Some(t) = take_item(r, scene, s, item, pos) {
+                            let power = t.iter().any(|t| {
+                                matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
+                            });
+                            if power {
+                                log.event(
+                                    "power",
+                                    json!({"site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+                                );
+                            }
                             return t;
                         }
                         r.skip.insert(item);
@@ -1948,7 +1982,12 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         // are worth the walk, picked-over ones less so. Loot richness
         // already rises with danger (docs/MAP_DESIGN.md, "what the bots
         // value").
-        let rich = scene.zone.map.richness_at(s.at.to_array());
+        // (A job is worth the walk whatever's on the shelves there.)
+        let rich = if s.job {
+            1.0
+        } else {
+            scene.zone.map.richness_at(s.at.to_array())
+        };
         let score = pull * rich / (1.0 + d / 80.0)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
@@ -2161,7 +2200,28 @@ fn take_item(
             if !plan.in_grid(pos) {
                 return None;
             }
-            tasks.extend(indoor(plan, pos, plan.to_local(at).xz(), 0.3)?);
+            let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
+            // Behind a door on an underground site's power: throw the
+            // switch first (it's loud: the crawlers come), unless careful.
+            let held = route
+                .iter()
+                .any(|t| matches!(t, Task::OpenDoor(d) if scene.power_locked.contains(*d)));
+            if held {
+                if r.traits.name == "cautious" {
+                    return None;
+                }
+                let (switch, _, gt) = scene
+                    .power_switches
+                    .iter()
+                    .find(|(_, sw, _)| sw.site == plan.entity)?;
+                let at_switch = gt.translation();
+                tasks.extend(indoor(plan, pos, plan.to_local(at_switch).xz(), 0.5)?);
+                tasks.push(Task::Press(switch));
+                tasks.push(Task::Wait(1.0));
+                tasks.extend(indoor(plan, at_switch, plan.to_local(at).xz(), 0.3)?);
+            } else {
+                tasks.extend(route);
+            }
         }
         _ => {
             // Artifacts sit in anomalies: test the snare, then dive.
@@ -2171,14 +2231,17 @@ fn take_item(
                 .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
-                // Not hurt, it doesn't.
-                if r.hp < 60.0 && r.traits.avoid_anomalies {
+                // Not hurt, it doesn't; and nobody careful reaches into a
+                // well's heart.
+                if r.traits.avoid_anomalies && (r.hp < 60.0 || kind == AnomalyKind::Well) {
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
-                if kind == AnomalyKind::Snare && r.traits.test_anomalies {
+                if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
+                    && r.traits.test_anomalies
+                {
                     if let Some(junk) = junk(r, scene) {
                         tasks.push(Task::Grab {
                             item: junk,
