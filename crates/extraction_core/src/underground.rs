@@ -548,6 +548,53 @@ impl Hazard {
 }
 
 impl Layout {
+    /// Which rooms are open from the stair's foot (the first room) as the
+    /// site stands: through its links, not through heat nothing crosses
+    /// (till it's vented) nor a pit (the crane's). The rest are behind
+    /// the site's own works.
+    pub fn open_rooms(&self) -> Vec<bool> {
+        let id = |r: &str| self.rooms.iter().position(|q| q.id == r);
+        let hot_room = |k: usize| {
+            self.rooms[k].pit
+                || self.heat.iter().any(|h| {
+                    h.level >= SCORCHING && h.room.as_deref() == Some(self.rooms[k].id.as_str())
+                })
+        };
+        let hot_link = |l: &Link| {
+            self.heat.iter().any(|h| {
+                h.level >= SCORCHING
+                    && h.link.as_ref().is_some_and(|(a, b)| {
+                        (*a == l.from && *b == l.to) || (*a == l.to && *b == l.from)
+                    })
+            })
+        };
+        let mut open = vec![false; self.rooms.len()];
+        if self.rooms.is_empty() || hot_room(0) {
+            return open;
+        }
+        open[0] = true;
+        let mut stack = vec![0];
+        while let Some(k) = stack.pop() {
+            for l in self.links.iter().filter(|l| !hot_link(l)) {
+                let (Some(a), Some(b)) = (id(&l.from), id(&l.to)) else {
+                    continue;
+                };
+                let next = if a == k {
+                    b
+                } else if b == k {
+                    a
+                } else {
+                    continue;
+                };
+                if !open[next] && !hot_room(next) {
+                    open[next] = true;
+                    stack.push(next);
+                }
+            }
+        }
+        open
+    }
+
     /// A room's floor, site y.
     /// Every round and its crawlers: `patrol` first, then `rounds`.
     pub fn residents(&self) -> Vec<Resident<'_>> {
@@ -2082,6 +2129,31 @@ mod tests {
 
     /// The check walks the power in its stages: a switch behind its own
     /// stage's door (or a later one's) can never be thrown.
+    /// The cellars' coal store waits on the flue's vent, the far ledge on
+    /// the crane; the rest are open from the stair.
+    #[test]
+    fn rooms_behind_the_works() {
+        let l = layout("cellars_cinder").unwrap();
+        let open: Vec<&str> = l
+            .rooms
+            .iter()
+            .zip(l.open_rooms())
+            .filter(|(_, o)| *o)
+            .map(|(r, _)| r.id.as_str())
+            .collect();
+        assert_eq!(
+            open,
+            ["stair_foot", "vent_room", "burner_gallery", "near_ledge"],
+            "open as the cellars stand"
+        );
+        for (id, _) in SITES {
+            let l = layout(id).unwrap();
+            if l.heat.is_empty() && !l.rooms.iter().any(|r| r.pit) {
+                assert!(l.open_rooms().iter().all(|o| *o), "{id}: every room open");
+            }
+        }
+    }
+
     #[test]
     fn power_stages_are_reached_in_order() {
         let mut l = layout("mine_kettle").unwrap().clone();

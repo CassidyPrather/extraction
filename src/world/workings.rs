@@ -192,10 +192,10 @@ fn place_site_items(
 /// rails, their shoring standing.
 fn wire_workings(
     mut commands: Commands,
-    buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
+    buildings: Query<(Entity, &Building), Added<Building>>,
     mut gas: ResMut<Gas>,
 ) {
-    for (site, b, xf) in &buildings {
+    for (site, b) in &buildings {
         let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
             continue;
         };
