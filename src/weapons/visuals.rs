@@ -47,6 +47,7 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::show_grenade_parts,
                 super::grenades::explosion_fx,
                 super::zero::aim_lenses,
+                super::zero::turn_drums,
             ),
         )
         .add_plugins((
