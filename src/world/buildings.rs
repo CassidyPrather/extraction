@@ -4480,7 +4480,8 @@ fn aligned_box(size: Vec3, at: Transform) -> Mesh {
 /// prop whose models are in is merged in place of its boxes.
 pub fn dress_buildings(
     mut commands: Commands,
-    mut pending: Query<(Entity, &Building, &mut PropsPending)>,
+    mut pending: Query<(Entity, &Building, &Transform, &mut PropsPending)>,
+    zone: Option<Res<super::Zone>>,
     mut props: crate::render::world_props::PropModels,
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -4491,14 +4492,36 @@ pub fn dress_buildings(
     // Baking a building's occlusion takes a few milliseconds: a few
     // buildings a frame, so a valley's arrival doesn't hitch.
     let mut built = 0;
-    for (e, b, mut wait) in &mut pending {
+    for (e, b, xf, mut wait) in &mut pending {
         if built >= 3 {
             break;
         }
-        let Some(geo) = prefab(&b.prefab) else {
+        let Some(mut geo) = prefab(&b.prefab) else {
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
+        // What the people who lived here left (`clutter`), with the
+        // furniture.
+        if let Some(zone) = &zone {
+            let at = Vec2::new(xf.translation.x, xf.translation.z);
+            let tag = zone
+                .map
+                .placements
+                .iter()
+                .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
+                .map_or("", |p| p.tag.as_str());
+            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf);
+            if !models.is_empty() {
+                let n = geo.pieces.len();
+                geo.props.push(PropDef {
+                    models,
+                    pieces: n..n,
+                    inside: true,
+                    shadow: false,
+                    lods: None,
+                });
+            }
+        }
         wait.0 += 1;
         let mut loading = false;
         let ready: Vec<bool> = geo
