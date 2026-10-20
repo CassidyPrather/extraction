@@ -70,6 +70,74 @@ def pu_scope():
     return [p]
 
 
+# --- PSO-1 scope ------------------------------------------------------------------------
+
+def pso_scope():
+    p = Part("body")
+    # The 4x PSO-1: a long tube, a wide objective bell with its sunshade,
+    # elevation and windage turrets in a squared housing, the reticle
+    # light's battery cap, a long rubber eyecup, and the side bracket that
+    # sits on the dovetail (here under it, as the game's mount is).
+    # Optical axis y = 0, the eye at z 0.2; 0.06 x 0.09 x 0.375 m.
+    prof = [(0.0, -0.1875), (0.0195, -0.1875), (0.0205, -0.185), (0.0205, -0.13),
+            (0.0195, -0.127), (0.0195, -0.11), (0.013, -0.082), (0.013, 0.07), (0.0165, 0.088),
+            (0.0165, 0.12), (0.0, 0.12)]
+    p.lathe(prof, "Blued", segs=32)
+    p.cyl(0.0182, -0.186, -0.18, "Lens", segs=28)
+    # The rubber eyecup, its brow shield up on the left.
+    p.lathe([(0.015, 0.119), (0.0185, 0.12), (0.0195, 0.168), (0.018, 0.172), (0.0165, 0.172),
+             (0.0155, 0.13)], "Rubber", segs=28, closed=True)
+    p.lathe([(0.0192, 0.15), (0.026, 0.168), (0.026, 0.1725), (0.0192, 0.168)], "Rubber",
+            segs=10, closed=True, start=100.0, sweep=110.0)
+    p.cyl(0.0135, 0.118, 0.122, "Lens", segs=24)
+    # The turret housing, and the drums with their caps and index marks.
+    p.box((0.034, 0.034, 0.05), (0.0, 0.0, -0.01), "Blued", bevel=0.005, segs=2)
+    p.cyl(0.0125, 0.017, 0.03, "Blued", segs=24, xf=T(0, 0, -0.01) @ UP, chamfer=0.0015)
+    for k in range(12):
+        p.box((0.0012, 0.004, 0.0012), (0.0, 0.0, 0.0), "Enamel",
+              xf=T(0, 0.0255, -0.01) @ RY(2 * math.pi * k / 12) @ T(0.0127, 0, 0))
+    p.cyl(0.0125, -0.03, -0.017, "Blued", segs=24, xf=T(0, 0, -0.01) @ ALONG_X, chamfer=0.0015)
+    # The battery cap for the lit reticle, up on the left of the housing.
+    p.cyl(0.007, 0.0, 0.012, "Blued", segs=16, xf=T(-0.016, 0.017, 0.012) @ RZ(0.6) @ UP,
+          chamfer=0.001)
+    # The bracket: a long base on the dovetail, its clamp lever on the left.
+    for z in (-0.06, 0.05):
+        p.tube(0.0158, 0.0128, z - 0.009, z + 0.009, "Black", segs=24, chamfer=0.001)
+        p.box((0.012, 0.014, 0.018), (0.0, -0.017, z), "Black", bevel=0.0015, segs=1)
+    p.box((0.016, 0.006, 0.15), (0.0, -0.0215, -0.005), "Black", bevel=0.0015, segs=1)
+    for sx in (-1, 1):
+        p.box((0.003, 0.006, 0.13), (sx * 0.009, -0.0235, -0.005), "Black", bevel=0.001, segs=1)
+    p.box((0.004, 0.006, 0.05), (-0.013, -0.021, -0.03), "Black", bevel=0.0015, segs=1,
+          xf=RY(-0.12, about=(-0.013, -0.021, -0.005)))
+    # The sunshade's screw ring, a little proud.
+    p.tube(0.0215, 0.0195, -0.13, -0.124, "Blued", segs=32)
+    return [p]
+
+
+# --- PBS-1 suppressor ------------------------------------------------------------------------
+
+def pbs_suppressor():
+    p = Part("body")
+    # A long can for the AK: a knurled coupling at the back that threads
+    # onto the muzzle, a plain tube, a front cap with the rubber wipe plug
+    # in its mouth. 0.036 x 0.036 x 0.2 m, its back face on the muzzle.
+    L = 0.1
+    p.lathe([(0.006, L), (0.0165, L), (0.0175, L - 0.002), (0.0175, L - 0.034),
+             (0.0165, L - 0.036), (0.006, L - 0.036)], "Blued", segs=28, closed=True)
+    for k in range(18):
+        p.box((0.0012, 0.0012, 0.028), (0.0, 0.0, 0.0), "Blued",
+              xf=RZ(2 * math.pi * k / 18) @ T(0.0175, 0, L - 0.018))
+    p.lathe([(0.0, L - 0.036), (0.0165, L - 0.036), (0.0165, -L + 0.022), (0.0, -L + 0.022)],
+            "Black", segs=28)
+    p.lathe([(0.0, -L + 0.022), (0.0175, -L + 0.022), (0.0175, -L + 0.002), (0.0165, -L),
+             (0.006, -L), (0.0, -L + 0.004)], "Blued", segs=28)
+    p.cyl(0.0058, -L - 0.0004, -L + 0.006, "Rubber", segs=16)
+    # Two welded seams round the body.
+    for z in (-0.02, 0.03):
+        p.tube(0.0172, 0.016, z - 0.0015, z + 0.0015, "Blued", segs=28)
+    return [p]
+
+
 # --- Side-mount rail -----------------------------------------------------------------------
 
 def side_rail():
@@ -161,7 +229,8 @@ def artifact_adapter():
     return [p]
 
 
-for item_id, fn in (("pu_scope", pu_scope), ("side_rail", side_rail),
+for item_id, fn in (("pso_scope", pso_scope), ("pbs_suppressor", pbs_suppressor),
+                    ("pu_scope", pu_scope), ("side_rail", side_rail),
                     ("weapon_light", weapon_light), ("laser_module", laser_module),
                     ("artifact_adapter", artifact_adapter)):
     if wanted(item_id):
