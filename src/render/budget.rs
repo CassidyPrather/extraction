@@ -143,7 +143,8 @@ impl Plugin for BudgetPlugin {
         );
         app.add_systems(
             PostUpdate,
-            (range_items,).before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+            (range_items, shadow_reach)
+                .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
         let knobs = Knobs::from_env();
         if knobs != Knobs::default() {
@@ -215,6 +216,39 @@ fn range_items(
                 end_margin: (far * 0.8)..far,
                 use_aabb: false,
             });
+    }
+}
+
+/// A mesh that casts the sun's shadow only this near the eye
+/// (horizontally, give or take a couple of metres so it doesn't flicker
+/// at the line). The shadow cascades' own range is the camera's, so a
+/// `VisibilityRange` can't stop a caster without hiding it: this can.
+/// The forest's near cards carry it: in a wood they were two thirds of
+/// the shadow passes, and beyond a few tens of metres in the fog the
+/// trunks' shadows read the same.
+#[derive(Component, Clone, Copy)]
+pub struct ShadowReach(pub f32);
+
+fn shadow_reach(
+    mut commands: Commands,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    casters: Query<(Entity, &GlobalTransform, &ShadowReach, Has<NotShadowCaster>)>,
+) {
+    let eyes: Vec<Vec2> = cams.iter().map(|g| g.translation().xz()).collect();
+    if eyes.is_empty() {
+        return;
+    }
+    for (e, gt, reach, off) in &casters {
+        let p = gt.translation().xz();
+        let d = eyes
+            .iter()
+            .map(|e| e.distance(p))
+            .fold(f32::INFINITY, f32::min);
+        if off && d < reach.0 - 2.0 {
+            commands.entity(e).try_remove::<NotShadowCaster>();
+        } else if !off && d > reach.0 + 2.0 {
+            commands.entity(e).try_insert(NotShadowCaster);
+        }
     }
 }
 

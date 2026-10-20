@@ -546,6 +546,11 @@ fn impostor_range(fog: f32) -> bevy::camera::visibility::VisibilityRange {
     }
 }
 
+/// Near cards (and cores) cast the sun's shadow only this close: past it
+/// the trunks' shadows carry the wood, as they do past the impostors' cut
+/// (see `render::budget::ShadowReach`).
+const CARD_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(30.0);
+
 /// The spruce's dark core, scaled inside its cards.
 const CORE_SCALE: Vec3 = Vec3::new(0.62, 0.96, 0.62);
 
@@ -641,8 +646,12 @@ fn stream_near_detail(
                     let v = &assets.handles[&(tree.species, tree.variant)];
                     let mut kids = Vec::new();
                     if let Some((cards, card_mat)) = &v.cards {
-                        let mut card =
-                            commands.spawn((Mesh3d(cards.clone()), fade.clone(), ChildOf(*e)));
+                        let mut card = commands.spawn((
+                            Mesh3d(cards.clone()),
+                            fade.clone(),
+                            CARD_SHADOWS,
+                            ChildOf(*e),
+                        ));
                         match &v.live {
                             Some(live) => card.insert(MeshMaterial3d(live.clone())),
                             None => card.insert(MeshMaterial3d(card_mat.clone())),
@@ -658,6 +667,7 @@ fn stream_near_detail(
                                             MeshMaterial3d(assets.core.clone()),
                                             Transform::from_scale(CORE_SCALE),
                                             fade.clone(),
+                                            CARD_SHADOWS,
                                             ChildOf(*e),
                                         ))
                                         .id(),
