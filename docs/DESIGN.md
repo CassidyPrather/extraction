@@ -422,8 +422,8 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   of the vest's pockets (the pocket decides front or back). A round that
   lands where a plate or the helmet covers goes through `armour_strike`:
   a stop leaves a bruise (5% of the damage) and wears the plate, a
-  ricochet does nothing, and a round that goes through keeps the square of
-  its remaining speed. A 6 mm plate stops pistol rounds and buckshot. A
+  ricochet does nothing, and a round that goes through does harm in
+  proportion to the speed it keeps. A 6 mm plate stops pistol rounds and buckshot. A
   new one dents under a rifle round, and a worn one lets it through.
   Blasts and blades go round plates.
 

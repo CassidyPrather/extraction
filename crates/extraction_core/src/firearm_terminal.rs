@@ -14,6 +14,8 @@
 //! through it; rifle rounds go through plaster and tin but nothing stops
 //! in a pane of glass; brick, concrete and rock stop everything.
 
+use crate::ammo::{AP_HARD, Load};
+
 /// What a round can meet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Stuff {
@@ -89,6 +91,14 @@ impl Stuff {
     }
 
     /// Steep enough a face that a grazing round may glance off it.
+    /// Hard plate: what an AP core is for.
+    pub fn hard(self) -> bool {
+        matches!(
+            self,
+            Stuff::Sheet | Stuff::Plate | Stuff::ArmourPlate | Stuff::Helmet
+        )
+    }
+
     pub fn ricochets(self) -> bool {
         matches!(
             self,
@@ -155,6 +165,28 @@ pub fn strike(
     thickness_mm: f32,
     roll: f32,
 ) -> Outcome {
+    strike_load(
+        Load::Standard,
+        stuff,
+        mass_g,
+        speed,
+        cos_in,
+        thickness_mm,
+        roll,
+    )
+}
+
+/// [`strike`] for a round of `load`: an AP core goes through hard plate
+/// for less.
+pub fn strike_load(
+    load: Load,
+    stuff: Stuff,
+    mass_g: f32,
+    speed: f32,
+    cos_in: f32,
+    thickness_mm: f32,
+    roll: f32,
+) -> Outcome {
     let cos_in = cos_in.clamp(0.0, 1.0);
     if stuff.ricochets() && cos_in < GRAZE_COS {
         // The flatter it comes in, the likelier it glances.
@@ -165,7 +197,13 @@ pub fn strike(
         }
     }
     let path = stuff.real_thickness_mm(thickness_mm) / cos_in.max(0.2);
-    let left = energy_j(mass_g, speed) - stuff.cost_per_mm() * path;
+    let cost = stuff.cost_per_mm()
+        * if load == Load::Ap && stuff.hard() {
+            AP_HARD
+        } else {
+            1.0
+        };
+    let left = energy_j(mass_g, speed) - cost * path;
     if left > 0.0 && path.is_finite() {
         Outcome::Through {
             speed: speed_for(mass_g, left),
@@ -207,9 +245,22 @@ pub fn armour_strike(
     cos_in: f32,
     roll: f32,
 ) -> (Outcome, f32) {
+    armour_strike_load(Load::Standard, def, condition, mass_g, speed, cos_in, roll)
+}
+
+/// [`armour_strike`] for a round of `load`.
+pub fn armour_strike_load(
+    load: Load,
+    def: &ArmourDef,
+    condition: f32,
+    mass_g: f32,
+    speed: f32,
+    cos_in: f32,
+    roll: f32,
+) -> (Outcome, f32) {
     let c = condition.clamp(0.0, 1.0);
     let t = def.thickness_mm * (0.5 + 0.5 * c);
-    let out = strike(def.stuff, mass_g, speed, cos_in, t, roll);
+    let out = strike_load(load, def.stuff, mass_g, speed, cos_in, t, roll);
     let e = energy_j(mass_g, speed);
     let absorbed = match out {
         Outcome::Stop => e,
@@ -348,6 +399,46 @@ mod tests {
             "{wear_pm} {wear_ak}"
         );
         assert!(wear_ak < 0.1, "a plate takes a good few: {wear_ak}");
+    }
+
+    /// An AP round from an AK at 100 m goes through a worn plate (0.3)
+    /// that stops ball, and a Mosin's AP through a new one.
+    #[test]
+    fn ap_through_a_worn_plate_where_ball_stops() {
+        let p = plate();
+        let hit = |load, gun: (&str, f32), cond: f32| {
+            armour_strike_load(
+                load,
+                &p,
+                cond,
+                bullet_mass_g(gun.0),
+                at_range(gun.1, 100.0),
+                1.0,
+                1.0,
+            )
+            .0
+        };
+        assert_eq!(hit(Load::Standard, AK, 0.3), Outcome::Stop);
+        assert!(matches!(hit(Load::Ap, AK, 0.3), Outcome::Through { .. }));
+        assert_eq!(
+            hit(Load::Ap, AK, 1.0),
+            Outcome::Stop,
+            "a new plate still holds a 5.45"
+        );
+        assert!(matches!(hit(Load::Ap, MOSIN, 1.0), Outcome::Through { .. }));
+        // Soft cover doesn't care.
+        assert_eq!(
+            strike_load(
+                Load::Ap,
+                Stuff::Logs,
+                bullet_mass_g(AK.0),
+                AK.1,
+                1.0,
+                250.0,
+                1.0
+            ),
+            strike(Stuff::Logs, bullet_mass_g(AK.0), AK.1, 1.0, 250.0, 1.0)
+        );
     }
 
     /// A helmet turns fragments and glances, not a pistol round head on.

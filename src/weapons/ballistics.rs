@@ -7,6 +7,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use extraction_core::ammo::Load;
 use extraction_core::noise::Rng;
 
 use crate::world::Layer;
@@ -41,6 +42,8 @@ pub struct Projectile {
     /// off so far.
     pub seed: u64,
     pub passes: u8,
+    /// What it's loaded with (AP, a tracer, a slug).
+    pub load: Load,
 }
 
 /// A round glanced off a hard face (for the whine and a spray of sparks).
@@ -106,6 +109,8 @@ pub struct Hit {
     /// The round's mass, grams, if it was a round (armour weighs it); 0
     /// for a blast or a blade.
     pub mass_g: f32,
+    /// What the round was loaded with (armour weighs an AP core).
+    pub load: Load,
 }
 
 /// A muzzle flash's light, fading out.
@@ -117,6 +122,14 @@ pub struct Flash {
 /// Shots fired and projectiles moved: hit messages are out after this.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BallisticsSystems;
+
+/// A slug's share of the buckshot load's summed harm, its speed against
+/// buckshot's, and its spread at most, radians.
+pub const SLUG_SHARE: f32 = 0.8;
+pub const SLUG_SPEED: f32 = 0.95;
+pub const SLUG_SPREAD: f32 = 0.004;
+/// An AP round's harm to a robot's armour plate, against ball's.
+pub const AP_PLATE: f32 = 1.6;
 
 /// Air drag, 1/s: a rough fit so a rifle round loses ~20% by 200 m.
 const DRAG: f32 = 0.12;
@@ -148,10 +161,29 @@ fn fire_shots(
     guns: Query<&super::Gun>,
 ) {
     for shot in shots.read() {
-        // Robots' guns have no cartridge: a middling bullet.
-        let mass_g = guns.get(shot.gun).map_or(8.0, |g| {
-            extraction_core::firearm_terminal::bullet_mass_g(&g.firearm.def.cartridge)
+        // Robots' guns have no cartridge: a middling bullet. A gun's shot
+        // is the round it just fired.
+        let (mass_g, load) = guns.get(shot.gun).map_or((8.0, Load::Standard), |g| {
+            let load = g.firearm.last_fired;
+            (load.mass_g(&g.firearm.def.cartridge), load)
         });
+        // A slug is one ball where buckshot is many: the pellets' harm in
+        // one, with a rifle's tight group.
+        let (projectiles, damage, spread, speed) = if load == Load::Slug {
+            (
+                1,
+                shot.damage * shot.projectiles.max(1) as f32 * SLUG_SHARE,
+                shot.spread.min(SLUG_SPREAD),
+                shot.speed * SLUG_SPEED,
+            )
+        } else {
+            (
+                shot.projectiles.max(1),
+                shot.damage,
+                shot.spread,
+                shot.speed,
+            )
+        };
         // An artifact in an adapter on this gun.
         let mods = mounted
             .iter()
@@ -163,16 +195,16 @@ fn fire_shots(
         let dir = shot.direction.normalize_or(Vec3::NEG_Z);
         let side = dir.any_orthonormal_vector();
         let up = dir.cross(side);
-        for _ in 0..shot.projectiles.max(1) {
+        for _ in 0..projectiles {
             // Uniform-in-disc spread.
-            let r = shot.spread * rng.f32().sqrt();
+            let r = spread * rng.f32().sqrt();
             let a = rng.range(0.0, std::f32::consts::TAU);
             let d = (dir + side * (r * a.cos()) + up * (r * a.sin())).normalize();
             commands.spawn((
                 Name::new("Projectile"),
                 Projectile {
-                    velocity: d * shot.speed,
-                    damage: shot.damage,
+                    velocity: d * speed,
+                    damage,
                     shooter: shot.shooter,
                     gun: shot.gun,
                     life: 3.0,
@@ -180,6 +212,7 @@ fn fire_shots(
                     mass_g,
                     seed: rng.next_u64(),
                     passes: 0,
+                    load,
                 },
                 Transform::from_translation(shot.origin),
             ));
@@ -212,7 +245,7 @@ pub(crate) fn fly_projectiles(
     struck: Struck,
     mut ricochets: MessageWriter<Ricochet>,
 ) {
-    use extraction_core::firearm_terminal::{Outcome, strike};
+    use extraction_core::firearm_terminal::{Outcome, strike_load};
     let dt = time.delta_secs();
     let filter =
         SpatialQueryFilter::from_mask([Layer::World, Layer::Item, Layer::Robot, Layer::Player]);
@@ -279,18 +312,28 @@ pub(crate) fn fly_projectiles(
             } else {
                 let roll =
                     Rng::new(p.seed ^ (u64::from(p.passes) + 1).wrapping_mul(0x9E37_79B9)).f32();
-                strike(stuff, p.mass_g, speed, cos_in, mm, roll)
+                strike_load(p.load, stuff, p.mass_g, speed, cos_in, mm, roll)
             };
             let glancing = matches!(outcome, Outcome::Ricochet { .. });
+            // An AP core punches a robot's plate; soft things it harms a
+            // little less than ball, which breaks up in them.
+            let core = if p.load != Load::Ap {
+                p.load.soft()
+            } else if struck.is_plate(hit.entity) {
+                AP_PLATE
+            } else {
+                p.load.soft()
+            };
             hits.write(Hit {
                 entity: hit.entity,
                 point,
                 normal: hit.normal,
                 velocity: p.velocity,
                 // A glancing blow only grazes.
-                damage: p.damage * p.mods.damage * if glancing { 0.3 } else { 1.0 },
+                damage: p.damage * p.mods.damage * core * if glancing { 0.3 } else { 1.0 },
                 shooter: p.shooter,
                 mass_g: p.mass_g,
+                load: p.load,
             });
             match outcome {
                 Outcome::Through { speed: out } => {
@@ -388,12 +431,19 @@ pub(crate) struct Struck<'w, 's> {
     structures: Query<'w, 's, (), With<crate::world::structures::Structure>>,
     items: Query<'w, 's, (), With<crate::items::Item>>,
     bodies: Query<'w, 's, (), With<crate::player::BodyCollider>>,
-    robot_parts: Query<'w, 's, (), With<crate::robots::RobotPart>>,
+    robot_parts: Query<'w, 's, &'static crate::robots::RobotPart>,
 }
 
 impl Struck<'_, '_> {
     /// What it is, how thick square to its face (mm), and how far the
     /// round's line runs through it (m).
+    /// A robot's armour plate.
+    fn is_plate(&self, e: Entity) -> bool {
+        self.robot_parts
+            .get(e)
+            .is_ok_and(|p| matches!(p.role, crate::robots::PartRole::Armour(_)))
+    }
+
     fn stuff(
         &self,
         e: Entity,

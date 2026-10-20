@@ -431,6 +431,7 @@ fn burners(
                     damage: 18.0 * dt,
                     shooter: None,
                     mass_g: 0.0,
+                    load: Default::default(),
                 });
             }
         }
@@ -536,6 +537,7 @@ fn snares(
                     damage: 40.0,
                     shooter: None,
                     mass_g: 0.0,
+                    load: Default::default(),
                 });
             } else if let Ok((rb, mut f)) = bodies.get_mut(t) {
                 if *rb == RigidBody::Dynamic {
@@ -800,6 +802,7 @@ mod tests {
             mass_g,
             seed: 0,
             passes: 0,
+            load: Default::default(),
         }
     }
 
