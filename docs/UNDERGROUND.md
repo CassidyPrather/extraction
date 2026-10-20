@@ -88,7 +88,7 @@ that the whole stairwell is open.
   radius)]`) and are laid out again each cycle with the valley's
   (`underground::spawn_anomalies`, called from
   `anomaly::spawn_cycle_anomalies`): a live snare by Marrow's generator, a
-  lift in Kettle's stope, a snare guarding the crate in Cinder's overflow
+  lift in Kettle's stope, a snare in the far corner of Cinder's overflow
   chamber. `check` keeps each inside its room and clear of the doorways:
   you go round them, you're never made to walk through one.
 - **Crawlers** (Robot minds' `robots::indoor`): each site's layout names

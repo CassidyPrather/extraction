@@ -425,6 +425,8 @@ fn crawler_at(
         patrol: route.clone(),
         spawn: at,
         crawlers: 1,
+        heavy: 0,
+        dormant: false,
     };
     let mut queue = CommandQueue::default();
     let e = {
@@ -1001,7 +1003,7 @@ fn an_open_door_lets_a_sound_out() {
     let post = ent.mid + ent.out * 8.0;
     let walker = walker_at(&mut app, &zone, zone.on_ground(post.x, post.z));
     let inside = ent.mid - ent.out * 2.0;
-    let mut heard = |app: &mut App, open: bool| {
+    let heard = |app: &mut App, open: bool| {
         app.world_mut()
             .get_mut::<crate::world::buildings::Door>(ent.door)
             .unwrap()
@@ -1074,4 +1076,126 @@ fn a_walker_runs_from_a_live_grenade() {
         "out past the blast ({:.1} m, blast {radius})",
         flat(last - at)
     );
+}
+
+/// A dormant resident sleeps through a player standing in front of it;
+/// a loud noise (a breaker's clank) wakes it.
+#[test]
+fn a_sleeping_crawler_wakes_to_a_loud_noise() {
+    let (mut app, player, zone) = app(None);
+    let centre = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, zone.on_ground(centre.x, centre.z - 6.0));
+    let crawler = crawler_at(&mut app, &zone, site(centre, |_| false), vec![centre]);
+    app.world_mut()
+        .entity_mut(crawler)
+        .insert(super::indoor::Dormant);
+    for _ in 0..90 * 4 {
+        app.update();
+        let a = app.world().get::<Awareness>(crawler).unwrap();
+        assert!(!a.can_see_target, "asleep: {a:?}");
+    }
+    app.world_mut().write_message(super::Noise {
+        at: zone.on_ground(centre.x + 8.0, centre.z),
+        radius: 30.0,
+        source: None,
+    });
+    let mut awake = false;
+    for _ in 0..90 * 4 {
+        app.update();
+        if app.world().get::<super::indoor::Dormant>(crawler).is_none() {
+            awake = true;
+            break;
+        }
+    }
+    assert!(awake, "the clank woke it");
+}
+
+/// The machines recalled: a resident walks back to its bay and sleeps
+/// there; the capstone doesn't take it away.
+#[test]
+fn recalled_residents_sleep_in_their_bays() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    let bay = zone.on_ground(centre.x - 8.0, centre.z);
+    let far = zone.on_ground(centre.x + 8.0, centre.z);
+    let crawler = crawler_at(&mut app, &zone, site(centre, |_| false), vec![bay, far]);
+    // Out on its round, away from the bay.
+    for _ in 0..90 * 15 {
+        app.update();
+        let p = app.world().get::<Transform>(crawler).unwrap().translation;
+        if flat(p - bay) > 10.0 {
+            break;
+        }
+    }
+    app.world_mut().resource_mut::<crate::raid::Raid>().recalled = true;
+    let mut asleep = false;
+    for _ in 0..90 * 30 {
+        app.update();
+        assert!(
+            app.world().get_entity(crawler).is_ok(),
+            "the capstone left it be"
+        );
+        if app.world().get::<super::indoor::Dormant>(crawler).is_some() {
+            asleep = true;
+            break;
+        }
+    }
+    assert!(asleep, "back in its bay, asleep");
+    let p = app.world().get::<Transform>(crawler).unwrap().translation;
+    assert!(flat(p - bay) < 3.5, "in its bay ({p:.1} vs {bay:.1})");
+}
+
+/// What a robot would voice: one shift per change, none repeated back to
+/// back; a robot that hears a call answers it once.
+#[test]
+fn minds_shift_once_per_change() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Shifts>().add_systems(
+        Last,
+        |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    // b first, out of your sight (far, facing away); then a, facing you.
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(130.0, 240.0));
+    app.world_mut()
+        .get_mut::<super::walker::Walker>(b)
+        .unwrap()
+        .yaw = std::f32::consts::PI;
+    put(&mut app, player, me);
+    let a = walker_at(&mut app, &zone, zone.on_ground(100.0, 220.0));
+    for _ in 0..90 * 8 {
+        app.update();
+    }
+    let shifts = &app.world().resource::<Shifts>().0;
+    let of = |r: Entity| {
+        shifts
+            .iter()
+            .filter(|s| s.robot == r)
+            .map(|s| s.state)
+            .collect::<Vec<_>>()
+    };
+    let sa = of(a);
+    assert!(sa.contains(&Mind::Noticed), "{sa:?}");
+    assert!(sa.contains(&Mind::Engaging), "{sa:?}");
+    assert!(sa.contains(&Mind::Calling), "{sa:?}");
+    for r in [a, b] {
+        let s = of(r);
+        for w in s.windows(2) {
+            assert!(
+                w[0] != w[1] || matches!(w[0], Mind::Answering { .. } | Mind::Hurt),
+                "repeated: {s:?}"
+            );
+        }
+    }
+    let answers = of(b)
+        .iter()
+        .filter(|m| **m == Mind::Answering { caller: a })
+        .count();
+    assert_eq!(answers, 1, "b answered a's call once: {:?}", of(b));
 }

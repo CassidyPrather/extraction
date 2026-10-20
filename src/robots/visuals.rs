@@ -1113,6 +1113,7 @@ fn lock_flares(
     mut commands: Commands,
     mut locks: MessageReader<super::drone::DroneLock>,
     mut aims: MessageReader<super::walker::WalkerAim>,
+    mut windups: MessageReader<super::sorter::SorterWindup>,
     mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
     time: Res<Time>,
 ) {
@@ -1131,6 +1132,25 @@ fn lock_flares(
                     ..default()
                 },
                 Transform::from_xyz(0.0, -0.15, -0.25),
+            ));
+        }
+    }
+    // The Sorter about to throw: a red flare off its head.
+    for w in windups.read() {
+        if let Ok(mut c) = commands.get_entity(w.sorter) {
+            c.with_child((
+                LockFlare {
+                    left: super::sorter::WINDUP,
+                    dur: super::sorter::WINDUP,
+                },
+                PointLight {
+                    color: Color::srgb(1.0, 0.12, 0.08),
+                    intensity: 0.0,
+                    range: 12.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, -0.5, -0.6),
             ));
         }
     }

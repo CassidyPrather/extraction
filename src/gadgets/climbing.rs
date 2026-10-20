@@ -432,6 +432,7 @@ fn climb(
     >,
     mut hands: Query<(Entity, &RigHand, &Hand, Option<&mut RopeGrip>)>,
     ropes: Query<&Rope>,
+    hand_holds: Query<(), With<crate::interact::hand_climb::HandHold>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
@@ -449,7 +450,8 @@ fn climb(
             }
         }
         let Some((hand_e, _)) = best else {
-            if climbing {
+            // A ladder or a ledge may hold you instead (`interact::hand_climb`).
+            if climbing && !children.iter().any(|c| hand_holds.contains(c)) {
                 commands.entity(player).remove::<Climbing>();
             }
             continue;

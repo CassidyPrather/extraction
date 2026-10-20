@@ -77,11 +77,20 @@ impl Shape {
             Shape::Hound => 0.95,
         }
     }
-    /// Top speed against a walker's, acceleration and turning likewise.
+    /// Speed at `Intent::pace` 1 against a walker's, acceleration and
+    /// turning likewise.
     fn pace(self) -> (f32, f32, f32) {
         match self {
             Shape::Orb => (1.0, 1.0, 1.0),
-            Shape::Hound => (2.6, 3.2, 2.2),
+            // ~2 m/s at a lope; pace 2.25 runs it at 4.5.
+            Shape::Hound => (1.41, 3.2, 2.2),
+        }
+    }
+    /// The most `Intent::pace` it can take (a hound runs flat out at 2.25).
+    pub fn max_pace(self) -> f32 {
+        match self {
+            Shape::Orb => 1.6,
+            Shape::Hound => 2.3,
         }
     }
 }
@@ -136,6 +145,11 @@ pub struct Gait {
     pub size: f32,
     /// How far into a crouch it is, 0..1 (smoothed `Intent::low`).
     pub crouch: f32,
+    /// Coiled to spring (a hound's lunge tell): seconds left, and toward.
+    pub coil: f32,
+    pub coil_at: Vec3,
+    /// Mid-lunge: seconds the gait lets its speed run past its top.
+    pub leap: f32,
     /// The body it carries.
     pub shape: Shape,
     /// Seconds alive, for idle motion.
@@ -166,6 +180,9 @@ impl Default for Gait {
             steady: 0.0,
             size: 1.0,
             crouch: 0.0,
+            coil: 0.0,
+            coil_at: Vec3::ZERO,
+            leap: 0.0,
             shape: Shape::Orb,
             age: 0.0,
         }
@@ -300,7 +317,10 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
-    let speed_scale = drive.pace.clamp(0.0, 1.6)
+    g.coil = (g.coil - dt).max(0.0);
+    g.leap = (g.leap - dt).max(0.0);
+    let speed_scale = drive.pace.clamp(0.0, g.shape.max_pace())
+        * if g.coil > 0.0 { 0.15 } else { 1.0 }
         * (1.0 - 0.6 * g.limp)
         * if g.steady > 0.0 || g.rear > 0.0 {
             0.3
@@ -315,6 +335,8 @@ pub fn step_walker(
 
     // Velocity: built up and bled off at a heavy machine's rate.
     let (_, accel_k, turn_k) = g.shape.pace();
+    // Mid-lunge it flies on what it launched with.
+    let accel_k = if g.leap > 0.0 { 0.0 } else { accel_k };
     let dv = (desired - w.velocity).clamp_length_max(ACCEL * accel_k * dt);
     w.velocity += dv;
     let v = w.velocity;
@@ -324,7 +346,12 @@ pub fn step_walker(
     let speed = v.length();
 
     // Yaw with inertia.
-    let face = drive.face.unwrap_or(v);
+    let coil_dir = g.coil_at - (t.translation - g.sway);
+    let face = if g.coil > 0.0 {
+        coil_dir
+    } else {
+        drive.face.unwrap_or(v)
+    };
     let want_rate = if !drive.down && Vec2::new(face.x, face.z).length() > 0.2 {
         let want = (-face.x).atan2(-face.z);
         (wrap(want - w.yaw) * 2.5).clamp(-TURN_RATE * turn_k, TURN_RATE * turn_k)
@@ -340,7 +367,9 @@ pub fn step_walker(
 
     // Feet.
     let rot = Quat::from_rotation_y(w.yaw);
-    let top = SPEED * s * g.shape.pace().0;
+    // (Cadence by the pace it can reach: a hound's stride lengthens to its run.)
+    let run = if g.shape == Shape::Hound { 2.25 } else { 1.0 };
+    let top = SPEED * s * g.shape.pace().0 * run;
     let fast = (speed / top).clamp(0.0, 1.5);
     // (A runner's feet are quicker.)
     let step_time = (0.36 - 0.1 * fast) * if g.shape == Shape::Hound { 0.7 } else { 1.0 };
@@ -493,7 +522,8 @@ pub fn step_walker(
         .filter(|f| f.alive && f.t < 1.0)
         .map(|f| (std::f32::consts::PI * f.t).sin())
         .fold(0.0f32, f32::max);
-    let bob_target = 0.025 * swing * fast.min(1.0);
+    // Mid-lunge it's up off its legs.
+    let bob_target = 0.025 * swing * fast.min(1.0) + if g.leap > 0.0 { 0.12 * s } else { 0.0 };
     g.bob_vel -= kick;
     g.bob_vel += ((bob_target - g.sway.y) * 140.0 - g.bob_vel * 15.0) * dt;
     let bob = (g.sway.y + g.bob_vel * dt).clamp(-0.15, 0.08);
@@ -570,10 +600,16 @@ pub fn step_walker(
         let j = k - k.floor() - 0.5;
         g.wobble_vel += Vec3::new(j, 0.0, 0.5 - j.abs()) * 1.6 * lame;
     }
+    // Coiled: haunches down, nose up toward what it'll spring at.
+    let coil = if g.coil > 0.0 {
+        Vec3::Y.cross(-Vec3::new(coil_dir.x, 0.0, coil_dir.z).normalize_or_zero()) * 0.22
+    } else {
+        Vec3::ZERO
+    };
     let tilt = if drive.down {
         Vec3::ZERO
     } else {
-        slope + lean + list + haul + rock
+        slope + lean + list + haul + rock + coil
     };
     g.tilt = g.tilt.lerp(tilt.clamp_length_max(0.4), (4.0 * dt).min(1.0));
     // Wobble: a stiff, underdamped spring.
@@ -1129,7 +1165,8 @@ mod tests {
             let drive = Drive {
                 desired: Vec3::X * g.top_speed(),
                 face: None,
-                pace: 1.0,
+                // Flat out.
+                pace: 2.25,
                 down: false,
                 stunned: false,
                 low: false,
@@ -1166,7 +1203,7 @@ mod tests {
                 );
             }
         }
-        assert!(fastest > 3.0, "ran at {fastest:.2} m/s");
+        assert!(fastest > 4.2, "ran at {fastest:.2} m/s");
         assert!(err < 0.01 && slip < 1e-5, "err {err:.3} slip {slip:.5}");
         assert!(pairs > 90, "trotted in diagonal pairs ({pairs} ticks)");
         assert!(landings > 20);

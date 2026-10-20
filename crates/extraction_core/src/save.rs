@@ -59,6 +59,9 @@ pub struct Stats {
     /// The notes read, "map/name", in order: the cork board's pins.
     #[serde(default)]
     pub notes_read: Vec<String>,
+    /// The ending played: Lev went down to the Depot with you.
+    #[serde(default)]
+    pub epilogue: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

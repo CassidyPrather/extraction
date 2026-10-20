@@ -1123,6 +1123,51 @@ impl Builder {
         self
     }
 
+    /// A piece of equipment: a box of `size` standing at `at` (turned
+    /// `yaw`) for its collider, drawn by `model`, loot on its top if any.
+    pub fn furnish(
+        &mut self,
+        model: &'static str,
+        size: Vec3,
+        at: Vec3,
+        yaw: f32,
+        loot: Option<&'static str>,
+    ) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(size),
+            Transform::from_translation(at + Vec3::Y * size.y * 0.5).with_rotation(rot),
+            Mat::DarkMetal,
+            true,
+        );
+        self.dress(
+            from,
+            vec![(model, Transform::from_translation(at).with_rotation(rot))],
+        );
+        if let Some(t) = loot {
+            self.loot(at + Vec3::Y * (size.y + 0.05), t);
+        }
+        self
+    }
+
+    /// A small thing drawn by `model` with no collider (a coil of rope on
+    /// the floor), standing in as a low box until it loads.
+    pub fn strew(&mut self, model: &'static str, size: Vec3, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(size),
+            Transform::from_translation(at + Vec3::Y * size.y * 0.5).with_rotation(rot),
+            Mat::Timber,
+            false,
+        );
+        self.dress(
+            from,
+            vec![(model, Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
     pub fn workbench(&mut self, at: Vec3, yaw: f32, loot: Option<&'static str>) -> &mut Self {
         let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
@@ -2443,8 +2488,15 @@ const MR_TANK: (f32, f32) = (4.4, 2.4);
 const MR_WALK: (f32, f32) = (0.75, 1.0);
 const MR_WALK_TOP: (f32, f32) = (3.2, 40.0);
 const MR_TROUGH: (f32, f32) = (-0.5, 1.2);
-const MR_LEVEL: f32 = 3.6;
-const MR_WHEEL: (f32, f32, f32) = (2.4, 1.0, 43.0);
+const MR_LEVEL: f32 = 5.1;
+const MR_WHEEL: (f32, f32, f32) = (2.4, 2.55, 43.0);
+/// The wheel house's inside, x (a pen on the ground: the terrain has no
+/// holes for a pit); the curb between its tailrace and its dry floor, the
+/// floor, the walls' top.
+const MR_PIT: (f32, f32) = (-3.0, 0.22);
+const MR_CURB: f32 = -1.3;
+const MR_FLOOR: f32 = 0.05;
+const MR_WALL_TOP: f32 = 1.6;
 
 fn mr_walk_y(z: f32) -> f32 {
     let (z0, z1) = MR_WALK_TOP;
@@ -2601,23 +2653,43 @@ fn mill_race(b: &mut Builder) {
         }
         z += 4.0;
     }
-    // The wheel in its pit.
+    // The wheel house round the wheel's foot: the tailrace behind a curb,
+    // a dry floor on the -X side, a doorway at the +Z end of that wall.
     let (wr, wy, wz) = MR_WHEEL;
-    let (px, pz) = (tw * 0.5 + 0.6, wr + 0.5);
-    for sx in [-1.0f32, 1.0] {
+    let ((px0, px1), pz) = (MR_PIT, wr + 0.5);
+    let (pcx, pw) = ((px0 + px1) * 0.5, px1 - px0);
+    let fl = MR_FLOOR;
+    b.bx(
+        Vec3::new(pw + 0.8, 0.3, 2.0 * pz + 0.8),
+        Vec3::new(pcx, fl - 0.15, wz),
+        Mat::Concrete,
+    );
+    let (wh, wy0) = (MR_WALL_TOP - fl, (MR_WALL_TOP + fl) * 0.5);
+    let (door0, door1) = (wz + pz - 1.65, wz + pz - 0.25);
+    for (z0, z1) in [(wz - pz - 0.4, door0), (door1, wz + pz + 0.4)] {
         b.bx(
-            Vec3::new(0.4, 1.9, 2.0 * pz + 0.8),
-            Vec3::new(tx + sx * (px + 0.2), -0.65, wz),
+            Vec3::new(0.4, wh, z1 - z0),
+            Vec3::new(px0 - 0.2, wy0, (z0 + z1) * 0.5),
             Mat::Concrete,
         );
     }
+    b.bx(
+        Vec3::new(0.4, wh, 2.0 * pz + 0.8),
+        Vec3::new(px1 + 0.2, wy0, wz),
+        Mat::Concrete,
+    );
     for sz in [-1.0f32, 1.0] {
         b.bx(
-            Vec3::new(2.0 * px, 1.9, 0.4),
-            Vec3::new(tx, -0.65, wz + sz * (pz + 0.2)),
+            Vec3::new(pw, wh, 0.4),
+            Vec3::new(pcx, wy0, wz + sz * (pz + 0.2)),
             Mat::Concrete,
         );
     }
+    b.bx(
+        Vec3::new(0.2, 0.55, 2.0 * pz),
+        Vec3::new(MR_CURB - 0.1, fl + 0.275, wz),
+        Mat::Concrete,
+    );
     b.piece(
         Shape::Cylinder(wr, tw),
         Transform::from_xyz(tx, wy, wz)
@@ -2636,6 +2708,56 @@ fn mill_race(b: &mut Builder) {
     );
     // Up on the deck, for whoever climbs.
     b.crate_box(Vec3::new(-2.3, top, -2.4 + MR_SHIFT), 0.7, Some("tools"));
+    // In the wheel house by the wheel, the millwright's chest.
+    b.furnish(
+        "tool_chest",
+        Vec3::new(0.9, 0.5, 0.5),
+        Vec3::new(-2.7, MR_FLOOR, wz - 1.2 + MR_SHIFT),
+        std::f32::consts::FRAC_PI_2,
+        Some("tools"),
+    );
+    // The gatekeeper's hut between the tower's feet: plank walls, a
+    // doorway on +X, a ceiling under the girts; his winch for hauling up
+    // to the deck, a bench, rope, a lantern.
+    let (hs, y0, hh) = (2.25, 0.2, 2.6);
+    let at = |x: f32, z: f32| Vec2::new(x, z + MR_SHIFT);
+    b.bx(
+        Vec3::new(2.0 * hs, 0.2, 2.0 * hs),
+        Vec3::new(0.0, 0.1, MR_SHIFT),
+        Mat::WoodFloor,
+    );
+    let walls: [(Vec2, Vec2, &[Opening]); 4] = [
+        (at(-hs, -hs), at(hs, -hs), &[window(hs)]),
+        (at(hs, -hs), at(hs, hs), &[self::gap(hs, 0.9, 2.0)]),
+        (at(hs, hs), at(-hs, hs), &[]),
+        (at(-hs, hs), at(-hs, -hs), &[]),
+    ];
+    for (a, c, ops) in walls {
+        b.wall(a, c, y0, hh, 0.12, Mat::Planks, ops);
+    }
+    b.bx(
+        Vec3::new(2.0 * hs + 0.12, 0.1, 2.0 * hs + 0.12),
+        Vec3::new(0.0, y0 + hh + 0.05, MR_SHIFT),
+        Mat::Planks,
+    );
+    b.workbench(
+        Vec3::new(-hs + 0.5, y0, 0.3 + MR_SHIFT),
+        std::f32::consts::FRAC_PI_2,
+        Some("tools"),
+    );
+    b.furnish(
+        "winch",
+        Vec3::new(1.2, 1.0, 0.8),
+        Vec3::new(0.6, y0, -hs + 0.7 + MR_SHIFT),
+        0.0,
+        None,
+    );
+    b.strew(
+        "rope_coil",
+        Vec3::new(0.7, 0.12, 0.7),
+        Vec3::new(1.2, y0, hs - 0.6 + MR_SHIFT),
+        0.4,
+    );
 }
 
 // The ropeway's measures, as `art/props/heroes.py` (RW_*, PY_* there).
@@ -2827,6 +2949,47 @@ fn ropeway_station(b: &mut Builder) {
         0.7,
         Some("tools"),
     );
+    // The machine room: the motor drives the gearbox, whose shaft goes
+    // out to the bull wheel; the brake on the line shaft; the engineman's
+    // stand by the open front, facing down the line; his chest.
+    let at = |x: f32, z: f32| Vec3::new(x, top, z) + RW_SHIFT;
+    b.furnish(
+        "gearbox",
+        Vec3::new(1.0, 0.75, 0.85),
+        at(0.0, 0.4),
+        0.0,
+        None,
+    );
+    b.furnish(
+        "drive_motor",
+        Vec3::new(1.7, 1.1, 0.8),
+        at(1.45, 0.4),
+        std::f32::consts::PI,
+        None,
+    );
+    b.furnish(
+        "brake_drum",
+        Vec3::new(1.8, 1.4, 1.0),
+        at(-1.7, 0.4),
+        0.0,
+        None,
+    );
+    b.furnish(
+        "control_stand",
+        Vec3::new(0.9, 1.4, 0.5),
+        at(-3.3, -1.4),
+        std::f32::consts::PI,
+        None,
+    );
+    b.furnish(
+        "tool_chest",
+        Vec3::new(0.9, 0.5, 0.5),
+        at(2.5, 3.8),
+        0.0,
+        Some("workshop"),
+    );
+    b.strew("rope_coil", Vec3::new(0.7, 0.12, 0.7), at(-2.6, 3.4), 1.1);
+    b.barrel(at(-3.9, 1.6));
 }
 
 /// A pylon's colliders, standing at the origin, then `at`: its legs, the
@@ -3172,6 +3335,55 @@ fn blast_furnace(b: &mut Builder) {
         "blast_furnace",
         Transform::from_translation(BF_SHIFT),
         ["blast_furnace_lod1", "blast_furnace_lod2"],
+    );
+    // The cast house floor: the clay gun on the foundation's edge aimed at
+    // the taphole, the tapping bars racked between columns, a sand bed of
+    // pigs by the runner, the crew's chest.
+    let fat = |x: f32, y: f32, z: f32| Vec3::new(x, y, z) + BF_SHIFT;
+    b.furnish(
+        "mud_gun",
+        Vec3::new(0.8, 1.4, 2.8),
+        fat(2.0, 1.2, -5.9),
+        std::f32::consts::PI,
+        None,
+    );
+    b.furnish(
+        "bar_rack",
+        Vec3::new(2.0, 2.2, 0.4),
+        fat(-7.6, 0.2, -10.0),
+        -std::f32::consts::FRAC_PI_2,
+        None,
+    );
+    b.strew(
+        "pig_bed",
+        Vec3::new(3.0, 0.2, 2.0),
+        fat(3.0, 0.2, -12.0),
+        0.0,
+    );
+    b.furnish(
+        "tool_chest",
+        Vec3::new(0.9, 0.5, 0.5),
+        fat(-5.5, 0.2, -8.0),
+        0.3,
+        Some("workshop"),
+    );
+    // The stoves' cold-blast valves at their feet, a chest by the middle
+    // one.
+    for x in xs {
+        b.furnish(
+            "gate_valve",
+            Vec3::new(1.3, 2.4, 1.1),
+            fat(x, 0.0, sz - sr - 0.8),
+            std::f32::consts::FRAC_PI_2,
+            None,
+        );
+    }
+    b.furnish(
+        "tool_chest",
+        Vec3::new(0.9, 0.5, 0.5),
+        fat(xs[1] + 1.8, 0.0, sz - sr - 0.9),
+        0.0,
+        Some("tools"),
     );
     // A crate in the platform's bay, one in the cast house.
     b.crate_box(
@@ -4266,28 +4478,130 @@ fn aligned_box(size: Vec3, at: Transform) -> Mesh {
 /// Client: a building's meshes, one per material (a house is a handful of
 /// draws, not fifty), once its props' models have loaded or failed: each
 /// prop whose models are in is merged in place of its boxes.
+/// A prefab's pieces shaded by its own solid pieces, baked once in the
+/// background: a big site's thousand pieces take half a second, a house's
+/// a few dozen milliseconds, every house alike (`render::spikes`).
+pub enum Bake {
+    Baking(bevy::tasks::Task<std::sync::Arc<Vec<Option<Mesh>>>>),
+    Ready(std::sync::Arc<Vec<Option<Mesh>>>),
+}
+
+/// A piece's mesh in building space, unshaded.
+fn piece_mesh(piece: &Piece) -> Mesh {
+    let mut mesh = match piece.shape {
+        Shape::Box(s) => aligned_box(s, piece.at),
+        Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
+        Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
+    };
+    let _ = mesh.generate_tangents();
+    mesh.transformed_by(piece.at)
+}
+
+/// Each piece as `dress_buildings` draws it when it isn't furniture's
+/// stand-in: a box shaded face by face, anything else shaded at its
+/// vertices (not under the ground: a site's rooms go unshaded).
+fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
+    // What shades the building's own surfaces: its solid pieces
+    // (furniture's boxes too, so the floor darkens round their feet),
+    // not its glass.
+    let occluders =
+        super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
+            let half = match p.shape {
+                Shape::Box(s) => s * 0.5,
+                Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
+                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+            };
+            let at = match p.shape {
+                // A gable's box is its lower half.
+                Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
+                _ => p.at,
+            };
+            (half, at)
+        }));
+    geo.pieces
+        .iter()
+        .map(|piece| match piece.shape {
+            // Glass keeps its own alpha (the rest carries the sky).
+            Shape::Box(s) => Some(super::ao::shaded_box(
+                s,
+                piece.at,
+                &occluders,
+                piece.mat != Mat::Glass,
+            )),
+            _ if site && piece.at.translation.y < super::underground::BELOW_Y => None,
+            _ => {
+                let mut mesh = piece_mesh(piece);
+                occluders.bake(&mut mesh);
+                Some(mesh)
+            }
+        })
+        .collect()
+}
+
 pub fn dress_buildings(
     mut commands: Commands,
-    mut pending: Query<(Entity, &Building, &mut PropsPending)>,
+    mut pending: Query<(Entity, &Building, &Transform, &mut PropsPending)>,
+    zone: Option<Res<super::Zone>>,
     mut props: crate::render::world_props::PropModels,
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
+    mut bakes: Local<std::collections::HashMap<String, Bake>>,
 ) {
     use crate::render::world_props::Resolved;
-    // Baking a building's occlusion takes a few milliseconds: a few
-    // buildings a frame, so a valley's arrival doesn't hitch.
+    // A few buildings a frame, each once its prefab's shading is baked
+    // (in the background, `Bake`), so a valley's arrival doesn't hitch.
     let mut built = 0;
-    for (e, b, mut wait) in &mut pending {
+    for (e, b, xf, mut wait) in &mut pending {
         if built >= 3 {
             break;
         }
-        let Some(geo) = prefab(&b.prefab) else {
+        let Some(mut geo) = prefab(&b.prefab) else {
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
+        // What the people who lived here left (`clutter`), with the
+        // furniture.
+        if let Some(zone) = &zone {
+            let at = Vec2::new(xf.translation.x, xf.translation.z);
+            let tag = zone
+                .map
+                .placements
+                .iter()
+                .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
+                .map_or("", |p| p.tag.as_str());
+            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf);
+            if !models.is_empty() {
+                let n = geo.pieces.len();
+                geo.props.push(PropDef {
+                    models,
+                    pieces: n..n,
+                    inside: true,
+                    shadow: false,
+                    lods: None,
+                });
+            }
+        }
         wait.0 += 1;
+        let bake = bakes.entry(b.prefab.clone()).or_insert_with(|| {
+            let geo = geo.clone();
+            let site = super::underground::ids().any(|id| id == b.prefab);
+            Bake::Baking(
+                bevy::tasks::AsyncComputeTaskPool::get()
+                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site)) }),
+            )
+        });
+        if let Bake::Baking(task) = bake {
+            match bevy::tasks::futures::check_ready(task) {
+                Some(baked) => *bake = Bake::Ready(baked),
+                None => continue,
+            }
+        }
+        let Bake::Ready(baked) = bake else {
+            continue;
+        };
+        let baked = baked.clone();
         let mut loading = false;
         let ready: Vec<bool> = geo
             .props
@@ -4308,29 +4622,26 @@ pub fn dress_buildings(
                 }
             })
             .collect();
+        // And their meshes, not just their glTFs (`PropMeshes::get`).
+        if !loading {
+            loading = geo.props.iter().zip(&ready).any(|(d, r)| {
+                *r && d
+                    .models
+                    .iter()
+                    .map(|(n, _)| *n)
+                    .chain(d.lods.into_iter().flatten())
+                    .any(|n| {
+                        cache.get(n, &mut props, &meshes);
+                        !cache.has(n)
+                    })
+            });
+        }
         // Models load in a few frames; past ten seconds, build without.
         if loading && wait.0 < 600 {
             continue;
         }
         commands.entity(e).remove::<PropsPending>();
         built += 1;
-        // What shades the building's own surfaces: its solid pieces
-        // (furniture's boxes too, so the floor darkens round their feet),
-        // not its glass.
-        let occluders =
-            super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
-                let half = match p.shape {
-                    Shape::Box(s) => s * 0.5,
-                    Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
-                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-                };
-                let at = match p.shape {
-                    // A gable's box is its lower half.
-                    Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
-                    _ => p.at,
-                };
-                (half, at)
-            }));
         let mut skip = vec![false; geo.pieces.len()];
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
@@ -4393,26 +4704,19 @@ pub fn dress_buildings(
                     }
                 }
                 let group = if is_below { BELOW } else { OUTER };
-                add(
-                    group,
-                    mat,
-                    // Glass keeps its own alpha (the rest carries the sky).
-                    super::ao::shaded_box(s, piece.at, &occluders, piece.mat != Mat::Glass),
-                );
+                if let Some(mesh) = &baked[i] {
+                    add(group, mat, mesh.clone());
+                }
                 continue;
             }
-            let mut mesh = match piece.shape {
-                Shape::Box(s) => aligned_box(s, piece.at),
-                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
-                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
-            };
-            let _ = mesh.generate_tangents();
-            let mut mesh = mesh.transformed_by(piece.at);
+            let mut mesh = piece_mesh(piece);
             if !far[i] && !is_below {
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
-                occluders.bake(&mut mesh);
+                if let Some(shaded) = &baked[i] {
+                    mesh = shaded.clone();
+                }
             } else {
                 super::ao::ensure_colours(&mut mesh);
             }

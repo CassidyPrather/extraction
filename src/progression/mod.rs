@@ -29,12 +29,6 @@ use crate::world::{Layer, Zone};
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
 pub struct Progression(pub Progress);
 
-/// Lev has been into the depot with you (Story's epilogue, saved as
-/// `Stats::epilogue`): Story's systems set it; the job card's asks and the
-/// career page change with it.
-#[derive(Resource, Debug, Clone, Copy, Default, PartialEq)]
-pub struct Epilogue(pub bool);
-
 /// A job was handed in at the card (`raid/requests.rs`).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct JobDone;
@@ -62,7 +56,6 @@ impl Plugin for ProgressionPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(safehouse::SafehousePlugin);
         app.init_resource::<Progression>()
-            .init_resource::<Epilogue>()
             .add_message::<JobDone>()
             .add_systems(
                 Update,
@@ -413,11 +406,13 @@ fn job_done(
 fn offer_job(
     opts: Res<LaunchOptions>,
     raid: Res<Raid>,
-    epilogue: Res<Epilogue>,
+    // Lev has been into the depot with you (Story's epilogue): the job
+    // card's asks ease off.
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut progression: ResMut<Progression>,
 ) {
-    if progression.0.quiet != epilogue.0 {
-        progression.0.quiet = epilogue.0;
+    if progression.0.quiet != epilogue.done {
+        progression.0.quiet = epilogue.done;
     }
     if progression.0.job.is_some() {
         return;

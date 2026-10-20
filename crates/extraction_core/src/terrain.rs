@@ -172,6 +172,7 @@ impl Heightmap {
     /// the height its layout wants (the entrance is a placement, padded as
     /// one), and opened up over every stairwell.
     fn underground(&mut self, map: &MapDef) {
+        const BLEND: f32 = 8.0;
         let sites = crate::underground::placed(map);
         for site in &sites {
             let footing = self.footing(&site.id, site.at, site.rot);
@@ -179,14 +180,16 @@ impl Heightmap {
                 let target = footing + portal.y;
                 let [w, _, d] = crate::underground::FOOTPRINT;
                 let (half_w, half_d) = (w * 0.5 + 0.8, d * 0.5 + 0.8);
-                let reach = half_w.max(half_d) + 6.0;
+                // Blended out over 8 m: a pad raised or cut 1.5 m into a
+                // hillside left a bank too steep to walk up over 5.
+                let reach = half_w.max(half_d) + BLEND + 1.0;
                 let lo = [at[0] - reach, at[1] - reach];
                 let hi = [at[0] + reach, at[1] + reach];
                 self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
                     let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
                     let out =
                         ((l[0].abs() - half_w).max(0.0)).hypot((l[1].abs() - half_d).max(0.0));
-                    let t = 1.0 - geom::smoothstep(0.0, 5.0, out);
+                    let t = 1.0 - geom::smoothstep(0.0, BLEND, out);
                     hm.heights[k] += (target - hm.heights[k]) * t;
                 });
             }
