@@ -1145,3 +1145,57 @@ fn recalled_residents_sleep_in_their_bays() {
     let p = app.world().get::<Transform>(crawler).unwrap().translation;
     assert!(flat(p - bay) < 3.5, "in its bay ({p:.1} vs {bay:.1})");
 }
+
+/// What a robot would voice: one shift per change, none repeated back to
+/// back; a robot that hears a call answers it once.
+#[test]
+fn minds_shift_once_per_change() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Shifts>().add_systems(
+        Last,
+        |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    // b first, out of your sight (far, facing away); then a, facing you.
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(130.0, 240.0));
+    app.world_mut()
+        .get_mut::<super::walker::Walker>(b)
+        .unwrap()
+        .yaw = std::f32::consts::PI;
+    put(&mut app, player, me);
+    let a = walker_at(&mut app, &zone, zone.on_ground(100.0, 220.0));
+    for _ in 0..90 * 8 {
+        app.update();
+    }
+    let shifts = &app.world().resource::<Shifts>().0;
+    let of = |r: Entity| {
+        shifts
+            .iter()
+            .filter(|s| s.robot == r)
+            .map(|s| s.state)
+            .collect::<Vec<_>>()
+    };
+    let sa = of(a);
+    assert!(sa.contains(&Mind::Noticed), "{sa:?}");
+    assert!(sa.contains(&Mind::Engaging), "{sa:?}");
+    assert!(sa.contains(&Mind::Calling), "{sa:?}");
+    for r in [a, b] {
+        let s = of(r);
+        for w in s.windows(2) {
+            assert!(
+                w[0] != w[1] || matches!(w[0], Mind::Answering { .. } | Mind::Hurt),
+                "repeated: {s:?}"
+            );
+        }
+    }
+    let answers = of(b)
+        .iter()
+        .filter(|m| **m == Mind::Answering { caller: a })
+        .count();
+    assert_eq!(answers, 1, "b answered a's call once: {:?}", of(b));
+}

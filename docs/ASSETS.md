@@ -215,7 +215,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/clutter.py` | lived-in clutter, visual only, dressed by `world::clutter` by valley and ruin state: suitcase_open, suitcase_shut, bundle, belongings_box, coat_hook, picture_frame, boots, helmet_lamp, carbide_lamp, lunch_pail, jacket_hook, tally_board, dishes, jars, books, rug, broom, dishes_broken, books_charred, frame_charred, ash_film, dog_bowl, lead_hook, pigeonholes, ledger_open | 0.1k to 0.75k |
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
 | `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire (staged scenes) | 0.3k to 2.9k |
-| `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
+| `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 5.1k each (palm 2.2k, plus the wrist display housing; fingers 2.7k) |
 | `art/kit/rig.py` | `models/kit/rig.glb` (harness_panel, harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
 ## Conventions

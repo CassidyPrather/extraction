@@ -763,16 +763,24 @@ fn drive_xr_rig(
         hand.primary = primary;
         hand.secondary = secondary;
         hand.stick = stick;
-        hand.stick_click = click && side == Side::Right;
+        // The click is the gun hand's (its fire selector); the other
+        // stick's click is the sprint.
+        hand.stick_click = click && side == comfort.gun_side();
         hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.
     input.mark = read_b(&a.stick_click, a.left)
         && read_b(&a.stick_click, a.right)
         && input.hand(Side::Left).stick.length() < 0.3;
-    // Locomotion and comfort turning.
-    let left_stick = input.hand(Side::Left).stick;
-    if read_b(&a.stick_click, a.left) && left_stick.length() > 0.3 {
+    // Locomotion and comfort turning: moving on the off hand's stick,
+    // turning on the gun hand's (mirrored for a left-handed player).
+    let (move_side, move_path) = if comfort.left_handed {
+        (Side::Right, a.right)
+    } else {
+        (Side::Left, a.left)
+    };
+    let left_stick = input.hand(move_side).stick;
+    if read_b(&a.stick_click, move_path) && left_stick.length() > 0.3 {
         turn.sprint = true;
     }
     if left_stick.length() < 0.2 {
@@ -784,7 +792,7 @@ fn drive_xr_rig(
         Vec2::ZERO
     };
     input.sprint = turn.sprint;
-    let right_stick = input.hand(Side::Right).stick;
+    let right_stick = input.hand(move_side.other()).stick;
     input.turn = 0.0;
     if right_stick.x.abs() < 0.3 && right_stick.y > -0.3 {
         turn.armed = true;
