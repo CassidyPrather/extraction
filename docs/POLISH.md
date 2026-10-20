@@ -41,6 +41,10 @@ not just the instance.
 
 ## Verifying
 
+- **Once per session, first:** `python3 scripts/fetch_assets.py`. The
+  textures it fetches are gitignored; without them trees fall back to a
+  heavier dev path and the frame-budget gauges print "frame budget NOT
+  CHECKED" instead of measuring the game that ships.
 - **Before you finish:** `cargo test --workspace` and
   `cargo run --profile fast -- --headless --scenario all` (must print
   `all 9 scenarios OK`). While working, run only the tests you touched;
