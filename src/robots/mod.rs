@@ -21,6 +21,7 @@ pub mod flight;
 pub mod fx;
 pub mod grappler;
 pub mod hound;
+pub mod hound_mind;
 pub mod indoor;
 #[cfg(test)]
 mod mind_tests;
@@ -231,6 +232,7 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
+            .add_plugins(hound_mind::HoundMindPlugin)
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,
@@ -361,13 +363,16 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
     }
 }
 
-/// What telemetry and logs call a robot: its kind, or "Crawler" for the
-/// small walkers that live underground.
-pub fn robot_name(kind: RobotKind, crawler: bool) -> String {
-    if crawler {
-        "Crawler".into()
-    } else {
-        format!("{kind:?}")
+/// A robot that is its own breed on a shared body (a crawler, a hound are
+/// walkers underneath): what telemetry and logs call it.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Breed(pub &'static str);
+
+/// What telemetry and logs call a robot: its breed, else its kind.
+pub fn robot_name(kind: RobotKind, breed: Option<&Breed>) -> String {
+    match breed {
+        Some(b) => b.0.into(),
+        None => format!("{kind:?}"),
     }
 }
 

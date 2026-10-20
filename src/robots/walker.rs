@@ -328,6 +328,7 @@ fn walker_brain(
             Option<&mut super::indoor::Patrol>,
             Has<super::indoor::Crawler>,
             Option<&super::anim::Gait>,
+            Option<&mut super::hound_mind::HoundMind>,
         ),
     )>,
     targets: Query<&GlobalTransform>,
@@ -343,6 +344,12 @@ fn walker_brain(
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
     spatial: SpatialQuery,
+    (mut shots, mut crouches, mut bites, mut seed): (
+        MessageWriter<Shot>,
+        MessageWriter<super::hound_mind::HoundCrouch>,
+        MessageWriter<super::hound_mind::HoundBite>,
+        Local<u64>,
+    ),
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 1.1;
@@ -357,9 +364,13 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait),
+        (local, mut patrol, crawler, gait, mut hound),
     ) in &mut walkers
     {
+        let is_hound = hound.is_some();
+        if let Some(h) = hound.as_deref_mut() {
+            h.cooldown -= dt;
+        }
         // A site's own grid, or the Zone's.
         let navr = local.map_or(NavRef::Zone(&nav.0), NavRef::Local);
         if robot.wrecked {
@@ -395,9 +406,14 @@ fn walker_brain(
             Brain::Transit { to } => {
                 let to = *to;
                 if Vec2::new(pos.x - to.x, pos.z - to.z).length() < 3.0 {
-                    *brain = Brain::Working {
-                        at: to,
-                        left: job.duration,
+                    // Hounds sent to a noise nose round where it was.
+                    *brain = if is_hound && job.kind == super::JobKind::Response {
+                        search::begin_search(to, aware, pos, navr, &entrances)
+                    } else {
+                        Brain::Working {
+                            at: to,
+                            left: job.duration,
+                        }
                     };
                 }
                 Some(to)
@@ -425,6 +441,17 @@ fn walker_brain(
                 intent.pace = if grappler { 0.6 } else { 0.8 };
                 intent.low = grappler;
                 intent.look = Some(at);
+                // A hound runs to a sound, then stalks the last of it, low.
+                if is_hound {
+                    let far = Vec2::new(pos.x - at.x, pos.z - at.z).length()
+                        > super::hound_mind::STALK_WITHIN;
+                    intent.pace = if far {
+                        1.0
+                    } else {
+                        super::hound_mind::STALK_PACE
+                    };
+                    intent.low = !far;
+                }
                 indoors = Some(at);
                 // A crawler that hears you close by in the dark keeps still
                 // and low, facing it, and lets you come to it (a while).
@@ -448,8 +475,8 @@ fn walker_brain(
                 }
             }
             Brain::Search { .. } => {
-                intent.pace = 0.7;
-                intent.low = grappler;
+                intent.pace = if is_hound { 0.5 } else { 0.7 };
+                intent.low = grappler || is_hound;
                 match search::search_step(&mut brain, pos, 2.0, dt, sweep) {
                     Step::Go(p) => Some(p),
                     Step::Look(l) => {
@@ -498,6 +525,56 @@ fn walker_brain(
                         }
                     }
                     (Some(_), _) if lame => None,
+                    (Some(tp), _) if is_hound => {
+                        let h = hound.as_deref_mut().unwrap();
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        intent.look = Some(tp);
+                        if h.crouch > 0.0 {
+                            // The tell: down on its haunches, then it springs.
+                            h.crouch -= dt;
+                            intent.low = true;
+                            if h.crouch <= 0.0 {
+                                h.lunge = super::hound_mind::LUNGE_TIME;
+                                h.bit = false;
+                            }
+                            None
+                        } else if h.lunge > 0.0 {
+                            h.lunge -= dt;
+                            intent.pace = 1.6;
+                            if d < super::hound_mind::BITE_RANGE && !h.bit {
+                                h.bit = true;
+                                h.cooldown = super::hound_mind::BITE_COOLDOWN;
+                                *seed = seed
+                                    .wrapping_mul(6364136223846793005)
+                                    .wrapping_add(1442695040888963407);
+                                let head = pos + Vec3::Y * 0.2;
+                                super::hound_mind::bite(
+                                    e,
+                                    head,
+                                    tp + Vec3::Y * 0.9,
+                                    *seed,
+                                    &mut shots,
+                                );
+                                bites.write(super::hound_mind::HoundBite { hound: e, at: head });
+                            }
+                            Some(tp)
+                        } else if d < super::hound_mind::LUNGE_RANGE && h.cooldown <= 0.0 {
+                            h.crouch = super::hound_mind::CROUCH_TIME;
+                            crouches.write(super::hound_mind::HoundCrouch { hound: e, at: pos });
+                            None
+                        } else if h.cooldown > 0.0 && d < super::hound_mind::LUNGE_RANGE {
+                            // Backs off between bites.
+                            let away = (pos - tp).with_y(0.0).normalize_or(Vec3::X);
+                            Some(pos + away * 3.0)
+                        } else {
+                            let facing = aware
+                                .target
+                                .and_then(|p| targets.get(p).ok())
+                                .map(|g| g.forward().as_vec3())
+                                .unwrap_or(Vec3::NEG_Z);
+                            Some(super::hound_mind::flank_point(pos, tp, facing))
+                        }
+                    }
                     (None, Some(lk)) if lame => {
                         intent.look = Some(lk);
                         None
@@ -530,7 +607,7 @@ fn walker_brain(
                         // (through the door, if that's indoors), and
                         // search from there.
                         indoors = Some(lk);
-                        intent.low = grappler;
+                        intent.low = grappler || is_hound;
                         intent.look = Some(lk);
                         if Vec2::new(pos.x - lk.x, pos.z - lk.z).length() < 3.0 {
                             *brain = search::begin_search(lk, aware, pos, navr, &entrances);

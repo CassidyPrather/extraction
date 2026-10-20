@@ -742,3 +742,188 @@ fn a_wrecked_crawler_does_not_block_the_way() {
     }
     assert!(!blocks(&mut app), "its wreck isn't");
 }
+
+fn hound_at(app: &mut App, zone: &Zone, at: Vec3, site: Vec3, kind: JobKind) -> Entity {
+    let mut queue = CommandQueue::default();
+    let h = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            zone,
+            at,
+            Job {
+                kind,
+                site,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..30 {
+        app.update();
+    }
+    h
+}
+
+#[derive(Resource, Default)]
+struct HoundLog {
+    crouch: Option<f32>,
+    bite: Option<f32>,
+}
+
+fn hound_log(
+    mut c: MessageReader<super::hound_mind::HoundCrouch>,
+    mut b: MessageReader<super::hound_mind::HoundBite>,
+    time: Res<Time>,
+    mut log: ResMut<HoundLog>,
+) {
+    let t = time.elapsed_secs();
+    if c.read().next().is_some() && log.crouch.is_none() {
+        log.crouch = Some(t);
+    }
+    if b.read().next().is_some() && log.bite.is_none() {
+        log.bite = Some(t);
+    }
+}
+
+/// A hound that sees you comes at you and bites, but crouches first: the
+/// tell comes a beat before the bite.
+#[test]
+fn a_hound_crouches_before_it_bites() {
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<HoundLog>().add_systems(Last, hound_log);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 215.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    for _ in 0..90 * 20 {
+        app.update();
+        if app.world().resource::<HoundLog>().bite.is_some() {
+            break;
+        }
+    }
+    let log = app.world().resource::<HoundLog>();
+    let crouch = log.crouch.expect("it crouched to lunge");
+    let bite = log.bite.expect("then bit");
+    assert!(
+        bite - crouch >= super::hound_mind::CROUCH_TIME - 0.05,
+        "a beat to react: crouched {crouch:.2}, bit {bite:.2}"
+    );
+}
+
+/// A hound hunts by ear: a shot 60 m off and it's there in a few seconds,
+/// at a run (a walker takes half a minute).
+#[test]
+fn a_hound_runs_to_a_shot() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    let shot = zone.on_ground(140.0, 245.0);
+    app.world_mut().write_message(super::Noise {
+        at: shot,
+        radius: 220.0,
+        source: None,
+    });
+    let mut secs = None;
+    for i in 0..90 * 30 {
+        app.update();
+        let p = app.world().get::<Transform>(hound).unwrap().translation;
+        if flat(p - shot) < super::hound_mind::STALK_WITHIN + 2.0 {
+            secs = Some(i as f32 / 90.0);
+            break;
+        }
+    }
+    let secs = secs.expect("it went to the shot");
+    assert!(secs < 25.0, "at a run: {secs:.1} s for ~45 m");
+}
+
+/// Keep still and a hound nosing round 8 m off doesn't make you out;
+/// move, and it does.
+#[test]
+fn keeping_still_beats_a_hound() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 208.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    // Facing you, standing still.
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    {
+        let mut w = app
+            .world_mut()
+            .get_mut::<super::walker::Walker>(hound)
+            .unwrap();
+        w.yaw = 0.0;
+    }
+    app.world_mut()
+        .get_mut::<RigInput>(player)
+        .unwrap()
+        .head
+        .translation
+        .y = 0.85;
+    for _ in 0..90 * 6 {
+        app.update();
+        let a = app.world().get::<Awareness>(hound).unwrap();
+        assert!(
+            !a.can_see_target && a.exposure < super::senses::GLIMPSE,
+            "still: {a:?}"
+        );
+    }
+    // Now walk: (move the body each tick, as feet would).
+    let mut seen = false;
+    for i in 0..90 * 4 {
+        let step = Vec3::X * (i as f32 * 1.4 / 90.0).sin() * 0.02;
+        let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+        t.translation += step;
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::X * 1.4;
+        app.update();
+        seen |= app.world().get::<Awareness>(hound).unwrap().exposure >= super::senses::GLIMPSE;
+    }
+    assert!(seen, "moving, it makes you out");
+}
+
+/// A suppressed AK is heard a third as far: a robot 150 m off hears a bare
+/// one and not a suppressed one.
+#[test]
+fn a_suppressor_keeps_a_shot_from_carrying() {
+    #[derive(Resource, Default)]
+    struct Heard(Vec<f32>);
+    let (mut app, player, _) = app(None);
+    app.init_resource::<Heard>().add_systems(
+        Last,
+        |mut n: MessageReader<super::Noise>, mut h: ResMut<Heard>| {
+            h.0.extend(n.read().filter(|n| n.radius > 50.0).map(|n| n.radius))
+        },
+    );
+    let bare = app.world_mut().spawn_empty().id();
+    let quiet = app.world_mut().spawn(crate::gadgets::Suppressed).id();
+    for gun in [bare, quiet] {
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Shot {
+                gun,
+                shooter: Some(player),
+                origin: Vec3::new(0.0, 500.0, 0.0),
+                direction: Vec3::Y,
+                speed: 900.0,
+                damage: 48.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 1,
+            });
+        app.update();
+        app.update();
+    }
+    let heard = &app.world().resource::<Heard>().0;
+    assert_eq!(heard.len(), 2, "{heard:?}");
+    let reach = |r: f32| r * 1.2; // a walker's ears
+    assert!(reach(heard[0]) > 150.0, "bare: {}", heard[0]);
+    assert!(reach(heard[1]) < 150.0, "suppressed: {}", heard[1]);
+}

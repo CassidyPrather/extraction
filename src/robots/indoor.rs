@@ -269,6 +269,7 @@ pub fn spawn_crawler(
         .insert((
             Name::new("Crawler"),
             Crawler::default(),
+            super::Breed("Crawler"),
             site.nav.clone(),
             Patrol::new(route),
             Brain::Working {
