@@ -4474,6 +4474,24 @@ fn aligned_box(size: Vec3, at: Transform) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
     mesh
 }
+/// What shades a building's own surfaces (`ao`): its solid pieces
+/// (furniture's boxes too, so the floor darkens round their feet), not its
+/// glass.
+pub fn occluders(geo: &Geo) -> super::ao::Occluders {
+    super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
+        let half = match p.shape {
+            Shape::Box(s) => s * 0.5,
+            Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
+            Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+        };
+        let at = match p.shape {
+            // A gable's box is its lower half.
+            Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
+            _ => p.at,
+        };
+        (half, at)
+    }))
+}
 
 /// Client: a building's meshes, one per material (a house is a handful of
 /// draws, not fifty), once its props' models have loaded or failed: each
@@ -4482,6 +4500,7 @@ pub fn dress_buildings(
     mut commands: Commands,
     mut pending: Query<(Entity, &Building, &Transform, &mut PropsPending)>,
     zone: Option<Res<super::Zone>>,
+    ivy: Option<Res<super::overgrowth::IvyAssets>>,
     mut props: crate::render::world_props::PropModels,
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -4566,20 +4585,7 @@ pub fn dress_buildings(
         // What shades the building's own surfaces: its solid pieces
         // (furniture's boxes too, so the floor darkens round their feet),
         // not its glass.
-        let occluders =
-            super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
-                let half = match p.shape {
-                    Shape::Box(s) => s * 0.5,
-                    Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
-                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-                };
-                let at = match p.shape {
-                    // A gable's box is its lower half.
-                    Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
-                    _ => p.at,
-                };
-                (half, at)
-            }));
+        let occluders = occluders(&geo);
         let mut skip = vec![false; geo.pieces.len()];
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
@@ -4745,6 +4751,53 @@ pub fn dress_buildings(
             }
         };
         let [outer, near, far, windows, hero, hero_mid, under] = merged;
+        // Years of ivy (`overgrowth`): stems near, leaves to the middle
+        // distance, a few big cards past that.
+        if let (Some(ivy), false, true) = (&ivy, site, super::overgrowth::enabled()) {
+            let at = Vec2::new(xf.translation.x, xf.translation.z);
+            let north = xf.rotation.inverse() * Vec3::NEG_Z;
+            let growth = super::overgrowth::grow(
+                &geo,
+                &occluders,
+                super::overgrowth::seed(at, &b.prefab),
+                north,
+            );
+            let span = |a: f32, b: f32| bevy::camera::visibility::VisibilityRange {
+                start_margin: if a > 0.0 { a - 5.0..a + 5.0 } else { 0.0..0.0 },
+                end_margin: b - 5.0..b + 5.0,
+                use_aabb: true,
+            };
+            if let Some(m) = super::overgrowth::vine_mesh(&growth) {
+                commands.spawn((
+                    Mesh3d(meshes.add(m)),
+                    MeshMaterial3d(ivy.vines.clone()),
+                    bevy::light::NotShadowCaster,
+                    span(0.0, super::overgrowth::VINES_TO),
+                    ChildOf(e),
+                ));
+            }
+            for (every, scale, range) in [
+                (1, 1.0, span(0.0, super::overgrowth::LEAVES_TO)),
+                (
+                    3,
+                    1.6,
+                    span(
+                        super::overgrowth::LEAVES_TO,
+                        crate::render::lod::FAR_BUILDING,
+                    ),
+                ),
+            ] {
+                if let Some(m) = super::overgrowth::leaf_mesh(&growth, every, scale) {
+                    commands.spawn((
+                        Mesh3d(meshes.add(m)),
+                        MeshMaterial3d(ivy.leaves.clone()),
+                        bevy::light::NotShadowCaster,
+                        range,
+                        ChildOf(e),
+                    ));
+                }
+            }
+        }
         for (mat, mesh) in under {
             commands.spawn((
                 Mesh3d(meshes.add(mesh)),

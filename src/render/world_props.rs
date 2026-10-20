@@ -29,6 +29,8 @@ impl Plugin for WorldPropsPlugin {
             Update,
             (
                 swap_in,
+                crate::world::overgrowth::setup_ivy,
+                crate::world::overgrowth::blow_ivy,
                 crate::world::buildings::dress_buildings
                     .after(crate::world::buildings::building_visuals),
             ),

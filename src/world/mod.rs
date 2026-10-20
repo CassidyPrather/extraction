@@ -10,6 +10,7 @@ pub mod clutter;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
+pub mod overgrowth;
 pub mod puddles;
 pub mod rain;
 pub mod rocks;
