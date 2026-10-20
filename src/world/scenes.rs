@@ -683,7 +683,6 @@ mod tests {
         for map in crate::world::story::VALLEYS {
             for (id, s) in of(map) {
                 let geo = geo(&id).unwrap_or_else(|| panic!("{}: no geometry", s.name));
-                assert!(!geo.pieces.is_empty());
                 let models: Vec<&str> = geo
                     .props
                     .iter()

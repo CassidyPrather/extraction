@@ -39,18 +39,44 @@ pub struct NotesRead(pub Vec<String>);
 /// The board, truck space: on the right canvas wall toward the tailgate,
 /// facing in, above the first-aid box (`art/vehicles/truck.py`, its top at
 /// FLOOR + 1.27) and clear of the bench display and the route card.
-pub const BOARD_AT: Vec3 = Vec3::new(1.12, FLOOR + 1.62, 1.15);
+pub const BOARD_AT: Vec3 = Vec3::new(1.12, FLOOR + 1.62, 1.1);
 /// Its face, metres (local x across, y up): up to the canopy's top rail.
-pub const BOARD: Vec2 = Vec2::new(1.1, 0.70);
+pub const BOARD: Vec2 = Vec2::new(1.2, 0.70);
 /// A pinned copy: the note's name, big enough to read from the bed.
-pub const CARD: Vec2 = Vec2::new(0.165, 0.054);
-/// A column a valley; two cards a row.
-const COLUMN: f32 = BOARD.x / 3.0;
+pub const CARD: Vec2 = Vec2::new(0.15, 0.054);
+/// A column a valley, as wide as its notes need: rows down, cards across.
 const ROW: f32 = 0.060;
+/// The gap between cards in a row.
+const GAP: f32 = 0.012;
 /// The top band of the board, for the valleys' names.
-const HEADER: f32 = 0.06;
-/// Cards a column holds before they start to overlap.
-pub const PER_COLUMN: usize = 2 * ((BOARD.y - HEADER - 0.02) / ROW) as usize;
+const HEADER: f32 = 0.07;
+/// Rows of cards a column holds.
+pub const ROWS: usize = ((BOARD.y - HEADER - 0.02) / ROW) as usize;
+
+/// Each valley's column: its left edge (board space) and cards a row,
+/// sized so every note there is fits.
+pub fn columns() -> &'static [(f32, usize); 3] {
+    static COLUMNS: std::sync::OnceLock<[(f32, usize); 3]> = std::sync::OnceLock::new();
+    COLUMNS.get_or_init(|| {
+        let ids: Vec<String> = every_note().into_iter().map(|(i, _)| i).collect();
+        let mut counts = [0usize; 3];
+        for (_, col, _) in layout(&ids) {
+            counts[col] += 1;
+        }
+        let mut out = [(0.0, 1); 3];
+        let mut x = -BOARD.x * 0.5;
+        for (col, n) in counts.iter().enumerate() {
+            let across = n.div_ceil(ROWS).max(1);
+            out[col] = (x, across);
+            x += column_width(across);
+        }
+        out
+    })
+}
+
+fn column_width(across: usize) -> f32 {
+    across as f32 * (CARD.x + GAP) + GAP
+}
 
 /// How close your head comes, and how long you look, to have read a note.
 const READ_REACH: f32 = 1.4;
@@ -221,10 +247,10 @@ fn put_up_board(
 /// Where a valley's `n`th read note is pinned, board space (a little
 /// crooked, as pinned things are).
 pub fn card_pose(column: usize, n: usize, id: &str) -> Transform {
-    let n = n.min(PER_COLUMN - 1);
-    let (row, side) = (n / 2, n % 2);
-    let x =
-        -BOARD.x * 0.5 + COLUMN * (column as f32 + 0.5) + (side as f32 - 0.5) * (CARD.x + 0.012);
+    let (left, across) = columns()[column];
+    let n = n.min(ROWS * across - 1);
+    let (row, side) = (n / across, n % across);
+    let x = left + GAP + (CARD.x + GAP) * side as f32 + CARD.x * 0.5;
     let y = BOARD.y * 0.5 - HEADER - CARD.y * 0.5 - ROW * row as f32;
     let h = id
         .bytes()
@@ -323,11 +349,11 @@ fn pin_cards(
                 ColumnHead(col),
                 ScreenText {
                     text: name,
-                    size: Vec2::new(COLUMN - 0.04, HEADER - 0.015),
+                    size: Vec2::new(column_width(columns()[col].1) - 0.03, HEADER - 0.015),
                     style: ScreenStyle::Card,
                 },
                 Transform::from_xyz(
-                    -BOARD.x * 0.5 + COLUMN * (col as f32 + 0.5),
+                    columns()[col].0 + column_width(columns()[col].1) * 0.5,
                     BOARD.y * 0.5 - HEADER * 0.5,
                     0.012,
                 ),
@@ -549,10 +575,22 @@ mod tests {
             assert!(deg >= MIN_EM_DEG, "{id}: {deg:.2} deg");
         }
         let ids: Vec<String> = all.iter().map(|(i, _)| i.clone()).collect();
+        // Every valley's notes fit its column, and the columns the board.
         for col in 0..3 {
             let n = layout(&ids).iter().filter(|(_, c, _)| *c == col).count();
-            assert!(n <= PER_COLUMN, "column {col}: {n} notes > {PER_COLUMN}");
+            let (_, across) = columns()[col];
+            assert!(
+                n <= ROWS * across,
+                "column {col}: {n} notes > {}",
+                ROWS * across
+            );
         }
+        let (left, across) = columns()[2];
+        assert!(
+            left + column_width(across) <= BOARD.x * 0.5 + 1e-4,
+            "the columns run off the board: {:?}",
+            columns()
+        );
         // And the ids are unique (a name twice in a valley would pin one).
         let mut seen = std::collections::HashSet::new();
         for id in &ids {
