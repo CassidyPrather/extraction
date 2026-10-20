@@ -1387,3 +1387,55 @@ fn a_night_visit_sends_two_walkers_to_the_door() {
         );
     }
 }
+
+/// A site sends a new grid (a gallery filled with gas, say) and the
+/// crawler already on its round paths round what's now closed.
+#[test]
+fn a_new_site_grid_reroutes_its_crawlers() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    let open = site(centre, |_| false);
+    let a = zone.on_ground(centre.x - 4.0, centre.z - 6.0);
+    let b = zone.on_ground(centre.x - 4.0, centre.z + 6.0);
+    let index = {
+        let mut sites = app.world_mut().resource_mut::<super::indoor::IndoorSites>();
+        sites.spawned = true;
+        sites.sites.push(super::indoor::IndoorSite {
+            nav: open.clone(),
+            patrol: vec![a, b],
+            spawn: a,
+            crawlers: 1,
+            heavy: 0,
+            dormant: false,
+        });
+        sites.sites.len() - 1
+    };
+    let crawler = crawler_at(&mut app, &zone, open, vec![a, b]);
+    app.update();
+    let gassed = site(centre, |p| p.x.abs() < 12.0 && p.y.abs() < 2.0).grid;
+    app.world_mut().write_message(super::indoor::SiteGrid {
+        site: index,
+        grid: gassed.clone(),
+    });
+    app.update();
+    app.update();
+    let nav = app.world().get::<super::indoor::LocalNav>(crawler).unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&nav.grid, &gassed),
+        "it took the new grid"
+    );
+    let wall = |p: Vec2| p.x.abs() < 11.0 && p.y.abs() < 1.0;
+    let (mut reached_b, mut crossed) = (false, false);
+    for _ in 0..90 * 60 {
+        app.update();
+        let p = app.world().get::<Transform>(crawler).unwrap().translation - centre;
+        crossed |= wall(Vec2::new(p.x, p.z));
+        if Vec2::new(p.x + 4.0, p.z - 6.0).length() < 1.5 {
+            reached_b = true;
+            break;
+        }
+    }
+    assert!(reached_b, "got there");
+    assert!(!crossed, "round the gas, not through it");
+}
