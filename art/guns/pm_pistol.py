@@ -81,7 +81,7 @@ frame_prof = [
     (0.027, 0.0485),
 ]
 frame_prof = fillet(frame_prof, [0.001, 0.002, 0.004, 0.003, 0.004, 0.0, 0.0, 0.004, 0.006, 0.002,
-                                 0.002, 0.003, 0.006, 0.003, 0.001], 4)
+                                 0.002, 0.003, 0.006, 0.003, 0.002], 4)
 static.prism(frame_prof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0018, segs=2)
 
 # Wraparound bakelite grip: sides and back strap, inset from the frame edges.

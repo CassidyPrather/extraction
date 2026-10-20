@@ -12,6 +12,7 @@ import bmesh
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import common  # noqa: E402
 from common import RX, RY, RZ, T, export, fillet, make, report, reset  # noqa: E402
 
 UP = RX(-math.pi / 2)       # lathe/cyl axis (Z) -> +Y
@@ -34,6 +35,7 @@ def item(item_id, build):
         make(p)
     print(f"{item_id}:")
     report()
+    common.FOLDS.clear()
     export(f"assets/models/items/{item_id}.glb")
 
 

@@ -342,6 +342,7 @@ class Part:
         bm = self.bm
         pts = [Vector(p) for p in profile]
         n = len(pts)
+        _check_fold(pts, r)
         rings = []
         for i in range(n):
             p = pts[i]
@@ -648,6 +649,27 @@ class Part:
         self.cutters.append(part)
 
 
+FOLDS = []
+
+
+def _check_fold(pts, r):
+    """Record outline corners a bevel of radius r folds over: a convex turn
+    whose rounding (edge length over turn angle) is tighter than r. The
+    folded side z-fights and spoils boolean cuts nearby."""
+    n = len(pts)
+    for i in range(n):
+        a, p, b = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e0, e1 = p - a, b - p
+        if e0.length < 1e-9 or e1.length < 1e-9:
+            continue
+        turn = math.atan2(e0.x * e1.y - e0.y * e1.x, e0.dot(e1))
+        if turn < math.radians(20):
+            continue  # straight on, or a concave corner
+        local = min(e0.length, e1.length) / turn
+        if local < r * 0.7:
+            FOLDS.append((tuple(round(c, 4) for c in p), round(local, 4), r))
+
+
 def section_rect(w, h, r=0.0, segs=2):
     """A rectangle section (x, n) centred on the path, rounded by r."""
     pts = [(-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)]
@@ -846,6 +868,13 @@ def parent(child, par):
 
 
 def report():
+    if FOLDS:
+        print(f"  WARNING {len(FOLDS)} bevelled outline corners tighter than their bevel "
+              f"(they fold; round them at least as much as the bevel), e.g. "
+              f"{FOLDS[:3]}")
+        if os.environ.get("FOLD_DETAIL") == "1":
+            for f in FOLDS:
+                print("    fold at", f)
     total = 0
     for obj in bpy.context.scene.objects:
         if obj.type != "MESH":

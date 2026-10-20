@@ -184,9 +184,9 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | Script | Output | Tris |
 | --- | --- | --- |
 | `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 10.8k |
-| `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.6k |
+| `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.2k |
 | `art/guns/mosin.py` | `models/guns/mosin.glb` | 12.5k |
-| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 24.2k (checkering) |
+| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 23.9k (checkering) |
 | `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 3.9k (with their visible rounds) |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
@@ -314,7 +314,10 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 
 - `prism`: a profile extruded along an axis. Its outline edges are
   rounded by `bevel` (a "rounded slab", built directly, because Blender's
-  bevel clamps to nothing on finely filleted outlines). A `width(a, b)`
+  bevel clamps to nothing on finely filleted outlines). A convex corner
+  rounded tighter than the bevel folds the side over itself (it z-fights
+  and spoils boolean cuts near it): `report` warns, `build.py` fails the
+  model, and `FOLD_DETAIL=1` lists the corners. A `width(a, b)`
   function can thicken it per point, for stocks and grips.
 - `lathe`, `cyl`, `tube`: revolved profiles about the bore. They take a
   partial `sweep` for panels.
