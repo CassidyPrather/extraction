@@ -88,6 +88,11 @@ pub struct Run {
     walker: Option<Entity>,
     /// When it last put a dressing on.
     dressed: f32,
+    dbg_hp: f32,
+    /// Things it's gone for in the pack step.
+    tried: Vec<Entity>,
+    /// Salvage set down for the pack step.
+    salvage: bool,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -129,13 +134,51 @@ pub(super) fn direct(
         bot.tasks.push_back(Task::Wait(IDLE));
     }
     let raid_no = raid.raids;
+    if let Ok(h) = world.health.get(player) {
+        if (h.hp - run.dbg_hp).abs() > 3.0 {
+            let an = world
+                .nearest_anomaly(here)
+                .map(|(a, at)| (a.kind, a.radius, at.xz().distance(here)));
+            let l = world
+                .holding(Side::Left)
+                .and_then(|e| world.id(e))
+                .map(str::to_string);
+            let r = world
+                .holding(Side::Right)
+                .and_then(|e| world.id(e))
+                .map(str::to_string);
+            info!(
+                "DBG hp {:.0} -> {:.0} bleeding {:.2} at {:.1} step {:?} anomaly {an:?} hands {l:?} {r:?} surge_in {:.0}",
+                run.dbg_hp,
+                h.hp,
+                h.bleeding,
+                root.translation,
+                run.step,
+                raid.surge_in()
+            );
+            run.dbg_hp = h.hp;
+        }
+    }
 
     // The radio: each first time met gets the bot's answer, now.
     for FirstMet(f) in met.read() {
         let (response, tasks): (&'static str, Vec<Task>) = match f {
             First::Jam(_) => ("rack it", vec![Task::Gun(MacroKind::Rack)]),
             First::Worn => ("carry on; mend it at the bench later", vec![]),
-            First::Anomaly if world.nearest_is_burner(here) => ("go round it", vec![]),
+            // Not on into it: back out the way it came, a few steps.
+            First::Anomaly if world.nearest_is_burner(here) => {
+                bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
+                let from = world
+                    .nearest_anomaly(here)
+                    .map_or(here + Vec2::Y, |(_, at)| at.xz());
+                (
+                    "go round it",
+                    vec![Task::WalkTo {
+                        to: here + (here - from).normalize_or(Vec2::Y) * 3.0,
+                        within: 0.8,
+                    }],
+                )
+            }
             First::Anomaly => match world.throwable(here) {
                 Some((item, at)) => (
                     "throw something in first",
@@ -455,14 +498,29 @@ pub(super) fn direct(
         Step::Pack => {
             if !firsts.met(First::PackFull) && run.tries < 12 {
                 // Everything loose nearby goes in the pack, till it won't.
-                if let Some(item) = world.bulky_near(here) {
+                // (Each tried once: one out of reach is left.)
+                if let Some(item) = world.bulky_near(here, &run.tried) {
+                    run.tried.push(item);
                     tasks.push(Grab {
                         item,
                         side: Side::Left,
                     });
                     tasks.push(Stow(Side::Left));
+                    run.tries += 1;
+                } else if !run.salvage {
+                    // Nothing big lying about in reach: salvage at its feet,
+                    // more than a pack holds.
+                    run.salvage = true;
+                    let away = world
+                        .nearest_anomaly(here)
+                        .map_or(Vec2::Y, |(_, at)| (here - at.xz()).normalize_or(Vec2::Y));
+                    let spot = here + away * 4.0;
+                    let at = Vec3::new(spot.x, world.zone.ground(spot.x, spot.y), spot.y);
+                    let _ = world.drop_items(&mut commands, at, &["fuel_can"; 4]);
+                    tasks.push(Wait(0.5));
+                } else {
+                    run.tries = 12;
                 }
-                run.tries += 1;
             } else {
                 advance(&mut run, Step::Surge);
             }
@@ -1059,16 +1117,23 @@ impl World2<'_, '_> {
         Some(!self.anomaly_events.is_empty())
     }
 
-    fn bulky_near(&self, near: Vec2) -> Option<Entity> {
+    fn bulky_near(&self, near: Vec2, tried: &[Entity]) -> Option<Entity> {
         self.items
             .iter()
-            .filter(|(_, it, gt, held, sock, bag)| {
-                held.is_none()
+            .filter(|(e, it, gt, held, sock, bag)| {
+                !tried.contains(e)
+                    && held.is_none()
                     && sock.is_none()
                     && bag.is_none()
                     && gt.translation().xz().distance(near) < 40.0
                     && self.catalog.get(it.kind()).category
                         != extraction_core::items::Category::Artifact
+                    // Out in the open (not on a shelf indoors)...
+                    && self.entrances.building_at(gt.translation()).is_none()
+                    // ...and not from the edge of one: it was gone round.
+                    && !self.anomalies.iter().any(|(a, agt)| {
+                        agt.translation().xz().distance(gt.translation().xz()) < a.radius + 2.0
+                    })
             })
             .max_by(|a, b| {
                 let bulk = |e: &crate::items::Item| self.catalog.get(e.kind()).bulk;

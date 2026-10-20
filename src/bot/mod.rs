@@ -99,6 +99,25 @@ pub enum Task {
         target: Entity,
         shots: u32,
     },
+    /// Take a gun off the body (sling, holster) into the gun hand.
+    DrawGun,
+    /// A press of one of the gun hand's buttons.
+    Button(Btn),
+    /// Reload with the gun hand alone (`Comfort::one_handed`): the
+    /// magazine out, the well brought down onto one in a pouch, the second
+    /// button to rack.
+    OneHandReload,
+}
+
+/// A controller button.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Btn {
+    /// A or X: the magazine release.
+    Primary,
+    /// B or Y: the slide stop, or (one-handed) a rack.
+    Secondary,
+    /// The stick's click: the fire selector.
+    Stick,
 }
 
 impl Task {
@@ -191,6 +210,16 @@ pub struct Bot {
     pending: bool,
     /// Seconds since the pending action was issued.
     retry: f32,
+    /// The gun hand's buttons held down this tick.
+    buttons: [bool; 3],
+    /// Where the gun hand's grip should be (world), for a move the ready
+    /// pose doesn't make (a well onto a pouched magazine).
+    gun_to: Option<Vec3>,
+    /// Times the current task was put off for something done first (one
+    /// hand: put the gun away, draw it back).
+    deferred: u32,
+    /// The gun's well from the gun hand's grip, world, for a reload.
+    well_off: Option<Vec3>,
 }
 
 impl Bot {
@@ -211,6 +240,10 @@ impl Bot {
             log: Vec::new(),
             pending: false,
             retry: 0.0,
+            buttons: [false; 3],
+            gun_to: None,
+            deferred: 0,
+            well_off: None,
         }
     }
 
@@ -248,6 +281,21 @@ impl Bot {
         self.pending = false;
         self.retry = 0.0;
         self.trigger = false;
+        self.buttons = [false; 3];
+        self.gun_to = None;
+        self.deferred = 0;
+        self.well_off = None;
+    }
+
+    /// Do these first, then the current task again.
+    fn first(&mut self, tasks: Vec<Task>) {
+        self.deferred += 1;
+        for t in tasks.into_iter().rev() {
+            self.tasks.push_front(t);
+        }
+        self.elapsed = 0.0;
+        self.pending = false;
+        self.retry = 0.0;
     }
 }
 
@@ -341,6 +389,16 @@ fn drive_bots(
             );
             right.trigger = if bot.trigger { 1.0 } else { 0.0 };
         }
+        {
+            let hand = input.hand_mut(gun_side);
+            hand.primary = bot.buttons[0];
+            hand.secondary = bot.buttons[1];
+            hand.stick_click = bot.buttons[2];
+        }
+        if let Some(to) = bot.gun_to {
+            let local = root.compute_affine().inverse().transform_point3(to);
+            input.hand_mut(gun_side).pose.translation = local;
+        }
         if let (true, Some(support)) = (supporting, hint.support) {
             let right_pose = input.hand(gun_side).pose;
             input.hand_mut(gun_side.other()).pose =
@@ -360,6 +418,73 @@ fn count_hits(mut hits: MessageReader<Hit>, mut bots: Query<(Entity, &mut Bot)>)
     }
 }
 
+/// What a one-handed bot does about a task.
+enum OneHand {
+    Do(Task),
+    /// Do these first (put the gun away, draw it back), then this again.
+    First(Vec<Task>),
+    /// Two-handed only (a hand on the handguard, two things together).
+    Skip,
+}
+
+/// One hand does everything: the gun goes away for anything else the hand
+/// takes, and comes back out to shoot; a reload and a rack are done with
+/// the gun hand alone.
+fn one_hand(
+    task: Task,
+    gun: Side,
+    held: Option<Entity>,
+    held_id: Option<String>,
+    gun_held: bool,
+) -> OneHand {
+    let free_first = |t: Task| {
+        if held.is_some() {
+            OneHand::First(vec![Task::Stow(gun)])
+        } else {
+            OneHand::Do(t)
+        }
+    };
+    let armed_first = |t: Task| {
+        if gun_held {
+            OneHand::Do(t)
+        } else if held.is_some() {
+            OneHand::First(vec![Task::Stow(gun), Task::DrawGun])
+        } else {
+            OneHand::First(vec![Task::DrawGun])
+        }
+    };
+    match task {
+        Task::Support | Task::Combine => OneHand::Skip,
+        Task::Gun(MacroKind::Reload) => armed_first(Task::OneHandReload),
+        Task::Gun(MacroKind::Rack) => armed_first(Task::Button(Btn::Secondary)),
+        Task::Gun(MacroKind::Mode) => armed_first(Task::Button(Btn::Stick)),
+        t @ (Task::Fire { .. }
+        | Task::Engage { .. }
+        | Task::Shoot { .. }
+        | Task::Button(_)
+        | Task::OneHandReload) => armed_first(t),
+        // Already in hand: done.
+        Task::PickUp { id, .. } if held_id.as_deref() == Some(id.as_str()) => {
+            OneHand::Do(Task::PickUp { id, side: gun })
+        }
+        Task::PickUp { id, .. } => free_first(Task::PickUp { id, side: gun }),
+        Task::Grab { item, .. } if held == Some(item) => OneHand::Do(Task::Wait(0.0)),
+        Task::Grab { item, .. } => free_first(Task::Grab { item, side: gun }),
+        Task::GrabFromHere { item, .. } => free_first(Task::GrabFromHere { item, side: gun }),
+        t @ (Task::Press(_) | Task::OpenDoor(_)) => free_first(t),
+        // Letting go of what the other hand held: a gun is put away, not
+        // dropped.
+        Task::Release(side) if side != gun && gun_held => OneHand::Do(Task::Stow(gun)),
+        Task::Release(_) => OneHand::Do(Task::Release(gun)),
+        Task::Stow(_) => OneHand::Do(Task::Stow(gun)),
+        Task::Use(_) => OneHand::Do(Task::Use(gun)),
+        Task::Throw { at, .. } => OneHand::Do(Task::Throw { side: gun, at }),
+        Task::Draw { slot, .. } => OneHand::Do(Task::Draw { slot, side: gun }),
+        Task::Expect(Expect::Holding(_, id)) => OneHand::Do(Task::Expect(Expect::Holding(gun, id))),
+        other => OneHand::Do(other),
+    }
+}
+
 /// What the newer tasks need, bundled to keep `run_tasks` under Bevy's
 /// parameter limit.
 #[derive(bevy::ecs::system::SystemParam)]
@@ -368,6 +493,16 @@ struct TaskExtras<'w, 's> {
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
+    socketed: Query<'w, 's, (Entity, &'static InSocket, &'static GlobalTransform)>,
+    sockets: Query<
+        'w,
+        's,
+        (
+            &'static crate::interact::Socket,
+            &'static crate::interact::SocketOwner,
+            &'static GlobalTransform,
+        ),
+    >,
 }
 
 /// Advances each bot's current task.
@@ -411,12 +546,51 @@ fn run_tasks(
     // The gun hand, and the other: a left-handed bot plays mirrored.
     let mirror = comfort.as_ref().is_some_and(|c| c.left_handed);
     let gun_side = Side::Right.mirrored(mirror);
-    let off_side = gun_side.other();
+    // One-handed, the other hand's work is the gun hand's too.
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
+    let off_side = if one_handed {
+        gun_side
+    } else {
+        gun_side.other()
+    };
     for (player, mut bot, root, body, children, mut mac) in &mut bots {
         let Some(task) = bot.tasks.front().cloned() else {
             continue;
         };
         let task = task.mirrored(mirror);
+        let task = if one_handed {
+            let held = children.iter().find_map(|c| {
+                hands
+                    .get(c)
+                    .ok()
+                    .filter(|(rh, _)| rh.side == gun_side)
+                    .and_then(|(_, h)| h.holding)
+            });
+            let gun_held = held.is_some_and(|e| guns.get(e).is_ok());
+            let held_id = held
+                .and_then(|e| items.get(e).ok())
+                .map(|i| catalog.get(i.kind()).id.clone());
+            match one_hand(task, gun_side, held, held_id, gun_held) {
+                OneHand::Do(t) => t,
+                OneHand::First(tasks) if bot.deferred < 4 => {
+                    bot.first(tasks);
+                    continue;
+                }
+                OneHand::First(_) => {
+                    bot.failed += 1;
+                    let t = bot.tasks.front().cloned();
+                    bot.note(format!("FAIL one hand: can't get to {t:?}"));
+                    bot.next();
+                    continue;
+                }
+                OneHand::Skip => {
+                    bot.next();
+                    continue;
+                }
+            }
+        } else {
+            task
+        };
         bot.elapsed += dt;
         let hand = |side: Side| {
             children.iter().find_map(|c| {
@@ -549,6 +723,141 @@ fn run_tasks(
                     }
                 }
                 if bot.elapsed > 0.5 {
+                    bot.next();
+                }
+            }
+            Task::DrawGun => {
+                if hand(gun_side)
+                    .and_then(|h| h.holding)
+                    .is_some_and(|e| guns.get(e).is_ok())
+                {
+                    bot.next();
+                    continue;
+                }
+                if !bot.pending || bot.retry > 1.0 {
+                    // A gun in one of this player's body slots.
+                    let slung = ext.socketed.iter().find(|(e, s, _)| {
+                        guns.get(*e).is_ok()
+                            && ext
+                                .sockets
+                                .get(s.socket)
+                                .is_ok_and(|(_, o, _)| o.0 == player)
+                    });
+                    let Some((gun_e, ..)) = slung else {
+                        bot.failed += 1;
+                        bot.note("FAIL no gun on the body to draw".into());
+                        // Nor what wanted the gun.
+                        bot.next();
+                        bot.next();
+                        continue;
+                    };
+                    actions.write(HandAction::Grab {
+                        player,
+                        side: gun_side,
+                        item: gun_e,
+                        point: Some(0),
+                    });
+                    bot.pending = true;
+                    bot.retry = 0.0;
+                } else {
+                    bot.retry += dt;
+                }
+            }
+            Task::Button(b) => {
+                let i = match b {
+                    Btn::Primary => 0,
+                    Btn::Secondary => 1,
+                    Btn::Stick => 2,
+                };
+                bot.buttons = [false; 3];
+                bot.buttons[i] = bot.elapsed < 0.15;
+                if bot.elapsed > 0.2 && !mac.busy() {
+                    bot.next();
+                }
+            }
+            Task::OneHandReload => {
+                bot.aim = false;
+                let Some((gun_e, gun, hand_at)) = hand(gun_side).and_then(|h| {
+                    h.holding
+                        .and_then(|e| guns.get(e).ok().map(|g| (e, g, h.world.translation)))
+                }) else {
+                    bot.failed += 1;
+                    bot.note("FAIL no gun in hand to reload".into());
+                    bot.next();
+                    continue;
+                };
+                let Some((well_s, _, well_at)) = ext.sockets.iter().find(|(s, o, _)| {
+                    o.0 == gun_e && matches!(s.kind, crate::interact::SocketKind::MagWell(_))
+                }) else {
+                    bot.failed += 1;
+                    bot.note("FAIL no magazine well".into());
+                    bot.next();
+                    continue;
+                };
+                let crate::interact::SocketKind::MagWell(family) = &well_s.kind else {
+                    continue;
+                };
+                let in_well = well_s.occupant;
+                let well_at = well_at.translation();
+                if bot.fired == 0 {
+                    // The empty one out.
+                    if in_well.is_some() {
+                        bot.buttons[0] = bot.elapsed < 0.15;
+                        continue;
+                    }
+                    bot.buttons = [false; 3];
+                    bot.fired = 1;
+                    bot.elapsed = 0.0;
+                }
+                if in_well.is_none() {
+                    // The fullest magazine of its kind in a pouch or pocket.
+                    let pouched = ext
+                        .socketed
+                        .iter()
+                        .filter(|(m, s, _)| {
+                            ext.sockets.get(s.socket).is_ok_and(|(so, o, _)| {
+                                o.0 == player
+                                    && matches!(so.kind, crate::interact::SocketKind::Body(_))
+                            }) && mags.get(*m).is_ok_and(|mg| &mg.family == family)
+                                && items.get(*m).is_ok_and(|it| it.rounds > 0)
+                        })
+                        .max_by_key(|(m, ..)| items.get(*m).map_or(0, |it| it.rounds));
+                    let Some((m, _, mgt)) = pouched else {
+                        bot.failed += 1;
+                        bot.note("FAIL no loaded magazine in a pouch".into());
+                        bot.next();
+                        continue;
+                    };
+                    let h = mags.get(m).map_or(0.1, |mg| mg.height);
+                    let top = mgt.transform_point(Vec3::Y * h * 0.5);
+                    // Down onto it from above.
+                    let above = (0.12 - bot.elapsed * 0.25).max(-0.01);
+                    // The well's offset from the grip, taken once: the gun
+                    // sits fixed in the hand, and the hand's own position
+                    // lags its target a tick.
+                    let off = *bot.well_off.get_or_insert(well_at - hand_at);
+                    bot.gun_to = Some(top + Vec3::Y * above - off);
+                    if bot.elapsed > 4.0 {
+                        bot.failed += 1;
+                        bot.note("FAIL the well didn't take the pouched magazine".into());
+                        bot.next();
+                    }
+                    continue;
+                }
+                bot.gun_to = None;
+                // In: rack a round in, if none is.
+                if bot.fired == 1 {
+                    bot.fired = 2;
+                    bot.elapsed = 0.0;
+                }
+                if gun.firearm.chambers.first().is_some_and(|c| c.is_none()) || bot.elapsed < 0.2 {
+                    bot.buttons[1] = bot.elapsed < 0.15;
+                    if bot.elapsed > 1.5 {
+                        bot.next();
+                    }
+                    continue;
+                }
+                if !mac.busy() {
                     bot.next();
                 }
             }
