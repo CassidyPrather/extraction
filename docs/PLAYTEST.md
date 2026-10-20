@@ -275,6 +275,22 @@ worst place. Bring all three to the lock beside any robot Gate in one
 raid and set them in its cradle. Mark whether the trail was findable and
 whether the ending felt like one.
 
+### 4c. Tree shimmer (10 minutes)
+
+Tree edges and ferns can crawl or sparkle as you turn your head. There
+is a smoother kind of edge, but it may cost frame time, so it's off
+unless you ask for it. Try both, in the same forest:
+
+1. Start a raid in Marrow Creek (`--map marrow_creek`), walk into the
+   spruce west of the road, and look around for a minute. Quit.
+2. Do the same again with the smoother edges on. In PowerShell:
+   `$env:EXTRACTION_A2C=1; cargo run --release -- --map marrow_creek`
+   (in bash: `EXTRACTION_A2C=1 cargo run --release -- --map marrow_creek`).
+
+Then note the session log's `gpu: ... ms a frame` lines from each run,
+and whether the shimmer bothered you in the first and was better in
+the second.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
