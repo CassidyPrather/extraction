@@ -36,6 +36,8 @@ pub struct Logbook {
     pub last: Option<RaidEntry>,
     /// The last raid as the card shows it (saved with the career).
     pub written: Option<String>,
+    /// Turned to the career page.
+    pub career: bool,
 }
 
 #[derive(Component)]
@@ -47,7 +49,13 @@ impl Plugin for LogbookPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Logbook>().add_systems(
             Update,
-            (spawn_card, tally_wrecks, write_entries, card_text)
+            (
+                spawn_card,
+                tally_wrecks,
+                write_entries,
+                turn_page,
+                card_text,
+            )
                 .chain()
                 .after(super::depart)
                 .after(super::downed),
@@ -60,6 +68,15 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
         commands.spawn((
             Name::new("Logbook"),
             LogbookCard,
+            super::truck::Pressable::Logbook,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            avian3d::prelude::Collider::cuboid(0.34, 0.25, 0.03),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::Item,
+                avian3d::prelude::LayerMask::NONE,
+            ),
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.34, 0.25),
@@ -194,18 +211,53 @@ fn entry_text(e: &RaidEntry) -> String {
     lines.join("\n")
 }
 
+/// Pressing the logbook turns it over: the last raid, or the career.
+fn turn_page(
+    mut events: MessageReader<crate::interact::InteractEvent>,
+    cards: Query<(), With<LogbookCard>>,
+    mut book: ResMut<Logbook>,
+) {
+    for ev in events.read() {
+        if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
+            if cards.contains(*item) {
+                book.career = !book.career;
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn card_text(
     raid: Res<Raid>,
     book: Res<Logbook>,
+    progression: Res<crate::progression::Progression>,
+    memorial: Res<crate::persist::Memorial>,
+    stashes: Query<&crate::interact::body::Backpack, With<super::truck::Stash>>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
     mut cards: Query<&mut ScreenText, With<LogbookCard>>,
 ) {
-    let record = format!(
-        "{} raids, {} home, {} lost",
-        raid.raids, raid.extractions, raid.deaths
-    );
-    let text = match &book.written {
-        Some(e) => format!("LOGBOOK\n{e}\n\n{record}"),
-        None => format!("LOGBOOK\n\n{record}"),
+    let text = if book.career {
+        let keys_home = stashes
+            .iter()
+            .flat_map(|s| s.contents.iter())
+            .filter_map(|e| items.get(*e).ok())
+            .filter(|i| {
+                let id = &catalog.get(i.kind()).id;
+                crate::capstone::KEYS.iter().any(|(k, _)| k == id)
+            })
+            .count();
+        let page = crate::progression::career_page(&progression.0, &raid, &memorial.0, keys_home);
+        format!("{page}\n\n(press: last raid)")
+    } else {
+        let record = format!(
+            "{} raids, {} home, {} lost",
+            raid.raids, raid.extractions, raid.deaths
+        );
+        match &book.written {
+            Some(e) => format!("LOGBOOK\n{e}\n\n{record}\n(press: career)"),
+            None => format!("LOGBOOK\n\n{record}\n(press: career)"),
+        }
     };
     let text = crate::render::screen::wrap_lines(&text, 26);
     for mut c in &mut cards {

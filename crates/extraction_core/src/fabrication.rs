@@ -162,6 +162,61 @@ pub const RECIPES: &[Recipe] = &[
     },
 ];
 
+/// What the bench can do once the driver has fitted a vice to it
+/// (`progression::Upgrade::BenchVice`): bench tier 1.
+pub const VICE_RECIPES: &[Recipe] = &[
+    Recipe {
+        id: "make_side_rail",
+        name: "Cut and file a side rail",
+        needs: &[(Need::Item("scrap_metal"), 1)],
+        makes: Make::Items(&[("side_rail", 1)]),
+        seconds: 14.0,
+    },
+    Recipe {
+        id: "make_door_wedge",
+        name: "Bend a door wedge",
+        needs: &[(Need::Item("scrap_metal"), 1)],
+        makes: Make::Items(&[("door_wedge", 1)]),
+        seconds: 8.0,
+    },
+    Recipe {
+        id: "make_weapon_light",
+        name: "Build a weapon light",
+        needs: &[
+            (Need::Item("electronics"), 1),
+            (Need::Item("power_cell"), 1),
+            (Need::Item("polymer"), 1),
+        ],
+        makes: Make::Items(&[("weapon_light", 1)]),
+        seconds: 14.0,
+    },
+    Recipe {
+        id: "make_emp_trap",
+        name: "Rig an EMP trap",
+        needs: &[
+            (Need::Item("electronics"), 2),
+            (Need::Item("robot_cell"), 1),
+            (Need::Item("servo"), 1),
+        ],
+        makes: Make::Items(&[("emp_trap", 1)]),
+        seconds: 16.0,
+    },
+    Recipe {
+        id: "repair_gun_fine",
+        name: "Strip and rebuild a worn gun",
+        needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
+        makes: Make::Repair(0.7),
+        seconds: 25.0,
+    },
+];
+
+/// The recipes a bench of `tier` knows, in recipe-book order.
+pub fn recipes(tier: u8) -> impl Iterator<Item = &'static Recipe> {
+    RECIPES
+        .iter()
+        .chain(VICE_RECIPES.iter().filter(move |_| tier >= 1))
+}
+
 /// One thing in the tray, as the bench sees it.
 #[derive(Clone, Copy, Debug)]
 pub struct TrayItem {
@@ -200,16 +255,20 @@ pub fn plan(recipe: &Recipe, tray: &[TrayItem], catalog: &ItemCatalog) -> Option
     Some(picks)
 }
 
-/// Every recipe the tray can make right now.
+/// Every recipe the tray can make right now on a bench as it came.
 pub fn available<'a>(tray: &[TrayItem], catalog: &ItemCatalog) -> Vec<&'a Recipe> {
-    RECIPES
-        .iter()
+    available_at(tray, catalog, 0)
+}
+
+/// Every recipe the tray can make right now on a bench of `tier`.
+pub fn available_at<'a>(tray: &[TrayItem], catalog: &ItemCatalog, tier: u8) -> Vec<&'a Recipe> {
+    recipes(tier)
         .filter(|r| plan(r, tray, catalog).is_some())
         .collect()
 }
 
 pub fn recipe(id: &str) -> Option<&'static Recipe> {
-    RECIPES.iter().find(|r| r.id == id)
+    recipes(u8::MAX).find(|r| r.id == id)
 }
 
 #[cfg(test)]
@@ -233,7 +292,7 @@ mod tests {
     #[test]
     fn every_recipe_names_real_items() {
         let cat = cat();
-        for r in RECIPES {
+        for r in recipes(u8::MAX) {
             for (n, _) in r.needs {
                 if let Need::Item(id) = n {
                     assert!(cat.kind(id).is_some(), "{}: {id}", r.id);
@@ -250,7 +309,7 @@ mod tests {
     #[test]
     fn nothing_comes_out_heavier_than_it_went_in() {
         let cat = cat();
-        for r in RECIPES {
+        for r in recipes(u8::MAX) {
             let Make::Items(out) = r.makes else {
                 continue;
             };
@@ -300,5 +359,21 @@ mod tests {
         assert!(available(&t, &cat).iter().any(|r| r.id == "repair_gun"));
         t[0].condition = 1.0;
         assert!(!available(&t, &cat).iter().any(|r| r.id == "repair_gun"));
+    }
+
+    #[test]
+    fn the_vice_teaches_the_bench_more() {
+        let cat = cat();
+        let t = tray(&cat, &["scrap_metal"]);
+        let ids =
+            |tier| -> Vec<&str> { available_at(&t, &cat, tier).iter().map(|r| r.id).collect() };
+        assert!(!ids(0).contains(&"make_side_rail"));
+        assert!(ids(1).contains(&"make_side_rail"));
+        assert!(recipe("make_emp_trap").is_some());
+        let mut seen: Vec<&str> = recipes(1).map(|r| r.id).collect();
+        let n = seen.len();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), n, "recipe ids are unique");
     }
 }

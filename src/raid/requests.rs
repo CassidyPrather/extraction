@@ -1,14 +1,17 @@
-//! The driver's requests. A card by the tailgate says what the driver
-//! wants this time — two robot eyes, a few cans of stew, some scrap. Put
-//! them in the stash and press the card at base: they're gone (a sink),
-//! and the driver tells you where they hid a cache of their own somewhere
-//! in the Zone. Nothing is bought: the reward is still out there to be
-//! found, carried and got home. A new request comes with the next raid.
+//! The driver's jobs. A card by the tailgate says what the driver wants
+//! this time: a few of something from the stash (a fetch), a recorder
+//! brought home from a building out there (a recover), or a look at a
+//! place (a scout). Press the card at base with it done: the driver tells
+//! you where they hid a cache of their own somewhere in the Zone, and the
+//! next job goes on the card. Nothing is bought: the reward is still out
+//! there to be found, carried and got home. The jobs come in tiers, and
+//! each tier done gets something fitted to the truck (`progression`).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use extraction_core::noise::Rng;
+use extraction_core::progression::{Job, RECOVER_ITEM, TIERS};
 
 use super::truck::{FLOOR, Pressable, Stash, Truck};
 use super::{Phase, Raid};
@@ -16,66 +19,23 @@ use crate::interact::body::Backpack;
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::items::loot::Loot;
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
+use crate::progression::Progression;
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::world::{Layer, Zone};
-
-/// What the driver asks for: item id, how many (min, max), and why.
-const WANTS: [(&str, u32, u32, &str); 10] = [
-    (
-        "sensor_eye",
-        1,
-        2,
-        "Robot eyes. Someone in town pays in diesel.",
-    ),
-    ("scrap_metal", 3, 5, "Scrap. The tailgate hinge is going."),
-    ("electronics", 2, 3, "Boards, any. The radio's dying."),
-    ("canned_stew", 2, 3, "Something hot that isn't my cooking."),
-    ("field_dressing", 2, 3, "Dressings. Not for me. Don't ask."),
-    (
-        "robot_cell",
-        1,
-        1,
-        "One of their cells. I want to see inside.",
-    ),
-    ("gun_oil", 1, 1, "Gun oil. The winch is seizing."),
-    ("matches", 2, 3, "Matches. Out again."),
-    ("servo", 1, 2, "A servo or two. I'm making a thing."),
-    ("tea_tin", 1, 1, "Tea. Real tea."),
-];
 
 /// Caches go at least this far from the truck: worth the walk.
 const CACHE_AWAY: f32 = 150.0;
 
-/// The request on the card, and where the last cache was left.
+/// How many jobs have been paid for, and where the last cache was left.
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
 pub struct Requests {
-    /// How many requests there have been.
+    /// Jobs paid for (seeds each cache).
     pub number: u32,
-    /// What's wanted now (item id, count), if anything.
-    pub want: Option<(String, u32)>,
     /// Where the driver's cache is, once told.
     pub cache: Option<String>,
     /// And on the map: the valley, and (x, z) there (pencilled on the
     /// field map).
     pub cache_at: Option<(String, [f32; 2])>,
-}
-
-impl Requests {
-    /// The next request, rolled from the career seed and its number.
-    pub fn next(&mut self, seed: u64) {
-        self.number += 1;
-        let mut rng = Rng::new(seed ^ 0x2E9_0E57 ^ (self.number as u64).wrapping_mul(0x9E37));
-        let (id, lo, hi, _) = WANTS[rng.below(WANTS.len())];
-        let n = lo + rng.below((hi - lo + 1) as usize) as u32;
-        self.want = Some((id.to_owned(), n));
-    }
-}
-
-fn why(id: &str) -> &'static str {
-    WANTS
-        .iter()
-        .find(|w| w.0 == id)
-        .map_or("You know what for.", |w| w.3)
 }
 
 #[derive(Component)]
@@ -87,7 +47,7 @@ impl Plugin for RequestsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Requests>().add_systems(
             Update,
-            (spawn_card, new_request, press_card, find_cache, card_text)
+            (spawn_card, press_card, find_cache, card_text)
                 .chain()
                 .after(super::leave_base),
         );
@@ -119,20 +79,11 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     }
 }
 
-/// A request to start with, and a new one each raid after the last was
-/// met.
-fn new_request(
-    raid: Res<Raid>,
-    opts: Res<crate::launch::LaunchOptions>,
-    mut requests: ResMut<Requests>,
-    mut was_out: Local<bool>,
-) {
-    let out = raid.phase != Phase::AtBase;
-    let set_off = out && !*was_out;
-    *was_out = out;
-    if requests.want.is_none() && (requests.number == 0 || set_off) {
-        requests.next(opts.seed);
-    }
+fn item_name(catalog: &Catalog, id: &str) -> String {
+    catalog
+        .kind(id)
+        .map(|k| catalog.get(k).name.clone())
+        .unwrap_or(id.to_owned())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -141,6 +92,7 @@ fn press_card(
     mut events: MessageReader<InteractEvent>,
     cards: Query<(), With<RequestCard>>,
     mut requests: ResMut<Requests>,
+    mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
     mut stashes: Query<&mut Backpack, With<Stash>>,
     items: Query<&Item>,
@@ -149,6 +101,7 @@ fn press_card(
     spots: Option<Res<crate::world::buildings::BuildingLoot>>,
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
+    mut done: MessageWriter<crate::progression::JobDone>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -157,57 +110,94 @@ fn press_card(
         if !cards.contains(*item) {
             continue;
         }
-        let Some((id, n)) = requests.want.clone() else {
+        let Some(job) = progression.0.job.clone() else {
             raid.say("Driver: \"Nothing else for now. Go on.\"");
             continue;
         };
         if raid.phase != Phase::AtBase {
-            raid.say("Driver: \"Back at base. I'm not counting tins out here.\"");
+            raid.say("Driver: \"Back at base. Tell me there.\"");
             continue;
         }
-        let name = catalog
-            .kind(&id)
-            .map(|k| catalog.get(k).name.clone())
-            .unwrap_or(id.clone());
+        if progression.0.last_raid == Some(raid.raids) {
+            raid.say("Driver: \"One thing at a time. After your next run.\"");
+            continue;
+        }
+        if opts.map == crate::camp::TRAINING_YARD {
+            raid.say("Driver: \"That's for when we're out there for real.\"");
+            continue;
+        }
         let Some(mut stash) = stashes.iter_mut().next() else {
             continue;
         };
-        let have: Vec<Entity> = stash
-            .contents
-            .iter()
-            .copied()
-            .filter(|e| items.get(*e).is_ok_and(|i| catalog.get(i.kind()).id == id))
-            .take(n as usize)
-            .collect();
-        if (have.len() as u32) < n {
-            raid.say(format!(
-                "Driver: \"That's {} of {n} {name}. In the stash, mind.\"",
-                have.len()
-            ));
-            continue;
-        }
-        stash.contents.retain(|e| !have.contains(e));
-        for e in have {
+        let in_stash = |id: &str, n: u32, stash: &Backpack| -> Vec<Entity> {
+            stash
+                .contents
+                .iter()
+                .copied()
+                .filter(|e| items.get(*e).is_ok_and(|i| catalog.get(i.kind()).id == id))
+                .take(n as usize)
+                .collect()
+        };
+        let handed: Vec<Entity> = match &job {
+            Job::Fetch { item: id, n } => {
+                let have = in_stash(id, *n, &stash);
+                if (have.len() as u32) < *n {
+                    raid.say(format!(
+                        "Driver: \"That's {} of {n} {}. In the stash, mind.\"",
+                        have.len(),
+                        item_name(&catalog, id)
+                    ));
+                    continue;
+                }
+                have
+            }
+            Job::Recover { .. } => {
+                let have = in_stash(RECOVER_ITEM, 1, &stash);
+                if have.is_empty() {
+                    raid.say("Driver: \"No recorder in the stash. Still out there, is it?\"");
+                    continue;
+                }
+                have
+            }
+            Job::Scout { place, seen, .. } => {
+                if !seen {
+                    raid.say(format!(
+                        "Driver: \"You've not been to the {place} yet. Go and look.\""
+                    ));
+                    continue;
+                }
+                Vec::new()
+            }
+        };
+        stash.contents.retain(|e| !handed.contains(e));
+        for e in handed {
             commands.entity(e).despawn();
         }
+        requests.number += 1;
+        progression.0.last_raid = Some(raid.raids);
+        let tier = progression.0.tier;
         let mut rng = Rng::new(opts.seed ^ 0xCAC4E ^ requests.number as u64);
         let placed = match (&loot, &spots) {
             (Some(loot), Some(spots)) => {
-                place_cache(&mut commands, &zone, spots, loot, &catalog, &mut rng)
+                place_cache(&mut commands, &zone, spots, loot, &catalog, &mut rng, tier)
             }
             _ => None,
         };
-        requests.want = None;
+        let thanks = match &job {
+            Job::Scout { place, .. } => format!("The {place}, eh. Good to know."),
+            _ => "Ta.".to_owned(),
+        };
         match placed {
             Some((where_, at)) => {
                 raid.say(format!(
-                    "Driver: \"Ta. My cache: {where_} It's on your map.\""
+                    "Driver: \"{thanks} My cache: {where_} It's on your map.\""
                 ));
                 requests.cache = Some(where_);
                 requests.cache_at = Some((opts.map.clone(), [at.x, at.z]));
             }
-            None => raid.say("Driver: \"Ta. I owe you one.\""),
+            None => raid.say(format!("Driver: \"{thanks} I owe you one.\"")),
         }
+        done.write(crate::progression::JobDone);
     }
 }
 
@@ -220,6 +210,7 @@ fn place_cache(
     loot: &Loot,
     catalog: &Catalog,
     rng: &mut Rng,
+    tier: u32,
 ) -> Option<(String, Vec3)> {
     let base = zone
         .marker(&MarkerKind::TruckStop)
@@ -235,12 +226,12 @@ fn place_cache(
         return None;
     }
     let at = far[rng.below(far.len())];
-    for (i, drop) in loot
-        .0
-        .roll("driver_cache", catalog, rng)
-        .into_iter()
-        .enumerate()
-    {
+    // From the third tier on the driver has more to give: a second pile.
+    let piles = if tier >= 2 { 2 } else { 1 };
+    let drops: Vec<_> = (0..piles)
+        .flat_map(|_| loot.0.roll("driver_cache", catalog, rng))
+        .collect();
+    for (i, drop) in drops.into_iter().enumerate() {
         let off = Vec3::new(
             (i as f32 * 1.7).sin() * 0.2,
             0.08 + 0.06 * i as f32,
@@ -345,20 +336,31 @@ fn find_cache(
 
 fn card_text(
     requests: Res<Requests>,
+    progression: Res<Progression>,
     catalog: Res<Catalog>,
+    opts: Res<crate::launch::LaunchOptions>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
 ) {
-    let mut text = String::from("DRIVER WANTS\n");
-    match &requests.want {
-        Some((id, n)) => {
-            let name = catalog
-                .kind(id)
-                .map(|k| catalog.get(k).name.clone())
-                .unwrap_or(id.clone());
-            let them = if *n == 1 { "it" } else { "them" };
-            text += &format!("{n} x {name}\n\"{}\"\nStash {them}, press here.", why(id));
-        }
+    let p = &progression.0;
+    let tier = p.tier_def();
+    let mut text = if (p.tier as usize) < TIERS.len() {
+        format!(
+            "{} - JOB {} OF {}\n",
+            tier.name.to_uppercase(),
+            p.done_in_tier + 1,
+            tier.jobs
+        )
+    } else {
+        "DRIVER WANTS\n".to_owned()
+    };
+    match &p.job {
+        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map),
         None => text += "Nothing yet.",
+    }
+    if let Some(u) = p.next_fitting().first() {
+        if p.done_in_tier + 1 == tier.jobs {
+            text += &format!("\nDo this and I'll fit {}.", u.name());
+        }
     }
     if let Some(c) = &requests.cache {
         text += &format!("\n\nMY CACHE: {c}");
@@ -372,11 +374,11 @@ fn card_text(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use crate::progression::Progression;
 
-    #[test]
-    fn handing_over_a_request_leaves_a_cache_out_there() {
+    pub(crate) fn app() -> App {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -387,38 +389,21 @@ mod tests {
         for _ in 0..3 {
             app.update();
         }
-        let (id, n) = app
-            .world()
-            .resource::<Requests>()
-            .want
-            .clone()
-            .expect("a first request");
-        let card = app
-            .world_mut()
-            .query_filtered::<Entity, With<RequestCard>>()
-            .iter(app.world())
-            .next()
-            .expect("the card is in the truck");
-        let player = app
-            .world_mut()
-            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        let items_before = app.world_mut().query::<&Item>().iter(app.world()).count();
-        // Pressing with nothing to give: a "that's 0 of" from the driver.
+        app
+    }
+
+    pub(crate) fn one<F: bevy::ecs::query::QueryFilter>(app: &mut App) -> Entity {
         app.world_mut()
-            .write_message(InteractEvent::Pressed { item: card, player });
-        app.update();
-        assert!(app.world().resource::<Requests>().want.is_some());
-        // Put what's wanted in the stash.
-        let catalog = app.world().resource::<Catalog>().clone();
-        let stash = app
-            .world_mut()
-            .query_filtered::<Entity, With<Stash>>()
+            .query_filtered::<Entity, F>()
             .iter(app.world())
             .next()
-            .unwrap();
+            .expect("there is one")
+    }
+
+    /// Puts `n` new `id`s in the truck's stash.
+    pub(crate) fn stash(app: &mut App, id: &str, n: u32) {
+        let catalog = app.world().resource::<Catalog>().clone();
+        let stash = one::<With<Stash>>(app);
         for _ in 0..n {
             let mut queue = bevy::ecs::world::CommandQueue::default();
             let e = {
@@ -427,7 +412,7 @@ mod tests {
                     &mut c,
                     &catalog,
                     SpawnItem {
-                        kind: catalog.kind(&id).unwrap(),
+                        kind: catalog.kind(id).unwrap(),
                         transform: Transform::default(),
                         condition: 1.0,
                     },
@@ -447,16 +432,20 @@ mod tests {
             ));
         }
         app.update();
+    }
+
+    pub(crate) fn press_card(app: &mut App) {
+        let card = one::<With<RequestCard>>(app);
+        let player = one::<With<crate::rig::LocalPlayer>>(app);
         app.world_mut()
             .write_message(InteractEvent::Pressed { item: card, player });
         app.update();
         app.update();
-        let r = app.world().resource::<Requests>().clone();
-        assert!(r.want.is_none(), "handed over");
-        let note = r.cache.expect("told where the cache is");
-        assert!(r.cache_at.is_some(), "and it's on the map");
-        // Walking up to it takes the cross off.
-        let at = r.cache_at.clone().unwrap().1;
+    }
+
+    /// Walks the player to (x, z) on the ground.
+    pub(crate) fn go(app: &mut App, at: [f32; 2]) {
+        let player = one::<With<crate::rig::LocalPlayer>>(app);
         let zone = app.world().resource::<crate::world::Zone>().clone();
         app.world_mut()
             .get_mut::<Transform>(player)
@@ -465,21 +454,95 @@ mod tests {
         for _ in 0..3 {
             app.update();
         }
+    }
+
+    /// Back in the truck bed at base, the raid over.
+    pub(crate) fn home(app: &mut App) {
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let bed = super::super::truck::base_pose(&zone).transform_point(Vec3::new(0.3, FLOOR, 0.6));
+        go(app, [bed.x, bed.z]);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        app.update();
+    }
+
+    fn job(app: &App) -> Job {
+        app.world()
+            .resource::<Progression>()
+            .0
+            .job
+            .clone()
+            .expect("a job on the card")
+    }
+
+    #[test]
+    fn a_job_done_pays_a_cache_out_there() {
+        let mut app = app();
+        // The first job: go and look at somewhere near.
+        let Job::Scout { at, place, .. } = job(&app) else {
+            panic!("the first job is a scout: {:?}", job(&app));
+        };
+        // Pressing before going: not done.
+        press_card(&mut app);
+        assert!(matches!(job(&app), Job::Scout { seen: false, .. }));
+        assert_eq!(app.world().resource::<Progression>().0.done, 0);
+        // Out to the place, and home.
+        go(&mut app, at);
         assert!(
-            app.world().resource::<Requests>().cache_at.is_none(),
-            "found it"
+            app.world().resource::<Raid>().phase != Phase::AtBase,
+            "walking off starts the raid"
         );
+        assert!(
+            matches!(job(&app), Job::Scout { seen: true, .. }),
+            "seen the {place}"
+        );
+        home(&mut app);
+        let items_before = app.world_mut().query::<&Item>().iter(app.world()).count();
+        press_card(&mut app);
+        let r = app.world().resource::<Requests>().clone();
+        assert_eq!(app.world().resource::<Progression>().0.done, 1, "done");
+        assert_eq!(r.number, 1);
+        let note = r.cache.clone().expect("told where the cache is");
         assert!(note.starts_with("in the "), "{note}");
         let items_after = app.world_mut().query::<&Item>().iter(app.world()).count();
         assert!(
             items_after > items_before,
             "the cache is out there ({items_before} -> {items_after})"
         );
-        // The next raid brings the next request.
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        // The next job is on the card straight away.
         app.update();
-        let r = app.world().resource::<Requests>();
-        assert_eq!(r.number, 2);
-        assert!(r.want.is_some());
+        assert!(app.world().resource::<Progression>().0.job.is_some());
+        // Walking up to the cache takes the cross off.
+        go(&mut app, r.cache_at.clone().unwrap().1);
+        assert!(
+            app.world().resource::<Requests>().cache_at.is_none(),
+            "found it"
+        );
+
+        // A fetch: what's wanted goes from the stash.
+        home(&mut app);
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Fetch {
+            item: "canned_stew".into(),
+            n: 2,
+        });
+        let stew = |app: &mut App| {
+            let catalog = app.world().resource::<Catalog>().clone();
+            app.world_mut()
+                .query::<&Item>()
+                .iter(app.world())
+                .filter(|i| catalog.get(i.kind()).id == "canned_stew")
+                .count()
+        };
+        stash(&mut app, "canned_stew", 1);
+        press_card(&mut app);
+        assert_eq!(
+            app.world().resource::<Progression>().0.done,
+            1,
+            "one's not two"
+        );
+        stash(&mut app, "canned_stew", 1);
+        let before = stew(&mut app);
+        press_card(&mut app);
+        assert_eq!(app.world().resource::<Progression>().0.done, 2);
+        assert_eq!(stew(&mut app), before - 2, "handed over");
     }
 }

@@ -14,6 +14,7 @@ pub mod props;
 pub mod screen;
 pub mod stats;
 pub mod terrain_material;
+pub mod upgrades;
 pub mod water_material;
 pub mod world_props;
 
@@ -43,6 +44,7 @@ impl Plugin for RenderPlugin {
             stats::RenderStatsPlugin,
             world_props::WorldPropsPlugin,
             kit::KitVisualsPlugin,
+            upgrades::UpgradeVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
