@@ -39,6 +39,11 @@ pub struct TerrainParams {
     pub tile: f32,
     /// 1 in a burnt valley: the ground goes to ash and scorched earth.
     pub burnt: f32,
+    /// How full the puddles are, 0..1 (`world::puddles::fill`).
+    pub puddles: f32,
+    /// Rain falling, 0..1: rings on the puddles.
+    pub rain: f32,
+    pub _pad: Vec2,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -115,6 +120,9 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
                 wetness: 0.35,
                 tile: 3.0,
                 burnt: 0.0,
+                puddles: 0.0,
+                rain: 0.0,
+                _pad: Vec2::ZERO,
             },
             albedo: load("albedo", true),
             normal: load("normal", false),

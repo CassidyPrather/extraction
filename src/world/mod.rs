@@ -9,6 +9,7 @@ pub mod buildings;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
+pub mod puddles;
 pub mod rain;
 pub mod rocks;
 pub mod scenes;

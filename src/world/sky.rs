@@ -30,7 +30,7 @@ impl Plugin for SkyPlugin {
                     .chain()
                     .in_set(WeatherLook),
             )
-            .add_systems(PostUpdate, follow_camera_with_dome);
+            .add_systems(PostUpdate, (follow_camera_with_dome, carry_wetness));
     }
 }
 
@@ -523,5 +523,23 @@ fn valley_air(
         base,
         cap_density: cap * k,
         cap_base: map.base_height + lift + dz,
+    }
+}
+
+/// How wet the world is, on its way to the surfaces' shaders: the fog
+/// colour's alpha (`render::fog::WET_CODE`), the one per-frame value every
+/// PBR surface already reads. While the eye is indoors the rooms are dry
+/// (`render::grade::Adaptation::indoors`).
+fn carry_wetness(
+    wet: Res<super::weather::Wetness>,
+    adapt: Res<crate::render::grade::Adaptation>,
+    mut fogs: Query<&mut DistanceFog>,
+) {
+    let w = (wet.level * (1.0 - adapt.indoors)).clamp(0.0, 1.0);
+    let a = 1.0 - w * crate::render::fog::WET_CODE;
+    for mut fog in &mut fogs {
+        if (fog.color.alpha() - a).abs() > 1e-6 {
+            fog.color.set_alpha(a);
+        }
     }
 }
