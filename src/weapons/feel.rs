@@ -1029,3 +1029,26 @@ mod vr_tests {
         assert_eq!(fire(&mut r, 1, true).len(), 1, "tap, rack, bang");
     }
 }
+
+#[cfg(test)]
+mod bot_pose {
+    use super::*;
+
+    /// Where the bot puts each long gun when it aims (its sight 32 cm in
+    /// front of the eye, `bot::drive`), the stock is at the head: bots
+    /// fight shouldered, as a competent player would, so recoil and strain
+    /// don't skew the sims.
+    #[test]
+    fn bots_aim_from_the_shoulder() {
+        for id in ["ak74", "mosin", "toz_double", "sks"] {
+            let layout = crate::weapons::layout::layout(id).unwrap();
+            let sight = layout.grip.compute_affine().inverse() * layout.sight.compute_affine();
+            let hand = Transform::from_xyz(0.0, 0.0, -0.32).compute_affine() * sight.inverse();
+            let gun = hand * layout.grip.compute_affine().inverse();
+            let (lo, hi) = layout.bounds();
+            let butt = Vec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, hi.z);
+            let d = gun.transform_point3(butt).length();
+            assert!(d < SHOULDER_REACH * 0.6, "{id}: butt {d:.3} m from the eye");
+        }
+    }
+}
