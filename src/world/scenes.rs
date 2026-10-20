@@ -26,11 +26,71 @@ pub struct ScenesPlugin;
 
 impl Plugin for ScenesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Startup,
-            spawn_scenes.after(super::buildings::spawn_buildings),
-        );
+        app.init_resource::<Staged>()
+            .add_systems(
+                Startup,
+                // After the career is loaded (it is before the loot): a
+                // scene behind a gate waits for the rank that opens it.
+                spawn_scenes.after(crate::items::loot::LootSpawnSystems),
+            )
+            .add_systems(Update, (unlock_scenes, super::story::tell_beats));
     }
+}
+
+/// What opens a scene (and a beat of the story, `world::story::THREADS`):
+/// a rank on the driver's job ladder (`Progress::tier` reached), the
+/// machines recalled, or this many raids set off in the scene's valley.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gate {
+    Tier(u32),
+    Recalled,
+    Visits(u32),
+}
+
+/// Where a career stands, as far as gates go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Standing {
+    pub tier: u32,
+    pub recalled: bool,
+    /// Raids set off in this valley.
+    pub visits: u32,
+}
+
+impl Gate {
+    pub fn open(self, at: Standing) -> bool {
+        match self {
+            Gate::Tier(t) => at.tier >= t,
+            Gate::Recalled => at.recalled,
+            Gate::Visits(n) => at.visits >= n,
+        }
+    }
+}
+
+/// The scenes standing in this Zone, by id.
+#[derive(Resource, Default, Debug)]
+pub struct Staged(pub std::collections::HashSet<String>);
+
+/// Where the career stands in `map` (rank 0, nothing done, where there's
+/// no career).
+pub fn standing(
+    progression: Option<&crate::progression::Progression>,
+    raid: Option<&crate::raid::Raid>,
+    map: &str,
+) -> Standing {
+    Standing {
+        tier: progression.map_or(0, |p| p.0.tier),
+        recalled: raid.is_some_and(|r| r.recalled),
+        visits: progression.map_or(0, |p| p.0.raids_in(map)),
+    }
+}
+
+/// [`standing`], from the world.
+pub fn gates(world: &World, map: &str) -> Standing {
+    standing(
+        world.get_resource::<crate::progression::Progression>(),
+        world.get_resource::<crate::raid::Raid>(),
+        map,
+    )
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -46,6 +106,10 @@ pub struct Scene {
     /// `underground::where_sites` prints it), not whatever is above.
     #[serde(default)]
     pub floor: Option<f32>,
+    /// Only once this opens (a beat of the story): until then it isn't
+    /// there.
+    #[serde(default)]
+    pub after: Option<Gate>,
     #[serde(default)]
     pub pieces: Vec<Piece>,
     #[serde(default)]
@@ -135,6 +199,12 @@ pub struct Note {
     pub at: [f32; 3],
     #[serde(default)]
     pub rot: f32,
+}
+
+impl Scene {
+    pub fn open(&self, at: Standing) -> bool {
+        self.after.is_none_or(|g| g.open(at))
+    }
 }
 
 /// Every scene in every valley.
@@ -312,59 +382,101 @@ pub fn pose(zone: &Zone, scene: &Scene) -> Transform {
         .with_rotation(Quat::from_rotation_y(yaw(scene.rot)))
 }
 
-fn spawn_scenes(mut commands: Commands, zone: Res<Zone>, opts: Res<crate::launch::LaunchOptions>) {
-    let mut n = 0;
+fn spawn_scenes(
+    mut commands: Commands,
+    zone: Res<Zone>,
+    opts: Res<crate::launch::LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+    raid: Res<crate::raid::Raid>,
+    mut staged: ResMut<Staged>,
+) {
+    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
     for (id, scene) in of(&opts.map) {
-        let Some(geo) = geo(&id) else {
-            continue;
-        };
-        let t = pose(&zone, scene);
-        let mut colliders = Vec::new();
-        let mut surfaces = Vec::new();
-        for piece in &geo.pieces {
-            let half = match piece.shape {
-                Shape::Box(s) => s * 0.5,
-                Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
-                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-            };
-            surfaces.push((half, piece.at, piece.mat));
-            if !piece.collide {
-                continue;
-            }
-            let c = match piece.shape {
-                Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
-                Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
-                Shape::Cylinder(r, h) => Collider::cylinder(r, h),
-            };
-            colliders.push((piece.at.translation, piece.at.rotation, c));
+        if scene.open(at) {
+            stage(&mut commands, &zone, &id, scene);
+            staged.0.insert(id);
         }
-        let root = commands
-            .spawn((
-                Name::new(format!("Scene: {}", scene.name)),
-                Building { prefab: id },
-                t,
-                Visibility::default(),
-            ))
-            .id();
-        if !colliders.is_empty() {
-            commands.entity(root).insert((
-                RigidBody::Static,
-                Collider::compound(colliders),
-                CollisionLayers::new(Layer::World, LayerMask::ALL),
-                super::surfaces::Surfaces(surfaces),
-            ));
-        }
-        if let Some(note) = &scene.note {
-            commands.spawn((
-                Name::new("Note"),
-                super::notes::note_panel(&note.text),
-                note_pose(t, note),
-                Visibility::default(),
-            ));
-        }
-        n += 1;
     }
-    info!("{n} staged scenes");
+    info!("{} staged scenes", staged.0.len());
+}
+
+/// A scene whose gate opens while you play (a job handed in at base, the
+/// machines recalled) is put up then, its things with it.
+fn unlock_scenes(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    opts: Res<crate::launch::LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+    raid: Res<crate::raid::Raid>,
+    catalog: Res<Catalog>,
+    mut staged: ResMut<Staged>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
+    for (id, scene) in of(&opts.map) {
+        if staged.0.contains(&id) || !scene.open(at) {
+            continue;
+        }
+        info!("scene opens: {}", scene.name);
+        stage(&mut commands, &zone, &id, scene);
+        lay_things(&mut commands, &zone, scene, &catalog);
+        staged.0.insert(id);
+    }
+}
+
+/// Puts up one scene: its furniture (as a building) and its note.
+fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene) {
+    let Some(geo) = geo(id) else {
+        return;
+    };
+    let t = pose(zone, scene);
+    let mut colliders = Vec::new();
+    let mut surfaces = Vec::new();
+    for piece in &geo.pieces {
+        let half = match piece.shape {
+            Shape::Box(s) => s * 0.5,
+            Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+            Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+        };
+        surfaces.push((half, piece.at, piece.mat));
+        if !piece.collide {
+            continue;
+        }
+        let c = match piece.shape {
+            Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
+            Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
+            Shape::Cylinder(r, h) => Collider::cylinder(r, h),
+        };
+        colliders.push((piece.at.translation, piece.at.rotation, c));
+    }
+    let root = commands
+        .spawn((
+            Name::new(format!("Scene: {}", scene.name)),
+            Building {
+                prefab: id.to_owned(),
+            },
+            t,
+            Visibility::default(),
+        ))
+        .id();
+    if !colliders.is_empty() {
+        commands.entity(root).insert((
+            RigidBody::Static,
+            Collider::compound(colliders),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            super::surfaces::Surfaces(surfaces),
+        ));
+    }
+    if let Some(note) = &scene.note {
+        commands.spawn((
+            Name::new("Note"),
+            super::notes::note_panel(&note.text),
+            note_pose(t, note),
+            Visibility::default(),
+        ));
+    }
 }
 
 /// A scene's note, lying face up on its surface.
@@ -377,29 +489,41 @@ pub fn note_pose(scene: Transform, note: &Note) -> Transform {
     )
 }
 
-/// Lays out this map's scenes' things, with the loot: each Surge cycle
-/// puts them back.
-pub fn spawn_things(commands: &mut Commands, map: &str, zone: &Zone, catalog: &Catalog) {
+/// Lays out this map's open scenes' things, with the loot: each Surge
+/// cycle puts them back.
+pub fn spawn_things(
+    commands: &mut Commands,
+    map: &str,
+    zone: &Zone,
+    catalog: &Catalog,
+    at: Standing,
+) {
     for (_, scene) in of(map) {
-        let t = pose(zone, scene);
-        for thing in &scene.items {
-            let Some(kind) = catalog.kind(&thing.id) else {
-                warn!("scene {}: no item {}", scene.name, thing.id);
-                continue;
-            };
-            spawn_item(
-                commands,
-                catalog,
-                SpawnItem {
-                    kind,
-                    transform: Transform::from_translation(
-                        t.transform_point(Vec3::from(thing.at) + Vec3::Y * 0.03),
-                    )
-                    .with_rotation(t.rotation * Quat::from_rotation_y(yaw(thing.rot))),
-                    condition: thing.condition,
-                },
-            );
+        if scene.open(at) {
+            lay_things(commands, zone, scene, catalog);
         }
+    }
+}
+
+fn lay_things(commands: &mut Commands, zone: &Zone, scene: &Scene, catalog: &Catalog) {
+    let t = pose(zone, scene);
+    for thing in &scene.items {
+        let Some(kind) = catalog.kind(&thing.id) else {
+            warn!("scene {}: no item {}", scene.name, thing.id);
+            continue;
+        };
+        spawn_item(
+            commands,
+            catalog,
+            SpawnItem {
+                kind,
+                transform: Transform::from_translation(
+                    t.transform_point(Vec3::from(thing.at) + Vec3::Y * 0.03),
+                )
+                .with_rotation(t.rotation * Quat::from_rotation_y(yaw(thing.rot))),
+                condition: thing.condition,
+            },
+        );
     }
 }
 
@@ -533,5 +657,49 @@ mod tests {
         }
         problems.dedup();
         assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// A scene behind a rank isn't there until the rank is reached, and is
+    /// put up, things and all, when a job handed in reaches it.
+    #[test]
+    fn a_rank_opens_its_scene() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let id = of("marrow_creek")
+            .find(|(_, s)| s.name == "Rusty's corner")
+            .unwrap()
+            .0;
+        let standing = |app: &mut App| {
+            app.world_mut()
+                .query::<&Building>()
+                .iter(app.world())
+                .any(|b| b.prefab == id)
+        };
+        assert!(!standing(&mut app), "not before the rank");
+        let items = |app: &mut App| {
+            app.world_mut()
+                .query::<&crate::items::Item>()
+                .iter(app.world())
+                .count()
+        };
+        let before = items(&mut app);
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .tier = 1;
+        for _ in 0..2 {
+            app.update();
+        }
+        assert!(standing(&mut app), "up once the rank is reached");
+        assert!(items(&mut app) > before, "with its things");
     }
 }

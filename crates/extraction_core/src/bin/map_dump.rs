@@ -156,5 +156,7 @@ fn main() {
     std::fs::write(format!("{out}/routes.json"), lint.routes_json()).unwrap();
     std::fs::write(format!("{out}/lint.json"), lint.findings_json()).unwrap();
     eprint!("{}", lint.text());
+    let sight = extraction_core::map_sight::audit(&map, &hm);
+    std::fs::write(format!("{out}/sight.json"), sight.json()).unwrap();
     println!("{} ({}x{} samples) -> {out}", map.name, hm.n, hm.n);
 }

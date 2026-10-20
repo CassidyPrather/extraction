@@ -133,21 +133,23 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `arrive` | `site`, `items`, `artifacts` | Reached a site: loose items lying there (artifacts among them). |
 | `stuck` | `x`, `z`, `doing`, `task` | Walked nowhere for 6 s; it sidesteps and replans. |
 | `fetch_gun` | `dist` | Its gun got left behind (a held long gun snags on door frames); it went back for it. |
-| `engage` | `robot` (`Drone`, `Walker`), `dist`, `noticed`, `x`, `z` (bot), `rx`, `rz` (robot) | A fight starts. |
+| `engage` | `robot` (`Drone`, `Walker`, `Crawler`...), `dist`, `noticed`, `x`, `z` (bot), `rx`, `rz` (robot) | A fight starts. |
 | `engage_end` | `robot`, `outcome` (`wrecked`, `lost`, `gone`, `out_of_range`, `out_of_ammo`, `broke_off`, `took_cover`, `died`), `shots`, `hits`, `secs`, `x`, `z` | A fight ends. |
 | `shot` | `x`, `z` | The bot fired. |
 | `hit` | `robot`, `part`, `damage` | A bot round hit a robot part. |
 | `blocked` | `what` (the collider's name: `Building shop`, `World edge`, `Terrain collider`...), `x`, `z`, `y` | A bot round hit something else. |
 | `reload`, `rack`, `refill`, `reposition` | `reload`: `spare`, `cover` | Gun handling (a reload with `cover` steps out of the robot's sight first, then back); stepping aside when rounds hit a wall. |
 | `evade`, `flee` | `robot`, `dist` | Backing off (cautious) or running (no ammunition). |
-| `damage` | `cause`, `amount`, `x`, `z`, `hp` | Damage taken, summed per cause per second. Causes: `Drone`, `Walker` (their rounds), `Burner`, `Snare`, `Lift` (standing in one), `surge`, `bleeding`, `fall`. |
+| `damage` | `cause`, `amount`, `x`, `z`, `hp` | Damage taken, summed per cause per second. Causes: `Drone`, `Walker`, `Crawler` (their rounds), `Burner`, `Snare`, `Lift` (standing in one), `surge`, `bleeding`, `fall`. |
 | `heal` | `item`, `hp`, `bleeding` | Used a dressing or injector. |
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
 | `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
 | `crouch` | `secs` | Stood up after crouching (creeping) near robots for `secs` (see `docs/MAP_DESIGN.md`, "How the bots move"). |
 | `freeze` | `secs`, `x`, `z` | Froze, crouched and still, while a robot searched close by. |
-| `distract` | `x`, `z`, `walker_dist` | Threw junk past a calm walker to send it looking the other way. |
+| `distract` | `x`, `z`, `walker_dist` | Threw junk to send a walker looking somewhere else. |
+| `stalk` | `dist`, `x`, `z` | (Cautious.) Set off creeping up on an unaware walker `dist` m off, to throw a distraction past it. |
+| `distract_result` | `outcome` (`drawn`, `ignored`, `spotted`, `broke_off`), `why`, `thrown` | How a creep-and-throw ended, 8 s after the throw or when it was given up. |
 | `cover` | `why` (`hurt`), `dist`, `hp` | Hurt and still being hit: broke off the fight into cover `dist` m away (the fight ends `took_cover`). |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |

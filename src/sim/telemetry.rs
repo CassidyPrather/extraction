@@ -144,7 +144,7 @@ pub fn record(
         With<LocalPlayer>,
     >,
     colliders: Query<(), With<BodyCollider>>,
-    robots: Query<&Robot>,
+    robots: Query<(&Robot, Has<crate::robots::indoor::Crawler>)>,
     parts: Query<&RobotPart>,
     anomalies: Query<(Entity, &Anomaly, &GlobalTransform)>,
     mut shots: MessageReader<Shot>,
@@ -196,7 +196,7 @@ pub fn record(
                 log.stats.hits += 1;
                 let kind = robots
                     .get(part.robot)
-                    .map(|r| format!("{:?}", r.kind))
+                    .map(|(r, c)| crate::robots::robot_name(r.kind, c))
                     .unwrap_or_default();
                 log.event(
                     "hit",
@@ -226,7 +226,7 @@ pub fn record(
             let cause = h
                 .shooter
                 .and_then(|s| robots.get(s).ok())
-                .map(|r| format!("{:?}", r.kind))
+                .map(|(r, c)| crate::robots::robot_name(r.kind, c))
                 .unwrap_or_else(|| "unknown".into());
             tr.expect.push((cause, h.damage, 0.3));
         }

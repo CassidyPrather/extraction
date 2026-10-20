@@ -161,7 +161,7 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             ..default()
         }),
         scorched: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.36, 0.34, 0.32),
+            base_color: Color::srgb(0.58, 0.56, 0.53),
             perceptual_roughness: 0.75,
             metallic: 0.2,
             ..default()
@@ -318,6 +318,8 @@ fn dress_parts(
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
+            (RobotKind::Walker, PartRole::Armour(_)) => "plate",
+            (RobotKind::Drone, PartRole::Armour(_)) => "panel",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
             (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {
@@ -375,6 +377,19 @@ fn dress_parts(
                     MeshMaterial3d(m.rotor.clone()),
                     ChildOf(disc),
                 ));
+            }
+            (_, PartRole::Armour(_)) => {
+                let Some(node) = ModelNode::find(model, node_name) else {
+                    continue;
+                };
+                attach(
+                    &mut commands,
+                    e,
+                    node,
+                    plate_turn(robot.kind, node),
+                    e,
+                    &mut mat,
+                );
             }
             (RobotKind::Walker, PartRole::Leg(i)) => {
                 // The collider entity stays invisible; segments are drawn separately.
@@ -1227,6 +1242,22 @@ fn dress_debris(
                     );
                 })
             }
+            Piece::Plate => {
+                let name = if d.kind == RobotKind::Walker {
+                    "plate"
+                } else {
+                    "panel"
+                };
+                node(name).map(|n| {
+                    attach(&mut commands, e, n, plate_turn(d.kind, n), e, &mut mat);
+                })
+            }
+            Piece::Sensor => node("sensor").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
+            Piece::Gun => node("gun").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
             Piece::Turret => node("turret").map(|n| {
                 attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
             }),
@@ -1296,6 +1327,13 @@ fn dress_debris(
                     ChildOf(e),
                 ));
             }
+            Piece::Sensor | Piece::Gun | Piece::Plate => {
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.08, 0.06, 0.2))),
+                    MeshMaterial3d(m.dark.clone()),
+                    ChildOf(e),
+                ));
+            }
             Piece::Turret => {
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.16, 0.1, 0.36))),
@@ -1311,6 +1349,18 @@ fn dress_debris(
                 ));
             }
         }
+    }
+}
+
+/// How a plate's model sits on its part, whose +Y faces out: a walker's
+/// plate is modelled facing out from the orb at its origin, a drone's
+/// (its top panel, worn under the belly) already faces +Y.
+fn plate_turn(kind: RobotKind, node: &ModelNode) -> Transform {
+    if kind == RobotKind::Walker {
+        let out = node.transform.translation.normalize_or(Vec3::Y);
+        Transform::from_rotation(Quat::from_rotation_arc(out, Vec3::Y))
+    } else {
+        Transform::IDENTITY
     }
 }
 
@@ -1367,7 +1417,24 @@ fn alert_eyes(
     mats: Option<Res<RobotMats>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Handle<StandardMaterial>>>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut flicker: Local<std::collections::HashMap<Entity, f32>>,
+    time: Res<Time>,
 ) {
+    // A shot into the eye makes it stutter for a moment.
+    for imp in impacts.read() {
+        if imp.part == Some(PartRole::Sensor) && imp.hurt {
+            if let Some(part) = imp.entity.and_then(|e| parts.get(e).ok()) {
+                flicker.insert(part.robot, 0.6);
+            }
+        }
+    }
+    let dt = time.delta_secs();
+    flicker.retain(|_, t| {
+        *t -= dt;
+        *t > 0.0
+    });
+    let now = time.elapsed_secs();
     let Some(m) = mats else {
         return;
     };
@@ -1394,9 +1461,18 @@ fn alert_eyes(
             .clone();
         commands.entity(e).insert(MeshMaterial3d(own));
     }
-    for (_, aware, own) in &robots {
+    for (robot, aware, own) in &robots {
         let Some(own) = own else {
             continue;
+        };
+        let stutter = if flicker.contains_key(&robot) {
+            if (now * 37.0 + robot.index_u32() as f32).sin() > 0.1 {
+                0.15
+            } else {
+                1.6
+            }
+        } else {
+            1.0
         };
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
@@ -1405,7 +1481,7 @@ fn alert_eyes(
             0.0
         };
         let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level;
+        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;

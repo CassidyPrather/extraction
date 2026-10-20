@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--heat")
     ap.add_argument("--paths")
     ap.add_argument("--lint")
+    ap.add_argument("--sight", help="map-dump's sight.json: shade ground with no landmark in sight")
     ap.add_argument("--title")
     args = ap.parse_args()
     heat = None
@@ -74,6 +75,28 @@ def main():
         heat = np.fromfile(args.heat, dtype="<f4").reshape(meta["n"], meta["n"])
     img, _, px = render(args.dump, args.px, heat=heat, title=args.title)
     d = ImageDraw.Draw(img)
+    if args.sight and os.path.exists(args.sight):
+        # Red where no landmark shows within fog range; deeper where none
+        # shows even in ordinary weather.
+        sg = json.load(open(args.sight))
+        ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        half = sg["step"] / 2
+        for k, d in enumerate(sg["nearest"]):
+            if d is None:
+                continue
+            x = sg["origin"] + (k % sg["n"]) * sg["step"]
+            z = sg["origin"] + (k // sg["n"]) * sg["step"]
+            if d < 0:
+                col = (220, 30, 30, 120)
+            elif d > sg["fog"]:
+                col = (240, 120, 40, 70)
+            else:
+                continue
+            a_, b_ = px((x - half, z - half)), px((x + half, z + half))
+            od.rectangle([a_, b_], fill=col)
+        img = Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB")
+        d = ImageDraw.Draw(img)
     if args.paths and os.path.exists(args.paths):
         for path in json.load(open(args.paths)):
             pts = [px(p) for p in path["points"]]

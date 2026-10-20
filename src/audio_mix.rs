@@ -107,6 +107,7 @@ pub const MIX: &[Cue] = &[
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
+    cue!("gun.shot_suppressed", "guns/rifle_shot", -5.0, 118.0, 0.5, Action),
     cue!("gun.distant", "guns/distant_shot", -6.0, 95.0, 100.0, Event),
     cue!("gun.malfunction", "guns/bolt_close", -9.0, 75.0, 0.5, Signal),
     cue!("gun.dry_fire", "guns/dry_fire", -5.0, 70.0, 0.5, Signal),
@@ -124,6 +125,8 @@ pub const MIX: &[Cue] = &[
     cue!("gun.casing", "guns/casing", -9.0, 60.0, 1.5, Detail),
     // Bullets landing.
     cue!("hit.impact", "impacts/metal", -2.0, 95.0, 15.0, Action, 8.0),
+    cue!("hit.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
+    cue!("hit.water", "footsteps/water", 3.0, 85.0, 15.0, Action, 8.0),
     cue!("hit.ricochet", "impacts/ricochet", -1.0, 90.0, 15.0, Action, 8.0),
     cue!("hit.glance", "impacts/ricochet", -2.5, 100.0, 1.0, Signal),
     cue!("hit.body", "physical/body_hit", -8.0, 90.0, 0.5, Signal),
@@ -235,6 +238,11 @@ pub fn db(name: &str) -> f32 {
         };
         c.db + lift
     })
+}
+
+/// A cue's role, if it's in the mix.
+pub fn role(name: &str) -> Option<Role> {
+    MIX.iter().find(|c| c.name == name).map(|c| c.role)
 }
 
 fn find(name: &str) -> Option<&'static Cue> {

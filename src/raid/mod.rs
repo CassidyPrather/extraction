@@ -9,6 +9,7 @@
 //! Stay too long and the Surge comes for everyone.
 
 pub mod bench;
+pub mod board;
 pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
@@ -152,6 +153,7 @@ impl Plugin for RaidPlugin {
             chatter::ChatterPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,
+            board::BoardPlugin,
         ))
         .add_systems(
             Update,
@@ -172,8 +174,12 @@ fn dev_surge_clock(opts: Res<crate::launch::LaunchOptions>, mut raid: ResMut<Rai
 /// Stepping out of the truck's pull-in starts the clock.
 fn leave_base(
     mut raid: ResMut<Raid>,
-    players: Query<&GlobalTransform, With<LocalPlayer>>,
-    trucks: Query<&GlobalTransform, With<truck::Truck>>,
+    // Their own poses, not the propagated ones: waking in the truck after
+    // going down moves both in the same frame, and the stale global poses
+    // read the player as still out where they fell (so the raid restarted
+    // with you sitting in the truck).
+    players: Query<&Transform, With<LocalPlayer>>,
+    trucks: Query<&Transform, With<truck::Truck>>,
 ) {
     if raid.phase != Phase::AtBase {
         return;
@@ -181,7 +187,7 @@ fn leave_base(
     let (Some(p), Some(t)) = (players.iter().next(), trucks.iter().next()) else {
         return;
     };
-    if p.translation().distance(t.translation()) > 14.0 {
+    if p.translation.distance(t.translation) > 14.0 {
         raid.phase = Phase::Out;
         raid.raids += 1;
         let mins = (raid.surge_in() / 60.0).max(0.0).ceil();

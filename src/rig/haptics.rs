@@ -476,7 +476,7 @@ mod tests {
             .resource::<crate::world::Zone>()
             .on_ground(0.0, 30.0);
         vr.stand(feet, 0.0);
-        let mut grab = |vr: &mut Vr, id: &str, dx: f32| {
+        let grab = |vr: &mut Vr, id: &str, dx: f32| {
             let at = feet + Vec3::new(dx, 1.0, -0.4);
             let item = vr.spawn(id, Transform::from_translation(at));
             vr.app

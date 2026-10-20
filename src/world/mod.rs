@@ -3,6 +3,7 @@
 //! [`WorldPlugin`] is the logic half (map, heightmap, colliders) and runs
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
+pub mod ao;
 pub mod bridges;
 pub mod buildings;
 pub mod cover;
@@ -130,24 +131,25 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((weather::WeatherPlugin, scenes::ScenesPlugin))
-            .add_systems(PreStartup, init_zone)
-            .add_systems(
-                Update,
-                (buildings::swing_doors, underground::register_residents),
-            )
-            .add_systems(
-                Startup,
-                (
-                    spawn_terrain_collider,
-                    structures::spawn_structures,
-                    structures::spawn_boundary,
-                    buildings::spawn_buildings,
-                    bridges::spawn_bridges,
-                    trees::spawn_tree_colliders,
-                    rocks::spawn_rock_colliders,
-                ),
-            );
+        app.add_plugins((
+            weather::WeatherPlugin,
+            scenes::ScenesPlugin,
+            underground::UndergroundPlugin,
+        ))
+        .add_systems(PreStartup, init_zone)
+        .add_systems(Update, buildings::swing_doors)
+        .add_systems(
+            Startup,
+            (
+                spawn_terrain_collider,
+                structures::spawn_structures,
+                structures::spawn_boundary,
+                buildings::spawn_buildings,
+                bridges::spawn_bridges,
+                trees::spawn_tree_colliders,
+                rocks::spawn_rock_colliders,
+            ),
+        );
     }
 }
 

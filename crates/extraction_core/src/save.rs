@@ -30,6 +30,10 @@ pub struct SaveGame {
     /// have none: they're credited from `requests` when loaded.
     #[serde(default)]
     pub progress: Option<Progress>,
+    /// The first-time moments the driver has already talked you through
+    /// (one line each, once a career).
+    #[serde(default)]
+    pub firsts: Vec<String>,
 }
 
 /// The driver's requests: how many there have been, what's wanted now,
@@ -52,6 +56,9 @@ pub struct Stats {
     /// The three keys were turned at a Gate: the machines went home.
     #[serde(default)]
     pub recalled: bool,
+    /// The notes read, "map/name", in order: the cork board's pins.
+    #[serde(default)]
+    pub notes_read: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -149,6 +156,10 @@ pub struct Career {
     pub requests: RequestsSave,
     #[serde(default)]
     pub progress: Option<Progress>,
+    /// The first-time moments the driver has already talked you through
+    /// (one line each, once a career).
+    #[serde(default)]
+    pub firsts: Vec<String>,
 }
 
 impl Career {
@@ -174,6 +185,7 @@ impl Career {
         save.logbook = self.logbook.clone();
         save.requests = self.requests.clone();
         save.progress = self.progress.clone();
+        save.firsts = self.firsts.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -189,6 +201,7 @@ impl Career {
         self.logbook = save.logbook.clone();
         self.requests = save.requests.clone();
         self.progress = save.progress.clone();
+        self.firsts = save.firsts.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }

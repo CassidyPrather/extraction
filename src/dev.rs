@@ -10,16 +10,21 @@ pub struct DevPlugin;
 
 impl Plugin for DevPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FrameCount>().add_systems(
-            Update,
-            (
-                count_frames,
-                screenshot_when_ready,
-                gallery,
-                first_person_hands,
-                wear_kit,
-            ),
-        );
+        app.init_resource::<FrameCount>()
+            .add_systems(
+                Update,
+                (
+                    count_frames,
+                    screenshot_when_ready,
+                    gallery,
+                    first_person_hands,
+                    wear_kit,
+                ),
+            )
+            .add_systems(
+                PreUpdate,
+                pose_body_for_gallery.after(crate::rig::RigDriverSystems),
+            );
     }
 }
 
@@ -588,5 +593,68 @@ fn wear_kit(
             });
             false
         });
+    }
+}
+
+/// `--gallery kit+stoop` (or any spec with `stoop`): after a moment
+/// standing, the head drops 0.35 m and comes 0.25 m forward, looking down,
+/// as you bend to your belt (the torso keeps its standing height until the
+/// head has dropped further). `behind` puts the camera behind and above
+/// the player instead, to see the pack on their back; `above` high behind,
+/// looking down at the feet, to see the body's shadow. The free camera
+/// otherwise stays where `--camera` put it.
+fn pose_body_for_gallery(
+    opts: Res<LaunchOptions>,
+    mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
+    mut cams: Query<
+        &mut Transform,
+        (
+            With<crate::render::FreeCamera>,
+            Without<crate::rig::LocalPlayer>,
+        ),
+    >,
+    mut frames: Local<u32>,
+) {
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let (stoop, behind, above) = (
+        spec.contains("stoop"),
+        spec.contains("behind"),
+        spec.contains("above"),
+    );
+    if !stoop && !behind && !above {
+        return;
+    }
+    *frames += 1;
+    let Some((root, mut input)) = players.iter_mut().next() else {
+        return;
+    };
+    if stoop && *frames > 20 {
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        input.head.translation += flat * 0.25 - Vec3::Y * 0.35;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.1);
+    }
+    let head = root.mul_transform(input.head);
+    let Ok(mut cam) = cams.single_mut() else {
+        return;
+    };
+    if above {
+        // High behind, looking down at the feet: the body's shadow.
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let feet = root.translation;
+        *cam = Transform::from_translation(feet - flat * 1.8 + Vec3::Y * 3.2)
+            .looking_at(feet, Vec3::Y);
+    } else if behind {
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let at = head.translation - flat * 1.3 + Vec3::Y * 0.25;
+        *cam =
+            Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
+    } else if *frames > 20 {
+        *cam = head;
     }
 }

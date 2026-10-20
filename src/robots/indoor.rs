@@ -207,15 +207,20 @@ pub struct CrawlerZap {
 }
 
 /// The spark gun reaches this far (m)...
-pub const ZAP_RANGE: f32 = 15.0;
+pub const ZAP_RANGE: f32 = 18.0;
 /// ...charges this long before each zap (s)...
 pub const ZAP_CHARGE: f32 = 0.5;
 /// ...hits this hard...
-pub const ZAP_DAMAGE: f32 = 8.0;
+pub const ZAP_DAMAGE: f32 = 12.0;
 /// ...and recharges this long between (s).
 pub const ZAP_COOLDOWN: f32 = 1.6;
 /// A crawler fights from no further than this (m).
 pub const CRAWLER_HOLD: f32 = 10.0;
+/// How much its core takes (a walker's is 130).
+pub const CRAWLER_HP: f32 = 100.0;
+/// Hearing you within reach of its gun, a crawler lies in wait this long
+/// before it comes to look (s).
+pub const AMBUSH: f32 = 8.0;
 /// How big a crawler is against a walker (Robot bodies' `spawn_walker_sized`).
 pub const CRAWLER_SIZE: f32 = 0.6;
 
@@ -255,7 +260,7 @@ pub fn spawn_crawler(
         at,
         job,
         false,
-        70.0,
+        CRAWLER_HP,
         CRAWLER_SIZE,
         Some(at.y),
     );

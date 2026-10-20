@@ -228,6 +228,9 @@ is what it did before.
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
 | Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
+| A round landing (`weapons::impacts::Impact`, classed once for the spray and the sound) | `hit.impact` by surface: concrete, wood, steel, earth; `hit.glass` (window glass, a robot's eye); `hit.water` (a slap, harder for faster rounds); `hit.body`; out through a thin wall, a second crack 6 dB quieter | — | re-classed from the Hit; water silent |
+| A spent case landing (`weapons::CasingLanded`), a beat after the shot | `gun.casing` by floor: brass rings on steel and concrete, knocks on boards, ticks in grass, plips in water; a shotgun hull thunks; bounces 8 dB quieter | — | a ping at the port |
+| A suppressed shot (`gadgets::Suppressed`) | `gun.shot_suppressed`: the shot through a 2.2 kHz low-pass, 5 LU under a bare one (about 118 dB at the ear, against 140); far off, the distant shot 14 dB down | as a shot | a bare shot |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
 | A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
@@ -274,6 +277,120 @@ goes past 0.6. Index controllers barely register under about 0.1 or
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
+## Acoustics
+
+Spaces sound like their size (`src/acoustics.rs`).
+
+**The space.** A few times a second, seventeen rays go out from your
+head: twelve round the horizon, four raised 40 degrees, one straight
+up. What they meet, and where, gives:
+- how enclosed the place is: the share of rays that meet something
+  within 40 m;
+- its size: the mean distance to what they meet; misses are openings;
+- its longest way round: a corridor's length, a hall's far end;
+- what its surfaces are made of, by majority: metal, bare concrete or
+  rock, plaster and brick, wood, soft (canvas, bark, earth);
+- the roof overhead.
+
+That makes it open, sheltered (an alley, a yard), a room, a hall, or
+underground (the dark sites).
+
+**The reverb.** One reverb bus (bevy_seedling's Freeverb, through its
+`effects` feature). Every placed sound sends to it at full level,
+except recordings with their own space baked in: the far-off shot's
+echo, the siren and the Surge's cracks send 30%. The space sets the
+bus:
+- **Decay** follows Sabine's formula. For a box the mean free path is
+  4V/S, so RT60 is about 0.04 × path / absorption. Absorption counts a
+  room's contents, not only its walls: metal 0.05, bare concrete 0.07,
+  plaster and brick 0.15, wood 0.2, soft 0.45. Open sides shorten it,
+  and tunnels count their longest way round. Above ground, long rays
+  have usually left through a window, so they don't count.
+- **Brightness:** metal rings, plaster and wood dull it.
+- **Wet level:** off in the open and in a forest (trunks and earth
+  don't echo), -24 to -18 dB sheltered, -16 to -12 in a room, -13 to
+  -9 in a hall, -11 to -8 underground.
+
+Changes ease over half a second, so walking through a door is a
+crossfade.
+
+| Place (2026-10, three maps) | Places | RT60 | Wet | A rifle shot's direct over reverb |
+| --- | --- | --- | --- | --- |
+| Field, forest | 10 | (dry) | off | dry |
+| Timber shed or cabin | 18 | 0.5 s (Freeverb's shortest) | -12 dB | +7 dB |
+| House, shop (plaster, brick) | 27 | 0.8 s | -12 dB | +6 dB |
+| Concrete room | 6 | 1.2 s | -12 dB | +5 dB |
+| Barn (wood hall) | 2 | 1.9 s | -9 dB | 0 dB |
+| Tin shed, depot (metal) | 9 | 2.3-3.5 s | -12 to -10 dB | +2 to -2 dB |
+| Factory hall (brick, Cinder Works) | 2 | 3.1 s | -11 dB | 0 dB |
+| Underground | 31 | 1.8 s | -8 dB | -1 dB |
+
+**Occlusion.** Each placed sound is checked as it starts, and loops
+every quarter second (at most 24 checks a frame), by the rule robots
+hear by (`robots::senses`):
+- **Through a wall or over a hill:** a sound carries `OCCLUDED`
+  (0.45) of its reach. Under inverse-distance falloff that is 6.9 dB
+  quieter, and it's muffled to 700 Hz.
+- **Round the edge of an open doorway** (both legs clear): 3 dB
+  quieter, muffled to 3 kHz.
+- **The ray test:** a path counts as blocked only if both the line from
+  just above the source and the line `HEARD_OVER` (1.2 m) above it are
+  cut. Robots test only the raised line, which through a doorway runs
+  into the lintel; they've been told.
+
+So a walker's footfall behind a wall is still heard, just duller, about
+where a robot would hear yours.
+
+**Underground**, the wind dies away over a few seconds as you go
+down the stairs, and the rain with it.
+
+**Rain under a roof.** Rain follows where you stand:
+- **In the open:** all of it.
+- **Under a roof:** quieter and duller. Tin and wood are 12-14 dB down
+  and below about 1 kHz; canvas loses less.
+- **Under a porch:** a little duller.
+- **Underground:** none.
+
+A roof's own drumming plays over that, blended by the rain's strength
+from a light loop to a heavy one (more and bigger drops). The loops are
+`ambience/rain_tin`, `rain_wood` and `rain_canvas`, plus `_light`
+versions.
+
+They're synthesised (`scripts/make_rain_roofs.py`), an exception to
+the recorded-world rule. No CC0 recordings were reachable: Freesound
+refused this container, and OpenGameArt and Commons had none. Rain on
+a roof is a dense Poisson stream of drop impacts, each a short burst
+exciting the roof's modes, over 16 patches of roof so no one resonance
+sings:
+- **Tin:** bright modes at 1-4 kHz, ringing 80-150 ms, and a low boom
+  from the panel.
+- **Wood:** 300-900 Hz, about 20 ms.
+- **Canvas:** soft, low-passed thumps.
+
+Each loop is a circular convolution of the drop train with the roof's
+response, so it repeats seamlessly. It's levelled against the outdoor
+rain bed: tin +3 LU, canvas 0, wood -4, light loops 6 LU under. The
+audit checks those levels to within 1.5 LU, and that tin rings
+brightest ([spectra](shots/audio/rain_roofs.png)). Replace them with
+recordings when they can be had.
+
+**Measuring it.** `cargo test acoustics::tests::every_place_is_probed_for_the_audit`
+probes every building and underground room on the three maps and writes
+`target/audio_audit/acoustics.json`. `audio_audit.py` then renders each
+kind of place's reverb with a port of the game's Freeverb
+(`scripts/audio_acoustics.py`) and checks it:
+- the decay against what the probe asked for, within 15%;
+- the direct-to-reverberant ratio of a shot and a footstep;
+- that a room's tail adds at most 3 LU to a shot's loudness, for
+  comfort;
+- that outdoors is dry.
+
+The first run found Freeverb's damping shortens every tail to 0.86 of
+its combs' decay, so `freeverb_room` asks for that much more
+(`FREEVERB_DAMPED`). Decays and tail spectra:
+[decay](shots/audio/acoustics_decay.png),
+[spectra](shots/audio/acoustics_spectra.png).
+
 ## Listening in the headset
 
 The numbers place each sound; only ears say whether it's the right one.
@@ -307,7 +424,11 @@ words ("too bright", "sounds like plastic", "late"):
     noticing you: is the whirr readable as "it saw me"?
 11. **A jam.** Does `gun.malfunction` read as "wrong", distinct from dry
     fire?
-12. **Overall.** Anything that made you flinch, or that you didn't hear
+12. **Rooms.** Walk from the field into a cabin, a tin shed and down
+    into a bunker, clapping or firing a shot in each: does each sound
+    its size? A walker behind a wall: muffled but readable? Rain from
+    under a roof?
+13. **Overall.** Anything that made you flinch, or that you didn't hear
     at all. The audit's "Loudest up close" list in `target/audio_audit/
     mix.txt` names the loudest suspects.
 

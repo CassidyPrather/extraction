@@ -130,9 +130,56 @@ pub fn fitted(u: Upgrade) -> String {
 pub const GIFT_CARBINE: &str =
     "Driver: \"My old carbine's in the crate. Never been past the fence. Take it.\"";
 
+/// The end of the third tier: the sub-machine gun.
+pub const GIFT_SMG: &str =
+    "Driver: \"Man in town owed me. There's a gun in the crate. Don't ask.\"";
+
+/// What he says when a fitting comes with something in the crate.
+pub fn gift(u: Upgrade) -> &'static str {
+    match u {
+        Upgrade::Aerial => GIFT_SMG,
+        _ => GIFT_CARBINE,
+    }
+}
+
 /// A fetch he's given up waiting for.
 pub fn fetch_swapped(name: &str) -> String {
     format!("Driver: \"Forget the {name}. Something else on the card.\"")
+}
+
+// --- Upkeep and orders (after the ladder) ---------------------------------
+
+/// "2 scrap metal", "1 electronics".
+pub fn parts(parts: &[(&str, u32)], name: impl Fn(&str) -> String) -> String {
+    parts
+        .iter()
+        .map(|(id, n)| format!("{n} {}", name(id)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn upkeep_paid(fitting: &str, parts: &str) -> String {
+    format!("Driver: \"Took {parts} for the {fitting}.\"")
+}
+
+pub fn laid_up(fitting: &str, parts: &str) -> String {
+    format!("Driver: \"The {fitting}'s laid up. Wants {parts}.\"")
+}
+
+pub fn back_in_order(fitting: &str) -> String {
+    format!("Driver: \"The {fitting}'s working again.\"")
+}
+
+/// The order card, past the ladder.
+pub fn order_card(order: &str) -> String {
+    format!("MY CACHES: {order}\n(press to change)")
+}
+
+/// The order card, before the ladder's done.
+pub const ORDER_LATER: &str = "Driver: \"Do my jobs first. Then you can ask.\"";
+
+pub fn ordered(order: &str) -> String {
+    format!("Driver: \"{order}, then. I'll see what I can find.\"")
 }
 
 // --- Out there ----------------------------------------------------------------
@@ -175,10 +222,16 @@ mod tests {
             paid_nothing(&thanks(Some(place))),
             LETTER_HOME.into(),
             GIFT_CARBINE.into(),
+            GIFT_SMG.into(),
             fetch_swapped(name),
             scout_noticed(place),
             scout_forgotten(place),
             AERIAL_SURGE.into(),
+            upkeep_paid("cabinet", "1 field dressing"),
+            laid_up("cabinet", "1 field dressing"),
+            back_in_order("cabinet"),
+            ORDER_LATER.into(),
+            ordered("Medicine"),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(

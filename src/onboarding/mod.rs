@@ -26,7 +26,9 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod firsts;
 pub mod hints;
+pub mod second_hour;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -451,7 +453,8 @@ impl Plugin for OnboardingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
-            .add_plugins(hints::HintsPlugin)
+            .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
+            .add_systems(Update, second_hour::direct)
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
@@ -1557,7 +1560,7 @@ pub mod bot;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::screen::{em_metres, read_from};
 
     /// The yard's own boards hold to more than the game's floor
     /// (`MIN_EM_DEG`): the first playtest's first complaint was signs it

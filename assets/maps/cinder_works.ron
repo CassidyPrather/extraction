@@ -139,6 +139,16 @@
                      (196.0, 76.0), (195.0, 50.0), (194.0, 21.0)],
             bridges: [(at: (195.0, 50.0), length: 26.0)],
         ),
+        // Off the slag road to the chimney and its strongbox.
+        (
+            name: "Chimney path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(82.0, -84.0), (94.0, -66.0), (102.0, -51.0)],
+        ),
+        // From the lookout track's end up to the tower's door.
+        (
+            name: "Lookout path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-150.0, -165.0), (-158.0, -160.0), (-168.0, -161.0), (-174.0, -166.0)],
+        ),
         // The towpath along the south bank.
         (
             name: "Towpath", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,

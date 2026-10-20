@@ -81,6 +81,8 @@ def tiers():
     return out, wants
 
 
+PRIOR = 4
+
 PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
     ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
 
@@ -98,8 +100,14 @@ def main():
     maps = ["marrow_creek", "kettle_pass", "cinder_works"] if map_name == "all" else [map_name]
     paths = []
     for m in maps:
-        runs_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "target", "sim", m)
-        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl")))]
+        if len(sys.argv) > 2:
+            # A runs dir; with `all`, a dir holding one folder per map
+            # (and they may hold a folder per batch).
+            runs_dir = os.path.join(sys.argv[2], m) if map_name == "all" else sys.argv[2]
+        else:
+            runs_dir = os.path.join(ROOT, "target", "sim", m)
+        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl"))
+                                          + glob.glob(os.path.join(runs_dir, "*", "*.jsonl")))]
     regs_by = {m: regions(m) for m in maps}
     runs = []
     for m, path in paths:
@@ -142,8 +150,11 @@ def main():
         for d in range(4):
             js = [r for r in jobs if r["job"].get("danger") == d]
             if js:
-                job_rate[d] = sum(r["home"] and r["job"]["seen"] for r in js) / len(js)
-                print(f"| {d} | {len(js)} | {job_rate[d]:.0%} |")
+                done = sum(r["home"] and r["job"]["seen"] for r in js)
+                # A few runs say little: lean on "reached that danger and
+                # got home" as a prior worth PRIOR runs.
+                job_rate[d] = (done + PRIOR * reach(d, d)) / (len(js) + PRIOR)
+                print(f"| {d} | {len(js)} | {done / len(js):.0%} (used: {job_rate[d]:.0%}) |")
         print()
 
     def place_odds(lo, hi):

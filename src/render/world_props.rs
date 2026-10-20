@@ -200,6 +200,22 @@ pub fn for_merge(m: &Mesh) -> Option<Mesh> {
         Ok(t) => out.insert_attribute(Mesh::ATTRIBUTE_TANGENT, t.clone()),
         Err(_) => out.generate_tangents().ok()?,
     }
+    // The model's baked ambient occlusion (white if it has none), as
+    // 32-bit floats so it merges with the buildings' own (`world::ao`).
+    let n = out.count_vertices();
+    let col: Vec<[f32; 4]> = match m.try_attribute(Mesh::ATTRIBUTE_COLOR) {
+        Ok(bevy::mesh::VertexAttributeValues::Float32x4(c)) if c.len() == n => c.clone(),
+        Ok(bevy::mesh::VertexAttributeValues::Float32x3(c)) if c.len() == n => {
+            c.iter().map(|c| [c[0], c[1], c[2], 1.0]).collect()
+        }
+        _ => vec![[1.0; 4]; n],
+    };
+    let col = if crate::world::ao::enabled() {
+        col
+    } else {
+        vec![[1.0; 4]; n]
+    };
+    out.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
     Some(out)
 }
 

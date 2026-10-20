@@ -91,10 +91,14 @@ that the whole stairwell is open.
   lift in Kettle's stope, a snare guarding the crate in Cinder's overflow
   chamber. `check` keeps each inside its room and clear of the doorways:
   you go round them, you're never made to walk through one.
-- **Robots**: none yet. The walkers path on the Zone grid, which has no
-  underground. Asked of Robot minds and bodies: an indoor robot that
-  patrols a site on its plan (`sim::indoor::plan_site` gives a walkable
-  grid with a floor per cell).
+- **Crawlers** (Robot minds' `robots::indoor`): each site's layout names
+  a patrol round (room ids in walking order) and how many crawlers walk
+  it (Marrow 2, Kettle 1, Cinder 2). `register_residents` hands Robot
+  minds the site's plan grid (the ground round the kiosks and deep water
+  taken out: they stay below and dry), its floors and the round
+  (`IndoorSites`), and tells every robot where it's dark and where the
+  lamps are (`senses::Lighting`): in the dark a crawler sees you only by
+  lamplight or your torch.
 - **Props**: the layout's vocabulary (`PropKind`) is built from the
   houses' furniture where it fits (shelves, lockers, crates, tables,
   workbenches, beds as bunks, barrels, pallets, counters, chairs), plus
@@ -102,6 +106,42 @@ that the whole stairwell is open.
   (Cabinet), `mine_tub` (Cart) and `bulkhead_lamp` (every lamp fitting).
   Rubble is boxes for now. `check` keeps props a metre clear of every
   corridor mouth and stair foot.
+
+## Power
+
+Each site has a breaker board or a generator somewhere awkward (layout
+`power`): Marrow's generator beside the live snare in the generator room,
+Kettle's breaker in the wet sump, Cinder's at the back of the dead-end
+cable vault. Until it's thrown, the doors it holds (the armoury, the
+explosives magazine, the overflow chamber: the best loot) won't open
+(`PowerLocked`), and the `Lamp::Powered` rooms are dark. Throwing it (a
+pressable, through the hands) unbolts them, lights those lamps (and adds
+them to the robots' `Lighting`), and makes a noise the crawlers come to;
+a generator keeps humming. `a_hand_on_the_switch_powers_the_site`
+tests it through the headset harness. Sim raiders whose way to an item
+runs through a held door throw the switch first (a `power` event in the
+telemetry); cautious ones leave it.
+
+## Water
+
+Floods are layout data too (a room or a corridor, and a depth): a drain
+from Marrow's gas lock to the filter plant (1.0 m), Kettle's drowned old
+drive from the lamp room to the west crosscut (1.35 m: you float) and
+its wet sump, Cinder's culvert from the stair hall to the pump room
+(1.1 m) and its flooded overflow chamber. The corridors are short cuts:
+slower (wading drags, the bots' grid costs it) and louder (splashing is a
+robot `Noise`), and the crawlers won't follow into water deeper than 0.9 m
+(`DEEP`). Underground the player reads the site's water
+(`site_water`), never the ground's water above.
+
+## What it costs to draw
+
+Nothing culls by the rock, so a site under a village would be drawn in
+every view of it. A site's geometry more than 1 m below its kiosks is
+merged apart (`Below`) and shown only while the eye is underground or
+within 18 m of a kiosk; door leaves below are drawn within 25 m (a
+kiosk's within 50 m), lamp lenses within 25 m. Marrow's budget views
+(`render::budget`) hold the 1200-draw line with the shelter in.
 
 ## Bots
 
@@ -114,3 +154,60 @@ not the shelter's). The entries are the stands outside every kiosk door, so
 a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
+
+## The Depot (design, in progress)
+
+The place the convoys go. The lore says each Gate is a depot, the
+machines keep everything they take "pending review", and only the three
+keys end it. The Depot makes that physical: the valleys' things, sorted
+and stacked under the Gate, your own lost kit among them.
+
+**Where.** Under the Marrow Gate (-250, -255), in the robots' corner of
+the valley where it began; Hana's dog was carried "to the Gate", and so
+was she. One depot is built (Marrow's), deeper and bigger than the three
+sites: four levels stepping down, about 60 x 45 m, 7 m to 20 m below
+the yard.
+
+**The way in: follow the haul.** The Depot's intake is a wide ramp in
+the Gate's yard behind a steel shutter. After every Surge the machines
+bring in what it swept: a haul convoy walks down the ramp and the
+shutter stands open for a few minutes; you go in behind it, or wait for
+the next. (In the recall's epilogue it stands open for good, the
+machines asleep in their bays.) Lev tells you about it on the radio at
+rank 4, after her letter ("she says they keep everything"), and
+Progression's late jobs send you there; Story places what you find.
+*Proposed to Progression and Story; theirs to decide.*
+
+**The way out** is the service stair from the bottom level, up to a
+hatch in the rim woods: only the last power stage opens it.
+
+**Levels** (each a set of rooms on its own floor; stairs between them;
+no level over another, so one plan grid still serves the bots):
+
+| Level | Floor | Rooms | Power |
+| - | - | - | - |
+| 1 Intake | -7 m | the ramp's foot, a receiving bay where the haulers set down, a guard post | stage 1: the intake breaker, by the bay |
+| 2 Sorting | -11 m | the sorting hall (24 x 16, 6 m high): rows of bins by kind, a gantry; the tag office (a terminal: "KEPT FOR REVIEW") | stage 2: the hall's control desk, opens the stacks |
+| 3 The kept | -15 m | long stacks by valley and house: crates with names on; one says MAREK | lights only on stage 2 |
+| 4 Cistern | -19 m | the pump gallery, flooded (1.2 m), the old pumps; the service stair's foot | stage 3: the pump room's breaker opens the stair out |
+
+**What's there.**
+- *Your lost kit.* Everything the memorial convoy carried off
+  (`Memorial::lost`) lies in the sorting hall's bins, tagged with the
+  raid it was taken on. You can take it back.
+- *The valleys' things.* Bicycles, the bins, bus four's destination
+  board, the chapel's candlesticks: what the notes say was taken.
+- *The kept.* Rusty's lead and whatever Story decides of Hana's in the
+  MAREK crate, and the Holms'.
+- *Danger.* Crawlers on every level, and on the sorting floor something
+  heavier (Robot minds and bodies). Every power stage is louder than
+  the last: the generator wakes the hall.
+
+**Budget.** Everything below the yard is in the `Below` group (drawn
+only from inside or near the ramp and the hatch); at most 8 unshadowed
+lamps, range-hidden; the bins and stacks are instanced props or merged
+boxes. Checked with Performance's gauges once built.
+
+**Built in stages:** per-room floors and stairs between levels; the
+layout and its placement; power in stages; the flooded level; the bins
+and the kept; robots; the way in. Each with its tests and shots.

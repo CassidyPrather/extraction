@@ -41,6 +41,10 @@ pub struct Budget {
     pub shadow_tris: usize,
     /// Point and spot lights casting shadows (six or one extra views each).
     pub shadowed_lights: usize,
+    /// Layers a pixel is shaded for, mean over the eye and at the 95th
+    /// percentile (`render::overdraw`; depth test off, so an upper bound).
+    pub overdraw_mean: f32,
+    pub overdraw_p95: u16,
 }
 
 pub const BUDGET: Budget = Budget {
@@ -49,6 +53,8 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
+    overdraw_mean: 10.0,
+    overdraw_p95: 35,
 };
 
 /// The sun's shadow map, a side, per cascade per eye. Bevy's default is
@@ -918,7 +924,7 @@ mod tests {
     }
 
     /// Every lookbook view of `map`, seen through the headset's eye.
-    fn loads(map: &str) -> Vec<(String, ViewLoad)> {
+    fn loads(map: &str) -> Vec<(String, ViewLoad, super::super::overdraw::Overdraw)> {
         let mut app = client(map);
         settle(&mut app);
         let zone = app.world().resource::<crate::world::Zone>().clone();
@@ -944,19 +950,47 @@ mod tests {
             for _ in 0..30 {
                 app.update();
             }
-            out.push((
-                v.file.trim_end_matches(".png").to_string(),
-                measure(&mut app),
-            ));
+            let load = measure(&mut app);
+            let cam = {
+                let w = app.world_mut();
+                w.query_filtered::<Entity, With<crate::render::FreeCamera>>()
+                    .single(w)
+                    .unwrap()
+            };
+            let od = super::super::overdraw::measure(app.world_mut(), cam);
+            out.push((v.file.trim_end_matches(".png").to_string(), load, od));
         }
         out
     }
 
+    /// Whether the game's own textures are here (`scripts/fetch_assets.py`).
+    /// Without them the trees are an untextured fallback (no cards, no
+    /// impostors): a different load, which has to fit the budget too
+    /// (a playtest has run from a bare checkout). The gauges say which
+    /// they measured.
+    fn fetched_foliage() -> bool {
+        let root = crate::asset_root_path().join("textures/foliage");
+        root.join("spruce_branch/albedo.ktx2").exists()
+            && root.join("birch_leaves/albedo.ktx2").exists()
+    }
+
     fn holds(map: &str) {
+        println!(
+            "{map}: foliage {}",
+            if fetched_foliage() {
+                "fetched"
+            } else {
+                "FALLBACK (no foliage textures: scripts/fetch_assets.py not run)"
+            }
+        );
         let loads = loads(map);
         let mut over = Vec::new();
-        for (view, load) in &loads {
+        for (view, load, od) in &loads {
             println!("{map} {view}: {}", load.summary());
+            println!("    {}", od.summary());
+            for (what, l) in od.by.iter().take(5) {
+                println!("    layers {what}: {l:.2}");
+            }
             for (what, c, t) in load.by.iter().take(4) {
                 println!("    drawn {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
@@ -976,18 +1010,29 @@ mod tests {
                     *t as f64 / 1000.0
                 );
             }
-            let o = load.over(&BUDGET);
+            let mut o = load.over(&BUDGET);
+            if od.mean > BUDGET.overdraw_mean {
+                o.push(format!(
+                    "overdraw mean {:.2} > {}",
+                    od.mean, BUDGET.overdraw_mean
+                ));
+            }
+            if od.p95 > BUDGET.overdraw_p95 {
+                o.push(format!("overdraw p95 {} > {}", od.p95, BUDGET.overdraw_p95));
+            }
             if !o.is_empty() {
                 over.push(format!("{view}: {}", o.join(", ")));
             }
         }
         // A view that counted nothing would pass any budget.
         assert!(
-            loads.iter().all(|(_, l)| l.draws > 50 && l.tris > 10_000),
+            loads
+                .iter()
+                .all(|(_, l, _)| l.draws > 50 && l.tris > 10_000),
             "a view counted (almost) nothing: {:?}",
             loads
                 .iter()
-                .map(|(v, l)| (v, l.draws, l.tris))
+                .map(|(v, l, _)| (v, l.draws, l.tris))
                 .collect::<Vec<_>>()
         );
         assert!(

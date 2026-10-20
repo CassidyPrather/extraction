@@ -154,6 +154,17 @@ impl Vr {
         input.hand_mut(side).grip = v;
     }
 
+    /// Tracked fingers, as the XR driver reads them from hand-tracking
+    /// joints (`None`: a controller without finger sensing).
+    pub fn fingers(&mut self, side: Side, f: Option<crate::rig::fingers::Fingers>) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).fingers = f;
+    }
+
     pub fn trigger(&mut self, side: Side, v: f32) {
         let mut input = self
             .app
@@ -277,6 +288,48 @@ mod tests {
         vr.grip(Side::Right, 0.0);
         vr.step(3);
         assert_eq!(vr.hand_state(Side::Right).holding, None);
+    }
+
+    /// With Index controllers a relaxed hand reads no squeeze but its
+    /// fingers still wrap the gun: it stays in hand until the fingers open
+    /// too. (Fingers from synthetic hand-tracking joints, as the XR driver
+    /// gets them.)
+    #[test]
+    fn relaxed_tracked_fingers_keep_hold_of_a_gun() {
+        use crate::rig::fingers::{fingers_from_joints, tests::synthetic_hand};
+        let hand_of = |curl: f32| {
+            fingers_from_joints(&synthetic_hand([curl; 5], [0.0; 4], Transform::IDENTITY))
+        };
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let at = feet + Vec3::new(0.15, 1.1, -0.35);
+        let gun = vr.spawn("pm_pistol", Transform::from_translation(at));
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 1.0, 0.0);
+        vr.fingers(Side::Right, hand_of(0.8));
+        vr.step(4);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(gun),
+            "pistol in hand"
+        );
+        // The squeeze relaxes; the fingers stay round the grip.
+        vr.grip(Side::Right, 0.0);
+        vr.step(6);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(gun),
+            "a relaxed hand dropped the gun"
+        );
+        // The fingers open: now it goes.
+        vr.fingers(Side::Right, hand_of(0.1));
+        vr.step(6);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            None,
+            "open fingers kept it"
+        );
     }
 
     /// Pistol in the right hand; the left hand's trigger takes the slide
@@ -2193,6 +2246,43 @@ mod onboarding {
         assert!(z < beam[1] - 0.5, "ducked, you go under (feet at z {z:.2})");
         assert!(ob(&vr).ducked, "the duck was noticed");
         assert!(said(&vr, "Mind your head"));
+    }
+
+    /// From where you start in the bed, walk at the cord: you get within an
+    /// arm of its toggle (the bench, the crate and the stand are all in the
+    /// bed with you).
+    #[test]
+    fn the_cord_is_in_reach_from_the_bed() {
+        let mut vr = Vr::first_run();
+        in_the_bed(&mut vr);
+        let toggle = {
+            let mut q = vr.app.world_mut().query::<(&Pressable, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(p, _)| **p == Pressable::BellPull)
+                .map(|(_, g)| g.transform_point(Vec3::new(0.0, -0.26, 0.0)))
+                .unwrap()
+        };
+        // Face it and walk at it for four seconds.
+        let feet = super::tests_feet(&vr);
+        let to = (toggle - feet).with_y(0.0).normalize();
+        vr.stand(feet, (-to.x).atan2(-to.z));
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::Y;
+        let mut closest = f32::MAX;
+        for _ in 0..(90 * 4) {
+            vr.step(1);
+            let f = super::tests_feet(&vr);
+            closest = closest.min(f.xz().distance(toggle.xz()));
+        }
+        eprintln!("nearest to the cord: {closest:.2} m");
+        // An arm, from the body's middle, reaches about 0.65 m.
+        assert!(
+            closest < 0.65,
+            "the nearest the body gets to the cord is {closest:.2} m (from {feet:.2?} to {toggle:.2?})"
+        );
     }
 
     /// Walk up to a card and squeeze it.

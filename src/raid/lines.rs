@@ -154,6 +154,36 @@ pub const CHATTER_FAR: &[&str] = &[
     "The radio clicks in their tones: something off to the {b}.",
 ];
 
+/// The thread (`world::story::BEATS`): what the driver says on the radio
+/// between raids when a rank opens the next beat. One line every few
+/// seconds, in order.
+pub const BEAT_RUSTY: &[&str] = &[
+    "Driver: \"We had a dog. Rusty. Mum's, really. Daft thing.\"",
+    "Driver: \"No dogs on the buses. That's why she stayed.\"",
+];
+pub const BEAT_HOLMS: &[&str] = &[
+    "Driver: \"The Holms ran the post counter. Mum's oldest friends.\"",
+    "Driver: \"Mrs Holm went down the shelter, they said. Never came up.\"",
+];
+pub const BEAT_COLLECTOR: &[&str] = &[
+    "Driver: \"I saw the collector come for someone in Marrow once.\"",
+    "Driver: \"February. From the fence. I watched it go to the Gate.\"",
+    "Driver: \"There's a letter on her table. I know there is.\"",
+];
+pub const BEAT_LETTER: &[&str] = &[
+    "Driver: \"She says they keep everything. For the review. Her too.\"",
+    "Driver: \"Three keys stop them, the inspector told her. All three.\"",
+    "Driver: \"Her photo's in the stash. Take it out there with you.\"",
+];
+pub const BEAT_RECALLED: &[&str] = &[
+    "Truck: \"They're walking home. All of them. I can see it from here.\"",
+    "Driver: \"I'm going in. First time. The house by the well.\"",
+];
+
+/// The first note read in a career: there's a board for them in the truck
+/// (`raid/board.rs`).
+pub const FIRST_PIN: &str = "Truck: \"Reading their notes? I keep copies. Board in the back.\"";
+
 /// A machine close by has stopped looking for you
 /// (`robots::search::LostYou`).
 pub const LOST_YOU: &[&str] = &[
@@ -218,7 +248,12 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 14] = [
+        let pools: [&[&str]; 20] = [
+            BEAT_RUSTY,
+            BEAT_HOLMS,
+            BEAT_COLLECTOR,
+            BEAT_LETTER,
+            BEAT_RECALLED,
             LOST_YOU,
             CALLED_OUT,
             CALLED,
@@ -233,6 +268,7 @@ mod tests {
             CHATTER_CLOSE,
             CHATTER_FAR,
             &[NO_FUEL],
+            &[FIRST_PIN],
         ];
         for pool in pools {
             for line in pool {

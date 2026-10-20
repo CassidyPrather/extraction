@@ -41,9 +41,15 @@ not just the instance.
 
 ## Verifying
 
+- **Once per session, first:** `python3 scripts/fetch_assets.py`. The
+  textures it fetches are gitignored; without them trees fall back to a
+  heavier dev path and the frame-budget gauges print "frame budget NOT
+  CHECKED" instead of measuring the game that ships.
 - **Before you finish:** `cargo test --workspace` and
   `cargo run --profile fast -- --headless --scenario all` (must print
-  `all 9 scenarios OK`). While working, run only the tests you touched;
+  `all 11 scenarios OK`). `second_hour` (a bot's three-raid career past
+  the yard, onboarding) is longer and not in `all`: run it by name,
+  `--headless --scenario second_hour`. While working, run only the tests you touched;
   the full suite takes about 7 minutes. If it restarts your container,
   use `cargo test --workspace -j 2 -- --test-threads=2`.
 - **Looking at things:**

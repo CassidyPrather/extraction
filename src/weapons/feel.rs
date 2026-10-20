@@ -290,11 +290,14 @@ pub fn kick_guns(
 pub struct JamProp(pub Malfunction);
 
 /// Case radius and length for a cartridge, metres.
-fn case_size(cartridge: &str) -> (f32, f32) {
+pub(crate) fn case_size(cartridge: &str) -> (f32, f32) {
     match cartridge {
         "9x18" => (0.0049, 0.018),
         "5.45x39" => (0.005, 0.039),
         "7.62x39" => (0.0056, 0.039),
+        "12ga" => (0.0105, 0.07),
+        "7.62x38R" => (0.0049, 0.0385),
+        "7.62x25" => (0.0049, 0.025),
         "7.62x54R" => (0.0062, 0.054),
         _ => (0.005, 0.03),
     }

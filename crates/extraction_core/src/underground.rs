@@ -81,6 +81,9 @@ pub enum Lamp {
     Flicker,
     /// A fitting, dead.
     Dead,
+    /// On the site's power: dark until the breaker's thrown or the
+    /// generator's started ([`PowerDef`]), then steady.
+    Powered,
 }
 
 /// Furniture and junk, placed in a room (relative to its centre).
@@ -211,6 +214,54 @@ pub struct Layout {
     pub patrol: Vec<String>,
     #[serde(default)]
     pub crawlers: u32,
+    #[serde(default)]
+    pub power: Option<PowerDef>,
+    /// Flooded rooms and corridors.
+    #[serde(default)]
+    pub floods: Vec<Flood>,
+}
+
+/// Standing water over a room's or a corridor's floor: slow to wade, loud,
+/// and over [`DEEP`] the crawlers won't go in.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Flood {
+    /// A room by id...
+    #[serde(default)]
+    pub room: Option<String>,
+    /// ... or a corridor by its ends (as its link names them).
+    #[serde(default)]
+    pub link: Option<(String, String)>,
+    /// Water over the floor, metres.
+    pub depth: f32,
+}
+
+/// Water deeper than this is a wall to the walkers (as on the surface).
+pub const DEEP: f32 = 0.9;
+
+/// The site's power: a breaker board or a generator somewhere awkward.
+/// Switching it on lights the `Lamp::Powered` rooms, lets the powered
+/// doors open, and makes a noise the crawlers hear.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PowerDef {
+    pub kind: PowerKind,
+    /// The room it's in, and where (relative to the room's centre, against
+    /// a wall: the switch faces the turned -Z).
+    pub room: String,
+    pub at: P2,
+    #[serde(default)]
+    pub rot: f32,
+    /// The rooms whose doors stay shut until it's on (the door of the
+    /// corridor into each).
+    #[serde(default)]
+    pub doors: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub enum PowerKind {
+    /// A board of breakers: one big lever, a clank.
+    Breaker,
+    /// A diesel generator: pull-start, and it runs (loud) from then on.
+    Generator,
 }
 
 /// An anomaly in a room: `kind` names an `anomaly::AnomalyKind` (Lift,
@@ -414,6 +465,8 @@ pub struct DoorSpot {
     pub width: f32,
     /// Floor under it, site y.
     pub y: f32,
+    /// The room it opens into (a corridor's door), if any.
+    pub room: Option<u16>,
 }
 
 /// The layout on a grid.
@@ -426,6 +479,8 @@ pub struct Raster {
     pub cells: Vec<Cell>,
     /// Ceiling height over the floor, flat cells (stairs: 0).
     pub ceil: Vec<f32>,
+    /// Water over the floor, flat cells (0: dry).
+    pub water: Vec<f32>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -473,6 +528,7 @@ impl Raster {
             nz,
             cells: vec![Cell::Rock; nx * nz],
             ceil: vec![0.0; nx * nz],
+            water: vec![0.0; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -515,11 +571,31 @@ impl Raster {
             let n = pts.len();
             let from_door = matches!(link.doors, Doors::From | Doors::Both);
             let to_door = matches!(link.doors, Doors::To | Doors::Both);
+            // Each end's leg that leaves its room (a via point can be
+            // inside the room).
+            let inside = |room: &Room, p: P2| {
+                (p[0] - room.at[0]).abs() < room.size[0] * 0.5
+                    && (p[1] - room.at[1]).abs() < room.size[1] * 0.5
+            };
+            let leaving = |room: &Room, path: Vec<P2>| -> (P2, P2) {
+                path.windows(2)
+                    .find(|w| !inside(room, w[1]))
+                    .map_or((path[1], path[0]), |w| (w[1], w[0]))
+            };
+            let rev: Vec<P2> = pts.iter().rev().copied().collect();
+            let (fo, fi) = leaving(&l.rooms[a], pts.clone());
+            let (to, ti) = leaving(&l.rooms[b], rev);
+            let _ = n;
             for (room, outer, inner, door) in [
-                (&l.rooms[a], pts[1], pts[0], from_door),
-                (&l.rooms[b], pts[n - 2], pts[n - 1], to_door),
+                (&l.rooms[a], fo, fi, from_door),
+                (&l.rooms[b], to, ti, to_door),
             ] {
-                if let Some(d) = r.mouth(room, outer, inner, link.width) {
+                if let Some(mut d) = r.mouth(room, outer, inner, link.width) {
+                    d.room = Some(if std::ptr::eq(room, &l.rooms[a]) {
+                        a
+                    } else {
+                        b
+                    } as u16);
                     r.mouths.push(d);
                     if door {
                         r.doors.push(d);
@@ -535,6 +611,27 @@ impl Raster {
                 Cell::Room(k as u16),
                 room.height,
             );
+        }
+        for f in &l.floods {
+            let link = f.link.as_ref().and_then(|(a, b)| {
+                l.links
+                    .iter()
+                    .position(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a))
+            });
+            let room = f
+                .room
+                .as_ref()
+                .and_then(|id| l.rooms.iter().position(|r| &r.id == id));
+            for (c, cell) in r.cells.iter().enumerate() {
+                let wet = match *cell {
+                    Cell::Room(k) => room == Some(k as usize),
+                    Cell::Hall(k) => link == Some(k as usize),
+                    _ => false,
+                };
+                if wet {
+                    r.water[c] = f.depth;
+                }
+            }
         }
         // Stairs: from the kiosk down to the first flat cell ahead.
         for (k, p) in l.portals.iter().enumerate() {
@@ -569,6 +666,7 @@ impl Raster {
                     along: turn([1.0, 0.0], p.rot),
                     width: 2.0 * STAIR_HALF,
                     y: l.floor,
+                    room: None,
                 });
             }
         }
@@ -592,6 +690,7 @@ impl Raster {
                 along: [0.0, 1.0],
                 width,
                 y: self.floor,
+                room: None,
             })
         } else if d[1].abs() > 0.0 {
             let z = if d[1] > 0.0 {
@@ -604,6 +703,7 @@ impl Raster {
                 along: [1.0, 0.0],
                 width,
                 y: self.floor,
+                room: None,
             })
         } else {
             None
@@ -644,6 +744,12 @@ impl Raster {
 
     pub fn get(&self, i: usize, j: usize) -> Cell {
         self.cells[j * self.nx + i]
+    }
+
+    /// Water over the floor at a site-space point (0: dry).
+    pub fn water_at(&self, p: P2) -> f32 {
+        self.cell_of(p)
+            .map_or(0.0, |(i, j)| self.water[j * self.nx + i])
     }
 
     /// The floor under a site-space point, if it's an open cell.
@@ -803,6 +909,57 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    if let Some(p) = &l.power {
+        match l.rooms.iter().find(|r| r.id == p.room) {
+            None => bad.push(format!("power in no room `{}`", p.room)),
+            Some(room) => {
+                let at = add(room.at, p.at);
+                if !r.at(at).open() {
+                    bad.push(format!("{}: its power switch is in the rock", room.id));
+                }
+                // Facing into the room (its turned -Z): you stand there.
+                let front = add(at, turn([0.0, -0.9], p.rot));
+                if !r.at(front).flat() {
+                    bad.push(format!("{}: its power switch faces the wall", room.id));
+                }
+            }
+        }
+        for id in &p.doors {
+            let Some(k) = l.rooms.iter().position(|r| &r.id == id) else {
+                bad.push(format!("a powered door into no room `{id}`"));
+                continue;
+            };
+            if !r.doors.iter().any(|d| d.room == Some(k as u16)) {
+                bad.push(format!("no door into `{id}` for the power to hold"));
+            }
+            if p.room == *id {
+                bad.push(format!("the power's behind its own door in `{id}`"));
+            }
+        }
+    }
+    for f in &l.floods {
+        let found = match (&f.room, &f.link) {
+            (Some(id), None) => l.rooms.iter().any(|r| &r.id == id),
+            (None, Some((a, b))) => l
+                .links
+                .iter()
+                .any(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a)),
+            _ => false,
+        };
+        if !found {
+            bad.push(format!("a flood in no one room or corridor: {f:?}"));
+        }
+        if !(0.2..=1.6).contains(&f.depth) {
+            bad.push(format!("a flood {} m deep", f.depth));
+        }
+    }
+    // Room to breathe over the water (a head afloat stands 0.35 m out).
+    for (c, w) in r.water.iter().enumerate() {
+        if *w > 0.0 && r.ceil[c] - w < 0.8 {
+            bad.push(format!("water {w} m deep under a {} m ceiling", r.ceil[c]));
+            break;
+        }
+    }
     for id in &l.patrol {
         if !l.rooms.iter().any(|r| &r.id == id) {
             bad.push(format!("a patrol through no room `{id}`"));
@@ -844,6 +1001,7 @@ pub fn check(l: &Layout) -> Vec<String> {
                 along: turn([1.0, 0.0], p.rot),
                 width: 2.0 * STAIR_HALF,
                 y: l.floor,
+                room: None,
             });
             for m in r.mouths.iter().copied().chain(feet) {
                 let off = sub(at, m.at);
@@ -951,6 +1109,8 @@ pub fn plan_svg(id: &str) -> Option<String> {
         for i in 0..r.nx {
             let colour = match r.get(i, j) {
                 Cell::Rock => continue,
+                _ if r.water[j * r.nx + i] >= DEEP => "#2e6f8e",
+                _ if r.water[j * r.nx + i] > 0.0 => "#6fa3b8",
                 Cell::Room(_) => "#b9b3a6",
                 Cell::Hall(_) => "#8f8a80",
                 Cell::Stair(_) => "#6f8fa6",
@@ -1004,6 +1164,38 @@ pub fn plan_svg(id: &str) -> Option<String> {
             "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#c0392b' stroke-width='4'/>\n"
         );
     }
+    if let Some(p) = &l.power {
+        if let Some(room) = l.rooms.iter().find(|r| r.id == p.room) {
+            let (x, y) = px(add(room.at, p.at));
+            out += &format!(
+                "<rect x='{:.1}' y='{:.1}' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#f1c40f'>{:?}</text>\n",
+                x - 5.0,
+                y - 5.0,
+                x + 8.0,
+                y + 4.0,
+                p.kind
+            );
+        }
+        // The doors on the power, drawn over in yellow.
+        for d in r.doors.iter().filter(|d| {
+            d.room
+                .is_some_and(|k| p.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+        }) {
+            let a = sub(
+                d.at,
+                [d.along[0] * d.width * 0.5, d.along[1] * d.width * 0.5],
+            );
+            let b = add(
+                d.at,
+                [d.along[0] * d.width * 0.5, d.along[1] * d.width * 0.5],
+            );
+            let ((x1, y1), (x2, y2)) = (px(a), px(b));
+            out += &format!(
+                "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#f1c40f' stroke-width='4'/>\n"
+            );
+        }
+    }
     for room in &l.rooms {
         for p in &room.props {
             let (x, y) = px(add(room.at, p.at));
@@ -1020,6 +1212,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
             Lamp::Steady => " *",
             Lamp::Flicker => " ~",
             Lamp::Dead => " x",
+            Lamp::Powered => " +",
         };
         out += &format!(
             "<text x='{x:.1}' y='{:.1}' fill='#1d1c1a' text-anchor='middle'>{}{lamp}</text>\n",
@@ -1029,7 +1222,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door, blue = stair; lamp * on, ~ flickering, x dead</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,
