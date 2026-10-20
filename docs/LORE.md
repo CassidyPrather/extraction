@@ -282,6 +282,19 @@ October; Dusek had been up the raise to look):
 | 3rd | **Letters by hand** in the works yard: he carried the inspector's letters round the valleys the first winter; "The last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses." | He delivered the valley office letter to Hana (never named) |
 | 5th | **The far stair**, where the service tunnel comes up: valve three opened again, the canal took the pit, Kral didn't come up; "Going over the pass to Kettle. There's a shot-firer there who knows about shelters." | He went to Dusek: the threads meet |
 
+## The board
+
+A cork board on the truck's right canopy wall, over the first-aid box, is
+where the player pieces it together (`src/raid/board.rs`). Every note read
+(looked at from within arm's reach for a moment) gets a pinned copy with
+its name, in a column for its valley, in the order read; where two read
+notes name each other in the thread (`world::story::THREAD`), red string
+runs pin to pin. Nothing unread shows: no gaps, no blank cards, so the
+board never says what's missing. Press a card to take the note down and
+read it whole; press again to pin it back. The read notes are kept with
+the career (`Stats::notes_read`). The first note read, Lev says he keeps
+copies (`onboarding::firsts::First::NotePinned`, said once a career).
+
 ## Staged scenes
 
 Small arrangements of existing props and items at the points of interest

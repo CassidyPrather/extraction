@@ -219,6 +219,7 @@ struct AnomalyAssets {
     core: Handle<Mesh>,
     leaf: Handle<Image>,
     radial: Handle<Image>,
+    dot: Handle<Image>,
     scorch: Handle<StandardMaterial>,
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
@@ -256,6 +257,33 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
+/// A soft round dot (no lobes), for glowing particles.
+fn dot_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 64u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r2 = u * u + v * v;
+            // A hot centre in a soft halo.
+            let a = ((-r2 * 9.0).exp() + 0.35 * (-r2 * 2.5).exp()) * (1.0 - r2).max(0.0);
+            data.extend_from_slice(&[255, 255, 255, (a.min(1.0) * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
 fn init_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -268,6 +296,7 @@ fn init_assets(
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
         .load("textures/foliage/birch_leaves/albedo.ktx2");
     let radial = radial_texture(&mut images);
+    let dot = dot_texture(&mut images);
     let mut ground = |c: Color, emissive: LinearRgba| {
         materials.add(StandardMaterial {
             base_color: c,
@@ -298,6 +327,7 @@ fn init_assets(
         core: meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
         leaf,
         radial,
+        dot,
         scorch,
         flattened,
         glassy,
@@ -490,7 +520,7 @@ fn dress_anomalies(
             mode,
             count,
             size,
-            texture: a.radial.clone(),
+            texture: a.dot.clone(),
             additive: true,
             color,
             alpha: 1.0,
@@ -537,7 +567,7 @@ fn dress_anomalies(
             AnomalyKind::Snare => (
                 Some(&a.glassy),
                 vec![glow(3.0, 30, 0.03, Vec3::new(5.0, 9.0, 20.0))],
-                (Color::srgb(0.45, 0.65, 1.0), 5_000.0, 25.0, 0.2),
+                (Color::srgb(0.45, 0.65, 1.0), 12_000.0, 12.0, 0.2),
                 Some((
                     1.1,
                     0.4,
@@ -554,9 +584,12 @@ fn dress_anomalies(
                 Some(&a.crushed),
                 vec![
                     soft(4.0, 140, 0.1, Vec3::new(0.09, 0.08, 0.085), 1.0),
+                    // Motes of light falling in with the grit: what reads
+                    // through fog and rain.
+                    glow(4.0, 36, 0.035, Vec3::new(5.0, 1.8, 12.0)),
                     soft(6.0, 20, 0.6, Vec3::new(0.2, 0.18, 0.2), 0.18),
                 ],
-                (Color::srgb(0.6, 0.3, 1.0), 2_500.0, 4.0, 1.0),
+                (Color::srgb(0.6, 0.3, 1.0), 4_000.0, 4.0, 1.0),
                 Some((
                     1.33,
                     r * 0.7,
@@ -918,15 +951,20 @@ fn jag(rng: &mut extraction_core::noise::Rng, from: Vec3, to: Vec3, rough: f32) 
 /// Arcs crawl about the snare's core, re-striking every few frames; when
 /// it discharges they reach out to its full radius, and to whatever it
 /// struck.
+#[allow(clippy::too_many_arguments)]
 fn snare_arcs(
-    mut arcs: Query<(&mut Arcs, &Mesh3d, &ChildOf)>,
+    mut arcs: Query<(&mut Arcs, &Mesh3d, &ChildOf, &GlobalTransform)>,
     anomalies: Query<(&Anomaly, &Look)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
+    locals: Query<(), With<LocalPlayer>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
-    for (mut a, mesh, parent) in &mut arcs {
+    let eye = eye_position(&heads, &locals, &cams);
+    for (mut a, mesh, parent, gt) in &mut arcs {
         let Ok((anomaly, look)) = anomalies.get(parent.parent()) else {
             continue;
         };
@@ -944,7 +982,12 @@ fn snare_arcs(
         let hot = anomaly.charge.max(look.flash).max(look.reveal);
         let reach = anomaly.radius * (0.3 + 0.7 * look.flash) * (0.4 + 0.6 * hot);
         let mut paths = Vec::new();
-        let width = 0.006 * (1.0 + 2.5 * look.flash);
+        // Thicker far off: an arc a few millimetres across is gone in a
+        // pixel by 20 m.
+        let far = eye.map_or(1.0, |e| {
+            (e.distance(gt.translation()) / 6.0).clamp(1.0, 4.0)
+        });
+        let width = 0.006 * (1.0 + 2.5 * look.flash) * far;
         for _ in 0..ARCS {
             if !rng.chance(0.25 + 0.75 * hot) {
                 continue;
@@ -965,8 +1008,8 @@ fn snare_arcs(
             paths.push((main, width));
         }
         for (to, _) in a.reaching.clone() {
-            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), 0.012));
-            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.16), 0.007));
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), 0.012 * far));
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.16), 0.007 * far));
         }
         if let Some(mut m) = meshes.get_mut(&mesh.0) {
             *m = arc_mesh(&paths);
@@ -1129,7 +1172,8 @@ fn dress_items(
                 ));
             }
             "detector" => {
-                let olive = mat(Color::srgb(0.2, 0.23, 0.14), 0.1, 0.7, LinearRgba::BLACK);
+                let olive = mat(Color::srgb(0.36, 0.4, 0.24), 0.15, 0.6, LinearRgba::BLACK);
+                let face = mat(Color::srgb(0.85, 0.82, 0.7), 0.0, 0.4, LinearRgba::BLACK);
                 let black = mat(Color::srgb(0.04, 0.04, 0.04), 0.3, 0.5, LinearRgba::BLACK);
                 let glass = mat(
                     Color::srgb(0.15, 0.03, 0.02),
@@ -1142,11 +1186,22 @@ fn dress_items(
                     olive,
                     Transform::from_xyz(0.0, 0.0, 0.025),
                 ));
-                // A grille on top and a dial face on the back.
+                // A dial and a grille on top, a carrying handle along the
+                // side.
                 parts.push((
-                    meshes.add(Cuboid::new(0.05, 0.004, 0.05)),
+                    meshes.add(Cylinder::new(0.016, 0.003).mesh().resolution(20)),
+                    face,
+                    Transform::from_xyz(0.012, 0.021, 0.05),
+                ));
+                parts.push((
+                    meshes.add(Cuboid::new(0.03, 0.004, 0.03)),
                     black.clone(),
-                    Transform::from_xyz(0.0, 0.021, 0.04),
+                    Transform::from_xyz(-0.015, 0.021, 0.005),
+                ));
+                parts.push((
+                    meshes.add(Cuboid::new(0.012, 0.012, 0.09)),
+                    black.clone(),
+                    Transform::from_xyz(-0.041, 0.0, 0.025),
                 ));
                 parts.push((
                     meshes.add(Cylinder::new(0.004, 0.05).mesh().resolution(8)),
@@ -1168,10 +1223,10 @@ fn dress_items(
             }
             "art_lodestone" => {
                 let iron = mat(
-                    Color::srgb(0.1, 0.095, 0.11),
-                    0.85,
-                    0.42,
-                    LinearRgba::rgb(0.03, 0.0, 0.08),
+                    Color::srgb(0.16, 0.15, 0.17),
+                    0.9,
+                    0.5,
+                    LinearRgba::rgb(0.004, 0.0, 0.01),
                 );
                 let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
                 // Knobbled, like a lump of slag.

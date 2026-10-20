@@ -113,12 +113,14 @@ fn impostor_cut(
 
 /// The overdraw of what `cam` sees.
 pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
+    let mut eye_pos = Vec3::ZERO;
     let (view, f, eye) = {
         let g = w.get::<GlobalTransform>(cam).unwrap();
         let Projection::Perspective(p) = w.get::<Projection>(cam).unwrap() else {
             return Overdraw::default();
         };
         let eye = g.translation();
+        eye_pos = eye;
         (
             g.affine().inverse(),
             1.0 / (p.fov * 0.5).tan(),
@@ -137,6 +139,12 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         let Some(m) = w.get::<Mesh3d>(e) else {
             continue;
         };
+        // Streaks are counted below, as their shader places them.
+        if w.get::<MeshMaterial3d<crate::world::rain::RainMaterial>>(e)
+            .is_some()
+        {
+            continue;
+        }
         let Some(mesh) = w.resource::<Assets<Mesh>>().get(&m.0) else {
             continue;
         };
@@ -188,6 +196,38 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
             *by.entry(class(w, e)).or_default() += covered;
         }
     }
+    // The worst weather, wherever the gauge's own is: a downpour's
+    // streaks, or (in a burnt valley, when it isn't raining) the ash.
+    // They live in a box round the eye, placed by their vertex shader, so
+    // they're replayed here rather than read from the scene.
+    let ash = w
+        .get_resource::<crate::world::Zone>()
+        .map_or(0.0, |z| z.map.ash);
+    let downpour = (
+        Vec4::new(1.0, 9.0, 0.55, crate::world::rain::BOX),
+        Vec4::new(3.2, 0.0, 1.6, 0.0),
+    );
+    let ashfall = (
+        Vec4::new(ash, 0.55, 0.035, crate::world::rain::BOX),
+        Vec4::new(0.35, 1.0, 0.15, 0.03),
+    );
+    let mut worst = (String::new(), vec![0u16; 0], 0u64);
+    for (name, (params, wind)) in [("rain (downpour)", downpour), ("ash", ashfall)] {
+        if params.x <= 0.0 {
+            continue;
+        }
+        let mut l = vec![0u16; RES * RES];
+        let n = streaks(params, wind, eye_pos, &view, f, &mut l);
+        if n > worst.2 {
+            worst = (name.to_string(), l, n);
+        }
+    }
+    if worst.2 > 0 {
+        for (a, b) in layers.iter_mut().zip(&worst.1) {
+            *a = a.saturating_add(*b);
+        }
+        by.insert(worst.0, worst.2);
+    }
     let px = (RES * RES) as f32;
     let mut sorted = layers.clone();
     sorted.sort_unstable();
@@ -199,6 +239,68 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         max: *sorted.last().unwrap_or(&0),
         by,
     }
+}
+
+/// Rain or ash streaks round the eye at time zero, placed and faced as
+/// `rain.wgsl` does (every streak the intensity keeps; shelters ignored:
+/// the open is the worst case). A streak right at the eye fades to
+/// nothing but is still rasterised, so it counts. Returns pixels covered.
+fn streaks(
+    params: Vec4,
+    wind: Vec4,
+    eye: Vec3,
+    view: &bevy::math::Affine3A,
+    f: f32,
+    layers: &mut [u16],
+) -> u64 {
+    let mesh = crate::world::rain::streak_mesh();
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return 0;
+    };
+    let fall = Vec3::new(wind.x, -params.y, wind.z);
+    let axis = (-fall).normalize();
+    let width = if wind.w > 0.0 { wind.w } else { 0.006 };
+    let box_size = params.w;
+    let mut covered = 0;
+    for corners in pos.chunks_exact(4) {
+        let base = Vec3::from(corners[0]);
+        let keep = ((base.x * 12.9898 + base.z * 78.233).sin() * 43758.547)
+            .fract()
+            .abs();
+        if keep > params.x {
+            continue;
+        }
+        let mut p = base;
+        if wind.y > 0.5 {
+            let ph = base.x * 3.1 + base.z * 1.7;
+            p += Vec3::new(ph.sin(), 0.0, (ph * 1.3).cos()) * 0.35;
+        }
+        let rel = p - eye;
+        let rel = ((rel / box_size + 0.5).fract_gl() - 0.5) * box_size;
+        let centre = eye + rel;
+        let to_cam = (eye - centre).normalize_or(Vec3::Z);
+        let side = axis.cross(to_cam).normalize_or(Vec3::X);
+        let at = |u: f32, v: f32| {
+            view.transform_point3(centre + side * (u - 0.5) * width + axis * v * params.z)
+        };
+        let q = [at(0.0, 0.0), at(1.0, 0.0), at(1.0, 1.0), at(0.0, 1.0)];
+        covered += raster(
+            &[q[0], q[1], q[2]],
+            crate::render::NEAR_CLIP,
+            f,
+            true,
+            layers,
+        );
+        covered += raster(
+            &[q[0], q[2], q[3]],
+            crate::render::NEAR_CLIP,
+            f,
+            true,
+            layers,
+        );
+    }
+    covered
 }
 
 /// Rasterises one view-space triangle (the camera looks down -Z), clipped
@@ -265,6 +367,48 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The streak replay against the analytic mean (streak area times
+    /// density over the frustum's directions and depth), for streaks wide
+    /// enough to sample well, so a near-zero rain figure is real. The
+    /// analytic sum treats streaks as points, which undercounts the few
+    /// within a hand's width of the eye (they cover much of the view and
+    /// are rasterised, faded or not): it's a floor, the replay about twice it.
+    #[test]
+    fn streaks_match_the_analytic_mean() {
+        let (b, n) = (crate::world::rain::BOX, crate::world::rain::STREAKS as f32);
+        let (width, len) = (0.3, 0.55);
+        let params = Vec4::new(1.0, 9.0, len, b);
+        let wind = Vec4::new(0.0, 0.0, 0.0, width);
+        let fov = super::super::budget::EYE_FOV_DEG.to_radians();
+        let f = 1.0 / (fov * 0.5).tan();
+        let view = bevy::math::Affine3A::IDENTITY;
+        let mut layers = vec![0u16; RES * RES];
+        let px = streaks(params, wind, Vec3::ZERO, &view, f, &mut layers);
+        let mean = px as f32 / (RES * RES) as f32;
+        // Layers = density x area x (f^2 / 4) x the integral over the
+        // frustum's directions of how deep the box goes that way.
+        let steps = 200;
+        let mut integral = 0.0;
+        for i in 0..steps {
+            for j in 0..steps {
+                let x = (i as f32 + 0.5) / steps as f32 * 2.0 - 1.0;
+                let y = (j as f32 + 0.5) / steps as f32 * 2.0 - 1.0;
+                let d = Vec3::new(x / f, y / f, -1.0);
+                let r = d.length();
+                let dir = d / r;
+                let deep = b * 0.5 / dir.abs().max_element();
+                // Solid angle of this NDC cell.
+                let cell = (2.0 / steps as f32).powi(2) / (f * f) / (r * r * r);
+                integral += deep * cell;
+            }
+        }
+        let expect = n / (b * b * b) * width * len * f * f / 4.0 * integral;
+        assert!(
+            mean > expect * 0.9 && mean < expect * 3.0,
+            "streaks: {mean:.3} layers, analytic {expect:.3}"
+        );
+    }
 
     /// A quad filling the view counts one layer everywhere, seen from
     /// either side when two-sided, and none from behind when not.

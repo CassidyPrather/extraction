@@ -11,7 +11,7 @@ Each line fits the wrist (3 lines of 26 characters) and uses no game words.
 | Moment | When | He says |
 | - | - | - |
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
-| Heard | a machine turns to look for you | get low, keep still |
+| Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
 | Drone lock | the chirp before it fires | get behind something |
 | Anomaly | within 4 m of one's edge | throw something in first |
@@ -65,7 +65,7 @@ Last run (merged main, 113 s):
 - **"Get low and keep still" fails after a gunshot.** A walker that heard
   your shot comes to where the shot was. A bot that kept still there was
   found and killed. Moving off 20 m low, *then* keeping still, lost it.
-  The line should say to move: a wording question for Story.
+  Lev's line now says to move off quiet, then go still.
 - **Fighting a drone that has already locked on loses.** That held even
   with a sound rifle, both hands on it, and the drone 40 m off. Lev's
   "get behind something" is the right advice. The run doesn't yet try

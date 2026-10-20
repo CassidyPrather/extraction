@@ -84,10 +84,10 @@ impl Material for RainMaterial {
     }
 }
 
-const STREAKS: usize = 2500;
-const BOX: f32 = 24.0;
+pub(crate) const STREAKS: usize = 2500;
+pub(crate) const BOX: f32 = 24.0;
 
-fn streak_mesh() -> Mesh {
+pub(crate) fn streak_mesh() -> Mesh {
     let mut rng = extraction_core::noise::Rng::new(0x4A1);
     let mut pos = Vec::with_capacity(STREAKS * 4);
     let mut uv = Vec::with_capacity(STREAKS * 4);

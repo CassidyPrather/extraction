@@ -239,6 +239,9 @@ struct Actions {
     secondary: openxr::Action<bool>,
     stick: openxr::Action<openxr::Vector2f>,
     stick_click: openxr::Action<bool>,
+    /// The thumb resting on a face button, the stick or the thumb rest
+    /// (Index and Touch sense it).
+    thumb_rest: openxr::Action<bool>,
     haptic: openxr::Action<openxr::Haptic>,
     left: openxr::Path,
     right: openxr::Path,
@@ -273,6 +276,7 @@ fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
             secondary: set.create_action("secondary", "Secondary button", &both)?,
             stick: set.create_action("stick", "Thumbstick", &both)?,
             stick_click: set.create_action("stick_click", "Thumbstick click", &both)?,
+            thumb_rest: set.create_action("thumb_rest", "Thumb resting", &both)?,
             haptic: set.create_action("haptic", "Vibration", &both)?,
             set,
             left,
@@ -309,6 +313,7 @@ fn suggest_bindings(
     let secondary = a.secondary.as_raw();
     let stick = a.stick.as_raw();
     let click = a.stick_click.as_raw();
+    let thumb_rest = a.thumb_rest.as_raw();
     let haptic = a.haptic.as_raw();
     for profile in [
         // (Quest 3's Touch Plus is offered to apps as plain Touch unless
@@ -427,6 +432,31 @@ fn suggest_bindings(
             ],
         );
         if touchlike {
+            // Every touch sensor the thumb rests on.
+            let rests: &[&str] = if profile.contains("index") {
+                &[
+                    "/user/hand/left/input/a/touch",
+                    "/user/hand/left/input/b/touch",
+                    "/user/hand/left/input/thumbstick/touch",
+                    "/user/hand/left/input/trackpad/touch",
+                    "/user/hand/right/input/a/touch",
+                    "/user/hand/right/input/b/touch",
+                    "/user/hand/right/input/thumbstick/touch",
+                    "/user/hand/right/input/trackpad/touch",
+                ]
+            } else {
+                &[
+                    "/user/hand/left/input/x/touch",
+                    "/user/hand/left/input/y/touch",
+                    "/user/hand/left/input/thumbstick/touch",
+                    "/user/hand/left/input/thumbrest/touch",
+                    "/user/hand/right/input/a/touch",
+                    "/user/hand/right/input/b/touch",
+                    "/user/hand/right/input/thumbstick/touch",
+                    "/user/hand/right/input/thumbrest/touch",
+                ]
+            };
+            bind(profile, thumb_rest, rests);
             let (p, s) = if profile.contains("index") {
                 ("a", "b")
             } else {
@@ -725,6 +755,7 @@ fn drive_xr_rig(
         let primary = read_b(&a.primary, path);
         let secondary = read_b(&a.secondary, path);
         let click = read_b(&a.stick_click, path);
+        let thumb_rest = read_b(&a.thumb_rest, path);
         let stick = read_v(path);
         let hand = input.hand_mut(side);
         hand.grip = grip;
@@ -733,6 +764,7 @@ fn drive_xr_rig(
         hand.secondary = secondary;
         hand.stick = stick;
         hand.stick_click = click && side == Side::Right;
+        hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.
     input.mark = read_b(&a.stick_click, a.left)

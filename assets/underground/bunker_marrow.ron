@@ -96,7 +96,7 @@
     // The generator, by its live snare: start it and the dorm, the
     // generator room and the armoury light up, and the armoury's door
     // (held shut) opens. It's loud.
-    power: Some((kind: Generator, room: "generator", at: (-0.9, -0.05), doors: ["armoury"])),
+    power: [(kind: Generator, room: "generator", at: (-0.9, -0.05), doors: ["armoury"])],
     floods: [
         (link: Some(("lock", "plant")), depth: 1.0),
     ],
