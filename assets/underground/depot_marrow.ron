@@ -36,9 +36,10 @@
         ]),
         // The tag office: the hall's control desk (stage 2), the terminal.
         (id: "tag_office", at: (18.0, 40.0), size: (6.0, 6.0), floor: Some(-11.0), height: 2.6, lamp: Flicker, props: [
-            (kind: Table, at: (-0.8, 1.5), loot: Some("gadgets")),
+            // (The desk's Story's: the docket and the intake terminal.)
+            (kind: Table, at: (-0.8, 1.5)),
             (kind: Chair, at: (-0.8, 0.75)),
-            (kind: Shelf, at: (-2.6, -1.4), rot: 270.0, loot: Some("curio")),
+            (kind: Shelf, at: (-2.6, -1.4), rot: 270.0, loot: Some("gadgets")),
         ]),
         // Level 3, the kept: long stacks by valley and house.
         (id: "kept_stacks", at: (-32.0, 40.0), size: (8.0, 24.0), floor: Some(-15.0), height: 4.0, lamp: Powered, stage: 1, props: [
