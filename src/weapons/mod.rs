@@ -336,19 +336,34 @@ fn sync_mag_rounds(
 
 /// A hand on a slide, charging handle, bolt or barrels works the action.
 fn work_handles(
-    hands: Query<&Hand>,
+    hands: Query<(Entity, &Hand)>,
     mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item)>,
     catalog: Res<Catalog>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
+    // Per hand: the gun, and its bolt travel and handle lift when the hand
+    // took hold. The hand moves the part from there, so taking a slide that
+    // is locked back, a bolt left open or a handle left up doesn't snap it
+    // to where the part rests.
+    mut taken: Local<std::collections::HashMap<Entity, (Entity, f32, f32)>>,
 ) {
-    for hand in &hands {
+    taken.retain(|h, (g, ..)| {
+        hands
+            .get(*h)
+            .is_ok_and(|(_, hand)| hand.handle.map(|x| x.0) == Some(*g))
+    });
+    for (hand_e, hand) in &hands {
         let Some((gun_e, _)) = hand.handle else {
             continue;
         };
         let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
             continue;
         };
+        let (_, start, start_lift) = *taken.entry(hand_e).or_insert((
+            gun_e,
+            gun.firearm.bolt_travel,
+            gun.firearm.handle_lift,
+        ));
         let Some(h) = gun.layout.handle.clone() else {
             continue;
         };
@@ -359,17 +374,20 @@ fn work_handles(
         let d = local - hand.handle_origin;
         let events = match h.kind {
             HandleKind::Slide | HandleKind::ChargingHandle => {
-                let travel = (d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                if d.z > 0.003 {
+                    gun.firearm.take_off_stop();
+                }
+                let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                 gun.firearm.set_bolt_travel(travel)
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
                 if gun.firearm.bolt_travel < 0.05 {
-                    let lift = (d.y / 0.035).clamp(0.0, 1.0);
+                    let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
                 }
                 if gun.firearm.handle_lift >= 0.95 {
-                    let travel = (d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                    let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_bolt_travel(travel));
                 }
                 ev
