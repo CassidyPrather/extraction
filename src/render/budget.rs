@@ -175,6 +175,13 @@ pub fn item_range(size: f32) -> f32 {
     (size * 300.0).clamp(15.0, 60.0)
 }
 
+/// Every mesh under this entity (its own, its children's, models
+/// swapped in later) fades out by this distance from the eye: for
+/// many small things a `VisibilityRange` can't be put on one at a time
+/// because their meshes arrive with a model (fence posts).
+#[derive(Component, Clone, Copy)]
+pub struct LodReach(pub f32);
+
 fn range_items(
     mut commands: Commands,
     added: Query<
@@ -186,14 +193,22 @@ fn range_items(
     >,
     parents: Query<&ChildOf>,
     items: Query<&crate::items::Item>,
+    reaches: Query<&LodReach>,
     catalog: Res<crate::items::Catalog>,
 ) {
     for e in &added {
         let mut at = e;
-        let mut item = None;
+        let mut far = None;
         for _ in 0..6 {
-            if let Ok(i) = items.get(at) {
-                item = Some(i);
+            if let Ok(r) = reaches.get(at) {
+                far = Some(r.0);
+                break;
+            }
+            if let Ok(item) = items.get(at) {
+                let def = catalog.get(item.kind());
+                if def.category != extraction_core::items::Category::Artifact {
+                    far = Some(item_range(def.size_m().into_iter().fold(0.0, f32::max)));
+                }
                 break;
             }
             match parents.get(at) {
@@ -201,14 +216,9 @@ fn range_items(
                 Err(_) => break,
             }
         }
-        let Some(item) = item else {
+        let Some(far) = far else {
             continue;
         };
-        let def = catalog.get(item.kind());
-        if def.category == extraction_core::items::Category::Artifact {
-            continue;
-        }
-        let far = item_range(def.size_m().into_iter().fold(0.0, f32::max));
         commands
             .entity(e)
             .try_insert(bevy::camera::visibility::VisibilityRange {
@@ -902,6 +912,11 @@ mod tests {
             for (what, c, t) in load.by.iter().take(4) {
                 println!("    drawn {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
+            let mut most = load.by.clone();
+            most.sort_by(|a, b| b.1.cmp(&a.1));
+            for (what, c, t) in most.iter().take(5) {
+                println!("    many {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+            }
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
@@ -1003,7 +1018,16 @@ mod tests {
                     r.contains::<bevy::camera::visibility::VisibilityRange>()
                 )
             } else {
-                format!("other {} components", r.archetype().component_count())
+                let at = r
+                    .get::<GlobalTransform>()
+                    .map(|g| g.translation())
+                    .unwrap_or_default();
+                format!(
+                    "other {} components swapin {} kids {} e.g. {at:.0}",
+                    r.archetype().component_count(),
+                    r.contains::<crate::render::world_props::SwapIn>(),
+                    r.get::<Children>().map_or(0, |c| c.len())
+                )
             };
             let comps = vec![comps];
             let key = comps.join(",");

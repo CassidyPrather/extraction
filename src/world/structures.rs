@@ -203,6 +203,7 @@ pub fn fence_visuals(
                     Transform::from_xyz(p.x, y, p.y).with_rotation(yaw),
                     Visibility::default(),
                     crate::render::world_props::SwapIn::one("fence_post"),
+                    POST_REACH,
                 ))
                 .with_child((
                     Mesh3d(post.clone()),
@@ -242,6 +243,7 @@ pub fn fence_visuals(
                         Mesh3d(plate.clone()),
                         MeshMaterial3d(sign.clone()),
                         Transform::from_translation(mid).with_rotation(rot),
+                        POST_REACH,
                     ));
                 }
             }
@@ -264,6 +266,10 @@ pub fn fence_visuals(
         ));
     }
 }
+
+/// An 8 cm post is under a pixel wide past about 90 m (and crawls): it
+/// fades out there, with the plates on the wire.
+const POST_REACH: crate::render::budget::LodReach = crate::render::budget::LodReach(90.0);
 
 /// Fence wire is merged in cells this wide (m) ...
 const WIRE_CELL: f32 = 16.0;
