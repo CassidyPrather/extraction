@@ -5,17 +5,20 @@ plate carrier (vest). Writes
   box): 6.5 mm armour steel, 0.25 x 0.30, curved round the chest, the top
   corners cut away for the rifle's butt; front (convex) face to -Z
 - assets/models/items/helmet.glb       the helmet as an item (centred)
-- assets/models/kit/helmet.glb         the helmet worn, in head space:
-  origin at the head's centre, -Z forward; its rim 2 cm above the eyes.
-  Empty `pt_helmet` at the origin
+- assets/models/kit/helmet.glb         the helmet worn, in head space (the
+  HMD's pose): origin at the eye centre, -Z forward; the rim 2.5 cm above
+  the eyes, its front edge at z -0.058. Empty `pt_helmet` at the origin
 - assets/models/items/vest.glb         the vest as an item (centred)
 - assets/models/kit/vest.glb           the vest worn, in torso space (as
   rig.glb's harness, src/interact/body.rs): a front and a back panel with
   a plate pocket each, padded shoulder straps, a cummerbund round the ribs.
-  It lies on the body (front panel z -0.088..-0.116, back 0.105..0.133),
-  so the rig rides 2.8 cm further out while it's worn. Empties
-  `pt_plate_front` and `pt_plate_back` where a plate sits in its pocket
-  (the plate item's own frame: front face to -Z on both), `pt_vest`
+  It takes the place of the harness's chest panel (its front face at
+  PANEL_Z, -0.104, so the pouches stay where they are; Hands hides the
+  panel and its webbing while it's worn), the back panel's face at
+  +0.125. Nodes `plate_front` and `plate_back`: the plates in their
+  pockets. Empties `pt_plate_front` and `pt_plate_back` where a plate sits
+  (a plate item's own frame there: front face to -Z, the back one turned
+  pi about Y so its face points out the back), `pt_vest_stow`
 
 Each item model carries a `<name>_lod1` node: the same thing in a fraction
 of the triangles, which the game draws instead past a few metres.
@@ -135,13 +138,19 @@ def helmets():
     write("assets/models/items/helmet.glb", [a, lod])
     reset()
     w = Part("helmet")
-    helmet(w, T(0.0, 0.02, 0.005))
+    # Head space is the HMD's: origin at the eye centre. The rim sits
+    # 2.5 cm above the eyes, the skull's centre 8.5 cm behind them, so the
+    # brim's front edge is at z -0.058 (clear of the view).
+    helmet(w, T(0.0, 0.025, 0.085))
     write("assets/models/kit/helmet.glb", [w], {"pt_helmet": (0.0, 0.0, 0.0)})
 
 
 # --- Vest ---------------------------------------------------------------------------------
 
-FRONT_Z, BACK_Z, VEST_T = -0.088, 0.105, 0.028
+# The panels' faces on the body: the front's outer face where the rig's
+# chest panel's is (PANEL_Z, so the pouches stay put), the back's 0.125
+# behind the origin (where the pack's straps meet it).
+FRONT_Z, BACK_Z, VEST_T = -0.076, 0.097, 0.028
 PANEL_W, PANEL_Y0, PANEL_Y1 = 0.29, -0.31, 0.05
 
 
@@ -232,8 +241,20 @@ def vests():
     reset()
     w = Part("vest")
     vest(w)
-    write("assets/models/kit/vest.glb", [w],
-          {"pt_plate_front": pf, "pt_plate_back": pb, "pt_vest": (0.0, 0.0, 0.0)})
+    # The plates in their pockets (shown while one's in): the front one as
+    # the item lies, the back one turned to face out the back.
+    front = Part("plate_front", origin=pf)
+    plate(front, T(pf[0], pf[1] - PLATE_H / 2, pf[2]))
+    back = Part("plate_back", origin=pb)
+    plate(back, T(pb[0], pb[1], pb[2]) @ RY(math.pi) @ T(0.0, -PLATE_H / 2, 0.0))
+    for p_ in (w, front, back):
+        make(p_)
+    empty("pt_plate_front", pf)
+    empty("pt_plate_back", pb, RY(math.pi))
+    empty("pt_vest_stow", (0.0, 0.0, 0.0))
+    print("assets/models/kit/vest.glb:")
+    report()
+    export("assets/models/kit/vest.glb")
     reset()
     a = Part("vest")
     vest(a)
