@@ -279,6 +279,9 @@ pub struct Raider {
     skip: HashSet<Entity>,
     /// Anomalies it has seen.
     known: HashSet<Entity>,
+    /// Anomalies that have had it (it walked into one without meaning
+    /// to): never again, whatever its nerve.
+    burned: HashSet<Entity>,
     /// The current plan was cut short (a fight, a repath): redo, don't
     /// give up.
     interrupted: bool,
@@ -468,6 +471,7 @@ pub fn attach_raider(
                 act: Act::Idle,
                 skip: HashSet::new(),
                 known: HashSet::new(),
+                burned: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
                 rv: None,
@@ -1729,6 +1733,33 @@ fn fight_on(
 
 /// Anomalies it can see get routed round (unless it's reckless).
 fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
+    // In one it didn't mean to walk into: out the way it came, and never
+    // that one again, reckless or not (a dive ends when it leaves).
+    if !r.diving {
+        let caught = scene.anomalies.iter().find(|(e, a, gt)| {
+            !r.burned.contains(e) && gt.translation().xz().distance(here) < a.radius + 0.3
+        });
+        if let Some((e, a, gt)) = caught {
+            let at = gt.translation().xz();
+            let danger = a.kind.danger_radius(a.radius);
+            r.burned.insert(e);
+            r.grid.block(
+                Obstacle::Circle {
+                    at: at.to_array(),
+                    radius: danger + 1.0,
+                },
+                0.0,
+            );
+            let out = at + (here - at).normalize_or(Vec2::X) * (danger + 1.5);
+            r.interrupted = true;
+            bot.replace([Task::WalkTo {
+                to: out,
+                within: 0.8,
+            }]);
+            bot.sprint = true;
+            return;
+        }
+    }
     let mut new = Vec::new();
     for (e, a, gt) in &scene.anomalies {
         if r.known.contains(&e) {

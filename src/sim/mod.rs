@@ -116,6 +116,86 @@ mod tests {
         );
     }
 
+    /// A snare that catches a bot (even a reckless one, who walks through
+    /// anomalies it hasn't been hurt by) is never walked into again: it
+    /// steps out the way it came and goes round.
+    #[test]
+    fn a_bot_caught_by_a_snare_never_walks_into_it_again() {
+        use crate::bot::{Bot, Task};
+        use bevy::math::Vec3Swizzles;
+        let dir = std::env::temp_dir().join(format!("extraction-snare-{}", std::process::id()));
+        let opts = LaunchOptions {
+            sim_run: Some("snare".into()),
+            sim_out: Some(dir.clone()),
+            personality: Some("reckless".into()),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        // Kitted up and walking somewhere.
+        let mut target = None;
+        for _ in 0..90 * 90 {
+            app.update();
+            let walk = app
+                .world_mut()
+                .query::<&Bot>()
+                .iter(app.world())
+                .find_map(|b| {
+                    b.tasks.iter().find_map(|t| match t {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    })
+                });
+            let me = app
+                .world_mut()
+                .query_filtered::<&Transform, With<crate::rig::LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap()
+                .translation;
+            let stage_raid = app
+                .world_mut()
+                .query::<&raider::Raider>()
+                .iter(app.world())
+                .any(|r| r.stage == raider::Stage::Raid);
+            if let Some(to) = walk.filter(|to| stage_raid && to.distance(me.xz()) > 6.0) {
+                target = Some(to);
+                break;
+            }
+        }
+        let to = target.expect("it set off somewhere");
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(to.x, to.y);
+        crate::anomaly::spawn_anomaly(
+            app.world_mut(),
+            extraction_core::anomaly::AnomalyKind::Snare,
+            at,
+            2.5,
+            None,
+        );
+        for _ in 0..90 * 90 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<telemetry::SimLog>().flush();
+        let text = std::fs::read_to_string(dir.join("snare.jsonl")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let entries = text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|e| e["ev"] == "anomaly_enter" && e["kind"] == "Snare")
+            .filter(|e| {
+                let p = Vec2::new(
+                    e["x"].as_f64().unwrap() as f32,
+                    e["z"].as_f64().unwrap() as f32,
+                );
+                p.distance(to) < 4.0
+            })
+            .count();
+        assert_eq!(entries, 1, "caught once, then kept clear: {entries}");
+    }
+
     /// The way into the truck from behind, at base and at every
     /// rendezvous: up the steps, into the bed.
     #[test]
