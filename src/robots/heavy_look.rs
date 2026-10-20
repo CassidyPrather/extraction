@@ -29,7 +29,13 @@ impl Plugin for HeavyLookPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (dress_heavies, pose_limbs, light_heavies, dress_doors),
+            (
+                dress_heavies,
+                pose_limbs,
+                light_heavies,
+                dress_doors,
+                gallery,
+            ),
         );
     }
 }
@@ -264,7 +270,8 @@ fn dress_heavies(
 }
 
 /// A segment from `a` to `b` bending about `hinge`: Y down it, X along the
-/// hinge, at the body's scale (its length stretched to the joints).
+/// hinge, at the body's scale (`nominal`, the model's length, stretched
+/// to the joints).
 fn segment(a: Vec3, b: Vec3, hinge: Vec3, nominal: f32) -> Transform {
     let len = a.distance(b).max(0.01);
     let dir = (b - a) / len;
@@ -293,9 +300,9 @@ fn pose_limbs(
                     hinge = gt.right().as_vec3();
                 }
                 if matches!(limb.kind, LimbKind::Thigh(_)) {
-                    segment(hip, knee, hinge, UPPER * SIZE)
+                    segment(hip, knee, hinge, UPPER)
                 } else {
-                    segment(knee, foot, hinge, LOWER * SIZE)
+                    segment(knee, foot, hinge, LOWER)
                 }
             }
             LimbKind::ArmUpper | LimbKind::ArmFore => {
@@ -309,17 +316,17 @@ fn pose_limbs(
                     hinge
                 };
                 if limb.kind == LimbKind::ArmUpper {
-                    segment(shoulder, elbow, hinge, UPPER * SIZE)
+                    segment(shoulder, elbow, hinge, UPPER)
                 } else {
-                    segment(elbow, arm.claw, hinge, LOWER * SIZE)
+                    segment(elbow, arm.claw, hinge, LOWER)
                 }
             }
         };
     }
 }
 
-/// The vents glow cyan cold and run to orange as it heats (flaring while
-/// it stalls); a lost vent goes dark; its eye goes out when it's blinded;
+/// The vents and the strips down its back glow cyan cold and run to
+/// orange as it heats (flaring while it stalls); a lost vent goes dark; its eye goes out when it's blinded;
 /// everything goes out when it falls.
 fn light_heavies(
     heavies: Query<(&Heavy, &Robot, &Lights, &Children)>,
@@ -328,7 +335,7 @@ fn light_heavies(
     time: Res<Time>,
 ) {
     let cold = LinearRgba::rgb(0.2 * 6.0, 0.8 * 6.0, 1.0 * 6.0);
-    let hot = LinearRgba::rgb(1.0 * 9.0, 0.32 * 9.0, 0.06 * 9.0);
+    let hot = LinearRgba::rgb(8.0, 1.4, 0.12);
     let dark = LinearRgba::BLACK;
     for (h, robot, lights, children) in &heavies {
         let mut vent_alive = [true; 2];
@@ -366,7 +373,8 @@ fn light_heavies(
             }
         }
         if let Some(mut m) = materials.get_mut(&lights.strips) {
-            let want = if robot.wrecked { dark } else { cold };
+            // (The strips warm with it too: its vents are under plates.)
+            let want = if robot.wrecked { dark } else { warm };
             if m.emissive != want {
                 m.emissive = want;
             }
@@ -404,5 +412,99 @@ fn dress_doors(
             MeshMaterial3d(mat),
             ChildOf(e),
         ));
+    }
+}
+
+/// `--gallery heavy[:open|:hot|:down][,YAW[,DIST]]`: a heavy standing in
+/// front of the `--camera`, still (its senses off). `open` has its left
+/// plate and hatch off and a knee shot out; `hot` runs it near a stall;
+/// `down` is its wreck.
+///
+/// ```text
+/// scripts/shot.sh docs/shots/heavy/front.png 40,0,262,0,0 60 --gallery heavy,200
+/// ```
+#[allow(clippy::too_many_arguments)]
+fn gallery(
+    mut commands: Commands,
+    opts: Res<crate::launch::LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+    mut stage: Local<u32>,
+    mut made: Local<Option<(Entity, String)>>,
+    mut heavies: Query<(&mut Heavy, &mut Robot, &Children)>,
+    parts: Query<(Entity, &HeavyPart)>,
+    mut hits: MessageWriter<crate::weapons::ballistics::Hit>,
+) {
+    let (Some(spec), Some((cam, yaw, _)), Some(zone)) = (&opts.gallery, opts.camera, zone) else {
+        return;
+    };
+    let mut fields = spec.split(',');
+    let first = fields.next().unwrap_or("");
+    let Some(state) = first.strip_prefix("heavy") else {
+        return;
+    };
+    *stage += 1;
+    if *stage == 3 {
+        let turn: f32 = fields.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+        let dist: f32 = fields.next().and_then(|v| v.parse().ok()).unwrap_or(9.0);
+        let fwd = Quat::from_rotation_y(-yaw.to_radians()) * Vec3::NEG_Z;
+        let at = zone.on_ground(cam.x + fwd.x * dist, cam.z + fwd.z * dist);
+        let e = super::heavy::spawn_heavy(
+            &mut commands,
+            &zone,
+            &catalog,
+            at,
+            super::Job {
+                kind: super::JobKind::Survey,
+                site: at,
+                duration: 1.0e6,
+                exit: at,
+            },
+        );
+        // Still: no senses, nothing to do but stand.
+        commands
+            .entity(e)
+            .remove::<super::Senses>()
+            .insert(super::Brain::Working { at, left: 1.0e6 });
+        // Its yaw: facing the camera, turned by `turn`.
+        let face = (-fwd).with_y(0.0);
+        let yaw = (-face.x).atan2(-face.z) + turn.to_radians();
+        commands.queue(move |w: &mut World| {
+            if let Some(mut wk) = w.get_mut::<super::walker::Walker>(e) {
+                wk.yaw = yaw;
+            }
+        });
+        *made = Some((e, state.trim_start_matches(':').to_owned()));
+    }
+    let Some((e, state)) = made.as_ref() else {
+        return;
+    };
+    let Ok((mut h, mut robot, children)) = heavies.get_mut(*e) else {
+        return;
+    };
+    match state.as_str() {
+        "hot" => h.heat = 0.9,
+        "down" if *stage == 30 => robot.wrecked = true,
+        "open" if *stage == 30 => {
+            for c in children.iter() {
+                let Ok((pe, part)) = parts.get(c) else {
+                    continue;
+                };
+                let kill = matches!(part.0, Slot::Bolt { plate: 0 | 1, .. } | Slot::Knee(1));
+                if kill {
+                    hits.write(crate::weapons::ballistics::Hit {
+                        entity: pe,
+                        point: Vec3::ZERO,
+                        normal: Vec3::Y,
+                        velocity: Vec3::ZERO,
+                        damage: 1000.0,
+                        shooter: None,
+                        mass_g: 0.0,
+                        load: Default::default(),
+                    });
+                }
+            }
+        }
+        _ => {}
     }
 }

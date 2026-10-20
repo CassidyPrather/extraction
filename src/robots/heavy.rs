@@ -68,7 +68,7 @@ pub const HULL_AT: Vec3 = Vec3::new(0.0, 0.04, 0.0);
 pub const EYE_AT: Vec3 = Vec3::new(0.0, 0.2, -0.56);
 pub const SHOULDER: Vec3 = Vec3::new(0.3, 0.12, -0.5);
 /// Where the claw hangs at rest.
-pub const ARM_REST: Vec3 = Vec3::new(0.42, -0.3, -0.78);
+pub const ARM_REST: Vec3 = Vec3::new(0.48, -0.9, -1.1);
 /// Half extents of a plate (thin along local Z, its outward normal).
 pub const PLATE_HALF: Vec3 = Vec3::new(0.27, 0.165, 0.0125);
 /// The cell, behind the hatch.
@@ -1073,9 +1073,10 @@ fn pose_heavy(
     }
 }
 
-/// The elbow of an arm from `shoulder` to `claw`: out and up.
+/// The elbow of an arm from `shoulder` to `claw`: out, forward and a
+/// little up, so at rest it folds in front of the hull like a mantis's.
 pub fn arm_elbow(t: &Transform, shoulder: Vec3, claw: Vec3) -> Vec3 {
-    let out = t.rotation * Vec3::new(1.0, 0.6, 0.3);
+    let out = t.rotation * Vec3::new(0.8, 0.3, -1.0);
     super::anim::solve_knee_sized(shoulder, claw, out, SIZE)
 }
 
