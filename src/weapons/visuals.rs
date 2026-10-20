@@ -44,6 +44,8 @@ impl Plugin for GunVisualsPlugin {
                 super::casing_visuals,
                 super::feel::jam_visuals,
                 super::muzzle::muzzle_fx,
+                super::grenades::show_grenade_parts,
+                super::grenades::explosion_fx,
             ),
         )
         .add_plugins(super::impacts::ImpactFxPlugin);

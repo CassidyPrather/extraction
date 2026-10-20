@@ -305,6 +305,120 @@ fn burn_fuses(
     }
 }
 
+/// The grenade model's `pin` goes with the pin, its `spoon` with the
+/// spoon (client side).
+pub fn show_grenade_parts(
+    grenades: Query<(&Live, &Children)>,
+    roots: Query<&Children, With<crate::items::ItemModelRoot>>,
+    mut nodes: Query<(&Name, &mut Visibility)>,
+) {
+    use extraction_core::grenade::Fuse;
+    for (live, children) in &grenades {
+        let pinned = live.grenade.fuse == Fuse::Pinned;
+        let spooned = matches!(live.grenade.fuse, Fuse::Pinned | Fuse::Held);
+        for root in children.iter().filter_map(|c| roots.get(c).ok()) {
+            for node in root.iter() {
+                let Ok((name, mut vis)) = nodes.get_mut(node) else {
+                    continue;
+                };
+                let show = match name.as_str() {
+                    "pin" => pinned,
+                    "spoon" => spooned,
+                    _ => continue,
+                };
+                let want = if show {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                };
+                if *vis != want {
+                    *vis = want;
+                }
+            }
+        }
+    }
+}
+
+/// The bang (client side): a flash, sparks, thrown earth and a cloud of
+/// smoke that drifts off on the wind.
+pub(crate) fn explosion_fx(
+    mut commands: Commands,
+    mut events: MessageReader<GrenadeEvent>,
+    assets: Option<Res<super::impacts::FxAssets>>,
+    pool: Option<ResMut<super::impacts::FxPool>>,
+) {
+    use super::impacts::{SPRAY, Spray, spray_bits};
+    let (Some(a), Some(mut pool)) = (assets, pool) else {
+        events.clear();
+        return;
+    };
+    let pool = &mut *pool;
+    for ev in events.read() {
+        if ev.event != FuseEvent::Exploded {
+            continue;
+        }
+        commands.spawn((
+            Name::new("Grenade flash"),
+            super::ballistics::Flash { life: 0.12 },
+            PointLight {
+                color: Color::srgb(1.0, 0.8, 0.55),
+                intensity: 2_000_000.0,
+                range: 30.0,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_translation(ev.at + Vec3::Y * 0.3),
+        ));
+        let sprays = [
+            Spray {
+                n: 24,
+                mat: |a| a.spark.clone(),
+                size: Vec3::new(0.008, 0.008, 0.2),
+                out: 4.0,
+                scatter: 14.0,
+                life: 0.25,
+                align: true,
+                ..SPRAY
+            },
+            Spray {
+                n: 14,
+                mat: |a| a.clod.clone(),
+                size: Vec3::splat(0.04),
+                out: 6.0,
+                scatter: 4.0,
+                life: 1.4,
+                spin: 12.0,
+                ..SPRAY
+            },
+            Spray {
+                n: 12,
+                mesh: |a| a.ball.clone(),
+                mat: |a| a.soil_dust.clone(),
+                size: Vec3::splat(0.5),
+                out: 2.5,
+                scatter: 2.0,
+                life: 4.0,
+                grow: 3.0,
+                gravity: -0.35,
+                drag: 1.6,
+                wind: 1.0,
+                ..SPRAY
+            },
+        ];
+        for s in &sprays {
+            spray_bits(
+                &mut commands,
+                pool,
+                &a,
+                s,
+                ev.at + Vec3::Y * 0.1,
+                Vec3::Y,
+                Vec3::ZERO,
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
