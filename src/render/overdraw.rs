@@ -113,7 +113,7 @@ fn impostor_cut(
 
 /// The overdraw of what `cam` sees.
 pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
-    let mut eye_pos = Vec3::ZERO;
+    let eye_pos;
     let (view, f, eye) = {
         let g = w.get::<GlobalTransform>(cam).unwrap();
         let Projection::Perspective(p) = w.get::<Projection>(cam).unwrap() else {

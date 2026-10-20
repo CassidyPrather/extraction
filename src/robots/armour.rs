@@ -16,6 +16,8 @@ use super::{PartDestroyed, PartRole, Robot, RobotKind, part_bundle};
 pub const WALKER_PLATE_HP: f32 = 40.0;
 /// A drone's belly plate (its shell has 70).
 pub const DRONE_PLATE_HP: f32 = 20.0;
+/// The Sorter's carriage plates (the carriage has 260).
+pub const SORTER_PLATE_HP: f32 = 70.0;
 /// A dirigible gondola's side plates (the gondola has 260).
 pub const GONDOLA_PLATE_HP: f32 = 80.0;
 /// How far out from the orb's centre a walker plate's middle sits.
@@ -46,6 +48,16 @@ pub fn walker_plate_dir(i: usize) -> Vec3 {
 /// The plate's place on its robot (local to the root).
 fn plate_transform(kind: RobotKind, i: usize) -> Transform {
     match kind {
+        RobotKind::Sorter => {
+            // Either side of the carriage, facing out (the model's plate is
+            // on +X; the second turns round to -X).
+            if i == 0 {
+                Transform::from_xyz(0.74, 0.0, 0.0)
+            } else {
+                Transform::from_xyz(-0.74, 0.0, 0.0)
+                    .with_rotation(Quat::from_rotation_y(std::f32::consts::PI))
+            }
+        }
         RobotKind::Dirigible => {
             // Down each side of the gondola (its centre is 3.1 m under the
             // envelope's), facing out.
@@ -85,6 +97,7 @@ fn fit_plates(
                 Collider::cuboid(0.3, 0.03, 0.28),
             ),
             RobotKind::Drone => (1, DRONE_PLATE_HP, Collider::cuboid(0.3, 0.02, 0.28)),
+            RobotKind::Sorter => (2, SORTER_PLATE_HP, Collider::cuboid(0.06, 0.5, 1.0)),
             // (Local Y is out: thin along it.)
             RobotKind::Dirigible => (2, GONDOLA_PLATE_HP, Collider::cuboid(0.86, 0.06, 3.3)),
             _ => continue,
@@ -143,6 +156,12 @@ fn shed_plates(
                 Collider::cuboid(0.86, 0.06, 3.3),
                 40.0,
                 Vec3::new(36.0, 39.0, 2.5),
+            )
+        } else if robot.kind == RobotKind::Sorter {
+            (
+                Collider::cuboid(0.06, 0.5, 1.0),
+                14.0,
+                Vec3::new(1.4, 1.2, 0.3),
             )
         } else {
             (
@@ -402,6 +421,7 @@ mod tests {
                 velocity: Vec3::Z * 500.0,
                 damage: 100.0,
                 shooter: None,
+                mass_g: 3.4,
             });
         for _ in 0..3 {
             app.update();

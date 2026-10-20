@@ -103,6 +103,9 @@ pub struct Hit {
     pub velocity: Vec3,
     pub damage: f32,
     pub shooter: Option<Entity>,
+    /// The round's mass, grams, if it was a round (armour weighs it); 0
+    /// for a blast or a blade.
+    pub mass_g: f32,
 }
 
 /// A muzzle flash's light, fading out.
@@ -287,6 +290,7 @@ pub(crate) fn fly_projectiles(
                 // A glancing blow only grazes.
                 damage: p.damage * p.mods.damage * if glancing { 0.3 } else { 1.0 },
                 shooter: p.shooter,
+                mass_g: p.mass_g,
             });
             match outcome {
                 Outcome::Through { speed: out } => {

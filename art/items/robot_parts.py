@@ -14,12 +14,15 @@ assets/models/items/<id>.glb (item space: see _kit.py), centred on its box.
 - `dirigible_gas_valve`  the airship's lift-gas valve: a flanged seat with
                          a scrap of envelope round it, the poppet's
                          actuator and its eye
+- `sorter_servo_pack`    the Sorter's elbow (sorter.py): the hinge drum
+                         with stubs of both arm beams, the ram on the
+                         upper arm's back, its glow strips and warning band
 - `pylon_relay_coil`     a relay pylon's coil: copper wound on a dark core
                          between white end caps, glowing insulators
 
 Robot bodies drops these from a robot's parts still alive when it dies
-(robots/wreck.rs). Materials: Shell, Dark, Glow, Eye, Steel, Copper, Red,
-Black, Canvas.
+(robots/wreck.rs). Materials: Shell, Dark, Glow, Eye, Warn, Steel, Copper,
+Red, Black, Canvas.
 """
 
 import math
@@ -151,11 +154,38 @@ def pylon_relay_coil():
     return centred([p])
 
 
+def sorter_servo_pack():
+    p = Part("body")
+    # The Sorter's elbow drum (sorter.py): the hinge along X.
+    p.cyl(0.16, -0.16, 0.16, "Dark", segs=28, xf=ALONG_X, chamfer=0.012)
+    for sx in (-1, 1):
+        p.cyl(0.11, 0.0, 0.015, "Shell", segs=24, xf=T(sx * 0.16, 0, 0) @ RY(sx * math.pi / 2),
+              chamfer=0.004)
+    # A stub of the upper arm up from it, with its glow strips and the ram
+    # on its back; a stub of the forearm down and forward, its warning band.
+    p.box((0.22, 0.3, 0.26), (0.0, 0.27, 0.0), "Shell", bevel=0.012, segs=1)
+    for sx in (-1, 1):
+        p.box((0.004, 0.2, 0.012), (sx * 0.111, 0.3, 0.0), "Glow", segs=1)
+    p.cyl(0.05, 0.0, 0.16, "Dark", segs=14, xf=T(0, 0.24, 0.17) @ RX(-math.pi / 2), chamfer=0.006)
+    p.cyl(0.035, 0.0, 0.2, "Steel", segs=12, xf=T(0, 0.12, 0.17) @ RX(-math.pi / 2 + 0.25))
+    fore = RX(math.pi / 2 + 0.7)
+    p.box((0.17, 0.2, 0.24), (0.0, 0.0, 0.0), "Shell", bevel=0.01, segs=1,
+          xf=fore @ T(0.0, 0.0, 0.24))
+    p.box((0.19, 0.215, 0.08), (0.0, 0.0, 0.0), "Warn", segs=1, xf=fore @ T(0.0, 0.0, 0.28))
+    # Torn ends: cables out of both stubs.
+    tube_path(p, [(0.04, 0.42, 0.03), (0.07, 0.48, 0.06), (0.05, 0.52, 0.1)], 0.008, "Red",
+              sides=6, closed=False)
+    tube_path(p, [(-0.05, 0.42, -0.02), (-0.08, 0.47, -0.06)], 0.008, "Black", sides=6,
+              closed=False)
+    return centred([p])
+
+
 if __name__ == "__main__":
     for item_id, build in (("drone_rotor_motor", drone_rotor_motor),
                            ("walker_leg_actuator", walker_leg_actuator),
                            ("crawler_capacitor", crawler_capacitor),
                            ("dirigible_gas_valve", dirigible_gas_valve),
-                           ("pylon_relay_coil", pylon_relay_coil)):
+                           ("pylon_relay_coil", pylon_relay_coil),
+                           ("sorter_servo_pack", sorter_servo_pack)):
         if wanted(item_id):
             item(item_id, build)

@@ -28,6 +28,12 @@ pub enum Mount {
     Cell,
     /// The artifact adapter's cradle: artifacts.
     Cradle,
+    /// Worn on the torso (a plate carrier).
+    Vest,
+    /// Worn on the head.
+    Helmet,
+    /// A plate carrier's pocket: armour plates.
+    Plate,
 }
 
 /// How big a thing is, for pockets and slings. Bulk (a continuous volume) is

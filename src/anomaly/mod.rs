@@ -155,6 +155,7 @@ impl Plugin for AnomalyPlugin {
             .add_message::<ArcStrike>()
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
+            .add_message::<wells::EnteredWell>()
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
             .add_observer(surge::remember_size)
@@ -429,6 +430,7 @@ fn burners(
                     velocity: Vec3::ZERO,
                     damage: 18.0 * dt,
                     shooter: None,
+                    mass_g: 0.0,
                 });
             }
         }
@@ -533,6 +535,7 @@ fn snares(
                     velocity: Vec3::ZERO,
                     damage: 40.0,
                     shooter: None,
+                    mass_g: 0.0,
                 });
             } else if let Ok((rb, mut f)) = bodies.get_mut(t) {
                 if *rb == RigidBody::Dynamic {
@@ -839,11 +842,21 @@ mod tests {
         let (_, at, _) = find(&mut app, AnomalyKind::Well);
         let p = player(&mut app);
         app.world_mut().get_mut::<Transform>(p).unwrap().translation = at;
+        let mut cursor = app
+            .world()
+            .resource::<Messages<wells::EnteredWell>>()
+            .get_cursor_current();
+        let mut told = 0;
         for _ in 0..30 {
             app.update();
+            told += cursor
+                .read(app.world().resource::<Messages<wells::EnteredWell>>())
+                .filter(|m| m.player == p)
+                .count();
         }
         let hp = app.world().get::<Health>(p).unwrap().hp;
         assert!(hp < 95.0, "the heart crushes ({hp})");
+        assert_eq!(told, 1, "going in was told once, not every tick");
     }
 
     /// Fires a round along +X past `heart` at `miss` metres and returns

@@ -53,8 +53,15 @@ pub const GRASS_STEEP: f32 = 0.6;
 /// Ground fog: exposure falls as `exp(-density * FOG_SIGHT * distance)`
 /// (density per `Conditions::ground_fog`, 0.006 clear to 0.024 thick).
 pub const FOG_SIGHT: f32 = 1.6;
-/// Keeping still: how much of a moving body's exposure a still one has.
+/// Keeping still: how much of a moving body's exposure a still one has
+/// (robots that see movement more than shape carry their own:
+/// [`MotionSight`]).
 pub const STILL: f32 = 0.55;
+
+/// This robot sees movement more than shape: a still body shows it only
+/// this share of a moving one's exposure (in place of [`STILL`]).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MotionSight(pub f32);
 /// Running: more than walking.
 pub const RUNNING: f32 = 1.35;
 /// Daylight a robot's eyes are tuned to, lux (a drizzly day).
@@ -187,6 +194,9 @@ pub struct SightCase {
     /// In the dark: how lit you are there (0..1: lamps, your torch). None
     /// in daylight.
     pub dark: Option<f32>,
+    /// What keeping still leaves of you to this robot ([`STILL`], or its
+    /// [`MotionSight`]).
+    pub still: f32,
 }
 
 /// How much of you a robot makes out (see the module docs).
@@ -218,7 +228,7 @@ pub fn exposure(c: &SightCase) -> f32 {
     } else if c.speed > 0.3 {
         1.0
     } else {
-        STILL
+        c.still
     };
     let e = range * fog * light * posture * hidden * motion;
     if c.distance < POINT_BLANK {
@@ -274,14 +284,26 @@ struct Sound {
 }
 
 /// Shots are heard a long way off: how far by calibre.
+/// A suppressor fitted cuts the report to `gadgets::SUPPRESSED_REACH`; a
+/// hound's bite isn't a shot at all.
 pub(crate) fn gunshot_noise(
     mut shots: MessageReader<crate::weapons::ballistics::Shot>,
     mut noise: MessageWriter<Noise>,
+    suppressed: Query<(), With<crate::gadgets::Suppressed>>,
+    hounds: Query<(), With<super::hound::Hound>>,
 ) {
     for s in shots.read() {
+        if hounds.contains(s.gun) {
+            continue;
+        }
+        let k = if suppressed.contains(s.gun) {
+            crate::gadgets::SUPPRESSED_REACH
+        } else {
+            1.0
+        };
         noise.write(Noise {
             at: s.origin,
-            radius: gunshot_reach(s.speed, s.damage, s.projectiles),
+            radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
             source: s.shooter,
         });
     }
@@ -325,6 +347,7 @@ pub(crate) fn perceive(
         &mut Awareness,
         Has<Stunned>,
         Option<&super::indoor::LocalNav>,
+        Option<&MotionSight>,
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
@@ -442,7 +465,7 @@ pub(crate) fn perceive(
         })
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
-    for (robot_e, robot, senses, gt, mut aware, stunned, local) in &mut robots {
+    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion) in &mut robots {
         aware.news = false;
         if robot.wrecked {
             continue;
@@ -505,6 +528,7 @@ pub(crate) fn perceive(
                     indoors: t.indoors && !robot_indoors,
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
                     dark: t.dark,
+                    still: motion.map_or(STILL, |m| m.0),
                 });
                 // In the dark, a torch pointed this way is a light in its eyes.
                 if let (Some(_), Some((at, beam))) = (t.dark, t.torch) {
@@ -634,6 +658,7 @@ mod tests {
             indoors: false,
             depression: 0.05,
             dark: None,
+            still: STILL,
         }
     }
 

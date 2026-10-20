@@ -44,6 +44,8 @@ pub enum Piece {
     Gun,
     /// An armour plate shot loose (`armour`).
     Plate,
+    /// A Sorter's upper arm (0) or forearm (1).
+    Arm(u8),
 }
 
 /// A loose piece of a wrecked robot.
@@ -401,6 +403,8 @@ fn break_up(
                     commands.entity(c).despawn();
                 }
             }
+            // The Sorter comes off its rails in its own way (`sorter`).
+            (RobotKind::Sorter, ..) => {}
             _ => {
                 // Dirigibles and pylons wreck in their own way.
                 commands.entity(e).insert(Broken);

@@ -21,6 +21,7 @@ pub mod flight;
 pub mod fx;
 pub mod grappler;
 pub mod hound;
+pub mod hound_mind;
 pub mod indoor;
 #[cfg(test)]
 mod mind_tests;
@@ -28,6 +29,8 @@ pub mod pylon;
 pub mod reel;
 pub mod search;
 pub mod senses;
+pub mod sorter;
+pub mod sorter_look;
 pub mod visuals;
 pub mod walker;
 pub mod weathering;
@@ -52,6 +55,8 @@ pub enum RobotKind {
     Dirigible,
     /// A relay pylon walkers put up at a work site (see `pylon`).
     Pylon,
+    /// The Depot's ceiling gantry (see `sorter`).
+    Sorter,
 }
 
 #[derive(Component, Debug)]
@@ -231,6 +236,7 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
+            .add_plugins(hound_mind::HoundMindPlugin)
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,
@@ -240,11 +246,14 @@ impl Plugin for RobotsPlugin {
                 grappler::GrapplerPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
-                anim::AnimPlugin,
-                flight::FlightPlugin,
-                wreck::WreckPlugin,
-                armour::ArmourPlugin,
-                hound::HoundPlugin,
+                (
+                    anim::AnimPlugin,
+                    flight::FlightPlugin,
+                    wreck::WreckPlugin,
+                    armour::ArmourPlugin,
+                    hound::HoundPlugin,
+                    sorter::SorterPlugin,
+                ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
@@ -358,16 +367,21 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
         RobotKind::Walker => "walker_wreck",
         RobotKind::Dirigible => "dirigible_wreck",
         RobotKind::Pylon => "pylon_wreck",
+        // (Its own table when Models: kit's sorter parts are in.)
+        RobotKind::Sorter => "pylon_wreck",
     }
 }
 
-/// What telemetry and logs call a robot: its kind, or "Crawler" for the
-/// small walkers that live underground.
-pub fn robot_name(kind: RobotKind, crawler: bool) -> String {
-    if crawler {
-        "Crawler".into()
-    } else {
-        format!("{kind:?}")
+/// A robot that is its own breed on a shared body (a crawler, a hound are
+/// walkers underneath): what telemetry and logs call it.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Breed(pub &'static str);
+
+/// What telemetry and logs call a robot: its breed, else its kind.
+pub fn robot_name(kind: RobotKind, breed: Option<&Breed>) -> String {
+    match breed {
+        Some(b) => b.0.into(),
+        None => format!("{kind:?}"),
     }
 }
 

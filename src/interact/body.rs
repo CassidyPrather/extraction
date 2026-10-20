@@ -269,6 +269,15 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
             )
         }
         SlotKind::Mount => (Vec3::new(-0.13, 0.06, -0.12), Transform::IDENTITY, 0.08),
+        // Worn: the vest on the chest (let go mid-chest, it sits in the
+        // torso's own frame, as its worn model is drawn), the helmet on the
+        // head (from the torso's middle).
+        SlotKind::Vest => (
+            Vec3::new(0.0, -0.08, -0.02),
+            Transform::from_xyz(0.0, 0.08, 0.02),
+            0.25,
+        ),
+        SlotKind::Head => (Vec3::new(0.0, 0.43, -0.02), Transform::IDENTITY, 0.2),
     }
 }
 

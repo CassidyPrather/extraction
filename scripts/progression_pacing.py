@@ -185,6 +185,14 @@ def main():
                 job_rate[d] = (done + PRIOR * reach(d, d)) / (len(js) + PRIOR)
                 print(f"| {d} | {len(js)} | {done / len(js):.0%} (used: {job_rate[d]:.0%}) |")
         print()
+        # How play style changes it (drones decide most deaths, and careful
+        # play avoids them: robot minds' sims).
+        print("| Personality | Bots given a scout job | Seen and home |\n| - | - | - |")
+        for who in sorted({r["personality"] for r in jobs}):
+            js = [r for r in jobs if r["personality"] == who]
+            ok = sum(r["home"] and r["job"]["seen"] for r in js)
+            print(f"| {who} | {len(js)} | {ok / len(js):.0%} |")
+        print()
 
     def place_odds(lo, hi):
         """A place job's chance per raid: what bots that had the job did, else

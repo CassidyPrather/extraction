@@ -150,7 +150,7 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     for k in 0..r.portals.len() {
         stair(&mut b, r, k, &m);
     }
-    doors(&mut b, r, &m);
+    doors(&mut b, l, r, &m);
     dressing(&mut b, l, r);
     for room in &l.rooms {
         for p in &room.props {
@@ -598,10 +598,18 @@ fn append(b: &mut Builder, g: Geo, at: [f32; 2], y: f32, rot: f32) {
 
 /// Doors across corridors' mouths and stairs' feet: a wall on the line
 /// with a door in it (or the opening, with a lintel over).
-fn doors(b: &mut Builder, r: &Raster, m: &Mats) {
+fn doors(b: &mut Builder, l: &Layout, r: &Raster, m: &Mats) {
     for d in &r.doors {
-        let along = Vec2::from(d.along);
+        let mut along = Vec2::from(d.along);
         let at = Vec2::from(d.at);
+        // A leaf opens toward the wall's right, (along.z, -along.x): into
+        // its room, not back into the corridor it closes.
+        if let Some(room) = d.room {
+            let into = Vec2::from(l.rooms[room as usize].at) - at;
+            if Vec2::new(along.y, -along.x).dot(into) < 0.0 {
+                along = -along;
+            }
+        }
         let a = at - along * d.width * 0.5;
         let c = at + along * d.width * 0.5;
         // Up to the higher roof either side.
@@ -924,6 +932,72 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
             );
             if let Some(t) = loot {
                 b.loot(at + Vec3::Y * 1.65, t);
+            }
+        }
+        PropKind::Bin => {
+            // A floor and four sides: what's in it lies in it.
+            let from = b.geo.pieces.len();
+            let side = |b: &mut Builder, size: Vec3, off: Vec3| {
+                b.piece(
+                    Shape::Box(size),
+                    Transform::from_translation(at + rot * off).with_rotation(rot),
+                    Mat::DarkMetal,
+                    true,
+                );
+            };
+            side(b, Vec3::new(1.2, 0.06, 0.8), Vec3::new(0.0, 0.03, 0.0));
+            side(b, Vec3::new(1.2, 0.9, 0.04), Vec3::new(0.0, 0.45, -0.38));
+            side(b, Vec3::new(1.2, 0.9, 0.04), Vec3::new(0.0, 0.45, 0.38));
+            side(b, Vec3::new(0.04, 0.9, 0.8), Vec3::new(-0.58, 0.45, 0.0));
+            side(b, Vec3::new(0.04, 0.9, 0.8), Vec3::new(0.58, 0.45, 0.0));
+            b.dress(
+                from,
+                vec![(
+                    "depot_bin",
+                    Transform::from_translation(at).with_rotation(rot),
+                )],
+            );
+            if let Some(t) = loot {
+                b.loot(at + Vec3::Y * 0.3, t);
+            }
+        }
+        PropKind::Conveyor
+        | PropKind::Tagger
+        | PropKind::KeptCrate
+        | PropKind::KeptCrateSmall
+        | PropKind::Cradle => {
+            let (model, size) = match kind {
+                PropKind::Conveyor => ("depot_conveyor", Vec3::new(6.0, 1.0, 0.9)),
+                PropKind::Tagger => ("depot_tagger", Vec3::new(0.7, 1.3, 0.6)),
+                PropKind::KeptCrate => ("depot_crate_long", Vec3::new(2.1, 0.65, 0.7)),
+                PropKind::KeptCrateSmall => ("depot_crate_small", Vec3::new(0.8, 0.5, 0.6)),
+                _ => ("depot_cradle", Vec3::new(2.2, 0.3, 2.0)),
+            };
+            let from = b.geo.pieces.len();
+            b.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + Vec3::Y * size.y * 0.5).with_rotation(rot),
+                Mat::PaintedMetal,
+                true,
+            );
+            // The cradle's uprights, at the wall.
+            if kind == PropKind::Cradle {
+                for x in [-1.0, 1.0] {
+                    b.piece(
+                        Shape::Box(Vec3::new(0.2, 2.6, 0.3)),
+                        Transform::from_translation(at + rot * Vec3::new(x, 1.3, 0.8))
+                            .with_rotation(rot),
+                        Mat::PaintedMetal,
+                        true,
+                    );
+                }
+            }
+            b.dress(
+                from,
+                vec![(model, Transform::from_translation(at).with_rotation(rot))],
+            );
+            if let Some(t) = loot {
+                b.loot(at + Vec3::Y * (size.y + 0.15), t);
             }
         }
         PropKind::Cabinet => {
@@ -1920,7 +1994,7 @@ fn fill_lost_bins(
     let bins: Vec<Vec2> = hall
         .props
         .iter()
-        .filter(|p| matches!(p.kind, PropKind::Crate | PropKind::Pallet))
+        .filter(|p| matches!(p.kind, PropKind::Bin | PropKind::Crate | PropKind::Pallet))
         .map(|p| Vec2::new(hall.at[0] + p.at[0], hall.at[1] + p.at[1]))
         .collect();
     if bins.is_empty() {
@@ -2046,6 +2120,29 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// A corridor's door swings open into its room, not back into the
+    /// corridor (narrow: the leaf would pin whoever's coming through).
+    #[test]
+    fn doors_swing_into_their_rooms() {
+        for id in ids() {
+            let (r, g) = (ug::raster(id).unwrap(), geo(id).unwrap());
+            let first = r.portals.len();
+            for (k, d) in r.doors.iter().enumerate() {
+                let Some(room) = d.room else { continue };
+                let leaf = &g.doors[first + k];
+                let open = Quat::from_rotation_y(leaf.yaw + 1.75) * Vec3::X * leaf.width * 0.9;
+                let tip = leaf.hinge + open;
+                assert_eq!(
+                    r.at([tip.x, tip.z]),
+                    Cell::Room(room),
+                    "{id}: the door into `{}` at {:?} swings to {tip:?}",
+                    ug::layout(id).unwrap().rooms[room as usize].id,
+                    d.at
+                );
+            }
+        }
     }
 
     /// No daylight gets into the rooms: from every room and corridor, rays
@@ -2684,6 +2781,187 @@ mod tests {
                 "{name} at {at:?}: {site:?}"
             );
         }
+    }
+
+    /// The Depot's deep job, end to end: with the Ledger job on the card the
+    /// intake ledger lies in bay K-14; a bot goes in down the ramp, throws
+    /// the three stages in turn, takes the ledger into its pack, swims the
+    /// cistern and climbs out by the hatch, and the Depot says it carried
+    /// the ledger out. (No robots: the crawlers are the other tests'.)
+    #[test]
+    fn the_ledger_comes_out_of_the_depot() {
+        use crate::bot::{Bot, Task};
+        use crate::rig::{LocalPlayer, Side};
+        use crate::sim::indoor::{BuildingPlan, plan_buildings};
+        use extraction_core::progression::{Job, LEDGER_ITEM};
+        let mut app = crate::headless_app(
+            LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .job = Some(Job::Ledger);
+        for _ in 0..90 * 3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let kind = app
+            .world()
+            .resource::<crate::items::Catalog>()
+            .kind(LEDGER_ITEM)
+            .expect("the ledger in the catalog");
+        let (ledger, at) = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|(_, i, _)| i.kind() == kind)
+            .map(|(e, _, g)| (e, g.translation()))
+            .expect("the ledger is out");
+        let (site, floor) = site_under(&zone, at).expect("the ledger is down in a site");
+        assert_eq!(site, DEPOT);
+        assert!(
+            (at.y - floor).abs() < 0.3,
+            "on the floor: {at:?}, floor {floor}"
+        );
+        let (placed, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .unwrap();
+        let l = ug::layout(&placed.id).unwrap();
+        let bay = l.rooms.iter().find(|r| r.id == "bay_k14").unwrap();
+        let local = xf.compute_affine().inverse().transform_point3(at);
+        assert!(
+            (local.x - bay.at[0]).abs() < bay.size[0] * 0.5
+                && (local.z - bay.at[1]).abs() < bay.size[1] * 0.5,
+            "in bay K-14: {local:?}"
+        );
+        let plan: BuildingPlan = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &super::super::buildings::Building, &Transform)>,
+                 d: Query<(Entity, &super::super::buildings::DoorLeaf, &ChildOf)>| {
+                    plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == DEPOT)
+            .unwrap();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let entry = *plan
+            .entries
+            .iter()
+            .min_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap();
+        let exit = *plan
+            .entries
+            .iter()
+            .max_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap();
+        let start = plan.to_world(entry);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(start.x, zone.ground(start.x, start.z) + 0.1, start.z);
+        app.update();
+        let run = |app: &mut App, tasks: Vec<Task>, what: &str| {
+            app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+            for _ in 0..90 * 150 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let bot = app.world().get::<Bot>(player).unwrap();
+            assert_eq!(bot.failed, 0, "{what}: {:?}", bot.log);
+        };
+        let route = |app: &App, to: Vec2, within: f32| {
+            let pos = app.world().get::<Transform>(player).unwrap().translation;
+            crate::sim::raider::indoor_route(&plan, pos, to, within)
+                .unwrap_or_else(|| panic!("no route from {pos:?} to {to:?}"))
+        };
+        let mut switches: Vec<(usize, Entity, Vec3)> = app
+            .world_mut()
+            .query::<(Entity, &PowerSwitch, &GlobalTransform)>()
+            .iter(app.world())
+            .filter(|(_, sw, _)| sw.site == plan.entity)
+            .map(|(e, sw, g)| (sw.stage, e, g.translation()))
+            .collect();
+        switches.sort_by_key(|s| s.0);
+        assert_eq!(switches.len(), 3, "three stages");
+        for (stage, switch, at) in switches {
+            let mut tasks = route(&app, plan.to_local(at).xz(), 0.5);
+            tasks.push(Task::Press(switch));
+            tasks.push(Task::Wait(1.0));
+            run(&mut app, tasks, "to a switch");
+            assert!(
+                app.world().get::<SitePower>(plan.entity).unwrap().on(stage),
+                "stage {stage} on"
+            );
+        }
+        let at = app
+            .world()
+            .get::<GlobalTransform>(ledger)
+            .unwrap()
+            .translation();
+        let mut tasks = route(&app, plan.to_local(at).xz(), 0.3);
+        tasks.push(Task::Grab {
+            item: ledger,
+            side: Side::Right,
+        });
+        tasks.push(Task::Wait(0.5));
+        tasks.push(Task::Stow(Side::Right));
+        tasks.push(Task::Wait(0.5));
+        run(&mut app, tasks, "to the ledger");
+        assert_eq!(
+            app.world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(ledger)
+                .map(|c| c.0),
+            Some(player),
+            "the ledger on you"
+        );
+        let mut out = Vec::new();
+        let tasks = route(&app, exit, 0.6);
+        app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+        for _ in 0..90 * 150 {
+            app.update();
+            out.extend(
+                app.world()
+                    .resource::<Messages<CarriedOutOfDepot>>()
+                    .iter_current_update_messages()
+                    .map(|m| m.item),
+            );
+            if app.world().get::<Bot>(player).unwrap().done() {
+                break;
+            }
+        }
+        for _ in 0..10 {
+            app.update();
+            out.extend(
+                app.world()
+                    .resource::<Messages<CarriedOutOfDepot>>()
+                    .iter_current_update_messages()
+                    .map(|m| m.item),
+            );
+        }
+        let at = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(
+            plan.to_local(at).xz().distance(exit) < 1.2,
+            "out by the hatch: {at:?}"
+        );
+        assert!(out.contains(&ledger), "carried the ledger out: {out:?}");
     }
 
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
