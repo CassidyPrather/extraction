@@ -5,7 +5,7 @@ use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 
 use super::search::{Searching, plan_search};
-use super::{Awareness, Brain, Job, JobKind};
+use super::{Awareness, Brain, Job, JobKind, Robot};
 use crate::rig::{LocalPlayer, RigInput};
 use crate::world::Zone;
 
@@ -1322,4 +1322,68 @@ fn experiment_crouched_shooter_at_40m() {
         found += seen as u32;
     }
     eprintln!("FOUND {found} of {tried}");
+}
+
+/// A night visit: the response queued near the cabin is dropped, and when
+/// it's due two walkers set off from the Gate to look inside, behind the
+/// door they were sent to.
+#[test]
+fn a_night_visit_sends_two_walkers_to_the_door() {
+    use super::director::{Director, NightVisit};
+    let (mut app, _, _) = app(None);
+    app.update();
+    let ent = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .iter()
+        .find(|e| {
+            app.world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| b.prefab == "house_plank")
+        })
+        .expect("a house door");
+    {
+        let mut d = app.world_mut().resource_mut::<Director>();
+        d.enabled = true;
+        d.next_job = 1e9;
+        d.next_logistics = 1e9;
+        d.response_cooldown = 1e9;
+        d.queue_response(30.0, ent.mid + ent.out * 20.0);
+        d.queue_response(30.0, ent.mid + Vec3::X * 400.0);
+    }
+    app.world_mut().write_message(NightVisit {
+        door: ent.door,
+        at: ent.mid - ent.out * 3.0,
+        delay: 1.0,
+    });
+    for _ in 0..90 * 2 {
+        app.update();
+    }
+    let d = app.world().resource::<Director>();
+    assert_eq!(
+        d.responses.len(),
+        1,
+        "the near one dropped: {:?}",
+        d.responses
+    );
+    let inside = ent.mid - ent.out * 2.0;
+    let visitors: Vec<_> = app
+        .world_mut()
+        .query::<(&Robot, &Brain, &Job)>()
+        .iter(app.world())
+        .filter(|(r, _, j)| {
+            r.kind == super::RobotKind::Walker
+                && j.kind == JobKind::Response
+                && j.site.distance(inside) < 0.1
+        })
+        .map(|(_, b, _)| b.clone())
+        .collect();
+    assert_eq!(visitors.len(), 2, "{visitors:?}");
+    for b in visitors {
+        assert!(
+            matches!(b, Brain::Investigate { at, .. } if at.distance(inside) < 0.1),
+            "looking inside: {b:?}"
+        );
+    }
 }
