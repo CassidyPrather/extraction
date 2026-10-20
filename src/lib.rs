@@ -39,6 +39,7 @@ pub mod tour;
 #[cfg(test)]
 mod vr_harness;
 pub mod weapons;
+pub mod wildlife;
 pub mod world;
 
 use avian3d::prelude::*;
@@ -91,7 +92,8 @@ impl Plugin for GamePlugin {
                 robot_voice::VoicePlugin,
             ),
         ))
-        .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
+        .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
+        .add_plugins(wildlife::WildlifePlugin);
     }
 }
 
@@ -120,6 +122,7 @@ impl Plugin for ClientPlugin {
         .add_plugins(capture::CapturePlugin)
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .add_plugins(destruction::visuals::DestructionVisualsPlugin)
+        .add_plugins(wildlife::WildlifeVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
