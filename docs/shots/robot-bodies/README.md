@@ -10,6 +10,7 @@ software renderer is.
 | `walk.png` | A walker crossing the road: diagonal pairs stepping, the orb bobbing and leaning | 0.1 s |
 | `drone_bank.png` | A drone flying a figure of eight: banking through the turns, nose leading | 0.2 s |
 | `crawler_walk.png` | A crawler (the walker body at 0.6, for low ceilings underground) crossing: the same gait at its own scale | 0.13 s |
+| `hound_run.png` | The hound's body (no mind yet, nothing spawns it): turning as it sets off and trotting across at nearly 4 m/s in diagonal pairs | 0.1 s |
 | `crawler_zap.png` | A crawler's spark gun: the blue charge glow and crackle for half a second, then the arc | 0.1 s |
 | `shell_marks.png` | Rounds into a walker's front: its low armour plate takes them (sparks, marks) until it comes off, then the core behind scorches; the eye stutters when it's hit | 0.33 s |
 | `eyes_by_hour.png` | Day, dusk and night (`--hour`): three walkers calm, suspicious and seeing you (left to right) and a drone; eyes glow by mood, more so the darker it is, and shells dim their own glow with the light | still |

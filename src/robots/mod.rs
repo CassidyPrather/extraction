@@ -20,6 +20,7 @@ pub mod drone;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod hound;
 pub mod indoor;
 #[cfg(test)]
 mod mind_tests;
@@ -242,6 +243,7 @@ impl Plugin for RobotsPlugin {
                 flight::FlightPlugin,
                 wreck::WreckPlugin,
                 armour::ArmourPlugin,
+                hound::HoundPlugin,
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
