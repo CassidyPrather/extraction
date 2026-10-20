@@ -18,6 +18,7 @@ pub mod artifacts;
 pub mod costs;
 pub mod detector;
 pub mod harvest;
+pub mod hush;
 pub mod mirrors;
 pub mod offering;
 pub mod scenarios;
@@ -164,6 +165,7 @@ impl Plugin for AnomalyPlugin {
             .add_message::<harvest::Burned>()
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
+            .init_resource::<hush::Hushes>()
             .add_observer(surge::remember_size)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
@@ -176,6 +178,7 @@ impl Plugin for AnomalyPlugin {
                     // The anomalies themselves.
                     (
                         surge::stir,
+                        hush::gather,
                         // Before anything can blink or fling what was thrown.
                         detector::reveal,
                         costs::feathers_wake_lifts,
@@ -193,6 +196,7 @@ impl Plugin for AnomalyPlugin {
                         detector::detectors,
                         costs::bites,
                         harvest::heat,
+                        hush::press,
                         measure_attention,
                         spend_attention,
                         age_blooms,
@@ -624,25 +628,33 @@ fn snares(
 
 /// Attention per player: the artifacts they carry, and the noise they make.
 fn measure_attention(
-    mut players: Query<(Entity, &mut Attention)>,
+    mut players: Query<(Entity, &mut Attention, &GlobalTransform)>,
     carried: Query<(&Item, &artifacts::CarriedBy), Without<artifacts::Shielded>>,
     catalog: Res<Catalog>,
+    hushes: Res<hush::Hushes>,
     mut noises: MessageReader<Noise>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let mut loud: Vec<(Entity, f32)> = Vec::new();
     for n in noises.read() {
-        if let Some(s) = n.source {
+        if let Some(s) = n.source
+            && !hushes.eats(n.at)
+        {
             loud.push((s, n.radius));
         }
     }
-    for (p, mut att) in &mut players {
-        att.carried = carried
-            .iter()
-            .filter(|(_, c)| c.0 == p)
-            .map(|(i, _)| catalog.get(i.kind()).attention)
-            .sum();
+    for (p, mut att, gt) in &mut players {
+        // Stood in a Hush, the Zone can't hear your stones.
+        att.carried = if hushes.in_standing(gt.translation() + Vec3::Y * 1.0) {
+            0.0
+        } else {
+            carried
+                .iter()
+                .filter(|(_, c)| c.0 == p)
+                .map(|(i, _)| catalog.get(i.kind()).attention)
+                .sum()
+        };
         // Noise attention halves every half minute. It is a small share:
         // gunfire already gets a team sent where it was heard
         // (`director::hear_reports`), and a big share here turned every

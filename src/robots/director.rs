@@ -103,8 +103,13 @@ fn hear_reports(
     mut noises: MessageReader<Noise>,
     mut director: ResMut<Director>,
     players: Query<(), With<crate::player::Player>>,
+    hushes: Option<Res<crate::anomaly::hush::Hushes>>,
 ) {
     for n in noises.read() {
+        // Nothing made in a Hush is heard (`anomaly::hush`).
+        if hushes.as_ref().is_some_and(|h| h.eats(n.at)) {
+            continue;
+        }
         let by_player = n.source.is_some_and(|s| players.contains(s));
         if by_player && n.radius > 150.0 && director.response_cooldown <= 0.0 {
             let delay = director.rng.range(35.0, 70.0);

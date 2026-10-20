@@ -15,7 +15,7 @@ import json
 import os
 import sys
 
-KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror"}
+KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror", "Hush"}
 # Deaths in anomalies per deliberate dive: some, never most.
 MAX_DEATHS_PER_DIVE = 0.2
 # Stones brought out per deliberate dive.

@@ -117,6 +117,7 @@ pub fn stone_height(kind: AnomalyKind) -> f32 {
         AnomalyKind::Mirror => super::mirrors::MIRROR_HEIGHT,
         AnomalyKind::Well => 0.3,
         AnomalyKind::Burner => 0.3,
+        AnomalyKind::Hush => 0.3,
     }
 }
 

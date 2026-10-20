@@ -26,7 +26,7 @@ impl Plugin for EpiloguePlugin {
                 Update,
                 (begin, plan_depot, walk, release, at_the_bay, home).chain(),
             )
-            .add_systems(Update, (tell_progression, crates_stay_open));
+            .add_systems(Update, crates_stay_open);
     }
 }
 
@@ -382,16 +382,6 @@ fn release(
     }
 }
 
-/// Progression's copy of it (the jobs and career page change once he's
-/// been in).
-fn tell_progression(epi: Res<Epilogue>, p: Option<ResMut<crate::progression::Epilogue>>) {
-    if let Some(mut p) = p
-        && p.0 != epi.done
-    {
-        p.0 = epi.done;
-    }
-}
-
 /// Once released, always: on later raids the Depot's crates stand open.
 fn crates_stay_open(
     epi: Res<Epilogue>,
@@ -709,10 +699,6 @@ mod tests {
         assert!(lev(&mut app).is_none(), "he's back in the cab");
         assert!(!app.world().resource::<Epilogue>().active());
         assert!(app.world().resource::<Epilogue>().done);
-        assert!(
-            app.world().resource::<crate::progression::Epilogue>().0,
-            "Progression knows"
-        );
         assert_eq!(
             app.world()
                 .resource::<super::super::logbook::Logbook>()
