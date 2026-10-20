@@ -271,6 +271,90 @@ fn lay_straps(
 }
 
 #[cfg(test)]
+mod vr_tests {
+    use crate::interact::{GripRole, InSocket, Socket, SocketKind};
+    use crate::rig::Side;
+    use crate::vr_harness::Vr;
+    use avian3d::prelude::RigidBody;
+    use bevy::prelude::*;
+    use extraction_core::inventory::SlotKind;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Let go of a rifle at your shoulder and it's slung there; reach over
+    /// that shoulder and grip, and it's back in your hand.
+    #[test]
+    fn a_rifle_let_go_at_the_shoulder_is_slung_and_comes_back() {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        let at = feet + Vec3::new(0.2, 1.2, -0.4);
+        let gun = vr.spawn("ak74", Transform::from_translation(at));
+        vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+        let grip = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(gun)
+            .insert(RigidBody::Dynamic);
+        vr.step(10);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        // The right shoulder, from the torso.
+        let shoulder = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&GlobalTransform, &crate::interact::body::Torso)>();
+            let (t, _) = q.iter(vr.app.world()).next().expect("a torso");
+            t.transform_point(crate::interact::body::SHOULDER)
+        };
+        // Up to the front of the shoulder, and open the hand.
+        let from = vr.hand_state(Side::Right).world.translation;
+        let to = shoulder + Vec3::new(0.0, 0.05, -0.12);
+        for i in 1..=20 {
+            vr.move_hand(Side::Right, from.lerp(to, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(5);
+        let slot = vr
+            .app
+            .world()
+            .get::<InSocket>(gun)
+            .and_then(|s| vr.app.world().get::<Socket>(s.socket))
+            .map(|s| s.kind.clone());
+        assert_eq!(slot, Some(SocketKind::Body(SlotKind::Sling)), "slung");
+        // Away, then back over the shoulder for it.
+        vr.move_hand(Side::Right, feet + Vec3::new(0.3, 1.0, -0.3));
+        vr.step(10);
+        assert!(
+            vr.app
+                .world()
+                .get::<crate::interact::ReachZone>(gun)
+                .is_some(),
+            "a slung gun can be reached for"
+        );
+        let over = shoulder + Vec3::new(0.0, 0.06, 0.05);
+        vr.move_hand(Side::Right, over);
+        vr.step(4);
+        vr.grip(Side::Right, 1.0);
+        vr.step(5);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(gun),
+            "back in hand"
+        );
+        assert!(vr.app.world().get::<InSocket>(gun).is_none());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
