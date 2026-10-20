@@ -144,13 +144,29 @@ grown somewhere new.
 ### The stones (artifacts)
 
 "Bright stones", to the people who stayed; "field-active material" to the
-Authority. They grow where the ground is wrong (the Hollow, the quarry,
-the slag heaps, the ash pit) and are gone at the next Surge if no one
-takes them. Each does something odd and useful while carried
-(featherstone, hearth, glass eye, aegis are scavengers' names). Each also
-**hums**, and the machines hear it. "If you hear the hum, you're carrying
-too many of the bright stones. Put some down." A lead-lined case quiets
-them.
+Authority. Each kind of wrong ground grows its own, and they are gone at
+the next Surge if no one takes them. The scavengers' names: a lift grows
+a **featherstone**, a burner a **hearth**, a snare an **aegis knot**, a
+well a **lodestone**, a mirror a **mirror shard**. A **glass eye** turns
+up anywhere, rarely. Rarest is the **stormglass**, which grows only where
+the Surge itself breaks the ground, about one a Surge, in its last
+minutes.
+
+Each does something odd and useful while carried, and each costs you
+something in the body:
+
+| Stone | What it asks of you | How it's got out (what they call it) |
+| - | - | - |
+| Featherstone | It wants home: lifts you pass wind up and pop | "Let it throw": it rides the column until something winds the lift up and it flings the stone |
+| Hearth | Runs you hot; your wind comes back slowly | "Wait for the coals": too hot to hold until it cools or is quenched |
+| Aegis knot | Holds a charge and bites when wet | "Earth it first": safe only once something metal has drawn the charge |
+| Lodestone | Far heavier on you than in the hand | "Go to the heart": it hangs at the crushing middle of the well |
+| Mirror shard | Its reflection runs late, and glints where anything can see | "Catch the fold": reachable as the mirror closes after something's gone through |
+| Stormglass | The Surge passes over you as if under a roof; the whole Zone knows where it is | Taken from the Surge's own ground, in its last minutes |
+
+Each also **hums**, and the machines hear it. "If you hear the hum,
+you're carrying too many of the bright stones. Put some down." A
+lead-lined case quiets the hum, the cost and the gift together.
 
 ### The offering places
 
@@ -159,6 +175,16 @@ the burnt chapel. They take what's left in them and, once in a while,
 answer: a calm hour, a whisper of where a stone lies, the Surge held off.
 Nobody in the notes claims to know why. The pump keeper thinks the well
 was like this before the Lift, just slower.
+
+Most take any stone alike. A few answer one stone in their own way
+(`src/anomaly/offering.rs`):
+
+| Place | Stone | Answer |
+| - | - | - |
+| The well (Marrow) | Stormglass | The Surge held off far longer: "the well drinks the storm" |
+| The cairn (Kettle) | Lodestone | Refused: the stone rolls back out at your feet |
+| The burnt chapel (Cinder) | Hearth | Taken gladly: a calm hour, the machines slow |
+| The chapel font (Kettle) | Mirror shard | A whisper: where the nearest stone lies |
 
 ### The driver
 
