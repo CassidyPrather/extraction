@@ -13,6 +13,7 @@ pub mod puddles;
 pub mod rain;
 pub mod rocks;
 pub mod scenes;
+pub mod shafts;
 pub mod sky;
 pub mod story;
 pub mod structures;
@@ -225,6 +226,7 @@ impl Plugin for WorldVisualsPlugin {
             rocks::RockVisualsPlugin,
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
+            shafts::ShaftsPlugin,
         ));
     }
 }
