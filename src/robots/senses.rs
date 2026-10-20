@@ -345,6 +345,7 @@ pub(crate) fn perceive(
         Has<Stunned>,
         Option<&super::indoor::LocalNav>,
         Option<&MotionSight>,
+        Has<super::indoor::Dormant>,
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
@@ -478,9 +479,11 @@ pub(crate) fn perceive(
         .map(|e| e.mid)
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
-    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion) in &mut robots {
+    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant) in &mut robots {
         aware.news = false;
-        if robot.wrecked {
+        // Asleep: only a loud noise reaches it (`indoor::wake_residents`).
+        if robot.wrecked || dormant {
+            aware.can_see_target = false;
             continue;
         }
         if stunned {

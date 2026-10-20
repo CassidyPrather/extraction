@@ -1369,6 +1369,8 @@ pub fn register_residents(
                 patrol,
                 spawn,
                 crawlers,
+                heavy: 0,
+                dormant: false,
             });
         }
     }
