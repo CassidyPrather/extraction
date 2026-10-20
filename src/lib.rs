@@ -12,6 +12,7 @@ pub mod audio_score;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
+pub mod capture;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -103,6 +104,7 @@ impl Plugin for ClientPlugin {
             gadgets::visuals::GadgetVisualsPlugin,
             models::ModelsPlugin,
         ))
+        .add_plugins(capture::CapturePlugin)
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
