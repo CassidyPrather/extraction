@@ -204,6 +204,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
+| `art/kit/rig.py` | `models/kit/rig.glb` (harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
 ## Conventions
 
@@ -253,6 +254,17 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   (`pointing_index_ends_on_the_poke_fingertip`). `Glove`, `Leather` and
   `Padding` are per-glove copies, tinted while the hand is in reach of
   something. `--gallery fp:open|point|<item id>` shows them first-person.
+- **Worn kit.** `rig.glb` lays the rig out as worn, in torso space
+  (`interact::body`: origin mid-chest under the neck): `harness` (chest
+  panel, shoulder straps, belt) hangs on the torso, and `holster`,
+  `pouch`, `pocket`, `mount` and their `<kind>_flap_closed` sit at one
+  slot of their kind; the game hangs each slot piece's mesh on every slot
+  of its kind (`render::kit`), so the mesh is in slot space and the node's
+  place is only for the art checks. `rig_open.glb` has the open flaps,
+  shown while a slot holds something. The pack's `pack_lid_closed` /
+  `pack_lid_open` follow `Backpack::open`. Slot positions, seats and snap
+  radii are gameplay and the models are built round them. `--gallery kit`
+  fills the slots (`kit+pack` also opens the pack).
 - **Items.** `models/items/<item id>.glb` (magazines stay in
   `models/mags/`) is in item space: origin at the centre of the item's
   `dims` box from `items.ron` (a cube of side cbrt(bulk / 1000) without
