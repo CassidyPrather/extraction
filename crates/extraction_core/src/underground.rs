@@ -402,6 +402,8 @@ pub struct Raster {
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
     pub doors: Vec<DoorSpot>,
+    /// Where every corridor meets a room, door or not (kept clear of props).
+    pub mouths: Vec<DoorSpot>,
     /// Each link's corridor legs as rectangles (lo, hi).
     pub legs: Vec<Vec<(P2, P2)>>,
 }
@@ -447,6 +449,7 @@ impl Raster {
             stairs,
             portals: l.portals.clone(),
             doors: Vec::new(),
+            mouths: Vec::new(),
             legs: Vec::new(),
         };
         let room_ix: HashMap<&str, usize> = l
@@ -481,17 +484,19 @@ impl Raster {
                 r.fill(*lo, *hi, Cell::Hall(k as u16), l.corridor_height);
             }
             r.legs.push(legs);
-            let mut door = |room: &Room, outer: P2, inner: P2| {
+            let n = pts.len();
+            let from_door = matches!(link.doors, Doors::From | Doors::Both);
+            let to_door = matches!(link.doors, Doors::To | Doors::Both);
+            for (room, outer, inner, door) in [
+                (&l.rooms[a], pts[1], pts[0], from_door),
+                (&l.rooms[b], pts[n - 2], pts[n - 1], to_door),
+            ] {
                 if let Some(d) = r.mouth(room, outer, inner, link.width) {
-                    r.doors.push(d);
+                    r.mouths.push(d);
+                    if door {
+                        r.doors.push(d);
+                    }
                 }
-            };
-            if matches!(link.doors, Doors::From | Doors::Both) {
-                door(&l.rooms[a], pts[1], pts[0]);
-            }
-            if matches!(link.doors, Doors::To | Doors::Both) {
-                let n = pts.len();
-                door(&l.rooms[b], pts[n - 2], pts[n - 1]);
             }
         }
         for (k, room) in l.rooms.iter().enumerate() {
@@ -771,6 +776,24 @@ pub fn check(l: &Layout) -> Vec<String> {
                     "{}: a {:?} in the rock at {at:?}",
                     room.id, prop.kind
                 ));
+            }
+            // Clear of every corridor's mouth and every stair's foot.
+            let feet = r.stairs.iter().zip(&r.portals).map(|(s, p)| DoorSpot {
+                at: p.to_site([0.0, s.foot]),
+                along: turn([1.0, 0.0], p.rot),
+                width: 2.0 * STAIR_HALF,
+                y: l.floor,
+            });
+            for m in r.mouths.iter().copied().chain(feet) {
+                let off = sub(at, m.at);
+                let along = off[0] * m.along[0] + off[1] * m.along[1];
+                let across = off[0] * m.along[1] - off[1] * m.along[0];
+                if along.abs() < m.width * 0.5 + 0.5 && across.abs() < 1.2 {
+                    bad.push(format!(
+                        "{}: a {:?} at {at:?} in the way of a doorway at {:?}",
+                        room.id, prop.kind, m.at
+                    ));
+                }
             }
         }
     }

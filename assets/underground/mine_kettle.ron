@@ -7,8 +7,8 @@
     corridor_height: 2.3,
     rooms: [
         (id: "station", at: (0.0, 10.0), size: (5.0, 4.0), height: 2.8, lamp: Flicker, props: [
-            (kind: Cart, at: (-1.6, 0.6)),
-            (kind: Barrel, at: (2.0, 1.4)),
+            (kind: Cart, at: (1.6, 1.0)),
+            (kind: Barrel, at: (2.1, -1.4)),
         ]),
         (id: "lamp_room", at: (-7.0, 10.0), size: (5.0, 4.0), height: 2.5, lamp: Steady, props: [
             (kind: Shelf, at: (-2.1, 0.0), rot: 270.0, loot: Some("tools")),
@@ -38,13 +38,13 @@
             (kind: Machine, at: (-1.5, 1.0)),
             (kind: Barrel, at: (2.3, -1.8)),
             (kind: Barrel, at: (2.3, -1.15)),
-            (kind: Workbench, at: (1.0, 1.7), rot: 180.0, loot: Some("workshop")),
+            (kind: Workbench, at: (1.5, -2.05), rot: 180.0, loot: Some("workshop")),
         ]),
         (id: "refuge", at: (-6.0, 40.0), size: (5.0, 4.0), height: 2.4, lamp: Steady, props: [
-            (kind: Bunk, at: (-1.5, 0.0)),
-            (kind: Cabinet, at: (2.2, 0.8), rot: 90.0),
-            (kind: Shelf, at: (0.6, 1.65), rot: 180.0, loot: Some("medical")),
-            (kind: SmallCrate, at: (1.6, -1.4), loot: Some("food_common")),
+            (kind: Bunk, at: (-1.0, -1.45), rot: 90.0),
+            (kind: Cabinet, at: (1.4, -1.75)),
+            (kind: Shelf, at: (-1.6, 1.75), rot: 180.0, loot: Some("medical")),
+            (kind: SmallCrate, at: (1.6, 1.4), loot: Some("food_common")),
         ]),
         (id: "raise_foot", at: (0.0, 48.0), size: (3.0, 3.0), height: 2.4),
     ],
@@ -63,6 +63,6 @@
     ],
     portals: [
         (),
-        (at: (0.0, 57.5), rot: 180.0, y: 0.4),
+        (at: (0.0, 58.0), rot: 180.0, y: 0.4),
     ],
 )

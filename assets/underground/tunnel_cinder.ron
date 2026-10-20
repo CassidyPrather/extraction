@@ -19,13 +19,13 @@
         ]),
         (id: "valve_chamber", at: (-10.0, 34.0), size: (6.0, 5.0), height: 3.0, lamp: Flicker, props: [
             (kind: Machine, at: (-1.2, 0.8)),
-            (kind: Cabinet, at: (2.65, -1.2), rot: 90.0),
+            (kind: Cabinet, at: (-2.65, 1.5), rot: 270.0),
         ]),
         (id: "tunnel_b", at: (4.0, 34.0), size: (20.0, 3.0), height: 2.8),
         (id: "switch_room", at: (10.0, 22.0), size: (6.0, 6.0), height: 2.6, lamp: Flicker, props: [
-            (kind: Cabinet, at: (2.65, -1.5), rot: 90.0),
-            (kind: Cabinet, at: (2.65, 0.0), rot: 90.0),
-            (kind: Cabinet, at: (2.65, 1.5), rot: 90.0),
+            (kind: Cabinet, at: (0.2, 2.65), rot: 180.0),
+            (kind: Cabinet, at: (1.2, 2.65), rot: 180.0),
+            (kind: Cabinet, at: (2.2, 2.65), rot: 180.0),
             (kind: Table, at: (-0.8, 1.6), loot: Some("gadgets")),
             (kind: Chair, at: (-0.8, 0.85)),
         ]),
@@ -44,7 +44,7 @@
         (id: "workshop", at: (18.0, 34.0), size: (6.0, 6.0), height: 2.6, lamp: Steady, props: [
             (kind: Workbench, at: (2.2, 0.0), rot: 90.0, loot: Some("workshop")),
             (kind: Locker, at: (-0.8, 2.65), rot: 180.0),
-            (kind: Shelf, at: (0.8, -2.6), loot: Some("medical")),
+            (kind: Shelf, at: (-1.8, -2.6), loot: Some("medical")),
         ]),
         // The overflow chamber: the deepest, wettest, most dangerous.
         (id: "overflow", at: (18.0, 22.0), size: (6.0, 6.0), height: 3.2, props: [

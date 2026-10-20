@@ -27,7 +27,7 @@
             (kind: Bunk, at: (-3.3, 1.6)),
             (kind: Bunk, at: (-1.6, 2.3), rot: 90.0),
             (kind: SmallCrate, at: (2.8, 2.4), loot: Some("house")),
-            (kind: Locker, at: (3.65, 0.6), rot: 90.0),
+            (kind: Locker, at: (3.65, -2.3), rot: 90.0),
             (kind: Rubble, at: (1.0, -1.8)),
         ]),
         (id: "mess", at: (5.0, 31.0), size: (6.0, 6.0), props: [
@@ -40,13 +40,13 @@
         (id: "plant", at: (-12.0, 24.0), size: (6.0, 7.0), height: 3.0, lamp: Steady, props: [
             (kind: Machine, at: (-1.5, -1.8)),
             (kind: Machine, at: (-1.5, 1.6)),
-            (kind: Workbench, at: (2.3, 0.0), rot: 90.0, loot: Some("tools")),
+            (kind: Workbench, at: (2.2, -2.3), rot: 90.0, loot: Some("tools")),
         ]),
         (id: "generator", at: (-12.0, 31.0), size: (5.0, 5.0), height: 3.0, props: [
             (kind: Machine, at: (-0.9, 0.6)),
-            (kind: Barrel, at: (1.7, -1.7)),
-            (kind: Barrel, at: (1.7, -1.05)),
-            (kind: Shelf, at: (1.95, 1.0), rot: 90.0, loot: Some("workshop")),
+            (kind: Barrel, at: (-2.0, -1.0)),
+            (kind: Barrel, at: (1.9, -1.9)),
+            (kind: Shelf, at: (1.0, 2.1), rot: 180.0, loot: Some("workshop")),
         ]),
         (id: "command", at: (12.0, 24.0), size: (6.0, 6.0), lamp: Flicker, props: [
             (kind: Table, at: (0.0, -0.4), loot: Some("gadgets")),
@@ -63,7 +63,7 @@
         ]),
         (id: "medical", at: (0.0, 39.0), size: (5.0, 4.0), props: [
             (kind: Bunk, at: (-1.5, 0.2)),
-            (kind: Shelf, at: (0.6, 1.75), rot: 180.0, loot: Some("medical")),
+            (kind: Shelf, at: (1.7, 1.75), rot: 180.0, loot: Some("medical")),
             (kind: Table, at: (1.1, -0.9), loot: Some("medical")),
         ]),
         // The way out that isn't the way in.

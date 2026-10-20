@@ -172,8 +172,8 @@ fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     let extent = (n - 1) as f32 * hm.cell;
     let centre = hm.origin + extent * 0.5;
     // Cells opened over underground stairwells (`underground`) are left
-    // out; parry's cell (i, j) is between rows i, i+1 (x) and columns j,
-    // j+1 (z).
+    // out. Parry's rows run along Z (see above): its cell (row, column) is
+    // the heightmap's (j, i).
     let mut collider = Collider::heightfield(heights, Vec3::new(extent, 1.0, extent));
     if hm.holes.iter().any(|h| *h) {
         let mut shape = collider.shape().clone();
@@ -182,8 +182,8 @@ fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
                 for i in 0..n - 1 {
                     if hm.holes[hm.idx(i, j)] {
                         hf.set_cell_status(
-                            i,
                             j,
+                            i,
                             avian3d::parry::shape::HeightFieldCellStatus::CELL_REMOVED,
                         );
                     }

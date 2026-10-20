@@ -237,6 +237,9 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                 };
                 let a = s0 as f32 * cell - end(s0.checked_sub(1));
                 let c = s as f32 * cell + end((s < len).then_some(s));
+                if c - a < 0.01 {
+                    continue;
+                }
                 let (lo, hi) = (band.0 as f32 / 100.0, band.1 as f32 / 100.0);
                 let line = t as f32 * cell;
                 // The wall's band: on the rock side of the line.
@@ -682,6 +685,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
             continue;
         }
         let y = r.floor + room.height;
+        let from = b.geo.pieces.len();
         b.piece(
             Shape::Box(Vec3::new(0.32, 0.12, 0.18)),
             Transform::from_xyz(room.at[0], y - 0.06, room.at[1]),
@@ -693,6 +697,13 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
             Transform::from_xyz(room.at[0], y - 0.145, room.at[1]),
             Mat::Glass,
             false,
+        );
+        b.dress(
+            from,
+            vec![(
+                "bulkhead_lamp",
+                Transform::from_xyz(room.at[0], y, room.at[1]),
+            )],
         );
     }
 }
@@ -788,6 +799,7 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
             }
         }
         PropKind::Cart => {
+            let from = b.geo.pieces.len();
             b.piece(
                 Shape::Box(Vec3::new(0.9, 0.7, 1.4)),
                 Transform::from_translation(at + Vec3::Y * 0.6).with_rotation(rot),
@@ -803,11 +815,19 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                     false,
                 );
             }
+            b.dress(
+                from,
+                vec![(
+                    "mine_tub",
+                    Transform::from_translation(at).with_rotation(rot),
+                )],
+            );
             if let Some(t) = loot {
                 b.loot(at + Vec3::Y * 1.0, t);
             }
         }
         PropKind::Machine => {
+            let from = b.geo.pieces.len();
             b.piece(
                 Shape::Box(Vec3::new(1.4, 1.6, 1.0)),
                 Transform::from_translation(at + Vec3::Y * 0.8).with_rotation(rot),
@@ -827,16 +847,31 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                 Mat::DarkMetal,
                 false,
             );
+            b.dress(
+                from,
+                vec![(
+                    "filter_unit",
+                    Transform::from_translation(at).with_rotation(rot),
+                )],
+            );
             if let Some(t) = loot {
                 b.loot(at + Vec3::Y * 1.65, t);
             }
         }
         PropKind::Cabinet => {
+            let from = b.geo.pieces.len();
             b.piece(
                 Shape::Box(Vec3::new(0.8, 1.4, 0.4)),
                 Transform::from_translation(at + Vec3::Y * 0.7).with_rotation(rot),
                 Mat::PaintedMetal,
                 true,
+            );
+            b.dress(
+                from,
+                vec![(
+                    "switch_cabinet",
+                    Transform::from_translation(at).with_rotation(rot),
+                )],
             );
             if let Some(t) = loot {
                 b.loot(at + Vec3::Y * 1.45, t);
@@ -1259,6 +1294,57 @@ mod tests {
         }
     }
 
+    /// Down every stairwell, inside its kiosk, a ray from above meets the
+    /// steps, not the ground (the heightfield's cells are open there).
+    #[test]
+    fn the_ground_is_open_over_the_stairs() {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let mut app = app(map);
+            for (site, xf) in sites_on(&app) {
+                let r = ug::raster(&site.id).unwrap();
+                let probes: Vec<(Vec3, f32)> = r
+                    .portals
+                    .iter()
+                    .zip(&r.stairs)
+                    .flat_map(|(p, s)| {
+                        [0.5f32, 1.5, 2.5].map(|z| {
+                            let q = p.to_site([0.3, z]);
+                            (
+                                xf.transform_point(Vec3::new(q[0], p.top() + 1.5, q[1])),
+                                xf.transform_point(Vec3::new(0.0, s.floor_at(z), 0.0)).y,
+                            )
+                        })
+                    })
+                    .collect();
+                let hits: Vec<(Vec3, f32, Option<f32>)> = app
+                    .world_mut()
+                    .run_system_once(move |spatial: SpatialQuery| {
+                        probes
+                            .iter()
+                            .map(|(p, want)| {
+                                let h = spatial.cast_ray(
+                                    *p,
+                                    Dir3::NEG_Y,
+                                    20.0,
+                                    true,
+                                    &SpatialQueryFilter::default(),
+                                );
+                                (*p, *want, h.map(|h| p.y - h.distance))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap();
+                for (p, want, got) in hits {
+                    let got = got.expect("something under the stair");
+                    assert!(
+                        (got - want).abs() < 0.3,
+                        "{map}: over the stair at {p:?} the ray stops at {got:.2}, the tread is at {want:.2}"
+                    );
+                }
+            }
+        }
+    }
+
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
     /// in the site, and out by the other way (the exit kiosk).
     #[test]
@@ -1326,10 +1412,26 @@ mod tests {
                 .map(|s| plan.to_local(*s).xz())
                 .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
                 .unwrap();
-            let mut walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
+            if std::env::var_os("SITE_DUMP").is_some() {
+                crate::sim::indoor::dump_plans(
+                    std::slice::from_ref(&plan),
+                    &spots,
+                    &crate::asset_root_path()
+                        .join("../target/site_plans")
+                        .join(map),
+                );
+            }
+            let walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
                 let pos = app.world().get::<Transform>(player).unwrap().translation;
                 let tasks = crate::sim::raider::indoor_route(&plan, pos, to, within)
-                    .unwrap_or_else(|| panic!("{map}: no route {what}"));
+                    .unwrap_or_else(|| {
+                        let a = plan.to_local(pos).xz();
+                        panic!(
+                            "{map}: no route {what} from {a:?} (walkable {}) to {to:?}: reach {:?}",
+                            plan.grid.walkable(a.to_array()),
+                            crate::sim::raider::reach_cell(&plan, a, to)
+                        )
+                    });
                 app.world_mut().entity_mut(player).insert(Bot::new(tasks));
                 for _ in 0..90 * 120 {
                     app.update();
