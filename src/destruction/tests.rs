@@ -761,3 +761,44 @@ fn a_rifle_round_would_reach_through_a_plank_door_and_not_a_steel_one() {
     assert_eq!(pistol, 0, "a pistol round never does");
     assert_eq!(through_steel, 0, "nor any round a steel door");
 }
+
+#[test]
+fn a_step_in_broken_glass_crunches_and_is_heard() {
+    use super::glass::Crunch;
+    let mut app = app(None);
+    let (pane, at, out) = open_pane(&mut app);
+    let player = app
+        .world_mut()
+        .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+        .iter(app.world())
+        .next()
+        .unwrap();
+    let step = |app: &mut App, feet: Vec3| {
+        app.world_mut().write_message(crate::player::Footstep {
+            entity: player,
+            position: feet,
+            speed: 1.4,
+        });
+        app.update();
+        app.world().resource::<Messages<Crunch>>().len()
+    };
+    let p = app.world().get::<Pane>(pane).unwrap().clone();
+    // Under the pane, where its glass would fall going away from `out`.
+    let feet = at - out * 0.4 - Vec3::Y * (p.half.y + 0.9);
+    assert_eq!(step(&mut app, feet), 0, "a whole pane: nothing underfoot");
+    shoot(&mut app, at + out * 2.0, at, 700.0, 7.9, 40.0);
+    run(&mut app, 3);
+    assert!(step(&mut app, feet) > 0, "glass crunches underfoot");
+    let heard = app
+        .world()
+        .resource::<Messages<crate::robots::Noise>>()
+        .iter_current_update_messages()
+        .any(|n| n.radius == super::glass::CRUNCH_HEARD);
+    assert!(heard, "and the robots hear it");
+    // A step on the other side of the wall, where none fell: quiet.
+    run(&mut app, 3);
+    assert_eq!(
+        step(&mut app, at + out * 0.4 - Vec3::Y * (p.half.y + 0.9)),
+        0
+    );
+}

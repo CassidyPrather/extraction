@@ -1955,9 +1955,24 @@ fn door_sounds(
 fn break_sounds(
     mut commands: Commands,
     mut broke: MessageReader<crate::destruction::Broke>,
+    mut crunches: MessageReader<crate::destruction::glass::Crunch>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
+    // A step on broken glass: a short, bright grind.
+    for c in crunches.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/glass_break",
+            Some(c.at),
+            "hit.glass",
+            -12.0,
+            1.6,
+            0.15,
+        );
+    }
     for b in broke.read() {
         match b.stuff {
             crate::destruction::Stuff::Glass => {

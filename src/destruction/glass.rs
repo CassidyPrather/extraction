@@ -223,9 +223,10 @@ impl Plugin for GlassPlugin {
                     .after(crate::weapons::ballistics::fire_shots)
                     .before(crate::weapons::ballistics::fly_projectiles),
             )
+            .add_message::<Crunch>()
             .add_systems(
                 FixedUpdate,
-                (sweep_movers, blasts).in_set(super::DestructionSystems),
+                (sweep_movers, blasts, crunch).in_set(super::DestructionSystems),
             );
     }
 }
@@ -590,6 +591,55 @@ fn blasts(
                     v.normalize_or_zero() * (2.0 + 8.0 * k),
                 );
             }
+        }
+    }
+}
+
+/// A step on broken glass (for its sound).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Crunch {
+    pub at: Vec3,
+}
+
+/// How far a robot hears a step on broken glass, metres: further than a
+/// step on boards. A smashed window is an alarm you leave yourself.
+pub const CRUNCH_HEARD: f32 = 22.0;
+
+/// Whether `feet` stand in a broken pane's glass on the floor: below it,
+/// within its width and up to 0.9 m out on the side it fell.
+pub fn in_the_glass(pane: &Pane, feet: Vec3) -> bool {
+    let Some(b) = pane.broken.filter(|b| !b.weathered) else {
+        return false;
+    };
+    let l = pane.inv.transform_point3(feet);
+    let out = l.z * b.fell;
+    l.x.abs() < pane.half.x + 0.3
+        && (-0.1..0.95).contains(&out)
+        && l.y < -pane.half.y
+        && l.y > -pane.half.y - 2.2
+}
+
+/// Steps in broken glass crunch, and the robots hear it.
+fn crunch(
+    mut steps: MessageReader<crate::player::Footstep>,
+    panes: Query<&Pane>,
+    grid: Res<PaneGrid>,
+    mut out: MessageWriter<Crunch>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+) {
+    for s in steps.read() {
+        let p = s.position;
+        if grid
+            .near(p, p, 1.0)
+            .filter_map(|e| panes.get(e).ok())
+            .any(|pane| in_the_glass(pane, p))
+        {
+            out.write(Crunch { at: p });
+            noise.write(crate::robots::Noise {
+                at: p,
+                radius: CRUNCH_HEARD,
+                source: Some(s.entity),
+            });
         }
     }
 }

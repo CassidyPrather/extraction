@@ -131,6 +131,13 @@ Supply crates are part of the place, not the loot: they spawn on their own
 (`loot::spawn_supply_crates`) whether the Zone was rolled or restored, and
 the Surge rebuilds rather than adds them.
 
+## Glass underfoot
+
+A step in a broken pane's glass (below it, within its width, up to 0.9 m
+out on the side it fell) crunches (`glass::Crunch`, played by audio) and
+is heard by robots 22 m off (`CRUNCH_HEARD`), further than a step on
+boards: a window you smashed to get in is an alarm you leave yourself.
+
 ## Noise and sound
 
 Every break is a `destruction::Broke { at, stuff, size }`. Robots hear it
