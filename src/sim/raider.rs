@@ -1105,6 +1105,9 @@ fn react_to_robots(
     bot.replace(tasks);
 }
 
+/// A walker this close that isn't onto it draws a thrown distraction (m).
+const DISTRACT_RANGE: f32 = 45.0;
+
 /// Moving like a careful player near robots (`robots::senses`: crouched
 /// is harder to see, crouched footsteps carry a third as far, and crouching
 /// slows the body to a creep):
@@ -1112,9 +1115,10 @@ fn react_to_robots(
 ///   fighting it, or near where a robot is looking for someone;
 /// - **freeze** a few seconds, crouched and still, when a robot that's
 ///   onto something is investigating or searching close by;
-/// - **distract** (all but the reckless): throw junk past and to one side
-///   of a walker within 20 m that hasn't noticed it, so it walks off to look
-///   there.
+/// - **distract** (all but the reckless): when a walker within
+///   [`DISTRACT_RANGE`] is about but not onto it (at work, or looking for
+///   someone), throw junk well off to one side, so the walker turns and
+///   goes to look there instead.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
 fn sneak(
@@ -1158,10 +1162,10 @@ fn sneak(
                 freeze = true;
             }
             if seen
-                && d < 20.0
+                && d < DISTRACT_RANGE
                 && robot.kind == crate::robots::RobotKind::Walker
-                && matches!(brain, Brain::Working { .. } | Brain::Transit { .. })
-                && aware.suspicion < 0.3
+                && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+                && aware.suspicion < 0.55
             {
                 calm_walker = Some(at);
             }
@@ -1175,6 +1179,7 @@ fn sneak(
             log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
         }
     }
+    // Freezing comes first; a distraction is for when it's had its look.
     if freeze && r.clock - r.froze_at > 10.0 {
         r.froze_at = r.clock;
         let secs = r.rng.range(2.0, 4.0);
@@ -1188,17 +1193,23 @@ fn sneak(
     }
     if let Some(w) = calm_walker.filter(|_| r.traits.distract && r.clock - r.distracted_at > 60.0) {
         let Some(item) = junk(r, scene) else {
+            if r.debug {
+                log.event("distract_skip", json!({"why": "no junk"}));
+            }
             return;
         };
-        // A thrown bolt carries 15 m or so: past it if it's close, else off
-        // to one side of it, whichever side there's ground to land on.
+        // A thrown bolt carries 15 m or so: well off to one side of the
+        // line to it, so it turns and walks off that way, whichever side
+        // there's ground to land on.
         let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
-        let reach = (w.xz().distance(eye.xz()) + 6.0).min(15.0);
-        let Some(to) = [0.45f32, -0.45]
+        let Some(to) = [1.1f32, -1.1]
             .into_iter()
-            .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * reach)
+            .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * 15.0)
             .find(|p| r.grid.walkable([p.x, p.y]))
         else {
+            if r.debug {
+                log.event("distract_skip", json!({"why": "no ground"}));
+            }
             return;
         };
         r.distracted_at = r.clock;
