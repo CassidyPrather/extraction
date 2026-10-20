@@ -39,6 +39,21 @@ timed against each other (here with the bench, in the headset with the
 What lavapipe can't time: Bevy 0.19 has no GPU timestamps on the shadow
 passes. Time them as a difference (`shadows=0`).
 
+## Overdraw
+
+`render::overdraw` (in the gauges) rasterises everything an eye draws on
+the CPU at 192x192, depth test off, back faces culled where the material
+culls them, and counts layers a pixel: the fragments shaded, which is
+what fill and MSAA cost scale with. An alpha-tested card counts its
+whole polygon: a discarded fragment has still been shaded. It prints the
+mean, p95 and max, and the classes (tree cards, impostors, terrain,
+ground cover, or what a mesh belongs to) that make up the mean. It's an
+upper bound (no early depth rejection), but it ranks the classes right.
+
+Open views sit at 1-2.5 layers (terrain about 0.8, the sky 1); woods
+are where it piles up: the Marrow Creek spruce view was 16.3 (cards
+6.95, impostors 6.45), pines 9.3, Kettle Pass's quarry 7.0.
+
 ## Budget
 
 Per eye, per view (`render::budget::BUDGET`). Both eyes draw it all,
@@ -51,6 +66,8 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
+| Overdraw, mean layers a pixel | 15 | Held at the worst measured (wood views); to come down |
+| Overdraw, 95th percentile | 50 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
 
@@ -115,6 +132,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Near trunk chunks cast the sun's shadow only within 60 m (`ShadowReach`) | `world::trees` | Shadow triangles spruce 232k > 153k, pines 193k > 121k, edge 111k > 59k |
 | Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
 | Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
+| Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):

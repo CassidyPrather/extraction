@@ -101,8 +101,16 @@ impl StandIn {
         let base = self.pos.len() as u32;
         self.pos.extend_from_slice(p);
         self.nrm.extend(n);
-        self.col
-            .extend(std::iter::repeat_n(colour.to_f32_array(), p.len()));
+        // Times the mesh's own vertex colours, as its material would
+        // (a burnt valley's charred trunks).
+        let c = colour.to_f32_array();
+        match mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
+            Some(VertexAttributeValues::Float32x4(own)) if own.len() == p.len() => self.col.extend(
+                own.iter()
+                    .map(|o| [o[0] * c[0], o[1] * c[1], o[2] * c[2], o[3] * c[3]]),
+            ),
+            _ => self.col.extend(std::iter::repeat_n(c, p.len())),
+        }
         match mesh.indices() {
             Some(i) => self.idx.extend(i.iter().map(|i| base + i as u32)),
             None => self.idx.extend(base..base + p.len() as u32),
@@ -111,13 +119,7 @@ impl StandIn {
 
     /// A mesh in its own vertex colours (white where it has none).
     pub fn add_coloured(&mut self, mesh: &Mesh) {
-        let start = self.col.len();
         self.add(mesh, LinearRgba::WHITE);
-        if let Some(VertexAttributeValues::Float32x4(c)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
-            if c.len() == self.col.len() - start {
-                self.col[start..].copy_from_slice(c);
-            }
-        }
     }
 
     pub fn build(self) -> Option<Mesh> {

@@ -550,7 +550,7 @@ fn longest_gap(points: &[P2], ok: impl Fn(P2) -> bool) -> (f32, P2) {
 
 /// Whether the top of something `height` tall at `to` can be seen over
 /// the land from eye height at `from`.
-fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
+pub(crate) fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
     let d = dist(from, to);
     let eye = hm.height(from) + 1.7;
     let top = hm.height(to) + height;
@@ -576,7 +576,7 @@ fn walk_height(hm: &Heightmap, p: P2) -> f32 {
 
 /// Whether a point is inside the quarantine fence (the playable valley),
 /// by [`FENCE_MARGIN`]: a road's last metres climb the rim to the fence.
-fn inside_fence(map: &MapDef, p: P2) -> bool {
+pub(crate) fn inside_fence(map: &MapDef, p: P2) -> bool {
     let half = map.half() - map.fence_inset - FENCE_MARGIN;
     p[0].abs() <= half && p[1].abs() <= half
 }
