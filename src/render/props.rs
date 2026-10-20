@@ -14,6 +14,11 @@ use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
 
 pub struct PropVisualsPlugin;
 
+/// Where the gloves take this frame's pose (`PostUpdate`, before
+/// propagation): anything following them (the sleeves) runs after it.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct GlovePose;
+
 impl Plugin for PropVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -31,6 +36,7 @@ impl Plugin for PropVisualsPlugin {
         .add_systems(
             PostUpdate,
             pose_hands
+                .in_set(GlovePose)
                 .after(crate::rig::apply_rig_poses)
                 .before(TransformSystems::Propagate),
         )
@@ -404,9 +410,9 @@ fn body_casts_no_shadow(
 /// A gloved hand: a palm, four three-jointed fingers and a two-jointed
 /// thumb, curling to fit what they hold.
 #[derive(Component)]
-struct HandVisual {
-    hand: Entity,
-    side: Side,
+pub(crate) struct HandVisual {
+    pub(crate) hand: Entity,
+    pub(crate) side: Side,
     /// Current curl per finger (index, middle, ring, little, thumb), 0..1,
     /// eased toward the target.
     curl: [f32; 5],
@@ -717,7 +723,7 @@ const GRIP: Vec3 = Vec3::new(0.0, -0.028, -0.041);
 /// other). Its origin is the controller's grip, the middle of the fist, so
 /// the glove sits with `GRIP` there: centred on the palm, a gun's grip went
 /// through the palm and the fingers closed on air beside it.
-fn glove_frame(side: Side) -> Transform {
+pub(crate) fn glove_frame(side: Side) -> Transform {
     let roll = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2 * side.sign());
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }

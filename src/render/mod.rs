@@ -1,5 +1,6 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod arms;
 pub mod bench;
 pub mod budget;
 pub mod comfort;
@@ -50,6 +51,7 @@ impl Plugin for RenderPlugin {
             budget::BudgetPlugin,
         ))
         .init_resource::<lod::StandInMaterial>()
+        .add_plugins(arms::ArmsPlugin)
         .add_systems(Update, attach_flat_camera);
     }
 }
