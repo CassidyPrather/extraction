@@ -232,6 +232,7 @@ is what it did before.
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
 | Your kit as you move (`foley`): worn plates knocking, sling swivels, the pack's load shifting, water sloshing | `gear.plate`, `gear.swivel`, `gear.pack`, `gear.slosh` (low-passed: it's in a bottle), on a step, each louder the farther it carries (`gear_db`) and more often | — | silent |
@@ -511,11 +512,10 @@ sound, so it's heard through the head-related filter, muffled by walls
 and doors, and sent to the room's reverb. Synthesis costs nothing after
 the first time a kind says a word.
 
-**Who says what** (`VoicePlugin`, headless): today it reads the minds'
-own messages (`Noticed`, `Investigating`, `Searching`, `LostYou`,
-`CalledOut`, `PartDestroyed`), a robot's `Brain` turning to `Engage` or
-`Down`, and hits on its parts; Robot minds is adding one `MindShift`
-hook to replace those. Each turn is said exactly once (tested). The two
+**Who says what** (`VoicePlugin`, headless): it reads Robot minds'
+one hook, `robots::search::MindShift` (one per change of mind, never the
+same state twice running; its own test holds that). A robot going back
+to its rounds says so only within 70 m of someone. Each turn is said exactly once (tested). The two
 nearest robots that heard a call answer it a beat apart, and a response
 team answers as it sets out from wherever it starts. Calls and answers
 carry about 200 m in calm (`RANGE_TARGETS`), so a call answered far off
@@ -538,22 +538,23 @@ it). It passes if both answers to the dispatch are heard and at least
 four words in all. A run:
 
 ```
+  0.0 s  walker    idle             46 m   +0.0 dB  -
   0.5 s  drone     answering       185 m   +0.0 dB  HEARD
-  0.5 s  walker    answering        46 m   +0.0 dB  HEARD
+  0.6 s  walker    answering        46 m   +0.0 dB  HEARD
   2.0 s  walker    investigating    43 m   +0.0 dB  HEARD
   2.5 s  walker    engaging         43 m   +0.0 dB  HEARD
-  2.6 s  walker    noticed          42 m   +0.0 dB  HEARD
-  2.6 s  walker    calling          43 m   +0.0 dB  HEARD
-  5.4 s  drone     noticed         148 m   +0.0 dB  -
+  2.8 s  walker    calling          42 m   +0.0 dB  HEARD
+  4.3 s  walker    noticed          41 m   +0.0 dB  HEARD
   5.4 s  drone     calling         148 m   +0.0 dB  HEARD
-  5.4 s  drone     investigating   148 m   +0.0 dB  -
+  6.4 s  drone     noticed         135 m   +0.0 dB  -
+  6.8 s  drone     investigating   130 m   +0.0 dB  -
  11.9 s  drone     engaging         57 m   +0.0 dB  HEARD
 ```
 
-(The log shows when each word was decided; the walker's three words at
-2.5-2.6 s then play one after another. Its "engaging" comes before
-"noticed" because of the order the minds' messages arrive in today;
-the `MindShift` hook will settle that.)
+(Times are when each word is spoken, one after another per robot. The
+walker's "noticed" after "engaging" is the order its mind reports them
+in: its suspicion is announced crossing `NOTICED` after it has already
+turned to fight; raised with Robot minds.)
 
 **The score steps aside** for them: a voice within 80 m ducks the score
 12 dB for as long as it speaks (`SCORE_DUCK_DB`). The words that fall,

@@ -227,6 +227,7 @@ impl Plugin for AudioPlugin {
                         armour_sounds,
                         epilogue_sounds,
                         night_ambience,
+                        turret_sounds,
                     ),
                 ),
             )
@@ -658,6 +659,29 @@ fn armour_sounds(
                 0.06,
             );
         }
+    }
+}
+
+/// A scope's elevation drum turned one detent (`weapons::zero`): a small,
+/// quick click.
+fn turret_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::weapons::zero::TurretClicked>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            Some(c.at),
+            "scope.click",
+            0.0,
+            1.7,
+            0.04,
+        );
     }
 }
 

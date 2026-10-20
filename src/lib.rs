@@ -55,6 +55,15 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        // The collider trees are small (a few hundred proxies: the rocks
+        // and trunks are merged): optimise them in place. As an async task
+        // the step blocks on it at its end, behind whatever else is on the
+        // pool (forest and grass chunks), and a frame waits 30-110 ms
+        // (`render::spikes`).
+        app.insert_resource(avian3d::collider_tree::ColliderTreeOptimization {
+            use_async_tasks: false,
+            ..default()
+        });
         app.add_plugins((
             world::WorldPlugin,
             rig::RigPlugin,
