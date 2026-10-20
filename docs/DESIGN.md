@@ -506,6 +506,20 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   proportion to the speed it keeps. A 6 mm plate stops pistol rounds and buckshot. A
   new one dents under a rifle round, and a worn one lets it through.
   Blasts and blades go round plates.
+- **Loads** (`extraction_core::ammo`): rifle calibres come as ball, AP
+  and tracer, and 12 gauge as buckshot or slug. Each round keeps its load
+  from the box through the magazine and the chamber to the shot. Loading
+  by hand is how you choose: touch rounds to a magazine and they go on
+  top, last in first out. A box can come packed with every fourth round a
+  tracer, and that order carries into the magazine.
+  - AP: half the cost through hard plate (armour steel, sheet, a helmet),
+    so it goes through a worn plate where ball stops. It does 1.6 times
+    ball's harm to a robot's armour plate and 0.85 to soft targets.
+  - Tracers (`weapons/tracers.rs`): a red-orange streak from 8 m out to
+    800 m, a pixel or two wide however far off, and fog doesn't hide it.
+    At most 32 are drawn.
+  - A slug: one 32 g ball with 0.8 of the buckshot's summed harm, and a
+    rifle's group.
 
 ### Gadgets and attachments
 
@@ -522,6 +536,15 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Optics**: the scope moves the sight line to its eyepiece and
   magnifies when your eye is on it: in the headset, a picture-in-picture
   lens (with a PU reticle in the scope); flat mode zooms the camera.
+- **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
+  (to 1300 m) have an elevation drum. Take it with the other hand's
+  trigger and turn your wrist, clockwise from above for more range, one
+  click per 100 m. The zero comes from the game's own ballistics (the
+  gun's muzzle velocity, the scope's height over the bore), so at the set
+  range the round goes where the reticle is. Nearer it strikes high,
+  farther low: under a 300 m zero, a robot at 400 m needs holdover (the
+  PSO's lower chevrons are a thousandth apart). The PSO's rangefinder
+  reads range off a 1.7 m man between its baseline and curve.
 - **Artifact adapter**: featherstone rounds fly flat, hearth rounds hit
   half again as hard, aegis rounds knock robots senseless for two
   seconds, glass-eye rounds bend toward robots.

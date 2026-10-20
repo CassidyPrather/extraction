@@ -102,6 +102,41 @@ reformatting their code.
 | Story | the Zone's story and its telling: `src/world/notes.rs` text, terminals' text, radio lines (`src/raid/chatter.rs` text), staged scenes (remains, abandoned camps) as data, a lore bible in `docs/LORE.md` |
 | Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
 | Anomalies | `src/anomaly/` (kinds' rules, visuals, artifacts, the detector), `crates/extraction_core/src/anomaly.rs`, `assets/shaders/anomaly_*.wgsl`; standing anomalies' placement in the valleys together with Map design |
+| Fourth valley | a new map file in `assets/maps/` and its structures (`art/props/dam`), its section in `docs/MAP_DESIGN.md`; Map design's tooling is shared, not forked |
+| Wildlife | `src/wildlife/`, `art/animals/`, `docs/WILDLIFE.md` |
+| Destruction | `src/destruction/`, `docs/DESTRUCTION.md`; one hook in `src/weapons/impacts.rs` |
+| Heavy machine | `src/robots/heavy*.rs`, `art/robots/heavy*`; uses Robot bodies' and Robot minds' machinery |
+| Capture | `src/capture/`, `scripts/capture_*.sh`, `docs/CAPTURE.md`, `docs/shots/showcase/` |
+| Legibility | text and fine symbols everywhere: the size floors, `docs/LEGIBILITY.md`, the text registry and its gauges; may resize, move or re-light text in any area, telling the owner |
+
+### Session ids
+
+Message another workstream directly with `mcp__claude-code-remote__send_message`:
+
+| Workstream | Session |
+| - | - |
+| Coordinator | `session_01Jh513kJMQ8gf9L4fAucvBe` |
+| Onboarding | `session_01NmXBds2EZM9Y4sFRZVTXQt` |
+| Models: world | `session_01FTvvMAiAnDzT4h2vaEUNJV` |
+| Models: kit | `session_0182cBxJFUBuNLdR4W44jxQz` |
+| Visual design | `session_0113CzDXC7Tma7dy3uRwgwP3` |
+| Map design | `session_0192tCbD5KwqWRcfipuzpYrb` |
+| Hands | `session_01DtdvKhReJzNvkQesvuCiZy` |
+| Performance | `session_01DCfmMekPwwUHW5wKfmmkPx` |
+| Robot bodies | `session_01Ka1TLmCaYKYxaoCkbURtaJ` |
+| Robot minds | `session_01359rCXoRimJiU4Lk4NAKYT` |
+| Weapon feel | `session_01BK2jqRVHg2vuktbZkG3odU` |
+| Progression | `session_01ArynrgKsvPTRMGS4rL7XZT` |
+| Underground | `session_015wmLsHYWg7jZzqQpptLCyh` |
+| Story | `session_018Vt7kU7WwqQXvcxJt7iTS4` |
+| Audio | `session_01NrGcFyjBPLDhEAAYQKWyh8` |
+| Anomalies | `session_01Do2jSkdLc48q56gF6pVJE2` |
+| Fourth valley | `session_01EfrkLDw7bYgJDycJjJ7Vdc` |
+| Wildlife | `session_01EH9Rp2WfVsZvx81DEmXaRu` |
+| Destruction | `session_01UnnefVR1t5QAeMk45Vh8tg` |
+| Heavy machine | `session_01UYS29AKspvCeepAatEb31x` |
+| Capture | `session_01G4MW4GWrhGGDH6D1ThFCZE` |
+| Legibility | `session_01EFDRQ8jB3YUANXu8qAPEXH` |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.
@@ -130,9 +165,10 @@ Run the whole suite before each report (`cargo test --workspace`, with
 `-j 2 -- --test-threads=2` if it restarts your container), not just your
 own tests: `qa::` and `sim::` gauges catch cross-area breakage.
 
-The coordinator does every merge. Don't merge the coordinator's branch
-into yours (you can't, from a session); keep working on your own, and
-say in your report what you'd want from it.
+The coordinator merges every branch into main. You may merge main
+(`origin/claude/serene-clarke-rcgj62`) into your own branch whenever you
+need something from it: a plain merge commit, never a rebase or force-push.
+Your next merge into main is then easy. Run the suite after you do.
 
 ## Handing back
 
