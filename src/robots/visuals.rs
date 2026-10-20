@@ -8,6 +8,7 @@
 //! primitive shapes.
 
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use super::drone::{Drone, DroneGun};
@@ -28,6 +29,8 @@ impl Plugin for RobotVisualsPlugin {
                 spin_propellers,
                 pose_leg_visuals,
                 dim_dead_eyes,
+                blink_beacons,
+                show_halos,
                 dress_pylon_masts,
                 pylon_work_lights,
                 lock_flares,
@@ -46,6 +49,17 @@ struct RobotMats {
     /// Cyan running lights on weak points (rotors, knees, vents): brighter
     /// than the kit's `Glow`, to carry through fog at 30-80 m.
     glow: Handle<StandardMaterial>,
+    /// Drone beacons: amber, one material for them all, blinked by
+    /// `blink_beacons`.
+    beacon: Handle<StandardMaterial>,
+    /// The soft additive glow round a drone's beacon, flashing with it.
+    halo: Handle<StandardMaterial>,
+}
+
+/// A beacon's halo shell, hidden when its part dies.
+#[derive(Component)]
+struct Halo {
+    part: Entity,
 }
 
 /// A spinning rotor disc (visual only).
@@ -116,6 +130,19 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             emissive: LinearRgba::rgb(1.2, 7.0, 9.0),
             ..default()
         }),
+        beacon: materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.75, 0.4),
+            emissive: BEACON_ON * BEACON_REST,
+            ..default()
+        }),
+        halo: materials.add(StandardMaterial {
+            base_color: HALO.with_alpha(0.0),
+            alpha_mode: AlphaMode::Add,
+            unlit: true,
+            // A lamp in fog: the glow is what's left when the drone is gone.
+            fog_enabled: false,
+            ..default()
+        }),
     }
 }
 
@@ -159,6 +186,7 @@ fn robot_material(
     match name {
         Some("Eye") => m.eye.clone(),
         Some("Glow") => m.glow.clone(),
+        Some("Beacon") => m.beacon.clone(),
         Some("Shell") => {
             // The scanned shell with a faint glow of its own: under the
             // overcast it lit to about the fog's own value, and a robot
@@ -338,6 +366,26 @@ fn dress_parts(
                     attach(&mut commands, seg, node, Transform::IDENTITY, e, &mut mat);
                 }
             }
+            (RobotKind::Drone, PartRole::Core) => {
+                let Some(node) = ModelNode::find(model, node_name) else {
+                    continue;
+                };
+                attach(&mut commands, e, node, Transform::IDENTITY, e, &mut mat);
+                // The beacon's halo: three nested additive shells, so it
+                // reads as a soft glow 40 cm across, not a 3 cm dot.
+                if let Some(halo) = ModelNode::find(model, "halo") {
+                    for r in [0.06, 0.14, 0.26] {
+                        commands.spawn((
+                            Halo { part: e },
+                            Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
+                            MeshMaterial3d(m.halo.clone()),
+                            Transform::from_translation(halo.transform.translation),
+                            NotShadowCaster,
+                            ChildOf(e),
+                        ));
+                    }
+                }
+            }
             (RobotKind::Dirigible, PartRole::Core) => {
                 let Some(node) = ModelNode::find(model, node_name) else {
                     continue;
@@ -395,7 +443,7 @@ fn attach(
             ChildOf(holder),
         ));
         // Eyes and glowing seams go dark with their part.
-        if matches!(p.material.as_deref(), Some("Eye" | "Glow")) {
+        if matches!(p.material.as_deref(), Some("Eye" | "Glow" | "Beacon")) {
             ec.insert(Eye { part });
         }
     }
@@ -729,6 +777,78 @@ fn dim_dead_eyes(
     }
 }
 
+/// A beacon at full flash, and how much of it glows between flashes.
+const BEACON_ON: LinearRgba = LinearRgba::rgb(40.0, 24.0, 8.0);
+const BEACON_REST: f32 = 0.06;
+/// Seconds between flashes, and how long each lasts.
+const BEACON_PERIOD: f32 = 1.3;
+const BEACON_FLASH: f32 = 0.18;
+/// The halo's colour (amber, like the beacon).
+const HALO: Color = Color::LinearRgba(LinearRgba::new(2.4, 1.3, 0.45, 1.0));
+
+/// How bright a beacon is `t` seconds in: a short flash each period, a
+/// faint glow between (a blink in the corner of the eye finds a drone in
+/// fog that a steady light doesn't).
+fn beacon_level(t: f32) -> f32 {
+    let phase = t.rem_euclid(BEACON_PERIOD);
+    if phase < BEACON_FLASH {
+        // Up fast, down a little slower: a lamp, not a strobe.
+        let k = phase / BEACON_FLASH;
+        BEACON_REST + (1.0 - BEACON_REST) * (1.0 - (2.0 * k - 1.0).powi(2)).max(0.0).sqrt()
+    } else {
+        BEACON_REST
+    }
+}
+
+/// Blinks every drone's beacon (one shared material; a dead drone's beacon
+/// has been swapped for the dead-eye material).
+fn blink_beacons(
+    time: Res<Time>,
+    mats: Option<Res<RobotMats>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(m) = mats else {
+        return;
+    };
+    let level = beacon_level(time.elapsed_secs());
+    if let Some(mut mat) = materials.get_mut(&m.beacon) {
+        mat.emissive = BEACON_ON * level;
+    }
+    if let Some(mut mat) = materials.get_mut(&m.halo) {
+        // Only the flash has a halo.
+        let k = ((level - BEACON_REST) / (1.0 - BEACON_REST)).max(0.0);
+        mat.base_color = HALO.with_alpha(0.3 * k);
+    }
+}
+
+/// Halos are for seeing a drone from far off: shown beyond `HALO_NEAR` of
+/// the camera (closer, the nested shells read as discs, and the drone
+/// itself is plain to see), and gone with a dead drone's beacon.
+const HALO_NEAR: f32 = 12.0;
+
+fn show_halos(
+    mut halos: Query<(&Halo, &GlobalTransform, &mut Visibility)>,
+    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    parts: Query<&RobotPart>,
+    robots: Query<&Robot>,
+) {
+    let eye = cameras.iter().next().map(|t| t.translation());
+    for (h, gt, mut vis) in &mut halos {
+        let dead = parts
+            .get(h.part)
+            .is_ok_and(|part| !part.alive() || robots.get(part.robot).is_ok_and(|r| r.wrecked));
+        let near = eye.is_some_and(|e| e.distance(gt.translation()) < HALO_NEAR);
+        let want = if dead || near {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        if *vis != want {
+            *vis = want;
+        }
+    }
+}
+
 /// A pylon's mast: a dark lattice box, scaled with the pylon's progress.
 fn dress_pylon_masts(
     mut commands: Commands,
@@ -896,5 +1016,21 @@ fn lock_flares(
         let k = 1.0 - f.left / super::drone::LOCK_TIME;
         let on = k > 0.38 || (k % 0.19) < 0.09;
         light.intensity = if on { 25_000.0 } else { 0.0 };
+    }
+}
+
+#[cfg(test)]
+mod beacon_tests {
+    use super::*;
+
+    /// A short flash at the start of each period, a faint glow between.
+    #[test]
+    fn beacons_flash_then_rest() {
+        let peak = beacon_level(BEACON_FLASH * 0.5);
+        assert!((peak - 1.0).abs() < 1e-4, "peak {peak}");
+        assert_eq!(beacon_level(BEACON_FLASH + 0.1), BEACON_REST);
+        assert_eq!(beacon_level(BEACON_PERIOD - 0.01), BEACON_REST);
+        let again = beacon_level(BEACON_PERIOD * 3.0 + BEACON_FLASH * 0.5);
+        assert!((again - 1.0).abs() < 1e-3, "periodic: {again}");
     }
 }

@@ -152,7 +152,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Enamel", "Worn", "Red", "Pebble", "Char", "Ember", "Cream", "Paper", "Olive", "Copper",
     "Dark", "Rotor", "Lens", "Clear", "Lamp", "LampRed", "Glow", "Warn", "Eye", "Strange",
     // World props (art/props).
-    "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking", "Zinc", "Straw",
+    "Beacon", "Timber", "Rusty", "Painted", "Plaster", "Concrete", "Cast", "Wool", "Ticking",
+    "Zinc", "Straw",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -274,6 +275,8 @@ impl ModelMaterials {
             "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
             "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
+            // A robot's beacon (robots blink theirs; see robots::visuals).
+            "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
             "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),
