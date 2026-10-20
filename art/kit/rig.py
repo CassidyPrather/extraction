@@ -5,9 +5,11 @@ assets/models/kit/rig.glb and assets/models/kit/backpack.glb.
 Everything is built in the frames src/interact/body.rs gives it (game
 space: metres, +X right, +Y up, -Z forward):
 
-- `harness`: torso space (origin mid-chest, under the neck): the chest
-  panel the pouches ride on, shoulder straps, the belt round the hips, the
-  straps joining them.
+- `harness_panel`: torso space (origin mid-chest, under the neck): the
+  chest panel the pouches ride on and the shoulder straps. Hidden while a
+  vest is worn (kit/vest.glb takes its place; art/kit/armor.py).
+- `harness`: the same space: the belt round the hips, and the straps
+  from the panel down to it.
 - `holster`, `pouch`, `pocket`, `mount`: each in its slot's space (origin
   the slot, where the item seated in it sits), drawn on every slot of its
   kind. `holster` is for a pistol hung barrel down, grip back (the slot's
@@ -80,7 +82,10 @@ def belt_point(a, grow=0.0, y=BELT_Y):
 # --- Harness ---------------------------------------------------------------
 
 def harness():
-    p = Part("harness")
+    """Two parts: `harness_panel` (the chest panel, its webbing and the
+    shoulder straps, which a worn vest replaces) and `harness` (the belt
+    and the straps from the panel down to it, which stay)."""
+    p = Part("harness_panel")
     # The chest panel: a padded plate across the lower chest, flat where the
     # pouches ride, its sides swept back round the ribs.
     xs = [-0.23, -0.2, -0.17, 0.17, 0.2, 0.23]
@@ -111,6 +116,8 @@ def harness():
         strap(p, path, 0.044, 0.005, "Olive", normals=nrm)
         # A buckle where it meets the panel.
         p.box((0.05, 0.016, 0.006), (x, -0.06, PANEL_Z - 0.004), "Iron", bevel=0.0015, segs=1)
+    panel = p
+    p = Part("harness")
     # The belt, with its buckle in front.
     n = 40
     ring_out = [belt_point(2 * math.pi * k / n) for k in range(n)]
@@ -137,7 +144,7 @@ def harness():
         out = Vector((0, 0, -1))
         strap(p, [top, mid, bot], 0.03, 0.004, "Olive", normals=[out, out, out])
     # The mount's tab on the left strap (the mount itself is per slot).
-    return p
+    return panel, p
 
 
 # --- Holster ---------------------------------------------------------------
@@ -312,7 +319,8 @@ def slots(open_):
 
 # rig.glb: the rig as worn, empty (flaps closed), and the mount.
 main_guard()
-make(harness())
+for part in harness():
+    make(part)
 slots(False)
 place(make(mount()), MOUNT)
 report()
