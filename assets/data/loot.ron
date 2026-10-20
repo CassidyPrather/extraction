@@ -113,6 +113,8 @@
             Item(id: "artifact_adapter", weight: 0.15),
             Item(id: "lead_case", weight: 0.3),
             Item(id: "detector", weight: 0.8),
+            Item(id: "detector_sweep", weight: 0.35),
+            Item(id: "detector_bear", weight: 0.12),
         ]),
         "house": (rolls: (1, 3), entries: [
             Table(name: "kitchen", weight: 4.0),
