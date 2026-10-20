@@ -77,6 +77,11 @@ coming ("Do these and I'll fit a vice to the bench").
 | 3 **Runs** | 4 | danger 2-3 | **Whip aerial** on the cab: the truck radios a Surge warning at ten minutes instead of five, and robot chatter says how far |
 | 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (a dressing in it each raid) and a **second rack**: 400 L |
 
+The last job of the last tier is always the same, whatever valley you're
+in: "There's a house by the well in the village. On the table. Bring me
+what's there." It's Hana's letter (`hana_letter`, see `docs/LORE.md`), and
+it ends the driver's ladder on his own story.
+
 Then **standing jobs**: the driver keeps asking (any kind, any valley,
 danger 2-3) and keeps paying in caches, for as long as you play.
 
@@ -115,6 +120,9 @@ the whole arc is written down, in pencil, in the truck.
   the recorder's placement, scouting, the career page.
 - One job is handed in per raid ("One thing at a time. After your next
   run."): a full stash can't clear fetches back to back at base.
+- `src/progression/lines.rs`: every word the driver says about his jobs,
+  apart from the logic (Story writes them), with a test holding the wrist
+  lines to three lines of 26.
 - `src/raid/requests.rs`: the card now shows the job; pressing it checks
   whichever kind it is.
 - `src/persist.rs` / `extraction_core::save`: `ProgressSave` on the career
