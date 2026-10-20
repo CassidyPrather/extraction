@@ -82,7 +82,11 @@ def tiers():
     for tier in wants_src.split("&[\n")[1:]:
         wants.append([(m[0] or "robot_parts", int(m[1]), int(m[2]))
                       for m in re.findall(r'(?:"([a-z_]+)"|ANY_PARTS),\s*(\d+),\s*(\d+),', tier)])
-    return out[:-1], wants, out[-1]
+    # The ladder; then the deep jobs (the standing jobs after the epilogue
+    # are left out: they're the quiet coda).
+    ladder = [t for t in out if t["jobs"] > 0]
+    deep = next(t for t in out if t["name"] == "Deep jobs")
+    return ladder, wants, deep
 
 
 PRIOR = 4

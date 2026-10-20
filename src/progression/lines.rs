@@ -158,13 +158,24 @@ pub fn fetch_swapped(name: &str) -> String {
 // --- After the epilogue (Lev has been into the depot) --------------------
 
 /// The career page's last line, once he has.
-pub const CAREER_AFTER: &str = "Lev drives in now.";
+pub const CAREER_AFTER: &str = "Lev drives in now. He parks by the well.";
 
 /// What he says he wants a fetch for, after: gentler (Story's); `None`
 /// keeps the usual why.
 pub fn why_after(item: &str) -> Option<&'static str> {
-    let _ = item;
-    None
+    Some(match item {
+        "canned_stew" => "Something hot. We'll eat at the well.",
+        "field_dressing" => "Dressings. For my sister. She's asking after you.",
+        "matches" => "Matches. I light the lamp in her window.",
+        "tea_tin" => "Tea. Two cups, these days.",
+        "scrap_metal" => "Scrap. I'm mending her gate.",
+        "gun_oil" => "Oil. Her well's winch squeals.",
+        "electronics" => "Boards. The mast at the fence still talks to itself.",
+        "robot_parts" => "Their parts. Nobody's coming for them now.",
+        "sensor_eye" => "An eye. I want one on the shelf where I can see it.",
+        "servo" => "A servo. I'm making her gate open itself.",
+        _ => return None,
+    })
 }
 
 // --- Upkeep and orders (after the ladder) ---------------------------------
