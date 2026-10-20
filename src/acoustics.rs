@@ -126,10 +126,12 @@ impl Space {
             Surface::Soft => (0.45, 0.8),
         };
         let per_m = 0.04 / absorption;
-        // Enclosed, a sound goes on down the corridor and back: the
-        // longest way round counts as well as the mean.
+        // Underground, a sound goes on down the corridor and back: the
+        // longest way round counts as well as the mean. (Above ground the
+        // long rays are ones that left through a window and met the next
+        // building.)
         let path = match self.kind {
-            SpaceKind::Hall | SpaceKind::Underground => self.size.max(0.5 * self.length),
+            SpaceKind::Underground => self.size.max(0.5 * self.length),
             _ => self.size,
         };
         let rt60 = (path * per_m * (0.4 + 0.6 * self.enclosed)).clamp(0.3, 3.5);
@@ -269,7 +271,7 @@ pub fn probe(
     let kind = if underground {
         SpaceKind::Underground
     } else if roof.is_some() && enclosed >= 0.5 {
-        if size > 8.0 || length > 25.0 {
+        if size > 8.0 {
             SpaceKind::Hall
         } else {
             SpaceKind::Room
