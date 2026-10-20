@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--no-binaural`, `--no-score`,
+//! `--finger-grab`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -38,6 +38,9 @@ pub struct Comfort {
     pub binaural: bool,
     /// The ambient score that rises with danger (`audio`).
     pub score: bool,
+    /// A faint tick on the wrist when a machine nearby turns certain of
+    /// you (`rig::haptics`).
+    pub machine_tick: bool,
 }
 
 impl Default for Comfort {
@@ -52,6 +55,7 @@ impl Default for Comfort {
             finger_grab: false,
             binaural: true,
             score: true,
+            machine_tick: true,
         }
     }
 }
@@ -146,6 +150,14 @@ impl Comfort {
         }
     }
 
+    pub fn machine_tick_label(&self) -> String {
+        if self.machine_tick {
+            "WARNING TICK\non the wrist".into()
+        } else {
+            "WARNING TICK\nOFF".into()
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
@@ -209,6 +221,7 @@ impl Comfort {
                 "--finger-grab" => c.finger_grab = true,
                 "--no-binaural" => c.binaural = false,
                 "--no-score" => c.score = false,
+                "--no-machine-tick" => c.machine_tick = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
