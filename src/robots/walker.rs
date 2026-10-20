@@ -172,11 +172,13 @@ pub fn spawn_walker_sized(
     core_hp: f32,
     size: f32,
 ) -> Entity {
-    let ground = zone.ground(at.x, at.z);
-    let pos = Vec3::new(at.x, ground + BODY_HEIGHT * size, at.z);
+    // Well below the terrain, `at` is on an underground floor: stand on it.
+    let underground = at.y < zone.ground(at.x, at.z) - 0.5;
+    let floor = |x: f32, z: f32| if underground { at.y } else { zone.ground(x, z) };
+    let pos = Vec3::new(at.x, floor(at.x, at.z) + BODY_HEIGHT * size, at.z);
     let feet = std::array::from_fn(|i| {
         let p = pos + rest_offset(i) * size;
-        let f = Vec3::new(p.x, zone.ground(p.x, p.z), p.z);
+        let f = Vec3::new(p.x, floor(p.x, p.z), p.z);
         Foot {
             planted: f,
             from: f,

@@ -481,6 +481,36 @@ pub fn step_walker(
     }
 }
 
+/// The walkable surface under `p` (probed from `p`, about hip height):
+/// steps, floors and kerbs by a ray down (`ray(from, reach)` gives the
+/// distance to what it hits), else the terrain. Below the terrain (an
+/// underground site) only the ray counts: the floor is down there, not
+/// up on the heightfield; with nothing under it, it stays level.
+pub fn footing(
+    p: Vec3,
+    terrain: f32,
+    size: f32,
+    ray: impl FnOnce(Vec3, f32) -> Option<f32>,
+) -> f32 {
+    let underground = p.y < terrain - 0.1;
+    if p.y > terrain + 0.25 || underground {
+        let reach = if underground {
+            (UPPER + LOWER) * size * 1.6
+        } else {
+            p.y - terrain + 0.3
+        };
+        // Started inside something (a wall): not a footing.
+        if let Some(d) = ray(p, reach).filter(|d| *d > 0.02) {
+            return p.y - d;
+        }
+    }
+    if underground {
+        p.y - BODY_HEIGHT * size
+    } else {
+        terrain
+    }
+}
+
 /// Joints for each leg (hip, knee, foot), after [`step_walker`].
 pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
     std::array::from_fn(|i| {
@@ -554,24 +584,13 @@ pub(crate) fn walk(
             stunned: stunned && !w.collapsed && !robot.wrecked,
             low: intent.low,
         };
+        let size = g.size;
         let mut ground = |p: Vec3| {
-            let h = zone.ground(p.x, p.z);
-            // Steps, floors and kerbs: a ray down from about hip height.
-            if p.y > h + 0.25 {
-                if let Some(hit) = spatial.cast_ray(
-                    Vec3::new(p.x, p.y, p.z),
-                    Dir3::NEG_Y,
-                    p.y - h + 0.3,
-                    true,
-                    &filter,
-                ) {
-                    // Started inside something (a wall): not a footing.
-                    if hit.distance > 0.02 {
-                        return p.y - hit.distance;
-                    }
-                }
-            }
-            h
+            footing(p, zone.ground(p.x, p.z), size, |from, reach| {
+                spatial
+                    .cast_ray(from, Dir3::NEG_Y, reach, true, &filter)
+                    .map(|hit| hit.distance)
+            })
         };
         let mut landed = |at: Vec3| {
             steps.write(WalkerStep { at });
@@ -854,6 +873,25 @@ mod tests {
             assert!(hip.distance(foot) <= (UPPER + LOWER) * size + 0.01);
             assert!((hip.distance(knee) - UPPER * size).abs() < 1e-3);
         }
+    }
+
+    /// Underground, below the terrain, footing is the floor the ray finds,
+    /// never the heightfield overhead.
+    #[test]
+    fn footing_underground_is_the_floor() {
+        let terrain = 20.0;
+        // A floor 6 m under the terrain, the probe 1.1 m above it.
+        let p = Vec3::new(0.0, 15.1, 0.0);
+        assert!((footing(p, terrain, 1.0, |_, _| Some(1.1)) - 14.0).abs() < 1e-4);
+        // Nothing under it: stay level rather than jump to the surface.
+        let h = footing(p, terrain, 1.0, |_, _| None);
+        assert!(h < terrain - 1.0, "{h}");
+        // On the surface, a kerb is found; nothing found is the terrain.
+        let q = Vec3::new(0.0, 21.2, 0.0);
+        assert!((footing(q, terrain, 1.0, |_, _| Some(1.0)) - 20.2).abs() < 1e-4);
+        assert_eq!(footing(q, terrain, 1.0, |_, _| None), terrain);
+        // A ray that starts inside a wall isn't a footing.
+        assert_eq!(footing(q, terrain, 1.0, |_, _| Some(0.0)), terrain);
     }
 
     /// A step up: feet find the top of it (the ground function stands in
