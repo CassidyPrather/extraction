@@ -220,6 +220,7 @@ impl Plugin for AudioPlugin {
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
+                    grenade_sounds,
                 ),
             )
             .add_systems(
@@ -507,6 +508,7 @@ fn surface_set(s: Surface) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn footsteps(
     mut commands: Commands,
     mut steps: MessageReader<Footstep>,
@@ -516,9 +518,11 @@ fn footsteps(
     trucks: Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
     spatial: SpatialQuery,
     built: Query<(&GlobalTransform, &Surfaces)>,
+    wetness: Option<Res<crate::world::weather::Wetness>>,
 ) {
+    let wet = wetness.map_or(0.0, |w| w.level);
     for s in steps.read() {
-        let set = ground_set(&zone, &trucks, &spatial, &built, s.position);
+        let set = ground_set(&zone, &trucks, &spatial, &built, s.position, wet);
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
@@ -533,14 +537,67 @@ fn footsteps(
     }
 }
 
+/// How much standing water (`world::puddles::puddle_at`) a step must land
+/// in to splash.
+const PUDDLE_SPLASH: f32 = 0.5;
+
+/// A grenade (`weapons::grenades`): the pin's click and the ring's scrape
+/// coming away, the spoon's ping as it flies, and the bang, the RGD-5's
+/// sharp and the F-1's heavier.
+fn grenade_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::weapons::grenades::GrenadeEvent>,
+    items: Query<&crate::items::Item>,
+    catalog: Res<crate::items::Catalog>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::grenade::Event as E;
+    for ev in events.read() {
+        let at = Some(ev.at);
+        let mut one = |set: &str, cue: &str, speed: f64| {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                at,
+                cue,
+                0.0,
+                speed,
+                0.05,
+            );
+        };
+        match ev.event {
+            E::PinPulled => {
+                one("guns/safety", "grenade.pin", 1.1);
+                one("physical/handle_metal", "grenade.scrape", 1.2);
+            }
+            E::SpoonOff => one("guns/casing", "grenade.spoon", 1.25),
+            E::Exploded => {
+                let heavy = items
+                    .get(ev.grenade)
+                    .is_ok_and(|i| catalog.get(i.kind()).id == "f1");
+                if heavy {
+                    one("explosions/grenade_heavy", "grenade.bang_heavy", 1.0);
+                } else {
+                    one("explosions/grenade_sharp", "grenade.bang", 1.0);
+                }
+            }
+        }
+    }
+}
+
 /// The footstep set for whatever is under `at`: the truck's bed, a built
-/// floor, or the ground.
+/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), or the
+/// ground.
 fn ground_set(
     zone: &Zone,
     trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
     spatial: &SpatialQuery,
     built: &Query<(&GlobalTransform, &Surfaces)>,
     at: Vec3,
+    wet: f32,
 ) -> &'static str {
     let p = [at.x, at.z];
     let in_truck = trucks
@@ -551,6 +608,8 @@ fn ground_set(
         "footsteps/wood"
     } else if let Some(m) = underfoot(spatial, built, at) {
         footstep_set(m)
+    } else if wet > 0.0 && crate::world::puddles::puddle_at(&zone.hm, p, wet) > PUDDLE_SPLASH {
+        "footsteps/water"
     } else {
         surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
     }
@@ -569,7 +628,9 @@ fn landing_sounds(
     mut was: Local<HashMap<Entity, (bool, f32, f32)>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
+    wetness: Option<Res<crate::world::weather::Wetness>>,
 ) {
+    let wet = wetness.map_or(0.0, |w| w.level);
     for (e, body, gt) in &bodies {
         let before = was.insert(e, (body.grounded, body.velocity.y, body.airborne));
         let Some((was_grounded, vy, airborne)) = before else {
@@ -579,7 +640,7 @@ fn landing_sounds(
             continue;
         }
         let at = gt.translation();
-        let set = ground_set(&zone, &trucks, &spatial, &built, at);
+        let set = ground_set(&zone, &trucks, &spatial, &built, at, wet);
         let hard = ((-vy - 2.5) / 6.0).clamp(0.0, 1.0);
         for _ in 0..2 {
             play_at_speed(
@@ -731,6 +792,9 @@ fn shot_sounds(
     }
 }
 
+/// Speed (m/s) a round hits at full level; slower ones hit softer.
+const IMPACT_FULL_SPEED: f32 = 300.0;
+
 /// Rounds landing, as `weapons::impacts` classes them (so the sound and
 /// the spray can't disagree): concrete, wood, steel, glass, earth, water,
 /// a robot's part (armour rings, an eye shatters), a body. A round
@@ -769,7 +833,9 @@ fn hit_sounds(
         let trim = if i.kind == K::Water {
             trim - 6.0 + 6.0 * (i.velocity.length() / 800.0).min(1.0)
         } else {
-            trim
+            // A slow round (a grenade's fragments, spent) hits softer: full
+            // from a pistol's speed, down to -12 dB at a quarter of it.
+            trim + 20.0 * (i.velocity.length() / IMPACT_FULL_SPEED).clamp(0.25, 1.0).log10()
         };
         play_at_speed(
             &mut commands,

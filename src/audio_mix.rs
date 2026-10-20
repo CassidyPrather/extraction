@@ -127,6 +127,11 @@ pub const MIX: &[Cue] = &[
     cue!("gun.charging", "guns/charging_handle", -10.5, 80.0, 0.5, Detail),
     cue!("gun.slide_rack", "guns/slide_rack", -6.0, 80.0, 0.5, Detail),
     cue!("gun.casing", "guns/casing", -9.0, 60.0, 1.5, Detail),
+    cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
+    cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),
+    cue!("grenade.spoon", "guns/casing", -8.0, 65.0, 1.0, Detail),
+    cue!("grenade.bang", "explosions/grenade_sharp", 2.0, 160.0, 15.0, Event, 15.0),
+    cue!("grenade.bang_heavy", "explosions/grenade_heavy", 1.5, 162.0, 15.0, Event, 15.0),
     // Bullets landing.
     cue!("hit.impact", "impacts/metal", -2.0, 95.0, 15.0, Action, 8.0),
     cue!("hit.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
