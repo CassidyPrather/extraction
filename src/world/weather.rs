@@ -182,12 +182,68 @@ impl Conditions {
     }
 }
 
+/// How wet the world's surfaces are, 0 (dry) to 1 (soaked): rain wets
+/// them over minutes and they dry over twenty, faster in
+/// sun; mist keeps them damp. The raid starts with the ground as the
+/// weather has left it; a new cycle's weather then works on it. Drives
+/// the surfaces' look (`render::fog`'s wet patch, the terrain, puddles).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Wetness {
+    pub level: f32,
+    settled: bool,
+}
+
+/// Minutes rain takes to bring the ground most of the way to soaked.
+pub const SOAK_MINUTES: f32 = 4.0;
+/// Minutes the ground takes to dry most of the way, in no sun.
+pub const DRY_MINUTES: f32 = 25.0;
+
+impl Wetness {
+    /// Where the weather leaves the ground, given time.
+    pub fn target(c: &Conditions) -> f32 {
+        if c.rain > 0.0 {
+            (0.35 + 0.65 * c.rain).min(1.0)
+        } else if c.kind == WeatherKind::PeaSouper {
+            // Mist: damp, never running wet.
+            0.3
+        } else {
+            0.0
+        }
+    }
+
+    /// `dt` seconds of the weather.
+    pub fn step(&mut self, c: &Conditions, dt: f32) {
+        let target = Self::target(c);
+        let minutes = if target > self.level {
+            // Heavier rain soaks faster.
+            SOAK_MINUTES / (0.4 + c.rain).min(1.4)
+        } else {
+            // Sun and wind dry it.
+            DRY_MINUTES / (1.0 + 0.5 * c.sun / 1600.0 + 0.3 * c.wind())
+        };
+        let k = 1.0 - (-dt / (minutes * 60.0 / 3.0)).exp();
+        self.level += (target - self.level) * k;
+    }
+}
+
+/// The ground as the weather keeps it.
+fn soak(conditions: Res<Conditions>, mut wet: ResMut<Wetness>, time: Res<Time>) {
+    if !wet.settled {
+        // A raid starts with the ground as this weather has left it.
+        wet.level = Wetness::target(&conditions);
+        wet.settled = true;
+        return;
+    }
+    wet.step(&conditions, time.delta_secs());
+}
+
 pub struct WeatherPlugin;
 
 impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Conditions::for_cycle(1, 0))
-            .add_systems(Update, follow_cycle);
+            .init_resource::<Wetness>()
+            .add_systems(Update, (follow_cycle, soak).chain());
     }
 }
 
@@ -305,6 +361,42 @@ mod tests {
             };
             assert_eq!(kinds[c as usize], old);
         }
+    }
+
+    #[test]
+    fn rain_soaks_in_minutes_and_dries_in_twenty() {
+        let pour = Conditions::compose(WeatherKind::Downpour, Hour::Day, 1);
+        let clear = Conditions::compose(WeatherKind::Clearing, Hour::Day, 1);
+        let mist = Conditions::compose(WeatherKind::PeaSouper, Hour::Day, 1);
+        let run = |w: &mut Wetness, c: &Conditions, secs: u32| {
+            for _ in 0..secs {
+                w.step(c, 1.0);
+            }
+        };
+        // Dry ground in a downpour: wet within a minute or two, soaked
+        // within five, never past soaked.
+        let mut w = Wetness::default();
+        run(&mut w, &pour, 60);
+        assert!(w.level > 0.3 && w.level < 0.9, "{}", w.level);
+        run(&mut w, &pour, 240);
+        assert!(w.level > 0.9 && w.level <= 1.0, "{}", w.level);
+        // Then the sky clears: still wet after five minutes, mostly dry by
+        // twenty, and the clouded sun dries slower than a clear one.
+        let soaked = w;
+        run(&mut w, &clear, 300);
+        assert!(w.level > 0.25, "{}", w.level);
+        run(&mut w, &clear, 900);
+        assert!(w.level < 0.1, "{}", w.level);
+        let mut dim = soaked;
+        let dusk = Conditions::compose(WeatherKind::Clearing, Hour::Dusk, 1);
+        run(&mut dim, &dusk, 300);
+        let mut bright = soaked;
+        run(&mut bright, &clear, 300);
+        assert!(dim.level > bright.level);
+        // Mist keeps it damp, no more.
+        let mut m = Wetness::default();
+        run(&mut m, &mist, 3600);
+        assert!((m.level - 0.3).abs() < 0.02);
     }
 
     #[test]
