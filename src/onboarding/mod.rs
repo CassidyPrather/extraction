@@ -1350,8 +1350,8 @@ fn press_cards(
 /// 26: it shows only the newest message, and cuts a long one off).
 pub const GREET_VR: &str = "Driver: \"Kit's in the crate by your left knee. Reach in, squeeze.\"";
 pub const GREET_FLAT: &str = "Driver: \"Kit's in the crate, front left. Look at it, press E.\"";
-pub const ALL_DONE_LINE: &str = "Driver: \"That's the lot. Off to the Zone.\"";
-pub const TOO_CLOSE_LINE: &str = "Driver: \"Too close! That shimmer burns. Back out.\"";
+pub const ALL_DONE_LINE: &str = "Driver: \"That's the lot. The real one's colder.\"";
+pub const TOO_CLOSE_LINE: &str = "Driver: \"Back out. That shimmer burns. Ask me how I know.\"";
 pub const START_OVER_LINE: &str = "Driver: \"From the top. The crate in the truck.\"";
 
 pub fn next_line(station: usize) -> String {
