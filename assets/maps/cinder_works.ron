@@ -293,6 +293,9 @@
         (kind: RobotGate, at: (250.0, -255.0), rot: 315.0, name: "The Gate"),
         (kind: ArtifactField, at: (200.0, -150.0), name: "The slag heaps"),
         (kind: ArtifactField, at: (-200.0, 0.0), name: "The ash pit"),
+        // Standing anomalies: they lie here every cycle (Anomalies).
+        (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
         (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
         (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
         (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),

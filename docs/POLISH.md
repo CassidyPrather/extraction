@@ -101,6 +101,7 @@ reformatting their code.
 | Underground | underground sites: new `src/world/underground.rs`, its prefabs and `art/props/bunker`, its lighting; placement in the valleys together with Map design |
 | Story | the Zone's story and its telling: `src/world/notes.rs` text, terminals' text, radio lines (`src/raid/chatter.rs` text), staged scenes (remains, abandoned camps) as data, a lore bible in `docs/LORE.md` |
 | Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
+| Anomalies | `src/anomaly/` (kinds' rules, visuals, artifacts, the detector), `crates/extraction_core/src/anomaly.rs`, `assets/shaders/anomaly_*.wgsl`; standing anomalies' placement in the valleys together with Map design |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.

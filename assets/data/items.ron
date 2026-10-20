@@ -231,6 +231,12 @@
             tags: ["glass", "metal"],
         ),
         (
+            id: "detector", dims: Some((0.07, 0.04, 0.16)), name: "Anomaly detector",
+            description: "A survey clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
+            category: Gadget, size: Small, mass: 0.35, bulk: 0.3,
+            tags: ["metal", "electronics"],
+        ),
+        (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,
@@ -388,6 +394,7 @@
         (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
         (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
+        (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
 
         // ---------------------------------------------------------------
         // Robot parts
@@ -443,6 +450,16 @@
             id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
             description: "A tangle of something like copper. While you carry it, the first hit always glances.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
+        ),
+        (
+            id: "art_lodestone", dims: Some((0.06, 0.05, 0.055)), name: "Lodestone",
+            description: "A fist of dark iron, heavier than it looks and heavier the nearer you hold it to your chest. Rounds fired at whoever carries it curve aside.",
+            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1,
+        ),
+        (
+            id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
+            description: "A sliver of something not quite glass. Your reflection in it moves a moment late. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
+            category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
 
         // ---------------------------------------------------------------
