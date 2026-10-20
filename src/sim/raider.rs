@@ -2258,6 +2258,17 @@ fn kind_name(k: SiteKind) -> &'static str {
 /// Picks the next site: worth, distance, and the pull of the far side as
 /// the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
+    // `SIM_SITE=<prefab>`: that site first, while it's there to be done
+    // (a smoke test of one underground site, say).
+    if let Ok(want) = std::env::var("SIM_SITE") {
+        if let Some(i) = r
+            .sites
+            .iter()
+            .position(|s| s.name == want && !s.visited && s.tries < 3)
+        {
+            return Some(i);
+        }
+    }
     let late = (scene.raid.clock / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;
