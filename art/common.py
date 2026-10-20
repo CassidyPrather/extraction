@@ -925,7 +925,8 @@ def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40, apart=(), sky=Fal
     With `sky`, alpha says whether rain falls on the corner: 1 in the open,
     0 under anything of the model's own overhead (one ray straight up, as
     `src/world/ao.rs` does for buildings); the game's wet-weather shading
-    reads it. Otherwise alpha is 1."""
+    reads it. `sky="indoors"` is 0 everywhere: furniture, always under a
+    building's roof. Otherwise alpha is 1."""
     import random as _random
 
     from mathutils.bvhtree import BVHTree
@@ -988,7 +989,9 @@ def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40, apart=(), sky=Fal
                 occ = hit / rays
                 v = 1.0 - strength * min(1.0, occ * 2.0)
                 a = 1.0
-                if sky:
+                if sky == "indoors":
+                    a = 0.0
+                elif sky:
                     # Blender's up is +Z.
                     loc, _, _, _ = tree.ray_cast(at + Vector((0, 0, 0.01)), Vector((0, 0, 1)),
                                                  200.0)
