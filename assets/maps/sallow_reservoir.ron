@@ -415,6 +415,9 @@
         (prefab: "stock_buses", at: (55.0, -95.0), rot: 0.0),
         (prefab: "stock_bicycles", at: (72.0, -40.0), rot: 0.0),
         (prefab: "stock_bicycles", at: (80.0, -40.0), rot: 0.0),
+        // The shed it tags its stock in: what's small enough to keep
+        // under a roof.
+        (prefab: "rail_shed", at: (40.0, -110.0), rot: 90.0, tag: "tagging_shed"),
         // The Custodian's gantry over the rows.
         (prefab: "sorting_gantry", at: (100.0, -82.0), rot: 0.0),
         (prefab: "stock_bins", at: (30.0, -130.0), rot: 90.0),

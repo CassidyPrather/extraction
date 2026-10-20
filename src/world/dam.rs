@@ -287,6 +287,19 @@ fn tower(b: &mut Builder) {
         );
     }
     b.crate_box(Vec3::new(-2.2, TOWER_BRIDGE, -2.6), 0.8, Some("tools"));
+    // The chain the keeper cut off the big wheel, lying where he left it:
+    // links along the floor from the east winch.
+    for k in 0..9 {
+        let t = k as f32 * 0.11;
+        let yaw = if k % 2 == 0 { 0.4 } else { -1.17 };
+        b.piece(
+            Shape::Box(Vec3::new(0.09, 0.025, 0.05)),
+            Transform::from_xyz(1.2 - t, TOWER_BRIDGE + 0.013, -1.0 + t * 0.6)
+                .with_rotation(Quat::from_rotation_y(yaw)),
+            Mat::RustyMetal,
+            false,
+        );
+    }
     // The keeper's table by the bridge door (Story's note lies on it).
     b.table(Vec3::new(-1.0, TOWER_BRIDGE, 1.9), 0.0, None);
     // The bridge to the crest: its deck, rails, and two piers down to the
