@@ -102,6 +102,9 @@ MATERIALS = {
     # Animals (art/animals; src/models.rs maps them).
     "Feather": ((0.03, 0.03, 0.036), 0.0, 0.45, None),
     "Beak": ((0.3, 0.3, 0.31), 0.0, 0.55, None),
+    "Hide": ((0.3, 0.24, 0.18), 0.0, 0.85, None),
+    "Pale": ((0.78, 0.74, 0.66), 0.0, 0.85, None),
+    "Hoof": ((0.04, 0.035, 0.03), 0.0, 0.5, None),
 }
 
 

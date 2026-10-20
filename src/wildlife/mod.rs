@@ -15,7 +15,10 @@
 use bevy::prelude::*;
 
 pub mod flock;
+pub mod herd;
+pub mod herd_look;
 pub mod perches;
+mod telemetry;
 pub mod visuals;
 
 #[cfg(test)]
@@ -80,9 +83,16 @@ fn gather_threats(
     robots: Query<(Entity, &GlobalTransform, &crate::robots::Robot)>,
     mut last: Local<std::collections::HashMap<Entity, Vec3>>,
     time: Res<Time>,
+    mut calm: Local<Option<bool>>,
 ) {
     use crate::robots::RobotKind;
     threats.0.clear();
+    // `EXTRACTION_WILDLIFE=calm`: nothing scares them (for looking at
+    // them in screenshots).
+    if *calm.get_or_insert_with(|| std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "calm"))
+    {
+        return;
+    }
     for (e, gt, body) in &players {
         threats.0.push(Threat {
             entity: e,
@@ -131,15 +141,20 @@ pub struct WildlifePlugin;
 impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Flushed>()
+            .add_message::<herd::Startled>()
             .init_resource::<Threats>()
             .add_systems(Startup, setup)
             .add_systems(
                 FixedUpdate,
-                (gather_threats, flock::flocks)
+                (gather_threats, (flock::flocks, herd::herds))
                     .chain()
                     .in_set(WildlifeSystems),
             )
-            .add_systems(FixedUpdate, flock::alarm_robots.after(WildlifeSystems));
+            .add_systems(
+                FixedUpdate,
+                (flock::alarm_robots, herd::bark_alarm).after(WildlifeSystems),
+            )
+            .add_systems(Last, telemetry::log_wildlife);
     }
 }
 
@@ -147,7 +162,13 @@ impl Plugin for WildlifePlugin {
 fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate::LaunchOptions>) {
     let started = std::time::Instant::now();
     let (obstacles, perches) = perches::survey(&zone);
-    let flocks = flock::spawn_flocks(&mut commands, &zone, &perches, opts.seed);
+    // `EXTRACTION_WILDLIFE=off`: no animals (to compare sims with and without).
+    let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
+    let flocks = if off {
+        0
+    } else {
+        flock::spawn_flocks(&mut commands, &opts.map, &perches, opts.seed)
+    };
     info!(
         "wildlife: {} perch sites ({} perches), {flocks} flocks, in {:.0} ms",
         perches.sites.len(),
@@ -163,6 +184,6 @@ pub struct WildlifeVisualsPlugin;
 
 impl Plugin for WildlifeVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(visuals::VisualsPlugin);
+        app.add_plugins((visuals::VisualsPlugin, herd_look::HerdLookPlugin));
     }
 }

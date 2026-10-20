@@ -207,13 +207,14 @@ pub fn flush_radius(t: &Threat) -> f32 {
 
 /// Flocks for a valley: a few, spread over its buildings, each on a site
 /// of its own. Returns how many.
-pub fn spawn_flocks(commands: &mut Commands, zone: &Zone, perches: &Perches, seed: u64) -> usize {
-    let species = Species::for_map(&zone.map.name);
-    let count = match zone.map.name.as_str() {
+/// `map` is the map's id (`marrow_creek`), as `LaunchOptions::map`.
+pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed: u64) -> usize {
+    let species = Species::for_map(map);
+    let count = match map {
         "training_yard" => 1,
         _ => (perches.sites.len() / 5).clamp(2, 5),
     };
-    let mut rng = Rng::new(seed ^ 0xB12D_5EED ^ name_hash(&zone.map.name));
+    let mut rng = Rng::new(seed ^ 0xB12D_5EED ^ name_hash(map));
     let mut taken: Vec<usize> = Vec::new();
     for _ in 0..count {
         // Far from the flocks already placed: the best of a few tries.

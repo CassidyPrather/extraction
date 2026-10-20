@@ -197,6 +197,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 16.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
+| `art/animals/rook.py` | `models/animals/rook.glb`: a rook in poses (sit, wingbeat up/mid/down, glide) and far stand-ins, swapped by `wildlife::visuals` (`docs/WILDLIFE.md`) | 0.33k a pose, 0.07-0.08k far |
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
 | `art/vehicles/bench.py` | `models/vehicles/bench.glb` (the bed's workbench) | 5.3k |
