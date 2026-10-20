@@ -59,8 +59,8 @@ pub const ASK_LETTER: &str = "\"Marrow. The house by the well. There's a letter 
 the table, for me. Bring it. Don't open it.\"\nStash it, press here.";
 
 /// The first deep job: the depot's intake ledger.
-pub const ASK_LEDGER: &str = "\"Under the Gate. Where they take everything. Their ledger \
-for the village, bay K-14. Bring it.\"\nStash it, press here.";
+pub const ASK_LEDGER: &str = "\"Where the convoys go, under the Gate: bay K-14. \
+There's a ledger. Bring it me. Don't read it out.\"\nStash it, press here.";
 
 /// Before the job, when it's in another valley.
 pub fn elsewhere(valley: &str) -> String {
@@ -81,7 +81,7 @@ pub const NOT_AT_BASE: &str = "Driver: \"Back at base. Tell me there.\"";
 pub const ONE_A_RAID: &str = "Driver: \"One thing at a time. After your next run.\"";
 pub const IN_THE_YARD: &str = "Driver: \"Not in the yard. Out there, for real.\"";
 pub const NO_RECORDER: &str = "Driver: \"No recorder in the stash. Still out there, is it?\"";
-pub const NO_LEDGER: &str = "Driver: \"Not in the stash. Bay K-14, under the Gate.\"";
+pub const NO_LEDGER: &str = "Driver: \"Not in the stash. Bay K-14. Under the Gate.\"";
 pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {

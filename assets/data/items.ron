@@ -568,7 +568,7 @@
         // The first deep job after the ladder: the depot's ledger (`progression`).
         (
             id: "intake_ledger", dims: Some((0.24, 0.05, 0.32)), name: "Intake ledger",
-            description: "A Custodian intake ledger, VILLAGE OF MARROW, every page a name and a bay.",
+            description: "A canvas-bound ledger stencilled GATE-M INTAKE. Every line in the same machine hand: what, where from, when, which bay.",
             category: Curio, size: Small, mass: 1.0, bulk: 0.5, tags: ["paper"],
         ),
         // The last of the driver's jobs (`progression`, `docs/LORE.md`).
