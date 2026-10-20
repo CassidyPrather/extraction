@@ -159,6 +159,8 @@ moment after the game starts; `--camera` puts the view anywhere.
 
 ## Order of business
 
+Audio checklist: docs/AUDIO.md, Listening in the headset.
+
 ### 1. Does it work in the headset? (10 minutes)
 
 - The view is in the headset, the right way up, the right scale (the

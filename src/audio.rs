@@ -126,6 +126,7 @@ impl Plugin for AudioPlugin {
                     convoy_sounds,
                     dirigible_loops,
                     drone_and_zip_sounds,
+                    kitchen_sounds,
                 ),
             )
             .add_systems(
@@ -2193,6 +2194,41 @@ fn drone_and_zip_sounds(
             cue,
             0.0,
             0.06,
+        );
+    }
+}
+
+/// The kitchen: each stroke of work sounds like the work (a knife on the
+/// board, stones grinding, a spoon or hands in the bowl), a dish done is a
+/// tap on the pot, an abandoned one a rustle.
+fn kitchen_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::raid::kitchen::Cooking>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::cooking::{Event, Process};
+    for c in events.read() {
+        let (set, cue, speed) = match (c.what, c.process) {
+            (Event::Stroke { .. }, Process::Chop) => ("impacts/wood", "kitchen.chop", 1.6),
+            (Event::Stroke { .. }, Process::Grind) => ("footsteps/gravel", "kitchen.grind", 1.2),
+            (Event::Stroke { .. }, _) => ("physical/cloth", "kitchen.work", 1.0),
+            (Event::Done(_), _) => ("physical/handle_metal", "kitchen.done", 0.9),
+            (Event::Aborted, _) => ("physical/cloth", "kitchen.work", 0.8),
+            _ => continue,
+        };
+        let at = positions.get(c.station).ok().map(|g| g.translation());
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            at,
+            cue,
+            0.0,
+            speed,
+            0.08,
         );
     }
 }

@@ -227,7 +227,7 @@ is what it did before.
 | Field dressing | `use.bandage` | — | silent |
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
-| Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less; the action clicks; a magazine seats with a knock | same |
+| Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
 | A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
@@ -246,6 +246,7 @@ is what it did before.
 | A cover deployed, folded | `cover.deploy`, `cover.fold` | — | silent |
 | The camera drone spun up, marking a robot, landing | `camera_drone.on` (switch), `camera_drone.spot` (a click in your ear), `camera_drone.land` | — | rotor loop only |
 | A zipline rigged, packed | `zip.rig` (the anchor biting), `zip.pack` | — | silent |
+| Kitchen work: chopping, grinding, kneading and stirring, a dish done | `kitchen.chop`, `kitchen.grind`, `kitchen.work` per stroke; `kitchen.done` (`raid::kitchen::Cooking`) | — | silent |
 | The bench finishing a job | `bench.done`, a small high bell | — | silent |
 | An onboarding step done | `step.done`, a light ding | a soft pulse in both hands | (new) |
 
@@ -255,8 +256,8 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** No sound yet for the kitchen's stations (beyond the
-generic click). The audit measures the dirigible's engine
+**Still open.** Searching robots and the walker's and grappler's
+attack tells wait on the robot-minds branch. The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its

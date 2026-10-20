@@ -21,6 +21,15 @@ use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::world::{Layer, Zone};
 
+/// Something happened at a station: a stroke of work, a dish done (for
+/// its sounds, in `audio`). `process` is the station's first.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Cooking {
+    pub station: Entity,
+    pub process: Process,
+    pub what: Event,
+}
+
 /// One cooking station, with the container food goes into.
 #[derive(Component)]
 pub struct Cook {
@@ -65,22 +74,23 @@ pub struct KitchenPlugin;
 
 impl Plugin for KitchenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Startup,
-            spawn_kitchen.after(crate::world::buildings::spawn_buildings),
-        )
-        .add_systems(
-            Update,
-            (
-                own_trays,
-                forget_made,
-                take_in_food,
-                use_controls,
-                cook,
-                label,
+        app.add_message::<Cooking>()
+            .add_systems(
+                Startup,
+                spawn_kitchen.after(crate::world::buildings::spawn_buildings),
             )
-                .chain(),
-        );
+            .add_systems(
+                Update,
+                (
+                    own_trays,
+                    forget_made,
+                    take_in_food,
+                    use_controls,
+                    cook,
+                    label,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -304,6 +314,7 @@ fn cook(
     catalog: Res<Catalog>,
     time: Res<Time>,
     mut raid: ResMut<Raid>,
+    mut cooking: MessageWriter<Cooking>,
 ) {
     let dt = time.delta_secs();
     for (me, mut cook) in &mut cooks {
@@ -315,7 +326,13 @@ fn cook(
             }
         }
         let name = cook.name;
+        let process = cook.station.processes()[0];
         for ev in cook.station.drain() {
+            cooking.write(Cooking {
+                station: me,
+                process,
+                what: ev,
+            });
             match ev {
                 Event::Smoking => raid.say(format!("The {} is smoking.", name.to_lowercase())),
                 Event::Burnt => raid.say(format!(
