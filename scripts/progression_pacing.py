@@ -81,6 +81,8 @@ def tiers():
     return out, wants
 
 
+PRIOR = 4
+
 PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
     ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
 
@@ -148,8 +150,11 @@ def main():
         for d in range(4):
             js = [r for r in jobs if r["job"].get("danger") == d]
             if js:
-                job_rate[d] = sum(r["home"] and r["job"]["seen"] for r in js) / len(js)
-                print(f"| {d} | {len(js)} | {job_rate[d]:.0%} |")
+                done = sum(r["home"] and r["job"]["seen"] for r in js)
+                # A few runs say little: lean on "reached that danger and
+                # got home" as a prior worth PRIOR runs.
+                job_rate[d] = (done + PRIOR * reach(d, d)) / (len(js) + PRIOR)
+                print(f"| {d} | {len(js)} | {done / len(js):.0%} (used: {job_rate[d]:.0%}) |")
         print()
 
     def place_odds(lo, hi):
