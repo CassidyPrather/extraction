@@ -19,6 +19,7 @@ pub mod loot;
 pub mod map;
 pub mod map_lint;
 pub mod map_nav;
+pub mod map_sight;
 pub mod nav;
 pub mod noise;
 pub mod rocks;
