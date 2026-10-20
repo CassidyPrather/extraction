@@ -18,6 +18,7 @@ pub mod artifacts;
 pub mod detector;
 pub mod mirrors;
 pub mod offering;
+pub mod surge;
 pub mod visuals;
 pub mod wells;
 
@@ -155,6 +156,8 @@ impl Plugin for AnomalyPlugin {
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
             .init_resource::<AttentionBudget>()
+            .init_resource::<surge::Agitation>()
+            .add_observer(surge::remember_size)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
             })
@@ -163,6 +166,7 @@ impl Plugin for AnomalyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    surge::stir,
                     // Before anything can blink or fling what was thrown.
                     detector::reveal,
                     lifts,
@@ -175,6 +179,7 @@ impl Plugin for AnomalyPlugin {
                     measure_attention,
                     spend_attention,
                     age_blooms,
+                    surge::surge_blooms,
                 )
                     .chain()
                     .after(crate::robots::perceive),
@@ -274,8 +279,10 @@ fn falloff(d: f32, r: f32) -> f32 {
 
 /// Lifts: loose things float and circle; the longer something's in it, the
 /// sooner it pops and flings everything out.
+#[allow(clippy::too_many_arguments)]
 fn lifts(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut bodies: Query<
         (&GlobalTransform, &RigidBody, &ComputedMass, Forces),
         Without<RigidBodyDisabled>,
@@ -370,7 +377,8 @@ fn lifts(
                 what: AnomalyAct::Pop,
             });
         } else if occupied {
-            a.charge = (a.charge + dt / 4.0).min(1.0);
+            let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
+            a.charge = (a.charge + dt * hurry / 4.0).min(1.0);
         } else {
             a.charge = (a.charge - dt / 6.0).max(0.0);
         }
@@ -378,8 +386,10 @@ fn lifts(
 }
 
 /// Burners: heat that hurts whoever stands in it, and cooks robot parts.
+#[allow(clippy::too_many_arguments)]
 fn burners(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut players: Query<(&GlobalTransform, &mut Health), With<Player>>,
     parts: Query<(), With<crate::robots::RobotPart>>,
     spatial: SpatialQuery,
@@ -399,7 +409,7 @@ fn burners(
             if Vec2::new(rel.x, rel.z).length() < a.radius && rel.y < 2.5 {
                 inside = true;
                 if !h.down {
-                    h.hp -= 14.0 * dt;
+                    h.hp -= 14.0 * (1.0 + agitation.0) * dt;
                     h.since_hit = 0.0;
                 }
             }
@@ -438,7 +448,8 @@ fn burners(
 /// Snares: discharge into everything in reach when anything touches them.
 #[allow(clippy::too_many_arguments)]
 fn snares(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
     held: Query<(&GlobalTransform, &Item, &crate::interact::Held)>,
     catalog: Res<Catalog>,
@@ -459,7 +470,8 @@ fn snares(
         if a.kind != AnomalyKind::Snare {
             continue;
         }
-        a.charge = (a.charge + dt / 3.5).min(1.0);
+        let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
+        a.charge = (a.charge + dt * hurry / 3.5).min(1.0);
         if a.charge < 1.0 {
             continue;
         }

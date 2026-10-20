@@ -54,7 +54,12 @@ fn landing_ok(zone: &Zone, others: &[(Vec2, f32)], p: [f32; 2]) -> bool {
 
 #[allow(clippy::type_complexity)]
 pub fn mirrors(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(
+        Entity,
+        &mut Anomaly,
+        &GlobalTransform,
+        Has<super::surge::Forming>,
+    )>,
     mut bodies: Query<
         (
             Entity,
@@ -79,11 +84,11 @@ pub fn mirrors(
     let dt = time.delta_secs();
     let all: Vec<(Vec2, f32)> = anomalies
         .iter()
-        .map(|(_, a, g)| (g.translation().xz(), a.radius))
+        .map(|(_, a, g, _)| (g.translation().xz(), a.radius))
         .collect();
     let underground = |p: Vec3| crate::world::underground::floor_under(&zone, p).is_some();
-    for (e, mut a, gt) in &mut anomalies {
-        if a.kind != AnomalyKind::Mirror {
+    for (e, mut a, gt, forming) in &mut anomalies {
+        if a.kind != AnomalyKind::Mirror || forming {
             continue;
         }
         a.charge = (a.charge + dt / MIRROR_RECHARGE).min(1.0);

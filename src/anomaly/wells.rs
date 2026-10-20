@@ -41,7 +41,7 @@ pub fn heart(at: Vec3) -> Vec3 {
 /// heart.
 #[allow(clippy::type_complexity)]
 pub fn wells(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<super::surge::Forming>>,
     mut bodies: Query<
         (
             &GlobalTransform,
