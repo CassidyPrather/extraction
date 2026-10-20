@@ -95,9 +95,6 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("selector", Moves::Selector),
         ("hammer", Moves::Hammer),
         ("static", Moves::Static),
-        // The PM's hammer is its own node; it stands still until Weapon
-        // feel's cocking hammer is in.
-        ("hammer", Moves::Static),
     ]
     .into_iter()
     .find(|(p, _)| name.starts_with(p))
