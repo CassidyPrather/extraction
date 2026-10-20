@@ -150,13 +150,17 @@ impl Space {
 
 /// Freeverb's comb filters average this long (1378 samples at 44.1 kHz).
 pub const FREEVERB_COMB: f32 = 0.0312;
+/// Measured by the audit (`scripts/audio_acoustics.py`).
+pub const FREEVERB_DAMPED: f32 = 1.16;
 
 /// The `room_size` that gives Freeverb a decay of `rt60` seconds: its
 /// feedback is `0.7 + 0.28 * room_size`, and a comb of delay `d` with
 /// feedback `g` falls 60 dB in `3 d / -log10 g`. The shortest it does
-/// is about 0.6 s (room_size 0); the audit checks the rest by rendering.
+/// is about 0.6 s (room_size 0). Its damping shortens the tail too: the
+/// audit renders it and measures 0.86 of the comb's decay at every size,
+/// so the comb is asked for [`FREEVERB_DAMPED`] more.
 pub fn freeverb_room(rt60: f32) -> f32 {
-    let feedback = 10f32.powf(-3.0 * FREEVERB_COMB / rt60.max(0.05));
+    let feedback = 10f32.powf(-3.0 * FREEVERB_COMB / (rt60 * FREEVERB_DAMPED).max(0.05));
     ((feedback - 0.7) / 0.28).clamp(0.0, 1.0)
 }
 
