@@ -40,6 +40,8 @@ pub enum First {
     Death,
     ConvoyTook,
     KitRecovered,
+    /// The first note read (its copy goes on the truck's board).
+    NotePinned,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -76,6 +78,7 @@ pub const ALL: &[First] = &[
     First::Death,
     First::ConvoyTook,
     First::KitRecovered,
+    First::NotePinned,
 ];
 
 impl First {
@@ -117,6 +120,9 @@ impl First {
             First::ConvoyTook => {
                 &["Truck: \"That's through the Gate. Kept, they call it. Be quicker.\""]
             }
+            First::NotePinned => {
+                &["Truck: \"Reading their notes? I keep copies. Board in the back.\""]
+            }
             First::KitRecovered => &["Truck: \"That's how you get it back. Take it home.\""],
         }
     }
@@ -141,6 +147,12 @@ pub struct FirstMet(pub First);
 #[derive(Resource, Default, Debug, Clone)]
 pub struct Spoken(pub Vec<String>, pub Vec<f32>);
 
+/// Other systems' moments: write this when one happens (each is said once
+/// a career, like the rest). E.g. `MeetFirst(First::NotePinned)` when a
+/// note is read.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct MeetFirst(pub First);
+
 /// Lines waiting their turn on the wrist.
 #[derive(Resource, Default)]
 struct Queue {
@@ -163,6 +175,7 @@ impl Plugin for FirstsPlugin {
             .init_resource::<Queue>()
             .init_resource::<Spoken>()
             .add_message::<FirstMet>()
+            .add_message::<MeetFirst>()
             .add_systems(
                 Update,
                 (
@@ -176,6 +189,7 @@ impl Plugin for FirstsPlugin {
                         worn,
                         deaths,
                         convoy,
+                        asked,
                     ),
                     speak,
                 )
@@ -442,6 +456,12 @@ fn convoy(
         m.meet(First::KitRecovered);
     }
     *recovered = Some(now);
+}
+
+fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
+    for MeetFirst(f) in asks.read() {
+        m.meet(*f);
+    }
 }
 
 /// One line at a time, a few seconds apart.
