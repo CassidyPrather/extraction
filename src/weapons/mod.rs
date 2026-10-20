@@ -137,13 +137,17 @@ fn update_aim_hints(
     )>,
 ) {
     for (mut hint, children) in &mut players {
-        let gun = children.iter().find_map(|c| {
-            hands
-                .get(c)
-                .ok()
-                .filter(|(rh, _)| rh.side == crate::rig::Side::Right)
-                .and_then(|(_, h)| h.holding)
-                .and_then(|e| guns.get(e).ok())
+        // The gun held by its grip, in either hand (a left-handed player's
+        // is in the left); the right's first if both hands hold one.
+        let gun = crate::rig::Side::BOTH.iter().rev().find_map(|side| {
+            children.iter().find_map(|c| {
+                hands
+                    .get(c)
+                    .ok()
+                    .filter(|(rh, h)| rh.side == *side && h.supporting.is_none())
+                    .and_then(|(_, h)| h.holding)
+                    .and_then(|e| guns.get(e).ok())
+            })
         });
         *hint = match gun {
             Some((ge, g, ggt)) => {
