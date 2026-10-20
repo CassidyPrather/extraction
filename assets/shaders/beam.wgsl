@@ -50,7 +50,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let spread = 1.0 / (1.0 + d * d * 0.08);
     let ends = smoothstep(0.0, 0.08, along) * pow(1.0 - along, 2.0);
     // Close to the eye a face would fill the view: let it go.
-    let near = smoothstep(0.25, 1.2, dist);
+    let near = smoothstep(0.4, 3.0, dist);
     var k = path * spread * ends * near * beam.air.x;
     // Dust: motes on a drifting grid, near only (far, they'd shimmer).
     let t = globals.time;
