@@ -493,6 +493,21 @@ mod tests {
                             ));
                         }
                     }
+                    let p = [w.x, w.z];
+                    for r in &zone.map.roads {
+                        if extraction_core::geom::polyline_closest(&r.points, p).0
+                            < r.width * 0.5 + 0.8
+                        {
+                            problems.push(format!("{}: a piece on {}", s.name, r.name));
+                        }
+                    }
+                    for wt in &zone.map.water {
+                        if extraction_core::geom::polyline_closest(&wt.points, p).0
+                            < wt.width * 0.5 + 1.0
+                        {
+                            problems.push(format!("{}: a piece in {}", s.name, wt.name));
+                        }
+                    }
                     if let Some(tree) = trees.iter().find(|tr| tr.pos.xz().distance(w.xz()) < 1.2) {
                         problems.push(format!(
                             "{}: a tree at {:.1},{:.1}",
