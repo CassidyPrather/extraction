@@ -75,7 +75,12 @@ pub struct Run {
     reported: bool,
     /// What the bot carried when it went down, to fetch back.
     remains: Option<Vec3>,
+    /// Walks to a door, and drones sent, for the drone's moment.
+    walks: u32,
+    drones: u32,
 }
+
+const COVER: &str = "get behind something (indoors, beside the door)";
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn direct(
@@ -140,7 +145,7 @@ pub(super) fn direct(
                 None => ("(nothing to throw)", vec![]),
             },
             First::PackFull => ("leave the worst of it", vec![Task::Release(Side::Left)]),
-            First::Surge => match world.radio() {
+            First::Surge => match world.radio(here) {
                 Some(radio) => (
                     "call the truck, go home",
                     vec![
@@ -166,10 +171,37 @@ pub(super) fn direct(
                     Task::Wait(20.0),
                 ],
             ),
-            First::DroneLock => (
-                "fight it (two hands, sound rifle)",
-                vec![Task::Engage { shots: 30 }],
-            ),
+            // In through the door it waited by, and into a corner out of
+            // the doorway's line.
+            First::DroneLock => match world.shelter(here) {
+                Some(s) => {
+                    let mut t = Vec::new();
+                    if !world.door_open(s.door) {
+                        t.push(Task::OpenDoor(s.door));
+                    }
+                    for to in [s.inside, s.corner] {
+                        t.push(Task::WalkTo {
+                            to: to.xz(),
+                            within: 0.6,
+                        });
+                    }
+                    t.extend([Task::Wait(20.0), Task::Wait(20.0)]);
+                    // And out the way it came in, and round the house.
+                    t.push(Task::WalkTo {
+                        to: s.inside.xz(),
+                        within: 1.0,
+                    });
+                    for to in &s.away {
+                        t.push(Task::WalkTo {
+                            to: to.xz(),
+                            within: 1.5,
+                        });
+                    }
+                    (COVER, t)
+                }
+                None => ("fight it (no cover)", vec![Task::Engage { shots: 30 }]),
+            },
+            First::LostYou => ("stay low a while", vec![]),
             First::Death => ("go back for it", vec![]),
             _ => ("", vec![]),
         };
@@ -187,16 +219,17 @@ pub(super) fn direct(
                 bot.tasks.push_front(t);
             }
             bot.elapsed = 0.0;
-            run.pending.push((row, now + 45.0));
+            let wait = if *f == First::DroneLock { 60.0 } else { 45.0 };
+            run.pending.push((row, now + wait));
         } else {
             run.pending.push((row, now + 3.0));
         }
     }
-    // Get low for the machine that heard you.
+    // Get low for the machine that heard you, and in cover.
     let low = run
         .pending
         .iter()
-        .any(|(row, _)| run.rows[*row].first == First::Heard);
+        .any(|(row, _)| matches!(run.rows[*row].first, First::Heard | First::DroneLock));
     if input.crouch != low {
         input.crouch = low;
     }
@@ -217,12 +250,14 @@ pub(super) fn direct(
                 Phase::TruckCalled { .. } | Phase::TruckWaiting { .. }
             ),
             First::Heard => world.alive(player) && world.no_one_engaging(),
-            First::DroneLock => world.alive(player) && world.drones_down(),
+            First::DroneLock => {
+                world.alive(player) && (world.drones_down() || world.no_one_engaging())
+            }
             _ => true,
         };
         let early = match r.first {
             First::Heard => false,
-            First::DroneLock => ok,
+            First::DroneLock => world.drones_down(),
             _ => true,
         };
         if (ok && early) || now > deadline || !world.alive(player) {
@@ -362,6 +397,15 @@ pub(super) fn direct(
                 };
                 bot.log.push(format!("home from raid {}", raid.raids));
                 advance(&mut run, next);
+            } else if raid.phase == Phase::Out
+                && !world.radio_in_hand()
+                && world
+                    .radio(here)
+                    .is_none_or(|r| world.distance_to(r, here) > 15.0)
+            {
+                // Its radio went down with it, or was set down for a rifle.
+                world.drop_radio(&mut commands, root.translation);
+                tasks.push(Wait(0.5));
             } else {
                 tasks.extend(world.go_home(here, &raid, run.tries));
                 run.tries += 1;
@@ -460,19 +504,38 @@ pub(super) fn direct(
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
                 run.tries += 1;
-            } else if !firsts.met(First::DroneLock) && run.tries < 4 {
+            } else if let Some(s) = world
+                .shelter(here)
+                .filter(|s| s.outside.xz().distance(here) > 2.0)
+                .filter(|_| !firsts.met(First::DroneLock) && run.walks < 3)
+            {
+                // Met by a house, as most of the Zone is: walk up to a
+                // door first.
+                bot.log.push(format!(
+                    "  (to a door at {:.1}, inside {:.1}, corner {:.1})",
+                    s.outside, s.inside, s.corner
+                ));
+                let mut from = here;
+                for to in s.round.iter().chain([&s.outside]) {
+                    tasks.extend(world.legs(from, to.xz()));
+                    from = to.xz();
+                }
+                run.walks += 1;
+            } else if !firsts.met(First::DroneLock) && run.drones < 3 {
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Support);
+                // From the open side, the house at the bot's back, in plain
+                // sight.
+                let from = match world.shelter(here) {
+                    Some(s) => here + s.out.xz() * 25.0,
+                    None => here + Vec2::new(0.0, -25.0),
+                };
                 tasks.push(Spawn {
                     kind: crate::robots::RobotKind::Drone,
-                    at: Vec3::new(
-                        here.x,
-                        world.zone.ground(here.x, here.y - 40.0) + 12.0,
-                        here.y - 40.0,
-                    ),
+                    at: Vec3::new(from.x, world.zone.ground(from.x, from.y) + 10.0, from.y),
                 });
-                tasks.push(Wait(6.0));
-                run.tries += 1;
+                tasks.push(Wait(10.0));
+                run.drones += 1;
             } else {
                 advance(&mut run, Step::Home2);
             }
@@ -613,6 +676,20 @@ pub(super) struct World2<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    entrances: Res<'w, crate::robots::doors::Entrances>,
+    doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+}
+
+/// A house to get into: outside its nearest door, just in, and a spot
+/// beside the door out of its line (`corner`).
+struct Shelter {
+    door: Entity,
+    out: Vec3,
+    round: Vec<Vec3>,
+    away: Vec<Vec3>,
+    outside: Vec3,
+    inside: Vec3,
+    corner: Vec3,
 }
 
 impl World2<'_, '_> {
@@ -755,14 +832,18 @@ impl World2<'_, '_> {
         }
     }
 
-    fn radio(&self) -> Option<Entity> {
+    /// The nearest radio lying loose.
+    fn radio(&self, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
             .filter(|(e, _, _, held, sock, bag)| {
                 held.is_none() && sock.is_none() && bag.is_none() && self.id(*e) == Some("radio")
             })
+            .min_by(|a, b| {
+                let d = |gt: &GlobalTransform| gt.translation().xz().distance(near);
+                d(a.2).total_cmp(&d(b.2))
+            })
             .map(|(e, ..)| e)
-            .next()
     }
 
     fn drop_radio(&self, commands: &mut Commands, at: Vec3) {
@@ -857,7 +938,7 @@ impl World2<'_, '_> {
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
-                false => match self.radio() {
+                false => match self.radio(here) {
                     Some(r) => vec![
                         Task::Release(Side::Left),
                         Task::Grab {
@@ -913,6 +994,92 @@ impl World2<'_, '_> {
             })
             .map(|(e, ..)| e)
             .next()
+    }
+
+    fn door_open(&self, door: Entity) -> bool {
+        crate::robots::doors::is_open(self.doors.get(door).ok())
+    }
+
+    fn shelter(&self, near: Vec2) -> Option<Shelter> {
+        let e = self
+            .entrances
+            .doors
+            .iter()
+            .filter(|e| e.mid.xz().distance(near) < 200.0)
+            // A house, not a shed: a drone hovers at the door and looks in,
+            // so there has to be a corner out of its line.
+            .filter(|e| {
+                self.entrances
+                    .shells
+                    .iter()
+                    .any(|s| s.building == e.building && s.half.min_element() >= 3.0)
+            })
+            .min_by(|a, b| {
+                a.mid
+                    .xz()
+                    .distance(near)
+                    .total_cmp(&b.mid.xz().distance(near))
+            })?;
+        let shell = self
+            .entrances
+            .shells
+            .iter()
+            .find(|s| s.building == e.building)?;
+        let to_local = shell.xf.compute_affine().inverse();
+        // Beside the door, just in: the same room (no inner wall in the
+        // way), and out of the line of anything looking in through it.
+        let across = Vec3::new(-e.out.z, 0.0, e.out.x);
+        let corner = [1.0, -1.0]
+            .into_iter()
+            .map(|k| e.mid - e.out * 1.0 + across * 1.8 * k)
+            .find(|c| {
+                let l = to_local.transform_point3(*c);
+                l.x.abs() < shell.half.x - 0.5 && l.z.abs() < shell.half.y - 0.5
+            })?;
+        let ground = |p: Vec3| Vec3::new(p.x, self.zone.ground(p.x, p.z), p.z);
+        // Round the house's corners to its door, from behind or beside it
+        // (straight at it would be through a wall).
+        let n = to_local
+            .transform_vector3(e.out)
+            .with_y(0.0)
+            .normalize_or(Vec3::Z);
+        let t = Vec3::new(-n.z, 0.0, n.x);
+        let clear = 2.5;
+        let half = Vec3::new(shell.half.x, 0.0, shell.half.y);
+        let (hn, ht) = (half.dot(n.abs()) + clear, half.dot(t.abs()) + clear);
+        let route = |from: Vec2| {
+            let p = to_local.transform_point3(Vec3::new(from.x, 0.0, from.y));
+            let side = if p.dot(t) < 0.0 { -1.0 } else { 1.0 };
+            let mut round = Vec::new();
+            if p.dot(n) < -hn + clear {
+                round.push(t * ht * side - n * hn);
+            }
+            if p.dot(n) < hn {
+                round.push(t * ht * side + n * hn);
+            }
+            round
+                .into_iter()
+                .map(|c| ground(shell.xf.transform_point(c)))
+                .collect::<Vec<_>>()
+        };
+        // Out again: clear of the door, then round towards the truck.
+        let mut away = vec![ground(e.mid + e.out * 3.0)];
+        away.extend(route(self.insertion()).into_iter().rev());
+        Some(Shelter {
+            door: e.door,
+            out: e.out,
+            round: route(near),
+            away,
+            outside: ground(e.mid + e.out * 1.6),
+            inside: ground(e.mid - e.out * 1.2),
+            corner: ground(corner),
+        })
+    }
+
+    fn distance_to(&self, item: Entity, near: Vec2) -> f32 {
+        self.items.get(item).map_or(f32::MAX, |(_, _, gt, ..)| {
+            gt.translation().xz().distance(near)
+        })
     }
 
     fn radio_in_hand(&self) -> bool {
