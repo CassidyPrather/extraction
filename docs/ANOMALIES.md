@@ -14,6 +14,7 @@ looks like. Code: `src/anomaly/`, rules in
 | Snare | the Surge | discharges into whatever touches it (robots too), then recharges; metal in a hand draws the arc from 0.8 m further off | blue arcs and sparks, a crackling light; arcs reach out to what they strike | aegis knot |
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
+| Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
 
 Wells and mirrors don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
@@ -81,12 +82,13 @@ carry it safe, or carry it live.
 | Lodestone | well | rounds fired at you curve aside | five kilograms more on your back | it hangs at the crushing heart; dash in and out |
 | Mirror shard | mirror | use it to step up to 4 m ahead, once a minute | every 20–40 s its late reflection glints, and robots within 35 m hear where you are | it hangs in the fold; throw something through and reach in while it closes (1.5 s) |
 | Glass eye | rare, any field | held to your eye, walls go thin | strong attention | as its anomaly's stone |
+| Hushstone | hush | a small Hush round you (1.2 m): your steps and shots aren't heard | every detector you carry is mute; attention 1.5/s | it lies in the dead air: in and out before 8 s |
 | Stormglass | only the Surge's own blooms (about one a Surge) | the Surge passes over you as if you were under a roof | the whole Zone knows where you are (attention 3/s) | as its bloom's kind, once it has finished forming |
 
 Rules and numbers: `extraction_core::anomaly` (costs, harvesting);
 game side `src/anomaly/costs.rs`, `harvest.rs`, `artifacts.rs`.
 Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
-`harvest_well`, `harvest_mirror` (in `--scenario all`).
+`harvest_well`, `harvest_mirror`, `harvest_hush` (in `--scenario all`).
 
 **Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
 `hunter` sim raids, at most 20% of deliberate dives into anomalies may

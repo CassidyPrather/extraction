@@ -360,13 +360,14 @@ pub(crate) fn perceive(
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances): (
+    (lighting, doors, cloaks, conditions, zone, entrances, hushes): (
         Res<Lighting>,
         Query<&crate::world::buildings::Door>,
         Res<crate::gadgets::Cloaks>,
         Res<crate::world::weather::Conditions>,
         Res<Zone>,
         Res<super::doors::Entrances>,
+        Option<Res<crate::anomaly::hush::Hushes>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
@@ -405,6 +406,10 @@ pub(crate) fn perceive(
             radius: footstep_reach(loud, s.speed, body.height),
             source: Some(s.entity),
         });
+    }
+    // A Hush eats every sound made in it (`anomaly::hush`).
+    if let Some(h) = &hushes {
+        sounds.retain(|s| !h.eats(s.at));
     }
     // Where each player's eyes are, and what they stand in.
     struct Seen {
