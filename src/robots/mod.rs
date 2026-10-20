@@ -14,6 +14,7 @@ pub mod director;
 pub mod dirigible;
 pub mod doors;
 pub mod drone;
+pub mod flight;
 pub mod grappler;
 pub mod pylon;
 pub mod reel;
@@ -188,6 +189,7 @@ impl Plugin for RobotsPlugin {
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
                 anim::AnimPlugin,
+                flight::FlightPlugin,
             ))
             .add_systems(
                 FixedUpdate,

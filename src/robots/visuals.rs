@@ -66,6 +66,8 @@ struct Halo {
 #[derive(Component)]
 struct RotorDisc {
     index: usize,
+    /// How far round it has spun.
+    angle: f32,
 }
 
 /// A dirigible's engine propeller, turning about its Z while the ship lives.
@@ -319,7 +321,10 @@ fn dress_parts(
                 );
                 let disc = commands
                     .spawn((
-                        RotorDisc { index: i as usize },
+                        RotorDisc {
+                            index: i as usize,
+                            angle: 0.0,
+                        },
                         Transform::from_translation(
                             blades.transform.translation - rotor.transform.translation,
                         ),
@@ -520,7 +525,10 @@ fn dress_blockout(
                 MeshMaterial3d(m.dark.clone()),
             ));
             commands.spawn((
-                RotorDisc { index: i as usize },
+                RotorDisc {
+                    index: i as usize,
+                    angle: 0.0,
+                },
                 Mesh3d(meshes.add(Cylinder::new(0.16, 0.006))),
                 MeshMaterial3d(m.rotor.clone()),
                 Transform::from_xyz(0.0, 0.035, 0.0),
@@ -659,7 +667,10 @@ fn dress_blockout(
                         Transform::from_xyz(x, 0.2, 0.8),
                     ));
                     c.spawn((
-                        RotorDisc { index: 0 },
+                        RotorDisc {
+                            index: 0,
+                            angle: 0.0,
+                        },
                         Mesh3d(
                             meshes.add(
                                 Cylinder::new(0.55, 0.02)
@@ -683,26 +694,41 @@ fn dress_blockout(
     }
 }
 
+/// Rotors spin with their thrust and tip toward where the drone is
+/// trying to go, so you can read its intent off its rotors.
 fn spin_rotors(
-    drones: Query<(&Drone, &Children)>,
+    drones: Query<(&Drone, &super::flight::Flight, &Transform, &Children)>,
     rotor_parts: Query<&Children, With<RobotPart>>,
-    mut discs: Query<(&RotorDisc, &mut Transform)>,
+    mut discs: Query<(&mut RotorDisc, &mut Transform), Without<Drone>>,
     time: Res<Time>,
 ) {
-    for (d, children) in &drones {
+    for (d, flight, dt, children) in &drones {
+        let a = dt.rotation.inverse() * flight.accel;
+        let tip = Vec3::Y
+            .cross(Vec3::new(a.x, 0.0, a.z) * 0.06)
+            .clamp_length_max(0.3);
         for c in children.iter() {
             let Ok(grand) = rotor_parts.get(c) else {
                 continue;
             };
             for g in grand.iter() {
-                if let Ok((disc, mut t)) = discs.get_mut(g) {
-                    let rate = if d.rotor_alive[disc.index] {
+                if let Ok((mut disc, mut t)) = discs.get_mut(g) {
+                    let alive = d.rotor_alive[disc.index];
+                    let rate = if alive {
                         40.0 + d.thrust[disc.index] * 3.0
                     } else {
                         0.0
                     };
                     let dir = if disc.index % 2 == 0 { 1.0 } else { -1.0 };
-                    t.rotate_y(rate * dir * time.delta_secs());
+                    disc.angle = (disc.angle + rate * dir * time.delta_secs())
+                        .rem_euclid(std::f32::consts::TAU);
+                    // A dead rotor hangs bent on its mount.
+                    let tilt = if alive {
+                        Quat::from_scaled_axis(tip)
+                    } else {
+                        Quat::from_rotation_x(0.35) * Quat::from_rotation_z(0.2)
+                    };
+                    t.rotation = tilt * Quat::from_rotation_y(disc.angle);
                 }
             }
         }

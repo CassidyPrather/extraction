@@ -55,6 +55,7 @@ fn reel(
     zone: Option<Res<Zone>>,
     mut state: Local<Reel>,
     mut walkers: Query<&mut Walker>,
+    mut drones: Query<&mut super::drone::Drone>,
     mut parts: Query<(Entity, &mut RobotPart, &GlobalTransform)>,
     mut robots: Query<&mut super::Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
@@ -103,9 +104,8 @@ fn reel(
         let walk_start = eye + flat * 6.0 - right * 4.5;
         let e = match what {
             "drone" | "dronewreck" => {
-                let site = eye + flat * 16.0;
-                let at = site + Vec3::Y * 3.0;
-                spawn_drone(&mut commands, at, job(Vec3::new(site.x, 0.0, site.z)))
+                let at = eye + flat * 8.0 + Vec3::Y * 0.8;
+                spawn_drone(&mut commands, at, job(at))
             }
             "turn" => {
                 let start = eye + flat * 9.0 - right * 3.5;
@@ -119,16 +119,17 @@ fn reel(
         };
         // Deaf and blind: it's here to be looked at, not to hunt.
         commands.entity(e).remove::<Senses>();
-        // At work already: walkers stand where they are (and follow the
-        // path given below), drones circle the site.
-        let at = if what.starts_with("drone") {
-            eye + flat * 16.0
+        if what.starts_with("drone") {
+            // No brain: the reel flies it (below).
+            commands.entity(e).remove::<Brain>();
         } else {
-            walk_start
-        };
-        commands
-            .entity(e)
-            .insert(Brain::Working { at, left: 1.0e6 });
+            // At work already: it stands where it is and follows the path
+            // given below.
+            commands.entity(e).insert(Brain::Working {
+                at: walk_start,
+                left: 1.0e6,
+            });
+        }
         state.subject = Some(e);
         state.kill_at = match what {
             "wreck" | "dronewreck" => Some(WARMUP + 6),
@@ -139,6 +140,16 @@ fn reel(
     let Some(subject) = state.subject else {
         return;
     };
+    // A drone flies a figure of eight in front of you, banking through
+    // the turns, nose leading.
+    if let Ok(mut d) = drones.get_mut(subject) {
+        let k = frame as f32 / 30.0 * std::f32::consts::TAU / 7.0;
+        let centre = eye + flat * 8.0 + Vec3::Y * 0.8;
+        d.goal = centre + right * (k.sin() * 4.5) + flat * ((2.0 * k).sin() * 2.0);
+        if what == "dronewreck" {
+            d.goal = centre;
+        }
+    }
     if frame == 5 {
         if let Ok(mut w) = walkers.get_mut(subject) {
             let p = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
