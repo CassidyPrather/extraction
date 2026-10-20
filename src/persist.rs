@@ -255,6 +255,7 @@ fn load_save(
     mut requests: ResMut<crate::raid::requests::Requests>,
     mut progression: ResMut<crate::progression::Progression>,
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
+    mut notes: ResMut<crate::raid::board::NotesRead>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -288,6 +289,7 @@ fn load_save(
     raid.extractions = save.stats.extractions;
     raid.deaths = save.stats.deaths;
     raid.recalled = save.stats.recalled;
+    notes.0 = save.stats.notes_read.clone();
     raid.clock = save.zone.clock;
     raid.cycle = save.zone.cycle;
     memorial.0 = save.memorial.clone();
@@ -721,6 +723,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         .get_resource::<crate::onboarding::firsts::Firsts>()
         .map(|f| f.0.iter().cloned().collect())
         .unwrap_or_default();
+    save.stats.notes_read = world
+        .get_resource::<crate::raid::board::NotesRead>()
+        .map(|n| n.0.clone())
+        .unwrap_or_default();
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()
@@ -844,7 +850,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     save
 }
 
-fn write_career(path: &std::path::Path, career: &Career) {
+pub(crate) fn write_career(path: &std::path::Path, career: &Career) {
     let text = match career.to_ron() {
         Ok(t) => t,
         Err(e) => {

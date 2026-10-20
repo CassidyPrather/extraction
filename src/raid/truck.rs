@@ -66,6 +66,9 @@ pub enum Pressable {
     Camp,
     /// The logbook: turn to the other page (`raid/logbook.rs`).
     Logbook,
+    /// A note on the cork board: take it down, pin it back
+    /// (`raid/board.rs`).
+    Note,
 }
 
 /// The stash crate in the truck bed.
