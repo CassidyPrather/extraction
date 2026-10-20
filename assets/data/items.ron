@@ -621,25 +621,25 @@
         // The heavy's (robots/heavy.rs): its plates and its cell ride on
         // its hull until they come loose; knees and claw drop from a wreck.
         (
-            id: "heavy_cell", dims: Some((0.44, 0.28, 0.18)), name: "Heavy power cell",
+            id: "heavy_cell", dims: Some((0.44, 0.29, 0.207)), name: "Heavy power cell",
             description: "The heart of a demolition unit, still warm and ticking. Twenty robot cells in one; mind your back carrying it.",
             category: RobotPart, size: Large, mass: 16.0, bulk: 6.0, battery_wh: 2400.0,
             tags: ["electronics"],
         ),
         (
-            id: "heavy_plate", dims: Some((1.08, 0.66, 0.05)), name: "Heavy armour plate",
+            id: "heavy_plate", dims: Some((1.08, 0.66, 0.06)), name: "Heavy armour plate",
             description: "A plate off a demolition unit's hull, bolt holes torn. Nothing you own will go through it.",
             category: RobotPart, size: Bulky, mass: 14.0, bulk: 12.0,
             tags: ["metal"],
         ),
         (
-            id: "heavy_knee", dims: Some((0.3, 0.5, 0.3)), name: "Heavy knee actuator",
+            id: "heavy_knee", dims: Some((0.308, 0.48, 0.26)), name: "Heavy knee actuator",
             description: "A knee off a demolition unit: a ram as thick as your arm in a cage of plate.",
             category: RobotPart, size: Large, mass: 12.0, bulk: 5.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "heavy_claw", dims: Some((0.5, 0.7, 0.35)), name: "Manipulator claw",
+            id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
             description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
             category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
             tags: ["electronics", "metal"],

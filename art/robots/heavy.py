@@ -27,9 +27,9 @@ Segments bend about X. Every object has `<name>_lod1` and `<name>_lod2`
 stand-ins (fewer sides, no small parts) for 25 m and 70 m.
 
 The items are world-sized (twice the robot space), centred:
-- `heavy_plate` 1.08 x 0.66 x 0.05, its outer face +Z
-- `heavy_cell`  0.44 x 0.28 x 0.18, its handle on +Z (out of the bay)
-- `heavy_knee`  0.3 x 0.5 x 0.3,   `heavy_claw` 0.5 x 0.7 x 0.35
+- `heavy_plate` 1.08 x 0.66 x 0.06, its outer face +Z
+- `heavy_cell`  0.44 x 0.29 x 0.21, its handle on +Z (out of the bay)
+- `heavy_knee`  0.31 x 0.48 x 0.26, `heavy_claw` 0.32 x 0.56 x 0.32 (centred on their bounds)
 """
 
 import math
@@ -298,5 +298,16 @@ export("assets/models/robots/heavy.glb")
 
 for p in items():
     reset()
-    make(p)
+    obj = make(p)
+    # Centred on its bounds: the item's box (items.ron dims) sits round
+    # its origin.
+    me = obj.data
+    lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+    hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+    mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+    for v in me.vertices:
+        v.co = [v.co[k] - mid[k] for k in range(3)]
+    size = [hi[k] - lo[k] for k in range(3)]
+    # (Blender is Z up: game x, y, z = its x, z, y.)
+    print(f"{p.name} dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f}")
     export(f"assets/models/items/{p.name}.glb")
