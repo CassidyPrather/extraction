@@ -2805,3 +2805,121 @@ mod climbing {
         );
     }
 }
+
+/// Tools worked with the hands.
+mod tools {
+    use super::*;
+    use crate::interact::tools::crowbar::{CLAW, GRIP, PriedFree, Pryable, SHAFT};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn on_ground(vr: &Vr, x: f32, z: f32) -> Vec3 {
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(x, z)
+    }
+
+    #[derive(Resource, Default)]
+    struct Freed(Vec<Entity>);
+
+    fn collect_freed(mut r: MessageReader<PriedFree>, mut freed: ResMut<Freed>) {
+        freed.0.extend(r.read().map(|f| f.target));
+    }
+
+    /// A crowbar in both hands, its claw to the seam on a block's face
+    /// 0.6 m ahead at waist height; then levered round the claw with the
+    /// hands at `out` and `steady` metres up the bar from it. Did it give?
+    fn pry(out: f32, steady: f32) -> bool {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Freed>()
+            .add_systems(FixedUpdate, collect_freed);
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let face = feet + Vec3::new(0.0, 1.0, -0.6);
+        let block = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(1.0, 1.0, 0.4),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(face - Vec3::Z * 0.2),
+                Pryable {
+                    needs: 100.0,
+                    seam: Vec3::new(0.0, 0.0, 0.23),
+                    radius: 0.08,
+                },
+            ))
+            .id();
+        let bar = vr.spawn(
+            "crowbar",
+            Transform::from_translation(feet + Vec3::new(0.3, 0.9, -0.3)),
+        );
+        vr.app.world_mut().entity_mut(bar).insert(RigidBody::Static);
+        let grip = vr.point(bar, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(bar)
+            .insert(RigidBody::Dynamic);
+        let shaft = vr.point(bar, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, shaft, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(4);
+        assert!(
+            vr.hand_state(Side::Left).supporting == Some(bar),
+            "the other hand steadies the bar"
+        );
+        // The claw to the seam: the bar along a line up and back from it.
+        let seam = face + Vec3::Z * 0.03;
+        let line = Vec3::new(0.0, 0.6, 0.8).normalize();
+        let hands_at = |line: Vec3, a: f32, b: f32| (seam + line * a, seam + line * b);
+        let (r, l) = hands_at(line, (GRIP - CLAW).length(), (SHAFT - CLAW).length());
+        for i in 1..=20 {
+            let k = i as f32 / 20.0;
+            vr.move_hand(Side::Right, grip.lerp(r, k));
+            vr.move_hand(Side::Left, shaft.lerp(l, k));
+            vr.step(1);
+        }
+        vr.step(10);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::tools::crowbar::Crowbar>(bar)
+            .unwrap()
+            .seated
+            .is_some();
+        assert!(seated, "the claw seats on the seam");
+        // Slide the hands to where they'll lever from, then pull the
+        // handle round the claw, 0.45 rad, and hold it there.
+        let (r0, l0) = hands_at(line, out, steady);
+        vr.move_hand(Side::Right, r0);
+        vr.move_hand(Side::Left, l0);
+        vr.step(2);
+        let bent = Quat::from_rotation_x(-0.45) * line;
+        for i in 1..=10 {
+            let k = i as f32 / 10.0;
+            let now = line.slerp(bent, k);
+            let (r, l) = hands_at(now, out, steady);
+            vr.move_hand(Side::Right, r);
+            vr.move_hand(Side::Left, l);
+            vr.step(1);
+        }
+        vr.step(40);
+        vr.app.world().resource::<Freed>().0.contains(&block)
+    }
+
+    /// Levered from the end of the bar with both hands, the seam gives.
+    #[test]
+    fn a_crowbar_levered_from_its_end_prises_the_seam() {
+        assert!(pry(0.67, 0.4), "two hands at the end didn't move it");
+    }
+
+    /// Choked up by the claw, the same pull moves nothing.
+    #[test]
+    fn a_crowbar_held_short_moves_nothing() {
+        assert!(!pry(0.25, 0.12), "hands by the claw prised it");
+    }
+}

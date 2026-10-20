@@ -22,6 +22,7 @@ pub mod hand_climb;
 mod physics_audit;
 pub mod physics_hands;
 pub mod poke;
+pub mod tools;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -309,6 +310,7 @@ impl Plugin for InteractPlugin {
                 body::BodyPlugin,
                 physics_hands::PhysicsHandsPlugin,
                 hand_climb::HandClimbPlugin,
+                tools::ToolsPlugin,
             ));
     }
 }
