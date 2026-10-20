@@ -85,6 +85,9 @@ pub struct Gait {
     /// Settling its turret (a walker's tell): seconds left. It plants and
     /// sinks a little, steadying.
     pub steady: f32,
+    /// The body's scale (1 for a walker; a crawler is smaller). The root's
+    /// `Transform::scale` must match: hips come from it.
+    pub size: f32,
 }
 
 impl Default for Gait {
@@ -109,11 +112,20 @@ impl Default for Gait {
             rear: 0.0,
             rear_dir: Vec3::ZERO,
             steady: 0.0,
+            size: 1.0,
         }
     }
 }
 
 impl Gait {
+    /// A body `size` times a walker's.
+    pub fn sized(size: f32) -> Self {
+        Self {
+            size,
+            ..Default::default()
+        }
+    }
+
     /// A knock to the body (a hit): `impulse` in m/s at the point, roughly.
     pub fn knock(&mut self, at_offset: Vec3, impulse: Vec3) {
         // Torque-ish: a hit high on the orb rocks it more than one low.
@@ -134,11 +146,19 @@ pub fn rest_offset(i: usize) -> Vec3 {
 
 /// Two-bone IK: the knee, bent toward `pole`.
 pub fn solve_knee(hip: Vec3, foot: Vec3, pole: Vec3) -> Vec3 {
-    let d = (foot - hip).length().clamp(0.05, UPPER + LOWER - 0.001);
+    solve_knee_sized(hip, foot, pole, 1.0)
+}
+
+/// [`solve_knee`] for legs `size` times the walker's.
+pub fn solve_knee_sized(hip: Vec3, foot: Vec3, pole: Vec3, size: f32) -> Vec3 {
+    let (upper, lower) = (UPPER * size, LOWER * size);
+    let d = (foot - hip)
+        .length()
+        .clamp(0.05 * size, upper + lower - 0.001);
     let dir = (foot - hip).normalize_or(Vec3::NEG_Y);
     // Distance along hip->foot to the knee's projection, and the knee's offset.
-    let a = (UPPER * UPPER - LOWER * LOWER + d * d) / (2.0 * d);
-    let h = (UPPER * UPPER - a * a).max(0.0).sqrt();
+    let a = (upper * upper - lower * lower + d * d) / (2.0 * d);
+    let h = (upper * upper - a * a).max(0.0).sqrt();
     let bend = (pole - dir * pole.dot(dir)).normalize_or(Vec3::Y);
     hip + dir * a + bend * h
 }
@@ -183,6 +203,7 @@ pub fn step_walker(
     if dt <= 0.0 {
         return;
     }
+    let s = g.size;
     g.rear = (g.rear - dt).max(0.0);
     g.steady = (g.steady - dt).max(0.0);
     // Rearing back: up over the wind-up, held at the top.
@@ -242,13 +263,13 @@ pub fn step_walker(
 
     // Feet.
     let rot = Quat::from_rotation_y(w.yaw);
-    let fast = (speed / SPEED).clamp(0.0, 1.5);
+    let fast = (speed / (SPEED * s)).clamp(0.0, 1.5);
     let step_time = 0.36 - 0.1 * fast;
-    let trigger = 0.3 + 0.16 * fast;
+    let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
     let probe_y = next.y;
-    let ideal_xz = |i: usize| next + rot_ahead * rest_offset(i) + lookahead;
+    let ideal_xz = |i: usize| next + rot_ahead * rest_offset(i) * s + lookahead;
     let mut kick = 0.0f32;
     for i in 0..LEGS {
         if !w.feet[i].alive || w.feet[i].t >= 1.0 {
@@ -277,7 +298,7 @@ pub fn step_walker(
             let k = ((nt - 0.3) / 0.7).clamp(0.0, 1.0);
             k * k * (3.0 - 2.0 * k)
         };
-        let lift = (STEP_HEIGHT * (0.8 + 0.4 * fast.min(1.0)) + dy.abs() * 0.4)
+        let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) + dy.abs() * 0.4)
             * (std::f32::consts::PI * nt).sin();
         let xz = f.from.lerp(f.to, s);
         f.planted = Vec3::new(xz.x, f.from.y + dy * sv + lift, xz.z);
@@ -324,7 +345,7 @@ pub fn step_walker(
                     let neighbours_down = [(i + 1) % LEGS, (i + LEGS - 1) % LEGS]
                         .iter()
                         .all(|&j| !w.feet[j].alive || w.feet[j].t >= 1.0);
-                    let ready = need[i] > 1.0 || (g.idle > 0.6 && need[i] * trigger > 0.12);
+                    let ready = need[i] > 1.0 || (g.idle > 0.6 && need[i] * trigger > 0.12 * s);
                     w.feet[i].alive && w.feet[i].t >= 1.0 && ready && neighbours_down
                 })
                 .max_by(|a, b| need[*a].total_cmp(&need[*b]));
@@ -351,7 +372,7 @@ pub fn step_walker(
     }
     let centroid = if n > 0.0 { sum / n } else { next };
     let under = ground(Vec3::new(next.x, probe_y, next.z));
-    let target_sag = if drive.down && !drive.stunned {
+    let target_sag = s * if drive.down && !drive.stunned {
         BODY_HEIGHT - 0.4
     } else if drive.stunned {
         0.55
@@ -365,9 +386,9 @@ pub fn step_walker(
     };
     g.sag += (target_sag - g.sag) * (3.0 * dt).min(1.0);
     let rest_y = if drive.down && !drive.stunned {
-        under + BODY_HEIGHT
+        under + BODY_HEIGHT * s
     } else {
-        centroid.y.max(under - 0.2) + BODY_HEIGHT
+        centroid.y.max(under - 0.2 * s) + BODY_HEIGHT * s
     } - g.sag;
     next.y += (rest_y - next.y) * (6.0 * dt).min(1.0);
 
@@ -395,7 +416,7 @@ pub fn step_walker(
     } else {
         Vec3::ZERO
     }
-    .clamp_length_max(0.07);
+    .clamp_length_max(0.07 * s);
     let flat = Vec3::new(g.sway.x, 0.0, g.sway.z).lerp(shift, (5.0 * dt).min(1.0));
     g.sway = Vec3::new(flat.x, bob, flat.z);
     t.translation = next + g.sway;
@@ -448,13 +469,14 @@ pub fn step_walker(
             continue;
         }
         let hip = t.transform_point(hip_offset(i));
-        let hang = hip + rot * (Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z) * 1.2)
-            - Vec3::Y * (UPPER + LOWER) * 0.85;
+        let hang = hip + rot * (Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z) * 1.2 * s)
+            - Vec3::Y * (UPPER + LOWER) * 0.85 * s;
         if g.dangle[i] == Vec3::ZERO || g.dangle[i].distance(hang) > 2.5 {
             g.dangle[i] = hang;
         }
         let d = g.dangle[i].lerp(hang, (3.0 * dt).min(1.0));
-        let floor = ground(Vec3::new(d.x, probe_y, d.z)) + 0.04;
+        // (The ground under the body will do: it hangs within a metre.)
+        let floor = under + 0.04;
         g.dangle[i] = Vec3::new(d.x, d.y.max(floor), d.z);
     }
 }
@@ -469,7 +491,7 @@ pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
             g.dangle[i]
         };
         let out = (hip - t.translation).normalize_or(Vec3::X);
-        let knee = solve_knee(hip, foot, out + Vec3::Y * 0.8);
+        let knee = solve_knee_sized(hip, foot, out + Vec3::Y * 0.8, g.size);
         [hip, knee, foot]
     })
 }
@@ -506,7 +528,8 @@ pub(crate) fn walk(
             if to.length() < 0.8 {
                 w.path.remove(0);
             } else {
-                desired = to.normalize() * SPEED;
+                // Smaller legs, shorter strides, slower.
+                desired = to.normalize() * SPEED * g.size.sqrt();
             }
         }
         for c in children.iter() {
@@ -801,6 +824,38 @@ mod tests {
         }
     }
 
+    /// A crawler (a 0.6 walker) walks the same slope: feet on the ground,
+    /// never sliding, legs never stretched past their reach, the orb at
+    /// its own height.
+    #[test]
+    fn a_small_walker_walks_too() {
+        let slope = |p: Vec3| 0.2 * p.x - 0.1 * p.z;
+        let size = 0.6;
+        let start = Vec3::new(0.0, BODY_HEIGHT * size, 0.0);
+        let (mut w, _, mut t) = walker_at(start, &slope);
+        for i in 0..LEGS {
+            let p = start + rest_offset(i) * size;
+            let f = Vec3::new(p.x, slope(p), p.z);
+            w.feet[i].planted = f;
+            w.feet[i].from = f;
+            w.feet[i].to = f;
+        }
+        let mut g = Gait::sized(size);
+        t.scale = Vec3::splat(size);
+        let (dist, err, slip) = run(&mut w, &mut g, &mut t, Vec3::X, 6.0, &slope);
+        assert!(dist > 3.0, "walked {dist:.2} m");
+        assert!(err < 0.01 && slip < 1e-5, "err {err:.3} slip {slip:.4}");
+        let over = t.translation.y - slope(t.translation);
+        assert!(
+            (over - BODY_HEIGHT * size).abs() < 0.2,
+            "body at {over:.2} m"
+        );
+        for [hip, knee, foot] in leg_poses(&w, &g, &t) {
+            assert!(hip.distance(foot) <= (UPPER + LOWER) * size + 0.01);
+            assert!((hip.distance(knee) - UPPER * size).abs() < 1e-3);
+        }
+    }
+
     /// A step up: feet find the top of it (the ground function stands in
     /// for the ray onto a kerb or a porch).
     #[test]
@@ -894,6 +949,49 @@ mod tests {
             let ideal = t.translation + rot * rest_offset(i);
             let off = Vec2::new(w.feet[i].planted.x - ideal.x, w.feet[i].planted.z - ideal.z);
             assert!(off.length() < 0.4, "foot {i} {:.2} off", off.length());
+        }
+    }
+
+    /// The cost budget: ground probes (rays, in the game) per walker per
+    /// tick, walking and turning on three legs and four.
+    #[test]
+    fn ground_probes_stay_in_budget() {
+        let flat = |_: Vec3| 0.0;
+        for dead in [None, Some(2)] {
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            if let Some(i) = dead {
+                w.feet[i].alive = false;
+            }
+            let (mut total, mut worst) = (0usize, 0usize);
+            let ticks = 90 * 8;
+            for k in 0..ticks {
+                let drive = Drive {
+                    desired: Quat::from_rotation_y(k as f32 * 0.004) * Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.3,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                let mut n = 0;
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| {
+                        n += 1;
+                        0.0
+                    },
+                    &mut |_| {},
+                );
+                total += n;
+                worst = worst.max(n);
+            }
+            let mean = total as f32 / ticks as f32;
+            assert!(mean < 1.6, "{mean:.2} probes a tick on average ({dead:?})");
+            assert!(worst <= 4, "{worst} probes in one tick ({dead:?})");
         }
     }
 

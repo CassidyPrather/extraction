@@ -12,6 +12,7 @@
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
+//! `crawler` (a 0.6-size walker across),
 //! `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -115,6 +116,15 @@ fn reel(
                 let at = eye + flat * 5.0;
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
+            "crawler" => super::walker::spawn_walker_sized(
+                &mut commands,
+                &zone,
+                walk_start,
+                job(walk_start),
+                false,
+                60.0,
+                0.6,
+            ),
             _ => spawn_walker(&mut commands, &zone, walk_start, job(walk_start)),
         };
         // Deaf and blind: it's here to be looked at, not to hunt.
