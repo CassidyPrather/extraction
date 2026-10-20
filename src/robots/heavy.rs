@@ -2045,4 +2045,70 @@ pub(crate) mod tests {
             "and it's dead"
         );
     }
+
+    /// Its blow through a real player: stand in reach and it raises its
+    /// arm (the tell), then brings it down on you; step back out of reach
+    /// while the arm is up and it comes down on the empty road.
+    #[test]
+    fn its_blow_lands_unless_you_move() {
+        let run = |dodge: bool| -> (f32, bool) {
+            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let zone = vr.app.world().resource::<Zone>().clone();
+            let catalog = vr.app.world().resource::<Catalog>().clone();
+            let at = zone.on_ground(40.0, 230.0);
+            let me = zone.on_ground(40.0, 226.5);
+            vr.stand(me, 0.0);
+            let heavy = {
+                let mut c = vr.app.world_mut().commands();
+                let e = spawn_heavy(
+                    &mut c,
+                    &zone,
+                    &catalog,
+                    at,
+                    Job {
+                        kind: super::super::JobKind::Response,
+                        site: at,
+                        duration: 999.0,
+                        exit: at,
+                    },
+                );
+                vr.app.world_mut().flush();
+                e
+            };
+            let hp0 = vr
+                .app
+                .world()
+                .get::<crate::health::Health>(vr.player)
+                .unwrap()
+                .hp;
+            let mut raised = false;
+            for _ in 0..(90 * 15) {
+                vr.step(1);
+                let state = vr.app.world().get::<Arm>(heavy).unwrap().state;
+                if state == ArmState::Raise && !raised {
+                    raised = true;
+                    if dodge {
+                        // Back off, well out of its reach.
+                        vr.stand(zone.on_ground(40.0, 219.0), 0.0);
+                    }
+                }
+                if raised && state == ArmState::Rest {
+                    break;
+                }
+            }
+            let hp = vr
+                .app
+                .world()
+                .get::<crate::health::Health>(vr.player)
+                .unwrap()
+                .hp;
+            (hp0 - hp, raised)
+        };
+        let (hurt, raised) = run(false);
+        assert!(raised, "its arm went up first");
+        assert!(hurt > 30.0, "standing there, it hit ({hurt:.0})");
+        let (hurt, raised) = run(true);
+        assert!(raised);
+        assert!(hurt < 1.0, "stepped back, it missed ({hurt:.0})");
+    }
 }
