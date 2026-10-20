@@ -209,6 +209,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
+| `art/props/heroes.py` | hero landmarks, each with `_lod1` (past 60 m) and `_lod2` (the far stand-in): mill_race (Marrow Creek), ropeway_station (Kettle Pass, models only so far) | 14.4k / 2.8k / 1.2k (mill_race) |
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
 | `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire (staged scenes) | 0.3k to 2.9k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
@@ -222,6 +223,14 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   it back where it started. The numbers in a gun script read the same as
   `src/weapons/layout.rs`, and a robot script's read the same as the spawn
   code in `src/robots/`.
+- **Baked ambient occlusion.** Every world model (`art/props`) carries
+  its occlusion in a colour attribute, exported as COLOR_0, which the
+  game's StandardMaterial multiplies into the base colour: no shader of
+  its own. `common.bake_ao` ray-casts the scene (and a floor, for
+  anything standing on one) from each face corner; `export(colors=True)`
+  writes it. `art/check.py` fails a world model without it. Buildings'
+  own boxes are shaded the same way in the game (`src/world/ao.rs`).
+  `EXTRACTION_NO_AO=1` turns the buildings' shading off, for comparisons.
 - **One object per motion.** A gun's top-level objects are named for the
   layout's `Moves`: `static*`, `bolt*` (slides with the bolt), `turnbolt*`
   (turns about its origin's Z axis, then slides), `barrels*` (tips about
