@@ -191,6 +191,11 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: M,
+        note: "Vey tag",
+        mentions: &[(M, "Survey log"), (M, "Stake readings"), (M, "The Hollow")],
+    },
+    Lead {
+        map: M,
         note: "Barricade note",
         mentions: &[(M, "Old farm")],
     },
