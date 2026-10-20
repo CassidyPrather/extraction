@@ -29,7 +29,7 @@ woods to hide in. Sallow is a **wall, then a hole**.
   measured open gaps between them, and the long sightlines are the point.
 - **Vertical.** The dam's crest is 21 m over the valley below and 16 m over
   the bed; the draw-off tower stands another 16 m above the crest, joined to
-  it by a footbridge; the catchwater runs along the east hillside at crest
+  it by its bridge; the catchwater runs along the east hillside at crest
   height. You look down on the bed from three sides before you go in.
 - **Wet.** The upper arm, held back by the old causeway when the bed was
   drained, is still full: New Sallow's lower street is under 0.5-1.4 m of

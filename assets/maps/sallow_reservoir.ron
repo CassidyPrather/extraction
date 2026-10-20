@@ -242,12 +242,12 @@
             points: [(-130.0, 140.0), (-130.0, 126.0), (-105.0, 105.0), (-80.0, 80.0), (-75.0, 50.0)],
         ),
         // The old road, out of the silt: from the slipway's foot through
-        // Old Sallow and over its bridge to the inflow.
+        // Old Sallow, fording the old river where its bridge stood, to the
+        // inflow.
         (
             name: "Old road", kind: Dirt, width: 4.0, smoothing: 15.0,
             points: [(-75.0, 50.0), (-80.0, 20.0), (-55.0, -15.0), (-30.0, -60.0), (0.0, -120.0),
                      (25.0, -190.0), (40.0, -240.0), (45.0, -330.0)],
-            bridges: [(at: (-30.0, -50.0), length: 18.0)],
         ),
         // To the filter house's door.
         (
