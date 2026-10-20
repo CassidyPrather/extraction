@@ -1320,6 +1320,14 @@
       "author": "achinverma",
       "license": "CC0-1.0",
       "sha256": "031f8ba026acba643dfe2e362ae0a9df1c30f371b8cc1ac312664b698f3187cc"
+    },
+    "oga_bangs": {
+      "url": "https://opengameart.org/sites/default/files/25-CC0-bang-sfx.zip",
+      "page": "https://opengameart.org/content/25-cc0-bang-firework-sfx",
+      "title": "25 CC0 bang / firework SFX",
+      "author": "rubberduck",
+      "license": "CC0-1.0",
+      "sha256": "c0c9ecc11e2dc0d190f0cced755569858234b8528286bc83becb6314c663407f"
     }
   },
   "sets": [
@@ -3765,6 +3773,101 @@
           "source": "fs_487161",
           "start": 78,
           "length": 18.5
+        }
+      ]
+    },
+    {
+      "category": "explosions",
+      "name": "grenade_sharp",
+      "type": "oneshot",
+      "count": 6,
+      "highpass": 25,
+      "inputs": [
+        {
+          "source": "oga_bangs",
+          "member": "bang_01.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "bang_02.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "bang_04.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "bang_05.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "bang_07.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "bang_10.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        }
+      ]
+    },
+    {
+      "category": "explosions",
+      "name": "grenade_heavy",
+      "type": "oneshot",
+      "count": 5,
+      "highpass": 20,
+      "inputs": [
+        {
+          "source": "oga_bangs",
+          "member": "cannon_01.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "cannon_02.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "cannon_03.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "cannon_04.ogg",
+          "split": {
+            "mode": "whole"
+          }
+        },
+        {
+          "source": "oga_bangs",
+          "member": "cannon_05.ogg",
+          "split": {
+            "mode": "whole"
+          }
         }
       ]
     }

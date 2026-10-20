@@ -2753,15 +2753,16 @@ fn power_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use extraction_core::underground::PowerKind;
+    // Each stage of a site's power has its own switch, and its own sound.
     for (site, power) in &sites {
-        for (stage, power) in power.stages.iter().enumerate() {
-            let before = was.insert((site, stage), power.on).unwrap_or(false);
-            let Ok((gt, children)) = switches.get(power.switch) else {
+        for (i, stage) in power.stages.iter().enumerate() {
+            let before = was.insert((site, i), stage.on).unwrap_or(false);
+            let Ok((gt, children)) = switches.get(stage.switch) else {
                 continue;
             };
             let at = gt.translation();
-            if power.on && !before {
-                match power.kind {
+            if stage.on && !before {
+                match stage.kind {
                     PowerKind::Breaker => play_at_speed(
                         &mut commands,
                         &bank,
@@ -2786,7 +2787,7 @@ fn power_sounds(
                     ),
                 }
             }
-            let running = power.on && power.kind == PowerKind::Generator;
+            let running = stage.on && stage.kind == PowerKind::Generator;
             let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
             match (running, existing) {
                 (true, None) => {
@@ -2799,7 +2800,7 @@ fn power_sounds(
                             PlaybackSettings::default(),
                             Transform::default(),
                             spatial_fx("power.generator"),
-                            ChildOf(power.switch),
+                            ChildOf(stage.switch),
                         ));
                     }
                 }
