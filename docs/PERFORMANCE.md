@@ -274,3 +274,88 @@ the start): 40 > 20 ms, PostUpdate 68% > 37% of the frame. Today, single
 threaded and dev-built, the moment is about 20-23 ms: PostUpdate 8
 (visibility 2.2, transforms 1.3), Update 5, physics 3.7, game logic 2.7;
 past the top few, a long tail of systems under 0.1 ms each.
+
+## Hitches: the frames after one-off events
+
+Averages hold; a headset feels the single long frame. `render::spikes`
+sets off the raid's heavy one-off events in the busy moment above (the
+same staged fight, `budget::tests::busy_scene`) and times every frame for
+a second after each: a grenade (300 fragments), a walker and a drone
+wrecking, each kind of Surge bloom, the Depot's residents coming out, the
+truck's homecoming; and every frame of a valley loading.
+`render::spikes::tests::hitches_hold_their_ceiling` holds each event's
+worst frame to 3x the moment's median frame and loading's frames after
+the second to 10x (ratios in the same run, so a loaded machine moves
+both). With `SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it
+names the systems in each worst frame.
+
+Marrow Creek, one thread, the moment's median 18 ms:
+
+| event | before | after |
+|---|---|---|
+| grenade (300 fragments; ~170 land the first tick) | 28 ms | 30 ms |
+| walker / drone wreck | 31 / 32 ms | 28 / 28 ms |
+| blooms (Lift, Burner, Snare, Well, Mirror) | 29-35 ms | 24-36 ms |
+| Depot residents (7 robots) | 36 ms | 33 ms |
+| truck homecoming | **78 ms** | 27-31 ms |
+| loading, after the first frame | **p99 147 ms, worst 978** | p99 65 ms, worst 215 (frame 2) |
+
+Most events sit inside the moment's own spread (p99 28 ms): fragments are
+cheap, wrecks and blooms add a few entities. The two hitches were:
+
+- **The collider trees.** Avian optimises its trees as an async task and
+  blocks on it at the step's end. The trees are small (Marrow Creek: 505
+  static proxies, 311 dynamic, 82 kinematic), but the task queues behind
+  the forest and grass chunk builds on the same pool, so the frame waits
+  for those: 33-114 ms on `block_on_optimize_trees` while chunks stream,
+  worst when the truck brings the player home. `GamePlugin` now optimises
+  them in place (`ColliderTreeOptimization::use_async_tasks = false`):
+  microseconds at this size.
+- **Dressing buildings.** `dress_buildings` baked each building's ambient
+  occlusion on the main thread: the Depot's 1348 pieces 440 ms, the
+  bunker's 250, every house 20-50, each plank house the same bake again.
+  It's baked once a prefab on the async pool now (`buildings::Bake`).
+
+Still there: the first frame (Startup: building the Zone, terrain and
+rock meshes, 6.7 s on one thread) runs before the app submits a frame, so
+the headset shows its own loading indicator; and frame 2 (215 ms: first
+text layout, the screens). Neither is a hitch mid-raid.
+
+### First use: pipelines
+
+Bevy builds a pipeline the first time a mesh needs one, on the async
+compute pool: the render thread doesn't wait, but the mesh isn't drawn
+until it's ready. On a headset that's a muzzle flash that never shows (it
+lives 35 ms) or a bloom that opens a beat late. `EXTRACTION_PIPELINES=1`
+logs each pipeline as it's queued and ready; `EXTRACTION_FIRSTS=<frame>`
+sets off, in front of the camera, a shot, impacts on every surface, a
+robot struck, a grenade, each bloom and a wreck. On lavapipe:
+
+    D=$(mktemp -d); EXTRACTION_PIPELINES=1 EXTRACTION_FIRSTS=1000 \
+    WGPU_BACKEND=vulkan xvfb-run -a -s "-screen 0 1024x1024x24" \
+    ./target/fast/extraction --map marrow_creek --data-dir $D --new-game \
+    --screenshot out.png --frames 2100 --camera 170,0,230,315,-2 \
+    --weather downpour --size 1024x1024 --no-robots
+
+Before the warm-up, ten pipelines were first built in the raid, each a
+frame or more of the thing missing (lavapipe took 0.7-4 s apiece; a
+headset's driver tens of milliseconds): the muzzle flash's additive
+material at the first shot, three at the first Lift bloom (its particles,
+its haze, its ground mark), one each at the first Burner and Snare, and
+three more as a gun and a walker first came into view.
+
+`render::warmup` now keeps a shelf stocked for the first 900 frames of a
+session (ten seconds in the truck; `EXTRACTION_WARMUP=<frames>` to change,
+`0` to leave it out): one entry for every distinct material key, mesh
+layout, visibility-range dither and shadow casting among the things in
+the world, plus every effect material nothing wears yet, each drawn 30 cm
+in front of the eye at a millionth of its size, with bounds of its own.
+It restocks every half second (a material isn't drawn until its textures
+are in, and things stream in), and for the first restocks it holds a
+decoy anomaly of each kind 5 km under the map, since a valley's cycle may
+not hold every kind the Surge can open. Marrow Creek shelves 64 kinds of
+thing; every pipeline the raid's firsts need is then built in the first
+200 frames, and none at first use (the same run: a shot, impacts on every
+surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
+`warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
+(it stocks, the decoys go, nothing's left after).
