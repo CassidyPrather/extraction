@@ -39,6 +39,12 @@ impl Plugin for WorkingsPlugin {
             .add_message::<RoofFell>()
             .add_message::<GasFlash>()
             .add_systems(
+                Startup,
+                place_site_items
+                    .in_set(crate::items::loot::LootSpawnSystems)
+                    .after(crate::world::buildings::spawn_buildings),
+            )
+            .add_systems(
                 Update,
                 (
                     wire_workings,
@@ -141,14 +147,53 @@ fn pocket_at(b: &Building, xf: &Transform, p: Vec3) -> Option<usize> {
     (l.y > f - 0.3 && l.y < f + r.ceil[c].max(2.0) + 0.3).then_some(g as usize)
 }
 
+/// The layouts' own items (the canary on its bench, Brabec's boots), with
+/// the Zone's loot: once for a fresh Zone, not again over a restored one
+/// (the save has them where they were left).
+fn place_site_items(
+    mut commands: Commands,
+    buildings: Query<(&Building, &Transform)>,
+    catalog: Res<crate::items::Catalog>,
+    restore: Option<Res<crate::persist::Restore>>,
+) {
+    if restore.is_some_and(|r| r.zone) {
+        return;
+    }
+    for (b, xf) in &buildings {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        for it in &l.items {
+            let (Some(room), Some(kind)) = (
+                l.rooms.iter().find(|room| room.id == it.room),
+                catalog.kind(&it.id),
+            ) else {
+                continue;
+            };
+            let at = Vec3::new(
+                room.at[0] + it.at[0],
+                l.floor_of(room) + it.y + 0.1,
+                room.at[1] + it.at[1],
+            );
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(xf.transform_point(at)),
+                    condition: 1.0,
+                },
+            );
+        }
+    }
+}
+
 /// Logic, as sites are built: their pockets live, their carts on their
-/// rails, their shoring standing, their things lying about.
-#[allow(clippy::too_many_arguments)]
+/// rails, their shoring standing.
 fn wire_workings(
     mut commands: Commands,
     buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
     mut gas: ResMut<Gas>,
-    catalog: Res<crate::items::Catalog>,
 ) {
     for (site, b, xf) in &buildings {
         let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
@@ -234,28 +279,6 @@ fn wire_workings(
                 Visibility::default(),
                 ChildOf(site),
             ));
-        }
-        for it in &l.items {
-            let (Some(room), Some(kind)) = (
-                l.rooms.iter().find(|room| room.id == it.room),
-                catalog.kind(&it.id),
-            ) else {
-                continue;
-            };
-            let at = Vec3::new(
-                room.at[0] + it.at[0],
-                l.floor_of(room) + it.y + 0.1,
-                room.at[1] + it.at[1],
-            );
-            crate::items::spawn_item(
-                &mut commands,
-                &catalog,
-                crate::items::SpawnItem {
-                    kind,
-                    transform: Transform::from_translation(xf.transform_point(at)),
-                    condition: 1.0,
-                },
-            );
         }
     }
 }
