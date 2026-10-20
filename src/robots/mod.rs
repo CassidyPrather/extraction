@@ -16,6 +16,7 @@ pub mod doors;
 pub mod drone;
 pub mod grappler;
 pub mod pylon;
+pub mod reel;
 pub mod visuals;
 pub mod walker;
 

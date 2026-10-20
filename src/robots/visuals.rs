@@ -21,7 +21,7 @@ pub struct RobotVisualsPlugin;
 
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_plugins(super::reel::ReelPlugin).add_systems(
             Update,
             (
                 (request_models, dress_parts).chain(),
