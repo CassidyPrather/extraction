@@ -122,8 +122,12 @@ on uncovered sky; the terrain shader is the one to watch.
 
 ## What the current look costs
 
-Per-pixel work is estimated from the shaders (the software renderer
-can't time a GPU); geometry is from `EXTRACTION_RENDER_STATS=1`.
+Measured A/B against the commit before this work, with the session log's
+`gpu:` line under the software renderer (relative only: lavapipe is not a
+3060), at three views (meadow edge, spruce interior, pine slope): with
+everything below, the opaque pass is within noise of the base (spruce
+interior 850 vs 840 ms a software frame). Geometry is from
+`EXTRACTION_RENDER_STATS=1`.
 
 | Change | Where | Cost |
 | - | - | - |
@@ -132,7 +136,7 @@ can't time a GPU); geometry is from `EXTRACTION_RENDER_STATS=1`.
 | Water reflection | water pixels | A few ALU; the PBR specular it replaces is dropped |
 | Terrain macro colour, burn | every terrain pixel | 2 value-noise taps (~10 ALU), against 9 texture taps per layer already |
 | Cloud on the tops | every lit pixel, Kettle Pass only | A second closed-form fog integral (~10 ALU); compiled out elsewhere |
-| Alpha to coverage on foliage | foliage | Same pass and cost as the alpha test it replaces; shadow casters cut at 0.05 |
+| Alpha to coverage on foliage | foliage | **Off by default** (`EXTRACTION_A2C=1`): it cost the software opaque pass +40-70% wherever foliage filled the view. Time it on the headset machine before turning it on |
 | Grass widening | grass vertices | ~10 ALU a vertex; no new geometry |
 | Fuller pine crowns | pine near LOD | Densest pine view: tris drawn 321k to 332k, shadow 261k to 287k, draw calls unchanged |
 | Weather wetness, sky weight | uniforms | None |
