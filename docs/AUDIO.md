@@ -228,6 +228,9 @@ is what it did before.
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
 | Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
+| A round landing (`weapons::impacts::Impact`, classed once for the spray and the sound) | `hit.impact` by surface: concrete, wood, steel, earth; `hit.glass` (window glass, a robot's eye); `hit.water` (a slap, harder for faster rounds); `hit.body`; out through a thin wall, a second crack 6 dB quieter | — | re-classed from the Hit; water silent |
+| A spent case landing (`weapons::CasingLanded`), a beat after the shot | `gun.casing` by floor: brass rings on steel and concrete, knocks on boards, ticks in grass, plips in water; a shotgun hull thunks; bounces 8 dB quieter | — | a ping at the port |
+| A suppressed shot (`gadgets::Suppressed`) | `gun.shot_suppressed`: the shot through a 2.2 kHz low-pass, 5 LU under a bare one (about 118 dB at the ear, against 140); far off, the distant shot 14 dB down | as a shot | a bare shot |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
 | A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
@@ -337,6 +340,9 @@ hear by (`robots::senses`):
 
 So a walker's footfall behind a wall is still heard, just duller, about
 where a robot would hear yours.
+
+**Underground**, the wind dies away over a few seconds as you go
+down the stairs, and the rain with it.
 
 **Rain under a roof.** Rain follows where you stand:
 - **In the open:** all of it.

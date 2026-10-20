@@ -361,6 +361,40 @@
       }
     ]
   },
+  "anomaly/mirror_blink": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/mirror_blink_1.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/mirror_blink_2.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/mirror_blink_3.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/mirror_shimmer": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/mirror_shimmer.ogg",
+        "seconds": 9.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "anomaly/offering": {
     "type": "oneshot",
     "channels": 2,
@@ -369,6 +403,28 @@
       {
         "file": "audio/anomaly/offering.ogg",
         "seconds": 7.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/reveal": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/reveal_1.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/reveal_2.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/reveal_3.ogg",
+        "seconds": 1.2,
         "source": "synth:scripts/synth_anomaly.py"
       }
     ]
@@ -415,6 +471,18 @@
       {
         "file": "audio/anomaly/surge_drone.ogg",
         "seconds": 32.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/well_drone": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/well_drone.ogg",
+        "seconds": 12.8,
         "source": "synth:scripts/synth_anomaly.py"
       }
     ]
@@ -1635,6 +1703,33 @@
         "file": "audio/machines/clank_8.ogg",
         "seconds": 1.462,
         "source": "fs_264889"
+      }
+    ]
+  },
+  "machines/detector_click": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/detector_click_1.ogg",
+        "seconds": 0.03,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_2.ogg",
+        "seconds": 0.03,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_3.ogg",
+        "seconds": 0.03,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_4.ogg",
+        "seconds": 0.03,
+        "source": "synth:scripts/synth_anomaly.py"
       }
     ]
   },

@@ -96,9 +96,24 @@ def muffle_db(fc):
     return -10 * np.log10(1 + (f / fc) ** 2)
 
 
+# Filters the game puts on a cue's own chain (src/audio.rs), Hz: the
+# suppressed shot's low-pass. Judged by what they take out of the asset's
+# spectrum.
+CUE_LOWPASS = {"gun.shot_suppressed": 2200.0}
+
+
+def filter_loss(cue, sets):
+    fc = CUE_LOWPASS.get(cue["name"])
+    if not fc:
+        return 0.0
+    bands = np.array(sets[cue["set"]]["bands"], dtype=float)
+    p = 10 ** (bands / 10)
+    return float(10 * np.log10((p * 10 ** (muffle_db(fc) / 10)).sum() / p.sum()))
+
+
 def heard(cue, sets):
     a = sets[cue["set"]]
-    base = a["loudness"]
+    base = a["loudness"] + filter_loss(cue, sets)
     return base + cue["db"] + falloff(cue["dist"], cue["reach"])
 
 
@@ -434,7 +449,7 @@ def run(sets, out):
                 f"heard to {r['calm']}/{r['downpour']} m, wants {want[0]}/{want[1]}")
     # Startle: the loudest each sudden sound gets, up close.
     def up_close(c, extra=0.0):
-        loud = max(f["momentary_max"] for f in sets[c["set"]]["files"])
+        loud = max(f["momentary_max"] for f in sets[c["set"]]["files"]) + filter_loss(c, sets)
         near = falloff(c["dist"], c["reach"]) if c["role"] == "Event" else 0.0
         return loud + c["db"] + near + extra
     shot = next(c for c in mix if c["name"] == "gun.shot")

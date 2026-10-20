@@ -16,12 +16,12 @@ use crate::audio_mix as mix;
 use crate::interact::InteractEvent;
 use crate::player::Footstep;
 use crate::rig::RigHead;
+use crate::robots::Robot;
 use crate::robots::drone::Drone;
-use crate::robots::{Robot, RobotPart};
 use crate::weapons::GunEvent;
-use crate::weapons::ballistics::{Hit, Shot};
+use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
-use crate::world::surfaces::{Surfaces, footstep_set, impact_set, underfoot};
+use crate::world::surfaces::{Surfaces, footstep_set, underfoot};
 use avian3d::prelude::*;
 
 /// Every sound set by name (`"guns/rifle_shot"`), as loaded handles.
@@ -192,6 +192,7 @@ impl Plugin for AudioPlugin {
                     drone_and_zip_sounds,
                     kitchen_sounds,
                     mind_sounds,
+                    casing_sounds,
                 ),
             )
             .add_systems(
@@ -474,6 +475,7 @@ fn gun_sounds(
     mut rng: ResMut<AudioRng>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     guns: Query<&crate::weapons::Gun>,
+    suppressed: Query<(), With<crate::gadgets::Suppressed>>,
 ) {
     let ear = listener
         .iter()
@@ -486,10 +488,31 @@ fn gun_sounds(
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
-                if far {
-                    ("guns/distant_shot", "gun.distant", 0.0)
-                } else {
-                    (shot_set(&ev.item), "gun.shot", 0.0)
+                let quiet = suppressed.contains(ev.gun);
+                if quiet && !far {
+                    // A suppressor: a cough, the crack's highs and boom gone.
+                    if let Some(sample) = bank.pick(shot_set(&ev.item), &mut rng.0) {
+                        let cue = "gun.shot_suppressed";
+                        commands.spawn((
+                            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+                            PlaybackSettings::default().with_speed(0.94),
+                            Transform::from_translation(ev.at),
+                            sample_effects![
+                                mix::spatial(cue),
+                                FastLowpassNode::<2> {
+                                    cutoff_hz: 2_200.0,
+                                    ..default()
+                                },
+                                reverb_send(cue)
+                            ],
+                        ));
+                    }
+                    continue;
+                }
+                match (far, quiet) {
+                    (true, true) => ("guns/distant_shot", "gun.distant", -14.0),
+                    (true, false) => ("guns/distant_shot", "gun.distant", 0.0),
+                    _ => (shot_set(&ev.item), "gun.shot", 0.0),
                 }
             }
             (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire", 0.0),
@@ -515,8 +538,8 @@ fn gun_sounds(
             (FireEvent::Cocked, Some(BreakAction)) => {
                 ("guns/shotgun_open", "gun.shotgun_open", 0.0)
             }
-            // A spent case is lighter than a live round.
-            (FireEvent::Ejected(Round::Spent), _) => ("guns/casing", "gun.casing", -4.0),
+            // A spent case is heard where it lands (`casing_sounds`), a beat
+            // after the shot; a live round worked out by hand, here.
             (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
             _ => continue,
         };
@@ -569,65 +592,64 @@ fn shot_sounds(
     }
 }
 
+/// Rounds landing, as `weapons::impacts` classes them (so the sound and
+/// the spray can't disagree): concrete, wood, steel, glass, earth, water,
+/// a robot's part (armour rings, an eye shatters), a body. A round
+/// leaving the far side of a thin wall is a second, quieter crack.
 fn hit_sounds(
     mut commands: Commands,
-    mut hits: MessageReader<Hit>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
-    parts: Query<(), With<RobotPart>>,
-    trees: Query<(), With<crate::world::trees::TreeTrunks>>,
-    structures: Query<(), With<crate::world::structures::Structure>>,
-    items: Query<(), With<crate::items::Item>>,
-    bodies: Query<(), With<crate::player::BodyCollider>>,
-    built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
-    for h in hits.read() {
-        // A round into you is a thump, not the ground's spray of dirt.
-        if bodies.contains(h.entity) {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "physical/body_hit",
-                Some(h.point),
-                "hit.body",
-                0.0,
-                0.08,
-            );
-            continue;
-        }
-        let made_of = built
-            .get(h.entity)
-            .ok()
-            .and_then(|(gt, surf)| surf.at(gt, h.point));
-        let set = if parts.contains(h.entity) || items.contains(h.entity) {
-            "impacts/metal"
-        } else if trees.contains(h.entity) {
-            "impacts/wood"
-        } else if let Some(m) = made_of {
-            impact_set(m)
-        } else if structures.contains(h.entity) {
-            "impacts/concrete"
-        } else {
-            "impacts/dirt"
+    use crate::weapons::impacts::ImpactKind as K;
+    for i in impacts.read() {
+        // Out of the far side: the surface faces along the round.
+        let exit = i.entity.is_some() && i.normal.dot(i.velocity) > 0.0;
+        let trim = if exit { -6.0 } else { 0.0 };
+        let (set, cue, speed) = match i.kind {
+            K::Masonry => ("impacts/concrete", "hit.impact", 1.0),
+            K::Wood => ("impacts/wood", "hit.impact", 1.0),
+            K::Metal => ("impacts/metal", "hit.impact", 1.0),
+            K::Glass => ("physical/glass_break", "hit.glass", 1.15),
+            K::Soil => ("impacts/dirt", "hit.impact", 1.0),
+            K::Water => ("footsteps/water", "hit.water", 1.6),
+            K::Body => ("physical/body_hit", "hit.body", 1.0),
+            K::Robot => match (i.part, i.hurt) {
+                (Some(crate::robots::PartRole::Sensor), true) => {
+                    ("physical/glass_break", "hit.glass", 1.3)
+                }
+                // A dead part just rings.
+                (_, false) => ("impacts/metal", "hit.impact", 1.12),
+                _ => ("impacts/metal", "hit.impact", 1.0),
+            },
         };
-        play(
+        // Water takes a big round with more of a slap.
+        let trim = if i.kind == K::Water {
+            trim - 6.0 + 6.0 * (i.velocity.length() / 800.0).min(1.0)
+        } else {
+            trim
+        };
+        play_at_speed(
             &mut commands,
             &bank,
             &mut rng.0,
             set,
-            Some(h.point),
-            "hit.impact",
-            0.0,
+            Some(i.point),
+            cue,
+            trim,
+            if exit { speed * 0.9 } else { speed },
             0.08,
         );
-        if rng.0.chance(0.12) && set != "impacts/dirt" {
+        // Now and then a whine off something hard.
+        let hard = matches!(i.kind, K::Masonry | K::Metal | K::Robot);
+        if hard && !exit && rng.0.chance(0.12) {
             play(
                 &mut commands,
                 &bank,
                 &mut rng.0,
                 "impacts/ricochet",
-                Some(h.point),
+                Some(i.point),
                 "hit.ricochet",
                 0.0,
                 0.1,
@@ -1548,8 +1570,10 @@ fn indoor_ambience(
     wind: Query<&SampleEffects, With<WindLoop>>,
     room: Query<&SampleEffects, With<RoomLoop>>,
     mut volumes: Query<&mut VolumeNode>,
+    listening: Res<Listening>,
     time: Res<Time>,
     mut inside: Local<f32>,
+    mut below: Local<f32>,
 ) {
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
@@ -1560,9 +1584,17 @@ fn indoor_ambience(
     let target = if indoors { 1.0 } else { 0.0 };
     *inside += (target - *inside).clamp(-time.delta_secs(), time.delta_secs());
     let k = *inside;
+    // Down the stairs the wind dies away altogether, over a few seconds.
+    let under = listening.space.kind == crate::acoustics::SpaceKind::Underground;
+    let target = if under { 1.0 } else { 0.0 };
+    *below += (target - *below).clamp(-time.delta_secs() * 0.4, time.delta_secs() * 0.4);
     for effects in &wind {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            v.volume = Volume::Decibels(mix::db("wind") - 14.0 * k);
+            v.volume = if *below > 0.99 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below)
+            };
         }
     }
     for effects in &room {
@@ -2546,6 +2578,43 @@ fn occlude(
             node.muffle_cutoff_hz = o.cutoff;
         }
         commands.entity(e).insert(Occluded { next: now + 0.25 });
+    }
+}
+
+/// Spent cases landing, a beat after the shot: brass rings on steel and
+/// concrete, knocks on boards, ticks in the grass, plips in water; a
+/// shotgun hull thunks. The first landing is the clink, the bounces
+/// quieter.
+fn casing_sounds(
+    mut commands: Commands,
+    mut landed: MessageReader<crate::weapons::CasingLanded>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::weapons::CasingFloor as F;
+    for c in landed.read() {
+        let (set, trim, speed) = match (c.floor, c.hull) {
+            (F::Water, _) => ("footsteps/water", -10.0, 2.2),
+            (F::Soft, false) => ("guns/casing", -14.0, 0.7),
+            (F::Soft, true) => continue,
+            (F::Metal, false) => ("guns/casing", 0.0, 1.1),
+            (F::Hard, false) => ("guns/casing", 0.0, 1.0),
+            (F::Wood, false) => ("guns/casing", -4.0, 0.8),
+            (_, true) => ("physical/drop_plastic", -6.0, 1.2),
+        };
+        let bounce = if c.first { 0.0 } else { -8.0 };
+        let hard = ((c.speed - 3.0) * 1.0).clamp(-4.0, 2.0);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(c.at),
+            "gun.casing",
+            trim + bounce + hard,
+            speed,
+            0.08,
+        );
     }
 }
 
