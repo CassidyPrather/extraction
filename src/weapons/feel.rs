@@ -726,6 +726,109 @@ mod vr_tests {
         mag
     }
 
+    /// Takes `id` from the air into the left hand.
+    fn take(r: &mut Range, id: &str, rounds: u32) -> Entity {
+        let at = r.feet + Vec3::new(-0.35, 1.0, -0.3);
+        let e = r.vr.spawn(id, Transform::from_translation(at));
+        r.vr.app.world_mut().get_mut::<Item>(e).unwrap().rounds = rounds;
+        r.vr.app
+            .world_mut()
+            .entity_mut(e)
+            .insert(avian3d::prelude::RigidBody::Static);
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(Side::Left, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(e)
+            .insert(avian3d::prelude::RigidBody::Dynamic);
+        assert_eq!(r.vr.hand_state(Side::Left).holding, Some(e), "took {id}");
+        e
+    }
+
+    /// The gun's load port and its up, in the world.
+    fn load_port(r: &mut Range) -> (Vec3, Vec3) {
+        let port = gun_mut(r).layout.load_port;
+        let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+        (gt.transform_point(port), gt.up().as_vec3())
+    }
+
+    /// Glides the left hand from `a` to `b`.
+    fn glide(r: &mut Range, a: Vec3, b: Vec3, steps: usize) {
+        for i in 0..=steps {
+            r.vr.move_hand(Side::Left, a.lerp(b, i as f32 / steps as f32));
+            r.vr.step(1);
+        }
+    }
+
+    /// A Mosin with its bolt open: a clip set in the guide and pushed down
+    /// strips five rounds into the magazine.
+    #[test]
+    fn a_clip_pushed_down_the_guide_loads_the_mosin() {
+        let mut r = hold("mosin", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.set_handle_lift(1.0);
+            g.firearm.set_bolt_travel(1.0);
+        }
+        let clip = take(&mut r, "mosin_clip", 5);
+        let (port, up) = load_port(&mut r);
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, port + up * 0.05, 15);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 0, "not yet pushed");
+        glide(&mut r, port + up * 0.05, port + up * 0.015, 8);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 5, "stripped");
+        assert_eq!(r.vr.app.world().get::<Item>(clip).unwrap().rounds, 0);
+        // Close the bolt: a round goes up the spout.
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.set_bolt_travel(0.0);
+            g.firearm.set_handle_lift(0.0);
+        }
+        assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 5);
+    }
+
+    /// The double: thumb the lever to break it, bring a shell to each
+    /// barrel, thumb it shut: two in.
+    #[test]
+    fn shells_go_into_the_open_double_by_hand() {
+        let mut r = hold("toz_double", false, false);
+        r.vr.primary(Side::Right, true);
+        r.vr.step(2);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(2);
+        assert!(gun_mut(&mut r).firearm.bolt_travel > 0.5, "broken open");
+        for n in 1..=2 {
+            let shell = take(&mut r, "shell_12ga", 1);
+            let (port, _) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port, 15);
+            r.vr.step(2);
+            let loaded = gun_mut(&mut r)
+                .firearm
+                .chambers
+                .iter()
+                .filter(|c| c.is_some())
+                .count();
+            assert_eq!(loaded, n, "shell {n} in");
+            assert!(
+                r.vr.app.world().get_entity(shell).is_err(),
+                "out of the hand"
+            );
+            assert_eq!(r.vr.hand_state(Side::Left).holding, None);
+            r.vr.grip(Side::Left, 0.0);
+            r.vr.step(2);
+        }
+        r.vr.primary(Side::Right, true);
+        r.vr.step(2);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(2);
+        assert!(gun_mut(&mut r).firearm.is_closed());
+        assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 2);
+    }
+
     /// A double feed on the pistol: racking does nothing with the magazine
     /// in; thumb the mag release, rack, and the pair falls out; a fresh
     /// magazine and a rack, and it fires.

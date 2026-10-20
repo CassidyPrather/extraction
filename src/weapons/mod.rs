@@ -148,6 +148,7 @@ impl Plugin for WeaponsPlugin {
                     magwell_events,
                     work_handles,
                     tap_magazines,
+                    feed_by_hand,
                     buttons,
                     triggers,
                     sync_mag_rounds,
@@ -437,6 +438,102 @@ fn tap_magazines(
             let name = catalog.get(item.kind()).id.clone();
             emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
         }
+    }
+}
+
+/// How near a gun's load port (its open breech, its clip guide) a held
+/// round, box or clip must come, metres from the item's middle.
+pub const LOAD_REACH: f32 = 0.07;
+/// How far a clip in the guide must be pushed down to strip, metres.
+pub const STRIP_PUSH: f32 = 0.02;
+/// Seconds between rounds fed from a box held at the port.
+pub const BOX_FEED: f32 = 0.3;
+
+/// Rounds by hand: with the action open, a loose round or shell brought to
+/// the load port goes in (and leaves the hand), a box held there feeds a
+/// round at a time, and a stripper clip set in the guide and pushed down
+/// strips its rounds into the magazine.
+#[allow(clippy::too_many_arguments)]
+fn feed_by_hand(
+    mut commands: Commands,
+    mut hands: Query<(Entity, &mut Hand)>,
+    mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item), Without<Mag>>,
+    mut ammo: Query<(&mut Item, &GlobalTransform), Without<Gun>>,
+    catalog: Res<Catalog>,
+    time: Res<Time>,
+    // Per hand: (gun, the clip's height along the gun's up when it reached
+    // the guide), and when a box last fed.
+    mut clips: Local<std::collections::HashMap<Entity, (Entity, f32)>>,
+    mut boxes: Local<std::collections::HashMap<Entity, f32>>,
+    mut out: MessageWriter<GunEvent>,
+    mut ejected: MessageWriter<Ejection>,
+) {
+    let now = time.elapsed_secs();
+    for (hand_e, mut hand) in &mut hands {
+        let Some(held) = hand.holding else {
+            clips.remove(&hand_e);
+            continue;
+        };
+        let Ok((it, at)) = ammo.get(held) else {
+            clips.remove(&hand_e);
+            continue;
+        };
+        let def = catalog.get(it.kind());
+        let (cartridge, clip) = match (&def.magazine, &def.cartridge) {
+            (Some(m), _) if m.stripper => (m.cartridge.clone(), true),
+            (None, Some(c)) if def.category == Category::Ammo => (c.clone(), false),
+            _ => {
+                clips.remove(&hand_e);
+                continue;
+            }
+        };
+        if it.rounds == 0 {
+            continue;
+        }
+        let at = at.translation();
+        let near = guns.iter_mut().find(|(_, g, gt, _)| {
+            g.firearm.def.cartridge == cartridge
+                && gt.transform_point(g.layout.load_port).distance(at) < LOAD_REACH
+        });
+        let Some((gun_e, mut gun, gt, gun_item)) = near else {
+            clips.remove(&hand_e);
+            continue;
+        };
+        let name = catalog.get(gun_item.kind()).id.clone();
+        let mut events = Vec::new();
+        let Ok((mut it, _)) = ammo.get_mut(held) else {
+            continue;
+        };
+        if clip {
+            // Down the guide: the clip's height in the gun's frame.
+            let h = gt.affine().inverse().transform_point3(at).y;
+            let entry = clips.entry(hand_e).or_insert((gun_e, h));
+            if entry.0 != gun_e {
+                *entry = (gun_e, h);
+            }
+            entry.1 = entry.1.max(h);
+            if entry.1 - h >= STRIP_PUSH {
+                let moved = gun.firearm.strip_clip(it.rounds);
+                it.rounds -= moved;
+                events.extend((0..moved).map(|_| FireEvent::RoundLoaded));
+                clips.remove(&hand_e);
+            }
+        } else if def.rounds <= 1 {
+            // A loose round: thumbed in, out of the hand.
+            if gun.firearm.load_round() {
+                events.push(FireEvent::RoundLoaded);
+                hand.holding = None;
+                commands.entity(held).despawn();
+            }
+        } else if boxes.get(&hand_e).is_none_or(|t| now - t >= BOX_FEED) {
+            // A box at the port: a round at a time, as fast as fingers.
+            if gun.firearm.load_round() {
+                it.rounds -= 1;
+                events.push(FireEvent::RoundLoaded);
+                boxes.insert(hand_e, now);
+            }
+        }
+        emit(gun_e, &name, &gun, gt, events, &mut out, &mut ejected);
     }
 }
 
