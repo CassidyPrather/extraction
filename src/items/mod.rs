@@ -238,7 +238,7 @@ fn finish_item_models(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut cache: Local<PlaceholderCache>,
 ) {
-    use crate::models::{ModelState, Models, model_nodes, spawn_primitives};
+    use crate::models::{ModelState, Models, item_lod_range, model_nodes, spawn_primitives_ranged};
     for (e, item, p) in &pending {
         let gltf = match Models::state(&p.0, &server, &gltfs) {
             ModelState::Loading => continue,
@@ -261,7 +261,10 @@ fn finish_item_models(
                 ChildOf(e),
             ))
             .id();
-        for node in model_nodes(gltf, &nodes, &gltf_meshes) {
+        let model = model_nodes(gltf, &nodes, &gltf_meshes);
+        // Models with `<name>_lod1` stand-ins swap to them past a few metres.
+        let has_lods = model.iter().any(|n| n.name.ends_with("_lod1"));
+        for node in model {
             if node.primitives.is_empty() {
                 continue;
             }
@@ -274,7 +277,8 @@ fn finish_item_models(
                     ChildOf(root),
                 ))
                 .id();
-            spawn_primitives(&mut commands, n, &node, |name| {
+            let range = item_lod_range(&node.name, has_lods);
+            spawn_primitives_ranged(&mut commands, n, &node, range, |name| {
                 model_mats.get(name.unwrap_or("Blued"), &mut lib, &server, &mut materials)
             });
         }
