@@ -9,8 +9,9 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+use super::search::{self, Step};
 use super::{
-    Awareness, Brain, Job, PartDestroyed, PartRole, Robot, RobotKind, RobotPart, Senses,
+    Awareness, Brain, Intent, Job, PartDestroyed, PartRole, Robot, RobotKind, RobotPart, Senses,
     part_bundle,
 };
 use crate::weapons::ballistics::Shot;
@@ -103,6 +104,7 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 eye: Vec3::new(0.0, -0.08, -0.22),
             },
             Awareness::default(),
+            Intent::default(),
             Brain::Transit { to: job.site },
             job,
             Transform::from_translation(at),
@@ -187,31 +189,52 @@ fn drone_parts_destroyed(
     }
 }
 
+/// Suspicion at which a drone that sees you opens fire.
+pub const ENGAGE_AT: f32 = 0.6;
+/// Out of sight this long in a fight, it goes to look where you were.
+pub const PATIENCE: f32 = 10.0;
+/// It fights from this far out (m)...
+pub const STANDOFF: f32 = 20.0;
+/// ...this high over the ground (m), higher when it has lost sight of you
+/// (to look over what you're behind)...
+pub const FIGHT_ALTITUDE: (f32, f32) = (8.0, 13.0);
+/// ...circling (rad/s), faster while you're looking at it: it slides out
+/// of your aim, round to your flank.
+pub const ORBIT: (f32, f32) = (0.35, 0.9);
+/// Searching, it sweeps the spots this high (m).
+const SEARCH_ALTITUDE: f32 = 6.0;
+
 /// Picks where the drone wants to be, from its brain state.
+#[allow(clippy::too_many_arguments)]
 fn drone_brain(
     mut drones: Query<(
         Entity,
         &mut Drone,
         &mut Brain,
-        &Job,
+        &mut Job,
         &Awareness,
         &Transform,
         &Robot,
+        &mut Intent,
     )>,
     zone: Res<Zone>,
     targets: Query<&GlobalTransform>,
+    heads: Query<(&ChildOf, &GlobalTransform), With<crate::rig::RigHead>>,
     time: Res<Time>,
     mut commands: Commands,
     entrances: Res<super::doors::Entrances>,
     door_states: Query<&crate::world::buildings::Door>,
+    nav: Res<super::walker::Nav>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut d, mut brain, job, aware, t, robot) in &mut drones {
+    let sweep = time.elapsed_secs() * 0.9;
+    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent) in &mut drones {
         if robot.wrecked {
             *brain = Brain::Down;
             continue;
         }
         let pos = t.translation;
+        *intent = Intent::default();
         let ground = zone.ground(pos.x, pos.z);
         let cruise = |p: Vec3, h: f32| Vec3::new(p.x, zone.ground(p.x, p.z).max(ground) + h, p.z);
         // Someone indoors: hover outside a doorway, low, and look in
@@ -224,22 +247,10 @@ fn drone_brain(
             let p = ent.mid + ent.out * if open { 3.5 } else { 7.0 };
             Some(Vec3::new(p.x, zone.ground(p.x, p.z) + 2.7, p.z))
         };
-        d.phase += dt * 0.35;
+        d.phase += dt * ORBIT.0;
         // Alarm overrides the job.
-        if aware.can_see_target
-            && aware.suspicion > 0.6
-            && !matches!(*brain, Brain::Engage | Brain::Down)
-        {
-            *brain = Brain::Engage;
-        } else if !matches!(
-            *brain,
-            Brain::Engage | Brain::Investigate { .. } | Brain::Down | Brain::Leave { .. }
-        ) && aware.suspicion > 0.35
-        {
-            if let Some(at) = aware.last_known {
-                *brain = Brain::Investigate { at, left: 25.0 };
-            }
-        }
+        search::react(&mut brain, aware, ENGAGE_AT);
+        search::lost_sight(&mut brain, aware, PATIENCE, pos);
         match &mut *brain {
             Brain::Transit { to } => {
                 d.goal = cruise(*to, 22.0);
@@ -263,41 +274,73 @@ fn drone_brain(
                 }
             }
             Brain::Investigate { at, left } => {
-                d.goal = peek(*at).unwrap_or_else(|| {
+                let at = *at;
+                let looking_in = peek(at);
+                d.goal = looking_in.unwrap_or_else(|| {
                     cruise(
-                        *at + Vec3::new(d.phase.cos() * 8.0, 0.0, d.phase.sin() * 8.0),
+                        at + Vec3::new(d.phase.cos() * 6.0, 0.0, d.phase.sin() * 6.0),
                         9.0,
                     )
                 });
+                intent.look = Some(at);
                 *left -= dt;
-                if *left <= 0.0 {
-                    *brain = Brain::Leave { to: job.exit };
+                let there = match looking_in {
+                    Some(g) => g.distance(pos) < 3.0,
+                    None => Vec2::new(pos.x - at.x, pos.z - at.z).length() < 9.0,
+                };
+                if there || *left <= 0.0 {
+                    *brain = search::begin_search(at, aware, pos, &nav.0, &entrances);
                 }
             }
+            Brain::Search { .. } => match search::search_step(&mut brain, pos, 4.0, dt, sweep) {
+                Step::Go(p) => {
+                    d.goal = cruise(p, SEARCH_ALTITUDE);
+                    intent.pace = 0.7;
+                }
+                Step::Look(l) => intent.look = Some(l),
+                Step::Done => search::give_up(&mut brain, &mut job),
+            },
             Brain::Engage => {
-                let Some(target) = aware
+                let seen = aware
                     .target
+                    .filter(|_| aware.can_see_target)
                     .and_then(|p| targets.get(p).ok())
-                    .map(|g| g.translation())
-                else {
+                    .map(|g| g.translation());
+                let Some(target) = seen.or(aware.last_known) else {
                     *brain = Brain::Leave { to: job.exit };
                     continue;
                 };
-                if aware.unseen > 12.0 {
-                    *brain = Brain::Investigate {
-                        at: aware.last_known.unwrap_or(target),
-                        left: 20.0,
-                    };
-                    continue;
-                }
                 if let Some(g) = peek(target) {
                     d.goal = g;
                     continue;
                 }
-                // Stand off and circle: hard to hit, keeps a firing line.
-                let r = 18.0;
+                // Looked at down your sights? Slide round to your flank.
+                let eyed = aware
+                    .target
+                    .filter(|_| seen.is_some())
+                    .and_then(|p| heads.iter().find(|(c, _)| c.parent() == p))
+                    .is_some_and(|(_, h)| {
+                        let to_me = (pos - h.translation()).normalize_or_zero();
+                        (h.rotation() * Vec3::NEG_Z).dot(to_me) > 0.9
+                    });
+                if eyed || seen.is_none() {
+                    d.phase += dt * (ORBIT.1 - ORBIT.0);
+                }
+                // Stand off and circle: hard to hit, keeps a firing line;
+                // over where you were, higher, when it's lost you.
+                let h = if seen.is_some() {
+                    FIGHT_ALTITUDE.0
+                } else {
+                    FIGHT_ALTITUDE.1
+                };
+                let r = if seen.is_some() {
+                    STANDOFF
+                } else {
+                    STANDOFF * 0.6
+                };
                 let off = Vec3::new(d.phase.cos() * r, 0.0, d.phase.sin() * r);
-                d.goal = cruise(target + off, 7.0);
+                d.goal = cruise(target + off, h);
+                intent.look = Some(target);
             }
             Brain::Leave { to } => {
                 d.goal = cruise(*to, 25.0);
@@ -317,6 +360,7 @@ fn fly_drones(
         &Robot,
         &Transform,
         &Awareness,
+        &Intent,
         Has<super::Stunned>,
         Forces,
     )>,
@@ -326,7 +370,7 @@ fn fly_drones(
 ) {
     let dt = time.delta_secs();
     let g = Vec3::new(0.0, -9.81, 0.0);
-    for (mut d, robot, t, aware, stunned, mut forces) in &mut drones {
+    for (mut d, robot, t, aware, intent, stunned, mut forces) in &mut drones {
         let pos = t.translation;
         let lin = LinearVelocity(forces.linear_velocity());
         let ang = AngularVelocity(forces.angular_velocity());
@@ -344,7 +388,7 @@ fn fly_drones(
         // Position controller.
         let err = d.goal - pos;
         let mut acc = err * 1.2 - lin.0 * 1.6;
-        let horiz = Vec2::new(acc.x, acc.z).clamp_length_max(5.0);
+        let horiz = Vec2::new(acc.x, acc.z).clamp_length_max(5.0 * intent.pace.max(0.3));
         acc = Vec3::new(horiz.x, acc.y.clamp(-4.0, 5.0), horiz.y);
         // Don't scrape the ground.
         if pos.y - zone.ground(pos.x, pos.z) < 2.5 {
@@ -368,6 +412,7 @@ fn fly_drones(
             .filter(|_| aware.can_see_target)
             .and_then(|p| targets.get(p).ok())
             .map(|g| g.translation() - pos)
+            .or(intent.look.map(|l| l - pos))
             .unwrap_or(lin.0);
         let fwd = t.rotation * Vec3::NEG_Z;
         let face_flat = Vec3::new(face.x, 0.0, face.z);

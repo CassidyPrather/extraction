@@ -259,6 +259,13 @@ mod tests {
             .get_mut::<Transform>(player)
             .unwrap()
             .translation = inside.with_y(ent.mid.y - 1.15);
+        // Standing (nothing drives the rig here).
+        app.world_mut()
+            .get_mut::<crate::rig::RigInput>(player)
+            .unwrap()
+            .head
+            .translation
+            .y = 1.65;
         if wedge {
             let catalog = app.world().resource::<Catalog>().clone();
             let leaf = *app.world().get::<GlobalTransform>(ent.door).unwrap();
