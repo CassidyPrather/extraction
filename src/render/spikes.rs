@@ -338,7 +338,6 @@ mod tests {
     /// `SPIKE_PROFILE=1` with `--features "bevy/trace bevy/debug"` names
     /// the systems in each worst frame).
     #[test]
-    #[ignore = "held once the homecoming and loading hitches are cut"]
     fn hitches_hold_their_ceiling() {
         let _one_at_a_time = heavy();
         let map = std::env::var("SPIKE_MAP").unwrap_or("marrow_creek".into());
