@@ -560,6 +560,12 @@
             category: RobotPart, size: Small, mass: 1.8, bulk: 1.0,
             tags: ["electronics", "metal"],
         ),
+        (
+            id: "sorter_servo_pack", dims: Some((0.352, 0.86, 0.557)), name: "Sorter servo pack",
+            description: "The Sorter's elbow, hinge and ram and all. It sorted cars by the ton; it's heavy to carry.",
+            category: RobotPart, size: Bulky, mass: 9.0, bulk: 8.0,
+            tags: ["electronics", "metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Artifacts. Every one draws attention while carried.
