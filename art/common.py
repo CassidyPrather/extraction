@@ -571,6 +571,70 @@ class Part:
             rings.append(ring)
         return self.loft(rings, mat, xf)
 
+    def checkering(self, cutter, outline, width, power, panel, pitch=0.0028, angle=30.0,
+                   depth=0.0006, sides=(-1, 1)):
+        """Checkering on a `stock`, both sides: `cutter` (cut from the stock)
+        gets a recess 4 mm deep over `panel` = (z0, z1, y0, y1), and this
+        Part (joined to the stock after the cut, or the cut eats it) an
+        insert filling it whose face is a lattice of little pyramids, their
+        tips on the stock's surface and the grooves between `depth` below
+        it, the grooves at +-`angle` degrees to the bore, `pitch` apart.
+        (Cutting each groove with a boolean costs ten times the triangles.)
+        Give it the stock's outline, width and power."""
+        surf = stock_surface(outline, width, power)
+        z0, z1, y0, y1 = panel
+        a = math.radians(angle)
+        e1 = Vector((math.cos(a), math.sin(a)))
+        e2 = Vector((math.cos(a), -math.sin(a)))
+        L = pitch / math.sin(2 * a)   # rhombus side for grooves `pitch` apart
+        centre = Vector(((z0 + z1) / 2, (y0 + y1) / 2))
+        n = int(math.hypot(z1 - z0, y1 - y0) / L) + 2
+
+        def at(i, j):
+            return centre + e1 * (i * L) + e2 * (j * L)
+
+        def inside(q):
+            return z0 <= q.x <= z1 and y0 <= q.y <= y1 and surf(q.x, q.y) is not None
+
+        cells = {(i, j) for i in range(-n, n) for j in range(-n, n)
+                 if all(inside(at(i + di, j + dj)) for di, dj in ((0, 0), (1, 0), (1, 1), (0, 1)))}
+        if not cells:
+            return
+        floor = 0.004
+        for sx in sides:
+            def co(q, dx):
+                return Vector((sx * (surf(q.x, q.y) + dx), q.y, q.x))
+
+            for part, top_dx, relief in ((self, 0.0, True), (cutter, 0.002, False)):
+                bm = part.bm
+                top, bot = {}, {}
+
+                def corner(i, j, store, dx):
+                    if (i, j) not in store:
+                        store[(i, j)] = bm.verts.new(co(at(i, j), dx))
+                    return store[(i, j)]
+
+                faces, verts = [], []
+                for (i, j) in cells:
+                    ring = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+                    tc = [corner(ci, cj, top, top_dx - (depth if relief else 0.0))
+                          for ci, cj in ring]
+                    bc = [corner(ci, cj, bot, -floor) for ci, cj in ring]
+                    if relief:
+                        apex = bm.verts.new(co(at(i + 0.5, j + 0.5), 0.0))
+                        verts.append(apex)
+                        for k in range(4):
+                            faces.append(bm.faces.new((tc[k], tc[(k + 1) % 4], apex)))
+                    else:
+                        faces.append(bm.faces.new(tc))
+                    faces.append(bm.faces.new(list(reversed(bc))))
+                    for k, (di, dj) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+                        if (i + di, j + dj) not in cells:
+                            faces.append(bm.faces.new((tc[(k + 1) % 4], tc[k], bc[k],
+                                                       bc[(k + 1) % 4])))
+                verts += list(top.values()) + list(bot.values())
+                part._finish_piece(verts, faces, "Wood")
+
     def cut(self, part):
         """Subtract another Part (a cutter) when the object is made."""
         self.cutters.append(part)
@@ -584,6 +648,35 @@ def section_rect(w, h, r=0.0, segs=2):
 
 def section_circle(r, n=8):
     return [(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+
+
+def stock_surface(outline, width, power):
+    """x(z, y) of a `Part.stock`'s +X side at (z, y), or None outside it."""
+    if area2(outline) < 0:
+        outline = list(reversed(outline))
+
+    def surf(z, y):
+        ys = []
+        n = len(outline)
+        for i in range(n):
+            (za, ya), (zb, yb) = outline[i], outline[(i + 1) % n]
+            if (za - z) * (zb - z) <= 0 and za != zb:
+                ys.append(ya + (z - za) / (zb - za) * (yb - ya))
+        if len(ys) < 2:
+            return None
+        lo, hi = min(ys), max(ys)
+        yc, h = (lo + hi) / 2, (hi - lo) / 2
+        t = (y - yc) / h
+        if abs(t) >= 0.98:
+            return None
+        p = power(z) if callable(power) else power
+        sn = math.copysign(abs(t) ** (p / 2), t)
+        c = math.sqrt(max(0.0, 1 - sn * sn))
+        wb, wt = width(z, yc, h)
+        w = wb + (wt - wb) * (sn + 1) / 2
+        return c ** (2.0 / p) * w
+
+    return surf
 
 
 # ---------------------------------------------------------------------------
