@@ -509,7 +509,40 @@ impl Builder {
                 false,
             );
         };
-        strip(self, len, len + face, 0.0, h, 0.0, face, mat);
+        // A ruin's collapsed stretches: breaches to the wall's top. Trim
+        // there would hang in the air; a corner's cap stands only as high
+        // as the stub left.
+        let gone: Vec<(f32, f32, f32)> = ops
+            .iter()
+            .filter(|o| o.kind == OpeningKind::Breach && o.top >= h - 0.01)
+            .map(|o| (o.centre - o.width * 0.5, o.centre + o.width * 0.5, o.bottom))
+            .collect();
+        let stub = |at: f32| {
+            gone.iter()
+                .find(|(s0, s1, _)| at >= s0 - 0.02 && at <= s1 + 0.02)
+                .map(|g| g.2)
+        };
+        strip(
+            self,
+            len,
+            len + face,
+            0.0,
+            stub(len).unwrap_or(h),
+            0.0,
+            face,
+            mat,
+        );
+        // Runs of a strip along the wall's top, broken where it's gone.
+        let top_runs = |s0: f32, s1: f32| {
+            let mut out = Vec::new();
+            let mut s = s0;
+            for &(g0, g1, _) in &gone {
+                out.push((s, g0.max(s0)));
+                s = g1.min(s1);
+            }
+            out.push((s, s1));
+            out
+        };
         let doors: Vec<(f32, f32, OpeningKind, f32)> = ops
             .iter()
             .filter(|o| o.kind != OpeningKind::Window)
@@ -538,9 +571,13 @@ impl Builder {
             Mat::Planks | Mat::LogWall => {
                 let timber = Mat::Timber;
                 if mat == Mat::Planks {
-                    strip(self, -face, -face + 0.14, -0.05, h, face, 0.03, timber);
                     let e = len + face + 0.03;
-                    strip(self, e - 0.14, e, -0.05, h, face, 0.03, timber);
+                    if stub(0.0).is_none() {
+                        strip(self, -face, -face + 0.14, -0.05, h, face, 0.03, timber);
+                    }
+                    if stub(len).is_none() {
+                        strip(self, e - 0.14, e, -0.05, h, face, 0.03, timber);
+                    }
                     for (s0, s1) in runs(len + face + 0.045, 0.13) {
                         strip(self, s0, s1, -0.04, 0.12, face, 0.045, timber);
                     }
@@ -582,16 +619,9 @@ impl Builder {
                 }
             }
             Mat::Brick | Mat::Plaster => {
-                strip(
-                    self,
-                    -face,
-                    len + face + 0.04,
-                    h - 0.18,
-                    h - 0.02,
-                    face,
-                    0.04,
-                    mat,
-                );
+                for (s0, s1) in top_runs(-face, len + face + 0.04) {
+                    strip(self, s0, s1, h - 0.18, h - 0.02, face, 0.04, mat);
+                }
                 for (s0, s1) in runs(len + face + 0.025, 0.06) {
                     strip(self, s0, s1, -0.05, 0.3, face, 0.025, Mat::Concrete);
                 }
@@ -733,11 +763,12 @@ impl Builder {
             let cx = side * (w * 0.5 + overhang) * 0.5 - side * overhang * 0.0;
             let cy = eave_y + rise * 0.5 - overhang * pitch.tan() * 0.5 + 0.06;
             let rot = Quat::from_rotation_z(-side * pitch);
-            // A ruin's roof: a third of the +X slope gone over the front
-            // room (damaged), or only the front's two slopes left (burnt).
+            // A ruin's roof: the front third of the +X slope gone over the
+            // fallen corner (damaged), or only the front's two slopes left
+            // (burnt).
             let spans: &[(f32, f32)] = match (self.ruin, side > 0.0) {
                 (None, _) => &[(-0.5, 0.5)],
-                (Some(Ruin::Damaged), true) => &[(-0.5, -1.0 / 3.0), (0.0, 0.5)],
+                (Some(Ruin::Damaged), true) => &[(-1.0 / 6.0, 0.5)],
                 (Some(Ruin::Damaged), false) => &[(-0.5, 0.5)],
                 (Some(Ruin::Burnt), _) => &[(-0.5, -1.0 / 6.0)],
             };
@@ -836,10 +867,9 @@ impl Builder {
                     .map(|k| -span * 0.5 + span * k as f32 / n as f32)
                     .collect(),
             )
-        } else if side > 0.0 {
-            let depth = d + 1.0;
-            (Mat::Timber, vec![-depth / 3.0 + 0.3, -depth / 6.0, -0.3])
         } else {
+            // Damaged: they came down with the corner (they're in its
+            // rubble).
             return;
         };
         // `w` is the roof's (the walls' and 0.18 either side): the wall's
@@ -878,26 +908,18 @@ impl Builder {
         let y = eave_y + 0.02;
         match ruin {
             Ruin::Damaged => {
-                // The +X half's hole under the roof's, z -d/3 to 0.
+                // The +X half's front open under the roof's hole.
                 self.deco(
                     Vec3::new(w * 0.5, 0.04, d),
                     Vec3::new(-w * 0.25, y, 0.0),
                     Mat::Planks,
                 );
-                for (z0, z1) in [(-d * 0.5, -d / 3.0), (0.0, d * 0.5)] {
-                    self.deco(
-                        Vec3::new(w * 0.5, 0.04, z1 - z0),
-                        Vec3::new(w * 0.25, y, (z0 + z1) * 0.5),
-                        Mat::Planks,
-                    );
-                }
-                for z in [-d * 2.0 / 9.0, -d / 9.0] {
-                    self.deco(
-                        Vec3::new(w * 0.5 - 0.1, 0.1, 0.08),
-                        Vec3::new(w * 0.25 - 0.05, y - 0.09, z),
-                        Mat::Timber,
-                    );
-                }
+                let z0 = -d / 6.0;
+                self.deco(
+                    Vec3::new(w * 0.5, 0.04, d * 0.5 - z0),
+                    Vec3::new(w * 0.25, y, (z0 + d * 0.5) * 0.5),
+                    Mat::Planks,
+                );
             }
             Ruin::Burnt => {
                 let n = (d / 1.2).floor() as i32;
@@ -1512,14 +1534,25 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
     let (x, z) = (w * 0.5, d * 0.5);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Damaged: the front +X corner fallen in to a stub (both its walls'
+    // ends), and a breach knocked through the +X wall.
+    let stub = 0.5;
     let side: &[Opening] = if damaged {
         &[
+            breach(0.6, 1.2, stub, h),
             window(d * 0.3),
             breach(d * 0.52, 1.4, 0.3, 1.9),
             window(d * 0.8),
         ]
     } else {
         &[window(d * 0.3), window(d * 0.75)]
+    };
+    let front_breach = [breach(w - 0.5, 1.0, stub, h)];
+    let front_open = [window(w * 0.2), door(w * 0.5), window(w * 0.8)];
+    let front: Vec<Opening> = if damaged {
+        front_open.iter().chain(&front_breach).copied().collect()
+    } else {
+        front_open.to_vec()
     };
     b.shell(
         w,
@@ -1529,7 +1562,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         0.18,
         wall,
         [
-            &[window(w * 0.2), door(w * 0.5), window(w * 0.8)],
+            &front,
             side,
             &[window(w * 0.25), window(w * 0.75)],
             &[window(d * 0.5)],
@@ -1606,8 +1639,44 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         "rubble_planks"
     };
     if damaged {
+        // The fallen corner's rubble, outside and in, in steps: up from the
+        // ground over the stub and down to the floor.
+        let corner = Vec3::new(x, 0.0, -z);
+        let from = b.geo.pieces.len();
+        for (size, at) in [
+            (
+                Vec3::new(1.8, 0.35, 1.8),
+                corner + Vec3::new(0.55, 0.175, -0.55),
+            ),
+            (
+                Vec3::new(1.1, 0.35, 1.1),
+                corner + Vec3::new(0.25, 0.525, -0.25),
+            ),
+            (
+                Vec3::new(1.2, 0.3, 1.2),
+                corner + Vec3::new(-0.75, f + 0.15, 0.75),
+            ),
+        ] {
+            b.bx(size, at, Mat::Planks);
+        }
+        b.dress(
+            from,
+            vec![
+                (
+                    heap,
+                    Transform::from_translation(corner + Vec3::new(0.5, 0.0, -0.5))
+                        .with_rotation(Quat::from_rotation_y(0.8))
+                        .with_scale(Vec3::new(1.1, 1.8, 1.2)),
+                ),
+                (
+                    heap,
+                    Transform::from_translation(corner + Vec3::new(-0.75, f, 0.75))
+                        .with_rotation(Quat::from_rotation_y(-0.7)),
+                ),
+            ],
+        );
         // Under the roof's hole; the breach's spill outside and in.
-        rubble(b, Vec3::new(x * 0.5, f, -d / 6.0), 0.0, "rubble_planks");
+        rubble(b, Vec3::new(x * 0.4, f, -z * 0.5), 0.0, "rubble_planks");
         rubble(b, Vec3::new(x + 0.75, 0.0, 0.14), 1.57, heap);
         rubble(b, Vec3::new(x - 0.75, f, 0.14), -1.57, heap);
         beam(
@@ -4475,9 +4544,25 @@ fn aligned_box(size: Vec3, at: Transform) -> Mesh {
     mesh
 }
 
-/// Client: a building's meshes, one per material (a house is a handful of
-/// draws, not fifty), once its props' models have loaded or failed: each
-/// prop whose models are in is merged in place of its boxes.
+/// What shades a building's own surfaces (`ao`): its solid pieces
+/// (furniture's boxes too, so the floor darkens round their feet), not its
+/// glass.
+pub fn occluders(geo: &Geo) -> super::ao::Occluders {
+    super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
+        let half = match p.shape {
+            Shape::Box(s) => s * 0.5,
+            Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
+            Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+        };
+        let at = match p.shape {
+            // A gable's box is its lower half.
+            Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
+            _ => p.at,
+        };
+        (half, at)
+    }))
+}
+
 /// A prefab's pieces shaded by its own solid pieces, baked once in the
 /// background: a big site's thousand pieces take half a second, a house's
 /// a few dozen milliseconds, every house alike (`render::spikes`).
@@ -4501,23 +4586,7 @@ fn piece_mesh(piece: &Piece) -> Mesh {
 /// stand-in: a box shaded face by face, anything else shaded at its
 /// vertices (not under the ground: a site's rooms go unshaded).
 fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
-    // What shades the building's own surfaces: its solid pieces
-    // (furniture's boxes too, so the floor darkens round their feet),
-    // not its glass.
-    let occluders =
-        super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
-            let half = match p.shape {
-                Shape::Box(s) => s * 0.5,
-                Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
-                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-            };
-            let at = match p.shape {
-                // A gable's box is its lower half.
-                Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
-                _ => p.at,
-            };
-            (half, at)
-        }));
+    let occluders = occluders(geo);
     geo.pieces
         .iter()
         .map(|piece| match piece.shape {
@@ -4538,10 +4607,16 @@ fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
         .collect()
 }
 
+/// Client: a building's meshes, one per material (a house is a handful of
+/// draws, not fifty), once its props' models have loaded or failed: each
+/// prop whose models are in is merged in place of its boxes.
 pub fn dress_buildings(
     mut commands: Commands,
     mut pending: Query<(Entity, &Building, &Transform, &mut PropsPending)>,
     zone: Option<Res<super::Zone>>,
+    ivy: Option<Res<super::overgrowth::IvyAssets>>,
+    stain_mats: Option<Res<super::decay::StainAssets>>,
+    epilogue: Option<Res<crate::progression::Epilogue>>,
     mut props: crate::render::world_props::PropModels,
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -4561,6 +4636,17 @@ pub fn dress_buildings(
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
+        // Years empty: some of the panes smashed (all of a ruin's), the
+        // same as the logic's panes see them (`decay::weathered_sashes`).
+        let broken = super::decay::weathered(&geo, &b.prefab, xf);
+        let mut sash = broken.iter();
+        for d in &mut geo.props {
+            for (name, _) in &mut d.models {
+                if *name == "window_sash" && sash.next() == Some(&true) {
+                    *name = "window_sash_broken";
+                }
+            }
+        }
         // What the people who lived here left (`clutter`), with the
         // furniture.
         if let Some(zone) = &zone {
@@ -4571,7 +4657,8 @@ pub fn dress_buildings(
                 .iter()
                 .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
                 .map_or("", |p| p.tag.as_str());
-            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf);
+            let ending = epilogue.as_ref().is_some_and(|e| e.0);
+            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf, ending);
             if !models.is_empty() {
                 let n = geo.pieces.len();
                 geo.props.push(PropDef {
@@ -4642,6 +4729,10 @@ pub fn dress_buildings(
         }
         commands.entity(e).remove::<PropsPending>();
         built += 1;
+        // What shades the building's own surfaces: its solid pieces
+        // (furniture's boxes too, so the floor darkens round their feet),
+        // not its glass.
+        let occluders = occluders(&geo);
         let mut skip = vec![false; geo.pieces.len()];
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
@@ -4799,7 +4890,86 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [outer, near, far, windows, hero, hero_mid, under] = merged;
+        let [mut outer, near, far, windows, hero, hero_mid, under] = merged;
+        // Moss and lichen in the shell's colours, stains on its walls
+        // (`decay`).
+        let decay = !site && super::overgrowth::enabled();
+        let bseed =
+            super::overgrowth::seed(Vec2::new(xf.translation.x, xf.translation.z), &b.prefab);
+        let bnorth = xf.rotation.inverse() * Vec3::NEG_Z;
+        if decay {
+            for (_, m) in &mut outer {
+                super::decay::moss(m, bnorth, bseed);
+            }
+            if let Some(sm) = &stain_mats {
+                let decals =
+                    super::decay::stains(&geo, &occluders, bseed, b.prefab.ends_with("_burnt"));
+                for (k, kind) in super::decay::STAINS.iter().enumerate() {
+                    if let Some(m) = super::decay::decal_mesh(&decals, *kind) {
+                        commands.spawn((
+                            Mesh3d(meshes.add(m)),
+                            MeshMaterial3d(sm.0[k].clone()),
+                            bevy::light::NotShadowCaster,
+                            bevy::camera::visibility::VisibilityRange {
+                                start_margin: 0.0..0.0,
+                                end_margin: super::overgrowth::LEAVES_TO - 5.0
+                                    ..super::overgrowth::LEAVES_TO + 5.0,
+                                use_aabb: true,
+                            },
+                            ChildOf(e),
+                        ));
+                    }
+                }
+            }
+        }
+        // Years of ivy (`overgrowth`): stems near, leaves to the middle
+        // distance, a few big cards past that.
+        if let (Some(ivy), false, true) = (&ivy, site, super::overgrowth::enabled()) {
+            let at = Vec2::new(xf.translation.x, xf.translation.z);
+            let north = xf.rotation.inverse() * Vec3::NEG_Z;
+            let gseed = super::overgrowth::seed(at, &b.prefab);
+            let mut growth = super::overgrowth::grow(&geo, &occluders, gseed, north);
+            // Saplings through a ruin's floor, bushes at the walls' feet.
+            let ruin = extraction_core::map::prefab_base(&b.prefab) != b.prefab;
+            let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);
+            growth.vines.extend(wild.vines);
+            growth.leaves.extend(wild.leaves);
+            let span = |a: f32, b: f32| bevy::camera::visibility::VisibilityRange {
+                start_margin: if a > 0.0 { a - 5.0..a + 5.0 } else { 0.0..0.0 },
+                end_margin: b - 5.0..b + 5.0,
+                use_aabb: true,
+            };
+            if let Some(m) = super::overgrowth::vine_mesh(&growth) {
+                commands.spawn((
+                    Mesh3d(meshes.add(m)),
+                    MeshMaterial3d(ivy.vines.clone()),
+                    bevy::light::NotShadowCaster,
+                    span(0.0, super::overgrowth::VINES_TO),
+                    ChildOf(e),
+                ));
+            }
+            for (every, scale, range) in [
+                (1, 1.0, span(0.0, super::overgrowth::LEAVES_TO)),
+                (
+                    3,
+                    1.6,
+                    span(
+                        super::overgrowth::LEAVES_TO,
+                        crate::render::lod::FAR_BUILDING,
+                    ),
+                ),
+            ] {
+                if let Some(m) = super::overgrowth::leaf_mesh(&growth, every, scale) {
+                    commands.spawn((
+                        Mesh3d(meshes.add(m)),
+                        MeshMaterial3d(ivy.leaves.clone()),
+                        bevy::light::NotShadowCaster,
+                        range,
+                        ChildOf(e),
+                    ));
+                }
+            }
+        }
         for (mat, mesh) in under {
             commands.spawn((
                 Mesh3d(meshes.add(mesh)),
