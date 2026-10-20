@@ -221,7 +221,13 @@ impl Plugin for AudioPlugin {
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
-                    (grenade_sounds, gear_sounds, armour_sounds, epilogue_sounds),
+                    (
+                        grenade_sounds,
+                        gear_sounds,
+                        armour_sounds,
+                        epilogue_sounds,
+                        night_ambience,
+                    ),
                 ),
             )
             .add_systems(
@@ -1312,6 +1318,24 @@ fn start_ambience(
             }],
         ));
     }
+    // The night's beds (`night_ambience`): insects and leaves, silent
+    // until dark.
+    for (set, marker) in [
+        ("ambience/insects_night", NightLoop::Insects),
+        ("ambience/rustle_leaves", NightLoop::Rustle),
+    ] {
+        if let Some(sample) = bank.pick(set, &mut rng.0) {
+            commands.spawn((
+                marker,
+                SamplePlayer::new(sample).looping(),
+                PlaybackSettings::default(),
+                sample_effects![VolumeNode {
+                    volume: Volume::SILENT,
+                    ..default()
+                }],
+            ));
+        }
+    }
     if let Some(sample) = bank.pick("ambience/room_tone", &mut rng.0) {
         commands.spawn((
             RoomLoop,
@@ -1367,11 +1391,15 @@ fn ambient_oneshots(
     time: Res<Time>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     zone: Res<Zone>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     mut next: Local<(f32, f32, f32, f32)>,
 ) {
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
     };
+    let night = conditions
+        .as_deref()
+        .is_some_and(|c| c.hour == crate::world::weather::Hour::Night);
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
@@ -1424,8 +1452,9 @@ fn ambient_oneshots(
         let a = rng.0.range(0.0, std::f32::consts::TAU);
         let d = rng.0.range(25.0, 70.0);
         let at = ear + Vec3::new(a.cos() * d, rng.0.range(4.0, 15.0), a.sin() * d);
+        // Birds keep to the day.
         let birds = &zone.map.sounds.birds;
-        if !birds.is_empty() {
+        if !birds.is_empty() && !night {
             let set = &birds[rng.0.below(birds.len())];
             play(
                 &mut commands,
@@ -1464,18 +1493,35 @@ fn ambient_oneshots(
             0.1,
         );
     }
+    // Far thunder; at night, the Surge's, deeper and more often, a long
+    // way off across the Zone.
     if next.1 <= 0.0 {
-        next.1 = rng.0.range(60.0, 180.0);
-        play(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "ambience/thunder_distant",
-            None,
-            "thunder",
-            0.0,
-            0.05,
-        );
+        if night {
+            next.1 = rng.0.range(35.0, 90.0);
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/thunder_distant",
+                None,
+                "thunder.surge",
+                0.0,
+                0.78,
+                0.06,
+            );
+        } else {
+            next.1 = rng.0.range(60.0, 180.0);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/thunder_distant",
+                None,
+                "thunder",
+                0.0,
+                0.05,
+            );
+        }
     }
 }
 
@@ -2014,6 +2060,108 @@ fn epilogue_sounds(
             speed,
             0.0,
         );
+    }
+}
+
+/// The night's own beds.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+enum NightLoop {
+    Insects,
+    Rustle,
+}
+
+/// How near a machine silences the insects, m: the big ones (walkers and
+/// their breeds, the dirigible), and a drone's whine from further, since
+/// the crickets would hide it (`scripts/audio_voices.py`: at night the
+/// hush is the warning where the machine itself is masked).
+pub const INSECTS_HUSH_BIG: f32 = 60.0;
+pub const INSECTS_HUSH_DRONE: f32 = 120.0;
+/// ...and a shot this near.
+pub const INSECTS_HUSH_SHOT: f32 = 150.0;
+/// After the last of it, they wait this long, then come back over this.
+pub const INSECTS_WAIT: f32 = 6.0;
+pub const INSECTS_RETURN: f32 = 15.0;
+
+/// How dark it is for the night's sounds: 1 at night, half at dusk.
+pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
+    use crate::world::weather::Hour;
+    match hour {
+        Hour::Night => 1.0,
+        Hour::Dusk => 0.5,
+        Hour::Dawn | Hour::Day => 0.0,
+    }
+}
+
+/// The night: crickets everywhere outside, which fall silent when
+/// something big comes near or a shot goes off (and so tell you it's
+/// there) and come back a while after; wind in the leaves where it's
+/// overgrown. Quieter through walls, gone underground and in rain.
+#[allow(clippy::too_many_arguments)]
+fn night_ambience(
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    listening: Res<Listening>,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    robots: Query<(&crate::robots::Robot, &GlobalTransform)>,
+    mut shots: MessageReader<crate::weapons::GunEvent>,
+    loops: Query<(&NightLoop, &SampleEffects)>,
+    mut volumes: Query<&mut VolumeNode>,
+    time: Res<Time>,
+    mut state: Local<(f32, f32, f32)>,
+) {
+    use crate::acoustics::SpaceKind;
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    let (last_threat, hush, _) = &mut *state;
+    let near = robots.iter().any(|(r, gt)| {
+        let reach = match r.kind {
+            crate::robots::RobotKind::Drone => INSECTS_HUSH_DRONE,
+            crate::robots::RobotKind::Walker | crate::robots::RobotKind::Dirigible => {
+                INSECTS_HUSH_BIG
+            }
+            _ => 0.0,
+        };
+        !r.wrecked && gt.translation().distance(ear) < reach
+    });
+    let shot = shots.read().any(|g| {
+        matches!(g.event, extraction_core::firearm::Event::Fired { .. })
+            && g.at.distance(ear) < INSECTS_HUSH_SHOT
+    });
+    if near || shot {
+        *last_threat = now;
+    }
+    // Silent in a second and a half; back slowly, once it's been quiet a
+    // while.
+    let quiet = now - *last_threat > INSECTS_WAIT || *last_threat == 0.0;
+    *hush = if quiet {
+        (*hush + dt / INSECTS_RETURN).min(1.0)
+    } else {
+        (*hush - dt / 1.5).max(0.0)
+    };
+    let (night, rain) = conditions
+        .as_deref()
+        .map_or((0.0, 0.0), |c| (nightness(c.hour), c.rain));
+    let under = listening.space.kind == SpaceKind::Underground;
+    let walls = listening.space.enclosed;
+    let cover = zone
+        .as_deref()
+        .map_or(0.5, |z| z.forest_cover(ear.x, ear.z));
+    for (which, effects) in &loops {
+        let (level, cue) = match which {
+            NightLoop::Insects => (night * (1.0 - rain * 2.0).max(0.0) * *hush, "insects"),
+            NightLoop::Rustle => (night * (0.35 + 0.65 * cover), "rustle"),
+        };
+        let level = if under { 0.0 } else { level };
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = if level < 0.01 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(mix::db(cue) + 20.0 * level.log10() - 12.0 * walls)
+            };
+        }
     }
 }
 
@@ -3314,6 +3462,19 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The night's sounds come with the dark.
+    #[test]
+    fn night_comes_with_the_dark() {
+        use crate::world::weather::Hour;
+        assert_eq!(nightness(Hour::Night), 1.0);
+        assert_eq!(nightness(Hour::Dusk), 0.5);
+        assert_eq!(nightness(Hour::Day), 0.0);
+        assert_eq!(nightness(Hour::Dawn), 0.0);
+        // A drone's whine carries further than a walker's tread, so the
+        // crickets go quiet for it sooner.
+        const { assert!(INSECTS_HUSH_DRONE > INSECTS_HUSH_BIG) };
+    }
 
     /// The ending's hush eases in, holds, and lets go.
     #[test]

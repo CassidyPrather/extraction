@@ -237,11 +237,14 @@ pub const MIX: &[Cue] = &[
     cue!("rain", "ambience/rain_light", -15.0, 60.0, 0.0, Bed),
     cue!("room", "ambience/room_tone", -18.0, 35.0, 0.0, Bed),
     cue!("creek", "ambience/creek", -4.0, 60.0, 15.0, Bed),
+    cue!("insects", "ambience/insects_night", -27.0, 45.0, 0.0, Bed),
+    cue!("rustle", "ambience/rustle_leaves", -30.0, 45.0, 0.0, Bed),
     cue!("birds", "ambience/crow", -2.0, 70.0, 45.0, Event),
     cue!("valley.distant", "ambience/rockfall", 2.0, 90.0, 110.0, Event),
     cue!("works.groan", "machines/groan", -2.0, 85.0, 80.0, Event),
     cue!("works.clank", "machines/clank", -4.0, 85.0, 80.0, Event),
     cue!("thunder", "ambience/thunder_distant", -14.0, 75.0, 0.0, Event),
+    cue!("thunder.surge", "ambience/thunder_distant", -11.0, 80.0, 0.0, Event),
 ];
 
 /// Narrow dynamics (the comfort board's sound card), dB per role: the

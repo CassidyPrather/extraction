@@ -574,6 +574,35 @@ the information; the score is only the mood.
 - the score pass: with the score at full (ducked), every word keeps 90%
   of its range.
 
+## The night
+
+After dark (`world::weather::Hour::Night`; half at dusk) the valley
+sounds different (`night_ambience`, `ambient_oneshots`):
+
+- **Insects** (`ambience/insects_night`: TRP's cricket chorus, Ontario,
+  CC0) everywhere outside, 12 dB down through walls, gone underground
+  and in rain. **They fall silent** when something big comes near (a
+  walker or its breeds, or the dirigible, within 60 m; a drone within
+  120 m) or a shot goes off within 150 m: silent in a second and a half,
+  and back over 15 s once it's been quiet for 6. They are the natural
+  tell: the crickets stopping is often the first you know of a machine.
+- **Wind in the leaves** (`ambience/rustle_leaves`, high-passed at
+  250 Hz so it's the leaves and not the gusts on the microphone), louder
+  where it's overgrown (the zone's forest cover, until World models'
+  ivy says which buildings are overgrown).
+- **The Surge's thunder**: the far thunder comes more often at night
+  (every 35-90 s), deeper (0.78 speed), a little louder
+  (`thunder.surge`).
+- **No birds.** They used to sing all night.
+
+**The audit** (`scripts/audio_voices.py`): the insects clear the wind
+by 24 dB at 8 kHz and the leaves by 19 dB at 16 kHz, so both are
+heard. Over the night's beds every robot's word keeps 75% of its calm
+range (now 87-100%) and your footstep still clears them (+6.7 dB). A
+walker's step and a drone's rotor are warned of to the mix's own target
+(60 m, 120 m): the crickets would hide the rotor past 71 m and the
+step past 46 m, so the hush radii cover the rest.
+
 ## The score
 
 A generative ambient layer (`src/audio_score.rs`) that isn't there until
