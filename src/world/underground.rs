@@ -1785,6 +1785,21 @@ mod tests {
                 local.y < plan.floor + 1.0,
                 "{map}: not down at the floor: {local:?}"
             );
+            // From anywhere in the site (the deepest room, the stairs under
+            // the kiosks), the way out is one of the kiosks' doors.
+            for c in (0..plan.grid.n * plan.grid.n).step_by(37) {
+                let (i, j) = (c % plan.grid.n, c / plan.grid.n);
+                if plan.grid.cost[c] == extraction_core::nav::BLOCKED || plan.outside[c] {
+                    continue;
+                }
+                let from = Vec2::from_array(plan.grid.centre(i, j));
+                if let Some(to) = crate::sim::raider::way_out(&plan, from) {
+                    assert!(
+                        plan.entries.iter().any(|e| e.distance(to) < 0.1),
+                        "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
+                    );
+                }
+            }
             let at = walk(&mut app, exit, 0.6, "out");
             let local = plan.to_local(at);
             assert!(
