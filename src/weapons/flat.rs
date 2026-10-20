@@ -154,7 +154,7 @@ fn start_macros(
             }
         }
     }
-    if keys.just_pressed(KeyCode::KeyC) {
+    if keys.just_pressed(KeyCode::KeyT) {
         if let (Some(a), Some(b)) = (right, left) {
             combine.write(Combine { a, b });
         }
