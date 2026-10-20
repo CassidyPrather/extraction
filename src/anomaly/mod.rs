@@ -1024,6 +1024,9 @@ mod tests {
                         gun: Entity::PLACEHOLDER,
                         life: 2.0,
                         mods: Default::default(),
+                        mass_g: 6.1,
+                        seed: 0,
+                        passes: 0,
                     },
                     Transform::from_translation(chest + Vec3::new(0.0, 1.0, 12.0)),
                 ))
