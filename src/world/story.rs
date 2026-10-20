@@ -397,6 +397,9 @@ pub const BEATS: &[Beat] = &[
 
 /// Seconds between the driver's lines (the wrist shows each for 8).
 const BEAT_GAP: f32 = 7.0;
+/// Before the first: the job's own lines go first (at the letter's
+/// hand-in, four land at once).
+const BEAT_FIRST: f32 = 12.0;
 
 /// Tells the beats that open while you play: a job handed in at base that
 /// finishes a rank, or the recall. The driver speaks a few seconds after
@@ -428,7 +431,7 @@ pub fn tell_beats(
                 if let (Some(id), Some(stash)) = (beat.gift, stashes.iter().next()) {
                     gift(&mut commands, &catalog, stash, id);
                 }
-                *timer = BEAT_GAP;
+                *timer = BEAT_FIRST;
             }
         }
     }
