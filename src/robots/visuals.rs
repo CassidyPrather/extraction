@@ -161,7 +161,7 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             ..default()
         }),
         scorched: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.36, 0.34, 0.32),
+            base_color: Color::srgb(0.58, 0.56, 0.53),
             perceptual_roughness: 0.75,
             metallic: 0.2,
             ..default()
@@ -1380,7 +1380,24 @@ fn alert_eyes(
     mats: Option<Res<RobotMats>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Handle<StandardMaterial>>>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut flicker: Local<std::collections::HashMap<Entity, f32>>,
+    time: Res<Time>,
 ) {
+    // A shot into the eye makes it stutter for a moment.
+    for imp in impacts.read() {
+        if imp.part == Some(PartRole::Sensor) && imp.hurt {
+            if let Some(part) = imp.entity.and_then(|e| parts.get(e).ok()) {
+                flicker.insert(part.robot, 0.6);
+            }
+        }
+    }
+    let dt = time.delta_secs();
+    flicker.retain(|_, t| {
+        *t -= dt;
+        *t > 0.0
+    });
+    let now = time.elapsed_secs();
     let Some(m) = mats else {
         return;
     };
@@ -1407,9 +1424,18 @@ fn alert_eyes(
             .clone();
         commands.entity(e).insert(MeshMaterial3d(own));
     }
-    for (_, aware, own) in &robots {
+    for (robot, aware, own) in &robots {
         let Some(own) = own else {
             continue;
+        };
+        let stutter = if flicker.contains_key(&robot) {
+            if (now * 37.0 + robot.index_u32() as f32).sin() > 0.1 {
+                0.15
+            } else {
+                1.6
+            }
+        } else {
+            1.0
         };
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
@@ -1418,7 +1444,7 @@ fn alert_eyes(
             0.0
         };
         let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level;
+        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;
