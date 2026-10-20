@@ -141,7 +141,11 @@ static.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012), "Blued")
 hammer = fillet([(0.0205, 0.0485), (0.0295, 0.0495), (0.0365, 0.0585), (0.0372, 0.0675),
                  (0.0335, 0.0725), (0.0285, 0.0705), (0.0245, 0.0615), (0.0215, 0.055)],
                 [0, 0.002, 0.003, 0.003, 0.003, 0.002, 0.002, 0], 3)
-hammer_p = Part("hammer")
+# Its own object: the game turns it about its pin (the origin, an axis
+# along X) when it cocks. Modelled down, against the slide; cocked is a
+# positive turn about +X, the spur going back.
+HAMMER_PIN = (0.0, 0.0515, 0.025)
+hammer_p = Part("hammer", origin=HAMMER_PIN)
 hammer_p.prism(hammer, -0.0034, 0.0034, "Blued", axis="x", bevel=0.0007, segs=1)
 # Spur grooves, cut across the back of the spur.
 spur_cut = Part("cut")
@@ -183,7 +187,8 @@ for i in range(3):
 for p in (slide, trig, safety):
     make(p, worn={})
 grip.cut(grip_cut)
-join("static_frame", static, hammer_p, grip, grip_check, worn={})
+join("static_frame", static, grip, grip_check, worn={})
+make(hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
 empty("pt_muzzle", (0.0, BORE_Y, -0.13))
