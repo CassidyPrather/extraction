@@ -98,9 +98,15 @@ impl BuildingPlan {
     pub fn contains(&self, p: Vec3, pad: f32) -> bool {
         let l = self.to_local(p);
         if self.levels.is_some() {
-            return self
-                .level(l)
-                .is_some_and(|y| l.y > y - 0.6 && l.y < y + MAX_REACH_UP + 0.5);
+            // The ground round a kiosk is the plan's, but it isn't in.
+            let out = self
+                .grid
+                .cell_of([l.x, l.z])
+                .is_some_and(|(i, j)| self.outside[j * self.grid.n + i]);
+            return !out
+                && self
+                    .level(l)
+                    .is_some_and(|y| l.y > y - 0.6 && l.y < y + MAX_REACH_UP + 0.5);
         }
         l.x.abs() <= self.half.x + pad && l.z.abs() <= self.half.y + pad
     }
