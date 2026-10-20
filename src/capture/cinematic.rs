@@ -44,6 +44,11 @@ fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
     opts.capture.cinematic.is_some()
 }
 
+/// A still's field of view (the game's own camera's), degrees.
+pub const STILL_FOV: f32 = 75.0;
+/// Frames a still settles for at its pose (streamed detail, shadows).
+pub const STILL_SETTLE: u32 = 14;
+
 /// The lowest the camera goes over the ground, metres.
 pub const CLEARANCE: f32 = 0.6;
 /// Frames being read back at once, at most.
@@ -62,6 +67,9 @@ pub struct Shot {
     /// Share of the path inside trees, and of its views a trunk blocks
     /// (`Trees::score`).
     pub trees: (f32, f32),
+    /// A still (from a `.stills` file): one frame, saved as
+    /// `<capture-out>/<name>.png`.
+    pub still: bool,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -93,7 +101,32 @@ struct Cine {
 }
 
 /// Reads the shots of a `.cine` file and makes them flyable in `zone`.
+/// A `.stills` file (the `--tour-views` format, `name x,y,z,yaw,pitch`)
+/// gives one still a line instead: time still steps a frame at a time, so
+/// a look that a real-time tour would outlast (the Surge, which passes in
+/// a few minutes) holds for every still.
 pub fn load(zone: &Zone, file: &std::path::Path, fps: u32) -> Result<Vec<Shot>, String> {
+    if file.extension().is_some_and(|e| e == "stills") {
+        let trees = Trees::new(zone);
+        return Ok(crate::tour::scripted_views(zone, file)
+            .into_iter()
+            .map(|v| {
+                let (at, look) = (Vec3::from_array(v.at), Vec3::from_array(v.look));
+                let flight = Flight::new(vec![(at, Some(look)), (at, Some(look))], 0.0, 0.0);
+                Shot {
+                    name: v.file.trim_end_matches(".png").to_string(),
+                    trees: trees.score(&flight),
+                    flight,
+                    frames: 1,
+                    fov: STILL_FOV,
+                    hour: None,
+                    weather: None,
+                    settle: STILL_SETTLE,
+                    still: true,
+                }
+            })
+            .collect());
+    }
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let specs = path::parse(&text)?;
     let trees = Trees::new(zone);
@@ -160,6 +193,7 @@ pub fn build(zone: &Zone, trees: &Trees, spec: &ShotSpec, fps: u32) -> Result<Sh
         hour: spec.get("hour").map(str::to_string),
         weather: spec.get("weather").map(str::to_string),
         settle: spec.num("settle", 40.0) as u32,
+        still: false,
     })
 }
 
@@ -489,7 +523,11 @@ fn fly(
                 shot.settle
             };
             cine.settle = Some(n);
-            let _ = std::fs::create_dir_all(out.join(&shot.name));
+            let _ = std::fs::create_dir_all(if shot.still {
+                out.clone()
+            } else {
+                out.join(&shot.name)
+            });
             n
         }
     };
@@ -527,7 +565,12 @@ fn fly(
     if cine.in_flight >= IN_FLIGHT {
         time.pause();
     }
-    let mut save = save_to_disk(out.join(&shot.name).join(format!("f{frame:05}.png")));
+    let file = if shot.still {
+        out.join(format!("{}.png", shot.name))
+    } else {
+        out.join(&shot.name).join(format!("f{frame:05}.png"))
+    };
+    let mut save = save_to_disk(file);
     commands.spawn(Screenshot::primary_window()).observe(
         move |shot: On<ScreenshotCaptured>, mut cine: ResMut<Cine>| {
             save(shot);

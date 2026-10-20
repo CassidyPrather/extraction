@@ -13,8 +13,6 @@ m11_summit      -100,0,-160,100,-8   # vista from the mast summit, east
 m12_aerial      40,45,300,0,-8       # over the gate, up the valley
 
 # Hero views of the landmarks: low from the south-east, high from the south-west.
-h_sawmill_low   -142,0,188,315,8
-h_sawmill_high  -199,~14,199,45,-12
 h_water_tower_low   255,0,-173,315,8
 h_water_tower_high  198,~14,-162,45,-12
 h_ranger_tower_low   124,0,21,315,8
@@ -25,5 +23,4 @@ h_mill_race_low   -97,0,141,315,8
 h_mill_race_high  -154,~14,152,45,-12
 h_farmhouse_low   213,0,168,315,8
 h_farmhouse_high  156,~14,179,45,-12
-h_barn_low   188,0,153,315,8
 h_barn_high  131,~14,164,45,-12

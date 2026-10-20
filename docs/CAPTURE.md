@@ -71,13 +71,18 @@ crossfades. Without ffmpeg you get the frames and the contact sheets.
 ## Press-kit stills
 
 `scripts/capture_presskit.sh` shoots the views in
-`scripts/capture_paths/<map>.stills` (the `--tour-views` format,
-`name x,y,z,yaw,pitch`) in each mood:
+`scripts/capture_paths/<map>.stills` in each mood. The views use the
+`--tour-views` format, `name x,y,z,yaw,pitch`, where `~h` means h metres
+over the ground. It shoots through `--cinematic`: a `.stills` file gives
+one still per line, saved as `<capture-out>/<name>.png`. Time still steps
+one frame at a time. That matters for the Surge: a real-time tour takes
+long enough that the Surge rages, passes and resets the Zone partway
+through, so a tour's "Surge" stills mostly show a calm day.
 
 | Mood | Settings |
 | - | - |
 | golden | dusk, clearing, the sun 7° up |
-| night | night, clearing |
+| night | night, clearing, by the free camera's torch (`EXTRACTION_TORCH=1`) |
 | rain | a downpour by day |
 | surge | the Surge raging (`--surge-in -40`), drizzle |
 | day | the reference look: drizzle by day |
