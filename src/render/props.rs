@@ -419,6 +419,10 @@ pub(crate) struct HandVisual {
     /// Current spread of index..little, radians toward the thumb (eased;
     /// tracked fingers set it, otherwise `rest_spread`).
     spread: [f32; 4],
+    /// A tracked thumb: which way its first bone points on the unrolled
+    /// glove and how far its last joint bends (radians); `None` swings it
+    /// by its curl.
+    thumb: Option<(Vec3, f32)>,
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -469,6 +473,7 @@ fn spawn_hand_visuals(
                 side: rh.side,
                 curl: [0.0; 5],
                 spread: std::array::from_fn(rest_spread),
+                thumb: None,
             },
             PlayerGlove,
         ));
@@ -776,6 +781,7 @@ pub(crate) fn spawn_hand(
                 side,
                 curl,
                 spread: std::array::from_fn(rest_spread),
+                thumb: None,
             },
             GloveMaterial(vec![glove.clone()]),
             Transform::default(),
@@ -1103,11 +1109,13 @@ fn pose_hands(
         // An empty hand reaching for a push button points at it, so the
         // finger the button feels is the one you see.
         let tip = pose.transform_point(crate::interact::poke::FINGERTIP);
+        let mut thumb = None;
         if let Some(real) = tracked.filter(|_| free) {
             // Tracked fingers (Index controllers): a free hand is the real
             // one; what's held keeps the glove's wrap round it.
             target = real.curl;
             spread = real.splay;
+            thumb = (real.thumb_dir != Vec3::ZERO).then_some((real.thumb_dir, real.thumb_bend));
         } else if free
             && buttons
                 .iter()
@@ -1122,6 +1130,10 @@ fn pose_hands(
         for (s, want) in v.spread.iter_mut().zip(spread) {
             *s += (want - *s) * ease;
         }
+        v.thumb = thumb.map(|(dir, bend)| match v.thumb {
+            Some((d, b)) => (d.lerp(dir, ease).normalize_or(dir), b + (bend - b) * ease),
+            None => (dir, bend),
+        });
     }
     for (f, parent, mut ft) in &mut fingers {
         // Up the chain to the hand this joint belongs to.
@@ -1136,7 +1148,16 @@ fn pose_hands(
             continue;
         };
         let spread = v.spread.get(f.finger).copied().unwrap_or(0.0);
-        ft.rotation = joint_rotation_spread(v.side, f.finger, f.joint, v.curl[f.finger], spread);
+        ft.rotation = match (f.finger, f.joint, v.thumb) {
+            // A tracked thumb points where the real one does (the glove's
+            // unrolled frame is OpenXR's palm frame), pad toward the fingers.
+            (4, 0, Some((dir, _))) => {
+                Quat::from_rotation_arc(Vec3::NEG_Z, dir)
+                    * Quat::from_rotation_z(0.6 * v.side.sign())
+            }
+            (4, _, Some((_, bend))) => Quat::from_rotation_x(-bend),
+            _ => joint_rotation_spread(v.side, f.finger, f.joint, v.curl[f.finger], spread),
+        };
     }
 }
 
@@ -1662,6 +1683,7 @@ mod glove_tests {
                     side: Side::Right,
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
+                    thumb: None,
                 },
                 Transform::default(),
             ))
@@ -1767,6 +1789,7 @@ mod glove_tests {
                     side: Side::Right,
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
+                    thumb: None,
                 },
                 Transform::default(),
             ))
@@ -1774,6 +1797,8 @@ mod glove_tests {
         let real = Fingers {
             curl: [0.1, 0.6, 0.8, 0.9, 0.3],
             splay: [0.15, 0.0, -0.1, -0.2],
+            thumb_dir: Vec3::new(0.5, -0.4, -0.77).normalize(),
+            thumb_bend: 0.4,
         };
         app.world_mut()
             .get_mut::<RigInput>(player)
@@ -1785,9 +1810,14 @@ mod glove_tests {
                 app.update();
             }
             let v = app.world().get::<HandVisual>(glove).unwrap();
-            (v.curl, v.spread)
+            (v.curl, v.spread, v.thumb)
         };
-        let (curl, spread) = settle(&mut app);
+        let (curl, spread, thumb) = settle(&mut app);
+        let (dir, bend) = thumb.expect("a tracked thumb");
+        assert!(
+            dir.distance(real.thumb_dir) < 0.01 && (bend - real.thumb_bend).abs() < 0.01,
+            "free thumb {dir} {bend}"
+        );
         for f in 0..5 {
             assert!((curl[f] - real.curl[f]).abs() < 0.02, "free curl {curl:?}");
         }
@@ -1819,7 +1849,8 @@ mod glove_tests {
             ))
             .id();
         app.world_mut().get_mut::<Hand>(hand).unwrap().holding = Some(gun);
-        let (curl, _) = settle(&mut app);
+        let (curl, _, thumb) = settle(&mut app);
+        assert!(thumb.is_none(), "a held gun's thumb wraps it, not tracked");
         let wrap = hold_curl(Some(GripRole::Primary), 0.0, 0.0);
         for f in 0..5 {
             assert!(

@@ -102,6 +102,11 @@ What changed, and worth a comment each:
   wrist readout sits on a housing on the left cuff. Mark anything that
   looks wrong in your hand, especially a hand that sits too far forward
   or back on its grip.
+- **Fingers.** The Index controllers' finger sensing reaches the gloves:
+  an empty glove's fingers and thumb follow yours, and sleeves run up to
+  your shoulders. A gun stays in a relaxed hand as long as your fingers
+  are still round it; open your fingers (not just the squeeze) to let go.
+  Say if that ever keeps hold of something you meant to drop.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
