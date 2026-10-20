@@ -365,7 +365,7 @@ impl Region {
 /// A ruined house's prefab id is its house's with the ruin's state after
 /// it (`house_plank_burnt`); built from the same plan, it stands on the
 /// same footprint with the same doors.
-pub const RUIN_STATES: [&str; 2] = ["_damaged", "_burnt"];
+pub const RUIN_STATES: [&str; 3] = ["_damaged", "_burnt", "_drowned"];
 
 /// The prefab a ruin is a ruin of (any other id as it is).
 pub fn prefab_base(id: &str) -> &str {
@@ -445,6 +445,25 @@ pub struct Entrance {
 /// with the game's recipes by `buildings::tests::entrances_match_the_map`;
 /// regenerate it from the recipes when they change.
 pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
+    // A drowned house's doorway is a breach, its silt banked up to it:
+    // wider, and further out.
+    if let Some(base) = id.strip_suffix("_drowned") {
+        const fn door(z: f32) -> Entrance {
+            Entrance {
+                at: [0.0, z],
+                out: [0.0, -1.0],
+                width: 1.1,
+                clear: 4.21,
+            }
+        }
+        const PLANK: [Entrance; 1] = [door(-3.59)];
+        const WIDE: [Entrance; 1] = [door(-4.09)];
+        return match base {
+            "house_plank" => &PLANK,
+            "farmhouse" | "house_brick" => &WIDE,
+            _ => &[],
+        };
+    }
     match prefab_base(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],

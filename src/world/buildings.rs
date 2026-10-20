@@ -172,6 +172,10 @@ pub enum Ruin {
     Damaged,
     /// Burnt out: charred to its rafters, no doors or glass, ash.
     Burnt,
+    /// Under a reservoir for sixty years, the water now down: the roof
+    /// and floors gone, the walls standing, silted to the sills, a tide
+    /// line round them.
+    Drowned,
 }
 
 /// One of `n` variants for a prop at `at`, so a room's two crates differ
@@ -325,7 +329,7 @@ impl Builder {
                 // A ruin's windows: burnt out, or (damaged) every other
                 // one's glass broken out of its bar.
                 OpeningKind::Window
-                    if self.ruin == Some(Ruin::Burnt)
+                    if matches!(self.ruin, Some(Ruin::Burnt | Ruin::Drowned))
                         || (self.ruin.is_some() && variant(mid, 2) == 1) =>
                 {
                     if self.ruin == Some(Ruin::Damaged) {
@@ -412,8 +416,8 @@ impl Builder {
                         );
                     }
                     let hinge = at(s0 + 0.02, y0);
-                    // Burnt, the door's gone with the rest.
-                    if self.ruin != Some(Ruin::Burnt) {
+                    // Burnt or drowned, the door's gone with the rest.
+                    if !matches!(self.ruin, Some(Ruin::Burnt | Ruin::Drowned)) {
                         self.geo.doors.push(DoorDef {
                             hinge,
                             width: o.width - 0.04,
@@ -781,6 +785,8 @@ impl Builder {
                 (Some(Ruin::Damaged), true) => &[(-1.0 / 6.0, 0.5)],
                 (Some(Ruin::Damaged), false) => &[(-0.5, 0.5)],
                 (Some(Ruin::Burnt), _) => &[(-0.5, -1.0 / 6.0)],
+                // (A drowned house has no roof to build.)
+                (Some(Ruin::Drowned), _) => &[],
             };
             for &(z0, z1) in spans {
                 self.piece(
@@ -932,6 +938,8 @@ impl Builder {
                     Mat::Planks,
                 );
             }
+            // No ceiling to build.
+            Ruin::Drowned => {}
             Ruin::Burnt => {
                 let n = (d / 1.2).floor() as i32;
                 for k in 0..=n {
@@ -1331,7 +1339,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 39] = [
+pub const PREFABS: [&str; 42] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1371,6 +1379,9 @@ pub const PREFABS: [&str; 39] = [
     "farmhouse_burnt",
     "house_brick_damaged",
     "house_brick_burnt",
+    "house_plank_drowned",
+    "farmhouse_drowned",
+    "house_brick_drowned",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1385,10 +1396,21 @@ pub fn prefab(id: &str) -> Option<Geo> {
     if base != id {
         let ruin = if id.ends_with("_burnt") {
             Ruin::Burnt
+        } else if id.ends_with("_drowned") {
+            Ruin::Drowned
         } else {
             Ruin::Damaged
         };
         b.ruin = Some(ruin);
+        if ruin == Ruin::Drowned {
+            match base {
+                "house_plank" => house_drowned(&mut b, 8.0, 7.0, Mat::Planks),
+                "farmhouse" => house_drowned(&mut b, 10.0, 8.0, Mat::Planks),
+                "house_brick" => house_drowned(&mut b, 10.0, 8.0, Mat::Brick),
+                _ => return None,
+            }
+            return Some(b.finish());
+        }
         match base {
             "house_plank" => house_ruin(&mut b, 8.0, 7.0, Mat::Planks, Mat::Shingles, ruin),
             "farmhouse" => house_ruin(&mut b, 10.0, 8.0, Mat::Planks, Mat::Corrugated, ruin),
@@ -1784,6 +1806,113 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
                 m => m,
             };
         }
+    }
+}
+
+/// How deep a drowned house's silt lies over its footing: four of a
+/// stair's risers (`underground::STEP_RISE`), a hand under the sills.
+const SILT: f32 = 0.76;
+
+/// A house that was under a reservoir (`Ruin::Drowned`): its walls, no
+/// roof, floors or partitions, no doors or glass, the timber sodden; silt
+/// inside to just under the sills, banked up to the doorway in steps (the
+/// door frame rotted out, the wall over it fallen: a doorway open to the
+/// sky); a stove standing out of the silt. The tide line is
+/// `decay::stains`'s, found by the silt.
+fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
+    let start = b.geo.pieces.len();
+    // At grade: the valley's mud has come up round it.
+    let f = 0.05;
+    let h = 2.7;
+    let thick = 0.18;
+    let (x, z) = (w * 0.5, d * 0.5);
+    b.plinth(w, d, f, Mat::Concrete, Mat::Silt);
+    let doorway = 1.1;
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        thick,
+        wall,
+        [
+            &[
+                window(w * 0.2),
+                breach(w * 0.5, doorway, 0.0, h),
+                window(w * 0.8),
+            ],
+            &[window(d * 0.3), window(d * 0.75)],
+            &[window(w * 0.25), window(w * 0.75)],
+            &[window(d * 0.5)],
+        ],
+    );
+    // The silt: wall to wall, and through the doorway to the bank.
+    let top = f + SILT;
+    b.bx(
+        Vec3::new(w - thick, SILT, d - thick),
+        Vec3::new(0.0, f + SILT * 0.5, 0.0),
+        Mat::Silt,
+    );
+    b.bx(
+        Vec3::new(doorway, SILT, thick + 0.02),
+        Vec3::new(0.0, f + SILT * 0.5, -z),
+        Mat::Silt,
+    );
+    let reach = b.door_steps(
+        Vec2::new(-x, -z),
+        Vec2::X,
+        Quat::IDENTITY,
+        x,
+        doorway,
+        top,
+        Mat::Silt,
+    );
+    let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+    b.geo.entrances.push(extraction_core::map::Entrance {
+        at: [0.0, r(-z - thick * 0.5)],
+        out: [0.0, -1.0],
+        width: doorway,
+        clear: r((reach - thick * 0.5).max(0.0) + 1.0),
+    });
+    // Lumps of it against the walls, and what stands out of it: the
+    // stove, a fallen joist.
+    for (ax, az, sx, sz) in [
+        (-0.7, 0.75, 1.6, 0.9),
+        (0.65, 0.2, 1.0, 1.4),
+        (-0.2, -0.55, 1.2, 0.8),
+    ] {
+        b.deco(
+            Vec3::new(sx, 0.12, sz),
+            Vec3::new(x * ax, top + 0.06, z * az),
+            Mat::Silt,
+        );
+    }
+    b.stove(Vec3::new(-x * 0.35, top - 0.45, z - 0.45), 0.0);
+    b.geo.loot.push(LootSpot {
+        at: Vec3::new(-x * 0.35, top + 0.45, z - 0.45),
+        table: "kitchen",
+    });
+    let (a, c) = (
+        Vec3::new(-x * 0.2, top + 0.05, -z * 0.1),
+        Vec3::new(x * 0.55, top + 0.9, z * 0.6),
+    );
+    let v = c - a;
+    b.piece(
+        Shape::Box(Vec3::new(0.14, 0.2, v.length())),
+        Transform::from_translation((a + c) * 0.5).looking_to(v.normalize(), Vec3::Y),
+        Mat::Sodden,
+        true,
+    );
+    b.loot(Vec3::new(x * 0.4, top + 0.05, -z * 0.45), "house");
+    // Sixty years under water: the timber sodden, the paint and plaster
+    // gone to the brick and the iron rusted.
+    for p in &mut b.geo.pieces[start..] {
+        p.mat = match p.mat {
+            Mat::Planks | Mat::Shingles | Mat::WoodFloor | Mat::Timber => Mat::Sodden,
+            Mat::Plaster => Mat::Concrete,
+            Mat::Corrugated | Mat::PaintedMetal => Mat::RustyMetal,
+            m => m,
+        };
     }
 }
 
@@ -4946,8 +5075,11 @@ pub fn dress_buildings(
             }
         }
         // Years of ivy (`overgrowth`): stems near, leaves to the middle
-        // distance, a few big cards past that.
-        if let (Some(ivy), false, true) = (&ivy, site, super::overgrowth::enabled()) {
+        // distance, a few big cards past that. None where the water's only
+        // just gone down.
+        let drowned = b.prefab.ends_with("_drowned");
+        if let (Some(ivy), false, false, true) = (&ivy, site, drowned, super::overgrowth::enabled())
+        {
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;
             let gseed = super::overgrowth::seed(at, &b.prefab);

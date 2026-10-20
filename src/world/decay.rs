@@ -102,9 +102,13 @@ pub enum Stain {
     /// Soot over an opening a fire came out of: black, darker at the
     /// bottom, rising.
     Soot,
+    /// Where a reservoir stood on a drowned house's walls: a hard dark
+    /// line, a film of mud under it. Its sides don't fade (the bands
+    /// meet along a wall).
+    Tide,
 }
 
-pub const STAINS: [Stain; 3] = [Stain::Water, Stain::Rust, Stain::Soot];
+pub const STAINS: [Stain; 4] = [Stain::Water, Stain::Rust, Stain::Soot, Stain::Tide];
 
 impl Stain {
     fn tint(self) -> Vec3 {
@@ -112,6 +116,7 @@ impl Stain {
             Stain::Water => Vec3::new(0.62, 0.64, 0.6),
             Stain::Rust => Vec3::new(0.62, 0.42, 0.28),
             Stain::Soot => Vec3::new(0.18, 0.17, 0.16),
+            Stain::Tide => Vec3::new(0.3, 0.29, 0.2),
         }
     }
 
@@ -150,9 +155,19 @@ impl Stain {
                         s = s.max(k * (1.0 - d * d) * (1.0 - t / len).powf(0.8));
                     }
                 }
-                // A band along the source edge, and soft sides.
-                s = s.max((1.0 - t * 6.0).max(0.0) * 0.7);
-                s *= smooth(0.0, 0.12, u) * smooth(0.0, 0.12, 1.0 - u);
+                if self == Stain::Tide {
+                    // The line, a few centimetres of near black; under it
+                    // the mud's film, even but for a mottle, paling a
+                    // little downwards.
+                    let line = 1.0 - smooth(0.03, 0.07, t);
+                    let film =
+                        0.52 + 0.06 * (u * 37.0 + t * 11.0).sin() * (u * 13.0).cos() - 0.12 * t;
+                    s = line.max(film);
+                } else {
+                    // A band along the source edge, and soft sides.
+                    s = s.max((1.0 - t * 6.0).max(0.0) * 0.7);
+                    s *= smooth(0.0, 0.12, u) * smooth(0.0, 0.12, 1.0 - u);
+                }
                 let c = Vec3::ONE.lerp(tint, s.clamp(0.0, 1.0));
                 data.extend_from_slice(&[
                     (c.x * 255.0) as u8,
@@ -382,7 +397,70 @@ pub fn stains(geo: &Geo, occ: &Occluders, seed: u64, burnt: bool) -> Vec<Decal> 
             }
         }
     }
+    tide(geo, occ, &mut out);
     out
+}
+
+/// How far over a drowned house's silt the water stood at its lowest
+/// for years, m.
+const TIDE: f32 = 1.0;
+
+/// A drowned house's tide line (`Ruin::Drowned`: found by its silt): on
+/// every face of its walls, in and out, the line `TIDE` over the silt and
+/// the film down to the silt (outside, a little further).
+fn tide(geo: &Geo, occ: &Occluders, out: &mut Vec<Decal>) {
+    let Some(silt) = geo
+        .pieces
+        .iter()
+        .filter(|p| p.mat == Mat::Silt && p.collide)
+        .filter_map(|p| match p.shape {
+            Shape::Box(s) if s.x * s.z > 4.0 => Some(p.at.translation.y + s.y * 0.5),
+            _ => None,
+        })
+        .reduce(f32::max)
+    else {
+        return;
+    };
+    let line = silt + TIDE;
+    const PROUD: f32 = 0.008;
+    for p in &geo.pieces {
+        let Shape::Box(s) = p.shape else { continue };
+        let walls = matches!(
+            p.mat,
+            Mat::Brick | Mat::Planks | Mat::Sodden | Mat::Concrete | Mat::DressedStone
+        );
+        let (c, h) = (p.at.translation, s * 0.5);
+        if !p.collide || !walls || c.y - h.y > line - 0.05 || c.y + h.y < line + 0.02 {
+            continue;
+        }
+        let r = p.at.rotation;
+        for (ln, lu, hn, hu) in [
+            (Vec3::X, Vec3::Z, h.x, h.z),
+            (Vec3::NEG_X, Vec3::Z, h.x, h.z),
+            (Vec3::Z, Vec3::X, h.z, h.x),
+            (Vec3::NEG_Z, Vec3::X, h.z, h.x),
+        ] {
+            let (n, u) = (r * ln, r * lu);
+            if hu < 0.04 || n.y.abs() > 0.3 {
+                continue;
+            }
+            let face = Vec3::new(c.x, line, c.z) + n * hn;
+            if occ.inside(face + n * 0.04) {
+                continue;
+            }
+            let outside = Vec2::new(face.x, face.z).dot(Vec2::new(n.x, n.z)) > 0.0
+                && !occ.inside(face + n * 0.3 - Vec3::Y * TIDE);
+            let foot = (c.y - h.y).max(if outside { silt - 0.6 } else { silt });
+            out.push(Decal {
+                kind: Stain::Tide,
+                top: face + n * PROUD,
+                n,
+                u,
+                width: hu * 2.0,
+                length: (line - foot).max(0.1),
+            });
+        }
+    }
 }
 
 /// One stain kind's decals as a mesh (building-local).
@@ -443,7 +521,7 @@ pub fn decal_mesh(decals: &[Decal], kind: Stain) -> Option<Mesh> {
 /// The stains' materials: their streak textures, multiplied over what's
 /// behind them, unlit.
 #[derive(Resource)]
-pub struct StainAssets(pub [Handle<StandardMaterial>; 3]);
+pub struct StainAssets(pub [Handle<StandardMaterial>; 4]);
 
 pub fn setup_stains(
     mut commands: Commands,
@@ -514,6 +592,40 @@ mod tests {
                 assert!(a.iter().any(|d| d.kind == Stain::Soot), "{id}: no soot");
             }
         }
+    }
+
+    /// A drowned house has its tide line round its walls, in and out,
+    /// and nothing else hangs on it but where the line runs.
+    #[test]
+    fn drowned_houses_have_a_tide_line() {
+        for id in [
+            "house_plank_drowned",
+            "farmhouse_drowned",
+            "house_brick_drowned",
+        ] {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            let tide: Vec<_> = stains(&geo, &occ, 7, false)
+                .into_iter()
+                .filter(|d| d.kind == Stain::Tide)
+                .collect();
+            assert!(tide.len() >= 16, "{id}: {} tide decals", tide.len());
+            let y = tide[0].top.y;
+            assert!(tide.iter().all(|d| (d.top.y - y).abs() < 1e-4), "{id}");
+            assert!(geo.doors.is_empty(), "{id}: a door left");
+            assert!(
+                !geo.pieces.iter().any(|p| p.mat == Mat::Glass),
+                "{id}: glass"
+            );
+        }
+        // And a dry house has none.
+        let geo = crate::world::buildings::prefab("house_brick").unwrap();
+        let occ = crate::world::buildings::occluders(&geo);
+        assert!(
+            !stains(&geo, &occ, 7, false)
+                .iter()
+                .any(|d| d.kind == Stain::Tide)
+        );
     }
 
     /// Weathered sashes: one per sash, the same every time, all of a

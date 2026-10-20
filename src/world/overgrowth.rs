@@ -80,6 +80,7 @@ fn climbable(m: Mat) -> bool {
             | Mat::SootBrick
             | Mat::SootPlaster
             | Mat::DressedStone
+            | Mat::Sodden
     )
 }
 
@@ -134,7 +135,7 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 /// same on the server and every client. 0 everywhere with decay off.
 /// For Audio's rustle in the leaves.
 pub fn amount(at: Vec2, prefab: &str) -> f32 {
-    if enabled() {
+    if enabled() && !prefab.ends_with("_drowned") {
         vigour(seed(at, prefab))
     } else {
         0.0
