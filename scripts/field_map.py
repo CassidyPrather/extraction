@@ -151,33 +151,36 @@ def main():
     f_med = font(round(NAME_MM * mm))
     f_small = font(round(LABEL_MM * mm))
     pencil = (55, 50, 48)
+    # A paper-coloured halo round the letters: names stay clear where they
+    # cross a road, a contour or the forest's marks.
+    HALO = {"stroke_width": max(1, round(0.5 * mm)), "stroke_fill": (214, 200, 168)}
     for r in meta["regions"]:
         xs = [px(p)[0] for p in r["polygon"]]
         ys = [px(p)[1] for p in r["polygon"]]
         cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
         w = d.textlength(r["name"], font=f_med)
-        d.text((cx - w / 2, cy - NAME_MM * mm / 2), r["name"], fill=pencil, font=f_med)
+        d.text((cx - w / 2, cy - NAME_MM * mm / 2), r["name"], fill=pencil, font=f_med, **HALO)
     for m in meta["markers"]:
         x, y = px(m["at"])
         if m["kind"] == "Rendezvous":
             d.ellipse([x - 7, y - 7, x + 7, y + 7], outline=(140, 30, 25), width=2)
-            d.text((x + 9, y + 4), "RV", fill=(140, 30, 25), font=f_small)
+            d.text((x + 9, y + 4), "RV", fill=(140, 30, 25), font=f_small, **HALO)
         elif m["kind"] == "RobotGate":
             d.line([(x - 7, y - 7), (x + 7, y + 7)], fill=(140, 30, 25), width=3)
             d.line([(x - 7, y + 7), (x + 7, y - 7)], fill=(140, 30, 25), width=3)
-            d.text((x - 3 * LABEL_MM * mm, y + 10), "keep away", fill=(140, 30, 25), font=f_small)
+            d.text((x - 3 * LABEL_MM * mm, y + 10), "keep away", fill=(140, 30, 25), font=f_small, **HALO)
         elif m["kind"] == "ArtifactField":
-            d.text((x - 6, y + 12), "? ? ?", fill=(90, 40, 110), font=f_med)
+            d.text((x - 6, y + 12), "? ? ?", fill=(90, 40, 110), font=f_med, **HALO)
         elif m["kind"] == "Insertion":
-            d.text((x + 10, y + 10), "truck drops here", fill=pencil, font=f_small)
+            d.text((x + 10, y + 10), "truck drops here", fill=pencil, font=f_small, **HALO)
     # North arrow and a pencilled scale.
-    d.text((N - 50, 18), "N", fill=pencil, font=f_med)
+    d.text((N - 50, 18), "N", fill=pencil, font=f_med, **HALO)
     d.line([(N - 42, 44), (N - 42, 90)], fill=pencil, width=2)
     d.polygon([(N - 48, 50), (N - 36, 50), (N - 42, 40)], fill=pencil)
     bar = 100 * s
     d.line([(24, N - 30), (24 + bar, N - 30)], fill=pencil, width=2)
-    d.text((24, N - 36 - LABEL_MM * mm * 1.2), "100 m (paced)", fill=pencil, font=f_small)
-    d.text((24, 16), meta["name"], fill=pencil, font=font(round(TITLE_MM * mm)))
+    d.text((24, N - 36 - LABEL_MM * mm * 1.2), "100 m (paced)", fill=pencil, font=f_small, **HALO)
+    d.text((24, 16), meta["name"], fill=pencil, font=font(round(TITLE_MM * mm)), **HALO)
     img = img.filter(ImageFilter.GaussianBlur(0.4))
     img.save(args.out, quality=86)
     print(args.out)

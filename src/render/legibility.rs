@@ -86,8 +86,9 @@ impl Need {
 
 /// How a text is read: from how far (eye to text, m), how far off square
 /// (degrees: the reader is that far toward the panel's bottom edge, as
-/// you are below a sign or at the near edge of a note on a table), and in
-/// what pose.
+/// you are below a sign or at the near edge of a note on a table; less
+/// than zero, toward its top edge, as you are over a label on a table),
+/// and in what pose.
 #[derive(Clone, Copy, Debug)]
 pub struct Reading {
     pub need: Need,
@@ -186,20 +187,25 @@ impl TextSource {
         match self {
             TextSource::Wrist => read(MustRead, 0.4, 0.0, "wrist raised and turned, like a watch"),
             TextSource::Radio => read(MustRead, 0.35, 0.0, "radio held up to the face"),
-            TextSource::BenchDisplay => read(MustRead, 0.9, 15.0, "standing at the bench"),
+            TextSource::BenchDisplay => read(MustRead, 0.9, -10.0, "standing at the bench"),
             TextSource::Note => read(MustRead, 0.65, 20.0, "leaning over the table"),
             TextSource::Sign => read(MustRead, 3.0, 0.0, "a few steps from the post"),
-            TextSource::Terminal => read(MustRead, 0.8, 10.0, "standing at the desk"),
+            TextSource::Terminal => read(
+                MustRead,
+                0.7,
+                -35.0,
+                "within reach of its button, looking down",
+            ),
             TextSource::DriversNote => read(MustRead, 0.8, 0.0, "standing at the bed's left wall"),
             TextSource::MemorialNote => read(Incidental, 0.8, 0.0, "standing at the front wall"),
-            TextSource::CampTitle => read(Incidental, 1.2, 15.0, "standing at the camp table"),
-            TextSource::CampSheet => read(MustRead, 1.0, 15.0, "standing at the camp table"),
+            TextSource::CampTitle => read(Incidental, 1.2, -12.0, "standing at the camp table"),
+            TextSource::CampSheet => read(MustRead, 1.0, -12.0, "standing at the camp table"),
             TextSource::Card => read(MustRead, 0.75, 0.0, "within reach of its button"),
             TextSource::Logbook => read(MustRead, 0.75, 0.0, "within reach, on the bed's wall"),
             TextSource::Request => read(MustRead, 0.75, 0.0, "within reach, on the bed's wall"),
             TextSource::PinnedNote => read(MustRead, 0.6, 0.0, "leaning in to the cork board"),
             TextSource::BoardColumn => read(MustRead, 0.8, 0.0, "at the cork board"),
-            TextSource::KitchenLabel => read(MustRead, 0.8, 20.0, "standing at the cooking table"),
+            TextSource::KitchenLabel => read(MustRead, 0.8, -20.0, "standing at the cooking table"),
             TextSource::LockScreen => read(MustRead, 0.8, 0.0, "standing at the lock"),
             TextSource::Epilogue => read(MustRead, 0.8, 30.0, "standing at the pedestal"),
             TextSource::StationBoard => read(MustRead, 2.0, 0.0, "at the station, by its post"),
@@ -564,6 +570,152 @@ mod tests {
         check("radio, full", &radio, Some(TextSource::Radio));
         assert!(bad.is_empty(), "{}", bad.join("\n"));
         assert!(seen.len() >= 15, "sources seen: {seen:?}");
+    }
+
+    /// Paper indoors is lit by the sky's share of light through the walls
+    /// (the ambient, dimmed while you're in a room). Going underground and
+    /// then in and out of buildings must leave it where it was: the
+    /// underground's darkening once took the room's dimmed ambient for the
+    /// sky's and wrote it back, so it ran down to nothing within a few
+    /// rooms and every note indoors went black for the rest of the raid
+    /// (the render gauge found it).
+    #[test]
+    fn a_trip_underground_and_through_rooms_leaves_the_light_alone() {
+        use bevy::render::RenderPlugin;
+        use bevy::render::settings::WgpuSettings;
+        let dir = std::env::temp_dir().join(format!("extraction-ambient-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut app = App::new();
+        app.add_plugins(
+            DefaultPlugins
+                .set(bevy::window::WindowPlugin {
+                    primary_window: None,
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: WgpuSettings {
+                        backends: None,
+                        ..default()
+                    }
+                    .into(),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: crate::asset_root_path().to_string_lossy().into_owned(),
+                    ..default()
+                })
+                .disable::<bevy::winit::WinitPlugin>()
+                .disable::<bevy::log::LogPlugin>(),
+        );
+        app.insert_resource(crate::LaunchOptions {
+            flat: true,
+            map: "marrow_creek".into(),
+            map_explicit: true,
+            new_game: true,
+            robots: false,
+            data_dir: Some(dir.clone()),
+            weather: Some("clearing".into()),
+            camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
+            ..default()
+        })
+        .insert_resource(Time::<Fixed>::from_hz(90.0))
+        .add_plugins(bevy::render::sync_world::SyncWorldPlugin)
+        .add_plugins(avian3d::prelude::PhysicsPlugins::default())
+        .add_plugins((crate::GamePlugin, crate::ClientPlugin));
+        app.finish();
+        app.cleanup();
+        for _ in 0..60 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        // A spot down in the village's shelter, and one in a room.
+        let site = extraction_core::underground::placed(&zone.map)
+            .into_iter()
+            .next()
+            .expect("an underground site");
+        let mut below = None;
+        'find: for dx in -20..=20 {
+            for dz in -20..=20 {
+                let (x, z) = (site.at[0] + dx as f32, site.at[1] + dz as f32);
+                for d in [2.5, 3.5, 4.5, 6.0] {
+                    let p = Vec3::new(x, zone.ground(x, z) - d, z);
+                    if crate::world::underground::floor_under(&zone, p).is_some() {
+                        below = Some(p);
+                        break 'find;
+                    }
+                }
+            }
+        }
+        let below = below.expect("a spot in the shelter");
+        let rooms: Vec<Vec3> = app
+            .world()
+            .resource::<crate::robots::doors::Entrances>()
+            .shells
+            .iter()
+            .take(4)
+            .map(|s| s.xf.translation + Vec3::Y * 1.2)
+            .collect();
+        assert!(!rooms.is_empty(), "no buildings");
+        let outside = zone.on_ground(site.at[0] + 30.0, site.at[1] + 30.0) + Vec3::Y * 1.7;
+        let mut go = |app: &mut App, at: Vec3, frames: usize| {
+            {
+                let w = app.world_mut();
+                let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
+                *q.single_mut(w).unwrap() = Transform::from_translation(at);
+                // Without a renderer the impostors' capture cameras never
+                // finish: they'd be taken for the eye.
+                let mut cams =
+                    w.query_filtered::<&mut Camera, Without<crate::render::FreeCamera>>();
+                for mut c in cams.iter_mut(w) {
+                    c.is_active = false;
+                }
+            }
+            for _ in 0..frames {
+                app.update();
+            }
+        };
+        go(&mut app, outside, 60);
+        let day = app.world().resource::<GlobalAmbientLight>().brightness;
+        assert!(day > 100.0, "{day}");
+        go(&mut app, below, 60);
+        go(&mut app, outside, 60);
+        for room in rooms.iter().cycle().take(8) {
+            go(&mut app, *room, 30);
+            go(&mut app, outside, 30);
+        }
+        go(&mut app, outside, 120);
+        let after = app.world().resource::<GlobalAmbientLight>().brightness;
+        // Which way round two systems run is the scheduler's choice unless
+        // it's pinned, so this run may have got the good order by luck:
+        // nothing that touches the ambient where the room's dimming is put
+        // on and taken off may run in no set order with another.
+        let amb = app
+            .world()
+            .components()
+            .resource_id::<GlobalAmbientLight>()
+            .expect("the ambient");
+        let schedules = app.world().resource::<bevy::ecs::schedule::Schedules>();
+        use bevy::ecs::schedule::ScheduleLabel;
+        for label in [First.intern(), PostUpdate.intern()] {
+            let s = schedules.get(label).unwrap();
+            let loose: Vec<_> = s
+                .graph()
+                .conflicting_systems()
+                .0
+                .iter()
+                .filter(|(_, _, ids)| ids.contains(&amb))
+                .collect();
+            assert!(
+                loose.is_empty(),
+                "{label:?}: systems touching the ambient in no set order: {loose:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            after > day * 0.95,
+            "the ambient ran down from {day:.0} to {after:.0}"
+        );
     }
 
     /// Every model's letters: big enough from where they're read, strokes

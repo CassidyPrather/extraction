@@ -54,19 +54,44 @@ def crop(img, rect, pad=4):
     return img.crop(box)
 
 
-def ocr(im, dark):
-    """Tesseract on the crop scaled up (it wants letters ~30 px tall)."""
+def flatten(im, dark):
+    """Dark letters on white: the panel's own ground (a lamp's glow across
+    it, shade) divided out, then cut to the words with a margin, as a
+    reader's eye adapts to the page and finds the words on it."""
     g = ImageOps.grayscale(im)
     if dark:
         g = ImageOps.invert(g)
+    # The ground: the lightest nearby, smoothed.
+    k = max(3, (min(g.width, g.height) // 8) | 1)
+    ground = g.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.GaussianBlur(k))
+    px = [min(255, int(255 * a / max(b, 1))) for a, b in zip(g.getdata(), ground.getdata())]
+    g.putdata(px)
     g = ImageOps.autocontrast(g, cutoff=1)
+    ink = g.point(lambda v: 255 if v < 140 else 0)
+    box = ink.getbbox()
+    if box:
+        m = max(4, (box[3] - box[1]) // 4)
+        g = g.crop((max(0, box[0] - m), max(0, box[1] - m),
+                    min(g.width, box[2] + m), min(g.height, box[3] + m)))
+    return g
+
+
+def ocr(im, dark, want):
+    """Tesseract on the crop scaled up (it wants letters ~30 px tall): as a
+    block, a line and sparse words, keeping the best reading (a lone word
+    on a big card trips the block reading)."""
+    g = flatten(im, dark)
     g = g.resize((g.width * 4, g.height * 4), Image.LANCZOS)
+    best = ""
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "c.png")
         g.save(p)
-        out = subprocess.run(["tesseract", p, "-", "--psm", "6", "-l", "eng"],
-                             capture_output=True, text=True)
-    return out.stdout
+        for psm in ("6", "11", "7"):
+            out = subprocess.run(["tesseract", p, "-", "--psm", psm, "-l", "eng"],
+                                 capture_output=True, text=True).stdout
+            if score(want, out) > score(want, best):
+                best = out
+    return best
 
 
 def proxy(im, dark):
@@ -104,10 +129,15 @@ def main(argv):
         path = os.path.join(d, s["file"])
         if not os.path.exists(path):
             continue
-        im = crop(Image.open(path).convert("RGB"), s["rect"])
-        seen = im.filter(ImageFilter.GaussianBlur(COMPOSITOR_BLUR))
+        whole = Image.open(path).convert("RGB")
+        # What the sheet shows: the panel and a little round it. What's
+        # read: just inside its edges, so nothing beside it is taken for
+        # letters.
+        im = crop(whole, s["rect"])
+        inner = crop(whole, s["rect"], pad=-max(2, int(0.03 * min(s["rect"][2:]))))
+        seen = inner.filter(ImageFilter.GaussianBlur(COMPOSITOR_BLUR))
         if have_ocr:
-            got = ocr(seen, s["dark"])
+            got = ocr(seen, s["dark"], s["text"])
             sc = score(s["text"], got)
         else:
             got, sc = proxy(seen, s["dark"])

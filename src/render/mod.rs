@@ -66,7 +66,13 @@ impl Plugin for RenderPlugin {
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
-        .add_systems(PostUpdate, grade::dim_indoors)
+        // After the underground's darkening, which takes whatever ambient it
+        // finds for the sky's: run before it, the room's dimming was taken
+        // for daylight and the light ran down to nothing indoors.
+        .add_systems(
+            PostUpdate,
+            grade::dim_indoors.after(crate::world::underground::go_dark),
+        )
         .add_systems(Update, attach_flat_camera)
         .add_systems(
             Update,

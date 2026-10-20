@@ -291,7 +291,9 @@ fn build_screens(
                 LinearRgba::BLACK
             },
             emissive_texture: emissive.then(|| handle.clone()),
-            perceptual_roughness: if emissive { 0.15 } else { 0.95 },
+            // Matte: a glossy screen catches a lamp's highlight right over
+            // its words (the bench display under the canopy light did).
+            perceptual_roughness: if emissive { 0.7 } else { 0.95 },
             ..default()
         });
         let mut view = ScreenView {

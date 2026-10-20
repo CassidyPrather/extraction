@@ -175,6 +175,13 @@ impl Adaptation {
         (-light.max(1e-3).log2() * ADAPT_SHARE).clamp(0.0, ADAPT_MAX)
     }
 
+    /// Takes the eyes straight to their adapted state next frame, as if
+    /// they'd been where the camera is for a while (the legibility gauge
+    /// reads each panel with adapted eyes).
+    pub fn resettle(&mut self) {
+        self.settled = false;
+    }
+
     /// One step toward `target` over `dt` seconds.
     pub fn step(&mut self, target: f32, dt: f32) {
         let tau = if target > self.stops {

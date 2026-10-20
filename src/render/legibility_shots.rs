@@ -38,6 +38,9 @@ struct Shot {
     rect: [f32; 4],
     /// Light (dark letters) or dark (light letters) ground.
     dark: bool,
+    /// Where the panel is, and the eye.
+    centre: [f32; 3],
+    eye: [f32; 3],
 }
 
 #[derive(Resource, Default)]
@@ -50,7 +53,7 @@ struct Shots {
 }
 
 /// Frames for a view to settle.
-const SETTLE: u32 = 4;
+const SETTLE: u32 = 6;
 
 #[allow(clippy::too_many_arguments)]
 fn shoot(
@@ -67,6 +70,9 @@ fn shoot(
     )>,
     mut cams: Query<(&mut Transform, &mut Projection, &Camera), With<FreeCamera>>,
     windows: Query<&Window>,
+    mut adapt: ResMut<super::grade::Adaptation>,
+    ambient: Res<GlobalAmbientLight>,
+    grades: Query<&bevy::render::view::ColorGrading, With<FreeCamera>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -86,6 +92,12 @@ fn shoot(
             .iter()
             .filter(|(_, s, src, _, vis, _)| {
                 vis.get() && !s.text.trim().is_empty() && **src != TextSource::Dev
+            })
+            // `--tour-only TEXT`: the panels whose source contains TEXT.
+            .filter(|(_, _, src, _, _, _)| {
+                opts.tour_only
+                    .as_ref()
+                    .is_none_or(|o| format!("{src:?}").contains(o.as_str()))
             })
             .map(|(e, _, src, gt, _, _)| {
                 let p = gt.translation();
@@ -131,6 +143,10 @@ fn shoot(
     if cam.translation.distance(want.translation) > 0.002 {
         state.wait = 0;
     }
+    // Read with eyes used to the place (a room's dark takes a while).
+    if state.wait < SETTLE - 1 {
+        adapt.resettle();
+    }
     *cam = want;
     state.wait += 1;
     if state.wait < SETTLE {
@@ -150,8 +166,12 @@ fn shoot(
     }
     let file = format!("{:03}_{:?}.png", state.next, source);
     info!(
-        "legibility: {file} panel at {:.2} seen from {:.2}",
-        centre, want.translation
+        "legibility: {file} panel at {:.2} seen from {:.2} (ambient {:.1}, exposure {:.2}, indoors {:.2})",
+        centre,
+        want.translation,
+        ambient.brightness,
+        grades.iter().next().map_or(0.0, |g| g.global.exposure),
+        adapt.indoors
     );
     state.done.push(Shot {
         file: file.clone(),
@@ -167,6 +187,8 @@ fn shoot(
             screen.style,
             crate::raid::bench::ScreenStyle::Lcd | crate::raid::bench::ScreenStyle::Crt
         ),
+        centre: centre.to_array(),
+        eye: want.translation.to_array(),
     });
     state.shooting = true;
     let mut save = save_to_disk(dir.join(&file));
