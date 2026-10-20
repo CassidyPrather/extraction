@@ -97,6 +97,16 @@ pub(super) fn direct(
     };
     let now = time.elapsed_secs();
     let here = root.translation.xz();
+    // Keep the idle task from running out while a check waits: an empty
+    // list is the end of the run.
+    let idle_only =
+        bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
+    if idle_only && bot.elapsed > IDLE - 1.0 && run.step != Some(Step::Done) {
+        bot.elapsed = 0.5;
+    }
+    if bot.tasks.is_empty() && run.step != Some(Step::Done) {
+        bot.tasks.push_back(Task::Wait(IDLE));
+    }
     let raid_no = raid.raids;
 
     // The radio: each first time met gets the bot's answer, now.
