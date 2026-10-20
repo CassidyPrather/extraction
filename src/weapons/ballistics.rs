@@ -2,8 +2,8 @@
 //! world every tick. Hits become [`Hit`] messages (robots read them for
 //! damage), impulses on whatever they strike, and impact effects.
 //!
-//! Recoil is physical: the shot kicks the held gun's rigid body, and the
-//! hand tracking pulls it back.
+//! Recoil is in [`super::feel`]: the shot kicks the gun in the hands that
+//! hold it, and they bring it back.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -117,7 +117,6 @@ impl Plugin for BallisticsPlugin {
 fn fire_shots(
     mut commands: Commands,
     mut shots: MessageReader<Shot>,
-    mut guns: Query<Forces>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
     catalog: Res<crate::items::Catalog>,
 ) {
@@ -150,11 +149,6 @@ fn fire_shots(
                 },
                 Transform::from_translation(shot.origin),
             ));
-        }
-        // Kick: back along the bore and up at the muzzle.
-        if let Ok(mut forces) = guns.get_mut(shot.gun) {
-            let back = -dir * shot.recoil * 0.9;
-            forces.apply_linear_impulse_at_point(back + Vec3::Y * shot.recoil * 0.25, shot.origin);
         }
         commands.spawn((
             Name::new("Muzzle flash"),

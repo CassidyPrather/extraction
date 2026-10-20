@@ -7,10 +7,11 @@
 //!   selector), and grabbing the slide/handle/bolt, whose motion along the
 //!   gun becomes bolt travel.
 //! - The mechanism's events become shots ([`ballistics`]), cases and live
-//!   rounds thrown from the port, recoil impulses and [`GunEvent`]s for
-//!   sound.
+//!   rounds thrown from the port, recoil ([`feel`]) and [`GunEvent`]s
+//!   for sound.
 
 pub mod ballistics;
+pub mod feel;
 pub mod flat;
 pub mod layout;
 pub mod visuals;
@@ -140,12 +141,13 @@ impl Plugin for WeaponsPlugin {
                 PreUpdate,
                 update_aim_hints.before(crate::rig::RigDriverSystems),
             )
-            .add_plugins(ballistics::BallisticsPlugin)
+            .add_plugins((ballistics::BallisticsPlugin, feel::FeelPlugin))
             .add_systems(
                 FixedUpdate,
                 (
                     magwell_events,
                     work_handles,
+                    tap_magazines,
                     buttons,
                     triggers,
                     sync_mag_rounds,
@@ -196,19 +198,7 @@ fn setup_gun_items(
         ));
     }
     // Collider: the bounds of the blockout, as one box.
-    let (lo, hi) = layout.parts.iter().fold(
-        (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
-        |(lo, hi), p| {
-            let half = match p.shape {
-                layout::Shape::Box(s) => s * 0.5,
-                layout::Shape::Cylinder(r, l) => Vec3::new(r, r, l * 0.5),
-            };
-            (
-                lo.min(p.at.translation - half),
-                hi.max(p.at.translation + half),
-            )
-        },
-    );
+    let (lo, hi) = layout.bounds();
     let centre = (lo + hi) * 0.5;
     let size = (hi - lo).max(Vec3::splat(0.01));
     let mut e = commands.entity(add.entity);
@@ -396,6 +386,57 @@ fn work_handles(
         };
         let name = catalog.get(item.kind()).id.clone();
         emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+    }
+}
+
+/// How fast a palm must come up into a seated magazine's floorplate to
+/// seat it (the tap of tap-rack), m/s relative to the gun.
+pub const TAP_SPEED: f32 = 0.7;
+/// How near the floorplate the palm must be, metres.
+pub const TAP_REACH: f32 = 0.1;
+
+/// A hand slapped up on a seated magazine: a slipped one goes home.
+fn tap_magazines(
+    hands: Query<(Entity, &Hand)>,
+    mut guns: Query<(
+        Entity,
+        &mut Gun,
+        &GlobalTransform,
+        &Item,
+        &LinearVelocity,
+        Option<&Held>,
+    )>,
+    sockets: Query<&Socket>,
+    mags: Query<(&GlobalTransform, &Mag)>,
+    catalog: Res<Catalog>,
+    mut out: MessageWriter<GunEvent>,
+    mut ejected: MessageWriter<Ejection>,
+) {
+    for (e, mut gun, gt, item, vel, held) in &mut guns {
+        if !gun.firearm.mag_unseated {
+            continue;
+        }
+        let Some((mgt, mag)) = gun
+            .magwell
+            .and_then(|w| sockets.get(w).ok())
+            .and_then(|s| s.occupant)
+            .and_then(|m| mags.get(m).ok())
+        else {
+            continue;
+        };
+        let up = gt.rotation() * Vec3::Y;
+        let floor = mgt.translation() - mgt.rotation() * Vec3::Y * (mag.height * 0.5);
+        let tapped = hands.iter().any(|(he, h)| {
+            held.is_none_or(|held| held.hand != he)
+                && h.holding.is_none()
+                && h.world.translation.distance(floor) < TAP_REACH
+                && (h.velocity - vel.0).dot(up) > TAP_SPEED
+        });
+        if tapped {
+            let events = gun.firearm.tap_magazine();
+            let name = catalog.get(item.kind()).id.clone();
+            emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+        }
     }
 }
 
@@ -692,7 +733,12 @@ impl Plugin for WeaponEffectsPlugin {
             .add_message::<DropMagazine>()
             .add_systems(
                 FixedUpdate,
-                (handle_released, drop_magazines, spawn_ejections)
+                (
+                    handle_released,
+                    drop_magazines,
+                    spawn_ejections,
+                    feel::kick_guns,
+                )
                     .chain()
                     .after(triggers),
             );
