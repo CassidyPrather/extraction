@@ -137,6 +137,9 @@ pub struct Room {
     pub lamp: Lamp,
     #[serde(default)]
     pub props: Vec<Prop>,
+    /// Its own floor, site y (a deeper level); the layout's otherwise.
+    #[serde(default)]
+    pub floor: Option<f32>,
 }
 
 fn room_height() -> f32 {
@@ -187,6 +190,9 @@ pub struct Portal {
     /// A door across the stair's foot.
     #[serde(default = "yes")]
     pub door: bool,
+    /// The floor its stair goes down to, site y; the layout's otherwise.
+    #[serde(default)]
+    pub floor: Option<f32>,
 }
 
 fn yes() -> bool {
@@ -282,6 +288,18 @@ impl Hazard {
             .find(|k| format!("{k:?}") == self.kind)
     }
 }
+
+impl Layout {
+    /// A room's floor, site y.
+    pub fn floor_of(&self, room: &Room) -> f32 {
+        room.floor.unwrap_or(self.floor)
+    }
+}
+
+/// The steepest a corridor between levels may step: a riser at most this
+/// over a tread of at least [`STEP_CELLS`] cells.
+pub const STEP_RISE: f32 = 0.19;
+pub const STEP_CELLS: usize = 2;
 
 fn corridor_height() -> f32 {
     2.3
@@ -479,6 +497,9 @@ pub struct Raster {
     pub cells: Vec<Cell>,
     /// Ceiling height over the floor, flat cells (stairs: 0).
     pub ceil: Vec<f32>,
+    /// The floor under each open cell, site y (rooms on their own levels;
+    /// a corridor between levels steps from one to the other).
+    pub floors: Vec<f32>,
     /// Water over the floor, flat cells (0: dry).
     pub water: Vec<f32>,
     pub floor: f32,
@@ -505,7 +526,11 @@ impl Raster {
             grow(sub(r.at, [r.size[0] * 0.5, r.size[1] * 0.5]));
             grow(add(r.at, [r.size[0] * 0.5, r.size[1] * 0.5]));
         }
-        let stairs: Vec<Stair> = l.portals.iter().map(|p| Stair::new(p, l.floor)).collect();
+        let stairs: Vec<Stair> = l
+            .portals
+            .iter()
+            .map(|p| Stair::new(p, p.floor.unwrap_or(l.floor)))
+            .collect();
         for (p, s) in l.portals.iter().zip(&stairs) {
             for q in [
                 [-KIOSK[0] - 1.0, -KIOSK[1] - 1.0],
@@ -528,6 +553,7 @@ impl Raster {
             nz,
             cells: vec![Cell::Rock; nx * nz],
             ceil: vec![0.0; nx * nz],
+            floors: vec![l.floor; nx * nz],
             water: vec![0.0; nx * nz],
             floor: l.floor,
             stairs,
@@ -565,7 +591,13 @@ impl Raster {
                 })
                 .collect();
             for (lo, hi) in &legs {
-                r.fill(*lo, *hi, Cell::Hall(k as u16), l.corridor_height);
+                r.fill(
+                    *lo,
+                    *hi,
+                    Cell::Hall(k as u16),
+                    l.corridor_height,
+                    l.floor_of(&l.rooms[a]),
+                );
             }
             r.legs.push(legs);
             let n = pts.len();
@@ -591,6 +623,7 @@ impl Raster {
                 (&l.rooms[b], to, ti, to_door),
             ] {
                 if let Some(mut d) = r.mouth(room, outer, inner, link.width) {
+                    d.y = l.floor_of(room);
                     d.room = Some(if std::ptr::eq(room, &l.rooms[a]) {
                         a
                     } else {
@@ -610,7 +643,56 @@ impl Raster {
                 add(room.at, h),
                 Cell::Room(k as u16),
                 room.height,
+                l.floor_of(room),
             );
+        }
+        // Corridors between levels: stepped down their length (outside
+        // the rooms) from one room's floor to the other's.
+        for (k, link) in l.links.iter().enumerate() {
+            let (Some(a), Some(b)) = (
+                l.rooms.iter().find(|x| x.id == link.from),
+                l.rooms.iter().find(|x| x.id == link.to),
+            ) else {
+                continue;
+            };
+            let (fa, fb) = (l.floor_of(a), l.floor_of(b));
+            if (fa - fb).abs() < 1e-3 {
+                continue;
+            }
+            let mut pts = vec![a.at];
+            pts.extend(link.via.iter().copied());
+            pts.push(b.at);
+            // Arc length along the corridor of each of its cells.
+            let along = |p: P2| -> f32 {
+                let mut best = (f32::INFINITY, 0.0);
+                let mut s0 = 0.0;
+                for w in pts.windows(2) {
+                    let d = sub(w[1], w[0]);
+                    let len = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-6);
+                    let o = sub(p, w[0]);
+                    let t = ((o[0] * d[0] + o[1] * d[1]) / len).clamp(0.0, len);
+                    let q = add(w[0], [d[0] / len * t, d[1] / len * t]);
+                    let e = sub(p, q);
+                    let dist = e[0] * e[0] + e[1] * e[1];
+                    if dist < best.0 {
+                        best = (dist, s0 + t);
+                    }
+                    s0 += len;
+                }
+                best.1
+            };
+            let mine: Vec<(usize, f32)> = (0..r.cells.len())
+                .filter(|c| r.cells[*c] == Cell::Hall(k as u16))
+                .map(|c| (c, along(r.centre(c % r.nx, c / r.nx))))
+                .collect();
+            let Some(s_lo) = mine.iter().map(|m| m.1).reduce(f32::min) else {
+                continue;
+            };
+            let n = ((fb - fa).abs() / STEP_RISE).ceil() as usize;
+            for (c, s) in mine {
+                let k = (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n);
+                r.floors[c] = fa + (fb - fa) * k as f32 / n as f32;
+            }
         }
         for f in &l.floods {
             let link = f.link.as_ref().and_then(|(a, b)| {
@@ -665,7 +747,7 @@ impl Raster {
                     at: p.to_site([0.0, foot]),
                     along: turn([1.0, 0.0], p.rot),
                     width: 2.0 * STAIR_HALF,
-                    y: l.floor,
+                    y: p.floor.unwrap_or(l.floor),
                     room: None,
                 });
             }
@@ -710,7 +792,7 @@ impl Raster {
         }
     }
 
-    fn fill(&mut self, lo: P2, hi: P2, cell: Cell, height: f32) {
+    fn fill(&mut self, lo: P2, hi: P2, cell: Cell, height: f32, floor: f32) {
         for j in 0..self.nz {
             for i in 0..self.nx {
                 let c = self.centre(i, j);
@@ -718,6 +800,7 @@ impl Raster {
                     let k = j * self.nx + i;
                     self.cells[k] = cell;
                     self.ceil[k] = height;
+                    self.floors[k] = floor;
                 }
             }
         }
@@ -756,7 +839,10 @@ impl Raster {
     pub fn floor_at(&self, p: P2) -> Option<f32> {
         match self.at(p) {
             Cell::Rock => None,
-            Cell::Room(_) | Cell::Hall(_) => Some(self.floor),
+            Cell::Room(_) | Cell::Hall(_) => {
+                let (i, j) = self.cell_of(p)?;
+                Some(self.floors[j * self.nx + i])
+            }
             Cell::Stair(k) => {
                 let k = k as usize;
                 Some(self.stairs[k].floor_at(self.portals[k].to_portal(p)[1]))
@@ -769,7 +855,10 @@ impl Raster {
         let (i, j) = self.cell_of(p)?;
         match self.get(i, j) {
             Cell::Rock => None,
-            Cell::Room(_) | Cell::Hall(_) => Some(self.floor + self.ceil[j * self.nx + i] + SLAB),
+            Cell::Room(_) | Cell::Hall(_) => {
+                let c = j * self.nx + i;
+                Some(self.floors[c] + self.ceil[c] + SLAB)
+            }
             Cell::Stair(k) => {
                 let k = k as usize;
                 let z = self.portals[k].to_portal(p)[1];
@@ -967,6 +1056,26 @@ pub fn check(l: &Layout) -> Vec<String> {
     }
     if l.crawlers > 0 && l.patrol.len() < 2 {
         bad.push("crawlers with no round to walk".into());
+    }
+    // Nowhere a step higher than a stair's riser between neighbouring
+    // floor cells (a corridor between levels too short for its drop).
+    'steps: for j in 0..r.nz {
+        for i in 0..r.nx {
+            let c = j * r.nx + i;
+            if !r.cells[c].flat() {
+                continue;
+            }
+            for (a, b) in [(i + 1, j), (i, j + 1)] {
+                if a >= r.nx || b >= r.nz || !r.get(a, b).flat() {
+                    continue;
+                }
+                let d = (r.floors[c] - r.floors[b * r.nx + a]).abs();
+                if d > STEP_RISE + 0.01 {
+                    bad.push(format!("a step of {d:.2} m at {:?}", r.centre(i, j)));
+                    break 'steps;
+                }
+            }
+        }
     }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {

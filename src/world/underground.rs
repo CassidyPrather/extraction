@@ -89,7 +89,8 @@ fn extent(r: &Raster, i: usize, j: usize) -> Option<(f32, f32)> {
     match r.get(i, j) {
         Cell::Rock => None,
         Cell::Room(_) | Cell::Hall(_) => {
-            Some((r.floor - SLAB, r.floor + r.ceil[j * r.nx + i] + SLAB))
+            let c = j * r.nx + i;
+            Some((r.floors[c] - SLAB, r.floors[c] + r.ceil[c] + SLAB))
         }
         Cell::Stair(k) => {
             let k = k as usize;
@@ -126,7 +127,10 @@ fn stair_band(s: &Stair, z: f32) -> (f32, f32) {
 /// The underside of the ceiling over an open cell, for lintels.
 fn ceiling(r: &Raster, i: usize, j: usize) -> Option<f32> {
     match r.get(i, j) {
-        Cell::Room(_) | Cell::Hall(_) => Some(r.floor + r.ceil[j * r.nx + i]),
+        Cell::Room(_) | Cell::Hall(_) => {
+            let c = j * r.nx + i;
+            Some(r.floors[c] + r.ceil[c])
+        }
         Cell::Stair(k) => {
             let k = k as usize;
             let s = &r.stairs[k];
@@ -149,7 +153,7 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     dressing(&mut b, l, r);
     for room in &l.rooms {
         for p in &room.props {
-            let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+            let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
             prop(&mut b, p.kind, at, -p.rot.to_radians(), p.loot.as_deref());
         }
     }
@@ -160,7 +164,7 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
         .filter(|p| p.kind == ug::PowerKind::Breaker)
     {
         if let Some(room) = l.rooms.iter().find(|room| room.id == p.room) {
-            let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+            let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
             prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
@@ -379,26 +383,32 @@ impl Mats {
 /// Floor slabs under every level cell (rooms, corridors, stairs' feet),
 /// ceiling slabs over rooms and corridors, merged into rectangles.
 fn slabs(b: &mut Builder, r: &Raster, m: &Mats) {
+    // By the floor's height (cm): each level, each step of a stair
+    // corridor, each stair's landing.
     let level = |i: usize, j: usize| match r.get(i, j) {
-        Cell::Room(_) | Cell::Hall(_) => Some(0),
+        Cell::Room(_) | Cell::Hall(_) => Some((r.floors[j * r.nx + i] * 100.0).round() as i32),
         Cell::Stair(k) => {
             let k = k as usize;
+            let s = &r.stairs[k];
             let z = r.portals[k].to_portal(r.centre(i, j))[1];
-            (z >= r.stairs[k].bottom).then_some(0)
+            (z >= s.bottom).then(|| (s.floor_at(s.bottom) * 100.0).round() as i32)
         }
         Cell::Rock => None,
     };
-    for (lo, hi, _) in rects(r, level) {
-        let (size, centre) = rect_box(r, lo, hi, r.floor - SLAB, r.floor);
+    for (lo, hi, f) in rects(r, level) {
+        let y = f as f32 / 100.0;
+        let (size, centre) = rect_box(r, lo, hi, y - SLAB, y);
         b.bx(size, centre, m.floor);
     }
+    // By the ceiling's height over each cell.
     let roof = |i: usize, j: usize| {
+        let c = j * r.nx + i;
         r.get(i, j)
             .flat()
-            .then(|| (r.ceil[j * r.nx + i] * 100.0).round() as i32)
+            .then(|| ((r.floors[c] + r.ceil[c]) * 100.0).round() as i32)
     };
     for (lo, hi, h) in rects(r, roof) {
-        let y = r.floor + h as f32 / 100.0;
+        let y = h as f32 / 100.0;
         let (size, centre) = rect_box(r, lo, hi, y, y + SLAB);
         b.bx(size, centre, m.ceiling);
     }
@@ -651,11 +661,12 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         if !hall(p) || !hall(q) {
                             continue;
                         }
-                        let h = r.ceil[r.cell_of(p.to_array()).map_or(0, |(i, j)| j * r.nx + i)];
+                        let c = r.cell_of(p.to_array()).map_or(0, |(i, j)| j * r.nx + i);
+                        let (h, f) = (r.ceil[c], r.floors[c]);
                         for e in [p, q] {
                             b.piece(
                                 Shape::Box(Vec3::new(0.16, h, 0.16)),
-                                Transform::from_xyz(e.x, r.floor + h * 0.5, e.y),
+                                Transform::from_xyz(e.x, f + h * 0.5, e.y),
                                 Mat::Timber,
                                 false,
                             );
@@ -669,7 +680,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         };
                         b.piece(
                             Shape::Box(size),
-                            Transform::from_xyz(mid.x, r.floor + h - 0.09, mid.y),
+                            Transform::from_xyz(mid.x, f + h - 0.09, mid.y),
                             Mat::Timber,
                             false,
                         );
@@ -688,6 +699,14 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                     let len = size.x.max(size.y);
                     let h = 2.0;
                     let mid = (lo + hi) * 0.5;
+                    // Level legs only (a corridor between levels steps).
+                    let floor_at = |p: Vec2| r.floor_at(p.to_array());
+                    let ends = [lo + (hi - lo) * 0.05, mid, hi - (hi - lo) * 0.05];
+                    let fs: Vec<f32> = ends.iter().filter_map(|p| floor_at(*p)).collect();
+                    let Some(&f) = fs.first() else { continue };
+                    if fs.iter().any(|x| (x - f).abs() > 0.01) {
+                        continue;
+                    }
                     if l.style == Style::Service {
                         for (k, rad) in [(0.0f32, 0.09f32), (1.0, 0.06)] {
                             let off = 0.18 + k * 0.22;
@@ -703,7 +722,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                             };
                             b.piece(
                                 Shape::Cylinder(rad, len),
-                                Transform::from_xyz(x, r.floor + h + 0.05 - k * 0.15, z)
+                                Transform::from_xyz(x, f + h + 0.05 - k * 0.15, z)
                                     .with_rotation(rot),
                                 Mat::RustyMetal,
                                 false,
@@ -717,7 +736,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         };
                         b.piece(
                             Shape::Box(size),
-                            Transform::from_xyz(x, r.floor + h, z),
+                            Transform::from_xyz(x, f + h, z),
                             Mat::DarkMetal,
                             false,
                         );
@@ -731,7 +750,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
         if room.lamp == ug::Lamp::None {
             continue;
         }
-        let y = r.floor + room.height;
+        let y = l.floor_of(room) + room.height;
         let from = b.geo.pieces.len();
         b.piece(
             Shape::Box(Vec3::new(0.32, 0.12, 0.18)),
@@ -953,7 +972,7 @@ pub fn spawn_anomalies(world: &mut World) {
             };
             let at = xf.transform_point(Vec3::new(
                 room.at[0] + h.at[0],
-                l.floor,
+                l.floor_of(room),
                 room.at[1] + h.at[1],
             ));
             crate::anomaly::spawn_anomaly(world, kind, at, h.radius, None);
@@ -1001,11 +1020,11 @@ pub struct PowerLocked {
 }
 
 /// Where a site's power switch is, building space, and which way it faces.
-pub fn switch_pose(l: &Layout, r: &Raster) -> Option<Transform> {
+pub fn switch_pose(l: &Layout) -> Option<Transform> {
     let p = l.power.as_ref()?;
     let room = l.rooms.iter().find(|room| room.id == p.room)?;
     let rot = Quat::from_rotation_y(-p.rot.to_radians());
-    let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+    let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
     // A breaker's lever on its board's face; a generator's pull-start low
     // on its end.
     let (up, out) = match p.kind {
@@ -1052,10 +1071,10 @@ fn wire_power(
     }
     *done = true;
     for (site, b) in &buildings {
-        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+        let Some(l) = ug::layout(&b.prefab) else {
             continue;
         };
-        let (Some(p), Some(pose)) = (&l.power, switch_pose(l, r)) else {
+        let (Some(p), Some(pose)) = (&l.power, switch_pose(l)) else {
             continue;
         };
         let switch = commands
@@ -1132,13 +1151,9 @@ fn throw_switches(
             source: None,
         });
         raid.say(line);
-        if let (Some(lighting), Some(l), Some(r)) = (
-            lighting.as_mut(),
-            ug::layout(&b.prefab),
-            ug::raster(&b.prefab),
-        ) {
+        if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
             for room in l.rooms.iter().filter(|room| room.lamp == ug::Lamp::Powered) {
-                let p = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+                let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
                 lighting
                     .lamps
                     .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
@@ -1230,7 +1245,12 @@ pub fn register_residents(
         // under the ground (the kiosks are lit like any building).
         let lo = Vec2::from(r.origin);
         let hi = lo + Vec2::new(r.nx as f32, r.nz as f32) * ug::CELL;
-        let (y0, y1) = (r.floor - 0.5, -0.3);
+        let deepest = l
+            .rooms
+            .iter()
+            .map(|room| l.floor_of(room))
+            .fold(r.floor, f32::min);
+        let (y0, y1) = (deepest - 0.5, -0.3);
         let centre = Vec3::new((lo.x + hi.x) * 0.5, (y0 + y1) * 0.5, (lo.y + hi.y) * 0.5);
         lighting.dark.push((
             xf * Transform::from_translation(centre),
@@ -1242,7 +1262,7 @@ pub fn register_residents(
             .filter(|room| matches!(room.lamp, ug::Lamp::Steady | ug::Lamp::Flicker))
             .take(LAMP_BUDGET)
         {
-            let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+            let at = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
             lighting
                 .lamps
                 .push((xf.transform_point(at), room.size[0].max(room.size[1]) + 4.0));
@@ -1275,8 +1295,8 @@ pub fn register_residents(
             .patrol
             .iter()
             .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
-            .filter_map(|room| grid.nearest_walkable(room.at))
-            .map(|p| xf.transform_point(Vec3::new(p[0], r.floor, p[1])))
+            .filter_map(|room| grid.nearest_walkable(room.at).map(|p| (room, p)))
+            .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
             .collect();
         let Some(&spawn) = patrol.first() else {
             continue;
@@ -1342,7 +1362,7 @@ fn light_lamps(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (e, b) in &buildings {
-        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+        let Some(l) = ug::layout(&b.prefab) else {
             continue;
         };
         let lit = l
@@ -1356,7 +1376,7 @@ fn light_lamps(
             })
             .take(LAMP_BUDGET);
         for (k, room) in lit.enumerate() {
-            let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+            let at = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
             let lens = materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.85, 0.6),
                 emissive: GLOW,
@@ -1422,12 +1442,14 @@ fn water_surfaces(
             alpha_mode: AlphaMode::Blend,
             ..default()
         });
+        // By the water's surface (cm): each level's floods apart.
         let class = |i: usize, j: usize| {
-            let w = r.water[j * r.nx + i];
-            (w > 0.0).then(|| (w * 100.0).round() as i32)
+            let c = j * r.nx + i;
+            let w = r.water[c];
+            (w > 0.0).then(|| ((r.floors[c] + w) * 100.0).round() as i32)
         };
-        for (lo, hi, depth) in rects(r, class) {
-            let y = r.floor + depth as f32 / 100.0;
+        for (lo, hi, level) in rects(r, class) {
+            let y = level as f32 / 100.0;
             let (size, centre) = rect_box(r, lo, hi, y - 0.01, y);
             commands.spawn((
                 Name::new("Flood"),
@@ -1870,7 +1892,11 @@ mod tests {
                             let c = r.centre(i, j);
                             let top = r.ceil[j * r.nx + i] - 0.15;
                             for y in [1.5, top] {
-                                from.push(xf.transform_point(Vec3::new(c[0], r.floor + y, c[1])));
+                                from.push(xf.transform_point(Vec3::new(
+                                    c[0],
+                                    r.floors[j * r.nx + i] + y,
+                                    c[1],
+                                )));
                             }
                         }
                     }
@@ -1983,11 +2009,14 @@ mod tests {
             let zone = app.world().resource::<Zone>().clone();
             let (site, xf) = sites_on(&app).remove(0);
             let l = ug::layout(&site.id).unwrap();
-            let r = ug::raster(&site.id).unwrap();
             {
                 let lighting = app.world().resource::<Lighting>();
                 for room in &l.rooms {
-                    let at = xf.transform_point(Vec3::new(room.at[0], r.floor + 1.5, room.at[1]));
+                    let at = xf.transform_point(Vec3::new(
+                        room.at[0],
+                        l.floor_of(room) + 1.5,
+                        room.at[1],
+                    ));
                     assert!(lighting.in_dark(at), "{map} {}: not dark", room.id);
                     let lit = lighting.lamplight(at);
                     match room.lamp {
@@ -2124,8 +2153,10 @@ mod tests {
         });
         let aim =
             Transform::from_translation(me + Vec3::Y * 1.5).looking_at(them + Vec3::Y, Vec3::Y);
+        // (Having heard you land, it may lie in wait a while first:
+        // `indoor::AMBUSH`.)
         let mut seen = false;
-        for _ in 0..90 * 5 {
+        for _ in 0..90 * (5 + crate::robots::indoor::AMBUSH as usize) {
             *app.world_mut().get_mut::<Transform>(torch).unwrap() = aim;
             app.update();
             seen |= app
@@ -2272,7 +2303,7 @@ mod tests {
                 .collect();
             let (i, j) = cells[cells.len() / 2];
             let c = r.centre(i, j);
-            let at = xf.transform_point(Vec3::new(c[0], r.floor, c[1]));
+            let at = xf.transform_point(Vec3::new(c[0], r.floors[j * r.nx + i], c[1]));
             let player = app
                 .world_mut()
                 .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
