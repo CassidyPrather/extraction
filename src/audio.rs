@@ -220,7 +220,7 @@ impl Plugin for AudioPlugin {
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
-                    grenade_sounds,
+                    (grenade_sounds, gear_sounds),
                 ),
             )
             .add_systems(
@@ -541,6 +541,80 @@ fn footsteps(
 /// in to splash.
 const PUDDLE_SPLASH: f32 = 0.5;
 
+/// Your kit on each step (`foley`): plates knock, swivels jingle, the
+/// pack's load shifts, water sloshes; each at a level by how far it
+/// carries (its reach over [`GEAR_REACH_REF`]), so what robots hear
+/// farther you hear louder.
+fn gear_sounds(
+    mut commands: Commands,
+    mut rattles: MessageReader<crate::foley::GearRattle>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for g in rattles.read() {
+        let r = g.rattle;
+        for (reach, set, cue, speed) in [
+            (r.plates, "physical/drop_metal", "gear.plate", 0.7),
+            (r.swivels, "physical/handle_metal", "gear.swivel", 1.6),
+            (r.pack, "physical/cloth", "gear.pack", 0.85),
+            (r.slosh, "footsteps/water", "gear.slosh", 1.2),
+        ] {
+            if reach <= 0.0 || !rng.0.chance(gear_chance(reach)) {
+                continue;
+            }
+            // Water in a bottle in a pouch: muffled.
+            if cue == "gear.slosh" {
+                let Some(sample) = bank.pick(set, &mut rng.0) else {
+                    continue;
+                };
+                let db = mix::db(cue) + gear_db(reach);
+                commands.spawn((
+                    SamplePlayer::new(sample).with_volume(Volume::Decibels(db)),
+                    PlaybackSettings::default().with_speed(speed),
+                    Transform::from_translation(g.at),
+                    sample_effects![
+                        mix::spatial(cue),
+                        FastLowpassNode::<2> {
+                            cutoff_hz: SLOSH_LOWPASS,
+                            ..default()
+                        },
+                        reverb_send(cue)
+                    ],
+                ));
+                continue;
+            }
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(g.at),
+                cue,
+                gear_db(reach),
+                speed,
+                0.08,
+            );
+        }
+    }
+}
+
+/// The slosh's low-pass, Hz (`scripts/audio_mix.py` CUE_LOWPASS).
+const SLOSH_LOWPASS: f32 = 900.0;
+
+/// A part of the kit heard to this far (m) plays at its cue's gain.
+pub const GEAR_REACH_REF: f32 = 5.0;
+
+/// A part's level against its cue, by its reach: twice as far, 6 dB up.
+pub fn gear_db(reach: f32) -> f32 {
+    20.0 * (reach / GEAR_REACH_REF).max(0.05).log10()
+}
+
+/// How often a part rattles on a step: a quiet one now and then, a loud
+/// one nearly every step.
+fn gear_chance(reach: f32) -> f32 {
+    (0.25 + reach / 10.0).min(0.95)
+}
+
 /// A grenade (`weapons::grenades`): the pin's click and the ring's scrape
 /// coming away, the spoon's ping as it flies, and the bang, the RGD-5's
 /// sharp and the F-1's heavier.
@@ -835,7 +909,10 @@ fn hit_sounds(
         } else {
             // A slow round (a grenade's fragments, spent) hits softer: full
             // from a pistol's speed, down to -12 dB at a quarter of it.
-            trim + 20.0 * (i.velocity.length() / IMPACT_FULL_SPEED).clamp(0.25, 1.0).log10()
+            trim + 20.0
+                * (i.velocity.length() / IMPACT_FULL_SPEED)
+                    .clamp(0.25, 1.0)
+                    .log10()
         };
         play_at_speed(
             &mut commands,
