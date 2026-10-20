@@ -687,7 +687,7 @@
         pieces: [],
         note: Some((
             name: "Pump log, below",
-            text: "PUMP LOG - O. Brabec, the station below\n14 Oct. Buses gone. Somebody has to run the pumps or the village floods with the first rain. Nobody said not to.\n2 Nov. Power off at the board. Not mine. Pumps stopping. Creek coming in at the inlet faster than I can crank.\nIf you're reading this you're wet or it's gone down. The wheel in the valve gallery lets the inlet down. Then the one on the inlet's far wall, under the water, does the screens. The sump has nowhere to go: the hand pump's in the screen room.\nMy things are by my locker in the sump. Have the flask.\n- O.B.",
+            text: "PUMP LOG - O. Brabec, the station below\n14 Oct. Buses gone. Somebody has to run the pumps or the village floods with the first rain. Nobody said not to.\n2 Nov. Power off at the board. Not mine. Pumps stopping. Creek coming in at the inlet faster than I can crank.\nIf you're reading this you're wet or it's gone down. Let the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy things are by my locker in the sump. Take the boots, they're good ones. Have the flask.\n- O.B.",
             at: (0.0, 0.785, 0.0),
             rot: 0.0,
         )),
@@ -695,9 +695,9 @@
     (
         map: "marrow_creek",
         name: "Brabec's locker",
-        // Beside his locker in the sump (site pump_marrow), under 2.4 m of
-        // water until it's pumped.
-        at: (-189.2, 41.6),
+        // By his locker in the sump (site pump_marrow; the boots are the
+        // layout's), under 2.4 m of water until it's pumped.
+        at: (-188.4, 40.2),
         rot: 0.0,
         floor: Some(12.61),
         pieces: [
@@ -713,7 +713,7 @@
         name: "Deep refuge",
         // The old workings' refuge (room "refuge", site deep_kettle): a
         // family that wouldn't go over the pass.
-        at: (-65.0, 152.0),
+        at: (-66.0, 151.6),
         rot: 0.0,
         floor: Some(-0.22),
         pieces: [
