@@ -105,6 +105,11 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: M,
+        note: "Shelter note",
+        mentions: &[(M, "Village note"), (M, "Village")],
+    },
+    Lead {
+        map: M,
         note: "Barricade note",
         mentions: &[(M, "Old farm")],
     },
@@ -185,6 +190,15 @@ pub const THREAD: &[Lead] = &[
         map: K,
         note: "Quarry pumps note",
         mentions: &[(K, "The quarry"), (K, "Shot-firer's note")],
+    },
+    Lead {
+        map: K,
+        note: "Refuge board",
+        mentions: &[
+            (K, "Kettle mine"),
+            (K, "Shot-firer's note"),
+            (K, "Crossing keeper's note"),
+        ],
     },
     Lead {
         map: K,
@@ -270,6 +284,11 @@ pub const THREAD: &[Lead] = &[
         map: C,
         note: "Pickers' note",
         mentions: &[(C, "The ash pit"), (C, "Sluice house note")],
+    },
+    Lead {
+        map: C,
+        note: "Valve note",
+        mentions: &[(C, "The ash pit"), (C, "Lookout log"), (C, "The works")],
     },
     Lead {
         map: C,

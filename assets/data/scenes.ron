@@ -258,4 +258,74 @@
             rot: 0.0,
         )),
     ),
+    (
+        map: "marrow_creek",
+        name: "Shelter dorm",
+        // Under the village, in the civil-defence shelter's dorm (room
+        // "dorm", site bunker_marrow): she came down after they took Jan.
+        at: (-13.3, 100.4),
+        rot: 90.0,
+        floor: Some(11.61),
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Remains(at: (0.0, 0.0), rot: 0.0, seated: true),
+            Crate(at: (0.6, -0.35), size: 0.5),
+            Lantern(at: (0.62, 0.5, -0.25)),
+        ],
+        items: [
+            (id: "old_photo", at: (0.5, 0.5, -0.45), condition: 0.3),
+        ],
+        note: Some((
+            name: "Shelter note",
+            text: "Day 30 down here. They took Jan from the street on the 3rd. I came down with the lamp oil.\nThe filters still turn. The machines don't come down the stair. I think they can't count us if they can't see us.\n- E. Holm",
+            at: (0.6, 0.5, -0.35),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "Refuge board",
+        // The mine's refuge chamber (room "refuge", site mine_kettle): the
+        // last shift waited here for an all-clear, then walked out.
+        at: (-95.0, 30.0),
+        rot: 0.0,
+        floor: Some(15.44),
+        pieces: [
+            Table(at: (0.0, 0.0), rot: 90.0),
+            Chair(at: (0.65, 0.0), rot: 270.0),
+        ],
+        items: [
+            (id: "canned_beans", at: (0.1, 0.785, 0.3)),
+            (id: "flashlight", at: (-0.1, 0.785, -0.35), rot: 60.0, condition: 0.1),
+        ],
+        note: Some((
+            name: "Refuge board",
+            text: "REFUGE - 15 OCT\nIn: Dusek, Pavlik, Hora, Benes.\nHolding below for the Authority's all-clear. Air good. Lamp on.\n16 Oct: no all-clear.\n17 Oct: Dusek up the raise to look. Says the trains have gone.\nOut, all four, 1400.",
+            at: (0.0, 0.785, 0.0),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Valve three",
+        // Under the works, in the valve chamber off the pump room (room
+        // "valve_chamber", site tunnel_cinder): a fitter's last job.
+        at: (81.4, -37.8),
+        rot: 0.0,
+        floor: Some(15.88),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.6),
+            Chair(at: (0.0, 0.7), rot: 0.0),
+        ],
+        items: [
+            (id: "multitool", at: (-0.15, 0.6, 0.05), condition: 0.5),
+            (id: "spare_parts", at: (0.18, 0.6, -0.1)),
+        ],
+        note: Some((
+            name: "Valve note",
+            text: "VALVE 3 CLOSED 12 FEB 1620, BY ORDER.\nCanal to the pit cut off.\nIf the fire comes down the tunnel, open it again and get out the far stair. Don't wait for me to say.\n- fitter on shift",
+            at: (0.0, 0.6, 0.0),
+            rot: 0.0,
+        )),
+    ),
 ]
