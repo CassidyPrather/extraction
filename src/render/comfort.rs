@@ -25,6 +25,7 @@ impl Plugin for ComfortPlugin {
                 add_vignette,
                 vignette,
                 add_wrist_panel,
+                handed_wrist,
                 wrist_panel,
                 add_radio_screens,
                 radio_screens,
@@ -141,21 +142,23 @@ fn vignette(
     }
 }
 
+/// The wrist display, on this glove.
 #[derive(Component)]
-struct WristPanel;
+struct WristPanel(crate::rig::Side);
 
-/// The panel rides on the back of the left glove.
+/// The panel rides on the back of the glove that isn't the gun hand (the
+/// left, for a right-handed player): one on each, the other hidden.
 fn add_wrist_panel(
     mut commands: Commands,
     hands: Query<(Entity, &crate::rig::RigHand, &ChildOf), Added<crate::rig::RigHand>>,
     locals: Query<(), With<LocalPlayer>>,
 ) {
     for (e, hand, parent) in &hands {
-        if hand.side != crate::rig::Side::Left || !locals.contains(parent.parent()) {
+        if !locals.contains(parent.parent()) {
             continue;
         }
         commands.entity(e).with_child((
-            WristPanel,
+            WristPanel(hand.side),
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.075, 0.045),
@@ -163,9 +166,38 @@ fn add_wrist_panel(
             },
             // On the back of the wrist, on the glove's display housing, like
             // a watch: turn the wrist to read it.
-            crate::render::props::wrist_mount(),
-            Visibility::default(),
+            crate::render::props::wrist_mount(hand.side),
+            if hand.side == crate::rig::Side::Left {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            },
         ));
+    }
+}
+
+/// Shown on the off hand's wrist only.
+fn handed_wrist(
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut panels: Query<(&WristPanel, &mut Visibility)>,
+    added: Query<(), Added<WristPanel>>,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    if !comfort.is_changed() && added.is_empty() {
+        return;
+    }
+    let watch = comfort.gun_side().other();
+    for (panel, mut vis) in &mut panels {
+        let want = if panel.0 == watch {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
     }
 }
 

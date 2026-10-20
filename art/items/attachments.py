@@ -52,9 +52,12 @@ def pu_scope():
     # Lenses, set back in their bells.
     p.cyl(0.0148, -0.134, -0.13, "Lens", segs=24)
     p.cyl(0.0125, 0.112, 0.116, "Lens", segs=24)
-    # Elevation drum on top, windage drum on the left, with index marks.
-    p.cyl(0.0105, 0.014, 0.0225, "Blued", segs=20, xf=T(0, 0, -0.012) @ UP, chamfer=0.0015)
-    p.box((0.002, 0.004, 0.001), (0.0, 0.019, -0.0226), "Cream")
+    # Elevation drum on top (its own node, `drum`, turning about +Y through
+    # (0, 0.01825, -0.012)), windage drum on the left, with index marks.
+    drum = Part("drum", origin=(0.0, 0.01825, -0.012))
+    drum.cyl(0.0105, 0.014, 0.0225, "Blued", segs=20, xf=T(0, 0, -0.012) @ UP, chamfer=0.0015)
+    drum.box((0.002, 0.004, 0.001), (0.0, 0.019, -0.0226), "Cream")
+    p.box((0.0012, 0.0012, 0.003), (0.0, 0.0152, -0.0255), "Cream", segs=1)
     p.cyl(0.0105, -0.0225, -0.014, "Blued", segs=20, xf=T(0, 0, -0.012) @ ALONG_X, chamfer=0.0015)
     p.box((0.03, 0.03, 0.024), (0.0, 0.0, -0.012), "Blued", bevel=0.004, segs=2)
     # Side mount: two rings, a base on the dovetail, a lever on the left.
@@ -67,7 +70,7 @@ def pu_scope():
     p.box((0.004, 0.006, 0.05), (-0.013, -0.019, -0.03), "Black", bevel=0.0015, segs=1,
           xf=RY(-0.12, about=(-0.013, -0.019, -0.005)))
     p.cyl(0.0045, -0.016, -0.009, "Black", segs=10, xf=T(0, -0.019, -0.005) @ ALONG_X)
-    return [p]
+    return [p, drum]
 
 
 # --- PSO-1 scope ------------------------------------------------------------------------
@@ -92,10 +95,15 @@ def pso_scope():
     p.cyl(0.0135, 0.118, 0.122, "Lens", segs=24)
     # The turret housing, and the drums with their caps and index marks.
     p.box((0.034, 0.034, 0.05), (0.0, 0.0, -0.01), "Blued", bevel=0.005, segs=2)
-    p.cyl(0.0125, 0.017, 0.03, "Blued", segs=24, xf=T(0, 0, -0.01) @ UP, chamfer=0.0015)
+    # The elevation drum is its own node (`drum`), turning about +Y through
+    # its centre (0, 0.0235, -0.01) with the range setting; a fixed index
+    # on the housing's front to read it against.
+    drum = Part("drum", origin=(0.0, 0.0235, -0.01))
+    drum.cyl(0.0125, 0.017, 0.03, "Blued", segs=24, xf=T(0, 0, -0.01) @ UP, chamfer=0.0015)
     for k in range(12):
-        p.box((0.0012, 0.004, 0.0012), (0.0, 0.0, 0.0), "Enamel",
-              xf=T(0, 0.0255, -0.01) @ RY(2 * math.pi * k / 12) @ T(0.0127, 0, 0))
+        drum.box((0.0012, 0.004, 0.0012), (0.0, 0.0, 0.0), "Enamel",
+                 xf=T(0, 0.0255, -0.01) @ RY(2 * math.pi * k / 12) @ T(0.0127, 0, 0))
+    p.box((0.0012, 0.0012, 0.003), (0.0, 0.0172, -0.0285), "Enamel", segs=1)
     p.cyl(0.0125, -0.03, -0.017, "Blued", segs=24, xf=T(0, 0, -0.01) @ ALONG_X, chamfer=0.0015)
     # The battery cap for the lit reticle, up on the left of the housing.
     p.cyl(0.007, 0.0, 0.012, "Blued", segs=16, xf=T(-0.016, 0.017, 0.012) @ RZ(0.6) @ UP,
@@ -111,7 +119,7 @@ def pso_scope():
           xf=RY(-0.12, about=(-0.013, -0.021, -0.005)))
     # The sunshade's screw ring, a little proud.
     p.tube(0.0215, 0.0195, -0.13, -0.124, "Blued", segs=32)
-    return [p]
+    return [p, drum]
 
 
 # --- PBS-1 suppressor ------------------------------------------------------------------------
