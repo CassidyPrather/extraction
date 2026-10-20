@@ -7,7 +7,8 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--no-binaural`, `--no-score`,
+//! `--finger-grab`, `--no-binaural`, `--no-score`, `--left-handed`,
+//! `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -38,6 +39,18 @@ pub struct Comfort {
     pub binaural: bool,
     /// The ambient score that rises with danger (`audio`).
     pub score: bool,
+    /// The gun hand is the left: the holster and the chest mount move to
+    /// the other side, and the wrist display to the right wrist.
+    pub left_handed: bool,
+    /// Played sitting down: the view is lifted to a standing eye height,
+    /// and the crouch button brings it down to the floor.
+    pub seated: bool,
+    /// Played with one hand: a magazine seats from a pouch when the gun's
+    /// well is brought to it, and the second button racks.
+    pub one_handed: bool,
+    /// What's said (the driver, the radio, the machines) shown on the
+    /// wrist with who's speaking and from where.
+    pub captions: bool,
 }
 
 impl Default for Comfort {
@@ -52,6 +65,10 @@ impl Default for Comfort {
             finger_grab: false,
             binaural: true,
             score: true,
+            left_handed: false,
+            seated: false,
+            one_handed: false,
+            captions: true,
         }
     }
 }
@@ -146,6 +163,47 @@ impl Comfort {
         }
     }
 
+    pub fn handed_label(&self) -> String {
+        if self.left_handed {
+            "GUN HAND\nleft".into()
+        } else {
+            "GUN HAND\nright".into()
+        }
+    }
+
+    pub fn seated_label(&self) -> String {
+        if self.seated {
+            "PLAYING\nseated".into()
+        } else {
+            "PLAYING\nstanding".into()
+        }
+    }
+
+    pub fn one_handed_label(&self) -> String {
+        if self.one_handed {
+            "HANDS\none".into()
+        } else {
+            "HANDS\ntwo".into()
+        }
+    }
+
+    pub fn captions_label(&self) -> String {
+        if self.captions {
+            "CAPTIONS\non the wrist".into()
+        } else {
+            "CAPTIONS\noff".into()
+        }
+    }
+
+    /// The gun hand.
+    pub fn gun_side(&self) -> super::Side {
+        if self.left_handed {
+            super::Side::Left
+        } else {
+            super::Side::Right
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
@@ -209,6 +267,10 @@ impl Comfort {
                 "--finger-grab" => c.finger_grab = true,
                 "--no-binaural" => c.binaural = false,
                 "--no-score" => c.score = false,
+                "--left-handed" => c.left_handed = true,
+                "--seated" => c.seated = true,
+                "--one-handed" => c.one_handed = true,
+                "--no-captions" => c.captions = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
