@@ -37,7 +37,15 @@ impl Plugin for GunVisualsPlugin {
                 .chain()
                 .before(TransformSystems::Propagate),
         )
-        .add_systems(Update, (super::casing_visuals, super::feel::jam_visuals));
+        .add_systems(
+            Update,
+            (
+                super::casing_visuals,
+                super::feel::jam_visuals,
+                super::muzzle::muzzle_fx,
+            ),
+        )
+        .add_plugins(super::impacts::ImpactFxPlugin);
     }
 }
 

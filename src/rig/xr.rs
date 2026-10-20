@@ -22,6 +22,9 @@
 //! through the palm, while the game's hands, guns and the flat rig all take
 //! -Z as where you point and +Y as up, which is what the aim pose is.
 //!
+//! Fingers come from `XR_EXT_hand_tracking` where the runtime has it
+//! (`read_fingers`, `rig::fingers`).
+//!
 //! The headset path runs in CI-less checks against Monado's simulated
 //! headset (`scripts/xr_check.sh`): instance, session, swapchains, actions
 //! and what the eyes see. Real controllers still need a real headset.
@@ -34,8 +37,9 @@ use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_openxr::resources::OxrInstance;
 use bevy_mod_openxr::session::OxrSession;
 use bevy_mod_xr::camera::XrCamera;
+use bevy_mod_xr::hands::{HandBone, LeftHand, RightHand};
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot, session_available};
-use bevy_mod_xr::spaces::XrSpaceSyncSet;
+use bevy_mod_xr::spaces::{XrSpaceLocationFlags, XrSpaceSyncSet};
 use openxr::Posef;
 
 use super::{LocalPlayer, RigDriverSystems, RigInput, Side};
@@ -63,7 +67,8 @@ impl Plugin for XrDriverPlugin {
             .add_systems(PostUpdate, play_haptics.run_if(openxr_session_running))
             .add_systems(
                 PreUpdate,
-                drive_xr_rig
+                (drive_xr_rig, read_fingers)
+                    .chain()
                     .after(XrSpaceSyncSet)
                     .after(OxrActionSetSyncSet)
                     .in_set(RigDriverSystems)
@@ -618,6 +623,47 @@ fn make_tracking_root(
 struct TurnState {
     armed: bool,
     sprint: bool,
+}
+
+/// The fingers, where the runtime tracks them (`XR_EXT_hand_tracking`,
+/// asked for at start-up: SteamVR fills it from Index controllers' finger
+/// sensing). A hand with any joint untracked, or a runtime without the
+/// extension, leaves `fingers` empty and the glove to its own poses.
+fn read_fingers(
+    bones: Query<(
+        &HandBone,
+        &Transform,
+        &XrSpaceLocationFlags,
+        Has<LeftHand>,
+        Has<RightHand>,
+    )>,
+    mut players: Query<&mut RigInput, With<LocalPlayer>>,
+    mut said: Local<bool>,
+) {
+    let Some(mut input) = players.iter_mut().next() else {
+        return;
+    };
+    let mut joints = [[Transform::IDENTITY; super::fingers::JOINTS]; 2];
+    let mut seen = [0usize; 2];
+    for (bone, t, flags, left, right) in &bones {
+        if !(flags.position_tracked && flags.rotation_tracked) || left == right {
+            continue;
+        }
+        let side = if left { Side::Left } else { Side::Right };
+        joints[side.index()][*bone as usize] = *t;
+        seen[side.index()] += 1;
+    }
+    for side in Side::BOTH {
+        let i = side.index();
+        let fingers = (seen[i] == super::fingers::JOINTS)
+            .then(|| super::fingers::fingers_from_joints(&joints[i]))
+            .flatten();
+        if fingers.is_some() && !*said {
+            *said = true;
+            info!("input: fingers tracked ({side:?} hand first)");
+        }
+        input.hand_mut(side).fingers = fingers;
+    }
 }
 
 fn drive_xr_rig(

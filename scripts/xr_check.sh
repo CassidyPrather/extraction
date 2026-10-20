@@ -14,6 +14,11 @@
 #     -DXRT_HAVE_OPENGLES=OFF -DXRT_HAVE_EGL=OFF -DBUILD_TESTING=OFF
 #   ninja -C build install
 # and have the OpenXR loader (libopenxr-loader1) installed.
+#
+# SIMULATED_HANDS=1 checks finger tracking too: it needs Monado with
+# scripts/monado-simulated-hands.patch applied (simulated controllers
+# report XR_EXT_hand_tracking joints, fingers cycling open and shut), and
+# fails unless the game logs that it saw tracked fingers.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 MAP="${1:-training_yard}"; OUT="${2:-target/xr_check/eye.png}"; shift 2 || shift $#
@@ -34,6 +39,7 @@ export XDG_RUNTIME_DIR=$RUN
 export XR_RUNTIME_JSON=$MONADO/share/openxr/1/openxr_monado.json
 export LD_LIBRARY_PATH=$WORK/lib
 export XRT_COMPOSITOR_NULL=1 SIMULATED_ENABLE=1 SIMULATED_LEFT=wmr SIMULATED_RIGHT=wmr
+export SIMULATED_HANDS=${SIMULATED_HANDS:-0}
 mkfifo $WORK/stdin
 $MONADO/bin/monado-service < $WORK/stdin > $WORK/monado.log 2>&1 &
 MPID=\$!
@@ -53,7 +59,10 @@ if grep -E "Suggested Path Unsupported|PATH_UNSUPPORTED|Failed to initialize ope
     echo "FAIL: see above"; fail=1
 fi
 [ -f "$OUT" ] || { echo "FAIL: no screenshot"; fail=1; }
-grep -E "Loaded OpenXR runtime|Using system|XrCamera resolution|entered XR state" "$LOG" | sed 's/^.*INFO[^ ]* //' | sort -u
+if [ "${SIMULATED_HANDS:-0}" = 1 ]; then
+    grep -q "fingers tracked" "$LOG" || { echo "FAIL: no tracked fingers"; fail=1; }
+fi
+grep -E "Loaded OpenXR runtime|Using system|XrCamera resolution|entered XR state|fingers tracked|Handtracking|hand_tracking" "$LOG" | sed 's/^.*INFO[^ ]* //' | sort -u
 echo "logs: $WORK (game.log, monado.log); eye: $OUT"
 rm -rf "$RUN"
 exit $fail

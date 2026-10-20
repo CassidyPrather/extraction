@@ -80,6 +80,19 @@ C762X39 = ([(0.0, 0.0), (0.0053, 0.0), (0.0056, -0.0005), (0.0056, -0.0013), (0.
            [(0.0, -0.037), (0.0039, -0.037), (0.0039, -0.044), (0.0035, -0.049), (0.0024, -0.053),
             (0.0011, -0.0555), (0.0, -0.056)], 0.056)
 
+# The pistol and submachine-gun round: a short bottlenecked case.
+C762X25 = ([(0.0, 0.0), (0.0049, 0.0), (0.0049, -0.0011), (0.0042, -0.0014), (0.0042, -0.0022),
+            (0.0049, -0.0026), (0.0048, -0.0205), (0.0043, -0.0215), (0.0042, -0.025),
+            (0.0, -0.025)],
+           [(0.0, -0.0235), (0.004, -0.0235), (0.004, -0.028), (0.0033, -0.0315), (0.0019, -0.0338),
+            (0.0, -0.0345)], 0.0345)
+
+# The Nagant's gas-seal round: the bullet sits wholly inside the case, the
+# crimped mouth just showing its flat nose.
+C762X38R = ([(0.0, 0.0), (0.0049, 0.0), (0.0049, -0.0011), (0.0039, -0.0013), (0.0039, -0.0355),
+             (0.0033, -0.0385), (0.0, -0.0385)],
+            [(0.0, -0.0383), (0.0026, -0.0383), (0.0021, -0.0389), (0.0, -0.039)], 0.039)
+
 
 def round_9x18():
     p = Part("body")
@@ -219,6 +232,37 @@ def ammo_762x39():
     return [p]
 
 
+def round_762x38r():
+    p = Part("body")
+    # The Nagant round: a long straight case, the bullet hidden inside it.
+    cartridge(p, C762X38R, T(0, 0, C762X38R[2] / 2), segs=12)
+    return [p]
+
+
+def ammo_762x38r():
+    p = Part("body")
+    # A brown paper packet of fourteen, two rows of seven lying flat, one
+    # end torn open on the crimped mouths; the calibre in black.
+    sx, sy, sz = 0.072, 0.022, 0.042
+    zt = -0.017
+    body = fillet([(-sx / 2, -sy / 2), (sx / 2, -sy / 2), (sx / 2, sy / 2), (-sx / 2, sy / 2)],
+                  0.003, 2)
+    p.prism(body, zt + 0.003, sz / 2 - 0.0005, "Rope", axis="z", bevel=0.002, segs=1)
+    zp = zt + 0.003
+    ragged(p, sx - 0.003, zp, 0.009, sy / 2 - 0.0008, sy / 2, "Rope", seed=2)
+    ragged(p, sx - 0.003, zp, 0.008, -sy / 2, -sy / 2 + 0.0008, "Rope", seed=5)
+    p.box((sx - 0.004, sy - 0.003, 0.003), (0.0, 0.0, zt + 0.0015), "Black")
+    for i in range(7):
+        for j in range(2):
+            x = -0.03 + i * 0.01
+            y = -0.0049 + j * 0.0098
+            nose(p, C762X38R, -0.031, T(x, y, -sz / 2 + C762X38R[2] - 0.004), segs=8)
+    p.box((0.05, 0.0004, 0.02), (0.0, sy / 2 + 0.0001, 0.006), "Paper")
+    text(p, "7.62 НАГАН", 0.005, "Black", T(0.0, sy / 2 + 0.0003, 0.006) @ ON_TOP,
+         depth=0.0004)
+    return [p]
+
+
 def ammo_762r():
     p = Part("body")
     # A white card carton of the big rimmed rounds lying in two layers,
@@ -334,6 +378,7 @@ if __name__ == "__main__":
     for item_id, fn in (("round_9x18", round_9x18), ("round_545", round_545),
                         ("round_762r", round_762r), ("shell_12ga", shell_12ga),
                         ("round_762x39", round_762x39), ("ammo_762x39", ammo_762x39),
+                        ("round_762x38r", round_762x38r), ("ammo_762x38r", ammo_762x38r),
                         ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
                         ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
                         ("robot_ammo_belt", robot_ammo_belt)):

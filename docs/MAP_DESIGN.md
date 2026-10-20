@@ -168,9 +168,10 @@ and so creep, within `Traits::sneak_range` of a robot they can see that
 isn't fighting them (cautious 45 m, looter and hunter 35 m, reckless
 never), or near where a robot is searching. They **freeze** 2–4 s when a
 robot that's investigating or searching is in sight within 30 m. Any
-but the reckless, with junk in its pack, **throws it** past and to one
-side of a walker within 20 m that hasn't noticed it (as far as a bolt
-carries, about 15 m), so the walker goes off to look there. None of this
+but the reckless, with junk in its pack, **throws it** about 15 m off to
+one side when a walker within 45 m is about but not onto it (at work, or
+already looking for someone: the sims showed that's when bots meet
+walkers), so the walker goes to look there instead. None of this
 happens in a fight, with the truck waiting, or when hurrying home hurt.
 Telemetry: `crouch` (seconds crouched), `freeze`, `distract`. Cover and
 grass along a route now matter to the sims as they do to a player: a

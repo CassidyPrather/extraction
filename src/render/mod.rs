@@ -2,6 +2,7 @@
 
 pub mod bench;
 pub mod budget;
+pub mod cards;
 pub mod comfort;
 pub mod fog;
 pub mod grade;
@@ -12,6 +13,8 @@ pub mod logistics;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
+#[cfg(test)]
+pub mod overdraw;
 pub mod props;
 pub mod screen;
 pub mod stats;
