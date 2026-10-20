@@ -1102,6 +1102,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "signal_box" => signal_box(&mut b),
         "steeple" => steeple(&mut b),
         "target" => target(&mut b),
+        id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
     }
     Some(b.finish())

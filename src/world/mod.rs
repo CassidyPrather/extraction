@@ -10,7 +10,9 @@ pub mod impostors;
 pub mod notes;
 pub mod rain;
 pub mod rocks;
+pub mod scenes;
 pub mod sky;
+pub mod story;
 pub mod structures;
 pub mod surfaces;
 pub mod terrain;
@@ -127,7 +129,7 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(weather::WeatherPlugin)
+        app.add_plugins((weather::WeatherPlugin, scenes::ScenesPlugin))
             .add_systems(PreStartup, init_zone)
             .add_systems(Update, buildings::swing_doors)
             .add_systems(

@@ -339,7 +339,7 @@ fn find_cache(
     if near {
         requests.cache_at = None;
         requests.cache = None;
-        raid.say("The driver's cache. Just where they said.");
+        raid.say("The driver's cache. Just where he said.");
     }
 }
 

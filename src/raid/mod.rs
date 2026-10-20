@@ -12,6 +12,7 @@ pub mod bench;
 pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
+pub mod lines;
 pub mod logbook;
 pub mod requests;
 pub mod route;
@@ -240,14 +241,14 @@ fn radio_calls(
                         }
                     }
                     if paid {
-                        raid.say("Truck: \"Burning a can for you. Get in the back.\"");
+                        raid.say(lines::pick(lines::SHORT_RUN, raid.clock as u32));
                         raid.phase = Phase::TruckWaiting {
                             rv: SHORT_EXFIL,
                             left: TRUCK_WAIT,
                         };
                         continue;
                     }
-                    raid.say("Truck: \"No fuel in the stores for the short run. Head for an RV.\"");
+                    raid.say(lines::NO_FUEL);
                 }
                 let rvs = rendezvous(&zone);
                 let Some((i, (name, _))) = rvs.iter().enumerate().min_by(|a, b| {
@@ -256,23 +257,24 @@ fn radio_calls(
                 }) else {
                     continue;
                 };
-                raid.say(format!(
-                    "Truck: \"Copy. Heading for the {name}. Give me two minutes.\""
-                ));
+                let n = raid.clock as u32;
+                raid.say(lines::fill(lines::pick(lines::CALLED, n), name, 0.0, ""));
                 raid.phase = Phase::TruckCalled {
                     rv: i,
                     eta: TRUCK_TRANSIT,
                 };
             }
             Phase::TruckCalled { eta, .. } => {
-                raid.say(format!("Truck: \"Still on my way. {:.0} seconds.\"", eta))
+                let n = raid.clock as u32;
+                raid.say(lines::fill(lines::pick(lines::ON_THE_WAY, n), "", eta, ""))
             }
             Phase::TruckWaiting { rv, .. } => {
                 let name = rendezvous(&zone)
                     .get(rv)
                     .map(|r| r.0.clone())
                     .unwrap_or_else(|| "gate".into());
-                raid.say(format!("Truck: \"I'm at the {name}. Get in the back.\""));
+                let n = raid.clock as u32;
+                raid.say(lines::fill(lines::pick(lines::WAITING, n), &name, 0.0, ""));
             }
             _ => {}
         }
@@ -300,9 +302,8 @@ pub(crate) fn tick_raid(
                     .get(rv)
                     .map(|r| r.0.clone())
                     .unwrap_or_default();
-                raid.say(format!(
-                    "Truck: \"At the {name}. I'll wait five minutes, no more.\""
-                ));
+                let n = raid.clock as u32;
+                raid.say(lines::fill(lines::pick(lines::ARRIVED, n), &name, 0.0, ""));
                 raid.phase = Phase::TruckWaiting {
                     rv,
                     left: TRUCK_WAIT,
@@ -314,7 +315,8 @@ pub(crate) fn tick_raid(
         Phase::TruckWaiting { rv, left } => {
             let left = left - dt;
             if left <= 0.0 {
-                raid.say("Truck: \"Can't stay. Call me again when you're close.\"");
+                let n = raid.clock as u32;
+                raid.say(lines::pick(lines::GAVE_UP, n));
                 raid.phase = Phase::Out;
             } else {
                 raid.phase = Phase::TruckWaiting { rv, left };
@@ -378,7 +380,8 @@ fn depart(
         match raid.phase {
             Phase::TruckWaiting { .. } => {
                 raid.extractions += 1;
-                raid.say("Truck: \"Hold on to something.\" You're out.");
+                let n = raid.extractions;
+                raid.say(lines::pick(lines::PULLING_OUT, n));
                 raid.phase = Phase::Extracting { left: 4.0 };
             }
             // Another valley on the card: drive there through the night.

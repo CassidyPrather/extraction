@@ -1,0 +1,156 @@
+// Staged scenes (src/world/scenes.rs, docs/LORE.md "Staged scenes").
+// Each is a moment someone didn't come back from, at a point of interest,
+// in its own frame: x right, -z ahead (where `rot` faces, as a marker's),
+// y up from where it rests. Tables' tops are at 0.785; a crate's top is its
+// size; a chair's seat is at 0.45. Things are laid out again each Surge
+// cycle, with the loot.
+[
+    (
+        map: "marrow_creek",
+        name: "Farm barricade",
+        // Behind crates in the farmyard, facing the Gate.
+        at: (176.0, 153.0),
+        rot: 315.0,
+        pieces: [
+            Crate(at: (-0.9, -1.0), size: 0.9),
+            Barrel(at: (0.2, -1.15)),
+            Crate(at: (1.1, -0.95), size: 0.7),
+            Remains(at: (0.3, 0.7), rot: 30.0, seated: false),
+        ],
+        items: [
+            (id: "brass", at: (-0.5, 0.0, -0.4)),
+            (id: "brass", at: (0.6, 0.0, -0.3), rot: 70.0),
+            (id: "ak_mag", at: (-0.2, 0.0, 0.25), rot: 20.0, condition: 0.6),
+            (id: "field_dressing", at: (1.0, 0.0, 0.5)),
+        ],
+        note: Some((
+            name: "Barricade note",
+            text: "Called our driver at six. Nothing.\nHolding the farm till he comes. Three of us.\nTwo.",
+            at: (-0.9, 0.9, -1.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Path marker",
+        // Where the ranger's path leaves the footbridge: the pump keeper's
+        // word for the quiet way.
+        at: (-175.0, -41.0),
+        rot: 0.0,
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.5),
+        ],
+        note: Some((
+            name: "Path note",
+            text: "The quiet way to the tower is up the ranger's path. The machines keep to the roads, and the pylons can't see under the spruce.\n- O.B.",
+            at: (0.0, 0.5, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Survey table",
+        // The survey team's table on the Hollow's edge, below the post.
+        at: (114.0, -14.0),
+        rot: 60.0,
+        pieces: [
+            Table(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (0.15, 0.75), rot: 200.0),
+            Crate(at: (1.35, -0.3), size: 0.7),
+            Lantern(at: (-0.42, 0.785, 0.12)),
+        ],
+        items: [
+            (id: "compass", at: (0.25, 0.785, -0.12)),
+            (id: "old_photo", at: (-0.05, 0.785, 0.18), rot: 15.0, condition: 0.3),
+            (id: "flashlight", at: (1.35, 0.7, -0.3), rot: 90.0, condition: 0.2),
+        ],
+        note: Some((
+            name: "Stake readings",
+            text: "HOLLOW - CENTRE STAKES\nC1 +41 cm. C2 +44 cm. C3 +52 cm. C4 not found.\nO.V. gone down to C4 with the box, 0640.\nWaited till 1000. Going back up for the lamp. - T.",
+            at: (0.2, 0.785, 0.1),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "Supper at the charcoal hut",
+        // Laid for two outside the hut, and left.
+        at: (127.0, -128.0),
+        rot: 220.0,
+        pieces: [
+            Table(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (0.0, 0.65), rot: 0.0),
+            Chair(at: (0.35, -1.0), rot: 165.0),
+            Stove(at: (-1.7, 0.2), rot: 90.0),
+        ],
+        items: [
+            (id: "cook_soup", at: (0.1, 0.785, 0.15)),
+            (id: "cook_soup", at: (-0.05, 0.785, -0.18), rot: 40.0),
+            (id: "cook_tea", at: (-0.35, 0.785, 0.12)),
+            (id: "crackers", at: (0.38, 0.785, 0.0)),
+            (id: "matches", at: (-0.45, 0.785, -0.2)),
+        ],
+    ),
+    (
+        map: "kettle_pass",
+        name: "Quarry watch",
+        // A chair facing the quarry, binoculars beside it.
+        at: (160.0, -80.0),
+        rot: 135.0,
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Crate(at: (0.65, -0.1), size: 0.5),
+        ],
+        items: [
+            (id: "binoculars", at: (0.62, 0.5, -0.15), rot: 30.0),
+            (id: "water_bottle", at: (0.68, 0.5, 0.1)),
+        ],
+        note: Some((
+            name: "Quarry watch note",
+            text: "Three evenings counting what the walkers carry up to the quarry. Pipe. A bath. A cot. A door. Cable. They come down empty.\nWhatever is in that shelter, they are building round it.\n- F.",
+            at: (0.0, 0.45, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "The inspector",
+        // In the works garage, by the office: he said he'd wait.
+        at: (-25.5, -24.5),
+        rot: 90.0,
+        pieces: [
+            Table(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (0.0, 0.65), rot: 0.0),
+            Remains(at: (0.0, 0.65), rot: 0.0, seated: true),
+            Lantern(at: (0.45, 0.785, -0.2)),
+        ],
+        items: [
+            (id: "radio", at: (0.22, 0.785, 0.05), condition: 0.15),
+            (id: "wristwatch", at: (-0.38, 0.785, 0.12), condition: 0.3),
+        ],
+        note: Some((
+            name: "Inspector's letter",
+            text: "For whoever comes for the review.\nI have kept the three keys where the machines won't move them. M: with Vey, in the Hollow. K: in the quarry shelter. C: here, under the chimney.\nTogether, at any Gate's lock, they stop it all. I could not get them back alone, and nobody came.\nI am told to wait. I am waiting.\nP. Rus, Inspector",
+            at: (-0.12, 0.785, -0.12),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Last fire in the dead wood",
+        // Someone who sat out a Surge in the open, by the woodward's cabin.
+        at: (-66.0, -167.0),
+        rot: 10.0,
+        pieces: [
+            Pallet(at: (0.0, 0.0), rot: 20.0),
+            Stove(at: (1.3, 0.4), rot: 0.0),
+            Barrel(at: (1.7, -0.9)),
+            Remains(at: (-0.9, 1.3), rot: 70.0, seated: false),
+        ],
+        items: [
+            (id: "canned_beans", at: (0.1, 0.144, 0.0)),
+            (id: "matches", at: (-0.2, 0.144, 0.15)),
+            (id: "mosin_clip", at: (0.3, 0.144, -0.2), condition: 0.5),
+        ],
+    ),
+]
