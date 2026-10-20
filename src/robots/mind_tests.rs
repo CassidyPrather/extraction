@@ -5,7 +5,7 @@ use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 
 use super::search::{Searching, plan_search};
-use super::{Awareness, Brain, Job, JobKind};
+use super::{Awareness, Brain, Job, JobKind, Robot};
 use crate::rig::{LocalPlayer, RigInput};
 use crate::world::Zone;
 
@@ -1198,4 +1198,244 @@ fn minds_shift_once_per_change() {
         .filter(|m| **m == Mind::Answering { caller: a })
         .count();
     assert_eq!(answers, 1, "b answered a's call once: {:?}", of(b));
+}
+
+/// A shot heard from 40 m off is a guess: two walkers each put it a few
+/// metres off the true spot, inside what they know they don't know, and
+/// not in the same place.
+#[test]
+fn a_heard_shot_is_a_guess_not_a_fix() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let a = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(103.0, 200.0));
+    app.update();
+    let shot = zone.on_ground(101.0, 240.0);
+    app.world_mut().write_message(super::Noise {
+        at: shot,
+        radius: super::senses::GUNSHOT,
+        source: Some(player),
+    });
+    app.update();
+    app.update();
+    let guess = |e: Entity| {
+        let aware = app.world().get::<Awareness>(e).unwrap();
+        (aware.last_known.expect("heard it"), aware.uncertainty)
+    };
+    let (ga, ua) = guess(a);
+    let (gb, _) = guess(b);
+    let off = flat(ga - shot);
+    assert!(ua > 3.0, "40 m off it's rough: {ua:.1} m");
+    assert!(
+        off >= ua * super::senses::HEARD_MISS * 0.99 && off <= ua * 1.01,
+        "off the spot but within its spread: {off:.1} of {ua:.1} m"
+    );
+    assert!(flat(ga - gb) > 0.5, "each its own guess: {ga} {gb}");
+}
+
+/// A measurement, not a test (run it with `--ignored --nocapture`): how
+/// often a walker that comes to look for one shot from 40 m finds a
+/// shooter crouched still in grass. About half: 3 of 6 when written.
+#[test]
+#[ignore]
+fn experiment_crouched_shooter_at_40m() {
+    let mut found = 0;
+    let mut tried = 0;
+    for k in 0..6 {
+        let (mut app, player, zone) = app(None);
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let spot = (0..600)
+            .map(|i| {
+                let a = i as f32 * 2.399 + k as f32 * 0.7;
+                let r = 20.0 + i as f32 * 0.6 + k as f32 * 37.0;
+                zone.on_ground(a.cos() * r, a.sin() * r)
+            })
+            .find(|p| {
+                let post = zone.on_ground(p.x, p.z + 40.0);
+                let grass = |q: Vec3| {
+                    zone.hm
+                        .surface([q.x, q.z], zone.forest_cover(q.x, q.z) > 0.5)
+                        == extraction_core::terrain::Surface::Grass
+                };
+                grass(*p)
+                    && nav.walkable([p.x, p.z])
+                    && nav.walkable([post.x, post.z])
+                    && (post.y - p.y).abs() < 1.5
+                    && nav.line_clear([p.x, p.z], [post.x, post.z])
+            })
+            .expect("open grass");
+        put(&mut app, player, spot);
+        let head = |app: &mut App| {
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation
+                .y = 0.85;
+        };
+        let walker = walker_at(&mut app, &zone, zone.on_ground(spot.x, spot.z + 40.0));
+        let mut early = false;
+        for _ in 0..90 * 4 {
+            head(&mut app);
+            app.update();
+            early |= app.world().get::<Awareness>(walker).unwrap().can_see_target;
+        }
+        if early {
+            eprintln!("spot {k}: seen before the shot");
+            continue;
+        }
+        tried += 1;
+        app.world_mut().write_message(super::Noise {
+            at: spot + Vec3::Y,
+            radius: super::senses::GUNSHOT,
+            source: Some(player),
+        });
+        let mut seen = false;
+        let mut glimpsed = false;
+        let mut closest = f32::MAX;
+        for _ in 0..90 * 45 {
+            head(&mut app);
+            app.update();
+            let at = app.world().get::<Transform>(walker).unwrap().translation;
+            closest = closest.min(flat(at - spot));
+            let aware = app.world().get::<Awareness>(walker).unwrap();
+            if aware.exposure >= super::senses::GLIMPSE && !glimpsed {
+                glimpsed = true;
+                eprintln!(
+                    "spot {k}: first glimpse at {:.1} m, e {:.3}",
+                    flat(at - spot),
+                    aware.exposure
+                );
+            }
+            if aware.can_see_target && !seen {
+                eprintln!(
+                    "spot {k}: first seen at {:.1} m, guess off {:.1} unc {:.1} brain {:?}",
+                    flat(at - spot),
+                    aware.last_known.map(|l| flat(l - spot)).unwrap_or(-1.0),
+                    aware.uncertainty,
+                    app.world().get::<Brain>(walker).unwrap()
+                );
+            }
+            seen |= aware.can_see_target;
+        }
+        eprintln!("spot {k} at {spot}: seen {seen}, closest {closest:.1} m");
+        found += seen as u32;
+    }
+    eprintln!("FOUND {found} of {tried}");
+}
+
+/// A night visit: the response queued near the cabin is dropped, and when
+/// it's due two walkers set off from the Gate to look inside, behind the
+/// door they were sent to.
+#[test]
+fn a_night_visit_sends_two_walkers_to_the_door() {
+    use super::director::{Director, NightVisit};
+    let (mut app, _, _) = app(None);
+    app.update();
+    let ent = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .iter()
+        .find(|e| {
+            app.world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| b.prefab == "house_plank")
+        })
+        .expect("a house door");
+    {
+        let mut d = app.world_mut().resource_mut::<Director>();
+        d.enabled = true;
+        d.next_job = 1e9;
+        d.next_logistics = 1e9;
+        d.response_cooldown = 1e9;
+        d.queue_response(30.0, ent.mid + ent.out * 20.0);
+        d.queue_response(30.0, ent.mid + Vec3::X * 400.0);
+    }
+    app.world_mut().write_message(NightVisit {
+        door: ent.door,
+        at: ent.mid - ent.out * 3.0,
+        delay: 1.0,
+    });
+    for _ in 0..90 * 2 {
+        app.update();
+    }
+    let d = app.world().resource::<Director>();
+    assert_eq!(
+        d.responses.len(),
+        1,
+        "the near one dropped: {:?}",
+        d.responses
+    );
+    let inside = ent.mid - ent.out * 2.0;
+    let visitors: Vec<_> = app
+        .world_mut()
+        .query::<(&Robot, &Brain, &Job)>()
+        .iter(app.world())
+        .filter(|(r, _, j)| {
+            r.kind == super::RobotKind::Walker
+                && j.kind == JobKind::Response
+                && j.site.distance(inside) < 0.1
+        })
+        .map(|(_, b, _)| b.clone())
+        .collect();
+    assert_eq!(visitors.len(), 2, "{visitors:?}");
+    for b in visitors {
+        assert!(
+            matches!(b, Brain::Investigate { at, .. } if at.distance(inside) < 0.1),
+            "looking inside: {b:?}"
+        );
+    }
+}
+
+/// A site sends a new grid (a gallery filled with gas, say) and the
+/// crawler already on its round paths round what's now closed.
+#[test]
+fn a_new_site_grid_reroutes_its_crawlers() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    let open = site(centre, |_| false);
+    let a = zone.on_ground(centre.x - 4.0, centre.z - 6.0);
+    let b = zone.on_ground(centre.x - 4.0, centre.z + 6.0);
+    let index = {
+        let mut sites = app.world_mut().resource_mut::<super::indoor::IndoorSites>();
+        sites.spawned = true;
+        sites.sites.push(super::indoor::IndoorSite {
+            nav: open.clone(),
+            patrol: vec![a, b],
+            spawn: a,
+            crawlers: 1,
+            heavy: 0,
+            dormant: false,
+        });
+        sites.sites.len() - 1
+    };
+    let crawler = crawler_at(&mut app, &zone, open, vec![a, b]);
+    app.update();
+    let gassed = site(centre, |p| p.x.abs() < 12.0 && p.y.abs() < 2.0).grid;
+    app.world_mut().write_message(super::indoor::SiteGrid {
+        site: index,
+        grid: gassed.clone(),
+    });
+    app.update();
+    app.update();
+    let nav = app.world().get::<super::indoor::LocalNav>(crawler).unwrap();
+    assert!(
+        std::sync::Arc::ptr_eq(&nav.grid, &gassed),
+        "it took the new grid"
+    );
+    let wall = |p: Vec2| p.x.abs() < 11.0 && p.y.abs() < 1.0;
+    let (mut reached_b, mut crossed) = (false, false);
+    for _ in 0..90 * 60 {
+        app.update();
+        let p = app.world().get::<Transform>(crawler).unwrap().translation - centre;
+        crossed |= wall(Vec2::new(p.x, p.z));
+        if Vec2::new(p.x + 4.0, p.z - 6.0).length() < 1.5 {
+            reached_b = true;
+            break;
+        }
+    }
+    assert!(reached_b, "got there");
+    assert!(!crossed, "round the gas, not through it");
 }
