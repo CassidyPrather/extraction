@@ -30,8 +30,11 @@ pub const NAMES: &[&str] = &[
     "drone_duel",
     "walker_hunt",
     crate::onboarding::bot::SCENARIO,
-    crate::onboarding::second_hour::SCENARIO,
 ];
+
+/// Longer runs, not in `all`: run them by name.
+/// - `second_hour`: a short career past the yard (`onboarding::second_hour`).
+pub const OPT_IN: &[&str] = &[crate::onboarding::second_hour::SCENARIO];
 
 /// Targets sit north of the insertion point at these distances.
 const TARGET_DISTANCES: [f32; 3] = [10.0, 25.0, 50.0];

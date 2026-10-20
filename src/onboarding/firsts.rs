@@ -40,6 +40,8 @@ pub enum First {
     Death,
     ConvoyTook,
     KitRecovered,
+    /// The first note read (its copy goes on the truck's board).
+    NotePinned,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -76,6 +78,7 @@ pub const ALL: &[First] = &[
     First::Death,
     First::ConvoyTook,
     First::KitRecovered,
+    First::NotePinned,
 ];
 
 impl First {
@@ -99,18 +102,27 @@ impl First {
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
             First::DroneLock => &["Truck: \"That chirp is it taking aim. Get behind something.\""],
             First::Anomaly => &["Truck: \"Air's wrong ahead. Throw something in first.\""],
-            First::Underground => &["Truck: \"Dark down there, and not empty. Torch on.\""],
+            First::Underground => {
+                &["Truck: \"Dark down there, and not empty. Torch on, go slow.\""]
+            }
             First::Surge => &["Truck: \"Sky's turning. That's the Surge coming. Come home.\""],
             First::Lamed => &["Truck: \"You've lamed it. It can't chase you now.\""],
             First::PackFull => &["Truck: \"Pack's full. Leave the worst of it behind.\""],
-            First::Worn => &["Truck: \"That gun's worn. It'll jam. The bench mends it.\""],
+            First::Worn => {
+                &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
+            }
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
-                "Truck: \"I got you back. The crate's as you left it: {s} things.\"",
+                "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
                 "Truck: \"{n} things you carried are where you fell.\"",
                 "Truck: \"Beat their convoy there and they're yours again.\"",
             ],
-            First::ConvoyTook => &["Truck: \"That's through the Gate now. Gone. Be quicker.\""],
+            First::ConvoyTook => {
+                &["Truck: \"That's through the Gate. Kept, they call it. Be quicker.\""]
+            }
+            First::NotePinned => {
+                &["Truck: \"Reading their notes? I keep copies. Board in the back.\""]
+            }
             First::KitRecovered => &["Truck: \"That's how you get it back. Take it home.\""],
         }
     }
@@ -135,6 +147,12 @@ pub struct FirstMet(pub First);
 #[derive(Resource, Default, Debug, Clone)]
 pub struct Spoken(pub Vec<String>, pub Vec<f32>);
 
+/// Other systems' moments: write this when one happens (each is said once
+/// a career, like the rest). E.g. `MeetFirst(First::NotePinned)` when a
+/// note is read.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct MeetFirst(pub First);
+
 /// Lines waiting their turn on the wrist.
 #[derive(Resource, Default)]
 struct Queue {
@@ -157,6 +175,7 @@ impl Plugin for FirstsPlugin {
             .init_resource::<Queue>()
             .init_resource::<Spoken>()
             .add_message::<FirstMet>()
+            .add_message::<MeetFirst>()
             .add_systems(
                 Update,
                 (
@@ -170,6 +189,7 @@ impl Plugin for FirstsPlugin {
                         worn,
                         deaths,
                         convoy,
+                        asked,
                     ),
                     speak,
                 )
@@ -436,6 +456,12 @@ fn convoy(
         m.meet(First::KitRecovered);
     }
     *recovered = Some(now);
+}
+
+fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
+    for MeetFirst(f) in asks.read() {
+        m.meet(*f);
+    }
 }
 
 /// One line at a time, a few seconds apart.

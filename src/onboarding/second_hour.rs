@@ -71,7 +71,7 @@ pub struct Run {
     tries: u32,
     rows: Vec<Row>,
     /// A check waiting on a response: (row, deadline in seconds).
-    pending: Option<(usize, f32)>,
+    pending: Vec<(usize, f32)>,
     reported: bool,
     /// What the bot carried when it went down, to fetch back.
     remains: Option<Vec3>,
@@ -97,6 +97,22 @@ pub(super) fn direct(
     };
     let now = time.elapsed_secs();
     let here = root.translation.xz();
+    // The run doesn't sit out the truck's whole drive.
+    if let Phase::TruckCalled { eta, .. } = &mut raid.phase {
+        if *eta > 10.0 {
+            *eta = 10.0;
+        }
+    }
+    // Keep the idle task from running out while a check waits: an empty
+    // list is the end of the run.
+    let idle_only =
+        bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
+    if idle_only && bot.elapsed > IDLE - 1.0 && run.step != Some(Step::Done) {
+        bot.elapsed = 0.5;
+    }
+    if bot.tasks.is_empty() && run.step != Some(Step::Done) {
+        bot.tasks.push_back(Task::Wait(IDLE));
+    }
     let raid_no = raid.raids;
 
     // The radio: each first time met gets the bot's answer, now.
@@ -138,12 +154,20 @@ pub(super) fn direct(
                 ),
                 None => ("(no radio)", vec![]),
             },
+            // Off from where it heard you, low, then still.
             First::Heard => (
-                "get low, keep still",
-                vec![Task::Wait(20.0), Task::Wait(20.0)],
+                "move off low, then keep still",
+                vec![
+                    Task::WalkTo {
+                        to: here + Vec2::new(-18.0, 6.0),
+                        within: 1.5,
+                    },
+                    Task::Wait(20.0),
+                    Task::Wait(20.0),
+                ],
             ),
             First::DroneLock => (
-                "get behind something / fight",
+                "fight it (two hands, sound rifle)",
                 vec![Task::Engage { shots: 30 }],
             ),
             First::Death => ("go back for it", vec![]),
@@ -163,52 +187,69 @@ pub(super) fn direct(
                 bot.tasks.push_front(t);
             }
             bot.elapsed = 0.0;
-            run.pending = Some((row, now + 45.0));
+            run.pending.push((row, now + 45.0));
         } else {
-            run.pending = Some((row, now + 3.0));
+            run.pending.push((row, now + 3.0));
         }
     }
     // Get low for the machine that heard you.
-    let low = run.rows.last().is_some_and(|r| {
-        r.first == First::Heard && run.pending.is_some_and(|p| p.0 + 1 == run.rows.len())
-    });
+    let low = run
+        .pending
+        .iter()
+        .any(|(row, _)| run.rows[*row].first == First::Heard);
     if input.crouch != low {
         input.crouch = low;
     }
 
-    // Did the answer work?
-    if let Some((row, deadline)) = run.pending {
+    // Did the answers work? (Being heard and the drone are judged at the
+    // end of their time; the rest as soon as they've come right.)
+    let mut still = Vec::new();
+    for (row, deadline) in std::mem::take(&mut run.pending) {
         let r = &run.rows[row];
         let ok = match r.first {
-            First::Jam(_) => world.gun_clear(player),
-            First::Worn => Some(true),
-            First::Anomaly if r.response == "go round it" => Some(!world.inside_anomaly(here)),
-            First::Anomaly => world.anomaly_answered(),
-            First::PackFull => world.hand_empty(Side::Left),
-            First::Surge => Some(matches!(
+            First::Jam(_) => world.gun_clear(player).unwrap_or(false),
+            First::Worn => true,
+            First::Anomaly if r.response == "go round it" => !world.inside_anomaly(here),
+            First::Anomaly => world.anomaly_answered().unwrap_or(false),
+            First::PackFull => world.hand_empty(Side::Left).unwrap_or(false),
+            First::Surge => matches!(
                 raid.phase,
                 Phase::TruckCalled { .. } | Phase::TruckWaiting { .. }
-            )),
-            First::Heard => Some(firsts.met(First::LostYou) || world.no_one_engaging()),
-            First::DroneLock => Some(world.alive(player) && world.drones_down()),
-            First::Death => Some(true),
-            _ => Some(true),
+            ),
+            First::Heard => world.alive(player) && world.no_one_engaging(),
+            First::DroneLock => world.alive(player) && world.drones_down(),
+            _ => true,
         };
-        let settled = bot.tasks.len() <= 1;
-        if ok == Some(true) && settled || now > deadline {
-            run.rows[row].right = Some(ok == Some(true));
-            run.pending = None;
-            if run.rows[row].first == First::Surge {
-                // Answered: the clock goes back, so the walk home isn't a
-                // race the run would lose to the Surge.
-                raid.clock = 0.0;
-                bot.log
-                    .push("  (clock wound back for the walk home)".into());
+        let early = match r.first {
+            First::Heard => false,
+            First::DroneLock => ok,
+            _ => true,
+        };
+        if (ok && early) || now > deadline || !world.alive(player) {
+            run.rows[row].right = Some(ok);
+            match run.rows[row].first {
+                First::Surge => {
+                    // Answered: the clock goes back, so the walk home isn't
+                    // a race the run would lose to the Surge.
+                    raid.clock = 0.0;
+                    bot.log
+                        .push("  (clock wound back for the walk home)".into());
+                }
+                First::Heard | First::DroneLock => {
+                    // The field cleared for what comes next.
+                    for e in world.robot_entities() {
+                        commands.entity(e).despawn();
+                    }
+                }
+                _ => {}
             }
+        } else {
+            still.push((row, deadline));
         }
-        if run.pending.is_some() {
-            return;
-        }
+    }
+    run.pending = still;
+    if !run.pending.is_empty() {
+        return;
     }
 
     // Steps, when the bot has nothing left but to idle.
@@ -341,7 +382,7 @@ pub(super) fn direct(
                     .holding(Side::Right)
                     .is_some_and(|e| world.guns.get(e).is_ok());
                 if !armed {
-                    if let Some(gun) = world.any_gun() {
+                    if let Some(gun) = world.any_gun(here) {
                         tasks.push(Grab {
                             item: gun,
                             side: Side::Right,
@@ -382,8 +423,46 @@ pub(super) fn direct(
             }
         }
         Step::Drone => {
-            if !firsts.met(First::DroneLock) && run.tries < 2 {
+            let armed = world
+                .holding(Side::Right)
+                .is_some_and(|e| world.guns.get(e).is_ok());
+            if !armed && run.tries < 2 {
+                // A rifle and a magazine, if what it had is gone.
+                world.drop_kit(&mut commands, root.translation);
+                tasks.push(Wait(0.5));
+                tasks.push(PickUp {
+                    id: "ak74".into(),
+                    side: Side::Right,
+                });
+                tasks.push(PickUp {
+                    id: "ak_mag".into(),
+                    side: Side::Left,
+                });
+                tasks.push(Stow(Side::Left));
                 tasks.push(Gun(MacroKind::Reload));
+                tasks.push(Gun(MacroKind::Mode));
+                run.tries += 1;
+            } else if world.held_condition(player) < 0.5 && run.tries < 2 {
+                // Not a drone with a worn rifle: the worn one on the sling,
+                // a sound one in hand.
+                world.drop_kit(&mut commands, root.translation);
+                tasks.push(Stow(Side::Right));
+                tasks.push(Wait(0.5));
+                tasks.push(PickUp {
+                    id: "ak74".into(),
+                    side: Side::Right,
+                });
+                tasks.push(PickUp {
+                    id: "ak_mag".into(),
+                    side: Side::Left,
+                });
+                tasks.push(Stow(Side::Left));
+                tasks.push(Gun(MacroKind::Reload));
+                tasks.push(Gun(MacroKind::Mode));
+                run.tries += 1;
+            } else if !firsts.met(First::DroneLock) && run.tries < 4 {
+                tasks.push(Gun(MacroKind::Reload));
+                tasks.push(Support);
                 tasks.push(Spawn {
                     kind: crate::robots::RobotKind::Drone,
                     at: Vec3::new(
@@ -411,7 +490,10 @@ pub(super) fn direct(
         }
         Step::Recover => {
             // Back out to where it fell, for what it carried.
-            match (run.remains, world.remains_item(player)) {
+            match (
+                world.remains_at(player).or(run.remains),
+                world.remains_item(player),
+            ) {
                 (Some(at), Some(item)) if run.tries < 3 => {
                     tasks.extend(world.legs(here, at.xz()));
                     tasks.push(Grab {
@@ -517,10 +599,19 @@ pub(super) struct World2<'w, 's> {
     hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     anomalies: Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
     anomaly_events: MessageReader<'w, 's, crate::anomaly::AnomalyEvent>,
-    robots: Query<'w, 's, (&'static crate::robots::Robot, &'static crate::robots::Brain)>,
+    robots: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::robots::Robot,
+            &'static crate::robots::Brain,
+        ),
+    >,
     health: Query<'w, 's, &'static crate::health::Health>,
     bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
 }
 
@@ -541,6 +632,13 @@ impl World2<'_, '_> {
 
     fn hand_empty(&self, side: Side) -> Option<bool> {
         Some(self.holding(side).is_none())
+    }
+
+    fn held_condition(&self, player: Entity) -> f32 {
+        self.guns
+            .iter()
+            .find(|(_, h)| h.player == player)
+            .map_or(1.0, |(g, _)| g.firearm.condition)
     }
 
     fn gun_clear(&self, player: Entity) -> Option<bool> {
@@ -630,6 +728,33 @@ impl World2<'_, '_> {
             .map(|(e, ..)| e)
     }
 
+    /// A rifle and a full magazine at the bot's feet.
+    fn drop_kit(&self, commands: &mut Commands, at: Vec3) {
+        for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
+            let Some(kind) = self.catalog.kind(id) else {
+                continue;
+            };
+            let e = crate::items::spawn_item(
+                commands,
+                &self.catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(
+                        at + Vec3::new(0.5 + 0.3 * k as f32, 1.0, -0.5),
+                    ),
+                    condition: 1.0,
+                },
+            );
+            if id == "ak_mag" {
+                commands.entity(e).queue(|mut w: EntityWorldMut| {
+                    if let Some(mut it) = w.get_mut::<Item>() {
+                        it.rounds = 30;
+                    }
+                });
+            }
+        }
+    }
+
     fn radio(&self) -> Option<Entity> {
         self.items
             .iter()
@@ -659,14 +784,25 @@ impl World2<'_, '_> {
         !self
             .robots
             .iter()
-            .any(|(r, b)| !r.wrecked && matches!(b, crate::robots::Brain::Engage))
+            .any(|(_, r, b)| !r.wrecked && matches!(b, crate::robots::Brain::Engage))
     }
 
     fn drones_down(&self) -> bool {
         !self
             .robots
             .iter()
-            .any(|(r, _)| !r.wrecked && r.kind == crate::robots::RobotKind::Drone)
+            .any(|(_, r, _)| !r.wrecked && r.kind == crate::robots::RobotKind::Drone)
+    }
+
+    fn remains_at(&self, player: Entity) -> Option<Vec3> {
+        self.remains
+            .iter()
+            .find(|(_, r)| r.owner == player)
+            .map(|(gt, _)| gt.translation())
+    }
+
+    fn robot_entities(&self) -> Vec<Entity> {
+        self.robots.iter().map(|(e, ..)| e).collect()
     }
 
     fn alive(&self, player: Entity) -> bool {
@@ -736,15 +872,19 @@ impl World2<'_, '_> {
             Phase::TruckWaiting { .. } => {
                 // Round to the back and up its steps, as a person would
                 // (straight at it, the bot met the truck's side).
-                let Some(rear) = self
-                    .trucks
-                    .iter()
-                    .next()
-                    .map(|g| g.transform_point(Vec3::new(0.0, 0.0, 4.0)).xz())
-                else {
+                // Then up the middle of the bed, left of the bench, to just
+                // past its front: the cord is in reach there.
+                let Some(truck) = self.trucks.iter().next() else {
                     return vec![Task::Wait(1.0)];
                 };
-                let mut t = self.legs(here, rear);
+                let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
+                let mut t = self.legs(here, at(0.0, 4.0));
+                for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
+                    t.push(Task::WalkTo {
+                        to: at(x, z),
+                        within: 0.3,
+                    });
+                }
                 if let Some((bell, _)) = self
                     .pressables
                     .iter()
@@ -760,12 +900,15 @@ impl World2<'_, '_> {
     }
 
     /// A gun lying loose, or in the crate.
-    fn any_gun(&self) -> Option<Entity> {
+    /// A gun lying loose nearby (not one out in its remains).
+    fn any_gun(&self, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
-            .filter(|(e, _, _, held, sock, _)| {
+            .filter(|(e, _, gt, held, sock, bag)| {
                 held.is_none()
                     && sock.is_none()
+                    && bag.is_none()
+                    && gt.translation().xz().distance(near) < 30.0
                     && matches!(self.id(*e), Some("ak74" | "pm_pistol" | "sks" | "mosin"))
             })
             .map(|(e, ..)| e)
