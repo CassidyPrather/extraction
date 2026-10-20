@@ -254,15 +254,13 @@ fn tower(b: &mut Builder) {
             Mat::Boulder,
         );
     }
-    // The roof: a pyramid of two gables crossed.
-    for yaw in [0.0, std::f32::consts::FRAC_PI_2] {
-        b.piece(
-            Shape::Prism(Vec3::new(w + 0.8, 3.2, w + 0.8)),
-            Transform::from_xyz(0.0, h, 0.0).with_rotation(Quat::from_rotation_y(yaw)),
-            Mat::Shingles,
-            true,
-        );
-    }
+    // The roof: a gable, its ridge across the bridge.
+    b.piece(
+        Shape::Prism(Vec3::new(w + 0.8, 3.2, w + 0.8)),
+        Transform::from_xyz(0.0, h, 0.0),
+        Mat::Shingles,
+        true,
+    );
     stair(b);
     // The valve room: a floor over the well at the bridge floor (all but
     // the last flight, which comes up beside it), the winch stands for the

@@ -32,6 +32,9 @@ const IDLE: f32 = 3.25;
 const STRIDE: usize = 2;
 /// Seconds without getting further along the route before it's stuck.
 const STALL: f32 = 45.0;
+/// How far short of the rendezvous marker the walk stops (the map lint's
+/// `TRUCK_ROOM` is 8 m: nothing stands nearer).
+const TRUCK_ROOM: f32 = 9.0;
 /// Seconds of game time the whole crossing may take.
 const DEADLINE: f32 = 1800.0;
 
@@ -179,7 +182,19 @@ fn direct(
                 return;
             };
             run.to = route.to.clone();
-            run.route = route.points.iter().map(|p| Vec2::from_array(*p)).collect();
+            // Up to the truck's room, not onto the marker: the truck
+            // appears there.
+            let end = Vec2::from_array(*route.points.last().unwrap());
+            run.route = route
+                .points
+                .iter()
+                .map(|p| Vec2::from_array(*p))
+                .filter(|p| p.distance(end) > TRUCK_ROOM)
+                .collect();
+            if run.route.is_empty() {
+                fail(&mut bot, &mut run, "the route is all truck room".into());
+                return;
+            }
             run.since = now;
             bot.log.push(format!(
                 "to {}: {:.0} m by the lint's main route",

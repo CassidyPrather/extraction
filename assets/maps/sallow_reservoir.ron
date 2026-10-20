@@ -137,6 +137,8 @@
         Plateau(polygon: [(254.1, -37.0), (253.7, -42.6), (245.7, -42.0), (246.1, -36.4)], height: Some(47.05), blend: 2.5),
         Plateau(polygon: [(253.7, -42.1), (253.3, -47.7), (245.3, -47.1), (245.7, -41.5)], height: Some(46.37), blend: 2.5),
         Plateau(polygon: [(253.4, -47.2), (253.0, -52.8), (245.0, -52.2), (245.4, -46.6)], height: Some(45.70), blend: 2.5),
+        // The draw-off tower's footing on the bed.
+        Plateau(polygon: [(-26.0, 96.5), (-14.0, 96.5), (-14.0, 108.5), (-26.0, 108.5)], height: Some(31.5), blend: 6.0),
         // The face stair's landing, in the gap in the parapet.
         Plateau(polygon: [(88.0, 140.0), (100.0, 140.0), (100.0, 157.0), (88.0, 157.0)], height: Some(52.0), blend: 2.0),
         // The dam's crest: sheer both sides.
@@ -371,18 +373,18 @@
         (prefab: "guard_booth", at: (32.8, 285.0), rot: 180.0),
 
         // The dam: its downstream and upstream faces either side of the
-        // crest, and the draw-off tower in front of it on the bed, joined
-        // to the crest by a footbridge.
+        // crest, and the draw-off tower in front of it on the bed, its own
+        // bridge to the crest (src/world/dam.rs).
         // The downstream face, broken where the face stair comes up onto
         // the crest; the upstream face, broken where the slipway leaves it.
         (prefab: "dam_face", at: (-42.5, 148.0), rot: 0.0, y: 30.0, absolute: true),
-        // The spillway keeper's hut on the east abutment.
-        (prefab: "shed", at: (184.0, 106.0), rot: 270.0),
         (prefab: "dam_face_end", at: (112.5, 148.0), rot: 0.0, y: 30.0, absolute: true),
         (prefab: "dam_back_end", at: (-157.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "dam_back", at: (2.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
-        (prefab: "draw_off_tower", at: (-20.0, 102.5), rot: 0.0),
-        (prefab: "footbridge", at: (-20.0, 119.0), rot: 0.0, y: 51.8, absolute: true),
+        (prefab: "draw_off_tower", at: (-20.0, 102.5), rot: 0.0, y: 31.5, absolute: true),
+
+        // The spillway keeper's hut on the east abutment.
+        (prefab: "shed", at: (184.0, 106.0), rot: 270.0),
 
         // Below the dam.
         (prefab: "pump_station", at: (12.0, 172.0), rot: 180.0, tag: "valve_house"),
@@ -428,7 +430,7 @@
         (prefab: "shop", at: (-180.0, -222.0), rot: 0.0),
 
         // The silt fans under the Gate.
-        (prefab: "anomaly_core", at: (150.0, -165.0), rot: 0.0),
+        (prefab: "anomaly_core", at: (160.0, -250.0), rot: 0.0),
 
         // The east side: the mast on its hill, the gauge house.
         (prefab: "radio_mast", at: (268.0, 75.0), rot: 0.0),
@@ -450,7 +452,7 @@
         (kind: Rendezvous, at: (236.0, -46.0), name: "Gauge house"),
         (kind: RobotGate, at: (222.0, -232.0), rot: 315.0, name: "The Gate"),
         (kind: ArtifactField, at: (-105.0, -75.0), name: "The churchyard"),
-        (kind: ArtifactField, at: (150.0, -165.0), name: "The silt fans"),
+        (kind: ArtifactField, at: (160.0, -250.0), name: "The silt fans"),
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (213.0, 207.0), name: "Spillway well"),
         (kind: Offering, at: (-66.0, -12.0), name: "The drowned font"),
         (kind: Offering, at: (-195.0, -238.0), name: "The village pump"),
@@ -466,7 +468,7 @@
         (kind: Poi, at: (95.0, -65.0), name: "The sorting ground"),
         (kind: Poi, at: (-122.0, -118.0), name: "The causeway"),
         (kind: Poi, at: (-210.0, -230.0), name: "New Sallow"),
-        (kind: Poi, at: (150.0, -165.0), name: "The silt fans"),
+        (kind: Poi, at: (160.0, -250.0), name: "The silt fans"),
         (kind: Poi, at: (245.0, -70.0), name: "Gauge house"),
         (kind: Poi, at: (35.0, -235.0), name: "Inflow bridge"),
         (kind: Poi, at: (215.0, 220.0), name: "The spillway"),
@@ -476,6 +478,14 @@
         (kind: Loot(table: "driver_cache"), at: (238.0, -84.0), name: "Gauge house driver's cache"),
         (kind: Loot(table: "workshop"), at: (100.0, -72.0), name: "Sorting ground tagging bench"),
         (kind: Loot(table: "ammo_common"), at: (-112.0, -112.0), name: "Toll hut ammo"),
+        // The bed's: what the Custodian has sorted and stacked, and what
+        // someone before you hid in the ruins.
+        (kind: Loot(table: "workshop"), at: (40.0, -76.0), name: "Stock pallet"),
+        (kind: Loot(table: "medical"), at: (66.0, -112.0), name: "Kept first-aid boxes"),
+        (kind: Loot(table: "ammo_common"), at: (122.0, -58.0), name: "Kept rifle crate"),
+        (kind: Loot(table: "tools"), at: (-86.0, -6.0), name: "Scavenger's cache in the ruins"),
+        (kind: Loot(table: "ammo_common"), at: (-48.0, -38.0), name: "Old Sallow church porch"),
+        (kind: Loot(table: "tools"), at: (124.0, 42.0), name: "Drowned cottage"),
     ],
 
     regions: [
