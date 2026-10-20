@@ -15,7 +15,7 @@
 //! in a pane of glass; brick, concrete and rock stop everything.
 
 /// What a round can meet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Stuff {
     /// Boards, shingles, furniture.
     Planks,
@@ -33,10 +33,14 @@ pub enum Stuff {
     Glass,
     /// The ground.
     Soil,
+    /// Worn armour: a hard steel plate.
+    ArmourPlate,
+    /// A steel helmet: softer, thinner.
+    Helmet,
 }
 
 impl Stuff {
-    pub const ALL: [Stuff; 10] = [
+    pub const ALL: [Stuff; 12] = [
         Stuff::Planks,
         Stuff::Logs,
         Stuff::Plaster,
@@ -47,6 +51,8 @@ impl Stuff {
         Stuff::Plate,
         Stuff::Glass,
         Stuff::Soil,
+        Stuff::ArmourPlate,
+        Stuff::Helmet,
     ];
 
     /// Joules a millimetre of path costs a round.
@@ -62,6 +68,8 @@ impl Stuff {
             Stuff::Plate => 400.0,
             Stuff::Glass => 2.0,
             Stuff::Soil => 40.0,
+            Stuff::ArmourPlate => 600.0,
+            Stuff::Helmet => 200.0,
         }
     }
 
@@ -84,7 +92,13 @@ impl Stuff {
     pub fn ricochets(self) -> bool {
         matches!(
             self,
-            Stuff::Concrete | Stuff::Rock | Stuff::Sheet | Stuff::Plate | Stuff::Brick
+            Stuff::Concrete
+                | Stuff::Rock
+                | Stuff::Sheet
+                | Stuff::Plate
+                | Stuff::Brick
+                | Stuff::ArmourPlate
+                | Stuff::Helmet
         )
     }
 }
@@ -159,6 +173,51 @@ pub fn strike(
     } else {
         Outcome::Stop
     }
+}
+
+/// Where a piece of armour is worn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ArmourArea {
+    Front,
+    Back,
+    Head,
+}
+
+/// A piece of armour, as authored in `items.ron`.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ArmourDef {
+    /// `ArmourPlate` or `Helmet`.
+    pub stuff: Stuff,
+    pub thickness_mm: f32,
+    pub area: ArmourArea,
+}
+
+/// Energy a piece of armour can soak, joules per millimetre of it, before
+/// it's worn through (condition 0).
+pub const ARMOUR_LIFE_PER_MM: f32 = 4000.0;
+
+/// A round meets worn armour of `condition` (0..=1): its effective
+/// thickness thins as it wears (half at condition 0). Returns what became
+/// of the round and the condition the armour lost.
+pub fn armour_strike(
+    def: &ArmourDef,
+    condition: f32,
+    mass_g: f32,
+    speed: f32,
+    cos_in: f32,
+    roll: f32,
+) -> (Outcome, f32) {
+    let c = condition.clamp(0.0, 1.0);
+    let t = def.thickness_mm * (0.5 + 0.5 * c);
+    let out = strike(def.stuff, mass_g, speed, cos_in, t, roll);
+    let e = energy_j(mass_g, speed);
+    let absorbed = match out {
+        Outcome::Stop => e,
+        Outcome::Through { speed: s } => e - energy_j(mass_g, s),
+        Outcome::Ricochet { speed: s } => (e - energy_j(mass_g, s)) * 0.3,
+    };
+    let wear = absorbed / (ARMOUR_LIFE_PER_MM * def.thickness_mm.max(0.1));
+    (out, wear)
 }
 
 /// Whether a round of `cartridge` at `speed` gets through `stuff` this
@@ -248,6 +307,61 @@ mod tests {
         ));
         // A glancing round still has the energy to hurt.
         assert!(energy_j(m, AK.1 * RICOCHET_KEEP) > energy_j(bullet_mass_g(PM.0), PM.1));
+    }
+
+    fn plate() -> ArmourDef {
+        ArmourDef {
+            stuff: Stuff::ArmourPlate,
+            thickness_mm: 6.0,
+            area: ArmourArea::Front,
+        }
+    }
+
+    /// A speed after `metres` of flight (the game's linear drag).
+    fn at_range(speed: f32, metres: f32) -> f32 {
+        // v' = -k v gives distance d = v0 (1 - e^{-kt}) / k: v = v0 - k d.
+        (speed - 0.12 * metres).max(0.0)
+    }
+
+    /// A new plate stops a pistol at 25 m and a 5.45 at 100 m; a Mosin
+    /// round at 100 m goes through a worn one (condition 0.3) though not
+    /// a new one; a steep glance turns off it; every stop wears it.
+    #[test]
+    fn plates_stop_what_they_should() {
+        let p = plate();
+        let hit = |gun: (&str, f32), m: f32, cond: f32| {
+            armour_strike(&p, cond, bullet_mass_g(gun.0), at_range(gun.1, m), 1.0, 1.0)
+        };
+        assert_eq!(hit(PM, 25.0, 1.0).0, Outcome::Stop);
+        assert_eq!(hit(AK, 100.0, 1.0).0, Outcome::Stop);
+        assert_eq!(hit(MOSIN, 100.0, 1.0).0, Outcome::Stop, "new: stops it");
+        assert!(
+            matches!(hit(MOSIN, 100.0, 0.3).0, Outcome::Through { .. }),
+            "worn: through"
+        );
+        let (glance, _) = armour_strike(&p, 1.0, bullet_mass_g(AK.0), AK.1, 0.1, 0.0);
+        assert!(matches!(glance, Outcome::Ricochet { .. }));
+        let (_, wear_pm) = hit(PM, 25.0, 1.0);
+        let (_, wear_ak) = hit(AK, 100.0, 1.0);
+        assert!(wear_pm > 0.0 && wear_ak > wear_pm * 2.0, "{wear_pm} {wear_ak}");
+        assert!(wear_ak < 0.1, "a plate takes a good few: {wear_ak}");
+    }
+
+    /// A helmet turns fragments and glances, not a pistol round head on.
+    #[test]
+    fn a_helmet_is_for_fragments() {
+        let h = ArmourDef {
+            stuff: Stuff::Helmet,
+            thickness_mm: 1.2,
+            area: ArmourArea::Head,
+        };
+        // An RGD-5 fragment a few metres out.
+        let (frag, _) = armour_strike(&h, 1.0, 0.45, 800.0, 1.0, 1.0);
+        assert_eq!(frag, Outcome::Stop);
+        let (pm, _) = armour_strike(&h, 1.0, bullet_mass_g(PM.0), PM.1, 1.0, 1.0);
+        assert!(matches!(pm, Outcome::Through { .. }));
+        let (glance, _) = armour_strike(&h, 1.0, bullet_mass_g(PM.0), PM.1, 0.15, 0.0);
+        assert!(matches!(glance, Outcome::Ricochet { .. }));
     }
 
     /// Through at an angle is a longer path: a rifle that goes through a

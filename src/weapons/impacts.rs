@@ -99,7 +99,7 @@ pub fn kind_of_stuff(s: extraction_core::firearm_terminal::Stuff) -> ImpactKind 
     match s {
         Stuff::Planks | Stuff::Logs => ImpactKind::Wood,
         Stuff::Plaster | Stuff::Brick | Stuff::Concrete | Stuff::Rock => ImpactKind::Masonry,
-        Stuff::Sheet | Stuff::Plate => ImpactKind::Metal,
+        Stuff::Sheet | Stuff::Plate | Stuff::ArmourPlate | Stuff::Helmet => ImpactKind::Metal,
         Stuff::Glass => ImpactKind::Glass,
         Stuff::Soil => ImpactKind::Soil,
     }
