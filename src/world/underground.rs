@@ -2752,6 +2752,187 @@ mod tests {
         }
     }
 
+    /// The Depot's deep job, end to end: with the Ledger job on the card the
+    /// intake ledger lies in bay K-14; a bot goes in down the ramp, throws
+    /// the three stages in turn, takes the ledger into its pack, swims the
+    /// cistern and climbs out by the hatch, and the Depot says it carried
+    /// the ledger out. (No robots: the crawlers are the other tests'.)
+    #[test]
+    fn the_ledger_comes_out_of_the_depot() {
+        use crate::bot::{Bot, Task};
+        use crate::rig::{LocalPlayer, Side};
+        use crate::sim::indoor::{BuildingPlan, plan_buildings};
+        use extraction_core::progression::{Job, LEDGER_ITEM};
+        let mut app = crate::headless_app(
+            LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .job = Some(Job::Ledger);
+        for _ in 0..90 * 3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let kind = app
+            .world()
+            .resource::<crate::items::Catalog>()
+            .kind(LEDGER_ITEM)
+            .expect("the ledger in the catalog");
+        let (ledger, at) = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|(_, i, _)| i.kind() == kind)
+            .map(|(e, _, g)| (e, g.translation()))
+            .expect("the ledger is out");
+        let (site, floor) = site_under(&zone, at).expect("the ledger is down in a site");
+        assert_eq!(site, DEPOT);
+        assert!(
+            (at.y - floor).abs() < 0.3,
+            "on the floor: {at:?}, floor {floor}"
+        );
+        let (placed, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .unwrap();
+        let l = ug::layout(&placed.id).unwrap();
+        let bay = l.rooms.iter().find(|r| r.id == "bay_k14").unwrap();
+        let local = xf.compute_affine().inverse().transform_point3(at);
+        assert!(
+            (local.x - bay.at[0]).abs() < bay.size[0] * 0.5
+                && (local.z - bay.at[1]).abs() < bay.size[1] * 0.5,
+            "in bay K-14: {local:?}"
+        );
+        let plan: BuildingPlan = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &super::super::buildings::Building, &Transform)>,
+                 d: Query<(Entity, &super::super::buildings::DoorLeaf, &ChildOf)>| {
+                    plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == DEPOT)
+            .unwrap();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let entry = *plan
+            .entries
+            .iter()
+            .min_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap();
+        let exit = *plan
+            .entries
+            .iter()
+            .max_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap();
+        let start = plan.to_world(entry);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(start.x, zone.ground(start.x, start.z) + 0.1, start.z);
+        app.update();
+        let run = |app: &mut App, tasks: Vec<Task>, what: &str| {
+            app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+            for _ in 0..90 * 150 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let bot = app.world().get::<Bot>(player).unwrap();
+            assert_eq!(bot.failed, 0, "{what}: {:?}", bot.log);
+        };
+        let route = |app: &App, to: Vec2, within: f32| {
+            let pos = app.world().get::<Transform>(player).unwrap().translation;
+            crate::sim::raider::indoor_route(&plan, pos, to, within)
+                .unwrap_or_else(|| panic!("no route from {pos:?} to {to:?}"))
+        };
+        let mut switches: Vec<(usize, Entity, Vec3)> = app
+            .world_mut()
+            .query::<(Entity, &PowerSwitch, &GlobalTransform)>()
+            .iter(app.world())
+            .filter(|(_, sw, _)| sw.site == plan.entity)
+            .map(|(e, sw, g)| (sw.stage, e, g.translation()))
+            .collect();
+        switches.sort_by_key(|s| s.0);
+        assert_eq!(switches.len(), 3, "three stages");
+        for (stage, switch, at) in switches {
+            let mut tasks = route(&app, plan.to_local(at).xz(), 0.5);
+            tasks.push(Task::Press(switch));
+            tasks.push(Task::Wait(1.0));
+            run(&mut app, tasks, "to a switch");
+            assert!(
+                app.world().get::<SitePower>(plan.entity).unwrap().on(stage),
+                "stage {stage} on"
+            );
+        }
+        let at = app
+            .world()
+            .get::<GlobalTransform>(ledger)
+            .unwrap()
+            .translation();
+        let mut tasks = route(&app, plan.to_local(at).xz(), 0.3);
+        tasks.push(Task::Grab {
+            item: ledger,
+            side: Side::Right,
+        });
+        tasks.push(Task::Wait(0.5));
+        tasks.push(Task::Stow(Side::Right));
+        tasks.push(Task::Wait(0.5));
+        run(&mut app, tasks, "to the ledger");
+        assert_eq!(
+            app.world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(ledger)
+                .map(|c| c.0),
+            Some(player),
+            "the ledger on you"
+        );
+        let mut out = Vec::new();
+        let tasks = route(&app, exit, 0.6);
+        app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+        for _ in 0..90 * 150 {
+            app.update();
+            out.extend(
+                app.world()
+                    .resource::<Messages<CarriedOutOfDepot>>()
+                    .iter_current_update_messages()
+                    .map(|m| m.item),
+            );
+            if app.world().get::<Bot>(player).unwrap().done() {
+                break;
+            }
+        }
+        for _ in 0..10 {
+            app.update();
+            out.extend(
+                app.world()
+                    .resource::<Messages<CarriedOutOfDepot>>()
+                    .iter_current_update_messages()
+                    .map(|m| m.item),
+            );
+        }
+        let at = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(
+            plan.to_local(at).xz().distance(exit) < 1.2,
+            "out by the hatch: {at:?}"
+        );
+        assert!(out.contains(&ledger), "carried the ledger out: {out:?}");
+    }
+
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
     /// in the site, and out by the other way (the exit kiosk).
     #[test]
