@@ -7,11 +7,14 @@
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
+use bevy::image::{ImageSampler, ImageSamplerDescriptor};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
+use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 
 use crate::raid::bench::{ScreenStyle, ScreenText};
+use crate::render::legibility::TextSource;
 
 pub struct ScreenPlugin;
 
@@ -45,6 +48,11 @@ struct ScreenView {
     font: f32,
     bg: Color,
     fg: Color,
+    /// The panel's material, and whether it shows the picture as light.
+    material: Handle<StandardMaterial>,
+    emissive: bool,
+    /// Counts redraws: a picture read back from an older one is dropped.
+    generation: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -179,8 +187,12 @@ fn panel(screen: &ScreenText) -> (f32, u32, u32, f32) {
     let h = (screen.size.y * ppm).round().max(16.0) as u32;
     let font = h as f32
         / match screen.style {
-            ScreenStyle::Lcd => 16.0,
-            ScreenStyle::Paper | ScreenStyle::Crt => 14.0,
+            // The wrist's and the radio's few lines of capitals as big as
+            // their screens allow.
+            ScreenStyle::Lcd => 6.0,
+            // Paper: a short sign's words as big as a ten-line page's.
+            ScreenStyle::Paper => 10.0,
+            ScreenStyle::Crt => 14.0,
             ScreenStyle::Card => 4.5,
         };
     (ppm, w, h, font)
@@ -213,33 +225,24 @@ pub fn wrap_to_fit(text: &str, size: Vec2, style: ScreenStyle) -> String {
     best.1
 }
 
-/// The smallest letters (em, as an angle at the eye) a headset shows
-/// legibly. A Beyond 2 at the auto render scale has about 20 pixels a
-/// degree; 0.6 degrees is a 12-pixel em.
-pub const MIN_EM_DEG: f32 = 0.6;
-
-/// Where a panel is read from (m): a signpost from a few steps off, your
-/// wrist from your face, everything else (cards, notes, screens) from
-/// about a metre.
-pub fn read_from(screen: &ScreenText) -> f32 {
-    if screen.style == ScreenStyle::Paper && screen.size.x >= 0.7 {
-        3.0
-    } else if screen.size.x < 0.1 {
-        0.45
-    } else {
-        1.0
-    }
-}
-
 fn build_screens(
     mut commands: Commands,
-    screens: Query<(Entity, &ScreenText), Added<ScreenText>>,
+    screens: Query<(Entity, &ScreenText, Option<&TextSource>, Option<&Name>), Added<ScreenText>>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut drawings: ResMut<Drawings>,
 ) {
-    for (e, screen) in &screens {
+    for (e, screen, source, name) in &screens {
+        if source.is_none() {
+            // Every panel says what it is, so the legibility gauges can
+            // measure it from where it's read (`render::legibility`).
+            error!(
+                "text panel {} has no TextSource: {:?}",
+                name.map_or("(unnamed)".into(), |n| n.to_string()),
+                screen.text.lines().next().unwrap_or("")
+            );
+        }
         let (_, w, h, font) = panel(screen);
         let (bg, fg, emissive) = match screen.style {
             ScreenStyle::Lcd => (
@@ -276,20 +279,9 @@ fn build_screens(
         );
         image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
             | TextureUsages::COPY_DST
+            | TextureUsages::COPY_SRC
             | TextureUsages::RENDER_ATTACHMENT;
         let handle = images.add(image);
-        let mut view = ScreenView {
-            drawing: None,
-            image: handle.clone(),
-            refresh: FIRST_FRAMES,
-            px: Vec2::new(w as f32, h as f32),
-            font,
-            bg,
-            fg,
-        };
-        let d = start_drawing(&mut commands, &view, &screen.text);
-        view.drawing = Some(d);
-        drawings.0.insert(e, d);
         let material = materials.add(StandardMaterial {
             base_color: if emissive { Color::BLACK } else { Color::WHITE },
             base_color_texture: (!emissive).then(|| handle.clone()),
@@ -302,6 +294,21 @@ fn build_screens(
             perceptual_roughness: if emissive { 0.15 } else { 0.95 },
             ..default()
         });
+        let mut view = ScreenView {
+            drawing: None,
+            image: handle.clone(),
+            refresh: FIRST_FRAMES,
+            px: Vec2::new(w as f32, h as f32),
+            font,
+            bg,
+            fg,
+            material: material.clone(),
+            emissive,
+            generation: 0,
+        };
+        let d = start_drawing(&mut commands, &view, &screen.text);
+        view.drawing = Some(d);
+        drawings.0.insert(e, d);
         commands.entity(e).insert(view).with_child((
             Mesh3d(meshes.add(Rectangle::new(screen.size.x, screen.size.y))),
             MeshMaterial3d(material),
@@ -315,6 +322,8 @@ fn update_screens(
     mut screens: Query<(Entity, &ScreenText, &mut ScreenView), Changed<ScreenText>>,
     mut texts: Query<(&mut Text, &mut TextFont)>,
     mut drawings: ResMut<Drawings>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     for (e, screen, mut view) in &mut screens {
         match view.drawing {
@@ -322,6 +331,8 @@ fn update_screens(
                 if let Ok((mut t, mut f)) = texts.get_mut(d.text) {
                     if t.0 != screen.text {
                         view.refresh = view.refresh.max(REFRESH_FRAMES);
+                        view.generation += 1;
+                        show_target(&mut materials, &mut images, &view);
                         t.0 = screen.text.clone();
                         let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
                         if f.font_size != size {
@@ -331,6 +342,8 @@ fn update_screens(
                 }
             }
             None => {
+                view.generation += 1;
+                show_target(&mut materials, &mut images, &view);
                 let d = start_drawing(&mut commands, &view, &screen.text);
                 view.drawing = Some(d);
                 view.refresh = REFRESH_FRAMES;
@@ -340,8 +353,29 @@ fn update_screens(
     }
 }
 
-/// A panel that has finished drawing lets its camera and UI go: its
-/// texture keeps the picture.
+/// While a panel redraws, its material shows the render target itself.
+fn show_target(
+    materials: &mut Assets<StandardMaterial>,
+    images: &mut Assets<Image>,
+    view: &ScreenView,
+) {
+    let Some(mut m) = materials.get_mut(&view.material) else {
+        return;
+    };
+    let slot = if view.emissive {
+        &mut m.emissive_texture
+    } else {
+        &mut m.base_color_texture
+    };
+    if slot.as_ref() != Some(&view.image) {
+        if let Some(old) = slot.replace(view.image.clone()) {
+            images.remove(&old);
+        }
+    }
+}
+
+/// A panel that has finished drawing lets its camera and UI go, and its
+/// picture is read back to be shown with mipmaps.
 fn idle_screens(
     mut commands: Commands,
     mut screens: Query<(Entity, &mut ScreenView)>,
@@ -356,9 +390,131 @@ fn idle_screens(
             if let Some(d) = view.drawing.take() {
                 stop_drawing(&mut commands, d);
                 drawings.0.remove(&e);
+                read_back(&mut commands, e, &view);
             }
         }
     }
+}
+
+/// Reads a panel's finished picture back and shows it with a full mip
+/// chain and anisotropic filtering instead of the bare render target: a
+/// texture with more texels than the eye has pixels for it (a sign seen
+/// from up the track, a note at a slant) otherwise sparkles as the head
+/// moves.
+fn read_back(commands: &mut Commands, panel: Entity, view: &ScreenView) {
+    let (w, h) = (view.px.x as u32, view.px.y as u32);
+    let (material, emissive, target) = (view.material.clone(), view.emissive, view.image.clone());
+    let generation = view.generation;
+    commands
+        .spawn(Readback::texture(view.image.clone()))
+        .observe(
+            move |done: On<ReadbackComplete>,
+                  mut images: ResMut<Assets<Image>>,
+                  mut materials: ResMut<Assets<StandardMaterial>>,
+                  views: Query<&ScreenView>,
+                  mut commands: Commands| {
+                commands.entity(done.entity).despawn();
+                let current = views
+                    .get(panel)
+                    .is_ok_and(|v| v.generation == generation && v.drawing.is_none());
+                if !current {
+                    return;
+                }
+                // Rows come padded to 256 bytes.
+                let stride = (w as usize * 4).div_ceil(256) * 256;
+                if done.data.len() < stride * (h as usize - 1) + w as usize * 4 {
+                    return;
+                }
+                let shown = images.add(mipped(&done.data, w, h, stride));
+                // A new texture, pointed to by the material (swapping an
+                // image's contents under a material doesn't reach its bind
+                // group); the one it showed before goes, unless it's the
+                // render target.
+                let Some(mut m) = materials.get_mut(&material) else {
+                    return;
+                };
+                let slot = if emissive {
+                    &mut m.emissive_texture
+                } else {
+                    &mut m.base_color_texture
+                };
+                if let Some(old) = slot.replace(shown) {
+                    if old != target {
+                        images.remove(&old);
+                    }
+                }
+            },
+        );
+}
+
+/// A panel's picture (`Bgra8UnormSrgb`, rows `stride` bytes apart) with a
+/// full mip chain, averaged in linear light so letters thin out evenly
+/// with distance, and filtered anisotropically so they stay sharp at a
+/// slant.
+pub fn mipped(data: &[u8], w: u32, h: u32, stride: usize) -> Image {
+    let lin: Vec<f32> = (0..=255u8)
+        .map(|v| LinearRgba::from(Srgba::rgb_u8(v, 0, 0)).red)
+        .collect();
+    let srgb = |l: f32| (Srgba::from(LinearRgba::rgb(l, 0.0, 0.0)).red * 255.0 + 0.5) as u8;
+    let (w, h) = (w as usize, h as usize);
+    let mut out = Vec::with_capacity(w * h * 6);
+    let mut level: Vec<f32> = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        let row = &data[y * stride..y * stride + w * 4];
+        out.extend_from_slice(row);
+        for (i, &v) in row.iter().enumerate() {
+            level.push(if i % 4 == 3 {
+                v as f32 / 255.0
+            } else {
+                lin[v as usize]
+            });
+        }
+    }
+    let (mut lw, mut lh) = (w, h);
+    let mut levels = 1;
+    while lw > 1 || lh > 1 {
+        let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
+        let mut next = vec![0.0f32; nw * nh * 4];
+        for y in 0..nh {
+            for x in 0..nw {
+                for c in 0..4 {
+                    let mut sum = 0.0;
+                    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                        let sx = (x * 2 + dx).min(lw - 1);
+                        let sy = (y * 2 + dy).min(lh - 1);
+                        sum += level[(sy * lw + sx) * 4 + c];
+                    }
+                    next[(y * nw + x) * 4 + c] = sum * 0.25;
+                }
+            }
+        }
+        out.extend(next.iter().enumerate().map(|(i, &v)| {
+            if i % 4 == 3 {
+                (v * 255.0 + 0.5) as u8
+            } else {
+                srgb(v)
+            }
+        }));
+        level = next;
+        (lw, lh) = (nw, nh);
+        levels += 1;
+    }
+    let mut image = Image::new_uninit(
+        Extent3d {
+            width: w as u32,
+            height: h as u32,
+            ..default()
+        },
+        TextureDimension::D2,
+        TextureFormat::Bgra8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    image.texture_descriptor.mip_level_count = levels;
+    image.data = Some(out);
+    let mut sampler = ImageSamplerDescriptor::linear();
+    sampler.set_anisotropic_filter(16);
+    image.sampler = ImageSampler::Descriptor(sampler);
+    image
 }
 
 /// A panel that went away (despawned, or its text taken off) takes its

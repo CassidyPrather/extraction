@@ -16,11 +16,24 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
+# The sheet in the map case and its lettering, in millimetres on the paper.
+# You read it held up to your face (0.3 m): letters these sizes clear the
+# must-read floor there (docs/LEGIBILITY.md; `render::legibility` reads
+# these lines, so keep them as plain numbers).
+MAP_MM = 280.0
+MAP_PX = 1024.0
+TITLE_MM = 8.5
+NAME_MM = 6.4
+LABEL_MM = 6.2
+
+
 def load(d, name, n):
     return np.fromfile(os.path.join(d, name), dtype="<f4").reshape(n, n)
 
 
-def font(size, italic=True):
+def font(size, italic=False):
+    # Upright: an italic's slanted, thin strokes are the first thing to go
+    # at a headset's few pixels a letter.
     for p in [
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf" if italic else "",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
@@ -134,15 +147,16 @@ def main():
         ]
         d.polygon(pts, fill=(52, 44, 38))
     # Names, in pencil.
-    f_med = font(max(14, N // 52))
-    f_small = font(max(11, N // 75))
+    mm = N / MAP_MM
+    f_med = font(round(NAME_MM * mm))
+    f_small = font(round(LABEL_MM * mm))
     pencil = (55, 50, 48)
     for r in meta["regions"]:
         xs = [px(p)[0] for p in r["polygon"]]
         ys = [px(p)[1] for p in r["polygon"]]
         cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
         w = d.textlength(r["name"], font=f_med)
-        d.text((cx - w / 2, cy - 8), r["name"], fill=pencil, font=f_med)
+        d.text((cx - w / 2, cy - NAME_MM * mm / 2), r["name"], fill=pencil, font=f_med)
     for m in meta["markers"]:
         x, y = px(m["at"])
         if m["kind"] == "Rendezvous":
@@ -151,7 +165,7 @@ def main():
         elif m["kind"] == "RobotGate":
             d.line([(x - 7, y - 7), (x + 7, y + 7)], fill=(140, 30, 25), width=3)
             d.line([(x - 7, y + 7), (x + 7, y - 7)], fill=(140, 30, 25), width=3)
-            d.text((x - 20, y + 10), "keep away", fill=(140, 30, 25), font=f_small)
+            d.text((x - 3 * LABEL_MM * mm, y + 10), "keep away", fill=(140, 30, 25), font=f_small)
         elif m["kind"] == "ArtifactField":
             d.text((x - 6, y + 12), "? ? ?", fill=(90, 40, 110), font=f_med)
         elif m["kind"] == "Insertion":
@@ -162,8 +176,8 @@ def main():
     d.polygon([(N - 48, 50), (N - 36, 50), (N - 42, 40)], fill=pencil)
     bar = 100 * s
     d.line([(24, N - 30), (24 + bar, N - 30)], fill=pencil, width=2)
-    d.text((24, N - 52), "100 m (paced)", fill=pencil, font=f_small)
-    d.text((24, 16), meta["name"], fill=pencil, font=font(max(18, N // 36)))
+    d.text((24, N - 36 - LABEL_MM * mm * 1.2), "100 m (paced)", fill=pencil, font=f_small)
+    d.text((24, 16), meta["name"], fill=pencil, font=font(round(TITLE_MM * mm)))
     img = img.filter(ImageFilter.GaussianBlur(0.4))
     img.save(args.out, quality=86)
     print(args.out)

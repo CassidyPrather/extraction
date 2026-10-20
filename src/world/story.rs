@@ -642,7 +642,7 @@ pub fn tell_beats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel};
     use extraction_core::map::{MapDef, MarkerKind};
 
     fn map(name: &str) -> MapDef {
@@ -687,8 +687,8 @@ mod tests {
             .collect()
     }
 
-    /// Every note's and terminal page's letters are big enough to read
-    /// at a metre (fast: straight from the maps, no app).
+    /// Every note's and terminal page's letters clear the floor from where
+    /// they're read (fast: straight from the maps, no app).
     #[test]
     fn every_note_fits_its_paper() {
         let mut small = Vec::new();
@@ -698,9 +698,9 @@ mod tests {
                 panels.push((n.name.clone(), crate::world::notes::note_panel(&n.text)));
             }
             for (what, panel) in panels {
-                let deg = (em_metres(&panel) / read_from(&panel)).atan().to_degrees();
-                if deg < MIN_EM_DEG {
-                    small.push(format!("{name}: {what}: {deg:.2} deg"));
+                let source = crate::render::legibility::marker_source(&what);
+                if let Err(e) = check_panel(&panel, source.unwrap_or(TextSource::Note)) {
+                    small.push(format!("{name}: {what}: {e}"));
                 }
             }
         }

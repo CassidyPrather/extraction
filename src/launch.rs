@@ -84,6 +84,9 @@ pub struct LaunchOptions {
     /// Dev: the tour's views from a file instead of the placements (see
     /// `tour::scripted_views`; the visual lookbook, `scripts/lookbook.sh`).
     pub tour_views: Option<PathBuf>,
+    /// Dev: screenshot every text panel from where it's read, at the
+    /// headset's pixels a degree, into this folder (`render::legibility`).
+    pub legibility: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -127,6 +130,7 @@ impl Default for LaunchOptions {
             tour: None,
             tour_only: None,
             tour_views: None,
+            legibility: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -159,6 +163,7 @@ impl LaunchOptions {
     pub fn tooling(&self) -> bool {
         self.screenshot.is_some()
             || self.tour.is_some()
+            || self.legibility.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -233,6 +238,13 @@ impl LaunchOptions {
                     o.robots = false;
                     o.flat = true;
                     // The tour drives a free camera.
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--legibility" => {
+                    o.legibility = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }

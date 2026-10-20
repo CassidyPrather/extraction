@@ -10,6 +10,8 @@ pub mod fog;
 pub mod grade;
 pub mod kit;
 pub mod kitchen;
+pub mod legibility;
+pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
 pub mod materials;
@@ -58,6 +60,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(crate::raid::lev::LevVisualsPlugin)
         .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
+        .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()

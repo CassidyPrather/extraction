@@ -297,6 +297,7 @@ fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>)
             },
             Collider::cuboid(0.3, 0.12, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
             crate::raid::bench::ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.12),

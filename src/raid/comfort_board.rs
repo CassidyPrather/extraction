@@ -71,6 +71,7 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
                 },
                 Collider::cuboid(0.26, 0.14, 0.03),
                 CollisionLayers::new(Layer::Item, LayerMask::NONE),
+                crate::render::legibility::TextSource::Card,
                 ScreenText {
                     text: String::new(),
                     size: Vec2::new(0.26, 0.14),
