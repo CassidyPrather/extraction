@@ -202,7 +202,8 @@ corner.
 
 **What's there.**
 - *Your lost kit.* The latest 16 of `Memorial::lost`, by catalog name,
-  lie on the hall's crates and pallets (`LostKit`), for the taking
+  lie on the hall's crates and in its bins, filled with sacked kit to
+  a reach under the rim (`LostKit`), for the taking
   back (`the_lost_kit_lies_in_the_sorting_hall`).
 - *The kept.* Bay K-14's crates are closed props: Hana's long crate
   with her basket, the small one for the dog, Jan Holm's. Story places

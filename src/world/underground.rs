@@ -938,6 +938,9 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
     }
 }
 
+/// How high a sorting bin is filled: its loot lies on that.
+const BIN_FILL: f32 = 0.6;
+
 /// One of the layout's props at `at` (on the floor), turned `yaw`.
 fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'static str>) {
     let rot = Quat::from_rotation_y(yaw);
@@ -1116,8 +1119,17 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                     Transform::from_translation(at).with_rotation(rot),
                 )],
             );
+            // Filled with sacked kit to a reach under the rim, so what's
+            // on top is at hand rather than at the bottom (no stooping).
+            b.piece(
+                Shape::Box(Vec3::new(1.1, BIN_FILL - 0.07, 0.7)),
+                Transform::from_translation(at + Vec3::Y * (0.07 + BIN_FILL) * 0.5)
+                    .with_rotation(rot),
+                Mat::Canvas,
+                true,
+            );
             if let Some(t) = loot {
-                b.loot(at + Vec3::Y * 0.3, t);
+                b.loot(at + Vec3::Y * (BIN_FILL + 0.05), t);
             }
         }
         // A kept crate is its own entity (`KeptCrate`: it opens); here only
@@ -2556,8 +2568,8 @@ pub struct LostKit;
 pub const LOST_SHOWN: usize = 16;
 
 /// Logic, once: what the memorial convoys took (`Memorial::lost`, the
-/// latest first) lies in the sorting hall's bins, on the crates and
-/// pallets, for the taking back.
+/// latest first) lies in the sorting hall's bins and on its crates, at a
+/// reach, for the taking back.
 fn fill_lost_bins(
     mut commands: Commands,
     buildings: Query<(&super::buildings::Building, &Transform)>,
@@ -2581,7 +2593,7 @@ fn fill_lost_bins(
     let bins: Vec<Vec2> = hall
         .props
         .iter()
-        .filter(|p| matches!(p.kind, PropKind::Bin | PropKind::Crate | PropKind::Pallet))
+        .filter(|p| matches!(p.kind, PropKind::Bin | PropKind::Crate))
         .map(|p| Vec2::new(hall.at[0] + p.at[0], hall.at[1] + p.at[1]))
         .collect();
     if bins.is_empty() {
@@ -2668,6 +2680,27 @@ mod tests {
     use super::*;
     use crate::launch::LaunchOptions;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Loot lies at a reach, not at your feet: every spot at least 0.3 m
+    /// over its floor (a shelf, a crate's top, a table, a filled bin), as
+    /// the valleys' loot is (`most_loot_in_the_zone_is_off_the_floor`).
+    #[test]
+    fn site_loot_is_off_the_floor() {
+        let mut low = Vec::new();
+        for id in ids() {
+            let (g, r) = (geo(id).unwrap(), ug::raster(id).unwrap());
+            for s in &g.loot {
+                let Some((i, j)) = r.cell_of([s.at.x, s.at.z]) else {
+                    continue;
+                };
+                let up = s.at.y - r.floors[j * r.nx + i];
+                if up < 0.3 {
+                    low.push(format!("{id} {} {up:.2} m up at {:.1?}", s.table, s.at));
+                }
+            }
+        }
+        assert!(low.is_empty(), "loot at your feet: {low:#?}");
+    }
 
     /// Every site's pieces are sound (positive sizes, finite poses) and it
     /// has doors and loot.
