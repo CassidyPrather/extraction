@@ -37,9 +37,14 @@ impl Plugin for FlightPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            knock_drones
-                .after(crate::weapons::ballistics::BallisticsSystems)
-                .before(PhysicsSystems::First),
+            (
+                knock_drones
+                    .after(crate::weapons::ballistics::BallisticsSystems)
+                    .before(PhysicsSystems::First),
+                sway_dirigibles
+                    .after(super::dirigible::fly_dirigibles)
+                    .before(PhysicsSystems::First),
+            ),
         );
     }
 }
@@ -194,6 +199,74 @@ pub(crate) fn fly_drones(
             forces.apply_torque(up * spin);
         }
         d.grounded = 0.0;
+    }
+}
+
+/// An airship's attitude, on top of the heading it flies.
+#[derive(Component, Debug, Default)]
+pub struct Sway {
+    pitch: f32,
+    roll: f32,
+    last_yaw: f32,
+    yaw_rate: f32,
+    age: f32,
+}
+
+/// Airships pitch with their climb, roll into turns, wallow a little in
+/// the wind, and list toward a punctured cell as they sink (nose down if
+/// it's the front one).
+fn sway_dirigibles(
+    mut commands: Commands,
+    mut ships: Query<(
+        Entity,
+        &super::dirigible::Dirigible,
+        &mut Transform,
+        Option<&mut Sway>,
+    )>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+    for (e, d, mut t, sway) in &mut ships {
+        let Some(mut s) = sway else {
+            commands.entity(e).insert(Sway {
+                last_yaw: d.yaw,
+                ..default()
+            });
+            continue;
+        };
+        s.age += dt;
+        let mut dy = d.yaw - s.last_yaw;
+        if dy > std::f32::consts::PI {
+            dy -= std::f32::consts::TAU;
+        } else if dy < -std::f32::consts::PI {
+            dy += std::f32::consts::TAU;
+        }
+        s.last_yaw = d.yaw;
+        s.yaw_rate += (dy / dt - s.yaw_rate) * (1.0 * dt).min(1.0);
+        let speed = Vec2::new(d.velocity.x, d.velocity.z).length();
+        let k = s.age + e.index_u32() as f32;
+        let mut pitch = (d.velocity.y * 0.05).clamp(-0.1, 0.1) + 0.012 * (k * 0.23).sin();
+        // Banking: the outside of the turn rises (a negative yaw rate turns
+        // right, rolling it right).
+        let mut roll = (s.yaw_rate * speed * 0.5).clamp(-0.08, 0.08) + 0.018 * (k * 0.31).sin();
+        if d.sinking {
+            for (i, alive) in d.cells.iter().enumerate() {
+                if !alive {
+                    pitch += (i as f32 - 1.0) * 0.16;
+                    roll += 0.05;
+                }
+            }
+        }
+        // Heavy and slow to answer.
+        let rate = (0.6 * dt).min(1.0);
+        s.pitch += (pitch - s.pitch) * rate;
+        s.roll += (roll - s.roll) * rate;
+        t.rotation = Quat::from_rotation_y(d.yaw)
+            * Quat::from_rotation_x(s.pitch)
+            * Quat::from_rotation_z(s.roll);
     }
 }
 

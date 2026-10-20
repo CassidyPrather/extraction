@@ -91,6 +91,9 @@ pub struct Gait {
     /// Last tick's velocity, for the lean into acceleration.
     last_v: Vec3,
     pub accel: Vec3,
+    /// Toward whatever it's hauling on (a grappler's line), horizontal;
+    /// zero when it isn't. It leans back from it and crouches.
+    pub brace: Vec3,
 }
 
 impl Default for Gait {
@@ -111,6 +114,7 @@ impl Default for Gait {
             idle: 0.0,
             last_v: Vec3::ZERO,
             accel: Vec3::ZERO,
+            brace: Vec3::ZERO,
         }
     }
 }
@@ -342,7 +346,7 @@ pub fn step_walker(
     } else if drive.stunned {
         0.55
     } else {
-        missing as f32 * 0.14 + g.limp * 0.05
+        missing as f32 * 0.14 + g.limp * 0.05 + g.brace.length() * 0.12
     };
     g.sag += (target_sag - g.sag) * (3.0 * dt).min(1.0);
     let rest_y = if drive.down && !drive.stunned {
@@ -410,10 +414,11 @@ pub fn step_walker(
     }
     let lean = Vec3::Y.cross(v * 0.035 + g.accel * 0.05);
     let list = Vec3::Y.cross(rot * dead).normalize_or_zero() * 0.14;
+    let haul = Vec3::Y.cross(-g.brace) * 0.18;
     let tilt = if drive.down {
         Vec3::ZERO
     } else {
-        slope + lean + list
+        slope + lean + list + haul
     };
     g.tilt = g.tilt.lerp(tilt.clamp_length_max(0.4), (4.0 * dt).min(1.0));
     // Wobble: a stiff, underdamped spring.
@@ -556,8 +561,37 @@ impl Plugin for AnimPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
+            (
+                knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
+                haul_lines.after(super::perceive),
+            ),
         );
+    }
+}
+
+/// A grappler hauling on a line leans back from it and crouches; firing
+/// the harpoon kicks it back.
+fn haul_lines(
+    mut fired: MessageReader<super::grappler::Harpoon>,
+    tethered: Query<(&super::grappler::Tethered, &GlobalTransform)>,
+    mut walkers: Query<(Entity, &mut Gait, &GlobalTransform)>,
+    targets: Query<&GlobalTransform>,
+) {
+    for (e, mut g, gt) in &mut walkers {
+        let pull = tethered
+            .iter()
+            .find(|(t, _)| t.by == e)
+            .map(|(_, pgt)| pgt.translation() - gt.translation())
+            .map(|d| Vec3::new(d.x, 0.0, d.z).normalize_or_zero())
+            .unwrap_or(Vec3::ZERO);
+        g.brace = g.brace.lerp(pull, 0.08);
+    }
+    for h in fired.read() {
+        let (Ok((_, mut g, gt)), Ok(to)) = (walkers.get_mut(h.from), targets.get(h.to)) else {
+            continue;
+        };
+        let dir = (to.translation() - gt.translation()).normalize_or_zero();
+        g.knock(Vec3::Y * 0.3, -dir * 0.9);
     }
 }
 

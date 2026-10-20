@@ -1218,13 +1218,24 @@ fn dress_debris(
                     );
                 }
             }),
-            Piece::Panel(_) => None,
+            // The model's loose panel, turned so its outside faces up (the
+            // piece's +Y, as it was thrown).
+            Piece::Panel(_) => node("panel").map(|n| {
+                let out = n.transform.translation.normalize_or(Vec3::Y);
+                attach(
+                    &mut commands,
+                    e,
+                    n,
+                    Transform::from_rotation(Quat::from_rotation_arc(out, Vec3::Y)),
+                    e,
+                    &mut mat,
+                );
+            }),
         };
         if dressed.is_some() {
             continue;
         }
-        // Primitives: the panel always (a curved plate, shell outside and
-        // dark inside), the rest when there's no model.
+        // Primitives, when there's no model (a drone's panel always).
         match d.piece {
             Piece::Panel(k) => {
                 let (w, l) = if k == 2 { (0.22, 0.18) } else { (0.3, 0.24) };

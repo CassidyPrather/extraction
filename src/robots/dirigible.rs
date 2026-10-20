@@ -204,7 +204,7 @@ fn dirigible_brain(
     }
 }
 
-fn fly_dirigibles(
+pub(crate) fn fly_dirigibles(
     mut ships: Query<(&mut Dirigible, &Brain, &mut Transform, &mut Robot)>,
     zone: Res<Zone>,
     time: Res<Time>,
