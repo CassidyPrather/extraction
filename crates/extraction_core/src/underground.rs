@@ -205,6 +205,12 @@ pub struct Layout {
     /// Anomalies that live down here, every cycle.
     #[serde(default)]
     pub anomalies: Vec<Hazard>,
+    /// The resident crawlers' round: room ids in walking order (they
+    /// path between them), and how many walk it.
+    #[serde(default)]
+    pub patrol: Vec<String>,
+    #[serde(default)]
+    pub crawlers: u32,
 }
 
 /// An anomaly in a room: `kind` names an `anomaly::AnomalyKind` (Lift,
@@ -797,6 +803,14 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    for id in &l.patrol {
+        if !l.rooms.iter().any(|r| &r.id == id) {
+            bad.push(format!("a patrol through no room `{id}`"));
+        }
+    }
+    if l.crawlers > 0 && l.patrol.len() < 2 {
+        bad.push("crawlers with no round to walk".into());
+    }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {
         let reached = (0..r.cells.len()).any(|c| seen[c] && r.cells[c] == Cell::Room(k as u16));
@@ -1041,11 +1055,21 @@ mod tests {
     }
 
     /// Every layout parses and is fit to build: rooms reached from the
-    /// entrance, stairs that land somewhere, nothing in the rock.
+    /// entrance, stairs that land somewhere, nothing in the rock, every
+    /// loot table one that exists.
     #[test]
     fn every_layout_is_sound() {
+        let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
+        let tables = crate::loot::LootTables::from_ron(crate::loot::BUILTIN_LOOT, &cat).unwrap();
         for (id, _) in SITES {
             let l = layout(id).unwrap();
+            for room in &l.rooms {
+                for p in &room.props {
+                    if let Some(t) = &p.loot {
+                        assert!(tables.has(t), "{id} {}: no loot table `{t}`", room.id);
+                    }
+                }
+            }
             let bad = check(l);
             assert!(bad.is_empty(), "{id}:\n{}", bad.join("\n"));
             let r = raster(id).unwrap();

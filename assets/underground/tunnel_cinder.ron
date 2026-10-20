@@ -68,6 +68,9 @@
     anomalies: [
         (kind: "Snare", room: "overflow", at: (0.3, 0.3), radius: 1.2),
     ],
+    // Resident maintenance crawlers walk this round (robots::indoor).
+    patrol: ["tunnel_a", "pump_room", "valve_chamber", "tunnel_b", "workshop", "overflow", "switch_room"],
+    crawlers: 2,
     portals: [
         (),
         (at: (10.0, 53.0), rot: 180.0, y: 0.0),

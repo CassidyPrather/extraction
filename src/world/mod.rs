@@ -132,7 +132,10 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((weather::WeatherPlugin, scenes::ScenesPlugin))
             .add_systems(PreStartup, init_zone)
-            .add_systems(Update, buildings::swing_doors)
+            .add_systems(
+                Update,
+                (buildings::swing_doors, underground::register_residents),
+            )
             .add_systems(
                 Startup,
                 (
