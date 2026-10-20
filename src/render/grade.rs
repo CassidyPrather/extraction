@@ -147,9 +147,8 @@ impl Look {
     }
 }
 
-/// How far a room's walls cut the sky's light: inside a building there's
-/// this share of the outside's ambient (`dim_indoors`).
-pub const INTERIOR_LIGHT: f32 = 0.3;
+/// How far a room's walls cut the sky's light (`dim_indoors`).
+pub use crate::world::weather::INTERIOR_LIGHT;
 
 /// How much of a light deficit the eyes make up (in stops, as a share).
 const ADAPT_SHARE: f32 = 0.6;

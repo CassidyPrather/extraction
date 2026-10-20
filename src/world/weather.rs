@@ -7,7 +7,8 @@
 //! day or at dusk, from a stream of its own (so the weather a seed gives
 //! is the same as before there were hours). The light it brings is
 //! gameplay too: robots see less far as it fails (`Conditions::sight`).
-//! Night isn't rolled yet (it belongs late in the ladder); `--hour night`
+//! Night comes late in the ladder: once Progression opens it (its third
+//! tier), about one cycle in five is a night; before that, `--hour night`
 //! shows it.
 
 use bevy::prelude::*;
@@ -20,6 +21,10 @@ pub enum WeatherKind {
     Downpour,
     Clearing,
 }
+
+/// Indoors, a room's walls let in this share of the sky's light (the
+/// client dims the ambient to it; robots' senses can read it too).
+pub const INTERIOR_LIGHT: f32 = 0.3;
 
 /// When in the day the raid is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +86,11 @@ pub struct Conditions {
 
 impl Conditions {
     pub fn for_cycle(seed: u64, cycle: u32) -> Self {
+        Self::for_cycle_with(seed, cycle, false)
+    }
+
+    /// The cycle's conditions, with night raids open or not.
+    pub fn for_cycle_with(seed: u64, cycle: u32, nights: bool) -> Self {
         let mut rng = Rng::new(seed ^ 0x3EA7_4E12 ^ (cycle as u64).wrapping_mul(0x9E37_79B9));
         // The first cycle is always the reference look.
         let kind = if cycle == 0 {
@@ -94,14 +104,22 @@ impl Conditions {
                 WeatherKind::Clearing,
             ][rng.below(5)]
         };
-        Self::compose(kind, Self::hour_for_cycle(seed, cycle), cycle)
+        Self::compose(kind, Self::hour_for_cycle(seed, cycle, nights), cycle)
     }
 
     /// The cycle's hour, from a stream of its own: the first cycle is the
-    /// day, then half are days and the rest dawn or dusk.
-    pub fn hour_for_cycle(seed: u64, cycle: u32) -> Hour {
+    /// day, then half are days and the rest dawn or dusk; with nights
+    /// open, about one in five is a night instead (from a third stream, so
+    /// the other cycles keep their hours).
+    pub fn hour_for_cycle(seed: u64, cycle: u32, nights: bool) -> Hour {
         if cycle == 0 {
             return Hour::Day;
+        }
+        if nights {
+            let mut n = Rng::new(seed ^ 0x0A16_47E5 ^ (cycle as u64).wrapping_mul(0x27D4_EB2F));
+            if n.below(5) == 0 {
+                return Hour::Night;
+            }
         }
         let mut rng = Rng::new(seed ^ 0x40C1_0C4D ^ (cycle as u64).wrapping_mul(0xC2B2_AE3D));
         [Hour::Dawn, Hour::Day, Hour::Day, Hour::Dusk][rng.below(4)]
@@ -132,6 +150,12 @@ impl Conditions {
             sun: sun * hour.sun(),
             cycle,
         }
+    }
+
+    /// The sky's light at a place, against a day's outdoors (0..=1):
+    /// `light`, and a room's share of it indoors.
+    pub fn light_at(&self, indoors: bool) -> f32 {
+        self.light * if indoors { INTERIOR_LIGHT } else { 1.0 }
     }
 
     /// How far a robot's eyes reach, given its own sight range: the
@@ -168,12 +192,28 @@ impl Plugin for WeatherPlugin {
 }
 
 /// New Surge cycle (or a loaded save), new weather.
+/// Night raids are open once the career's third tier is done
+/// (Progression's `NIGHTS_FROM`; `Progress::nights` when that's merged).
+const NIGHTS_FROM: u32 = 3;
+
 fn follow_cycle(
     raid: Res<crate::raid::Raid>,
     opts: Res<crate::launch::LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
     mut conditions: ResMut<Conditions>,
+    mut latched: Local<Option<(u32, bool)>>,
 ) {
-    let mut want = Conditions::for_cycle(opts.seed, raid.cycle);
+    // Whether nights are open is read when the cycle starts and kept: a
+    // tier finished at base mustn't turn the raid's day to night.
+    let open = progression.is_some_and(|p| p.0.tier >= NIGHTS_FROM);
+    let nights = match *latched {
+        Some((cycle, n)) if cycle == raid.cycle => n,
+        _ => {
+            *latched = Some((raid.cycle, open));
+            open
+        }
+    };
+    let mut want = Conditions::for_cycle_with(opts.seed, raid.cycle, nights);
     // Dev overrides: the asked-for weather and hour, the rest as rolled.
     let kind = match opts.weather.as_deref() {
         Some("fog") => WeatherKind::PeaSouper,
@@ -223,8 +263,23 @@ mod tests {
             for h in [Hour::Dawn, Hour::Day, Hour::Dusk] {
                 assert!(a.contains(&h), "seed {seed}: no {h:?} in 40 cycles");
             }
-            // Night is for later in the ladder: never rolled.
+            // Night is for later in the ladder: not until it's open...
             assert!(!a.contains(&Hour::Night));
+            // ...and then about one in five, the rest keeping their hours.
+            let n: Vec<Hour> = (0..200)
+                .map(|c| Conditions::for_cycle_with(seed, c, true).hour)
+                .collect();
+            let nights = n.iter().filter(|h| **h == Hour::Night).count();
+            assert!(
+                (25..=60).contains(&nights),
+                "seed {seed}: {nights} nights in 200"
+            );
+            assert_eq!(n[0], Hour::Day);
+            for c in 0..40 {
+                if n[c] != Hour::Night {
+                    assert_eq!(n[c], a[c]);
+                }
+            }
         }
         // Different seeds give different days.
         let one: Vec<Hour> = (0..40).map(|c| Conditions::for_cycle(1, c).hour).collect();
