@@ -421,6 +421,7 @@ mod tests {
                 velocity: Vec3::Z * 500.0,
                 damage: 100.0,
                 shooter: None,
+                mass_g: 3.4,
             });
         for _ in 0..3 {
             app.update();
