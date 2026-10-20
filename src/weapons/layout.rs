@@ -32,6 +32,9 @@ pub enum Moves {
     Trigger,
     /// Rotates through the selector positions.
     Selector,
+    /// An exposed hammer: tips back about its pin (the origin, local X)
+    /// when cocked.
+    Hammer,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -109,12 +112,32 @@ pub struct GunLayout {
     pub parts: Vec<Part>,
 }
 
+impl GunLayout {
+    /// The blockout's bounds, (low, high) corners in gun space.
+    pub fn bounds(&self) -> (Vec3, Vec3) {
+        self.parts.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), p| {
+                let half = match p.shape {
+                    Shape::Box(s) => s * 0.5,
+                    Shape::Cylinder(r, l) => Vec3::new(r, r, l * 0.5),
+                };
+                (
+                    lo.min(p.at.translation - half),
+                    hi.max(p.at.translation + half),
+                )
+            },
+        )
+    }
+}
+
 pub fn layout(id: &str) -> Option<GunLayout> {
     match id {
         "pm_pistol" => Some(pm()),
         "ak74" => Some(ak74()),
         "mosin" => Some(mosin()),
         "toz_double" => Some(toz()),
+        "sks" => Some(sks()),
         _ => None,
     }
 }
@@ -381,6 +404,78 @@ fn mosin() -> GunLayout {
     }
 }
 
+/// The SKS carbine (art/guns/sks.py): a semi-auto with a fixed ten-round
+/// magazine, loaded from clips through the open action at `load_port`.
+fn sks() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.048;
+    GunLayout {
+        grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
+        support: Some(Vec3::new(0.0, 0.01, -0.38)),
+        muzzle: Vec3::new(0.0, bore, -0.735),
+        // The open top of the receiver, between the rear sight and the cover.
+        port: Vec3::new(0.0, 0.068, -0.19),
+        eject: Vec3::new(0.6, 0.9, 0.1),
+        sight: at(0.0, 0.0875, -0.02),
+        magwell: None,
+        handle: Some(HandleLayout {
+            kind: HandleKind::ChargingHandle,
+            grab: Vec3::new(0.042, 0.054, -0.205),
+            travel: 0.1,
+        }),
+        load_port: Vec3::new(0.0, 0.075, -0.2),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // One-piece stock: forend, wrist and butt.
+            part(bx(0.036, 0.04, 0.5), at(0.0, 0.01, -0.3), Wood, Static),
+            part(bx(0.034, 0.05, 0.12), at(0.0, -0.002, 0.0), Wood, Static),
+            part(
+                bx(0.04, 0.115, 0.26),
+                Transform::from_xyz(0.0, -0.04, 0.17).with_rotation(Quat::from_rotation_x(0.1)),
+                Wood,
+                Static,
+            ),
+            // Receiver and its cover, the fixed magazine box under it.
+            part(
+                bx(0.031, 0.043, 0.235),
+                at(0.0, 0.04, -0.137),
+                Blued,
+                Static,
+            ),
+            part(bx(0.029, 0.034, 0.13), at(0.0, -0.03, -0.15), Blued, Static),
+            part(
+                bx(0.005, 0.022, 0.006),
+                at(0.0, -0.022, -0.05),
+                Black,
+                Trigger,
+            ),
+            // Barrel, handguard over the gas tube, front sight.
+            part(
+                Shape::Cylinder(0.011, 0.48),
+                at(0.0, bore, -0.5),
+                Blued,
+                Static,
+            ),
+            part(bx(0.029, 0.024, 0.2), at(0.0, 0.072, -0.37), Wood, Static),
+            part(bx(0.018, 0.035, 0.02), at(0.0, 0.07, -0.72), Blued, Static),
+            // Bolt carrier and the charging handle on the right.
+            part(
+                bx(0.017, 0.022, 0.11),
+                at(0.0, 0.054, -0.19),
+                Steel,
+                WithBolt,
+            ),
+            part(
+                bx(0.035, 0.012, 0.012),
+                at(0.03, 0.054, -0.205),
+                Steel,
+                WithBolt,
+            ),
+        ],
+    }
+}
+
 fn toz() -> GunLayout {
     use Mat::*;
     use Moves::*;
@@ -462,7 +557,7 @@ mod tests {
 
     #[test]
     fn muzzles_are_ahead_of_grips() {
-        for id in ["pm_pistol", "ak74", "mosin", "toz_double"] {
+        for id in ["pm_pistol", "ak74", "mosin", "toz_double", "sks"] {
             let l = layout(id).unwrap();
             assert!(l.muzzle.z < l.grip.translation.z - 0.1, "{id}");
             if let Some(s) = l.support {

@@ -390,9 +390,211 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
         "headframe" => [6.0, 19.6, 15.0],
-        "signal_box" => [6.0, 6.7, 3.8],
+        "signal_box" => [8.4, 6.9, 4.2],
         "steeple" => [4.4, 19.0, 4.4],
+        // A nave 10 x 14 with its steps at the west door, the bell tower
+        // off the east end.
+        "chapel" => [10.4, 19.0, 23.0],
+        // An underground site: its entrance kiosk and apron.
+        id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
+    }
+}
+
+/// An outside door or doorway of a prefab, in prefab space (x, z; -Z is
+/// the front): the middle of the opening on the wall's outer face, the
+/// way out, its width, and how far out from the face to keep clear (its
+/// steps, then room to stand). The game builds these into the prefab;
+/// `prefab_entrances` mirrors them, and a test in the game keeps the two
+/// the same.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Entrance {
+    pub at: [f32; 2],
+    pub out: [f32; 2],
+    pub width: f32,
+    pub clear: f32,
+}
+
+/// A prefab's outside doors and doorways (see [`Entrance`]). Kept in step
+/// with the game's recipes by `buildings::tests::entrances_match_the_map`;
+/// regenerate it from the recipes when they change.
+pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
+    match id {
+        "house_plank" => &[Entrance {
+            at: [0.0, -3.59],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.61,
+        }],
+        "farmhouse" => &[Entrance {
+            at: [0.0, -4.09],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.61,
+        }],
+        "house_brick" => &[Entrance {
+            at: [0.0, -4.09],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.61,
+        }],
+        "cabin_log" => &[Entrance {
+            at: [-1.5, -3.14],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.26,
+        }],
+        "shop" => &[
+            Entrance {
+                at: [0.0, -3.63],
+                out: [0.0, -1.0],
+                width: 0.95,
+                clear: 3.28,
+            },
+            Entrance {
+                at: [-3.0, 3.63],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 3.28,
+            },
+        ],
+        "shed" => &[Entrance {
+            at: [-1.0, -1.55],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.05,
+        }],
+        "barn" => &[
+            Entrance {
+                at: [0.0, -8.08],
+                out: [0.0, -1.0],
+                width: 4.0,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [6.08, -4.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [0.0, 8.08],
+                out: [0.0, 1.0],
+                width: 3.0,
+                clear: 1.0,
+            },
+        ],
+        "pump_station" => &[
+            Entrance {
+                at: [0.0, -5.15],
+                out: [0.0, -1.0],
+                width: 0.95,
+                clear: 3.25,
+            },
+            Entrance {
+                at: [-7.15, 0.0],
+                out: [-1.0, 0.0],
+                width: 0.95,
+                clear: 3.25,
+            },
+        ],
+        "bus_depot" => &[
+            Entrance {
+                at: [-6.0, -9.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [6.0, -9.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [10.5, 9.13],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 2.08,
+            },
+        ],
+        "rail_shed" => &[
+            Entrance {
+                at: [-4.0, -6.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [4.0, -6.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [7.0, 6.13],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 2.08,
+            },
+        ],
+        "mast_hut" => &[Entrance {
+            at: [-1.3, -2.13],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 2.98,
+        }],
+        "ranger_tower" => &[Entrance {
+            at: [2.04, 1.2],
+            out: [1.0, 0.0],
+            width: 0.95,
+            clear: 1.0,
+        }],
+        "guard_booth" => &[Entrance {
+            at: [0.0, -1.14],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.66,
+        }],
+        "boxcar" => &[Entrance {
+            at: [1.53, 0.0],
+            out: [1.0, 0.0],
+            width: 2.0,
+            clear: 1.0,
+        }],
+        "factory_hall" => &[
+            Entrance {
+                at: [-7.2, -10.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [7.2, -10.13],
+                out: [0.0, -1.0],
+                width: 5.0,
+                clear: 2.08,
+            },
+            Entrance {
+                at: [12.6, 10.13],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 2.08,
+            },
+        ],
+        "signal_box" => &[Entrance {
+            at: [-1.5, -1.95],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.25,
+        }],
+        "chapel" => &[Entrance {
+            at: [0.0, -7.18],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 3.53,
+        }],
+        _ => &[],
     }
 }
 
@@ -403,7 +605,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
 pub fn prefab_foundation(id: &str) -> f32 {
     match id {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
-        | "mast_hut" | "guard_booth" | "pump_station" => 1.5,
+        | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
         _ => 0.0,
     }

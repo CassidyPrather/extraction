@@ -183,10 +183,10 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 
 | Script | Output | Tris |
 | --- | --- | --- |
-| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 7.1k |
-| `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.6k |
+| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 10.8k |
+| `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.2k |
 | `art/guns/mosin.py` | `models/guns/mosin.glb` | 12.5k |
-| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 24.2k (checkering) |
+| `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 23.9k (checkering) |
 | `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 3.9k (with their visible rounds) |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
@@ -199,11 +199,13 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
-| `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench, chair, locker | 0.1k to 1.8k |
+| `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench, chair, locker, pew | 0.1k to 1.8k |
 | `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet, hay_bale | 0.3k to 2.9k |
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
-| `art/props/landmarks.py` | water_tower, headframe, signal_box, steeple (the prefabs of the same name) | 1.1k to 4.1k |
+| `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
+| `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
+| `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire (staged scenes) | 0.3k to 2.9k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
 | `art/kit/rig.py` | `models/kit/rig.glb` (harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
@@ -314,7 +316,10 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 
 - `prism`: a profile extruded along an axis. Its outline edges are
   rounded by `bevel` (a "rounded slab", built directly, because Blender's
-  bevel clamps to nothing on finely filleted outlines). A `width(a, b)`
+  bevel clamps to nothing on finely filleted outlines). A convex corner
+  rounded tighter than the bevel folds the side over itself (it z-fights
+  and spoils boolean cuts near it): `report` warns, `build.py` fails the
+  model, and `FOLD_DETAIL=1` lists the corners. A `width(a, b)`
   function can thicken it per point, for stocks and grips.
 - `lathe`, `cyl`, `tube`: revolved profiles about the bore. They take a
   partial `sweep` for panels.

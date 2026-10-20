@@ -1945,7 +1945,7 @@ mod onboarding {
         // Too close.
         vr.stand(ground(&vr, [heart[0] - r * 0.6, heart[1]]), 0.0);
         vr.step(10);
-        assert!(said(&vr, "Too close"), "warned");
+        assert!(said(&vr, "Back out. That shimmer burns"), "warned");
         // Back to the edge, facing in (+X).
         let feet = ground(&vr, [heart[0] - r - 0.8, heart[1]]);
         vr.stand(feet, -std::f32::consts::FRAC_PI_2);

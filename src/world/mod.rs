@@ -10,11 +10,14 @@ pub mod impostors;
 pub mod notes;
 pub mod rain;
 pub mod rocks;
+pub mod scenes;
 pub mod sky;
+pub mod story;
 pub mod structures;
 pub mod surfaces;
 pub mod terrain;
 pub mod trees;
+pub mod underground;
 pub mod water;
 pub mod weather;
 
@@ -127,7 +130,7 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(weather::WeatherPlugin)
+        app.add_plugins((weather::WeatherPlugin, scenes::ScenesPlugin))
             .add_systems(PreStartup, init_zone)
             .add_systems(Update, buildings::swing_doors)
             .add_systems(
@@ -170,10 +173,31 @@ fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
         .collect();
     let extent = (n - 1) as f32 * hm.cell;
     let centre = hm.origin + extent * 0.5;
+    // Cells opened over underground stairwells (`underground`) are left
+    // out. Parry's rows run along Z (see above): its cell (row, column) is
+    // the heightmap's (j, i).
+    let mut collider = Collider::heightfield(heights, Vec3::new(extent, 1.0, extent));
+    if hm.holes.iter().any(|h| *h) {
+        let mut shape = collider.shape().clone();
+        if let Some(hf) = shape.make_mut().as_heightfield_mut() {
+            for j in 0..n - 1 {
+                for i in 0..n - 1 {
+                    if hm.holes[hm.idx(i, j)] {
+                        hf.set_cell_status(
+                            j,
+                            i,
+                            avian3d::parry::shape::HeightFieldCellStatus::CELL_REMOVED,
+                        );
+                    }
+                }
+            }
+        }
+        collider = Collider::from(shape);
+    }
     commands.spawn((
         Name::new("Terrain collider"),
         RigidBody::Static,
-        Collider::heightfield(heights, Vec3::new(extent, 1.0, extent)),
+        collider,
         CollisionLayers::new(Layer::World, LayerMask::ALL),
         Friction::new(0.8),
         Transform::from_xyz(centre, 0.0, centre),
@@ -194,6 +218,7 @@ impl Plugin for WorldVisualsPlugin {
             notes::NotesPlugin,
             rocks::RockVisualsPlugin,
             cover::CoverPlugin,
+            underground::UndergroundVisualsPlugin,
         ));
     }
 }

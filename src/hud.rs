@@ -95,11 +95,10 @@ fn describe(
             Some(extraction_core::firearm::Round::Spent) => "spent case",
             None => "empty chamber",
         };
-        let jam = if f.malfunction.is_some() {
-            " JAMMED"
-        } else {
-            ""
-        };
+        let jam = f
+            .malfunction
+            .map(|m| format!(" JAMMED: {}", m.remedy()))
+            .unwrap_or_default();
         return format!(
             "{} [{} | {} in feed | {}{} | cond {:.0}% fouling {:.0}%]",
             def.name,
@@ -239,4 +238,4 @@ fn update_hud(
     text.0 = lines.join("\n");
 }
 
-const KEYS: &str = "WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | C combine | U use (radio, bandage) | E on the bell pull to leave | H check yourself";
+const KEYS: &str = "WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | T combine | C crouch | U use (radio, bandage) | E on the bell pull to leave | H check yourself";

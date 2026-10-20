@@ -22,6 +22,7 @@ pub mod onboarding;
 mod perf;
 pub mod persist;
 pub mod player;
+pub mod progression;
 pub mod qa;
 pub mod raid;
 pub mod render;
@@ -69,6 +70,7 @@ impl Plugin for GamePlugin {
                 anomaly::AnomalyPlugin,
                 gadgets::GadgetsPlugin,
                 onboarding::OnboardingPlugin,
+                progression::ProgressionPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));

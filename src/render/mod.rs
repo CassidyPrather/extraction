@@ -14,6 +14,7 @@ pub mod props;
 pub mod screen;
 pub mod stats;
 pub mod terrain_material;
+pub mod upgrades;
 pub mod water_material;
 pub mod world_props;
 
@@ -43,6 +44,7 @@ impl Plugin for RenderPlugin {
             stats::RenderStatsPlugin,
             world_props::WorldPropsPlugin,
             kit::KitVisualsPlugin,
+            upgrades::UpgradeVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
@@ -80,7 +82,10 @@ fn attach_flat_camera(
     if let Some((pos, yaw, pitch)) = opts.camera {
         let ground = zone.ground(pos.x, pos.z);
         // A height of 0 (or less) means standing there, eyes 1.7 m up.
-        let y = if pos.y <= 0.0 {
+        // Underground (in a site's rooms or on its stairs), as given.
+        let y = if crate::world::underground::floor_under(&zone, pos).is_some() {
+            pos.y
+        } else if pos.y <= 0.0 {
             ground + 1.7
         } else {
             pos.y.max(ground + 0.3)

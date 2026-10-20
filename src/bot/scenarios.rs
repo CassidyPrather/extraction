@@ -24,6 +24,7 @@ pub const NAMES: &[&str] = &[
     "pistol_drill",
     "rifle_drill",
     "bolt_drill",
+    "carbine_drill",
     "shotgun_drill",
     "pack_mule",
     "drone_duel",
@@ -124,6 +125,29 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Fire { at: t1, shots: 1 },
             Expect(super::Expect::GunRounds(3, 3)),
             Expect(super::Expect::Hits(1)),
+            Stow(Side::Right),
+        ],
+        "carbine_drill" => vec![
+            Log(s(
+                "carbine drill: load an SKS's fixed magazine, shoot it dry, it locks back",
+            )),
+            PickUp {
+                id: s("sks"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_762x39"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(10, 10)),
+            Gun(MacroKind::Mode),
+            Fire { at: t1, shots: 10 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(5)),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(10, 10)),
             Stow(Side::Right),
         ],
         "shotgun_drill" => vec![

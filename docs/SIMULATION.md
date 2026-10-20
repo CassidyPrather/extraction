@@ -144,6 +144,9 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
 | `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
+| `crouch` | `secs` | Stood up after crouching (creeping) near robots for `secs` (see `docs/MAP_DESIGN.md`, "How the bots move"). |
+| `freeze` | `secs`, `x`, `z` | Froze, crouched and still, while a robot searched close by. |
+| `distract` | `x`, `z`, `walker_dist` | Threw junk past a calm walker to send it looking the other way. |
 | `cover` | `why` (`hurt`), `dist`, `hp` | Hurt and still being hit: broke off the fight into cover `dist` m away (the fight ends `took_cover`). |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |

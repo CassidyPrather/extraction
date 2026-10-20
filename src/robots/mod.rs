@@ -19,6 +19,7 @@ pub mod drone;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod indoor;
 #[cfg(test)]
 mod mind_tests;
 pub mod pylon;
@@ -223,6 +224,7 @@ impl Plugin for RobotsPlugin {
         app.add_message::<PartDestroyed>()
             .add_message::<Noticed>()
             .add_message::<Noise>()
+            .init_resource::<senses::Lighting>()
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,
@@ -236,6 +238,7 @@ impl Plugin for RobotsPlugin {
                 flight::FlightPlugin,
                 wreck::WreckPlugin,
                 search::SearchPlugin,
+                indoor::IndoorPlugin,
             ))
             .add_systems(
                 FixedUpdate,

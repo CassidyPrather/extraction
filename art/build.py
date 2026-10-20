@@ -40,8 +40,12 @@ def main():
         res = subprocess.run([BLENDER, "-b", "--factory-startup", "--python-exit-code", "1",
                               "--python", path], capture_output=True, text=True)
         out = res.stdout + res.stderr
-        lines = [ln for ln in out.splitlines() if "tris" in ln or ln.startswith("wrote")]
-        ok = res.returncode == 0 and any(ln.startswith("wrote") for ln in lines)
+        lines = [ln for ln in out.splitlines()
+                 if "tris" in ln or ln.startswith("wrote") or "  WARNING " in ln]
+        # A bevelled outline folding over itself (see `_check_fold`) fails
+        # the build: the folded side z-fights and spoils cuts near it.
+        ok = (res.returncode == 0 and any(ln.startswith("wrote") for ln in lines)
+              and not any("  WARNING " in ln for ln in lines))
         print(f"{'ok ' if ok else 'FAIL'} {name} ({time.time() - t:.1f} s)")
         for ln in lines:
             print("    " + ln.strip())

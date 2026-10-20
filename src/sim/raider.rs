@@ -76,6 +76,12 @@ pub struct Traits {
     /// How likely it is to get out of sight when a drone chirps its
     /// lock-on (`robots::drone::DroneLock`).
     pub duck: f32,
+    /// Crouches (and so creeps) within this of a robot it can see that
+    /// isn't fighting it (0: never). See [`sneak`].
+    pub sneak_range: f32,
+    /// Throws junk past a walker at its post to send it looking the other
+    /// way.
+    pub distract: bool,
 }
 
 impl Traits {
@@ -98,6 +104,8 @@ impl Traits {
             max_kg: 26.0,
             heat: 1.6,
             duck: 0.75,
+            sneak_range: 35.0,
+            distract: true,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -126,6 +134,8 @@ impl Traits {
                 max_kg: 18.0,
                 heat: 1.0,
                 duck: 0.9,
+                sneak_range: 45.0,
+                distract: true,
                 ..base
             },
             "reckless" => Traits {
@@ -142,6 +152,8 @@ impl Traits {
                 max_kg: 34.0,
                 heat: f32::INFINITY,
                 duck: 0.3,
+                sneak_range: 0.0,
+                distract: false,
                 ..base
             },
             _ => base,
@@ -283,6 +295,11 @@ pub struct Raider {
     kg: f32,
     /// Attention from the artifacts it carries.
     heat: f32,
+    /// Crouched since (raid seconds), when it is.
+    crouched_since: Option<f32>,
+    /// When it last froze for a searching robot, or threw a distraction.
+    froze_at: f32,
+    distracted_at: f32,
 }
 
 impl Raider {
@@ -440,6 +457,9 @@ pub fn attach_raider(
                 hp: 100.0,
                 kg: 0.0,
                 heat: 0.0,
+                crouched_since: None,
+                froze_at: -99.0,
+                distracted_at: -99.0,
             },
         ));
     }
@@ -667,6 +687,7 @@ pub fn think(
             &Health,
             &crate::player::Body,
             &Children,
+            &mut crate::rig::RigInput,
         ),
         With<LocalPlayer>,
     >,
@@ -676,7 +697,7 @@ pub fn think(
 ) {
     let dt = scene.time.delta_secs();
     let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
-    for (me, mut bot, mut r, tf, health, body, children) in &mut bots {
+    for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
         if r.stage == Stage::Done || health.down {
             continue;
@@ -730,6 +751,7 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
+            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1076,6 +1098,122 @@ fn react_to_robots(
     bot.replace(tasks);
 }
 
+/// Moving like a careful player near robots (`robots::senses`: crouched
+/// is harder to see, crouched footsteps carry a third as far, and crouching
+/// slows the body to a creep):
+/// - **crouch** within `sneak_range` of a robot it can see that isn't
+///   fighting it, or near where a robot is looking for someone;
+/// - **freeze** a few seconds, crouched and still, when a robot that's
+///   onto something is investigating or searching close by;
+/// - **distract** (all but the reckless): throw junk past and to one side
+///   of a walker within 20 m that hasn't noticed it, so it walks off to look
+///   there.
+///
+/// Never in a fight, never with the truck waiting, never hurrying home hurt.
+fn sneak(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+    input: &mut crate::rig::RigInput,
+) {
+    let hurrying = bot.sprint
+        || r.combat.is_some()
+        || r.act == Act::Board
+        || matches!(scene.raid.phase, Phase::TruckWaiting { .. })
+        || (r.stage == Stage::Extract && r.hp < 50.0);
+    let mut wary = false;
+    let mut freeze = false;
+    let mut calm_walker: Option<Vec3> = None;
+    if r.traits.sneak_range > 0.0 && !hurrying {
+        for (_, robot, gt, aware, brain, job) in &scene.robots {
+            if robot.wrecked || job.kind == JobKind::Collect {
+                continue;
+            }
+            let at = gt.translation();
+            let d = at.distance(eye);
+            let hunting = match brain {
+                Brain::Investigate { at: look, .. } | Brain::Search { at: look, .. } => Some(*look),
+                _ => None,
+            };
+            let near_look = hunting.is_some_and(|l| l.xz().distance(eye.xz()) < 25.0);
+            if matches!(brain, Brain::Engage) && aware.target == Some(me) {
+                continue;
+            }
+            if d > r.traits.sneak_range && !near_look {
+                continue;
+            }
+            let seen = scene.visible(eye, at);
+            wary |= seen || near_look;
+            if seen && d < 30.0 && hunting.is_some() && aware.suspicion < 0.55 {
+                freeze = true;
+            }
+            if seen
+                && d < 20.0
+                && robot.kind == crate::robots::RobotKind::Walker
+                && matches!(brain, Brain::Working { .. } | Brain::Transit { .. })
+                && aware.suspicion < 0.3
+            {
+                calm_walker = Some(at);
+            }
+        }
+    }
+    if wary != input.crouch {
+        input.crouch = wary;
+        if wary {
+            r.crouched_since = Some(r.clock);
+        } else if let Some(t) = r.crouched_since.take() {
+            log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
+        }
+    }
+    if freeze && r.clock - r.froze_at > 10.0 {
+        r.froze_at = r.clock;
+        let secs = r.rng.range(2.0, 4.0);
+        log.event(
+            "freeze",
+            json!({"secs": round(secs, 1), "x": round(eye.x, 1), "z": round(eye.z, 1)}),
+        );
+        r.interrupted = true;
+        bot.replace([Task::Wait(secs)]);
+        return;
+    }
+    if let Some(w) = calm_walker.filter(|_| r.traits.distract && r.clock - r.distracted_at > 60.0) {
+        let Some(item) = junk(r, scene) else {
+            return;
+        };
+        // A thrown bolt carries 15 m or so: past it if it's close, else off
+        // to one side of it, whichever side there's ground to land on.
+        let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
+        let reach = (w.xz().distance(eye.xz()) + 6.0).min(15.0);
+        let Some(to) = [0.45f32, -0.45]
+            .into_iter()
+            .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * reach)
+            .find(|p| r.grid.walkable([p.x, p.y]))
+        else {
+            return;
+        };
+        r.distracted_at = r.clock;
+        log.event(
+            "distract",
+            json!({"x": round(to.x, 1), "z": round(to.y, 1), "walker_dist": round(w.distance(eye), 0)}),
+        );
+        r.interrupted = true;
+        bot.replace([
+            Task::Grab {
+                item,
+                side: Side::Left,
+            },
+            Task::Throw {
+                side: Side::Left,
+                at: scene.zone.on_ground(to.x, to.y),
+            },
+            Task::Wait(2.0),
+        ]);
+    }
+}
+
 /// A drone chirped its lock on this bot: get somewhere it can't see, if
 /// there's somewhere close (a player hears it and steps behind a tree).
 fn duck(
@@ -1394,9 +1532,20 @@ pub fn indoor_route(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> O
     indoor(plan, from, to, within)
 }
 
+/// To something to take: stand where it can be reached.
 fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
+    indoor_to(plan, from, goal, within)
+}
+
+/// Out of the building: to the floor nearest the way out.
+fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let goal = stand_near(plan, plan.to_local(from).xz(), to)?;
+    indoor_to(plan, from, goal, within)
+}
+
+fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
-    let goal = reach_cell(plan, a, to)?;
     let path = plan.path(a, goal)?;
     let mut tasks = Vec::new();
     let mut last = a;
@@ -1467,7 +1616,10 @@ fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
 
 /// The walkable cell nearest a goal among those reachable from `from`
 /// (the nearest walkable cell might be through a wall).
-pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+/// The floor cell nearest `goal` that a bot can walk to from `from`, on
+/// the same side of the walls as `goal` when it's indoors: somewhere to
+/// stand, not something to reach (that's [`reach_cell`]).
+pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
     let g = &plan.grid;
     let start = if g.walkable(from.to_array()) {
         from
@@ -1481,7 +1633,6 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
-    // Reach for indoor things from indoors, not through the wall.
     let indoors = plan.indoors(goal);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
@@ -1503,6 +1654,85 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     }
     best.filter(|b| b.0 < 2.0).map(|b| b.1)
 }
+
+pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+    let g = &plan.grid;
+    let start = if g.walkable(from.to_array()) {
+        from
+    } else {
+        near_walkable_same_side(plan, from)
+            .or_else(|| g.nearest_walkable(from.to_array()).map(Vec2::from_array))?
+    };
+    let (si, sj) = g.cell_of(start.to_array())?;
+    let n = g.n;
+    let mut seen = vec![false; n * n];
+    let mut stack = vec![(si, sj)];
+    seen[sj * n + si] = true;
+    let mut best: Option<(f32, Vec2)> = None;
+    let solid = has_no_floor(plan);
+    while let Some((i, j)) = stack.pop() {
+        let c = Vec2::from_array(g.centre(i, j));
+        let d = c.distance(goal);
+        let reach = reaches_with(plan, solid, c, goal);
+        if best.is_none_or(|b| d < b.0) && reach {
+            best = Some((d, c));
+        }
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (ni, nj) = (i as i64 + di, j as i64 + dj);
+            if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                continue;
+            }
+            let k = nj as usize * n + ni as usize;
+            if !seen[k] && g.cost[k] != extraction_core::nav::BLOCKED {
+                seen[k] = true;
+                stack.push((ni as usize, nj as usize));
+            }
+        }
+    }
+    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+}
+
+/// Whether a bot standing at `from` (building-local) can reach `goal`:
+/// along a clear line, not through a wall or a window, nor round one (a
+/// barn's open gaps join its floor to the outside, so "which side" isn't
+/// the test, the line is). Something with no floor of its own on the grid
+/// (a wagon, its bed at chest height) is reached into from beside it.
+#[cfg(test)]
+pub(crate) fn reaches(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> bool {
+    reaches_with(plan, has_no_floor(plan), from, goal)
+}
+
+fn reaches_with(plan: &BuildingPlan, solid: bool, from: Vec2, goal: Vec2) -> bool {
+    if solid {
+        from.distance(goal) <= SOLID_REACH
+    } else {
+        clear_reach(&plan.grid, from, goal)
+    }
+}
+
+fn has_no_floor(plan: &BuildingPlan) -> bool {
+    let g = &plan.grid;
+    !(0..g.n * g.n).any(|k| {
+        let c = Vec2::from_array(g.centre(k % g.n, k / g.n));
+        g.cost[k] != extraction_core::nav::BLOCKED
+            && c.x.abs() < plan.half.x
+            && c.y.abs() < plan.half.y
+    })
+}
+
+/// Whether a hand can go from standing at `from` to `goal` in a straight
+/// line over open floor: everything between walkable but the last
+/// [`SHELF`] metres, where the thing rests on its shelf or table.
+fn clear_reach(g: &extraction_core::nav::NavGrid, from: Vec2, goal: Vec2) -> bool {
+    let d = from.distance(goal);
+    let n = ((d - SHELF).max(0.0) / 0.1).ceil() as usize;
+    (0..=n).all(|k| g.walkable(from.lerp(goal, (k as f32 * 0.1 / d).min(1.0)).to_array()))
+}
+
+/// How deep a shelf, table or crate may be between a bot and what's on it.
+const SHELF: f32 = 1.1;
+/// How far into something with no floor of its own (a wagon) a bot reaches.
+const SOLID_REACH: f32 = 1.4;
 
 /// The next thing to do while raiding.
 fn raid_step(
@@ -1615,7 +1845,7 @@ fn raid_step(
                                     .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
                                     .copied()
                                     .unwrap();
-                                if let Some(t) = indoor(plan, pos, exit, 0.6) {
+                                if let Some(t) = indoor_out(plan, pos, exit, 0.6) {
                                     return t;
                                 }
                             }
@@ -1784,7 +2014,7 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
         })
         .min_by(|a, b| a.0.total_cmp(&b.0))?
         .1;
-    indoor(plan, pos, exit, 0.6)
+    indoor_out(plan, pos, exit, 0.6)
 }
 
 fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {

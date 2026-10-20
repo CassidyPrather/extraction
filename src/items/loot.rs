@@ -64,6 +64,7 @@ pub fn roll_zone_loot(world: &mut World) {
         let mut commands =
             Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
         spawn_marker_loot(&mut commands, zone, loot, catalog, seed);
+        crate::world::scenes::spawn_things(&mut commands, &opts.map, zone, catalog);
         if let Some(spots) = spots {
             spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
         }
@@ -243,6 +244,10 @@ fn spawn_dev_cache(
         ("compass", 0),
         ("map_case", 0),
         ("binoculars", 0),
+        // (Last, so nothing above moves.)
+        ("sks", 0),
+        ("ammo_762x39", 20),
+        ("sks_clip", 10),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {

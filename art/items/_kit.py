@@ -12,6 +12,7 @@ import bmesh
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import common  # noqa: E402
 from common import RX, RY, RZ, T, export, fillet, make, report, reset  # noqa: E402
 
 UP = RX(-math.pi / 2)       # lathe/cyl axis (Z) -> +Y
@@ -34,6 +35,7 @@ def item(item_id, build):
         make(p)
     print(f"{item_id}:")
     report()
+    common.FOLDS.clear()
     export(f"assets/models/items/{item_id}.glb")
 
 
@@ -144,6 +146,12 @@ def ring(p, R, r, mat, xf=None, segs=20, sides=6):
 _O = [((0, 0), (2, 0)), ((2, 0), (2, 4)), ((2, 4), (0, 4)), ((0, 4), (0, 0))]
 GLYPHS = {
     "0": _O, "O": _O,
+    "Q": _O + [((1.1, 1.0), (2.3, -0.4))],
+    "S": [((2, 4), (0, 4)), ((0, 4), (0, 2.3)), ((0, 2.3), (2, 1.7)), ((2, 1.7), (2, 0)),
+          ((2, 0), (0, 0))],
+    "U": [((0, 4), (0, 0)), ((0, 0), (2, 0)), ((2, 0), (2, 4))],
+    "V": [((0, 4), (1, 0)), ((1, 0), (2, 4))],
+    "F": [((0, 0), (0, 4)), ((0, 4), (2, 4)), ((0, 2), (1.5, 2))],
     "1": [((1, 0), (1, 4)), ((1, 4), (0.3, 3.3))],
     "2": [((0, 4), (2, 4)), ((2, 4), (2, 2)), ((2, 2), (0, 2)), ((0, 2), (0, 0)), ((0, 0), (2, 0))],
     "3": [((0, 4), (2, 4)), ((2, 4), (2, 0)), ((2, 0), (0, 0)), ((0.6, 2), (2, 2))],

@@ -17,8 +17,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, ON_TOP, UP, blob, cube, item, ragged, text, tube_path, wanted
-from common import Part, RX, RY, RZ, T, S, fillet
+from _kit import (ALONG_X, ON_TOP, UP, blob, cube, item, ragged, text, transform, tube_path,
+                  wanted)
+from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 KEY_Y0, KEY_Y1 = -0.015, 0.008   # the cartridge body; marks stand on its top
 
@@ -317,6 +318,61 @@ def old_photo():
     return [card, skyp, fieldp, trees, figures]
 
 
+# --- Field recorder -------------------------------------------------------------------------
+
+def field_recorder():
+    # A surveyor's field data recorder: a rugged grey-green case on a
+    # rubber foot, a little LCD in a bezel and four rubber keys on top, a
+    # stub antenna at one back corner, a strap through lugs at one end,
+    # QA-SURVEY 07 stencilled on the front in white. Box 0.16 x 0.06 x
+    # 0.11 m, front (-Z) toward the reader.
+    X, Z = 0.08, 0.055
+    y0, y1 = -0.03, 0.022
+    p = Part("body")
+    plan = fillet([(-X, -Z), (X, -Z), (X, Z), (-X, Z)], 0.014, 4)
+    p.prism([(x * 0.985, z * 0.98) for x, z in plan], y0, y0 + 0.008, "Rubber", axis="y",
+            bevel=0.003, segs=2)
+    inner = fillet([(-X + 0.002, -Z + 0.002), (X - 0.002, -Z + 0.002), (X - 0.002, Z - 0.002),
+                    (-X + 0.002, Z - 0.002)], 0.012, 4)
+    p.prism(inner, y0 + 0.006, y1, "GreyGreen", axis="y", bevel=0.006, segs=3)
+    cut = Part("cut")
+    # The screen's well, and the stencil (painted: its floor is the paint).
+    cut.box((0.07, 0.01, 0.032), (-0.022, y1 + 0.002, -0.012), "GreyGreen")
+    stencil = Part("stencil")
+    FRONT_FACE = T(0.0, -0.004, -Z + 0.002 + 0.0006) @ RY(math.pi)
+    text(stencil, "QA-SURVEY 07", 0.0095, "Enamel", FRONT_FACE, depth=0.0012)
+    p.cut(cut)
+    p.cut(stencil, paint=True)
+    # The LCD: dark glass in a black bezel, sunk in its well.
+    lcd = Part("lcd")
+    lcd.box((0.066, 0.004, 0.028), (-0.022, y1 - 0.004, -0.012), "Black", bevel=0.001, segs=1)
+    # (3 mm proud of the bezel: closer, the two z-fight.)
+    lcd.box((0.056, 0.004, 0.02), (-0.022, y1 + 0.0, -0.012), "Lens")
+    # Four rubber keys in a row behind it, a red one last.
+    for k in range(4):
+        x = -0.045 + k * 0.019
+        p.box((0.014, 0.006, 0.012), (x, y1 + 0.001, 0.02), "Red" if k == 3 else "Rubber",
+              bevel=0.002, segs=2)
+    # Stub antenna: a rubber-sleeved whip at the back left corner.
+    p.cyl(0.006, y1 - 0.004, y1 + 0.006, "Black", segs=12, xf=T(-0.06, 0, 0.038) @ UP,
+          chamfer=0.001)
+    p.cyl(0.0035, y1 + 0.006, y1 + 0.017, "Rubber", segs=10, xf=T(-0.06, 0, 0.038) @ UP)
+    p.sphere(0.0042, (-0.06, y1 + 0.017, 0.038), "Rubber", segs=10, rings=5)
+    # Strap lugs on the right end, and the strap looped through them.
+    for z in (-0.03, 0.03):
+        p.box((0.008, 0.012, 0.008), (X + 0.002, y1 - 0.012, z), "Iron", bevel=0.002, segs=1)
+    p.sweep([(-0.032, y1 - 0.012), (-0.03, y1 + 0.004), (0.0, y1 + 0.012), (0.03, y1 + 0.004),
+             (0.032, y1 - 0.012)], section_rect(0.004, 0.0025, 0.0008), "Black",
+            xf=T(X + 0.006, 0, 0) @ RY(0.0))
+    # Screws in the corners of the lid.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            p.cyl(0.0025, y1 - 0.001, y1 + 0.0008, "Steel", segs=8,
+                  xf=T(sx * (X - 0.012), 0, sz * (Z - 0.012)) @ UP)
+    # The strap hangs off the right end: centre the whole in x.
+    return transform([p, lcd], T(-0.0046, 0.0, 0.0))
+
+
 # --- Chess knight -----------------------------------------------------------------------------
 
 def chess_piece():
@@ -349,6 +405,7 @@ def chess_piece():
 
 for item_id, fn in (("key_marrow", key_marrow), ("key_kettle", key_kettle),
                     ("key_cinder", key_cinder), ("wristwatch", wristwatch),
-                    ("old_photo", old_photo), ("chess_piece", chess_piece)):
+                    ("old_photo", old_photo), ("chess_piece", chess_piece),
+                    ("field_recorder", field_recorder)):
     if wanted(item_id):
         item(item_id, fn)

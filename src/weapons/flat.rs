@@ -2,7 +2,7 @@
 //!
 //! | Key | Does |
 //! | --- | --- |
-//! | V | Work the action: rack the slide / charging handle, cycle the bolt, break the shotgun |
+//! | V | Work the action: tap-rack the slide / charging handle (drop the magazine first on a double feed), cycle the bolt, break the shotgun |
 //! | R | Reload from what you carry: swap magazines, or thumb rounds in |
 //! | X | Selector / safety |
 //! | C | Combine the items in your two hands (load a magazine from a box, clean a gun...) |
@@ -11,7 +11,7 @@
 //! step with human-ish timing, so flat play exercises the real mechanics.
 
 use bevy::prelude::*;
-use extraction_core::firearm::ActionKind;
+use extraction_core::firearm::{ActionKind, Malfunction};
 use extraction_core::items::Category;
 use std::collections::VecDeque;
 
@@ -40,6 +40,8 @@ pub enum Step {
     SlideStop,
     LoadRound,
     Mode,
+    /// Slap the magazine home.
+    TapMag,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -79,12 +81,36 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             if action == ActionKind::BreakAction {
                 let open = gun.firearm.bolt_travel < 0.5;
                 steps.push((0.1, Step::Break(open)));
+            } else if gun.firearm.malfunction == Some(Malfunction::DoubleFeed) {
+                // Strip the magazine, rack the pair out, reload, rack.
+                steps.push((0.05, Step::DropMag));
+                steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.25, s)));
+                steps.push((0.5, Step::InsertBestMag));
+                steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.05, s)));
+            } else if action == ActionKind::SemiAuto {
+                // Tap-rack: harmless when nothing is wrong.
+                steps.push((0.05, Step::TapMag));
+                steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.1, s)));
             } else {
                 steps = rack_steps(action);
             }
         }
         MacroKind::Mode => steps.push((0.0, Step::Mode)),
         MacroKind::Reload => match action {
+            ActionKind::SemiAuto if gun.firearm.def.magazine_family.is_none() => {
+                // A fixed magazine (an SKS): hold the bolt open, thumb
+                // rounds in, let it run home.
+                steps.push((0.1, Step::Bolt(1.0)));
+                for _ in gun.firearm.internal_rounds..gun.firearm.def.internal_capacity {
+                    steps.push((0.3, Step::LoadRound));
+                }
+                let home = if gun.firearm.locked_back {
+                    Step::SlideStop
+                } else {
+                    Step::ReleaseBolt
+                };
+                steps.push((0.15, home));
+            }
             ActionKind::SemiAuto => {
                 steps.push((0.05, Step::DropMag));
                 steps.push((0.6, Step::InsertBestMag));
@@ -154,7 +180,7 @@ fn start_macros(
             }
         }
     }
-    if keys.just_pressed(KeyCode::KeyC) {
+    if keys.just_pressed(KeyCode::KeyT) {
         if let (Some(a), Some(b)) = (right, left) {
             combine.write(Combine { a, b });
         }
@@ -234,6 +260,7 @@ fn run_macros(
             Step::Break(open) => gun.firearm.set_break_open(open),
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),
+            Step::TapMag => gun.firearm.tap_magazine(),
             Step::DropMag => {
                 drop.write(DropMagazine { gun: e });
                 Vec::new()

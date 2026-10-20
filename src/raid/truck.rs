@@ -64,6 +64,8 @@ pub enum Pressable {
     Terminal,
     /// A card on the camp's board (`camp`).
     Camp,
+    /// The logbook: turn to the other page (`raid/logbook.rs`).
+    Logbook,
 }
 
 /// The stash crate in the truck bed.
@@ -223,7 +225,7 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
             owner: Entity::PLACEHOLDER,
             open: true,
             model: inventory::Backpack {
-                capacity: 400.0,
+                capacity: extraction_core::progression::STASH_BASE,
                 mass: 0.0,
             },
             contents: Vec::new(),
@@ -358,10 +360,12 @@ fn finish_raid(
     }
     raid.phase = Phase::AtBase;
     save.write(crate::persist::SaveNow);
+    // On the drive home the driver says a little more each time.
+    let home = super::lines::coming_home(raid.extractions, raid.recalled);
     raid.say(if died {
         "You wake in the back of the truck. Your kit is gone."
     } else {
-        "Home. Unload, sort, sleep."
+        home
     });
 }
 

@@ -332,7 +332,13 @@ fn a_search_takes_in_doorways_and_cover() {
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
     let door = e.doors.first().expect("a door");
     let at = door.mid + door.out * 6.0;
-    let spots = plan_search(at, 10.0, at + Vec3::X * 20.0, &nav, e);
+    let spots = plan_search(
+        at,
+        10.0,
+        at + Vec3::X * 20.0,
+        super::indoor::NavRef::Zone(&nav),
+        e,
+    );
     assert!(spots.len() >= 2, "{spots:?}");
     assert!(
         spots
@@ -340,4 +346,367 @@ fn a_search_takes_in_doorways_and_cover() {
             .any(|s| flat(*s - (door.mid + door.out * 1.8)) < 0.5),
         "the doorway: {spots:?}"
     );
+}
+
+/// A robot close by calling the others about you puts a line on the
+/// wrist, once: a second call straight after says nothing.
+#[test]
+fn a_call_about_you_close_by_is_said_once() {
+    let (mut app, player, _) = app(None);
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    let me = app
+        .world()
+        .get::<GlobalTransform>(player)
+        .unwrap()
+        .translation();
+    let lines = |app: &App| app.world().resource::<crate::raid::Raid>().log.len();
+    let before = lines(&app);
+    for robot in [
+        Entity::from_raw_u32(9001).unwrap(),
+        Entity::from_raw_u32(9002).unwrap(),
+    ] {
+        app.world_mut().write_message(super::search::CalledOut {
+            robot,
+            at: me + Vec3::X * 12.0,
+            heard: 2,
+            about: Some(player),
+        });
+        app.update();
+    }
+    assert_eq!(
+        lines(&app) - before,
+        1,
+        "{:?}",
+        app.world().resource::<crate::raid::Raid>().log
+    );
+}
+
+/// A 30 m square site on open ground at `centre`, its own grid blocked
+/// wherever `rock` says (site-local x/z).
+fn site(centre: Vec3, rock: impl Fn(Vec2) -> bool) -> super::indoor::LocalNav {
+    let (n, cell, origin) = (60, 0.5, -15.0);
+    let mut cost = vec![1u8; n * n];
+    for j in 0..n {
+        for i in 0..n {
+            let p = Vec2::new(
+                origin + (i as f32 + 0.5) * cell,
+                origin + (j as f32 + 0.5) * cell,
+            );
+            if rock(p) {
+                cost[j * n + i] = extraction_core::nav::BLOCKED;
+            }
+        }
+    }
+    super::indoor::LocalNav {
+        grid: std::sync::Arc::new(extraction_core::nav::NavGrid {
+            n,
+            cell,
+            origin,
+            cost,
+            lanes: Vec::new(),
+        }),
+        xf: Transform::from_translation(centre),
+        floors: None,
+    }
+}
+
+fn crawler_at(
+    app: &mut App,
+    zone: &Zone,
+    nav: super::indoor::LocalNav,
+    route: Vec<Vec3>,
+) -> Entity {
+    let at = route.first().copied().unwrap_or(nav.xf.translation);
+    let site = super::indoor::IndoorSite {
+        nav,
+        patrol: route.clone(),
+        spawn: at,
+        crawlers: 1,
+    };
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::indoor::spawn_crawler(&mut c, zone, &site, at, route)
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    e
+}
+
+/// A crawler walks its round on its site's own grid: round the end of a
+/// wall that only the site's grid knows about, there and back.
+#[test]
+fn a_crawler_patrols_on_its_sites_grid() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    // A wall across the middle, x -11..11; the way round is past its ends.
+    // The grid keeps a metre off it, as a site's plan keeps a body's width
+    // off the rock.
+    let wall = |p: Vec2| p.x.abs() < 11.0 && p.y.abs() < 1.0;
+    let nav = site(centre, |p| p.x.abs() < 12.0 && p.y.abs() < 2.0);
+    let a = zone.on_ground(centre.x - 4.0, centre.z - 6.0);
+    let b = zone.on_ground(centre.x - 4.0, centre.z + 6.0);
+    let crawler = crawler_at(&mut app, &zone, nav, vec![a, b]);
+    let (mut reached_b, mut back_at_a, mut crossed) = (false, false, false);
+    for _ in 0..90 * 90 {
+        app.update();
+        let p = app.world().get::<Transform>(crawler).unwrap().translation - centre;
+        crossed |= wall(Vec2::new(p.x, p.z));
+        if !reached_b {
+            reached_b = Vec2::new(p.x + 4.0, p.z - 6.0).length() < 1.5;
+        } else if Vec2::new(p.x + 4.0, p.z + 6.0).length() < 1.5 {
+            back_at_a = true;
+            break;
+        }
+    }
+    assert!(
+        reached_b && back_at_a,
+        "round and back ({reached_b}, {back_at_a})"
+    );
+    assert!(!crossed, "never through the wall");
+}
+
+/// In the dark, standing 12 m in front of a crawler, you're nothing; a
+/// torch on you, and it has you.
+#[test]
+fn in_the_dark_a_torch_gives_you_away() {
+    let (mut app, player, zone) = app(None);
+    let centre = zone.on_ground(100.0, 200.0);
+    app.world_mut()
+        .resource_mut::<super::senses::Lighting>()
+        .dark
+        .push((
+            Transform::from_translation(centre),
+            Vec3::new(15.0, 4.0, 15.0),
+        ));
+    let me = zone.on_ground(centre.x, centre.z - 12.0);
+    put(&mut app, player, me);
+    let crawler = crawler_at(&mut app, &zone, site(centre, |_| false), vec![]);
+    for _ in 0..90 * 6 {
+        app.update();
+        let aware = app.world().get::<Awareness>(crawler).unwrap();
+        assert!(
+            !aware.can_see_target && aware.suspicion < 0.2,
+            "in the dark: {aware:?}"
+        );
+    }
+    // A lit torch at the head, pointed at the crawler.
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let (torch, cell) = {
+        let mut c = Commands::new(&mut queue, app.world());
+        let mut spawn = |id: &str| {
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind(id).unwrap(),
+                    transform: Transform::from_translation(me + Vec3::Y * 1.5),
+                    condition: 1.0,
+                },
+            )
+        };
+        (spawn("flashlight"), spawn("power_cell"))
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let socket = app
+        .world_mut()
+        .query::<(Entity, &crate::interact::SocketOwner)>()
+        .iter(app.world())
+        .find(|(_, o)| o.0 == torch)
+        .map(|(e, _)| e)
+        .expect("the torch's cell socket");
+    {
+        let mut q =
+            bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
+                app.world_mut(),
+            );
+        let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
+        let mut s = sockets.get_mut(socket).unwrap();
+        crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+        q.apply(app.world_mut());
+    }
+    app.world_mut()
+        .entity_mut(torch)
+        .insert(avian3d::prelude::RigidBody::Kinematic);
+    app.world_mut().write_message(crate::items::usage::UseItem {
+        player: Entity::PLACEHOLDER,
+        item: torch,
+    });
+    let aim = Transform::from_translation(me + Vec3::Y * 1.5).looking_at(centre + Vec3::Y, Vec3::Y);
+    let mut seen = false;
+    for _ in 0..90 * 5 {
+        *app.world_mut().get_mut::<Transform>(torch).unwrap() = aim;
+        app.update();
+        seen |= app
+            .world()
+            .get::<Awareness>(crawler)
+            .unwrap()
+            .can_see_target;
+    }
+    assert!(
+        app.world().get::<crate::gadgets::Powered>(torch).is_some(),
+        "the torch is on"
+    );
+    assert!(seen, "the torch gave you away");
+}
+
+/// Underground, sound goes round corners: a crawler hears a noise behind
+/// a pillar by the walk round it; a walker on the open grid, the same
+/// distance off, hears it through the pillar as faint as through a wall.
+#[test]
+fn a_crawler_hears_round_a_corner() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    let pillar = |p: Vec2| p.x.abs() < 2.0 && p.y.abs() < 2.0;
+    app.world_mut().spawn((
+        avian3d::prelude::RigidBody::Static,
+        avian3d::prelude::Collider::cuboid(4.0, 6.0, 4.0),
+        avian3d::prelude::CollisionLayers::new(
+            crate::world::Layer::World,
+            avian3d::prelude::LayerMask::ALL,
+        ),
+        Transform::from_translation(centre + Vec3::Y * 2.0),
+    ));
+    let at = zone.on_ground(centre.x + 3.2, centre.z);
+    let crawler = crawler_at(&mut app, &zone, site(centre, pillar), vec![at]);
+    let walker = walker_at(&mut app, &zone, zone.on_ground(centre.x, centre.z + 3.2));
+    // The walker's twin of the noise: as far off, behind the same pillar.
+    for _ in 0..10 {
+        app.update();
+    }
+    let noise = |at: Vec3| super::Noise {
+        at,
+        radius: 7.0,
+        source: None,
+    };
+    let ear = app.world().get::<Transform>(walker).unwrap().translation;
+    app.world_mut()
+        .write_message(noise(zone.on_ground(centre.x - 3.2, centre.z)));
+    app.world_mut().write_message(noise(
+        zone.on_ground(centre.x, centre.z - 3.2 - (ear.z - centre.z - 3.2)),
+    ));
+    app.update();
+    app.update();
+    let heard = |e: Entity, app: &App| app.world().get::<Awareness>(e).unwrap().suspicion;
+    assert!(
+        heard(crawler, &app) > 0.1,
+        "round the corner: {}",
+        heard(crawler, &app)
+    );
+    assert!(
+        heard(walker, &app) < 0.05,
+        "through the pillar: {}",
+        heard(walker, &app)
+    );
+}
+
+/// A walker with a leg shot off doesn't give chase: told where you were,
+/// it stays put and looks; a sound one goes there.
+#[test]
+fn a_lame_walker_does_not_chase() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let sound = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+    let lame = walker_at(&mut app, &zone, zone.on_ground(130.0, 200.0));
+    let leg = app
+        .world_mut()
+        .query::<(Entity, &super::RobotPart)>()
+        .iter(app.world())
+        .find(|(_, p)| p.robot == lame && p.role == super::PartRole::Leg(0))
+        .map(|(e, _)| e)
+        .unwrap();
+    app.world_mut().get_mut::<super::RobotPart>(leg).unwrap().hp = 0.0;
+    app.world_mut().write_message(super::PartDestroyed {
+        robot: lame,
+        part: leg,
+        role: super::PartRole::Leg(0),
+        at: Vec3::ZERO,
+    });
+    for _ in 0..30 {
+        app.update();
+    }
+    assert!(
+        app.world().get::<super::anim::Gait>(lame).unwrap().limp > super::walker::LAME,
+        "three legs is lame"
+    );
+    let start = |e: Entity, app: &App| app.world().get::<Transform>(e).unwrap().translation;
+    let (s0, l0) = (start(sound, &app), start(lame, &app));
+    for _ in 0..90 * 3 {
+        for (e, at) in [(sound, s0), (lame, l0)] {
+            *app.world_mut().get_mut::<Brain>(e).unwrap() = Brain::Engage;
+            let mut a = app.world_mut().get_mut::<Awareness>(e).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(zone.on_ground(at.x, at.z - 25.0));
+            a.suspicion = 1.0;
+            a.unseen = 1.0;
+        }
+        app.update();
+    }
+    let moved = |e: Entity, from: Vec3, app: &App| flat(start(e, app) - from);
+    assert!(
+        moved(sound, s0, &app) > 2.0,
+        "the sound one chased: {}",
+        moved(sound, s0, &app)
+    );
+    assert!(
+        moved(lame, l0, &app) < 0.8,
+        "the lame one held: {}",
+        moved(lame, l0, &app)
+    );
+}
+
+/// A drone searching comes down to a doorway on its round and hangs
+/// outside it, low, looking in.
+#[test]
+fn a_searching_drone_looks_in_at_a_doorway() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let door = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .first()
+        .expect("a door");
+    let start = door.mid + door.out * 25.0 + Vec3::Y * 10.0;
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            start,
+            Job {
+                kind: JobKind::Survey,
+                site: start,
+                duration: 999.0,
+                exit: start,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let stand = door.mid + door.out * 1.8;
+    let mut best = f32::MAX;
+    for _ in 0..90 * 20 {
+        if let Brain::Search { .. } = app.world().get::<Brain>(drone).unwrap() {
+        } else {
+            *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Search {
+                at: door.mid + door.out * 6.0,
+                left: 60.0,
+                spots: vec![stand],
+                dwell: 0.0,
+            };
+        }
+        app.update();
+        let p = app.world().get::<Transform>(drone).unwrap().translation;
+        let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
+        let low = p.y - zone.ground(p.x, p.z) < 4.0;
+        if low {
+            best = best.min(flat(p - hover));
+        }
+    }
+    assert!(best < 2.5, "hung low outside the doorway ({best:.1} m off)");
 }

@@ -74,6 +74,9 @@ pub struct Geo {
     /// Warm interior lamps (rare; most of the Zone is dark).
     pub lights: Vec<Vec3>,
     pub props: Vec<PropDef>,
+    /// Outside doors and doorways: what must be kept clear in front of
+    /// them (mirrored in `map::prefab_entrances` for the map lint).
+    pub entrances: Vec<extraction_core::map::Entrance>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -377,7 +380,18 @@ impl Builder {
                 Mat::Concrete
             };
             for o in ops.iter().filter(|o| o.kind != OpeningKind::Window) {
-                self.door_steps(a, dir, rot, o.centre, o.width, y0, steps);
+                let reach = self.door_steps(a, dir, rot, o.centre, o.width, y0, steps);
+                // From the wall's face: its steps, then a metre to stand in.
+                let out = rot * Vec3::NEG_Z;
+                let c = a + dir * o.centre;
+                let face = Vec2::new(c.x + out.x * thick * 0.5, c.y + out.z * thick * 0.5);
+                let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+                self.geo.entrances.push(extraction_core::map::Entrance {
+                    at: [r(face.x), r(face.y)],
+                    out: [r(out.x), r(out.z)],
+                    width: r(o.width),
+                    clear: r((reach - thick * 0.5).max(0.0) + 1.0),
+                });
             }
         }
         self
@@ -567,13 +581,23 @@ impl Builder {
     /// than the one above by a tread either side: it's climbed one riser
     /// at a time from in front or from either side (from beside a flight
     /// of equal steps, the ground is a whole flight lower).
+    /// Returns how far the flight reaches out from the wall's centre line.
     #[allow(clippy::too_many_arguments)]
-    fn door_steps(&mut self, a: Vec2, dir: Vec2, rot: Quat, s: f32, width: f32, y0: f32, mat: Mat) {
+    fn door_steps(
+        &mut self,
+        a: Vec2,
+        dir: Vec2,
+        rot: Quat,
+        s: f32,
+        width: f32,
+        y0: f32,
+        mat: Mat,
+    ) -> f32 {
         // Not up a tower (a cabin's door opens onto its own landing), nor
         // where the floor is as good as the ground.
         let low = y0 + self.drop;
         if y0 > 1.0 || low < 0.12 {
-            return;
+            return 0.0;
         }
         // Risers of 0.17 down from the floor, until one is at or below
         // the lowest the ground can be.
@@ -595,6 +619,7 @@ impl Builder {
                 true,
             );
         }
+        n as f32 * tread
     }
 
     /// A pitched roof along Z (ridge runs front to back).
@@ -955,6 +980,28 @@ impl Builder {
         )
     }
 
+    /// A chapel bench 2.4 long, facing -Z (its back at +Z).
+    pub fn pew(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(2.4, 0.45, 0.4)),
+            Transform::from_translation(at + Vec3::Y * 0.225).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.piece(
+            Shape::Box(Vec3::new(2.4, 0.5, 0.05)),
+            Transform::from_translation(at + rot * Vec3::new(0.0, 0.72, 0.19)).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("pew", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
     /// A steel locker, its door on -Z.
     pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
         let from = self.geo.pieces.len();
@@ -1013,7 +1060,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 27] = [
+pub const PREFABS: [&str; 28] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1041,9 +1088,13 @@ pub const PREFABS: [&str; 27] = [
     "headframe",
     "signal_box",
     "steeple",
+    "chapel",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
+    if let Some(g) = super::underground::geo(id) {
+        return Some(g);
+    }
     let mut b = Builder {
         drop: extraction_core::map::prefab_lift(id),
         ..Default::default()
@@ -1101,7 +1152,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "headframe" => headframe(&mut b),
         "signal_box" => signal_box(&mut b),
         "steeple" => steeple(&mut b),
+        "chapel" => chapel(&mut b),
         "target" => target(&mut b),
+        id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
     }
     Some(b.finish())
@@ -1925,46 +1978,147 @@ fn headframe(b: &mut Builder) {
     b.dress_structure(from, vec![("headframe", Transform::IDENTITY)]);
 }
 
-/// A railway signal box: brick below, a glazed cab up its outside stair.
+/// A railway signal box: an enterable brick ground floor (its lever frame,
+/// a desk), the glazed cab above it up an outside stair.
 fn signal_box(b: &mut Builder) {
+    let (w, d, f, h) = (6.0, 3.6, 0.3, 2.7);
+    b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        0.3,
+        Mat::Brick,
+        [
+            &[door(1.5), window(4.3)],
+            &[],
+            &[window(1.5), window(4.5)],
+            &[window(1.8)],
+        ],
+    );
+    // The cab (drawn by its model, `art/props/landmarks.py`) on a slab
+    // over the brick, its roof, and its stair as a ramp up the +X end.
     let from = b.geo.pieces.len();
     b.bx(
-        Vec3::new(4.0, 3.0, 3.0),
-        Vec3::new(0.0, 1.5, 0.0),
-        Mat::Brick,
-    );
-    b.bx(
-        Vec3::new(4.3, 0.15, 3.3),
-        Vec3::new(0.0, 3.075, 0.0),
+        Vec3::new(w + 0.6, 0.15, d + 0.6),
+        Vec3::new(0.0, f + h + 0.075, 0.0),
         Mat::Concrete,
     );
+    let floor = f + h + 0.15;
     b.bx(
-        Vec3::new(3.9, 2.25, 2.9),
-        Vec3::new(0.0, 4.275, 0.0),
+        Vec3::new(w, 2.25, d),
+        Vec3::new(0.0, floor + 1.125, 0.0),
         Mat::Planks,
     );
     b.piece(
-        Shape::Prism(Vec3::new(4.8, 1.25, 3.8)),
-        Transform::from_xyz(0.0, 5.4, 0.0),
+        Shape::Prism(Vec3::new(w + 0.8, 1.4, d + 0.8)),
+        Transform::from_xyz(0.0, floor + 2.25, 0.0),
         Mat::Corrugated,
         true,
     );
-    // The stair as a ramp under its treads, and its landing.
-    let (a, c) = (Vec3::new(2.5, 0.0, -1.5), Vec3::new(2.5, 3.0, 0.5));
-    let d = c - a;
+    let (a, c) = (
+        Vec3::new(w * 0.5 + 0.65, 0.0, -d * 0.5 + 0.1),
+        Vec3::new(w * 0.5 + 0.65, floor - 0.15, 0.5),
+    );
+    let along = c - a;
     b.piece(
-        Shape::Box(Vec3::new(0.9, 0.08, d.length())),
+        Shape::Box(Vec3::new(0.9, 0.08, along.length())),
         Transform::from_translation((a + c) * 0.5 - Vec3::Y * 0.1)
-            .with_rotation(Quat::from_rotation_x(-d.y.atan2(d.z))),
+            .with_rotation(Quat::from_rotation_x(-along.y.atan2(along.z))),
         Mat::Planks,
         true,
     );
     b.bx(
-        Vec3::new(0.9, 0.1, 1.1),
-        Vec3::new(2.5, 2.99, 0.95),
+        Vec3::new(0.9, 0.1, 1.2),
+        Vec3::new(w * 0.5 + 0.65, floor - 0.16, 1.1),
         Mat::Planks,
     );
     b.dress_structure(from, vec![("signal_box", Transform::IDENTITY)]);
+    // Inside: the lever frame along the back wall, a desk and a shelf.
+    let from = b.geo.pieces.len();
+    let lever = Vec3::new(0.5, f, d * 0.5 - 0.15 - 0.3);
+    b.bx(
+        Vec3::new(2.44, 1.0, 0.5),
+        lever + Vec3::new(0.0, 0.5, 0.04),
+        Mat::DarkMetal,
+    );
+    b.dress(
+        from,
+        vec![("lever_frame", Transform::from_translation(lever))],
+    );
+    b.table(Vec3::new(-1.9, f, 1.0), 0.0, Some("house"));
+    b.chair(Vec3::new(-1.9, f, 0.4), std::f32::consts::PI);
+    b.shelf(
+        Vec3::new(-w * 0.5 + 0.35, f, -0.6),
+        std::f32::consts::FRAC_PI_2,
+        Some("tools"),
+    );
+}
+
+/// A village chapel: a whitewashed nave you can go into (pews, an altar
+/// table) under a green iron roof, its bell tower at the east end.
+fn chapel(b: &mut Builder) {
+    let (w, d, f, h) = (10.0, 14.0, 0.5, 4.5);
+    let tall = |c: f32| Opening {
+        centre: c,
+        width: 1.0,
+        bottom: 1.5,
+        top: 3.6,
+        kind: OpeningKind::Window,
+    };
+    b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        0.35,
+        Mat::Plaster,
+        [
+            &[door(w * 0.5)],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+            &[],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+        ],
+    );
+    b.gable_roof_with(
+        w + 0.4,
+        d + 0.4,
+        f + h,
+        38.0,
+        0.5,
+        Mat::PaintedMetal,
+        Mat::Plaster,
+        true,
+    );
+    // Pews either side of the aisle, the altar table at the east end.
+    for k in 0..5 {
+        let z = -d * 0.5 + 3.0 + k as f32 * 1.1;
+        for x in [-2.6, 2.6] {
+            b.pew(Vec3::new(x, f, z), std::f32::consts::PI);
+        }
+    }
+    b.table(Vec3::new(0.0, f, d * 0.5 - 1.6), 0.0, Some("house"));
+    b.shelf(
+        Vec3::new(-w * 0.5 + 0.45, f, d * 0.5 - 1.0),
+        std::f32::consts::FRAC_PI_2,
+        Some("medical"),
+    );
+    // The bell tower against the east wall, on a foundation as deep as the
+    // nave's (it's lifted with it on a slope), its door turned outward.
+    let at = Vec3::new(0.0, 0.0, d * 0.5 + 0.175 + 2.0);
+    b.bx(Vec3::new(4.2, 1.5, 4.2), at - Vec3::Y * 0.75, Mat::Concrete);
+    let from = b.geo.pieces.len();
+    let mut tower = Builder::default();
+    steeple(&mut tower);
+    let turn =
+        Transform::from_translation(at).with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
+    for mut p in tower.geo.pieces {
+        p.at = turn * p.at;
+        b.geo.pieces.push(p);
+    }
+    b.dress_structure(from, vec![("steeple", turn)]);
 }
 
 /// A chapel's bell tower: brick, a whitewashed belfry, an onion dome.
@@ -3067,7 +3221,7 @@ mod tests {
     #[test]
     fn every_prop_model_exists() {
         let root = crate::asset_root_path();
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             let geo = prefab(id).unwrap();
             for d in &geo.props {
                 assert!(
@@ -3081,6 +3235,8 @@ mod tests {
             }
         }
         for name in [
+            "pew",
+            "lever_frame",
             "hay_bale",
             "door_metal",
             "road_block",
@@ -3109,7 +3265,7 @@ mod tests {
     /// pose (a negative box gave the colliders a NaN mass).
     #[test]
     fn every_piece_is_sound() {
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             for (i, p) in prefab(id).unwrap().pieces.iter().enumerate() {
                 let ok = match p.shape {
                     Shape::Box(s) | Shape::Prism(s) => s.is_finite() && s.min_element() > 0.0,
@@ -3117,6 +3273,31 @@ mod tests {
                 } && p.at.translation.is_finite()
                     && p.at.rotation.is_finite();
                 assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
+            }
+        }
+    }
+
+    /// The map's copy of every prefab's doors (`map::prefab_entrances`,
+    /// for the lint that keeps their steps and the space in front clear)
+    /// is the recipes' own. If this fails, regenerate the table from
+    /// `Geo::entrances`.
+    #[test]
+    fn entrances_match_the_map() {
+        for id in PREFABS {
+            let built = prefab(id).unwrap().entrances;
+            let listed = extraction_core::map::prefab_entrances(id);
+            assert_eq!(built.len(), listed.len(), "{id}: doors built vs listed");
+            for (b, l) in built.iter().zip(listed) {
+                let close = |a: f32, b: f32| (a - b).abs() < 0.011;
+                assert!(
+                    close(b.at[0], l.at[0])
+                        && close(b.at[1], l.at[1])
+                        && close(b.out[0], l.out[0])
+                        && close(b.out[1], l.out[1])
+                        && close(b.width, l.width)
+                        && close(b.clear, l.clear),
+                    "{id}: built {b:?}, listed {l:?}"
+                );
             }
         }
     }

@@ -81,7 +81,7 @@ frame_prof = [
     (0.027, 0.0485),
 ]
 frame_prof = fillet(frame_prof, [0.001, 0.002, 0.004, 0.003, 0.004, 0.0, 0.0, 0.004, 0.006, 0.002,
-                                 0.002, 0.003, 0.006, 0.003, 0.001], 4)
+                                 0.002, 0.003, 0.006, 0.003, 0.002], 4)
 static.prism(frame_prof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0018, segs=2)
 
 # Wraparound bakelite grip: sides and back strap, inset from the frame edges.
@@ -98,11 +98,12 @@ def grip_width(z, y):
     return (-0.0152 - swell, 0.0152 + swell)
 
 
-static.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.0035, segs=3, width=grip_width)
+grip = Part("grip")
+grip.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.0035, segs=3, width=grip_width)
 # The star medallion near the top of each panel.
 for sx in (-1, 1):
-    static.sphere(0.0048, (sx * 0.0156, 0.017, 0.007), "Bakelite", segs=16, rings=8,
-                  scale=(0.25, 1, 1))
+    grip.sphere(0.0048, (sx * 0.0156, 0.017, 0.007), "Bakelite", segs=16, rings=8,
+                scale=(0.25, 1, 1))
 
 
 def grip_span(y):
@@ -116,19 +117,18 @@ def grip_span(y):
     return min(zs), max(zs)
 
 
-# Raised ribs standing in for the checkering, inside a smooth border.
-for i in range(13):
-    y = -0.039 + i * 0.0042
+# Checkered panels on both sides, inside a smooth border, under the star.
+def grip_x(z, y):
     zf, zb = grip_span(y)
-    zf, zb = zf + 0.0065, zb - 0.0065
-    if y > 0.009:  # leave room for the medallion
-        zf = max(zf, 0.0135)
-    if zb - zf < 0.004:
-        continue
-    lo, hi = grip_width(0, y)
-    for sx, w in ((-1, lo), (1, hi)):
-        static.box((0.0012, 0.0011, zb - zf), (w + sx * 0.0003, y, (zf + zb) / 2), "Bakelite",
-                   bevel=0.0004, segs=1)
+    if not zf + 0.004 < z < zb - 0.004:
+        return None
+    return grip_width(z, y)[1]
+
+
+grip_cut = Part("cut")
+grip_check = Part("static_checkering")
+grip_check.checkering(grip_cut, grip_x, None, None, (-0.008, 0.034, -0.0405, 0.009),
+                      pitch=0.0022, depth=0.0005, mat="Bakelite")
 
 # Trigger guard: a large rounded loop (it hinges down for stripping).
 guard_path = catmull([
@@ -141,7 +141,11 @@ static.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012), "Blued")
 hammer = fillet([(0.0205, 0.0485), (0.0295, 0.0495), (0.0365, 0.0585), (0.0372, 0.0675),
                  (0.0335, 0.0725), (0.0285, 0.0705), (0.0245, 0.0615), (0.0215, 0.055)],
                 [0, 0.002, 0.003, 0.003, 0.003, 0.002, 0.002, 0], 3)
-hammer_p = Part("hammer")
+# Its own object: the game turns it about its pin (the origin, an axis
+# along X) when it cocks. Modelled down, against the slide; cocked is a
+# positive turn about +X, the spur going back.
+HAMMER_PIN = (0.0, 0.0515, 0.025)
+hammer_p = Part("hammer", origin=HAMMER_PIN)
 hammer_p.prism(hammer, -0.0034, 0.0034, "Blued", axis="x", bevel=0.0007, segs=1)
 # Spur grooves, cut across the back of the spur.
 spur_cut = Part("cut")
@@ -182,7 +186,9 @@ for i in range(3):
 # --- Build ------------------------------------------------------------------------
 for p in (slide, trig, safety):
     make(p, worn={})
-join("static_frame", static, hammer_p, worn={})
+grip.cut(grip_cut)
+join("static_frame", static, grip, grip_check, worn={})
+make(hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
 empty("pt_muzzle", (0.0, BORE_Y, -0.13))

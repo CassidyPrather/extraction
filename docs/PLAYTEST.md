@@ -159,6 +159,8 @@ moment after the game starts; `--camera` puts the view anywhere.
 
 ## Order of business
 
+Audio checklist: docs/AUDIO.md, Listening in the headset.
+
 ### 1. Does it work in the headset? (10 minutes)
 
 - The view is in the headset, the right way up, the right scale (the
@@ -239,6 +241,27 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   pistol's and AK's reach their triggers). More rake on those grips would
   bring it down, but it also changes where the rifle points against the
   controller, so say how it feels before we change it.
+- Loading by hand. With the Mosin's bolt open, set a clip in the guide
+  over the action and push it down: five rounds go in. Bring a shell to
+  each barrel of the broken-open TOZ, or a loose round to an open
+  breech; hold a box of rounds at the port to feed one at a time. Is the
+  push-down findable, and is 7 cm of reach too generous or too fussy?
+- How the guns handle (recoil, weight, sway: `src/weapons/feel.rs`; the
+  numbers are in `docs/DESIGN.md`, "Weapon feel"). Fire the AK on auto
+  in one hand, then two, then with the stock against your cheek:
+  - Does two-handed feel steadier, and shouldered steadier still? Is the
+    one-handed climb fun or just unfair?
+  - Hold the AK or the Mosin out in one hand: is the droop (about 4° and
+    7°) and the slow sway right, or does it feel like the gun is broken?
+  - Swing the rifle quickly: the gun follows the controller a little late
+    (about 40 ms in one hand, 17 ms in two). Noticeable? Nauseating?
+  - Sprint until winded, then aim: is the extra sway readable?
+  - Recoil should move the gun, never your view. Say if it ever did.
+- Jams (rare on a gun in good order; a worn, dirty AK in the training
+  yard will show them). A case standing in the port: rack. A click and
+  no bang: slap the magazine up with your other palm, then rack. A case
+  and a round in the port, the slide stuck: drop the magazine (A), rack,
+  reload. Can you tell which is which by look and sound?
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.

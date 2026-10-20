@@ -13,6 +13,7 @@ use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
 use extraction_core::firearm::FireMode;
 
+use super::feel::Handling;
 use super::layout::{Mat, Moves, Shape};
 use super::{Gun, Mag};
 use crate::interact::{InSocket, SocketOwner};
@@ -36,7 +37,7 @@ impl Plugin for GunVisualsPlugin {
                 .chain()
                 .before(TransformSystems::Propagate),
         )
-        .add_systems(Update, super::casing_visuals);
+        .add_systems(Update, (super::casing_visuals, super::feel::jam_visuals));
     }
 }
 
@@ -92,6 +93,7 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("barrels", Moves::Barrels),
         ("trigger", Moves::Trigger),
         ("selector", Moves::Selector),
+        ("hammer", Moves::Hammer),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -228,10 +230,26 @@ fn finish_gun_models(
     }
 }
 
-fn animate_parts(guns: Query<(&Gun, &Children)>, mut parts: Query<(&GunPart, &mut Transform)>) {
-    for (gun, children) in &guns {
+/// How far back a cocked hammer tips, radians.
+const HAMMER_BACK: f32 = 0.5;
+
+fn animate_parts(
+    guns: Query<(&Gun, &Children, Option<&Handling>)>,
+    mut parts: Query<(&GunPart, &mut Transform)>,
+) {
+    for (gun, children, handling) in &guns {
         let f = &gun.firearm;
         let travel = gun.layout.handle.as_ref().map_or(0.0, |h| h.travel);
+        // A self-loader's carrier or slide runs back and home after a shot
+        // (faster than the mechanism's state shows it).
+        let stroke = handling.map_or(0.0, |h| {
+            if h.cycle > 0.0 {
+                (std::f32::consts::PI * (1.0 - h.cycle)).sin()
+            } else {
+                0.0
+            }
+        });
+        let bolt = f.bolt_travel.max(stroke);
         for child in children.iter() {
             let Ok((part, mut t)) = parts.get_mut(child) else {
                 continue;
@@ -240,7 +258,19 @@ fn animate_parts(guns: Query<(&Gun, &Children)>, mut parts: Query<(&GunPart, &mu
                 Moves::Static => part.rest,
                 Moves::WithBolt => {
                     let mut r = part.rest;
-                    r.translation.z += f.bolt_travel * travel;
+                    r.translation.z += bolt * travel;
+                    r
+                }
+                Moves::Hammer => {
+                    // Back with the slide's stroke too, as the slide rides
+                    // over it.
+                    let back = if f.hammers_cocked.first() == Some(&true) {
+                        1.0
+                    } else {
+                        stroke.min(1.0)
+                    };
+                    let mut r = part.rest;
+                    r.rotation = Quat::from_rotation_x(HAMMER_BACK * back) * r.rotation;
                     r
                 }
                 Moves::TurnBolt => {

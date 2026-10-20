@@ -61,6 +61,9 @@ pub struct Heightmap {
     /// Each road's sampled centreline and graded heights, for road meshes,
     /// bridges and AI routing.
     pub road_lines: Vec<RoadLine>,
+    /// Cells left out of the ground (indexed by their low corner's
+    /// sample): where a stair goes down through it (`underground`).
+    pub holes: Vec<bool>,
 }
 
 /// A road as built: its centreline sampled every metre with the height the
@@ -145,6 +148,7 @@ impl Heightmap {
             water: vec![f32::NAN; n * n],
             wet: vec![0.0; n * n],
             road_lines: Vec::new(),
+            holes: vec![false; n * n],
         };
         let relief = hm.shape(map);
         hm.erode(map, &relief);
@@ -160,7 +164,46 @@ impl Heightmap {
             hm.road(i, road);
         }
         hm.settle(map);
+        hm.underground(map);
         hm
+    }
+
+    /// Underground sites: the ground levelled under each exit kiosk to
+    /// the height its layout wants (the entrance is a placement, padded as
+    /// one), and opened up over every stairwell.
+    fn underground(&mut self, map: &MapDef) {
+        let sites = crate::underground::placed(map);
+        for site in &sites {
+            let footing = self.footing(&site.id, site.at, site.rot);
+            for (at, rot, portal) in site.exits() {
+                let target = footing + portal.y;
+                let [w, _, d] = crate::underground::FOOTPRINT;
+                let (half_w, half_d) = (w * 0.5 + 0.8, d * 0.5 + 0.8);
+                let reach = half_w.max(half_d) + 6.0;
+                let lo = [at[0] - reach, at[1] - reach];
+                let hi = [at[0] + reach, at[1] + reach];
+                self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                    let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
+                    let out =
+                        ((l[0].abs() - half_w).max(0.0)).hypot((l[1].abs() - half_d).max(0.0));
+                    let t = 1.0 - geom::smoothstep(0.0, 5.0, out);
+                    hm.heights[k] += (target - hm.heights[k]) * t;
+                });
+            }
+        }
+        if sites.is_empty() {
+            return;
+        }
+        for j in 0..self.n - 1 {
+            for i in 0..self.n - 1 {
+                let p = self.pos(i, j);
+                let centre = [p[0] + self.cell * 0.5, p[1] + self.cell * 0.5];
+                if crate::underground::in_stairwell(&sites, centre) {
+                    let k = self.idx(i, j);
+                    self.holes[k] = true;
+                }
+            }
+        }
     }
 
     pub fn idx(&self, i: usize, j: usize) -> usize {

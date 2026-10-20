@@ -26,7 +26,7 @@ Flat controls: WASD move, mouse look (click to capture, Esc to release),
 Shift sprint, Space jump, C crouch. E grab what the crosshair is on, F put
 the second hand on the gun, Q drop (hold to throw), G stow, Tab open the
 backpack, 1-0 draw from a body slot. LMB fire, RMB aim, R reload, V rack /
-work the bolt / break the shotgun, X selector, B magazine release, C combine
+work the bolt / break the shotgun, X selector, B magazine release, T combine, C crouch
 the two held items (load a magazine from a box, clean a gun).
 
 VR: grip grabs, trigger fires; A/X magazine release (breaks a shotgun),

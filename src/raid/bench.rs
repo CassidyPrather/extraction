@@ -4,7 +4,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::fabrication::{Make, TrayItem, available, plan, recipe};
+use extraction_core::fabrication::{Make, TrayItem, available_at, plan, recipe};
 
 use super::Raid;
 use super::truck::{FLOOR, Pressable, Truck};
@@ -25,6 +25,9 @@ pub struct Bench {
     pub tray: Option<Entity>,
     /// What the last run made, for the display.
     pub last: Option<String>,
+    /// Which recipes it knows: 1 once the driver has fitted the vice
+    /// (`progression`).
+    pub tier: u8,
 }
 
 /// The bench's input/output tray (an open container).
@@ -218,7 +221,10 @@ pub fn run_bench(
             continue;
         };
         let (entities, tray) = tray_items(&bag, &items);
-        let options: Vec<&'static str> = available(&tray, &catalog).iter().map(|r| r.id).collect();
+        let options: Vec<&'static str> = available_at(&tray, &catalog, bench.tier)
+            .iter()
+            .map(|r| r.id)
+            .collect();
         if options != bench.options {
             let keep = bench.options.get(bench.selected).copied();
             bench.options = options;
