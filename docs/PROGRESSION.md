@@ -73,7 +73,7 @@ coming ("Do these and I'll fit a vice to the bench").
 | Tier | Jobs | Where | Fitted at the end |
 | - | - | - | - |
 | 1 **Odd jobs** | 3 | danger 1 (the village, the farm) | **Stash rack**: a timber rack over the crate, the stash grows 200 → 300 L |
-| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns six more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS) |
+| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns seven more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS, 7.62x25 for the PPSh) |
 | 3 **Runs** | 4 | danger 2-3 | **Whip aerial** on the cab: the truck radios a Surge warning at ten minutes instead of five, and robot chatter says how far |
 | 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (a dressing in it each raid) and a **second rack**: 400 L |
 
@@ -239,6 +239,13 @@ at danger 1, 52% at danger 2 and 2 times in 4 at danger 3, against 74% for
 raids in general: a job pulls you somewhere you'd not have gone, and that
 costs. Danger 3 has few samples; the script leans on how often raids
 reached danger 3 and got home (28%) until there are more.
+
+By play style the job comes out level: cautious bots saw the place and got
+home 5 times in 9, looters 10 in 18, hunters 8 in 18 (their artifacts draw
+response teams), reckless bots 6 in 9 (they get there fast, and get away
+with it on a short trip). Robot minds' sims say careful play all but ends
+drone deaths; a job is a short trip, which suits the bold, and the deep
+jobs past the ladder are where that stops being true.
 
 What it says:
 

@@ -28,8 +28,11 @@ pub mod pylon;
 pub mod reel;
 pub mod search;
 pub mod senses;
+pub mod sorter;
+pub mod sorter_look;
 pub mod visuals;
 pub mod walker;
+pub mod weathering;
 pub mod wreck;
 
 use avian3d::prelude::*;
@@ -51,6 +54,8 @@ pub enum RobotKind {
     Dirigible,
     /// A relay pylon walkers put up at a work site (see `pylon`).
     Pylon,
+    /// The Depot's ceiling gantry (see `sorter`).
+    Sorter,
 }
 
 #[derive(Component, Debug)]
@@ -239,11 +244,14 @@ impl Plugin for RobotsPlugin {
                 grappler::GrapplerPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
-                anim::AnimPlugin,
-                flight::FlightPlugin,
-                wreck::WreckPlugin,
-                armour::ArmourPlugin,
-                hound::HoundPlugin,
+                (
+                    anim::AnimPlugin,
+                    flight::FlightPlugin,
+                    wreck::WreckPlugin,
+                    armour::ArmourPlugin,
+                    hound::HoundPlugin,
+                    sorter::SorterPlugin,
+                ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
@@ -357,6 +365,8 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
         RobotKind::Walker => "walker_wreck",
         RobotKind::Dirigible => "dirigible_wreck",
         RobotKind::Pylon => "pylon_wreck",
+        // (Its own table when Models: kit's sorter parts are in.)
+        RobotKind::Sorter => "pylon_wreck",
     }
 }
 

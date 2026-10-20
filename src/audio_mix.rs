@@ -67,6 +67,10 @@ macro_rules! cue {
 /// the Surge siren included; air itself is far gentler.
 pub const MUFFLE_FULL: f32 = 900.0;
 
+/// The score's gain (`audio_score`), set by measurement: at full it stays
+/// under the wind and hides no robot (`scripts/audio_score.py`).
+pub const SCORE_DB: f32 = -42.0;
+
 #[rustfmt::skip]
 pub const MIX: &[Cue] = &[
     // Your own body and hands.
@@ -253,6 +257,26 @@ pub fn db(name: &str) -> f32 {
         };
         c.db + lift
     })
+}
+
+/// A cue's name as the table holds it (for components that keep it).
+pub fn static_name(name: &str) -> &'static str {
+    find(name).map_or("step", |c| c.name)
+}
+
+/// The head-related node a cue plays through in the headset: the same
+/// reach and muffle as `spatial`.
+pub fn hrtf(name: &str) -> bevy_seedling::prelude::HrtfNode {
+    use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
+    let reach = find(name).map_or(5.0, |c| c.reach);
+    bevy_seedling::prelude::HrtfNode {
+        distance_attenuation: DistanceAttenuation {
+            reference_distance: reach,
+            max_muffle_distance: MUFFLE_FULL,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }
 
 /// A cue's role, if it's in the mix.

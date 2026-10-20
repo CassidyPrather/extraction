@@ -25,10 +25,20 @@
         (id: "sorting_hall", at: (0.0, 40.0), size: (24.0, 16.0), floor: Some(-11.0), height: 6.0, lamp: Powered, stage: 0, props: [
             (kind: Shelf, at: (-8.0, -3.5), loot: Some("house")),
             (kind: Shelf, at: (-8.0, 3.5), loot: Some("kitchen")),
-            (kind: Crate, at: (-4.5, -3.5), loot: Some("cargo_pod")),
-            (kind: Crate, at: (-4.5, 3.5), loot: Some("house")),
-            (kind: Pallet, at: (4.5, -3.5)),
-            (kind: Crate, at: (4.5, 3.5), loot: Some("tools")),
+            // Wire bins in two rows (your lost kit lies in them too).
+            (kind: Bin, at: (-4.5, -3.5), loot: Some("cargo_pod")),
+            (kind: Bin, at: (-1.5, -3.5)),
+            (kind: Bin, at: (1.5, -3.5), loot: Some("house")),
+            (kind: Bin, at: (4.5, -3.5)),
+            (kind: Bin, at: (-4.5, 3.5), loot: Some("house")),
+            (kind: Bin, at: (-1.5, 3.5), loot: Some("kitchen")),
+            (kind: Bin, at: (1.5, 3.5)),
+            (kind: Bin, at: (4.5, 3.5), loot: Some("tools")),
+            // The sorting line down the middle, its tagger at the end.
+            (kind: Conveyor, at: (0.0, 0.0)),
+            (kind: Tagger, at: (3.6, -0.9)),
+            // A walker's charging cradle, empty.
+            (kind: Cradle, at: (-7.0, 6.9)),
             (kind: Shelf, at: (8.0, -3.5), loot: Some("workshop")),
             (kind: Shelf, at: (8.0, 3.5), loot: Some("curio")),
             (kind: Pallet, at: (-1.5, 6.0)),
@@ -47,18 +57,19 @@
             (kind: Shelf, at: (-3.6, -5.0), rot: 90.0, loot: Some("curio")),
             (kind: Shelf, at: (-3.6, 3.0), rot: 90.0, loot: Some("house")),
             (kind: Shelf, at: (-3.6, 7.0), rot: 90.0, loot: Some("medical")),
-            (kind: Crate, at: (1.5, -8.0)),
+            (kind: KeptCrate, at: (1.5, -8.0), rot: 90.0),
             (kind: Crate, at: (1.5, -4.0), loot: Some("cargo_pod")),
-            (kind: Crate, at: (1.5, 4.0)),
+            (kind: KeptCrate, at: (1.5, 4.0), rot: 90.0),
+            (kind: KeptCrate, at: (1.5, 0.0), rot: 90.0),
             (kind: Crate, at: (1.5, 8.0), loot: Some("curio")),
             (kind: Shelf, at: (3.6, -6.0), rot: 270.0, loot: Some("tools")),
             (kind: Shelf, at: (3.6, 6.0), rot: 270.0, loot: Some("kitchen")),
         ]),
         // Bay K-14: the Mareks, and Jan Holm.
         (id: "bay_k14", at: (-32.0, 56.0), size: (6.0, 4.0), floor: Some(-15.0), height: 3.0, lamp: Dead, props: [
-            (kind: Crate, at: (-1.6, -0.6)),
-            (kind: SmallCrate, at: (-0.2, 0.0)),
-            (kind: Crate, at: (1.6, 0.8)),
+            (kind: KeptCrate, at: (-1.6, -0.6)),
+            (kind: KeptCrateSmall, at: (-2.3, 0.9)),
+            (kind: KeptCrate, at: (1.6, 0.8)),
         ]),
         // Level 4, the cistern: the pump gallery, flooded.
         (id: "pump_gallery", at: (-32.0, 78.0), size: (10.0, 8.0), floor: Some(-19.0), height: 4.0, lamp: Dead, props: [

@@ -225,17 +225,23 @@ fn spawn_notes(
                         Visibility::default(),
                     ))
                     .id();
-                // The monitor: a deep case, a bezel, the glass.
+                // The monitor: a deep case, a bezel, the glass. Boxes until
+                // its model (`terminal`) is in.
+                commands
+                    .entity(root)
+                    .insert(crate::render::world_props::SwapIn::one("terminal"));
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.44, 0.38, 0.4))),
                     MeshMaterial3d(mat(Mat::Polymer)),
                     Transform::from_xyz(0.0, 0.22, -0.06),
+                    crate::render::world_props::Blockout,
                     ChildOf(root),
                 ));
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.2, 0.03, 0.2))),
                     MeshMaterial3d(mat(Mat::Polymer)),
                     Transform::from_xyz(0.0, 0.015, -0.06),
+                    crate::render::world_props::Blockout,
                     ChildOf(root),
                 ));
                 commands.spawn((
@@ -243,6 +249,7 @@ fn spawn_notes(
                     MeshMaterial3d(mat(Mat::Polymer)),
                     Transform::from_xyz(0.0, 0.015, 0.25)
                         .with_rotation(Quat::from_rotation_x(0.08)),
+                    crate::render::world_props::Blockout,
                     ChildOf(root),
                 ));
                 commands.spawn((

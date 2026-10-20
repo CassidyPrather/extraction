@@ -341,6 +341,11 @@ impl Plugin for LevVisualsPlugin {
     }
 }
 
+use crate::render::world_props::{Blockout, SwapIn};
+
+/// The panel's depth, truck space, in the runners (`art/vehicles/truck.py`).
+const PANEL_Z: f32 = -1.8255;
+
 /// The panel slides sideways to open.
 #[derive(Component)]
 struct HatchPanel;
@@ -362,13 +367,22 @@ fn dress_hatch(
     for e in &hatches {
         // The panel over the opening (the hole, its boot and the cab
         // behind are the truck model's).
-        commands.spawn((
-            HatchPanel,
-            Mesh3d(meshes.add(Cuboid::new(HATCH.x + 0.02, HATCH.y + 0.02, 0.015))),
-            MeshMaterial3d(mat(Color::srgb(0.27, 0.30, 0.22), 0.7)),
-            Transform::from_xyz(0.0, 0.0, 0.01),
-            ChildOf(e),
-        ));
+        // Shut, the panel sits in the truck model's runners, just behind
+        // the opening's face. Boxes until its model (`cab_hatch_panel`).
+        commands
+            .spawn((
+                HatchPanel,
+                SwapIn::one("cab_hatch_panel"),
+                Transform::from_xyz(0.0, 0.0, PANEL_Z - HATCH_AT.z),
+                Visibility::default(),
+                ChildOf(e),
+            ))
+            .with_child((
+                Mesh3d(meshes.add(Cuboid::new(HATCH.x + 0.02, HATCH.y + 0.02, 0.015))),
+                MeshMaterial3d(mat(Color::srgb(0.27, 0.30, 0.22), 0.7)),
+                Transform::IDENTITY,
+                Blockout,
+            ));
     }
     for e in &hands {
         // A bare, weathered hand, palm up, fingers curled round what it

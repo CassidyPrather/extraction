@@ -244,6 +244,22 @@ def main():
         with open(out / "mix.txt", "a") as f:
             f.write("\n\n" + text + "\n")
     flagged += room_flags
+    import audio_binaural  # noqa: E402  (where the headset puts sounds)
+    ear_flags, ear_lines = audio_binaural.run(out)
+    if ear_lines:
+        text = "\n".join(ear_lines)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n" + text + "\n")
+    flagged += ear_flags
+    import audio_score  # noqa: E402  (the score against the world)
+    score_flags, score_lines = audio_score.run(sets, out)
+    if score_lines:
+        text = "\n".join(score_lines)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n" + text + "\n")
+    flagged += score_flags
     if args.check and flagged:
         sys.exit(f"{flagged} cue(s) flagged: see {out / 'mix.txt'}")
 

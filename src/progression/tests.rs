@@ -467,12 +467,14 @@ fn the_second_and_third_tiers_hand_over_guns() {
         .filter(|g| catalog.kind(g.0).is_some())
         .map(|g| g.0)
         .collect();
+    // Every gift's item is in the catalog (the SKS, the PPSh and their
+    // ammunition), and every one came through the hatch.
+    let all = gifts(Upgrade::BenchVice).len() + gifts(Upgrade::Aerial).len();
+    assert_eq!(known.len(), all, "a gift names an item the catalog lacks");
     for id in &known {
         assert!(after.iter().any(|a| a == id), "{id} in {after:?}");
     }
-    if known.is_empty() {
-        assert_eq!(after.len(), before, "nothing given that doesn't exist yet");
-    }
+    assert!(after.len() > before);
 }
 
 #[test]

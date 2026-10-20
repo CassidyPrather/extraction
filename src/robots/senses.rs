@@ -395,19 +395,28 @@ pub(crate) fn perceive(
             } else {
                 STANDING
             };
+            // The rig's head, unless nothing drives it (it rests at the
+            // feet): then the top of the body.
             let head = heads
                 .iter()
                 .find(|(c, _)| c.parent() == e)
                 .map(|(_, h)| h.translation())
+                .filter(|h| h.y > feet.y + 0.5)
                 .unwrap_or(feet + Vec3::Y * (height - 0.15));
             let p = [feet.x, feet.z];
             let indoors = entrances.building_at(feet + Vec3::Y * 0.5).is_some();
             let surface = zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5);
-            // A powered light on you (in a hand, on your gun, at your head).
+            // A powered light on you (in a hand, on your gun, at your head):
+            // within reach of your body, from the feet to over your head.
             let torch = torches
                 .iter()
                 .filter(|(d, _)| d.kind == crate::gadgets::DeviceKind::Light)
-                .find(|(_, g)| g.translation().distance(head) < 1.4)
+                .find(|(_, g)| {
+                    let p = g.translation();
+                    Vec2::new(p.x - feet.x, p.z - feet.z).length() < 1.0
+                        && p.y > feet.y - 0.2
+                        && p.y < feet.y + STANDING + 0.5
+                })
                 .map(|(_, g)| (g.translation(), g.forward().as_vec3()));
             let dark = lighting.in_dark(feet + Vec3::Y * 0.5).then(|| {
                 let lamps = lighting.lamplight(feet + Vec3::Y * 0.5);

@@ -594,9 +594,14 @@ fn dress_terminals(
                 Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
                 MeshMaterial3d(polymer.clone()),
                 Transform::from_translation(at),
+                crate::render::world_props::Blockout,
                 ChildOf(root),
             ));
         }
+        // Boxes until the terminal's model is in.
+        commands
+            .entity(root)
+            .insert(crate::render::world_props::SwapIn::one("terminal"));
     }
 }
 

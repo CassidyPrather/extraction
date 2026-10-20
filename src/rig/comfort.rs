@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`,
+//! `--finger-grab`, `--no-binaural`, `--no-score`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -33,6 +33,11 @@ pub struct Comfort {
     /// takes it, as the squeeze does. Off by default: an unmeant grab is
     /// worse than a missed one.
     pub finger_grab: bool,
+    /// In the headset, placed sounds through a head-related filter, so
+    /// above and behind can be told apart (`audio`); off, they're panned.
+    pub binaural: bool,
+    /// The ambient score that rises with danger (`audio`).
+    pub score: bool,
 }
 
 impl Default for Comfort {
@@ -45,6 +50,8 @@ impl Default for Comfort {
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
+            binaural: true,
+            score: true,
         }
     }
 }
@@ -184,6 +191,8 @@ impl Comfort {
                 "--snap-turn" => c.smooth_turn = false,
                 "--narrow-dynamics" => c.narrow_dynamics = true,
                 "--finger-grab" => c.finger_grab = true,
+                "--no-binaural" => c.binaural = false,
+                "--no-score" => c.score = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
