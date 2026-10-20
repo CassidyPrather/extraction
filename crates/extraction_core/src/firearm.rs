@@ -65,6 +65,10 @@ pub struct FirearmDef {
     /// sear; the trigger lets it run forward, and it fires as it closes.
     #[serde(default)]
     pub open_bolt: bool,
+    /// A revolver's loading gate is this many chambers round from the one
+    /// under the hammer (clockwise seen from behind).
+    #[serde(default)]
+    pub gate_offset: u32,
     /// Metres per second.
     pub muzzle_velocity: f32,
     /// Base damage of one projectile (shot counts multiply this).
@@ -452,6 +456,11 @@ impl Firearm {
         events
     }
 
+    /// The chamber at a revolver's loading gate.
+    pub fn gate_chamber(&self) -> usize {
+        (self.cylinder + self.def.gate_offset as usize) % self.chambers.len().max(1)
+    }
+
     /// A revolver's cylinder steps one chamber on.
     fn turn_cylinder(&mut self) {
         if self.def.action == ActionKind::Revolver {
@@ -506,7 +515,8 @@ impl Firearm {
             return Vec::new();
         }
         self.rod = 1.0;
-        self.chambers[self.cylinder]
+        let g = self.gate_chamber();
+        self.chambers[g]
             .take()
             .map(Event::Ejected)
             .into_iter()
@@ -844,7 +854,7 @@ impl Firearm {
     pub fn load_round(&mut self) -> bool {
         match self.def.action {
             ActionKind::Revolver => {
-                let c = self.cylinder;
+                let c = self.gate_chamber();
                 if self.gate_open && self.chambers[c].is_none() {
                     self.chambers[c] = Some(Round::Live);
                     return true;
@@ -938,6 +948,7 @@ mod tests {
             last_round_hold_open: true,
             double_action: true,
             open_bolt: false,
+            gate_offset: 0,
             muzzle_velocity: 315.0,
             damage: 30.0,
             projectiles: 1,
@@ -1347,6 +1358,7 @@ mod tests {
             modes: vec![FireMode::Semi],
             last_round_hold_open: false,
             double_action: true,
+            gate_offset: 2,
             ..pistol()
         }
     }

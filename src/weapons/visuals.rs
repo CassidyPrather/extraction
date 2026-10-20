@@ -33,6 +33,7 @@ impl Plugin for GunVisualsPlugin {
                 animate_parts,
                 seat_mag_visuals,
                 show_mag_rounds,
+                show_chambers,
             )
                 .chain()
                 .before(TransformSystems::Propagate),
@@ -246,7 +247,7 @@ const HAMMER_BACK: f32 = 0.5;
 /// How far a revolver's gate swings open, radians.
 const GATE_OPEN: f32 = 1.4;
 /// A revolver's ejector rod's stroke, metres.
-const ROD_STROKE: f32 = 0.04;
+const ROD_STROKE: f32 = 0.042;
 
 fn animate_parts(
     guns: Query<(&Gun, &Children, Option<&Handling>)>,
@@ -286,7 +287,7 @@ fn animate_parts(
                 Moves::Gate => {
                     let mut r = part.rest;
                     let open = if f.gate_open { GATE_OPEN } else { 0.0 };
-                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
+                    r.rotation = Quat::from_rotation_z(-open) * r.rotation;
                     r
                 }
                 Moves::Rod => {
@@ -342,6 +343,43 @@ fn animate_parts(
                     r
                 }
             };
+        }
+    }
+}
+
+/// A revolver's `cylinder_round_N` / `cylinder_case_N` nodes show what
+/// chamber N holds: a live round, a spent case, or neither.
+fn show_chambers(
+    guns: Query<(&Gun, &Children)>,
+    mut nodes: Query<(&Name, &mut Visibility), With<GunPart>>,
+) {
+    for (gun, children) in &guns {
+        if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
+            continue;
+        }
+        for c in children.iter() {
+            let Ok((name, mut vis)) = nodes.get_mut(c) else {
+                continue;
+            };
+            let (want, n) = if let Some(n) = name.as_str().strip_prefix("cylinder_round_") {
+                (extraction_core::firearm::Round::Live, n)
+            } else if let Some(n) = name.as_str().strip_prefix("cylinder_case_") {
+                (extraction_core::firearm::Round::Spent, n)
+            } else {
+                continue;
+            };
+            let held = n
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| gun.firearm.chambers.get(i).copied().flatten());
+            let v = if held == Some(want) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != v {
+                *vis = v;
+            }
         }
     }
 }
