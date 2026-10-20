@@ -108,24 +108,31 @@ the whole arc is written down, in pencil, in the truck.
 
 - `extraction_core::progression`: tiers, upgrades, contracts and how
   they're rolled from a map (`roll_contract`, deterministic in the career
-  seed and the job number), the stash capacity per upgrade, and the pacing
-  model. No Bevy; unit-tested.
-- `src/progression/`: the `Progress` resource, fitting upgrades (the stash's
-  capacity, the bench's tier, the aerial's warning, the cabinet), the
-  recover item's placement, scouting, the career page.
+  seed and the job number), and the stash capacity per upgrade. No Bevy;
+  unit-tested. The bench's vice recipes are `fabrication::VICE_RECIPES`.
+- `src/progression/`: the `Progression` resource, fitting upgrades (the
+  stash's capacity, the bench's tier, the aerial's warning, the cabinet),
+  the recorder's placement, scouting, the career page.
+- One job is handed in per raid ("One thing at a time. After your next
+  run."): a full stash can't clear fetches back to back at base.
 - `src/raid/requests.rs`: the card now shows the job; pressing it checks
   whichever kind it is.
 - `src/persist.rs` / `extraction_core::save`: `ProgressSave` on the career
   (`#[serde(default)]`, so older saves load). An older career is credited
   with the requests it already met, so a veteran starts on the right tier.
 - Truck props (`src/render/upgrades.rs`): the racks, the vice, the aerial,
-  the cabinet, blockouts until Models model them (spec sent).
+  the cabinet, modelled in `art/props/truck_kit.py` (`models/props/<id>.glb`)
+  over blockouts.
+- The job's place is a blue ring on the field map (`gadgets/visuals.rs`),
+  the cache a red cross.
 
 ## The first job
 
 Fixed, so the training yard can hand it over: **Scout** the danger-1 point
-of interest nearest the insertion (Marrow Creek: the Village). "Walk up to
-the Village and have a look round. Come back and tell me." It teaches the
+of interest nearest the insertion (Marrow Creek: the Old farm; Kettle Pass:
+the Logging camp; Cinder Works: Ash Row). "Walk up to the Old farm and have
+a look round. Come back and tell me." The yard's last board says the card
+in the truck has your first job. It teaches the
 whole loop in one raid: go somewhere, call the truck, get home, press the
 card, and the cache it pays shows up as a red cross on the map.
 

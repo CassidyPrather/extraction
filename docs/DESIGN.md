@@ -101,8 +101,12 @@ good stuff (ammunition, gadgets, medicine, now and then a gun) left at a
 building well out in the Zone — "in the log cabin by the Hunting lodge."
 It's pencilled on your field map as a red cross. You still have to go
 and get it, and get it home; the Surge sweeps up a
-cache nobody fetched. A new request comes with the next raid
-(`raid/requests.rs`).
+cache nobody fetched. The requests are **jobs in tiers**: fetch a few
+of something, recover a recorder from a building, or go and look at a
+place, each tier sending you somewhere worse, and each tier done gets
+something fitted to the truck (a rack for the stash, a vice for the bench,
+an aerial, a medicine cabinet). One job a raid; press the logbook for the
+career page (`raid/requests.rs`, `progression/`, `docs/PROGRESSION.md`).
 
 ### Inventory: weight, bulk, and two big guns
 

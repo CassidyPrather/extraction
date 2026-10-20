@@ -236,6 +236,8 @@ fn card_text(
     items: Query<&Item>,
     catalog: Res<Catalog>,
     mut cards: Query<&mut ScreenText, With<LogbookCard>>,
+    added: Query<(), Added<LogbookCard>>,
+    mut last: Local<String>,
 ) {
     let text = if book.career {
         let keys_home = stashes
@@ -259,8 +261,13 @@ fn card_text(
             None => format!("LOGBOOK\n\n{record}\n(press: career)"),
         }
     };
-    let text = crate::render::screen::wrap_lines(&text, 26);
+    // Fitting the text is not free: only when it changes.
+    if *last == text && added.is_empty() {
+        return;
+    }
+    *last = text.clone();
     for mut c in &mut cards {
+        let text = crate::render::screen::wrap_to_fit(&text, c.size, c.style);
         if c.text != text {
             c.text = text.clone();
         }

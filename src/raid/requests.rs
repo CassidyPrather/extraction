@@ -340,6 +340,8 @@ fn card_text(
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
+    added: Query<(), Added<RequestCard>>,
+    mut last: Local<String>,
 ) {
     let p = &progression.0;
     let tier = p.tier_def();
@@ -365,8 +367,13 @@ fn card_text(
     if let Some(c) = &requests.cache {
         text += &format!("\n\nMY CACHE: {c}");
     }
-    let text = crate::render::screen::wrap_lines(&text, 24);
+    // Fitting the text is not free: only when it changes.
+    if *last == text && added.is_empty() {
+        return;
+    }
+    *last = text.clone();
     for mut c in &mut cards {
+        let text = crate::render::screen::wrap_to_fit(&text, c.size, c.style);
         if c.text != text {
             c.text = text.clone();
         }

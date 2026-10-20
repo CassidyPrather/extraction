@@ -318,3 +318,67 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
         .collect();
     assert!(log.iter().any(|l| l.contains("Aerial")), "{log:?}");
 }
+
+/// The longest things the request card and the career page say still read
+/// from where you stand in the bed (`vr_harness`'s panel test sees only
+/// what's on them in a new career).
+#[test]
+fn the_longest_job_and_career_page_still_read() {
+    use crate::raid::bench::ScreenText;
+    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    let mut app = crate::raid::requests::tests::app();
+    let long = "in the hut under the mast out past the Woodward's cabin.";
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.tier = 0;
+        p.0.done_in_tier = 2;
+        p.0.upgrades = Upgrade::ALL.iter().map(|u| u.id().to_owned()).collect();
+        for m in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            p.0.count_raid(m);
+        }
+        p.0.job = Some(Job::Recover {
+            map: "cinder_works".into(),
+            region: "The slag heaps".into(),
+            at: None,
+            place: Some(long.into()),
+        });
+    }
+    {
+        let mut r = app
+            .world_mut()
+            .resource_mut::<crate::raid::requests::Requests>();
+        r.cache = Some(long.into());
+    }
+    {
+        let mut m = app.world_mut().resource_mut::<crate::persist::Memorial>();
+        m.0.convoys = 12;
+        m.0.lost = vec!["x".into(); 140];
+    }
+    app.world_mut()
+        .resource_mut::<crate::raid::logbook::Logbook>()
+        .career = true;
+    {
+        let mut raid = app.world_mut().resource_mut::<Raid>();
+        raid.raids = 188;
+        raid.extractions = 120;
+        raid.deaths = 68;
+    }
+    for _ in 0..3 {
+        app.update();
+    }
+    let mut seen = 0;
+    let mut q = app.world_mut().query::<(&Name, &ScreenText)>();
+    for (name, screen) in q.iter(app.world()) {
+        if !["Request card", "Logbook"].contains(&name.as_str()) {
+            continue;
+        }
+        seen += 1;
+        let deg = (em_metres(screen) / read_from(screen)).atan().to_degrees();
+        assert!(
+            deg >= MIN_EM_DEG,
+            "{name}: {deg:.2} deg letters:\n{}",
+            screen.text
+        );
+    }
+    assert_eq!(seen, 2);
+}
