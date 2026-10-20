@@ -231,3 +231,33 @@ multiview passes wouldn't change that). Recommendation: not now. If
 the headset's `cpu:` line shows the render world over budget, the
 cheaper levers are fewer entities a view (the draw budget) first; watch
 upstream Bevy for multiview, and take it when it lands rather than fork.
+
+## CPU: a busy raid moment
+
+`render::cpu` splits every frame by schedule (marker schedules between
+the main and fixed schedules, so no tracing build is needed;
+`EXTRACTION_CPU=1` logs the split every ten seconds). The gauge
+`budget::tests::a_busy_moment_holds_the_cpu_budget` stages a raid's busy
+moment in Marrow Creek: the whole client without a GPU, the player beside
+an anomaly in a downpour, ten robots (six drones, four walkers) hunting
+and shooting, one fixed tick a frame, on one thread so each system's time
+is its own work and the frame's is the total. It holds each schedule to a
+share of the frame (`budget::CPU_SHARE`: PostUpdate 50%, Update 40%,
+physics 35%, ...) and the frame to 160 units of a fixed reference
+workload (three times today's): shares survive a busy machine, wall
+milliseconds don't (beside the rest of the suite they more than double).
+`busy_moments` (ignored) prints all three valleys.
+
+To name systems: `cargo test --lib system_profile --features "bevy/trace
+bevy/debug" -- --ignored --nocapture` (a one-off Bevy rebuild with
+per-system spans; a tracing layer totals them by system).
+
+What it found: Bevy's `calculate_bounds` was 18 ms of a 40 ms frame,
+re-bounding all ground cover (4.6M vertices) every frame because the
+cover's sway material is rewritten every frame (wind, and the player's
+feet for the grass to lean from), which marks every mesh using it
+changed. The cover now carries `NoAutoAabb` (its bounds are exact from
+the start): 40 > 20 ms, PostUpdate 68% > 37% of the frame. Today, single
+threaded and dev-built, the moment is about 20-23 ms: PostUpdate 8
+(visibility 2.2, transforms 1.3), Update 5, physics 3.7, game logic 2.7;
+past the top few, a long tail of systems under 0.1 ms each.

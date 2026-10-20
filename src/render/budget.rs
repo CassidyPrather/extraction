@@ -62,6 +62,27 @@ pub const BUDGET: Budget = Budget {
 /// look the same, a touch softer (which the overcast wants anyway).
 pub const SHADOW_MAP: usize = 1024;
 
+/// The CPU a busy raid moment may take (`budget::tests`: the whole
+/// client without a GPU, one thread, so each system's time is its own
+/// work and the frame's is the total; a dev build). Wall milliseconds
+/// swing with the machine and whatever else it's running (beside the rest
+/// of the suite they more than double, memory contention a reference loop
+/// doesn't feel), so the schedules are held as shares of the frame, which
+/// survive that, and the frame only loosely: in units of a fixed
+/// reference workload timed beside it, at three times today's (53),
+/// against a collapse. Not a verdict on 90 Hz (that's the headset log's
+/// `cpu:` line); the bug it was made for put PostUpdate at 68% of a
+/// frame twice today's.
+pub const CPU_FRAME_UNITS: f64 = 160.0;
+pub const CPU_SHARE: [(&str, f64); 6] = [
+    ("PostUpdate", 0.5),
+    ("Update", 0.4),
+    ("FixedUpdate", 0.3),
+    ("FixedPostUpdate", 0.35),
+    ("PreUpdate", 0.2),
+    ("Last", 0.15),
+];
+
 /// One eye's load.
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct ViewLoad {
@@ -858,7 +879,28 @@ mod tests {
     /// `client_systems_initialise`): visibility, LOD ranges and the
     /// cascades' culling all run on the CPU, so a view's load can be
     /// counted without rendering it.
+    /// The client-based gauges run one at a time: each builds a whole
+    /// valley, and side by side they skew each other's timings and memory.
+    static HEAVY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn heavy() -> std::sync::MutexGuard<'static, ()> {
+        HEAVY.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn client(map: &str) -> App {
+        client_in(
+            map,
+            &std::env::var("BUDGET_WEATHER").unwrap_or("clearing".into()),
+        )
+    }
+
+    fn client_in(map: &str, weather: &str) -> App {
+        client_threads(map, weather, None)
+    }
+
+    /// `client_in` on a fixed number of task-pool threads (one: every
+    /// system's time is its own work, and the frame's is the total).
+    fn client_threads(map: &str, weather: &str, threads: Option<usize>) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -883,6 +925,12 @@ mod tests {
                     file_path: crate::asset_root_path().to_string_lossy().into_owned(),
                     ..default()
                 })
+                .set(match threads {
+                    Some(n) => bevy::app::TaskPoolPlugin {
+                        task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
+                    },
+                    None => bevy::app::TaskPoolPlugin::default(),
+                })
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),
         );
@@ -893,7 +941,7 @@ mod tests {
             new_game: true,
             robots: false,
             data_dir: Some(dir),
-            weather: Some(std::env::var("BUDGET_WEATHER").unwrap_or("clearing".into())),
+            weather: Some(weather.into()),
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -988,6 +1036,7 @@ mod tests {
     }
 
     fn holds(map: &str) {
+        let _one_at_a_time = heavy();
         println!(
             "{map}: foliage {}",
             if fetched_foliage() {
@@ -1170,6 +1219,494 @@ mod tests {
         kinds.sort_by(|a, b| b.1.cmp(&a.1));
         for (k, n) in kinds.iter().take(15) {
             println!("{n:5} {k}");
+        }
+    }
+
+    /// A raid's busy moment in `map`, in the whole client with no GPU, one
+    /// fixed tick a frame: the player beside an anomaly in a downpour,
+    /// ten robots (six drones, four walkers) hunting them and shooting
+    /// (impacts, casings, wrecks as they fall). Returns each schedule's ms a
+    /// frame (mean, 1%) over the measured frames.
+    fn busy_moment(map: &str) -> Vec<(&'static str, f64, f64)> {
+        busy_moment_with(map, || {})
+    }
+
+    /// A fixed piece of work, timed (ms): the yardstick the busy moment's
+    /// frames are measured against.
+    fn reference_ms() -> f64 {
+        let t = std::time::Instant::now();
+        let mut x = 1u64;
+        for i in 0..200_000u64 {
+            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(i);
+            x ^= x >> 13;
+        }
+        std::hint::black_box(x);
+        t.elapsed().as_secs_f64() * 1000.0
+    }
+
+    thread_local! {
+        /// The reference's ms, frame by frame, over the last busy moment.
+        static REFERENCE: std::cell::RefCell<Vec<f64>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// `busy_moment`, calling `measuring` as the measured frames begin.
+    fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
+        use crate::robots::{Brain, Job, JobKind};
+        let mut app = client_threads(map, "downpour", Some(1));
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 90.0),
+        ));
+        settle(&mut app);
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        // Beside the anomaly nearest the map's middle.
+        let near = {
+            let w = app.world_mut();
+            w.query_filtered::<&GlobalTransform, With<crate::anomaly::Anomaly>>()
+                .iter(w)
+                .map(|g| g.translation())
+                .min_by(|a, b| a.length().total_cmp(&b.length()))
+                .unwrap_or(Vec3::ZERO)
+        };
+        let at = zone.on_ground(near.x + 9.0, near.z);
+        {
+            let w = app.world_mut();
+            let player = w
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .single(w)
+                .unwrap();
+            w.get_mut::<Transform>(player).unwrap().translation = at;
+            let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
+            *q.single_mut(w).unwrap() = Transform::from_translation(at + Vec3::Y * 1.7)
+                .looking_at(near + Vec3::Y * 1.0, Vec3::Y);
+        }
+        for _ in 0..30 {
+            app.update();
+        }
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut robots = Vec::new();
+        {
+            let mut c = Commands::new(&mut queue, app.world());
+            for i in 0..10 {
+                let a = i as f32 * 0.63;
+                let spot = zone.on_ground(at.x + a.cos() * 35.0, at.z + a.sin() * 35.0);
+                let job = Job {
+                    kind: JobKind::Response,
+                    site: at,
+                    duration: 999.0,
+                    exit: spot,
+                };
+                robots.push(if i < 6 {
+                    crate::robots::drone::spawn_drone(&mut c, spot + Vec3::Y * 15.0, job)
+                } else {
+                    crate::robots::walker::spawn_walker(&mut c, &zone, spot, job)
+                });
+            }
+        }
+        queue.apply(app.world_mut());
+        app.update();
+        for r in &robots {
+            if let Some(mut b) = app.world_mut().get_mut::<Brain>(*r) {
+                *b = Brain::Investigate { at, left: 999.0 };
+            }
+        }
+        let keep_alive = |app: &mut App| {
+            let w = app.world_mut();
+            for mut h in w.query::<&mut crate::health::Health>().iter_mut(w) {
+                h.hp = h.max;
+                h.down = false;
+            }
+        };
+        // Warm up (assets for the robots, first shots), then measure.
+        for _ in 0..90 {
+            keep_alive(&mut app);
+            app.update();
+        }
+        let skip = app
+            .world()
+            .resource::<super::super::cpu::ScheduleTimes>()
+            .frames
+            .len();
+        measuring();
+        REFERENCE.with(|r| r.borrow_mut().clear());
+        for _ in 0..450 {
+            keep_alive(&mut app);
+            app.update();
+            let ms = reference_ms();
+            REFERENCE.with(|r| r.borrow_mut().push(ms));
+        }
+        if std::env::var_os("BUDGET_CENSUS").is_some() {
+            census(&mut app);
+        }
+        app.world()
+            .resource::<super::super::cpu::ScheduleTimes>()
+            .stats(skip)
+    }
+
+    /// What the per-frame mesh systems iterate: mesh entities, those
+    /// without bounds, and the mesh and material assets modified in a
+    /// frame (`BUDGET_CENSUS=1`).
+    fn census(app: &mut App) {
+        use bevy::camera::primitives::Aabb;
+        let w = app.world_mut();
+        let meshes = w.query_filtered::<(), With<Mesh3d>>().iter(w).count();
+        let unbounded: Vec<Entity> = w
+            .query_filtered::<Entity, (With<Mesh3d>, Without<Aabb>)>()
+            .iter(w)
+            .collect();
+        println!(
+            "census: {meshes} mesh entities, {} without bounds",
+            unbounded.len()
+        );
+        let mut why: HashMap<String, usize> = HashMap::new();
+        for e in unbounded.iter().take(5000) {
+            let r = w.entity(*e);
+            let m = r.get::<Mesh3d>().unwrap();
+            let state = match w.resource::<Assets<Mesh>>().get(&m.0) {
+                None => "mesh asset gone".to_string(),
+                Some(mesh) => match mesh.attribute(Mesh::ATTRIBUTE_POSITION) {
+                    None => "no positions".to_string(),
+                    Some(p) if p.len() == 0 => "empty".to_string(),
+                    Some(_) => "has positions".to_string(),
+                },
+            };
+            let mut at = *e;
+            let mut name = "(unnamed)".to_string();
+            for _ in 0..8 {
+                if let Some(n) = w.get::<Name>(at) {
+                    name = n.as_str().split(' ').next().unwrap_or("").to_string();
+                    break;
+                }
+                match w.get::<ChildOf>(at) {
+                    Some(p) => at = p.parent(),
+                    None => break,
+                }
+            }
+            *why.entry(format!("{state}: {name}")).or_default() += 1;
+        }
+        let mut why: Vec<_> = why.into_iter().collect();
+        why.sort_by(|a, b| b.1.cmp(&a.1));
+        for (k, n) in why.iter().take(12) {
+            println!("  unbounded {n:6} {k}");
+        }
+        // What calculate_bounds works on, a frame: a probe beside it.
+        {
+            use bevy::asset::prelude::AssetChanged;
+            use bevy::camera::visibility::{NoAutoAabb, NoFrustumCulling};
+            #[derive(Resource, Default)]
+            struct Probe(Vec<(usize, usize, usize, usize, String)>);
+            app.init_resource::<Probe>();
+            app.add_systems(
+                PostUpdate,
+                (|meshes: Res<Assets<Mesh>>,
+                  new: Query<
+                    &Mesh3d,
+                    (
+                        Without<Aabb>,
+                        Without<NoFrustumCulling>,
+                        Without<NoAutoAabb>,
+                    ),
+                >,
+                  changed: Query<
+                    (Entity, &Mesh3d, Ref<Mesh3d>),
+                    (
+                        Or<(AssetChanged<Mesh3d>, Changed<Mesh3d>)>,
+                        Without<NoFrustumCulling>,
+                        Without<NoAutoAabb>,
+                    ),
+                >,
+                  names: Query<&Name>,
+                  parents: Query<&ChildOf>,
+                  mut probe: ResMut<Probe>| {
+                    let verts = |m: &Mesh3d| meshes.get(m).map_or(0, |m| m.count_vertices());
+                    let n: Vec<usize> = new.iter().map(verts).collect();
+                    let mut who: HashMap<String, usize> = HashMap::new();
+                    let mut cv = 0;
+                    let mut cn = 0;
+                    for (e, m, r) in &changed {
+                        cn += 1;
+                        cv += verts(m);
+                        let mut at = e;
+                        let mut name = "(unnamed)".to_string();
+                        for _ in 0..8 {
+                            if let Ok(nm) = names.get(at) {
+                                name = nm.as_str().split(' ').next().unwrap_or("").into();
+                                break;
+                            }
+                            match parents.get(at) {
+                                Ok(p) => at = p.parent(),
+                                Err(_) => break,
+                            }
+                        }
+                        let k = format!(
+                            "{name}{}",
+                            if r.is_changed() {
+                                " (Mesh3d changed)"
+                            } else {
+                                " (asset changed)"
+                            }
+                        );
+                        *who.entry(k).or_default() += verts(m);
+                    }
+                    let mut who: Vec<_> = who.into_iter().collect();
+                    who.sort_by(|a, b| b.1.cmp(&a.1));
+                    probe.0.push((
+                        n.len(),
+                        n.iter().sum(),
+                        cn,
+                        cv,
+                        format!("{:?}", &who[..who.len().min(5)]),
+                    ));
+                })
+                .before(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+            );
+            for _ in 0..4 {
+                app.update();
+            }
+            for p in app.world().resource::<Probe>().0.iter().skip(1) {
+                println!(
+                    "  calculate_bounds sees new {} ({} verts), changed {} ({} verts): {}",
+                    p.0, p.1, p.2, p.3, p.4
+                );
+            }
+        }
+        // Asset modifications over a few frames.
+        let mut mods: HashMap<String, usize> = HashMap::new();
+        for _ in 0..10 {
+            app.update();
+            let w = app.world_mut();
+            macro_rules! count {
+                ($t:ty, $label:expr) => {{
+                    let n = w
+                        .resource_mut::<Messages<AssetEvent<$t>>>()
+                        .iter_current_update_messages()
+                        .filter(|e| matches!(e, AssetEvent::Modified { .. }))
+                        .count();
+                    *mods.entry($label.to_string()).or_default() += n;
+                }};
+            }
+            count!(Mesh, "Mesh");
+            let ids: Vec<AssetId<Mesh>> = w
+                .resource_mut::<Messages<AssetEvent<Mesh>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                let verts = w
+                    .resource::<Assets<Mesh>>()
+                    .get(id)
+                    .map_or(0, |m| m.count_vertices());
+                let users: Vec<Entity> = w
+                    .query::<(Entity, &Mesh3d)>()
+                    .iter(w)
+                    .filter(|(_, m)| m.0.id() == id)
+                    .map(|(e, _)| e)
+                    .collect();
+                let name = users.first().map_or("(none)".to_string(), |e| {
+                    let mut at = *e;
+                    for _ in 0..8 {
+                        if let Some(n) = w.get::<Name>(at) {
+                            return n.as_str().to_string();
+                        }
+                        match w.get::<ChildOf>(at) {
+                            Some(p) => at = p.parent(),
+                            None => break,
+                        }
+                    }
+                    "(unnamed)".into()
+                });
+                *mods
+                    .entry(format!("mesh {verts} verts, {} users, {name}", users.len()))
+                    .or_default() += 1;
+            }
+            count!(StandardMaterial, "StandardMaterial");
+            count!(
+                crate::anomaly::visuals::ParticleMaterial,
+                "ParticleMaterial"
+            );
+            count!(crate::anomaly::visuals::XrayMaterial, "XrayMaterial");
+            count!(crate::world::rain::RainMaterial, "RainMaterial");
+            count!(crate::world::sky::SkyMaterial, "SkyMaterial");
+            count!(crate::world::trees::TreeSwayMaterial, "TreeSwayMaterial");
+            count!(crate::world::cover::SwayMaterial, "cover SwayMaterial");
+            count!(
+                crate::render::terrain_material::TerrainMaterial,
+                "TerrainMaterial"
+            );
+        }
+        for (k, n) in mods {
+            println!("  modified a frame: {k} {:.1}", n as f32 / 10.0);
+        }
+    }
+
+    /// Time a frame per system, from Bevy's per-system tracing spans:
+    /// only with Bevy's `trace` feature (`cargo test --lib system_profile
+    /// --features bevy/trace -- --ignored --nocapture`).
+    #[derive(Default, Clone)]
+    struct SystemTimes(std::sync::Arc<std::sync::Mutex<HashMap<String, f64>>>);
+
+    struct Named(String);
+    struct Entered(std::time::Instant);
+
+    impl<S> bevy::log::tracing_subscriber::Layer<S> for SystemTimes
+    where
+        S: bevy::log::tracing::Subscriber
+            + for<'a> bevy::log::tracing_subscriber::registry::LookupSpan<'a>,
+    {
+        fn on_new_span(
+            &self,
+            attrs: &bevy::log::tracing::span::Attributes<'_>,
+            id: &bevy::log::tracing::span::Id,
+            ctx: bevy::log::tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            if attrs.metadata().name() != "system" {
+                return;
+            }
+            struct V(Option<String>);
+            impl bevy::log::tracing::field::Visit for V {
+                fn record_debug(
+                    &mut self,
+                    f: &bevy::log::tracing::field::Field,
+                    v: &dyn std::fmt::Debug,
+                ) {
+                    if f.name() == "name" {
+                        self.0 = Some(format!("{v:?}").trim_matches('"').to_string());
+                    }
+                }
+                fn record_str(&mut self, f: &bevy::log::tracing::field::Field, v: &str) {
+                    if f.name() == "name" {
+                        self.0 = Some(v.to_string());
+                    }
+                }
+            }
+            let mut v = V(None);
+            attrs.record(&mut v);
+            if let (Some(name), Some(span)) = (v.0, ctx.span(id)) {
+                span.extensions_mut().insert(Named(name));
+            }
+        }
+
+        fn on_enter(
+            &self,
+            id: &bevy::log::tracing::span::Id,
+            ctx: bevy::log::tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            if let Some(span) = ctx.span(id) {
+                if span.extensions().get::<Named>().is_some() {
+                    span.extensions_mut()
+                        .replace(Entered(std::time::Instant::now()));
+                }
+            }
+        }
+
+        fn on_exit(
+            &self,
+            id: &bevy::log::tracing::span::Id,
+            ctx: bevy::log::tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            if let Some(span) = ctx.span(id) {
+                let ext = span.extensions();
+                if let (Some(Named(name)), Some(Entered(at))) =
+                    (ext.get::<Named>(), ext.get::<Entered>())
+                {
+                    *self.0.lock().unwrap().entry(name.clone()).or_default() +=
+                        at.elapsed().as_secs_f64() * 1000.0;
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "profile: needs --features bevy/trace"]
+    fn system_profile() {
+        use bevy::log::tracing_subscriber::layer::SubscriberExt;
+        let times = SystemTimes::default();
+        let subscriber = bevy::log::tracing_subscriber::registry().with(times.clone());
+        bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
+        let map = std::env::var("BUDGET_MAP").unwrap_or("marrow_creek".into());
+        // Count only the measured frames: clear when they start.
+        let (stats, frames) = {
+            let t = times.clone();
+            let out = busy_moment_with(&map, move || t.0.lock().unwrap().clear());
+            (out, 450.0)
+        };
+        let mut v: Vec<(String, f64)> = times.0.lock().unwrap().clone().into_iter().collect();
+        if v.is_empty() {
+            println!("no system spans: run with --features bevy/trace");
+            return;
+        }
+        v.sort_by(|a, b| b.1.total_cmp(&a.1));
+        println!("{map}, a busy moment: ms a frame by system (top 40)");
+        for (name, ms) in v.iter().take(40) {
+            println!("  {:7.3}  {name}", ms / frames);
+        }
+        for (name, mean, p99) in stats.iter().take(4) {
+            println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
+        }
+    }
+
+    /// A busy moment in Marrow Creek holds its CPU budget: the frame in
+    /// reference units (`CPU_FRAME_UNITS`), each schedule its share
+    /// (`CPU_SHARE`).
+    #[test]
+    fn a_busy_moment_holds_the_cpu_budget() {
+        let _one_at_a_time = heavy();
+        let stats = busy_moment("marrow_creek");
+        let reference = REFERENCE.with(|r| {
+            let mut v = r.borrow().clone();
+            v.sort_by(f64::total_cmp);
+            v[v.len() / 2]
+        });
+        let frame = stats
+            .iter()
+            .find(|(n, _, _)| *n == "main schedule")
+            .map_or(0.0, |s| s.1);
+        let units = frame / reference;
+        println!(
+            "busy moment: {frame:.2} ms a frame, reference {reference:.3} ms: {units:.1} units"
+        );
+        let mut over = Vec::new();
+        if units > CPU_FRAME_UNITS {
+            over.push(format!(
+                "the frame: {units:.1} reference units > {CPU_FRAME_UNITS}"
+            ));
+        }
+        for (name, mean, p99) in &stats {
+            let share = mean / frame.max(1e-9);
+            println!(
+                "    {name:>16} {mean:7.2} ms (1% {p99:7.2}), {:4.0}%",
+                share * 100.0
+            );
+            if let Some((_, limit)) = CPU_SHARE.iter().find(|(n, _)| n == name) {
+                if share > *limit {
+                    over.push(format!(
+                        "{name}: {:.0}% of the frame > {:.0}%",
+                        share * 100.0,
+                        limit * 100.0
+                    ));
+                }
+            }
+        }
+        assert!(
+            over.is_empty(),
+            "a busy raid moment is over its CPU budget (`cargo test --lib system_profile \
+             --features \"bevy/trace bevy/debug\" -- --ignored --nocapture` names the \
+             systems):\n{}",
+            over.join("\n")
+        );
+    }
+
+    #[test]
+    #[ignore = "timing: cargo test --lib busy -- --ignored --nocapture"]
+    fn busy_moments() {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let stats = busy_moment(map);
+            println!("{map}, a busy moment (ms a frame, mean / 1%):");
+            for (name, mean, p99) in stats {
+                println!("    {name:>16} {mean:7.2} {p99:7.2}");
+            }
         }
     }
 
