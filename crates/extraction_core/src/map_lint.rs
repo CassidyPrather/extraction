@@ -1485,6 +1485,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for route in &routes {
         let end = *route.points.last().unwrap();
         let mut g = gentle.clone();
+        let mut corridor = Vec::new();
         for p in route.points.iter().step_by(2) {
             if dist(*p, ins) < CHOICE_ENDS || dist(*p, end) < CHOICE_ENDS {
                 continue;
@@ -1500,6 +1501,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                         let (i, j) = (i as usize, j as usize);
                         if dist(g.centre(i, j), *p) <= CHOICE_APART {
                             g.cost[j * g.n + i] = BLOCKED;
+                            corridor.push(j * g.n + i);
                         }
                     }
                 }
@@ -1515,11 +1517,67 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             ))
         ));
         if alt.is_none_or(|l| l > route.length * CHOICE_DETOUR) {
+            // Say what cuts the other way off: too long on gentle ground, or
+            // only there over steep ground (point at its steepest cell), or
+            // not there at all.
+            let mid = route.points[route.points.len() / 2];
+            let (why, at) = if let Some(l) = alt {
+                (
+                    format!("; the other way is {l:.0} m ({:.2}x)", l / route.length),
+                    mid,
+                )
+            } else {
+                let mut w = walk.clone();
+                for c in &corridor {
+                    w.cost[*c] = BLOCKED;
+                }
+                match w.path(ins, end) {
+                    Some(p) => {
+                        // The ground along that way only the gentle grid refuses
+                        // (too steep for it), sampled every metre.
+                        let mut cut: Vec<(usize, usize)> = p
+                            .windows(2)
+                            .flat_map(|ab| {
+                                let n = dist(ab[0], ab[1]).ceil().max(1.0) as usize;
+                                (0..n).map(move |k| {
+                                    let t = k as f32 / n as f32;
+                                    [
+                                        ab[0][0] + (ab[1][0] - ab[0][0]) * t,
+                                        ab[0][1] + (ab[1][1] - ab[0][1]) * t,
+                                    ]
+                                })
+                            })
+                            .filter_map(|q| gentle.cell_of(q))
+                            .filter(|(i, j)| {
+                                gentle.cost[j * gentle.n + i] == BLOCKED
+                                    && walk.cost[j * walk.n + i] != BLOCKED
+                            })
+                            .collect();
+                        cut.dedup();
+                        let cut: Vec<[f32; 2]> =
+                            cut.iter().map(|(i, j)| gentle.centre(*i, *j)).collect();
+                        let steep = cut
+                            .iter()
+                            .copied()
+                            .max_by(|a, b| hm.slope_deg(*a).total_cmp(&hm.slope_deg(*b)))
+                            .unwrap_or(mid);
+                        (
+                            format!(
+                                "; there is one only over ground steeper than {ROUTE_GRADE}° ({:.0} m of it, worst {:.0}° here)",
+                                cut.len() as f32 * gentle.cell,
+                                hm.slope_deg(steep)
+                            ),
+                            steep,
+                        )
+                    }
+                    None => ("; none on any walkable ground either".into(), mid),
+                }
+            };
             find(
                 &mut r,
                 Rule::Choice,
-                format!("no second way to {} within {CHOICE_DETOUR}x", route.to),
-                route.points[route.points.len() / 2],
+                format!("no second way to {} within {CHOICE_DETOUR}x{why}", route.to),
+                at,
             );
         }
     }
