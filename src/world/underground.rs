@@ -926,6 +926,72 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                 b.loot(at + Vec3::Y * 1.65, t);
             }
         }
+        PropKind::Bin => {
+            // A floor and four sides: what's in it lies in it.
+            let from = b.geo.pieces.len();
+            let side = |b: &mut Builder, size: Vec3, off: Vec3| {
+                b.piece(
+                    Shape::Box(size),
+                    Transform::from_translation(at + rot * off).with_rotation(rot),
+                    Mat::DarkMetal,
+                    true,
+                );
+            };
+            side(b, Vec3::new(1.2, 0.06, 0.8), Vec3::new(0.0, 0.03, 0.0));
+            side(b, Vec3::new(1.2, 0.9, 0.04), Vec3::new(0.0, 0.45, -0.38));
+            side(b, Vec3::new(1.2, 0.9, 0.04), Vec3::new(0.0, 0.45, 0.38));
+            side(b, Vec3::new(0.04, 0.9, 0.8), Vec3::new(-0.58, 0.45, 0.0));
+            side(b, Vec3::new(0.04, 0.9, 0.8), Vec3::new(0.58, 0.45, 0.0));
+            b.dress(
+                from,
+                vec![(
+                    "depot_bin",
+                    Transform::from_translation(at).with_rotation(rot),
+                )],
+            );
+            if let Some(t) = loot {
+                b.loot(at + Vec3::Y * 0.3, t);
+            }
+        }
+        PropKind::Conveyor
+        | PropKind::Tagger
+        | PropKind::KeptCrate
+        | PropKind::KeptCrateSmall
+        | PropKind::Cradle => {
+            let (model, size) = match kind {
+                PropKind::Conveyor => ("depot_conveyor", Vec3::new(6.0, 1.0, 0.9)),
+                PropKind::Tagger => ("depot_tagger", Vec3::new(0.7, 1.3, 0.6)),
+                PropKind::KeptCrate => ("depot_crate_long", Vec3::new(2.1, 0.65, 0.7)),
+                PropKind::KeptCrateSmall => ("depot_crate_small", Vec3::new(0.8, 0.5, 0.6)),
+                _ => ("depot_cradle", Vec3::new(2.2, 0.3, 2.0)),
+            };
+            let from = b.geo.pieces.len();
+            b.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + Vec3::Y * size.y * 0.5).with_rotation(rot),
+                Mat::PaintedMetal,
+                true,
+            );
+            // The cradle's uprights, at the wall.
+            if kind == PropKind::Cradle {
+                for x in [-1.0, 1.0] {
+                    b.piece(
+                        Shape::Box(Vec3::new(0.2, 2.6, 0.3)),
+                        Transform::from_translation(at + rot * Vec3::new(x, 1.3, 0.8))
+                            .with_rotation(rot),
+                        Mat::PaintedMetal,
+                        true,
+                    );
+                }
+            }
+            b.dress(
+                from,
+                vec![(model, Transform::from_translation(at).with_rotation(rot))],
+            );
+            if let Some(t) = loot {
+                b.loot(at + Vec3::Y * (size.y + 0.15), t);
+            }
+        }
         PropKind::Cabinet => {
             let from = b.geo.pieces.len();
             b.piece(
@@ -1920,7 +1986,7 @@ fn fill_lost_bins(
     let bins: Vec<Vec2> = hall
         .props
         .iter()
-        .filter(|p| matches!(p.kind, PropKind::Crate | PropKind::Pallet))
+        .filter(|p| matches!(p.kind, PropKind::Bin | PropKind::Crate | PropKind::Pallet))
         .map(|p| Vec2::new(hall.at[0] + p.at[0], hall.at[1] + p.at[1]))
         .collect();
     if bins.is_empty() {

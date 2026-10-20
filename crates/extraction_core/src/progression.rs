@@ -1005,7 +1005,11 @@ mod tests {
             done: TIERS.iter().map(|t| t.jobs).sum(),
             ..Default::default()
         };
-        // No depot on the map: an ordinary deep job.
+        // No depot on the map (Marrow has one now: taken off): an ordinary
+        // deep job.
+        for (_, m) in v.iter_mut() {
+            m.placements.retain(|p| p.prefab != DEPOT_PREFAB);
+        }
         assert_ne!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
         let depot = crate::map::Placement {
             prefab: DEPOT_PREFAB.into(),

@@ -108,6 +108,18 @@ pub enum PropKind {
     /// A wall cabinet (switchgear, first aid).
     Cabinet,
     Chair,
+    /// The Depot's: a wire bin (1.2 x 0.9 x 0.8), its loot inside.
+    Bin,
+    /// A sorting conveyor, 6 m along the turned X.
+    Conveyor,
+    /// A tagging station by the conveyor.
+    Tagger,
+    /// A "kept" crate, long (2.1 x 0.65 x 0.7), shut for good.
+    KeptCrate,
+    /// ...and a small one (0.8 x 0.5 x 0.6).
+    KeptCrateSmall,
+    /// A walker's charging cradle, its back (+Z) to the wall.
+    Cradle,
 }
 
 #[derive(Clone, Debug, Deserialize)]
