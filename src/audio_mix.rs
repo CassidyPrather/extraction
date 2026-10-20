@@ -67,6 +67,10 @@ macro_rules! cue {
 /// the Surge siren included; air itself is far gentler.
 pub const MUFFLE_FULL: f32 = 900.0;
 
+/// The score's gain (`audio_score`), set by measurement: at full it stays
+/// under the wind and hides no robot (`scripts/audio_score.py`).
+pub const SCORE_DB: f32 = -42.0;
+
 #[rustfmt::skip]
 pub const MIX: &[Cue] = &[
     // Your own body and hands.

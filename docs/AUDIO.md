@@ -446,6 +446,49 @@ measures the cues on that output:
 | Front/back | 4–10 kHz over 0.5–3 kHz, ahead minus behind | ≥ 2.5 dB | 4.0 dB | 6.3 dB |
 | Up | the same, above minus ahead | ≥ 2.0 dB | 3.7 dB | 2.7 dB |
 
+## The score
+
+A generative ambient layer (`src/audio_score.rs`) that isn't there until
+it is. While nothing is wrong it is silent: its node outputs exact zeros
+and costs nothing. Then it rises:
+
+- with the attention on you (`anomaly::Attention`, the same total the
+  attention ringing follows), to 0.75 at most;
+- to 0.5 while a response team is on its way to within 150 m of you
+  (`Director::responses`);
+- to 1 with the Surge (`anomaly::surge::Agitation`).
+
+It rises over about ten seconds and falls over twenty-five. At the
+truck (waiting within 12 m, extracting, at base) and when you're down,
+it falls away over six. Off with the comfort setting `score`
+(`--no-score`).
+
+**What it is**, synthesised in the node one sample at a time from
+`intensity` alone, and deterministic for a seed:
+
+- long low drones on D2 (73 Hz, with harmonics so a headset's drivers
+  carry it): the root and a slow-beating partner, then the octave, the
+  fifth, the twelfth, and past 0.6 the minor second for unease, each
+  breathing on its own 17–43 s swell;
+- sparse fragments: one to three notes of D minor pentatonic (E flat
+  past 0.7), swelling in over 1–2.5 s and ringing out over 4–7 s. None
+  below 0.2; at 1, about one every 12 s. Nothing in it starts sharply:
+  a test holds every 50 ms within 6 dB of the half second before.
+
+**The audit check** (`scripts/audio_score.py`): `cargo test
+audio_score::tests::renders_for_the_audit` renders 90 s at intensities
+0.25, 0.5, 0.75 and 1, at the in-game gain (`audio_mix::SCORE_DB`). The
+check holds that:
+
+| What | Wants | Now |
+| --- | --- | --- |
+| Loudest 400 ms, any intensity | ≥ 3 LU under the wind bed | 3.2 LU under, at full |
+| Heard at all at full | clears the wind's masking | by 15 dB |
+| Every placed robot sound's audible range, score at full | ≥ 90 % of without, over the wind and over the Surge | unchanged for all 16 |
+
+The masking uses the score's loudest 3 s in each band, so a fragment
+ringing counts, not the average.
+
 ## Listening in the headset
 
 The numbers place each sound; only ears say whether it's the right one.
@@ -487,7 +530,13 @@ words ("too bright", "sounds like plastic", "late"):
     eyes by a running generator or the truck and turn round: does it stay
     put, and is behind clearly behind? A drone overhead: above? Then
     with `--no-binaural`: is the difference worth its cost?
-14. **Overall.** Anything that made you flinch, or that you didn't hear
+14. **The score.** Carry an artifact until the ringing starts, then
+    wait for the Surge (`--surge-in 60`): does something low come up
+    under the world without you noticing when it started? Does it make
+    the moment tenser, or just busier? Can you still pick out a walker's
+    steps and a drone? Does it fall away at the truck? Then try
+    `--no-score`.
+15. **Overall.** Anything that made you flinch, or that you didn't hear
     at all. The audit's "Loudest up close" list in `target/audio_audit/
     mix.txt` names the loudest suspects.
 

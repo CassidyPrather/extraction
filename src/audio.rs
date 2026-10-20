@@ -13,6 +13,7 @@ use extraction_core::terrain::Surface;
 use std::collections::HashMap;
 
 use crate::audio_mix as mix;
+use crate::audio_score::{self, ScoreNode};
 use crate::interact::InteractEvent;
 use crate::player::Footstep;
 use crate::rig::RigHead;
@@ -170,6 +171,7 @@ pub struct AudioPlugin;
 impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SeedlingPlugins)
+            .register_node::<ScoreNode>()
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
             .init_resource::<Binaural>()
@@ -233,6 +235,7 @@ impl Plugin for AudioPlugin {
                     rain_volume,
                     room_acoustics,
                     binaural_switch,
+                    score_drive,
                 ),
             )
             // After everything that plays, so a sound is placed the frame
@@ -1815,6 +1818,70 @@ fn indoor_ambience(
     }
 }
 
+/// The score (`audio_score`): spawned silent, and steered by what the
+/// Zone is doing. Off with the comfort setting `score`.
+#[allow(clippy::too_many_arguments)]
+fn score_drive(
+    mut commands: Commands,
+    players: Query<&crate::anomaly::Attention, With<crate::rig::LocalPlayer>>,
+    agitation: Option<Res<crate::anomaly::surge::Agitation>>,
+    director: Option<Res<crate::robots::director::Director>>,
+    raid: Option<Res<crate::raid::Raid>>,
+    trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut score: Query<&mut ScoreNode>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut level: Local<f32>,
+) {
+    use crate::raid::Phase;
+    let Ok(mut node) = score.single_mut() else {
+        commands.spawn(ScoreNode {
+            seed: rng.0.next_u64(),
+            ..default()
+        });
+        return;
+    };
+    let ear = listener.iter().next().map(|g| g.translation());
+    let at_truck = match raid.as_deref().map(|r| &r.phase) {
+        None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
+        Some(Phase::TruckWaiting { .. }) => {
+            ear.is_some_and(|e| trucks.iter().any(|t| t.translation().distance(e) < 12.0))
+        }
+        _ => false,
+    };
+    let response_near = match (director, ear) {
+        (Some(d), Some(e)) => d
+            .responses
+            .iter()
+            .any(|(_, at)| at.distance(e) < audio_score::RESPONSE_NEAR),
+        _ => false,
+    };
+    let want = if comfort.is_some_and(|c| !c.score) {
+        0.0
+    } else {
+        audio_score::target(
+            players.iter().next().map_or(0.0, |a| a.total()),
+            response_near,
+            agitation.map_or(0.0, |a| a.0),
+            at_truck,
+        )
+    };
+    let rate = if want > *level {
+        audio_score::RISE
+    } else if at_truck {
+        audio_score::FALL_AT_TRUCK
+    } else {
+        audio_score::FALL
+    };
+    let dt = time.delta_secs();
+    *level += (want - *level).clamp(-rate * dt, rate * dt);
+    if (node.intensity - *level).abs() > 1e-3 || (*level == 0.0 && node.intensity != 0.0) {
+        node.intensity = *level;
+    }
+}
+
 /// Attention is felt, not shown: past the first prickle a ringing rises in
 /// your ears, loudest when the whole Zone is looking at you.
 fn attention_hum(
@@ -3149,6 +3216,44 @@ mod tests {
             );
         }
         assert!(sends.iter().all(|s| edges.contains(&(*s, bus))));
+    }
+
+    /// The score is a node in the real graph, out to the main bus.
+    #[test]
+    fn the_score_joins_the_graph() {
+        use bevy_seedling::node::FirewheelNode;
+        use bevy_seedling::platform::mock::MockBackendPlugin;
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy_seedling::SeedlingCorePlugin,
+            MockBackendPlugin,
+        ))
+        .register_node::<ScoreNode>()
+        .add_systems(Startup, |mut commands: Commands| {
+            commands.spawn(ScoreNode::default());
+        });
+        app.finish();
+        app.cleanup();
+        for _ in 0..10 {
+            app.update();
+        }
+        let world = app.world_mut();
+        let score = world
+            .query_filtered::<&FirewheelNode, With<ScoreNode>>()
+            .single(world)
+            .expect("the score is a node")
+            .0;
+        let main = world
+            .query_filtered::<&FirewheelNode, With<MainBus>>()
+            .single(world)
+            .unwrap()
+            .0;
+        assert!(
+            graph_edges(world).contains(&(score, main)),
+            "score -> main bus"
+        );
     }
 
     /// The directions the binaural audit renders, in the listener's frame
