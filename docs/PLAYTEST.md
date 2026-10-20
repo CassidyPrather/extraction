@@ -274,6 +274,11 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   "hard enough" match what your arm did? Fix the SKS's bayonet (A).
 - Cover by material: shoot through a shed's plank wall with the AK, then
   try the pistol; skip rounds off concrete at a slant. Does it read?
+- Armour. Put on the plate carrier by letting it go at your chest, and
+  push a plate into its front pocket. Put the helmet on at your head.
+  Does putting it on feel like dressing, or like hunting for a hotspot?
+  Let a robot hit you on the plate: does it feel like a bruise
+  rather than a wound?
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.

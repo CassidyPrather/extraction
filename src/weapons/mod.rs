@@ -10,6 +10,7 @@
 //!   rounds thrown from the port, recoil ([`feel`]) and [`GunEvent`]s
 //!   for sound.
 
+pub mod armour;
 pub mod ballistics;
 pub mod feel;
 pub mod flat;
@@ -186,6 +187,7 @@ impl Plugin for WeaponsPlugin {
                 update_aim_hints.before(crate::rig::RigDriverSystems),
             )
             .add_plugins((
+                armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,

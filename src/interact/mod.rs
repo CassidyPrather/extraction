@@ -1074,6 +1074,9 @@ pub fn accepts_item(
 ) -> bool {
     match kind {
         SocketKind::Body(SlotKind::Holster) => size == SizeClass::Medium && is_gun,
+        // Worn things go on only where they're worn.
+        SocketKind::Body(SlotKind::Vest) => mount == Some(extraction_core::items::Mount::Vest),
+        SocketKind::Body(SlotKind::Head) => mount == Some(extraction_core::items::Mount::Helmet),
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
         SocketKind::Mount(m) => mount == Some(*m),

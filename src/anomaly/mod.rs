@@ -419,6 +419,7 @@ fn burners(
                     velocity: Vec3::ZERO,
                     damage: 18.0 * dt,
                     shooter: None,
+                    mass_g: 0.0,
                 });
             }
         }
@@ -521,6 +522,7 @@ fn snares(
                     velocity: Vec3::ZERO,
                     damage: 40.0,
                     shooter: None,
+                    mass_g: 0.0,
                 });
             } else if let Ok((rb, mut f)) = bodies.get_mut(t) {
                 if *rb == RigidBody::Dynamic {
