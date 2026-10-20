@@ -149,6 +149,26 @@ middle of the career too, and it's the reason scrap and oil are worth a
 pocket at raid 50. It's deliberately small: about one item a raid against
 the bots' 3-4 of the kinds it asks for.
 
+**Measured** (the same 54 job-taking sim raids, careers walked on to raid
+60 by `scripts/progression_pacing.py`): past the ladder a deep job is done
+about **every 2.6 raids** (the ladder's last tier took about one every 2),
+so raid 40 is a run to a danger-3 place or underground most times, for
+three piles of what you ordered. Upkeep at the bots' loot rates:
+
+| Part | Home per raid | Upkeep per raid (all fitted) | Share of income |
+| - | - | - | - |
+| scrap metal | 1.56 | 0.67 | 43% |
+| gun oil | 1.00 | 0.17 | 17% |
+| electronics | 0.72 | 0.17 | 23% |
+| field dressing | 1.54 | 0.17 | 11% |
+
+It never lays a fitting up for a career that keeps what it finds (0% of
+raids, every fitting); what it does is take nearly half the scrap, which
+the bench also wants for rounds and spare parts. That's the intended
+size: a pull on what you carry home and what you strip at the bench, not
+a tax that shuts the truck down. A player who strips everything for rounds
+will see the rack lie up, and that's the decision it's there to make.
+
 Cut from this: a reputation number (the order card is what reputation
 would have bought); per-fitting repairs at the bench (upkeep is taken, not
 crafted, so it never becomes a menu); rotating "seasons".
