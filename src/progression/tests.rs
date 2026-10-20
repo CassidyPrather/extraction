@@ -684,3 +684,49 @@ fn the_order_card_turns_the_caches() {
         "a cache of rounds: {before} -> {after}"
     );
 }
+
+/// The first deep job, once Underground's depot is on the map: the intake
+/// ledger, left in its bay, handed in from the stash.
+#[test]
+fn the_ledger_job_puts_the_ledger_in_its_bay_and_takes_it_home() {
+    use extraction_core::progression::{LEDGER_AT, LEDGER_ITEM};
+    let mut app = crate::raid::requests::tests::app();
+    app.world_mut()
+        .resource_mut::<Progression>()
+        .0
+        .credit(TIERS.iter().map(|t| t.jobs).sum());
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Ledger);
+    for _ in 0..3 {
+        app.update();
+    }
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(LEDGER_ITEM).unwrap();
+    let ledger = app
+        .world_mut()
+        .query::<(Entity, &Item, &Transform)>()
+        .iter(app.world())
+        .find(|(_, i, _)| i.kind() == kind)
+        .map(|(e, _, t)| (e, t.translation))
+        .expect("the ledger is in its bay");
+    assert!(
+        ledger
+            .1
+            .xz()
+            .distance(Vec2::new(LEDGER_AT[0], LEDGER_AT[2]))
+            < 0.5
+    );
+    press_card(&mut app);
+    assert_eq!(progress(&app).job, Some(Job::Ledger), "not without it");
+    app.world_mut().despawn(ledger.0);
+    stash(&mut app, LEDGER_ITEM, 1);
+    press_card(&mut app);
+    assert_ne!(progress(&app).job, Some(Job::Ledger), "handed in");
+    let log: Vec<String> = app
+        .world()
+        .resource::<Raid>()
+        .log
+        .iter()
+        .map(|l| l.0.clone())
+        .collect();
+    assert!(log.iter().any(|l| l == lines::LEDGER_HOME), "{log:?}");
+}
