@@ -22,3 +22,7 @@ with their layout grip points lowered ~4 cm so the trigger lines up
 `7_handles.jpg`: the right hand working a handle (`fp:<gun>+handle`):
 the AK's charging handle, the Mosin's bolt knob (from ahead and from the
 left), the PM's slide. The handle sits inside the closed fist.
+`8_tracked_fingers_monado.jpg`: the left eye under Monado's simulated
+headset with `SIMULATED_HANDS=1` (Monado patched with
+`scripts/monado-simulated-hands.patch`): the gloves' fingers follow the
+runtime's `XR_EXT_hand_tracking` joints, each finger at its own curl.

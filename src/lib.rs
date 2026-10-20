@@ -244,6 +244,13 @@ pub fn run(opts: LaunchOptions) -> AppExit {
                     name: "Extraction".into(),
                     version: bevy_mod_openxr::types::Version(0, 1, 0),
                 },
+                // Finger tracking (SteamVR gives it for Index controllers);
+                // dropped with a warning where the runtime lacks it.
+                exts: {
+                    let mut exts = bevy_mod_openxr::exts::OxrExtensions::default();
+                    exts.enable_hand_tracking();
+                    exts
+                },
                 ..default()
             },
         ));
