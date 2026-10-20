@@ -155,6 +155,18 @@ pub fn fetch_swapped(name: &str) -> String {
     format!("Driver: \"Forget the {name}. Something else on the card.\"")
 }
 
+// --- After the epilogue (Lev has been into the depot) --------------------
+
+/// The career page's last line, once he has.
+pub const CAREER_AFTER: &str = "Lev drives in now.";
+
+/// What he says he wants a fetch for, after: gentler (Story's); `None`
+/// keeps the usual why.
+pub fn why_after(item: &str) -> Option<&'static str> {
+    let _ = item;
+    None
+}
+
 // --- Upkeep and orders (after the ladder) ---------------------------------
 
 /// "2 scrap metal", "1 electronics".

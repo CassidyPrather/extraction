@@ -231,6 +231,7 @@ fn card_text(
     raid: Res<Raid>,
     book: Res<Logbook>,
     progression: Res<crate::progression::Progression>,
+    epilogue: Res<crate::progression::Epilogue>,
     memorial: Res<crate::persist::Memorial>,
     stashes: Query<&crate::interact::body::Backpack, With<super::truck::Stash>>,
     items: Query<&Item>,
@@ -249,7 +250,13 @@ fn card_text(
                 crate::capstone::KEYS.iter().any(|(k, _)| k == id)
             })
             .count();
-        let page = crate::progression::career_page(&progression.0, &raid, &memorial.0, keys_home);
+        let page = crate::progression::career_page(
+            &progression.0,
+            &raid,
+            &memorial.0,
+            keys_home,
+            epilogue.0,
+        );
         format!("{page}\n\n(press: last raid)")
     } else {
         let record = format!(
