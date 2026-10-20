@@ -108,6 +108,8 @@ pub struct LaunchOptions {
     pub sim_out: Option<PathBuf>,
     /// Sim raids run at once.
     pub jobs: usize,
+    /// Capture tooling: cinematics and sweeps (see `capture`).
+    pub capture: crate::capture::CaptureOptions,
 }
 
 impl Default for LaunchOptions {
@@ -148,6 +150,7 @@ impl Default for LaunchOptions {
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
+            capture: Default::default(),
         }
     }
 }
@@ -162,6 +165,7 @@ impl LaunchOptions {
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
+            || self.capture.active()
     }
 
     pub fn from_args() -> Self {
@@ -185,7 +189,9 @@ impl LaunchOptions {
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
                 // Comfort settings; read by `rig::comfort`.
-                "--smooth-turn" | "--snap-turn" => {}
+                "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
+                | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
+                | "--one-handed" | "--no-captions" => {}
                 "--vignette" => {
                     let _ = val();
                 }
@@ -257,8 +263,18 @@ impl LaunchOptions {
                         o.window_size = (v[0], v[1]);
                     }
                 }
+                flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // A capture drives free cameras: over a quiet valley, or after a
+        // sim bot, rendered (a sim run is otherwise headless).
+        if o.capture.active() {
+            o.flat = true;
+            o.headless = false;
+            o.robots &= !o.capture.still();
+            o.camera
+                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {
@@ -300,6 +316,7 @@ mod tests {
             "--screenshot out.png",
             "--sim-run 3",
             "--bot",
+            "--cinematic x.cine",
         ] {
             assert!(parse(a).tooling(), "{a}");
         }

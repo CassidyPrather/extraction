@@ -414,14 +414,14 @@ const LENS_ANGLE: f32 = 26.0;
 
 fn add_lenses(
     mut commands: Commands,
-    optics: Query<(Entity, &Optic), Added<Optic>>,
+    optics: Query<(Entity, &Optic, Has<crate::weapons::zero::Rangefinder>), Added<Optic>>,
     weather: Res<crate::world::sky::Weather>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
-    for (e, o) in &optics {
+    for (e, o, rangefinder) in &optics {
         let mut image = Image::new_fill(
             Extent3d {
                 width: 384,
@@ -477,7 +477,11 @@ fn add_lenses(
                 Mesh3d(meshes.add(Circle::new(0.017))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::BLACK,
-                    base_color_texture: Some(reticle_texture(&mut images)),
+                    base_color_texture: Some(if rangefinder {
+                        crate::weapons::zero::pso_reticle(&mut images, LENS_ANGLE / o.magnification)
+                    } else {
+                        reticle_texture(&mut images)
+                    }),
                     alpha_mode: AlphaMode::Mask(0.5),
                     unlit: true,
                     ..default()

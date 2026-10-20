@@ -88,6 +88,22 @@ pub const RECIPES: &[Recipe] = &[
         makes: Make::Items(&[("power_cell", 2)]),
         seconds: 6.0,
     },
+    // --- Breaking spares down ------------------------------------------
+    // (A second multitool or torch is clutter; its insides aren't.)
+    Recipe {
+        id: "strip_multitool",
+        name: "Break two multitools for parts",
+        needs: &[(Need::Item("multitool"), 2)],
+        makes: Make::Items(&[("spare_parts", 1)]),
+        seconds: 6.0,
+    },
+    Recipe {
+        id: "strip_flashlight",
+        name: "Gut two flashlights",
+        needs: &[(Need::Item("flashlight"), 2)],
+        makes: Make::Items(&[("electronics", 1)]),
+        seconds: 6.0,
+    },
     // --- Re-packing rounds -----------------------------------------------
     Recipe {
         id: "pack_9x18",

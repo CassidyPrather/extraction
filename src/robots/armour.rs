@@ -83,11 +83,20 @@ fn plate_transform(kind: RobotKind, i: usize) -> Transform {
 /// the sides of a dirigible's gondola.
 fn fit_plates(
     mut commands: Commands,
-    robots: Query<(Entity, &Robot, Has<super::hound::Hound>), Added<Robot>>,
+    robots: Query<
+        (
+            Entity,
+            &Robot,
+            Has<super::hound::Hound>,
+            Has<super::heavy::Heavy>,
+        ),
+        Added<Robot>,
+    >,
 ) {
-    for (e, robot, hound) in &robots {
-        // (A hound's body is all legs and speed.)
-        if hound {
+    for (e, robot, hound, heavy) in &robots {
+        // (A hound's body is all legs and speed; the heavy's plates are
+        // its own, on bolts: `heavy`.)
+        if hound || heavy {
             continue;
         }
         let (n, hp, collider) = match robot.kind {
@@ -133,6 +142,7 @@ fn shed_plates(
         Option<&LinearVelocity>,
         Option<&super::walker::Walker>,
     )>,
+    heavies: Query<(), With<super::heavy::Heavy>>,
 ) {
     for ev in events.read() {
         let PartRole::Armour(_) = ev.role else {
@@ -144,6 +154,9 @@ fn shed_plates(
         let Ok((robot, lin, walker)) = robots.get(ev.robot) else {
             continue;
         };
+        if heavies.contains(ev.robot) {
+            continue;
+        }
         let (scale, rot, at) = gt.to_scale_rotation_translation();
         let out = rot * Vec3::Y;
         let v0 = lin
@@ -202,6 +215,7 @@ fn pop_eyes(
         Option<&LinearVelocity>,
         Option<&super::walker::Walker>,
     )>,
+    heavies: Query<(), With<super::heavy::Heavy>>,
 ) {
     for ev in events.read() {
         if ev.role != PartRole::Sensor {
@@ -210,6 +224,9 @@ fn pop_eyes(
         let (Ok(gt), Ok((robot, lin, walker))) = (parts.get(ev.part), robots.get(ev.robot)) else {
             continue;
         };
+        if heavies.contains(ev.robot) {
+            continue;
+        }
         if !matches!(robot.kind, RobotKind::Drone | RobotKind::Walker) {
             continue;
         }

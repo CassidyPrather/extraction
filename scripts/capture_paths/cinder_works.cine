@@ -1,0 +1,8 @@
+# Cinder Works: cinematic shots (see docs/CAPTURE.md).
+
+shot cw_arrival gen=road index=0 from=0.03 to=0.2 height=2.6 dur=12 pitch=3
+shot cw_furnace gen=orbit target=blast_furnace turns=0.3 dur=12
+shot cw_hall gen=rise target=factory_hall dur=10
+shot cw_canal gen=river index=0 from=0.3 to=0.5 height=2.2 dur=12 pitch=4
+shot cw_chimney gen=rise target=chimney high=45 dur=10
+shot cw_sidings gen=road index=1 from=0.2 to=0.45 height=12 dur=12 pitch=10

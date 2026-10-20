@@ -131,15 +131,18 @@ fn wall(model: &'static str, at: Vec3) -> (&'static str, Transform) {
 }
 
 /// What a house holds, building-local: `prefab` placed at `xf` (its tag
-/// `tag`) on `map`.
+/// `tag`) on `map`; `epilogue` once Lev has been home
+/// (`raid::epilogue::Epilogue`), which hangs the collar on Hana's lead.
 pub fn dress(
     map: &MapDef,
     prefab: &str,
     tag: &str,
     xf: &Transform,
+    epilogue: bool,
 ) -> Vec<(&'static str, Transform)> {
     // `EXTRACTION_NO_CLUTTER=1`: the bare rooms, for comparisons.
-    let Some(valley) = valley(map).filter(|_| std::env::var_os("EXTRACTION_NO_CLUTTER").is_none())
+    let Some(valley) =
+        valley(map).filter(|_| std::env::var("EXTRACTION_NO_CLUTTER").map_or(true, |v| v != "1"))
     else {
         return Vec::new();
     };
@@ -244,6 +247,9 @@ pub fn dress(
         Some(Story::Hana) => {
             out.push(on("dog_bowl", s.door_floor[1], 0.0));
             out.push(wall("lead_hook", s.door_wall[1]));
+            if epilogue {
+                out.push(wall("dog_collar", s.door_wall[1]));
+            }
             out.push(wall("coat_hook", s.door_wall[0]));
         }
         Some(Story::ShotFirer) => {
@@ -327,7 +333,7 @@ mod tests {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
                 let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
-                for (model, _) in dress(&map, &p.prefab, &p.tag, &xf) {
+                for (model, _) in dress(&map, &p.prefab, &p.tag, &xf, true) {
                     let path = root.join(crate::render::world_props::path(model));
                     assert!(path.exists(), "{}: no model {}", p.prefab, path.display());
                 }
@@ -340,12 +346,16 @@ mod tests {
     fn storys_houses_have_their_things() {
         let map = crate::world::load_map_def("marrow_creek");
         let xf = Transform::from_xyz(-18.0, 0.0, 95.0);
-        let hana = dress(&map, "house_plank", "", &xf);
+        let hana = dress(&map, "house_plank", "", &xf, false);
         let names: Vec<_> = hana.iter().map(|(n, _)| *n).collect();
         assert!(
             names.contains(&"dog_bowl") && names.contains(&"lead_hook"),
             "{names:?}"
         );
+        // The lead alone before the ending, the collar on it after.
+        assert!(!names.contains(&"dog_collar"), "{names:?}");
+        let after = dress(&map, "house_plank", "", &xf, true);
+        assert!(after.iter().any(|(n, _)| *n == "dog_collar"));
         assert!(
             !names.iter().any(|n| n.starts_with("suitcase")),
             "{names:?}"

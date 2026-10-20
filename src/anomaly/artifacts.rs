@@ -10,6 +10,9 @@
 //!   `anomaly::visuals`).
 //! - **Lodestone** (from wells): rounds fired at whoever carries it curve
 //!   aside (`wells::bend_rounds`).
+//! - **Stormglass** (only from the Surge's own blooms): the Surge passes
+//!   over whoever carries it as if they were under a roof. The whole Zone
+//!   knows where it is.
 //! - **Mirror shard** (from mirrors): held and used, it steps you a few
 //!   metres ahead, once a minute (`mirrors::shards`).
 //!
@@ -42,6 +45,8 @@ pub struct ArtifactEffects {
     pub aegis_recharge: f32,
     pub hearth: bool,
     pub glass_eye: Option<Entity>,
+    /// The Surge passes over you as if you were under a roof.
+    pub stormglass: bool,
 }
 
 /// Recharge time for the aegis knot.
@@ -166,6 +171,7 @@ fn artifact_effects(
         let mut aegis = false;
         let mut hearth = false;
         let mut eye = None;
+        let mut storm = false;
         for (e, item, by, held) in &carried {
             if by.0 != p {
                 continue;
@@ -173,6 +179,7 @@ fn artifact_effects(
             match catalog.get(item.kind()).id.as_str() {
                 "art_aegis" => aegis = true,
                 "art_hearth" => hearth = true,
+                "art_stormglass" => storm = true,
                 "art_glasseye" if held.is_some() => eye = Some(e),
                 _ => {}
             }
@@ -180,6 +187,7 @@ fn artifact_effects(
         fx.aegis = aegis;
         fx.hearth = hearth;
         fx.glass_eye = eye;
+        fx.stormglass = storm;
         fx.aegis_recharge = (fx.aegis_recharge - dt).max(0.0);
     }
 }

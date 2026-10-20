@@ -10,6 +10,7 @@
 //   4 well grit       an accretion disc spiralling into the heart
 //   5 mirror glints   twinkles on the fold's surface, bright when revealed
 //   6 lift dust       a low swirl over the flattened ring
+//   7 hush dust       hanging dead still in a dome
 //
 // Fog is applied here through bevy_pbr's apply_fog, which render/fog.rs
 // patches to add the ground-fog banks and Kettle Pass's cloud cap, so a
@@ -151,6 +152,15 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         let tw = pow(max(0.0, sin(t * (1.0 + 2.5 * h(s, 4.1)) + s * 40.0)), 18.0);
         p.alpha = tw * (0.25 + 0.75 * max(reveal, flash));
         p.heat = 1.0;
+    } else if (mode == 7) {
+        // Hush: dust hanging dead still in a dome, barely drifting.
+        let a = s * TAU;
+        let rr = R * sqrt(h(s, 2.3));
+        let y = 0.15 + 2.4 * h(s, 4.9) * (1.0 - 0.5 * rr / R);
+        let drift = vec3<f32>(sin(t * 0.05 + s * 7.0), 0.0, cos(t * 0.04 + s * 5.0)) * 0.05;
+        p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + drift;
+        p.alpha = 0.6 + 0.4 * reveal;
+        p.spin = s * 3.0;
     } else {
         let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(s, 1.4));
         let r = R * (0.3 + 0.75 * h(s, 2.1));

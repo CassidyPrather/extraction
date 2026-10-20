@@ -63,6 +63,23 @@
       }
     ]
   },
+  "ambience/insects_night": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/insects_night_1.ogg",
+        "seconds": 45.0,
+        "source": "fs_571079"
+      },
+      {
+        "file": "audio/ambience/insects_night_2.ogg",
+        "seconds": 45.0,
+        "source": "fs_571079"
+      }
+    ]
+  },
   "ambience/jackdaw": {
     "type": "oneshot",
     "channels": 1,
@@ -294,6 +311,23 @@
         "file": "audio/ambience/rural_2.ogg",
         "seconds": 45.0,
         "source": "fs_372612"
+      }
+    ]
+  },
+  "ambience/rustle_leaves": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rustle_leaves_1.ogg",
+        "seconds": 35.0,
+        "source": "fs_848978"
+      },
+      {
+        "file": "audio/ambience/rustle_leaves_2.ogg",
+        "seconds": 45.0,
+        "source": "fs_848978"
       }
     ]
   },

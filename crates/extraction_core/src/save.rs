@@ -85,6 +85,25 @@ pub struct ZoneSave {
     /// Holes torn in walls, by their centres, centimetres.
     #[serde(default)]
     pub breaches: Vec<[i32; 3]>,
+    /// The valley's safehouse (`safehouse`), once you've started on it.
+    #[serde(default)]
+    pub safehouse: Option<crate::safehouse::SafehouseSave>,
+    /// Heavies' wrecks, where they fell: landmarks until the Surge.
+    #[serde(default)]
+    pub wrecks: Vec<WreckSave>,
+}
+
+/// A heavy's wreck: where it lies, how it leans, what's still on it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WreckSave {
+    pub at: [f32; 3],
+    pub yaw: f32,
+    /// Its settled lean (scaled axis, world).
+    pub lean: [f32; 3],
+    /// Which plates are still on it (hatch, left, right).
+    pub plates: [bool; 3],
+    /// Its cell is still in it.
+    pub cell: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

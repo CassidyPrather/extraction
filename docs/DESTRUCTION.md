@@ -80,9 +80,9 @@ meets a wall, twenty frames before the capture (`breach.png`).
 ## Broken by the years
 
 World models' decay swaps some sashes to `window_sash_broken` (all of a
-ruin's). `glass::weathered_sashes(prefab, at)` is the seam where those
-are read (one bool per sash in `panes_of` order; a stub until their
-decision is a pure function): their panes start broken with
+ruin's). `glass::weathered_sashes(prefab, at)` reads their decision
+(`world::decay::weathered_sashes`, one bool per sash in `panes_of`
+order): their panes start broken with
 `Break { weathered: true }`, draw nothing (the model has the shards),
 can't break again, and the Surge leaves them be.
 
@@ -224,5 +224,3 @@ house's back wall, its boards on the ground).
   and `hooks::smash` (`Some(Blunt)`), and weigh wood by it in
   `wood::take_hits`: rounds on doors `ROUND_ON_DOOR`, `Point` 0.25,
   `Edge` 0.5, `Blunt`/blasts 1.0.
-- World models' `world::decay::weathered_sashes(prefab, at)`: make
-  `glass::weathered_sashes` return it.

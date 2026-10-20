@@ -293,11 +293,11 @@ fn restored(k: [i32; 3]) -> Break {
 /// (`buildings::dress_buildings`), and their panes start broken here so
 /// they draw no glass over it and can't break again. Empty: none.
 ///
-/// The decision is World models' (`world::decay`/`overgrowth`): this is
-/// the seam where it's read, so the client's look and the logic agree.
+/// The decision is World models' (`world::decay::weathered_sashes`, the
+/// same one `dress_buildings` swaps the models by), so the client's look
+/// and the logic agree.
 pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
-    let _ = (prefab, at);
-    Vec::new()
+    crate::world::decay::weathered_sashes(prefab, at)
 }
 
 pub fn seed_of(k: [i32; 3]) -> u64 {
