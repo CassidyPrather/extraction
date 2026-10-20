@@ -234,6 +234,51 @@
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10,
             tags: ["brass", "powder", "polymer"],
         ),
+        // Other loads: armour-piercing (a steel core), tracers (a bright
+        // streak along the flight) and 12 gauge slugs. Their tips are
+        // painted as on the real thing.
+        (
+            id: "ammo_545_ap", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 AP rounds (box)",
+            description: "Steel-cored 7N22, black tips. Through a plate where ball stops; a little less to flesh.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Ap,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545_tracer", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 tracer rounds (box)",
+            description: "7T3, green tips. Each one burns a streak you can follow to where it went.",
+            category: Ammo, size: Small, mass: 0.31, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Tracer,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x39_ap", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 AP rounds (box)",
+            description: "Steel-cored BZ, black and red tips.",
+            category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Ap,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x39_tracer", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 tracer rounds (box)",
+            description: "T-45, green tips.",
+            category: Ammo, size: Small, mass: 0.35, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Tracer,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762r_ap", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R AP rounds (box)",
+            description: "B-32, black and red tips. Through a new plate.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Ap,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762r_tracer", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R tracer rounds (box)",
+            description: "T-46, green tips.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Tracer,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_12ga_slug", dims: Some((0.07, 0.07, 0.12)), name: "12 gauge slugs (box)",
+            description: "One heavy ball each instead of nine: a rifle's reach for the double, and a robot's plate.",
+            category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Slug,
+            tags: ["brass", "powder", "polymer"],
+        ),
         // Loose rounds: what racking a loaded gun throws on the ground, and
         // what you thumb into magazines one at a time.
         (id: "round_9x18", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, tags: ["brass", "powder"]),
@@ -243,6 +288,13 @@
         (id: "round_762x25", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_762r", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, tags: ["brass", "powder"]),
         (id: "shell_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, tags: ["brass", "powder", "polymer"]),
+        (id: "round_545_ap", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 AP round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
+        (id: "round_545_tracer", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 tracer round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
+        (id: "round_762x39_ap", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 AP round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
+        (id: "round_762x39_tracer", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 tracer round", category: Ammo, size: Tiny, mass: 0.016, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
+        (id: "round_762r_ap", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R AP round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
+        (id: "round_762r_tracer", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R tracer round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
+        (id: "slug_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge slug", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Slug, tags: ["brass", "powder", "polymer"]),
         (
             id: "robot_ammo_belt", name: "Robot ammunition belt",
             description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",

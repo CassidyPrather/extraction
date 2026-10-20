@@ -218,6 +218,17 @@ pub const STANDING: Tier = Tier {
     fits: &[],
 };
 
+/// Past the ladder, after the epilogue: the valleys are quiet, and the
+/// jobs ease to danger 2 (underground still counts).
+pub const STANDING_QUIET: Tier = Tier {
+    name: "Standing jobs",
+    jobs: 0,
+    danger: (2, 2),
+    far: false,
+    kinds: &[JobKind::Fetch, JobKind::Recover, JobKind::Scout],
+    fits: &[],
+};
+
 /// The stash crate's room before any rack, litres of bulk.
 pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
@@ -426,6 +437,10 @@ pub struct Progress {
     /// Fittings laid up for want of their upkeep (upgrade ids).
     #[serde(default)]
     pub laid_up: Vec<String>,
+    /// After the epilogue the valleys are quiet: deep jobs ease off
+    /// ([`STANDING_QUIET`]). Kept in step with the game's epilogue.
+    #[serde(default)]
+    pub quiet: bool,
 }
 
 impl Progress {
@@ -505,7 +520,11 @@ impl Progress {
 
     /// The tier being worked on (standing jobs once they're all done).
     pub fn tier_def(&self) -> &'static Tier {
-        TIERS.get(self.tier as usize).unwrap_or(&STANDING)
+        TIERS.get(self.tier as usize).unwrap_or(if self.quiet {
+            &STANDING_QUIET
+        } else {
+            &STANDING
+        })
     }
 
     /// The tier's jobs are all that's left before the next fitting.
@@ -1024,6 +1043,25 @@ mod tests {
             roll_job(&later, 3, "kettle_pass", &as_valleys(&v)),
             Job::Ledger
         );
+    }
+
+    #[test]
+    fn after_the_epilogue_the_jobs_ease_off() {
+        let v = valleys();
+        let valleys = as_valleys(&v);
+        for (id, map) in &v {
+            for done in 20..50 {
+                let p = Progress {
+                    tier: TIERS.len() as u32,
+                    done,
+                    quiet: true,
+                    ..Default::default()
+                };
+                if let Job::Scout { at, .. } = roll_job(&p, 4, id, &valleys) {
+                    assert_eq!(map.region_at(at).unwrap().danger, 2, "{id}");
+                }
+            }
+        }
     }
 
     #[test]

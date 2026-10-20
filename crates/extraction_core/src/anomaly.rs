@@ -351,6 +351,14 @@ pub fn surge_bloom_spot(
     None
 }
 
+/// Somewhere a run-time bloom (the director's, the Surge's) may open: the
+/// same ground as the Surge's own layout, `placeable` (dry, not steep,
+/// clear of every building by its footprint) and `clear_of_roads` for
+/// how far the kind reaches.
+pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
+    placeable(map, hm, p) && clear_of_roads(hm, p, kind.danger_radius(radius))
+}
+
 /// The anomalies of a Surge cycle.
 pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<AnomalySpec> {
     let mut rng = Rng::new(seed ^ 0xA70A ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -606,6 +614,48 @@ mod tests {
             );
         }
         assert!(surge_bloom_spot([0.0, 0.0], [0.0, 0.0], || 0.5, |_| false).is_none());
+    }
+
+    #[test]
+    fn blooms_never_open_by_a_building_or_a_road_in_any_valley() {
+        use crate::map::{CINDER_WORKS, KETTLE_PASS};
+        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = Heightmap::build(&map);
+            let mut rng = Rng::new(3);
+            let half = map.size * 0.5 - map.fence_inset - 30.0;
+            let mut n = 0;
+            for i in 0..400 {
+                let at = [rng.range(-half, half), rng.range(-half, half)];
+                let kind = AnomalyKind::ALL[i % AnomalyKind::ALL.len()];
+                let r = kind.radius_range().1;
+                let heading = [rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)];
+                let Some(p) = surge_bloom_spot(
+                    at,
+                    heading,
+                    || rng.f32(),
+                    |p| bloom_ok(&map, &hm, p, kind, r),
+                ) else {
+                    continue;
+                };
+                n += 1;
+                for pl in &map.placements {
+                    let f = crate::map::prefab_footprint(&pl.prefab);
+                    assert!(
+                        geom::dist(pl.at, p) >= f[0].max(f[2]) * 0.6 + 2.0,
+                        "{}: a {kind:?} bloom at {p:?} is inside {}'s clearance",
+                        map.name,
+                        pl.prefab
+                    );
+                }
+                assert!(
+                    clear_of_roads(&hm, p, kind.danger_radius(r)),
+                    "{}: {p:?} by a road",
+                    map.name
+                );
+            }
+            assert!(n > 100, "{}: blooms found ground ({n})", map.name);
+        }
     }
 
     #[test]

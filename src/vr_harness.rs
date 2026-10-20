@@ -479,6 +479,7 @@ mod tests {
                 family: "pm".into(),
                 capacity: 8,
                 rounds: 8,
+                ..Default::default()
             })
             .unwrap();
             f.set_bolt_travel(1.0);

@@ -430,7 +430,9 @@ fn seat_magazine(world: &mut World, gun_e: Entity, mag_e: Entity) {
     let Some(mag) = world.get::<Mag>(mag_e).cloned() else {
         return;
     };
-    let rounds = world.get::<Item>(mag_e).map_or(0, |i| i.rounds);
+    let (rounds, loads) = world
+        .get::<Item>(mag_e)
+        .map_or((0, Default::default()), |i| (i.rounds, i.loads.clone()));
     let fits = world.get::<Socket>(well).is_some_and(|s| {
         s.occupant.is_none() && matches!(&s.kind, SocketKind::MagWell(f) if *f == mag.family)
     });
@@ -443,6 +445,7 @@ fn seat_magazine(world: &mut World, gun_e: Entity, mag_e: Entity) {
                 family: mag.family.clone(),
                 capacity: mag.capacity,
                 rounds,
+                loads,
             })
             .is_ok()
     });

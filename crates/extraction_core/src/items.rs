@@ -113,6 +113,9 @@ pub struct ItemDef {
     /// Present if this item is a blade.
     #[serde(default)]
     pub melee: Option<crate::melee::MeleeDef>,
+    /// Ammunition: what its rounds are loaded with.
+    #[serde(default)]
+    pub load: crate::ammo::Load,
     /// Present if this item is worn armour.
     #[serde(default)]
     pub armour: Option<crate::firearm_terminal::ArmourDef>,
@@ -280,6 +283,9 @@ pub struct ItemState {
     pub rounds: u32,
     /// Stored energy in watt-hours, for batteries.
     pub charge_wh: f32,
+    /// What the rounds are loaded with, top last (see
+    /// [`crate::ammo::Loads`]); a box's are all its own load.
+    pub loads: crate::ammo::Loads,
 }
 
 impl ItemState {
@@ -292,6 +298,7 @@ impl ItemState {
             condition: condition.clamp(0.0, 1.0),
             rounds: def.rounds,
             charge_wh: def.battery_wh,
+            loads: crate::ammo::Loads::default(),
         }
     }
 }

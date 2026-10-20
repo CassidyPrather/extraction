@@ -8,6 +8,12 @@
 //! they don't, the slots and the pack keep their boxes. Everything here
 //! rides on the torso, so `props::body_casts_no_shadow` keeps it out of
 //! the shadow maps.
+//!
+//! Worn armour (`weapons::armour::Worn`): the vest (`art/kit/armor.py`) in
+//! place of the harness's chest panel, the plates in its pockets while
+//! there are plates in them, and the helmet on the head. The worn items
+//! themselves are hidden while worn; this draws the kit. Your own helmet
+//! only casts its shadow: drawn, its brim would hang in your view.
 
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
@@ -19,11 +25,15 @@ use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes, 
 use crate::raid::Remains;
 use crate::raid::truck::Stash;
 use crate::render::materials::MaterialLibrary;
+use crate::rig::{LocalPlayer, RigHead};
+use crate::weapons::armour::Worn;
 
 const RIG: &str = "models/kit/rig.glb";
 const RIG_OPEN: &str = "models/kit/rig_open.glb";
 const PACK: &str = "models/kit/backpack.glb";
 const PACK_OPEN: &str = "models/kit/backpack_open.glb";
+const VEST: &str = "models/kit/vest.glb";
+const HELMET: &str = "models/kit/helmet.glb";
 
 pub struct KitVisualsPlugin;
 
@@ -34,9 +44,15 @@ impl Plugin for KitVisualsPlugin {
             (
                 (dress_slots, dress_pack, mark_torsos),
                 wear_kit,
-                (open_flaps, open_lids),
+                (open_flaps, open_lids, own_helmet_shadow_only),
             )
                 .chain(),
+        )
+        // After `Worn` is brought up to date (in `Update`), before this
+        // frame's visibility is worked out.
+        .add_systems(
+            PostUpdate,
+            show_worn.before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
         );
     }
 }
@@ -65,6 +81,34 @@ struct Undressed {
 #[derive(Component)]
 struct Flap {
     open: bool,
+}
+
+/// A piece of worn kit, shown only while its player wears the thing (or,
+/// for the harness's chest panel, only while they don't wear a vest).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+enum WornPiece {
+    Vest,
+    /// The plate in the vest's front (0) or back (1) pocket.
+    Plate(usize),
+    Panel,
+    Helmet,
+}
+
+#[derive(Component, Clone, Copy, Debug)]
+struct WornBy {
+    player: Entity,
+    piece: WornPiece,
+}
+
+impl WornPiece {
+    fn shown(self, worn: &Worn) -> bool {
+        match self {
+            WornPiece::Vest => worn.vest.is_some(),
+            WornPiece::Plate(i) => worn.vest.is_some() && worn.plates[i].is_some(),
+            WornPiece::Panel => worn.vest.is_none(),
+            WornPiece::Helmet => worn.helmet.is_some(),
+        }
+    }
 }
 
 /// A torso still to get its harness.
@@ -185,7 +229,8 @@ fn wear_kit(
     mut commands: Commands,
     slots: Query<(Entity, &Socket, &Undressed), With<BodySlot>>,
     bags: Query<(Entity, &Undressed), With<Backpack>>,
-    torsos: Query<Entity, With<WantsHarness>>,
+    torsos: Query<(Entity, &ChildOf), With<WantsHarness>>,
+    heads: Query<(Entity, &ChildOf), With<RigHead>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
     gltfs: Res<Assets<Gltf>>,
@@ -202,6 +247,9 @@ fn wear_kit(
     let (Some(rig), Some(rig_open), Some(pack), Some(pack_open)) =
         (load(RIG), load(RIG_OPEN), load(PACK), load(PACK_OPEN))
     else {
+        return;
+    };
+    let (Some(vest), Some(helmet)) = (load(VEST), load(HELMET)) else {
         return;
     };
     let mut mat = |name: Option<&str>| {
@@ -223,12 +271,47 @@ fn wear_kit(
                 ));
             }
             spawn_primitives(commands, at, node, &mut mat);
+            at
         };
-    // The harness on every torso.
-    for t in &torsos {
+    // The harness on every torso, the vest and its plates (hidden until
+    // worn) over it, and the helmet on the head.
+    for (t, parent) in &torsos {
         commands.entity(t).remove::<WantsHarness>();
+        let player = parent.parent();
+        let worn = |piece| WornBy { player, piece };
         if let Some(h) = rig.as_deref().and_then(|r| ModelNode::find(r, "harness")) {
             hang(&mut commands, t, h, None);
+        }
+        if let Some(h) = rig
+            .as_deref()
+            .and_then(|r| ModelNode::find(r, "harness_panel"))
+        {
+            let at = hang(&mut commands, t, h, None);
+            commands.entity(at).insert(worn(WornPiece::Panel));
+        }
+        // Vest space is torso space; the plates sit in their pockets by
+        // their nodes' own placing.
+        for (name, piece) in [
+            ("vest", WornPiece::Vest),
+            ("plate_front", WornPiece::Plate(0)),
+            ("plate_back", WornPiece::Plate(1)),
+        ] {
+            if let Some(n) = vest.as_deref().and_then(|v| ModelNode::find(v, name)) {
+                let at = hang(&mut commands, t, n, None);
+                commands
+                    .entity(at)
+                    .insert((n.transform, worn(piece), Visibility::Hidden));
+            }
+        }
+        let head = heads.iter().find(|(_, c)| c.parent() == player);
+        if let (Some((head, _)), Some(n)) = (
+            head,
+            helmet.as_deref().and_then(|h| ModelNode::find(h, "helmet")),
+        ) {
+            let at = hang(&mut commands, head, n, None);
+            commands
+                .entity(at)
+                .insert((worn(WornPiece::Helmet), Visibility::Hidden));
         }
     }
     // Each slot: its piece and both flaps, or its box if the model lacks it.
@@ -274,6 +357,49 @@ fn wear_kit(
         hang(&mut commands, e, back, Some(true));
         for b in &undressed.boxes {
             commands.entity(*b).despawn();
+        }
+    }
+}
+
+/// Worn kit shows while it's worn: the vest (and the plates in it) in
+/// place of the harness's chest panel, the helmet on the head.
+fn show_worn(worn: Query<&Worn>, mut pieces: Query<(&WornBy, &mut Visibility)>) {
+    for (by, mut v) in &mut pieces {
+        let w = worn.get(by.player).copied().unwrap_or_default();
+        v.set_if_neq(if by.piece.shown(&w) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+    }
+}
+
+/// Your own helmet goes on the layer only the sun sees: its shadow on the
+/// ground is yours, but drawn, its brim would hang across the top of your
+/// view (the head is the eyes).
+fn own_helmet_shadow_only(
+    mut commands: Commands,
+    pieces: Query<(&WornBy, &Children)>,
+    locals: Query<(), With<LocalPlayer>>,
+    meshes: Query<
+        (),
+        (
+            With<Mesh3d>,
+            Without<bevy::camera::visibility::RenderLayers>,
+        ),
+    >,
+) {
+    for (by, children) in &pieces {
+        if by.piece != WornPiece::Helmet || !locals.contains(by.player) {
+            continue;
+        }
+        for c in children.iter() {
+            if meshes.contains(c) {
+                commands.entity(c).insert((
+                    bevy::camera::visibility::RenderLayers::layer(crate::render::arms::SHADOW_ONLY),
+                    bevy::light::NotShadowReceiver,
+                ));
+            }
         }
     }
 }
@@ -333,6 +459,30 @@ mod tests {
             .collect()
     }
 
+    /// The vest replaces the harness's chest panel; a plate shows only in
+    /// a worn vest's pocket; the helmet only while it's worn.
+    #[test]
+    fn worn_kit_shows_what_is_worn() {
+        let e = Entity::from_raw_u32(7).unwrap();
+        let bare = Worn::default();
+        let vest = Worn {
+            vest: Some(e),
+            plates: [Some(e), None],
+            ..default()
+        };
+        let helmet = Worn {
+            helmet: Some(e),
+            plates: [Some(e), Some(e)],
+            ..default()
+        };
+        use WornPiece::*;
+        let shown = |w: &Worn| [Vest, Plate(0), Plate(1), Panel, Helmet].map(|p| p.shown(w));
+        assert_eq!(shown(&bare), [false, false, false, true, false]);
+        assert_eq!(shown(&vest), [true, true, false, false, false]);
+        // Plates without a vest (a stale pocket) don't hang in the air.
+        assert_eq!(shown(&helmet), [false, false, false, true, true]);
+    }
+
     /// Every slot kind that draws something has its piece and both flaps,
     /// the torso its harness, the pack its bag and both lids: a missing
     /// node leaves that slot on its box, or a flap that never opens.
@@ -340,7 +490,16 @@ mod tests {
     fn every_worn_piece_is_modelled() {
         let rig = glb_nodes(RIG);
         let open = glb_nodes(RIG_OPEN);
-        let mut want: Vec<(String, &Vec<String>)> = vec![("harness".into(), &rig)];
+        let vest = glb_nodes(VEST);
+        let helmet = glb_nodes(HELMET);
+        let mut want: Vec<(String, &Vec<String>)> = vec![
+            ("harness".into(), &rig),
+            ("harness_panel".into(), &rig),
+            ("vest".into(), &vest),
+            ("plate_front".into(), &vest),
+            ("plate_back".into(), &vest),
+            ("helmet".into(), &helmet),
+        ];
         for kind in extraction_core::inventory::DEFAULT_SLOTS {
             let Some(name) = piece(*kind) else {
                 continue;

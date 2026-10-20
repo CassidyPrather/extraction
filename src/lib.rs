@@ -13,6 +13,7 @@ pub mod bot;
 pub mod camp;
 pub mod capstone;
 pub mod dev;
+pub mod foley;
 pub mod gadgets;
 pub mod health;
 pub mod hud;
@@ -73,6 +74,7 @@ impl Plugin for GamePlugin {
                 gadgets::GadgetsPlugin,
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
+                foley::FoleyPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));

@@ -67,9 +67,9 @@
         ]),
         // Bay K-14: the Mareks, and Jan Holm.
         (id: "bay_k14", at: (-32.0, 56.0), size: (6.0, 4.0), floor: Some(-15.0), height: 3.0, lamp: Dead, props: [
-            (kind: KeptCrate, at: (-1.6, -0.6)),
-            (kind: KeptCrateSmall, at: (-2.3, 0.9)),
-            (kind: KeptCrate, at: (1.6, 0.8)),
+            (kind: KeptCrate, at: (-1.6, -0.6), tag: Some("MAREK, H.")),
+            (kind: KeptCrateSmall, at: (-2.3, 0.9), tag: Some("MAREK dog")),
+            (kind: KeptCrate, at: (1.6, 0.8), tag: Some("HOLM, J.")),
         ]),
         // Level 4, the cistern: the pump gallery, flooded.
         (id: "pump_gallery", at: (-32.0, 78.0), size: (10.0, 8.0), floor: Some(-19.0), height: 4.0, lamp: Dead, props: [
@@ -105,7 +105,7 @@
         (rooms: ["kept_stacks", "bay_k14"], crawlers: 1),
     ],
     power: [
-        (kind: Breaker, room: "guard_post", at: (1.75, 0.8), rot: 270.0, doors: ["sorting_hall"]),
+        (kind: Breaker, room: "guard_post", at: (0.8, -1.75), rot: 180.0, doors: ["sorting_hall"]),
         (kind: Breaker, room: "tag_office", at: (2.75, -1.5), rot: 270.0, doors: ["kept_stacks"]),
         (kind: Breaker, room: "pump_room", at: (2.75, -1.6), rot: 270.0, doors: ["portal1"]),
     ],
