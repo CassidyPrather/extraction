@@ -576,6 +576,18 @@ fn run_tasks(
                     crate::robots::RobotKind::Pylon => {
                         crate::robots::pylon::spawn_pylon(&mut commands, at, 300.0, exit);
                     }
+                    crate::robots::RobotKind::Sorter => {
+                        // An open-air hall round where it was put.
+                        let floor = zone.on_ground(at.x, at.z);
+                        crate::robots::sorter::spawn_sorter(
+                            &mut commands,
+                            Transform::from_translation(floor),
+                            Vec2::new(12.0, 8.0),
+                            6.0,
+                            crate::robots::sorter::depot_spots(),
+                            6,
+                        );
+                    }
                 }
                 bot.note(format!("spawned a {kind:?}"));
                 bot.next();

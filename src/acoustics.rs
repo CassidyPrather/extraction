@@ -562,15 +562,17 @@ mod tests {
                 .unwrap()
         };
         let (mut passed, mut failed) = (0, Vec::new());
+        // Underground, a door leads to the next room, not out (and the
+        // sites' doors would fill the sample).
+        let entrances: Vec<_> = entrances
+            .into_iter()
+            .filter(|e| {
+                !app.world()
+                    .get::<crate::world::buildings::Building>(e.building)
+                    .is_some_and(|b| extraction_core::underground::is_site(&b.prefab))
+            })
+            .collect();
         for e in entrances.iter().take(30) {
-            // Underground, a door leads to the next room, not out.
-            let site = app
-                .world()
-                .get::<crate::world::buildings::Building>(e.building)
-                .is_some_and(|b| extraction_core::underground::is_site(&b.prefab));
-            if site {
-                continue;
-            }
             // Shut it, let the leaf swing to.
             if let Some(mut d) = app
                 .world_mut()

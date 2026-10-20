@@ -290,6 +290,21 @@ October; Dusek had been up the raise to look):
 | 3rd | **Letters by hand** in the works yard: he carried the inspector's letters round the valleys the first winter; "The last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses." | He delivered the valley office letter to Hana (never named) |
 | 5th | **The far stair**, where the service tunnel comes up: valve three opened again, the canal took the pit, Kral didn't come up; "Going over the pass to Kettle. There's a shot-firer there who knows about shelters." | He went to Dusek: the threads meet |
 
+## The Depot
+
+Under the Marrow Gate (Underground's `depot_marrow`) is where the convoys
+go: intake, the sorting hall's bins (the bicycles, the bins, the buses),
+and the kept stacks. Nothing is destroyed; everything is kept, tagged,
+pending a review that was never held. In bay K-14, off the stacks, are
+the Mareks: a long closed crate with her basket strapped on the lid, a
+small one with RUSTY on the collar tag, and Jan Holm's beside them; Vey is
+in the middle row, "recovered: the Hollow", with his notebook. The tag
+office has the intake terminal and the review docket Rus prepared and
+nobody stamped. The crates stay shut; the game never opens them. After
+the recall the machines sleep in their bays and the terminal says
+"Release procedure: NOT FOUND": nothing in them knows how to give
+anything back.
+
 ## The board
 
 A cork board on the truck's right canopy wall, over the first-aid box, is

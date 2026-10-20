@@ -21,27 +21,31 @@ pub struct RobotVisualsPlugin;
 
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((super::reel::ReelPlugin, super::fx::RobotFxPlugin))
-            .add_systems(
-                Update,
-                (
-                    (request_models, dress_parts).chain(),
-                    spin_rotors,
-                    spin_propellers,
-                    pose_leg_visuals,
-                    dim_dead_eyes,
-                    blink_beacons,
-                    show_halos,
-                    dress_pylon_masts,
-                    pylon_work_lights,
-                    lock_flares,
-                    scorch,
-                    dress_debris,
-                    alert_eyes,
-                    shell_by_light,
-                    super::weathering::weather_meshes,
-                ),
-            );
+        app.add_plugins((
+            super::reel::ReelPlugin,
+            super::fx::RobotFxPlugin,
+            super::sorter_look::SorterLookPlugin,
+        ))
+        .add_systems(
+            Update,
+            (
+                (request_models, dress_parts).chain(),
+                spin_rotors,
+                spin_propellers,
+                pose_leg_visuals,
+                dim_dead_eyes,
+                blink_beacons,
+                show_halos,
+                dress_pylon_masts,
+                pylon_work_lights,
+                lock_flares,
+                scorch,
+                dress_debris,
+                alert_eyes,
+                shell_by_light,
+                super::weathering::weather_meshes,
+            ),
+        );
     }
 }
 
@@ -183,6 +187,7 @@ fn model_path(kind: RobotKind) -> &'static str {
         RobotKind::Walker => "models/robots/walker.glb",
         RobotKind::Dirigible => "models/robots/dirigible.glb",
         RobotKind::Pylon => "models/robots/pylon.glb",
+        RobotKind::Sorter => "models/robots/sorter.glb",
     }
 }
 
@@ -332,6 +337,8 @@ fn dress_parts(
         };
         let hound = hounds.contains(part.robot);
         let node_name = match (robot.kind, part.role) {
+            (RobotKind::Sorter, PartRole::Core) => "carriage",
+            (RobotKind::Sorter, PartRole::Sensor) => "head",
             (_, PartRole::Core) if hound => "hound_body",
             (_, PartRole::Sensor) if hound => "hound_head",
             (_, PartRole::Core) => "core",
@@ -340,6 +347,8 @@ fn dress_parts(
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
             (RobotKind::Walker, PartRole::Armour(_)) => "plate",
+            (RobotKind::Sorter, PartRole::Armour(_)) => "plate",
+            (RobotKind::Sorter, PartRole::Leg(_)) => "arm_upper",
             (RobotKind::Drone, PartRole::Armour(_)) => "panel",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
@@ -412,12 +421,20 @@ fn dress_parts(
                     &mut mat,
                 );
             }
-            (RobotKind::Walker, PartRole::Leg(i)) => {
+            (RobotKind::Walker | RobotKind::Sorter, PartRole::Leg(i)) => {
                 // The collider entity stays invisible; segments are drawn separately.
-                for (lower, name, length) in [
-                    (false, "leg_upper", super::walker::UPPER),
-                    (true, "leg_lower", super::walker::LOWER),
-                ] {
+                let names = if robot.kind == RobotKind::Sorter {
+                    [
+                        (false, "arm_upper", super::sorter::UPPER),
+                        (true, "arm_lower", super::sorter::LOWER),
+                    ]
+                } else {
+                    [
+                        (false, "leg_upper", super::walker::UPPER),
+                        (true, "leg_lower", super::walker::LOWER),
+                    ]
+                };
+                for (lower, name, length) in names {
                     let Some(node) = ModelNode::find(model, name) else {
                         continue;
                     };
@@ -1254,6 +1271,23 @@ fn dress_debris(
         };
         let node = |name: &str| model.as_deref().and_then(|n| ModelNode::find(n, name));
         let dressed = match d.piece {
+            Piece::Arm(k) => {
+                let (name, len) = if k == 0 {
+                    ("arm_upper", super::sorter::UPPER)
+                } else {
+                    ("arm_lower", super::sorter::LOWER)
+                };
+                node(name).map(|n| {
+                    attach(
+                        &mut commands,
+                        e,
+                        n,
+                        Transform::from_translation(Vec3::NEG_Y * len * 0.5),
+                        e,
+                        &mut mat,
+                    );
+                })
+            }
             Piece::LegUpper | Piece::LegLower => {
                 let (name, len) = if d.piece == Piece::LegUpper {
                     ("leg_upper", super::walker::UPPER)
@@ -1274,7 +1308,7 @@ fn dress_debris(
                 })
             }
             Piece::Plate => {
-                let name = if d.kind == RobotKind::Walker {
+                let name = if d.kind != RobotKind::Drone {
                     "plate"
                 } else {
                     "panel"
@@ -1358,7 +1392,7 @@ fn dress_debris(
                     ChildOf(e),
                 ));
             }
-            Piece::Sensor | Piece::Gun | Piece::Plate => {
+            Piece::Sensor | Piece::Gun | Piece::Plate | Piece::Arm(_) => {
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.08, 0.06, 0.2))),
                     MeshMaterial3d(m.dark.clone()),

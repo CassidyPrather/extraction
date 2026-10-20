@@ -98,6 +98,7 @@ fn robot_name(kind: RobotKind, grappler: bool, collector: bool) -> &'static str 
         RobotKind::Walker => "walker",
         RobotKind::Dirigible => "airship",
         RobotKind::Pylon => "pylon",
+        RobotKind::Sorter => "sorter",
     }
 }
 
