@@ -3,7 +3,9 @@
 //! about it, once a career. A jam (and how to clear that kind), a machine
 //! that heard you (and when it loses you), a drone's lock-on chirp, the
 //! air going wrong ahead, the way underground, the sky turning before the
-//! Surge, a walker you've lamed, a full pack, a gun that's getting worn.
+//! Surge, a walker you've lamed, a full pack, a gun that's getting worn,
+//! the first wound that bleeds, the detector ticking, a thrown thing
+//! showing one up, a fold, a well's pull.
 //! And the first time you go down, what came back and what didn't.
 //!
 //! What's been said is kept in the career (`firsts` in `career.ron`), so a
@@ -37,6 +39,16 @@ pub enum First {
     Lamed,
     PackFull,
     Worn,
+    /// Hit, and bleeding: it doesn't stop on its own.
+    Bleeding,
+    /// The detector ticking fast: an anomaly's edge is near.
+    Detector,
+    /// A thrown thing showed one up.
+    Revealed,
+    /// Through a fold (mirrors), somewhere else.
+    Blinked,
+    /// In a well's pull (sent by the anomalies with `MeetFirst`).
+    Well,
     Death,
     ConvoyTook,
     KitRecovered,
@@ -75,6 +87,11 @@ pub const ALL: &[First] = &[
     First::Lamed,
     First::PackFull,
     First::Worn,
+    First::Bleeding,
+    First::Detector,
+    First::Revealed,
+    First::Blinked,
+    First::Well,
     First::Death,
     First::ConvoyTook,
     First::KitRecovered,
@@ -98,7 +115,7 @@ impl First {
             First::Jam(JamKind::Double) => {
                 &["Truck: \"Two rounds jammed. Mag out, rack, mag back in.\""]
             }
-            First::Heard => &["Truck: \"Something heard you. Get low and keep still.\""],
+            First::Heard => &["Truck: \"Something heard you. Move off quiet, then go still.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
             First::DroneLock => &["Truck: \"That chirp is it taking aim. Get behind something.\""],
             First::Anomaly => &["Truck: \"Air's wrong ahead. Throw something in first.\""],
@@ -111,6 +128,13 @@ impl First {
             First::Worn => {
                 &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
             }
+            First::Bleeding => &["Truck: \"You're bleeding. Dressing on it now, or you'll drop.\""],
+            First::Detector => &["Truck: \"Hear it ticking? Faster means nearer. Sweep it slow.\""],
+            First::Revealed => {
+                &["Truck: \"That's how you find them. Bolts are cheap. Legs aren't.\""]
+            }
+            First::Blinked => &["Truck: \"You went through a fold. Stop. Look before you step.\""],
+            First::Well => &["Truck: \"Feel that pull? Back out the way you came. Now.\""],
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
                 "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
@@ -187,6 +211,8 @@ impl Plugin for FirstsPlugin {
                         pack_full,
                         places,
                         worn,
+                        bleeding,
+                        anomaly_kit,
                         deaths,
                         convoy,
                         asked,
@@ -377,6 +403,52 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
         m.meet(First::Worn);
     }
 }
+
+/// Hit, and bleeding: the wrist's "BLEED" is easy to miss, and a wound
+/// doesn't stop on its own.
+fn bleeding(locals: Query<&crate::health::Health, With<LocalPlayer>>, mut m: Meet) {
+    if m.met(First::Bleeding) {
+        return;
+    }
+    if locals.iter().any(|h| !h.down && h.bleeding > BLEEDING) {
+        m.meet(First::Bleeding);
+    }
+}
+
+/// The detector, a thrown thing, a fold: how you find anomalies, and
+/// what one did to you.
+fn anomaly_kit(
+    mut clicks: MessageReader<crate::anomaly::detector::DetectorClick>,
+    mut acts: MessageReader<crate::anomaly::AnomalyEvent>,
+    mut blinks: MessageReader<crate::anomaly::mirrors::Blinked>,
+    locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    let Some((me, at)) = locals.iter().next() else {
+        return;
+    };
+    let near = |p: Vec3| p.distance(at.translation()) < NEAR_ME;
+    // Yours: ticking where you are (in a hand or on you).
+    if clicks.read().any(|c| c.near > 0.4 && near(c.at)) {
+        m.meet(First::Detector);
+    }
+    if acts
+        .read()
+        .any(|e| e.what == crate::anomaly::AnomalyAct::Reveal && near(e.at))
+    {
+        m.meet(First::Revealed);
+    }
+    if blinks.read().any(|b| b.entity == me) {
+        m.meet(First::Blinked);
+    }
+}
+
+/// Near enough to you to be yours: a detector on you, a thing you threw.
+const NEAR_ME: f32 = 30.0;
+
+/// Bleeding faster than this (HP a second) is worth a word: a graze
+/// that's about to stop isn't.
+const BLEEDING: f32 = 0.1;
 
 /// The first time you wake in the truck after going down: what's in the
 /// crate (all that came back), and how much lies where you fell.
@@ -585,6 +657,107 @@ mod tests {
             .windows(2)
             .all(|w| w[1] - w[0] >= SPACING - 0.05);
         assert!(gaps, "lines too close together");
+    }
+
+    /// The first wound that bleeds is named once, not on every hit after.
+    #[test]
+    fn the_first_bleed_is_said_once() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .expect("a player");
+        let line = First::Bleeding.lines()[0];
+        for _ in 0..2 {
+            app.world_mut()
+                .get_mut::<crate::health::Health>(me)
+                .unwrap()
+                .bleeding = 0.5;
+            for _ in 0..90 {
+                app.update();
+            }
+            // Dressed.
+            app.world_mut()
+                .get_mut::<crate::health::Health>(me)
+                .unwrap()
+                .bleeding = 0.0;
+            for _ in 0..90 * 6 {
+                app.update();
+            }
+        }
+        let spoken = &app.world().resource::<Spoken>().0;
+        let n = spoken.iter().filter(|s| *s == line).count();
+        assert_eq!(n, 1, "said {n} times");
+        assert!(app.world().resource::<Firsts>().met(First::Bleeding));
+    }
+
+    /// The detector ticking near you, a thrown thing showing one up, and a
+    /// fold you went through: each met from the anomalies' own messages,
+    /// and said once.
+    #[test]
+    fn the_anomaly_kit_is_explained_once() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let (me, at) = app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .map(|(e, g)| (e, g.translation()))
+            .expect("a player");
+        let thing = app.world_mut().spawn_empty().id();
+        for pass in 0..2 {
+            let w = app.world_mut();
+            // Far off, faint: not yet.
+            w.write_message(crate::anomaly::detector::DetectorClick {
+                detector: thing,
+                at,
+                held: true,
+                near: 0.1,
+            });
+            w.write_message(crate::anomaly::AnomalyEvent {
+                anomaly: thing,
+                kind: extraction_core::anomaly::AnomalyKind::Snare,
+                at: at + Vec3::X * 500.0,
+                what: crate::anomaly::AnomalyAct::Reveal,
+            });
+            app.update();
+            if pass == 0 {
+                assert!(!app.world().resource::<Firsts>().met(First::Detector));
+                assert!(!app.world().resource::<Firsts>().met(First::Revealed));
+            }
+            let w = app.world_mut();
+            w.write_message(crate::anomaly::detector::DetectorClick {
+                detector: thing,
+                at,
+                held: true,
+                near: 0.8,
+            });
+            w.write_message(crate::anomaly::AnomalyEvent {
+                anomaly: thing,
+                kind: extraction_core::anomaly::AnomalyKind::Snare,
+                at: at + Vec3::X * 6.0,
+                what: crate::anomaly::AnomalyAct::Reveal,
+            });
+            w.write_message(crate::anomaly::mirrors::Blinked {
+                entity: me,
+                from: at,
+                to: at + Vec3::X * 20.0,
+            });
+            app.update();
+        }
+        for _ in 0..90 * 20 {
+            app.update();
+        }
+        let spoken = &app.world().resource::<Spoken>().0;
+        for f in [First::Detector, First::Revealed, First::Blinked] {
+            assert!(app.world().resource::<Firsts>().met(f), "{f:?} not met");
+            let n = spoken.iter().filter(|s| *s == f.lines()[0]).count();
+            assert_eq!(n, 1, "{f:?} said {n} times");
+        }
     }
 
     /// Met once, kept in the career: a later session doesn't say it again.

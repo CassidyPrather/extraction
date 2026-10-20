@@ -113,7 +113,8 @@ fn dress_truck(
             | Pressable::Request
             | Pressable::Terminal
             | Pressable::Camp
-            | Pressable::Logbook => {}
+            | Pressable::Logbook
+            | Pressable::Note => {}
             Pressable::BellPull => {
                 let rope = mat(&mut materials, Color::srgb(0.55, 0.47, 0.32), 0.9, 0.0);
                 commands.entity(e).insert((
@@ -419,6 +420,13 @@ pub(crate) struct HandVisual {
     /// Current spread of index..little, radians toward the thumb (eased;
     /// tracked fingers set it, otherwise `rest_spread`).
     spread: [f32; 4],
+    /// A tracked thumb: which way its first bone points on the unrolled
+    /// glove and how far its last joint bends (radians); `None` swings it
+    /// by its curl.
+    thumb: Option<(Vec3, f32)>,
+    /// The faint glove at the tracked pose, shown when the real hand has
+    /// gone where the glove can't (into a wall).
+    pub(crate) ghost: bool,
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -469,8 +477,30 @@ fn spawn_hand_visuals(
                 side: rh.side,
                 curl: [0.0; 5],
                 spread: std::array::from_fn(rest_spread),
+                thumb: None,
+                ghost: false,
             },
             PlayerGlove,
+        ));
+        // The ghost: where your real hand is when a wall stops the glove
+        // (`interact::physics_hands`), faint, hidden otherwise.
+        let ghost = spawn_hand(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            rh.side,
+            [0.0; 5],
+        );
+        commands.entity(ghost).insert((
+            HandVisual {
+                hand: e,
+                side: rh.side,
+                curl: [0.0; 5],
+                spread: std::array::from_fn(rest_spread),
+                thumb: None,
+                ghost: true,
+            },
+            Visibility::Hidden,
         ));
     }
 }
@@ -776,6 +806,8 @@ pub(crate) fn spawn_hand(
                 side,
                 curl,
                 spread: std::array::from_fn(rest_spread),
+                thumb: None,
+                ghost: false,
             },
             GloveMaterial(vec![glove.clone()]),
             Transform::default(),
@@ -887,6 +919,10 @@ fn dress_gloves(
         };
         commands.entity(e).remove::<GloveParts>();
         let Some(model) = model else {
+            // A ghost of boxes would read as solid hands: none at all.
+            if v.ghost {
+                commands.entity(e).despawn();
+            }
             continue;
         };
         let Some(palm) = find_node(&model, "palm") else {
@@ -894,7 +930,18 @@ fn dress_gloves(
             continue;
         };
         let mut own: Vec<(String, Handle<StandardMaterial>)> = Vec::new();
+        let ghost = v.ghost.then(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.8, 0.84, 0.86, 0.2),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            })
+        });
         let mut mat = |name: Option<&str>| {
+            if let Some(g) = &ghost {
+                return g.clone();
+            }
             let name = name.unwrap_or("Glove");
             if let Some((_, h)) = own.iter().find(|(n, _)| n == name) {
                 return h.clone();
@@ -1018,11 +1065,13 @@ pub(crate) fn hold_curl(role: Option<GripRole>, trigger: f32, thinnest: f32) -> 
 }
 
 /// How far each finger wants to curl, given what the hand is doing.
+#[allow(clippy::too_many_arguments)]
 fn curl_targets(
     hand: &Hand,
     side: Side,
     grip: f32,
     trigger: f32,
+    thumb_rest: bool,
     held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
     guns: &Query<&crate::weapons::Gun>,
@@ -1054,15 +1103,21 @@ fn curl_targets(
     if hand.handle.is_some() {
         return [0.72, 0.74, 0.76, 0.78, 0.7];
     }
-    // Empty: the grip closes the hand, the trigger the index finger.
-    [grip.max(trigger), grip, grip, grip, grip * 0.8]
+    // Empty: the grip closes the hand, the trigger the index finger; a
+    // thumb resting on the controller's buttons lies across over them.
+    let thumb = if thumb_rest {
+        (grip * 0.8).max(0.5)
+    } else {
+        grip * 0.8
+    };
+    [grip.max(trigger), grip, grip, grip, thumb]
 }
 
 /// Hands sit on what they hold (so the glove wraps the grip even when the
 /// gun is blocked by a wall), otherwise on the tracked pose.
 fn pose_hands(
     time: Res<Time>,
-    mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
+    mut visuals: Query<(&mut HandVisual, &mut Transform, Option<&mut Visibility>), Without<Finger>>,
     mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
     hands: Query<(&Hand, &Transform, &ChildOf), (Without<HandVisual>, Without<Finger>)>,
     roots_t: Query<&Transform, (Without<Hand>, Without<HandVisual>, Without<Finger>)>,
@@ -1075,7 +1130,7 @@ fn pose_hands(
     guns: Query<&crate::weapons::Gun>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
-    for (mut v, mut t) in &mut visuals {
+    for (mut v, mut t, mut vis) in &mut visuals {
         let Ok((hand, local, parent)) = hands.get(v.hand) else {
             continue;
         };
@@ -1095,19 +1150,41 @@ fn pose_hands(
                 }
             }
         }
+        // A wall stops the glove where the hand's body stopped; the ghost
+        // stays on the real hand and shows only when the two are apart.
+        let tracked = pose;
+        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none() && !v.ghost) {
+            pose = felt;
+        }
+        if let (true, Some(vis)) = (v.ghost, vis.as_mut()) {
+            let apart = hand.felt.is_some_and(|f| {
+                f.translation.distance(tracked.translation)
+                    > crate::interact::physics_hands::GHOST_GAP
+            });
+            vis.set_if_neq(if apart && hand.holding.is_none() {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            });
+        }
         *t = pose;
-        let mut target = curl_targets(hand, v.side, grip, trigger, &held, &bounds, &guns);
+        let thumb_rest = input.is_ok_and(|i| i.thumb_rest);
+        let mut target = curl_targets(
+            hand, v.side, grip, trigger, thumb_rest, &held, &bounds, &guns,
+        );
         let mut spread = std::array::from_fn(rest_spread);
         let free = hand.holding.is_none() && hand.handle.is_none() && hand.supporting.is_none();
         let tracked = input.ok().and_then(|i| i.fingers);
         // An empty hand reaching for a push button points at it, so the
         // finger the button feels is the one you see.
         let tip = pose.transform_point(crate::interact::poke::FINGERTIP);
+        let mut thumb = None;
         if let Some(real) = tracked.filter(|_| free) {
             // Tracked fingers (Index controllers): a free hand is the real
             // one; what's held keeps the glove's wrap round it.
             target = real.curl;
             spread = real.splay;
+            thumb = (real.thumb_dir != Vec3::ZERO).then_some((real.thumb_dir, real.thumb_bend));
         } else if free
             && buttons
                 .iter()
@@ -1122,6 +1199,10 @@ fn pose_hands(
         for (s, want) in v.spread.iter_mut().zip(spread) {
             *s += (want - *s) * ease;
         }
+        v.thumb = thumb.map(|(dir, bend)| match v.thumb {
+            Some((d, b)) => (d.lerp(dir, ease).normalize_or(dir), b + (bend - b) * ease),
+            None => (dir, bend),
+        });
     }
     for (f, parent, mut ft) in &mut fingers {
         // Up the chain to the hand this joint belongs to.
@@ -1132,11 +1213,20 @@ fn pose_hands(
         if let Ok(p) = models.get(up) {
             up = p.parent();
         }
-        let Ok((v, _)) = visuals.get(up) else {
+        let Ok((v, _, _)) = visuals.get(up) else {
             continue;
         };
         let spread = v.spread.get(f.finger).copied().unwrap_or(0.0);
-        ft.rotation = joint_rotation_spread(v.side, f.finger, f.joint, v.curl[f.finger], spread);
+        ft.rotation = match (f.finger, f.joint, v.thumb) {
+            // A tracked thumb points where the real one does (the glove's
+            // unrolled frame is OpenXR's palm frame), pad toward the fingers.
+            (4, 0, Some((dir, _))) => {
+                Quat::from_rotation_arc(Vec3::NEG_Z, dir)
+                    * Quat::from_rotation_z(0.6 * v.side.sign())
+            }
+            (4, _, Some((_, bend))) => Quat::from_rotation_x(-bend),
+            _ => joint_rotation_spread(v.side, f.finger, f.joint, v.curl[f.finger], spread),
+        };
     }
 }
 
@@ -1662,6 +1752,8 @@ mod glove_tests {
                     side: Side::Right,
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
+                    thumb: None,
+                    ghost: false,
                 },
                 Transform::default(),
             ))
@@ -1767,6 +1859,8 @@ mod glove_tests {
                     side: Side::Right,
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
+                    thumb: None,
+                    ghost: false,
                 },
                 Transform::default(),
             ))
@@ -1774,6 +1868,8 @@ mod glove_tests {
         let real = Fingers {
             curl: [0.1, 0.6, 0.8, 0.9, 0.3],
             splay: [0.15, 0.0, -0.1, -0.2],
+            thumb_dir: Vec3::new(0.5, -0.4, -0.77).normalize(),
+            thumb_bend: 0.4,
         };
         app.world_mut()
             .get_mut::<RigInput>(player)
@@ -1785,9 +1881,14 @@ mod glove_tests {
                 app.update();
             }
             let v = app.world().get::<HandVisual>(glove).unwrap();
-            (v.curl, v.spread)
+            (v.curl, v.spread, v.thumb)
         };
-        let (curl, spread) = settle(&mut app);
+        let (curl, spread, thumb) = settle(&mut app);
+        let (dir, bend) = thumb.expect("a tracked thumb");
+        assert!(
+            dir.distance(real.thumb_dir) < 0.01 && (bend - real.thumb_bend).abs() < 0.01,
+            "free thumb {dir} {bend}"
+        );
         for f in 0..5 {
             assert!((curl[f] - real.curl[f]).abs() < 0.02, "free curl {curl:?}");
         }
@@ -1819,7 +1920,8 @@ mod glove_tests {
             ))
             .id();
         app.world_mut().get_mut::<Hand>(hand).unwrap().holding = Some(gun);
-        let (curl, _) = settle(&mut app);
+        let (curl, _, thumb) = settle(&mut app);
+        assert!(thumb.is_none(), "a held gun's thumb wraps it, not tracked");
         let wrap = hold_curl(Some(GripRole::Primary), 0.0, 0.0);
         for f in 0..5 {
             assert!(

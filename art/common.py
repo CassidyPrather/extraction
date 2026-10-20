@@ -904,10 +904,109 @@ def report():
     return total
 
 
-def export(rel_path):
+def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40, apart=(), sky=False):
+    """Bake ambient occlusion into each mesh's `AO` colour attribute (per
+    face corner), which `export(colors=True)` writes as COLOR_0 and the game's
+    materials multiply in: corners, undersides and the gaps between boards
+    darken. With `ground`, a floor at y 0 shades the prop's foot.
+
+    Ray-cast against the whole model rather than baked by Cycles: our
+    pieces overlap where they join, and a corner buried in its neighbour
+    would come out black. So each corner is sampled a little in from the
+    corner, and a ray that leaves from inside a piece (meeting the back of
+    a face first) doesn't count. Stored as 1 - strength * occlusion, so
+    nothing goes black.
+
+    `apart` names sets of objects (by name prefix) that share a place but
+    never show together, a revolver's rounds and its empty cases: each set
+    is baked without the others in the way. Objects in no set see the
+    first set.
+
+    With `sky`, alpha says whether rain falls on the corner: 1 in the open,
+    0 under anything of the model's own overhead (one ray straight up, as
+    `src/world/ao.rs` does for buildings); the game's wet-weather shading
+    reads it. `sky="indoors"` is 0 everywhere: furniture, always under a
+    building's roof. Otherwise alpha is 1."""
+    import random as _random
+
+    from mathutils.bvhtree import BVHTree
+
+    objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+    def group(o):
+        return next((k for k, pre in enumerate(apart) if o.name.startswith(pre)), None)
+
+    def build(seen):
+        """A BVH of the objects set `seen` sees (and the floor)."""
+        verts, polys = [], []
+        for o in objs:
+            g = group(o)
+            if g is not None and g != seen:
+                continue
+            m = o.matrix_world
+            base = len(verts)
+            verts += [m @ v.co for v in o.data.vertices]
+            polys += [[base + i for i in p.vertices] for p in o.data.polygons]
+        if ground:
+            g = len(verts)
+            verts += [Vector((-50, -50, -0.001)), Vector((50, -50, -0.001)),
+                      Vector((50, 50, -0.001)), Vector((-50, 50, -0.001))]
+            polys.append([g, g + 1, g + 2, g + 3])
+        return BVHTree.FromPolygons(verts, polys)
+    trees = {}
+    rng = _random.Random(7)
+    # Cosine-weighted directions about +Z, turned to each face's normal.
+    dirs = []
+    for k in range(rays):
+        u, v = (k + rng.random()) / rays, rng.random()
+        r, a = math.sqrt(u), 2 * math.pi * v
+        dirs.append(Vector((r * math.cos(a), r * math.sin(a), math.sqrt(max(0.0, 1 - u)))))
+    for o in objs:
+        seen = group(o) if apart else None
+        seen = 0 if apart and seen is None else seen
+        if seen not in trees:
+            trees[seen] = build(seen)
+        tree = trees[seen]
+        me = o.data
+        m = o.matrix_world
+        rot = m.to_3x3()
+        attr = me.color_attributes.get("AO") or me.color_attributes.new("AO", "FLOAT_COLOR",
+                                                                         "CORNER")
+        me.color_attributes.active_color = attr
+        for poly in me.polygons:
+            n = (rot @ poly.normal).normalized()
+            c = m @ poly.center
+            frame = Vector((0, 0, 1)).rotation_difference(n).to_matrix()
+            world_dirs = [frame @ d for d in dirs]
+            for li in poly.loop_indices:
+                corner = m @ me.vertices[me.loops[li].vertex_index].co
+                at = corner.lerp(c, 0.25) + n * 0.002
+                hit = 0.0
+                for d in world_dirs:
+                    loc, hn, _, dist = tree.ray_cast(at, d, distance)
+                    if loc is not None and hn.dot(d) < 0.0:
+                        hit += 1.0 - dist / distance
+                occ = hit / rays
+                v = 1.0 - strength * min(1.0, occ * 2.0)
+                a = 1.0
+                if sky == "indoors":
+                    a = 0.0
+                elif sky:
+                    # Blender's up is +Z.
+                    loc, _, _, _ = tree.ray_cast(at + Vector((0, 0, 0.01)), Vector((0, 0, 1)),
+                                                 200.0)
+                    a = 0.0 if loc is not None else 1.0
+                attr.data[li].color = (v, v, v, a)
+
+
+def export(rel_path, colors=False):
+    """Write the scene as a .glb. `colors` exports each mesh's active
+    colour attribute as COLOR_0 (the world props' baked AO)."""
     path = os.path.join(REPO, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    extra = {"export_vertex_color": "ACTIVE"} if colors else {}
     bpy.ops.export_scene.gltf(
+        **extra,
         filepath=path,
         export_format="GLB",
         export_yup=True,

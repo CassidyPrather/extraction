@@ -287,6 +287,70 @@ pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
     })
 }
 
+// --- The Surge ---------------------------------------------------------------
+
+/// How agitated the anomalies are with `surge_in` seconds to the Surge
+/// (negative: it's raging), given the warning's length: nothing before
+/// the warning, rising to all of it as the Surge breaks, all of it while
+/// it rages, and calm again once it has passed.
+pub fn surge_agitation(surge_in: f32, warning: f32, length: f32) -> f32 {
+    if surge_in > warning || surge_in <= -length {
+        0.0
+    } else if surge_in > 0.0 {
+        let t = 1.0 - surge_in / warning;
+        t * t
+    } else {
+        1.0
+    }
+}
+
+/// How much an agitated anomaly swells: up to this share again.
+pub const SURGE_SWELL: f32 = 0.3;
+/// How much faster agitated anomalies charge and recharge, at full.
+pub const SURGE_HURRY: f32 = 2.0;
+/// Seconds before the Surge at which a new anomaly blooms near you.
+pub const SURGE_BLOOMS: [f32; 5] = [240.0, 170.0, 110.0, 60.0, 25.0];
+/// Seconds a Surge bloom spends forming (visible, harmless) first.
+pub const SURGE_FORMING: f32 = 4.0;
+
+/// How many Surge blooms fall due as the clock goes from `before` to
+/// `after` seconds to the Surge.
+pub fn surge_blooms_due(before: f32, after: f32) -> usize {
+    SURGE_BLOOMS
+        .iter()
+        .filter(|t| before > **t && after <= **t)
+        .count()
+}
+
+/// Where a Surge bloom opens round someone at `at` heading `heading`
+/// (x, z; zero if standing): 10 to 25 m off, and off to a side (50 to 130
+/// degrees from the heading), never across the way they're going; on
+/// ground `ok` allows. `roll` gives numbers in 0..1.
+pub fn surge_bloom_spot(
+    at: [f32; 2],
+    heading: [f32; 2],
+    mut roll: impl FnMut() -> f32,
+    ok: impl Fn([f32; 2]) -> bool,
+) -> Option<[f32; 2]> {
+    let h = if geom::len(heading) > 0.1 {
+        geom::scale(heading, 1.0 / geom::len(heading))
+    } else {
+        [0.0, -1.0]
+    };
+    let base = h[1].atan2(h[0]);
+    for _ in 0..24 {
+        let side = if roll() < 0.5 { -1.0 } else { 1.0 };
+        let off = (50.0 + 80.0 * roll()).to_radians() * side;
+        let d = 10.0 + 15.0 * roll();
+        let a = base + off;
+        let p = [at[0] + a.cos() * d, at[1] + a.sin() * d];
+        if ok(p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
 /// The anomalies of a Surge cycle.
 pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<AnomalySpec> {
     let mut rng = Rng::new(seed ^ 0xA70A ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -505,6 +569,43 @@ mod tests {
             "{e:?}"
         );
         assert!(mirror_exit(c, [8.0, 5.0], 1.5, |_| false).is_none());
+    }
+
+    #[test]
+    fn the_surge_stirs_them_up_and_lets_them_go() {
+        let (w, l) = (300.0, 120.0);
+        assert_eq!(surge_agitation(400.0, w, l), 0.0);
+        assert_eq!(surge_agitation(w, w, l), 0.0);
+        let early = surge_agitation(200.0, w, l);
+        let late = surge_agitation(30.0, w, l);
+        assert!(early > 0.0 && late > early && late < 1.0, "{early} {late}");
+        assert_eq!(surge_agitation(-10.0, w, l), 1.0);
+        assert_eq!(surge_agitation(-l - 1.0, w, l), 0.0);
+        // Every bloom falls due once over the warning, ticking through it.
+        let mut n = 0;
+        let mut t = w + 5.0;
+        while t > -5.0 {
+            n += surge_blooms_due(t, t - 1.0 / 64.0);
+            t -= 1.0 / 64.0;
+        }
+        assert_eq!(n, SURGE_BLOOMS.len());
+    }
+
+    #[test]
+    fn surge_blooms_open_to_the_side_not_in_your_way() {
+        let mut rng = Rng::new(9);
+        for _ in 0..200 {
+            let p = surge_bloom_spot([0.0, 0.0], [0.0, -2.0], || rng.f32(), |_| true).unwrap();
+            let d = geom::len(p);
+            assert!((10.0..=25.0).contains(&d), "{d}");
+            // Heading -Z: the angle off it is 50..130 degrees.
+            let off = (-p[1] / d).acos().to_degrees();
+            assert!(
+                (49.0..=131.0).contains(&off),
+                "{p:?} is {off:.0} degrees off"
+            );
+        }
+        assert!(surge_bloom_spot([0.0, 0.0], [0.0, 0.0], || 0.5, |_| false).is_none());
     }
 
     #[test]

@@ -140,7 +140,9 @@ impl Traits {
                 duck: 0.9,
                 sneak_range: 45.0,
                 distract: true,
-                stalk: true,
+                // Off by default: it costs raids and the walkers spot it on
+                // open ground (`SIM_STALK=1` turns it on to study it).
+                stalk: std::env::var_os("SIM_STALK").is_some(),
                 ..base
             },
             "reckless" => Traits {
@@ -580,6 +582,7 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     /// Underground sites' power: doors held shut, and the switches.
     power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    site_power: Query<'w, 's, &'static crate::world::underground::SitePower>,
     power_switches: Query<
         'w,
         's,
@@ -1286,12 +1289,14 @@ fn sneak(
 }
 
 /// Unaware walkers this far off are worth creeping up on (m)...
-const STALK_FROM: f32 = 40.0;
+const STALK_FROM: f32 = 70.0;
 /// ...to this far from them, behind them...
 const STALK_TO: f32 = 10.0;
 /// ...outside their sight: more than this off their facing (radians; a
 /// walker sees 200 degrees round)...
 const STALK_BEHIND: f32 = 2.0;
+/// ...by way of a point this far out behind them...
+const STALK_WIDE: f32 = 25.0;
 /// ...then throw it this far past them, the far side from the bot (m).
 const STALK_PAST: f32 = 5.0;
 
@@ -1387,8 +1392,24 @@ fn stalk(
     if r.stage != Stage::Raid || r.clock - r.distracted_at < 90.0 {
         return false;
     }
-    let Some(item) = junk(r, scene) else {
+    let skip = |r: &mut Raider, log: &mut SimLog, why: &str| {
+        if r.debug {
+            log.event("stalk_skip", json!({"why": why}));
+        }
+        false
+    };
+    // Any walker in sight close enough to be worth it?
+    let walker_near = scene.robots.iter().any(|(_, robot, gt, ..)| {
+        !robot.wrecked
+            && robot.kind == crate::robots::RobotKind::Walker
+            && gt.translation().distance(eye) < STALK_FROM
+            && scene.visible(eye, gt.translation())
+    });
+    if !walker_near {
         return false;
+    }
+    let Some(item) = junk(r, scene) else {
+        return skip(r, log, "no junk");
     };
     // An unaware walker in sight.
     let pick = scene
@@ -1407,7 +1428,7 @@ fn stalk(
             && scene.visible(eye, gt.translation())
         });
     let Some((walker, _, gt, ..)) = pick else {
-        return false;
+        return skip(r, log, "aware");
     };
     let w = gt.translation().xz();
     let facing = {
@@ -1430,16 +1451,26 @@ fn stalk(
         if best.as_ref().is_some_and(|b| b.0 <= d) {
             continue;
         }
-        if let Some(t) = travel(&r.grid, eye.xz(), spot, 1.0) {
+        // Round the back at a distance first (out of its sight), then in.
+        let wide = w + dir * STALK_WIDE;
+        let around = if r.grid.walkable([wide.x, wide.y]) {
+            travel(&r.grid, eye.xz(), wide, 2.0).and_then(|mut t| {
+                t.extend(travel(&r.grid, wide, spot, 1.0)?);
+                Some(t)
+            })
+        } else {
+            travel(&r.grid, eye.xz(), spot, 1.0)
+        };
+        if let Some(t) = around {
             best = Some((d, spot, t));
         }
     }
     let Some((d, spot, mut tasks)) = best else {
-        return false;
+        return skip(r, log, "no way round");
     };
     let landing = w + (w - spot).normalize_or(Vec2::X) * STALK_PAST;
     if !r.grid.walkable([landing.x, landing.y]) {
-        return false;
+        return skip(r, log, "no landing");
     }
     r.distracted_at = r.clock;
     log.event(
@@ -1801,22 +1832,38 @@ fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<
     indoor_to(plan, from, goal, within)
 }
 
+/// The longest single walk on an indoor route (m).
+const LEG_MAX: f32 = 10.0;
+
 fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
     let path = plan.path(a, goal)?;
     let mut tasks = Vec::new();
+    // A long straight run (an underground site's long stair) in legs, each
+    // well inside a walk's time.
+    let walk = |tasks: &mut Vec<Task>, from: Vec2, to: Vec2, within: f32| {
+        let legs = (from.distance(to) / LEG_MAX).ceil().max(1.0) as usize;
+        for k in 1..legs {
+            tasks.push(Task::WalkTo {
+                to: plan.world2(from.lerp(to, k as f32 / legs as f32)),
+                within: 0.6,
+            });
+        }
+        tasks.push(Task::WalkTo {
+            to: plan.world2(to),
+            within,
+        });
+    };
     let mut last = a;
     let n = path.len();
     for (i, p) in path.into_iter().enumerate().skip(1) {
+        let mut start = last;
         for (door, cross) in plan.doors_on(last, p) {
             let dir = (p - last).normalize_or_zero();
             let before = cross - dir * 1.1;
-            let square = (before - last).dot(dir) > 0.0;
+            let square = (before - start).dot(dir) > 0.0;
             if square {
-                tasks.push(Task::WalkTo {
-                    to: plan.world2(before),
-                    within: 0.3,
-                });
+                walk(&mut tasks, start, before, 0.3);
             }
             tasks.push(Task::OpenDoor(door));
             // A door swinging out can shove you aside: square up to the
@@ -1827,11 +1874,9 @@ fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option
                     within: 0.3,
                 });
             }
+            start = cross;
         }
-        tasks.push(Task::WalkTo {
-            to: plan.world2(p),
-            within: if i == n - 1 { within } else { 0.35 },
-        });
+        walk(&mut tasks, start, p, if i == n - 1 { within } else { 0.35 });
         last = p;
     }
     Some(tasks)
@@ -2046,7 +2091,7 @@ fn raid_step(
                            "dist": round(site.at.distance(here), 0)}),
                 );
                 r.act = Act::Travel(s);
-                if let Some(t) = go_to_site(r, s, pos) {
+                if let Some(t) = go_to_site(r, scene, s, pos) {
                     return t;
                 }
                 r.sites[s].visited = true;
@@ -2085,7 +2130,7 @@ fn raid_step(
                     r.act = Act::Idle;
                     continue;
                 }
-                if let Some(t) = go_to_site(r, s, pos) {
+                if let Some(t) = go_to_site(r, scene, s, pos) {
                     return t;
                 }
                 r.sites[s].visited = true;
@@ -2279,18 +2324,24 @@ fn site_target(r: &Raider, s: usize, pos: Vec3) -> Vec2 {
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
-fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
+fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
     let plan = r
         .plans
         .iter()
         .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
-    let exit = way_out(plan, plan.to_local(pos).xz())?;
+    let exit = way_out(plan, plan.to_local(pos).xz(), &|d| {
+        scene.power_locked.contains(d)
+    })?;
     indoor_out(plan, pos, exit, 0.6)
 }
 
 /// Where to walk to be out of a building from a local point: the nearest
 /// door stand or point round the footprint by the walk.
-pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
+pub(crate) fn way_out(
+    plan: &BuildingPlan,
+    local: Vec2,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec2> {
     // All the way out of the footprint, the shortest way round: a hall
     // with open bays counts as "outside" for its doors, and leaving only
     // the office in its corner left a bot inside, walking at the wall.
@@ -2321,10 +2372,18 @@ pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
     // A door stand inside the footprint (the office's, in an open hall)
     // isn't out.
     let out = |e: &Vec2| e.x.abs() > plan.half.x || e.y.abs() > plan.half.y;
+    // Nor a door held shut (an exit on an underground site's power).
+    let open = |e: &Vec2| {
+        !plan
+            .doors
+            .iter()
+            .any(|d| shut(d.entity) && d.outside.is_some_and(|o| o.distance(*e) < 0.01))
+    };
     plan.entries
         .iter()
         .copied()
         .filter(out)
+        .filter(open)
         .chain(ring)
         .filter_map(|e| {
             let path = plan.path(local, e)?;
@@ -2336,11 +2395,11 @@ pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
         .map(|b| b.1)
 }
 
-fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {
+fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task>> {
     let to = site_target(r, s, pos);
     let same = matches!(r.sites[s].kind, SiteKind::Building(b) if r.plans[b].in_grid(pos));
     if !same {
-        if let Some(out) = leave_building(r, pos) {
+        if let Some(out) = leave_building(r, scene, pos) {
             return Some(out);
         }
     }
@@ -2427,23 +2486,33 @@ fn take_item(
             }
             let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
             // Behind a door on an underground site's power: throw the
-            // switch first (it's loud: the crawlers come), unless careful.
+            // switches first, stage by stage up to the one that holds it
+            // (it's loud: the crawlers come), unless careful.
             let held = route
                 .iter()
-                .any(|t| matches!(t, Task::OpenDoor(d) if scene.power_locked.contains(*d)));
-            if held {
+                .filter_map(|t| match t {
+                    Task::OpenDoor(d) => scene.power_locked.get(*d).ok().map(|l| l.stage),
+                    _ => None,
+                })
+                .max();
+            if let Some(stage) = held {
                 if r.traits.name == "cautious" {
                     return None;
                 }
-                let (switch, _, gt) = scene
-                    .power_switches
-                    .iter()
-                    .find(|(_, sw, _)| sw.site == plan.entity)?;
-                let at_switch = gt.translation();
-                tasks.extend(indoor(plan, pos, plan.to_local(at_switch).xz(), 0.5)?);
-                tasks.push(Task::Press(switch));
-                tasks.push(Task::Wait(1.0));
-                tasks.extend(indoor(plan, at_switch, plan.to_local(at).xz(), 0.3)?);
+                let first = scene.site_power.get(plan.entity).ok()?.next()?;
+                let mut from = pos;
+                for k in first..=stage {
+                    let (switch, _, gt) = scene
+                        .power_switches
+                        .iter()
+                        .find(|(_, sw, _)| sw.site == plan.entity && sw.stage == k)?;
+                    let at_switch = gt.translation();
+                    tasks.extend(indoor(plan, from, plan.to_local(at_switch).xz(), 0.5)?);
+                    tasks.push(Task::Press(switch));
+                    tasks.push(Task::Wait(1.0));
+                    from = at_switch;
+                }
+                tasks.extend(indoor(plan, from, plan.to_local(at).xz(), 0.3)?);
             } else {
                 tasks.extend(route);
             }
@@ -2574,7 +2643,7 @@ fn extract_step(
     }
     if here.distance(approach) > 4.0 {
         r.act = Act::ToRv;
-        if let Some(out) = leave_building(r, pos) {
+        if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
         return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {

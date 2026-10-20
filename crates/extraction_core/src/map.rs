@@ -362,9 +362,22 @@ impl Region {
     }
 }
 
+/// A ruined house's prefab id is its house's with the ruin's state after
+/// it (`house_plank_burnt`); built from the same plan, it stands on the
+/// same footprint with the same doors.
+pub const RUIN_STATES: [&str; 2] = ["_damaged", "_burnt"];
+
+/// The prefab a ruin is a ruin of (any other id as it is).
+pub fn prefab_base(id: &str) -> &str {
+    RUIN_STATES
+        .iter()
+        .find_map(|s| id.strip_suffix(s))
+        .unwrap_or(id)
+}
+
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
-    match id {
+    match prefab_base(id) {
         "quarantine_gate" => [12.0, 4.0, 3.0],
         "guard_booth" => [2.6, 2.7, 2.6],
         "sawmill" => [24.0, 7.0, 12.0],
@@ -398,6 +411,16 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A nave 10 x 14 with its steps at the west door, the bell tower
         // off the east end.
         "chapel" => [10.4, 19.0, 23.0],
+        // Hero landmarks: a valley's one unmistakable silhouette.
+        "mill_race" => [7.8, 28.5, 54.6],
+        // A mine's aerial ropeway: the upper station (its ropes run out
+        // 34 m along -z, not counted), the line's pylons, one fallen.
+        "ropeway_station" => [12.0, 25.5, 16.2],
+        "ropeway_pylon" => [7.2, 21.2, 4.9],
+        "ropeway_pylon_down" => [7.6, 4.6, 27.0],
+        // A blast furnace with its stoves, chimney, dust catcher, skip
+        // bridge and cast house.
+        "blast_furnace" => [45.6, 38.5, 59.2],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
@@ -422,7 +445,7 @@ pub struct Entrance {
 /// with the game's recipes by `buildings::tests::entrances_match_the_map`;
 /// regenerate it from the recipes when they change.
 pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
-    match id {
+    match prefab_base(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],
             out: [0.0, -1.0],
@@ -606,7 +629,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
 /// under it, less a margin, and still be footed. `qa` in the game checks
 /// this against the models.
 pub fn prefab_foundation(id: &str) -> f32 {
-    match id {
+    match prefab_base(id) {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,

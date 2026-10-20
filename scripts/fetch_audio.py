@@ -637,9 +637,11 @@ def credits_rows(man: dict, date: str) -> list[str]:
         for sid in seen:
             src = man["sources"][sid]
             glob = f"`assets/audio/{set_id(st)}_*.ogg`"
-            where = "Freesound" if "freesound.org" in src["page"] else "Kenney"
+            page = src["page"]
+            where = ("Freesound" if "freesound.org" in page
+                     else "OpenGameArt" if "opengameart.org" in page else "Kenney")
             what = f"{where} \"{src.get('title', sid)}\""
-            if where == "Kenney":
+            if where != "Freesound":
                 members = sorted({Path(i["member"]).name for i in st["inputs"]
                                   if i["source"] == sid and "member" in i})
                 what += " (" + ", ".join(members) + ")"

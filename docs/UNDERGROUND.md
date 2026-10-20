@@ -122,6 +122,16 @@ tests it through the headset harness. Sim raiders whose way to an item
 runs through a held door throw the switch first (a `power` event in the
 telemetry); cautious ones leave it.
 
+The power comes in stages (`power` is a list): each stage's switch is
+dead ("Nothing upstream.") until the one before is on, each holds its
+own doors (a room's, or `portal<N>`: an exit stair's, kiosk and foot)
+and lights its own rooms (a room's `stage`). The layout check floods
+the plan with each stage's doors and every later one's shut and wants
+the switch reached (`power_stages_are_reached_in_order`); the headset
+test throws a late switch first, then each in turn. Raiders throw the
+switches in order up to the stage a door needs, and never leave by an
+exit still held.
+
 ## Water
 
 Floods are layout data too (a room or a corridor, and a depth): a drain
@@ -154,3 +164,80 @@ not the shelter's). The entries are the stands outside every kiosk door, so
 a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
+
+## The Depot
+
+The place the convoys go. The lore says each Gate is a depot, the
+machines keep everything they take "pending review", and only the three
+keys end it. The Depot makes that physical: the valleys' things, sorted
+and stacked under the Gate, your own lost kit among them.
+
+**Where.** `depot_marrow`, placed at (-230, -234) rot 0 on Marrow Creek,
+in the Gate's danger zone 29 m from the Gate itself (scouted for rock
+cover and a kiosk clear of buildings: `SCOUT=marrow_creek:depot_marrow:
+-230:-230:60`). Four levels stepping down, 7 m to 19 m under the yard,
+about 60 x 120 m (plan: `docs/underground/depot_marrow.svg`).
+
+**The way in** is the intake ramp at the entrance kiosk. It is open: the
+Depot is a destination from rank 4 (Progression's deep jobs draw it as
+any site with a layout, the first after Hana's letter a fixed one), and
+Lev's line points there (Story). The shutter that opens behind a haul
+convoy after a Surge stays a proposal.
+
+**The way out** is the service stair from the pump room, 23 m up to a
+hatch north of the Depot at (-246, -119): only the last power stage
+opens it (`portal1` on stage 3), and raiders never leave by a held exit.
+
+| Level | Floor | Rooms | Power |
+| - | - | - | - |
+| 1 Intake | -7 m | `intake_bay` (the ramp's foot), `guard_post` | stage 1: the guard post's breaker opens the haul ramp's door into the hall and lights the hall |
+| 2 Sorting | -11 m | `sorting_hall` (24 x 16, 6 m high: rows of bins), `tag_office` (a staff stair round from the guard post) | stage 2: the office's board opens the stacks and lights them |
+| 3 The kept | -15 m | `kept_stacks` (shelves both walls, crates down the middle), `bay_k14` (the Mareks' crates and Jan Holm's) | - |
+| 4 Cistern | -19 m | `pump_gallery` (flooded 1.2 m: swim), `pump_room` (the best shelf) | stage 3: the pump room's breaker opens the hatch |
+
+Each switch is dead until the one before ("Nothing upstream."), and
+each is loud. Corridors between levels are stepped (a tread per half
+metre, 0.19 m); where one turns, its treads stay one apart across the
+corner.
+
+**What's there.**
+- *Your lost kit.* The latest 16 of `Memorial::lost`, by catalog name,
+  lie on the hall's crates and pallets (`LostKit`), for the taking
+  back (`the_lost_kit_lies_in_the_sorting_hall`).
+- *The kept.* Bay K-14's crates are closed props: Hana's long crate
+  with her basket, the small one for the dog, Jan Holm's. Story places
+  their tags, the tag office terminal and the review docket as scenes.
+  Progression puts the `intake_ledger` in the bay while its job is on.
+- *Danger.* Crawlers on the three dry levels (`rounds`: the intake's
+  round, two in the hall, one in the stacks), shut in behind the power
+  until it lets them out; none in the cistern (too deep). Something
+  heavier in the hall waits on Robot minds.
+
+**Hooks.** `DepotEntered { player }` each time a player goes down into
+it; `CarriedOutOfDepot { player, item }` for each thing they come back
+up with that they didn't take in (`the_depot_knows_who_came_and_what_
+they_took`).
+
+**Tested.** The layout check (stages reached in order, steps, floods);
+the headset throws its switches out of turn (nothing) and then in turn;
+a bot walks to each switch and throws it, takes the deepest loot (over
+the swim) and leaves by the hatch; daylight and crawler tests take every
+site on a map.
+
+**The deep job, end to end** (`the_ledger_comes_out_of_the_depot`):
+with Progression's Ledger job on the card the intake ledger lies in bay
+K-14; a bot goes down the ramp, throws the three stages in turn, takes
+the ledger into its pack, swims the cistern and climbs out by the hatch,
+and `CarriedOutOfDepot` names the ledger. (Handing it in at the card is
+Progression's own test.)
+
+**Budget.** Everything below is in the `Below` group, drawn only from
+inside or near the ramp and the hatch; five lamps (three on the power),
+range-hidden.
+
+**Shots** (`docs/shots/underground/d_*.jpg`, torch on, power off): the
+ramp kiosk (`d_ramp`; still the shelter's kiosk, a wider shuttered one
+is to come), the intake down the haul ramp (`d_intake`), the dark
+sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
+`d_bay`), the flooded cistern (`d_cistern`), the service stair up
+(`d_stair`) and the hatch (`d_hatch`).

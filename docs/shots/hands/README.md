@@ -35,3 +35,6 @@ body's shadow on the road, joined at the feet (the shadow on the grass is
 the signpost's). `10b`: the same with the shadow proxy drawn white for the
 record (it's on a layer only the sun sees). `10c`: before, a glove's
 shadow floating on the grass.
+`11_tracked_thumbs_monado.jpg`: tracked fingers with the thumbs following
+the runtime's own thumb direction (here open, standing up beside the
+index).

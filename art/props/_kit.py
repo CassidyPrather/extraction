@@ -19,6 +19,7 @@ import sys
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from common import bake_ao as common_bake_ao  # noqa: E402
 from common import Part, RX, RY, RZ, T, S, export, fillet, make, report, reset  # noqa: E402,F401
 
 UP = RX(-math.pi / 2)       # lathe/cyl axis (Z) -> +Y
@@ -34,9 +35,29 @@ def prop(name, build):
     parts = build()
     for p in parts:
         make(p)
+    bake_ao(ground=name not in AIRBORNE)
     print(f"{name}:")
     report()
-    export(f"assets/models/props/{name}.glb")
+    export(f"assets/models/props/{name}.glb", colors=True)
+
+
+# Props that don't stand on the floor: no ground under them in the bake.
+AIRBORNE = {"door_leaf", "door_metal", "window_sash", "window_casing", "stash_rack_2",
+            "med_cabinet", "aerial", "barrier_arm", "camp_board", "lantern"}
+
+# Ambient occlusion: how far a corner looks for what shades it, how dark a
+# fully shut-in corner gets (the shading's own lighting does the rest).
+AO_DISTANCE = 0.6
+AO_STRENGTH = 0.75
+# Bake the sky term into alpha too (see `common.bake_ao`): for structures
+# with floors under their own roofs, outdoors.
+AO_SKY = False
+
+
+def bake_ao(ground=True, distance=None, rays=40):
+    """Bake this prop's ambient occlusion (see `common.bake_ao`)."""
+    common_bake_ao(ground=ground, distance=distance or AO_DISTANCE, strength=AO_STRENGTH,
+                   rays=rays, sky=AO_SKY)
 
 
 def wanted(name):

@@ -102,6 +102,11 @@ What changed, and worth a comment each:
   wrist readout sits on a housing on the left cuff. Mark anything that
   looks wrong in your hand, especially a hand that sits too far forward
   or back on its grip.
+- **Fingers.** The Index controllers' finger sensing reaches the gloves:
+  an empty glove's fingers and thumb follow yours, and sleeves run up to
+  your shoulders. A gun stays in a relaxed hand as long as your fingers
+  are still round it; open your fingers (not just the squeeze) to let go.
+  Say if that ever keeps hold of something you meant to drop.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
@@ -331,6 +336,18 @@ Then note the session log's `gpu: ... ms a frame` lines from each run,
 and whether the shimmer bothered you in the first and was better in
 the second.
 
+### 4d. Long shadows at dusk (5 minutes)
+
+At dusk the sun is low, and in clear weather the trees' shadows run in
+long lines across the tracks (the "ruled lines" from the first
+session, now only at the ends of the day). Try it twice in Marrow Creek:
+
+1. `cargo run --release -- --map marrow_creek --hour dusk --weather clearing`
+2. The same with `--sun-elevation 28` (a higher sun, shorter shadows,
+   a little less golden).
+
+Which looked better in the headset, and did the shadow lines bother you?
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -384,6 +401,8 @@ the second.
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
+| `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |

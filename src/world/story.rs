@@ -155,6 +155,40 @@ pub const THREAD: &[Lead] = &[
             (M, "The well"),
         ],
     },
+    // The Depot: what the convoys keep.
+    Lead {
+        map: M,
+        note: "Hauler's tag",
+        mentions: &[(M, "Depot office terminal"), (M, "Village")],
+    },
+    Lead {
+        map: M,
+        note: "Review docket",
+        mentions: &[
+            (M, "Depot office terminal"),
+            (C, "Inspector's letter"),
+            (M, "Valley office copy"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Marek tag",
+        mentions: &[
+            (M, "Hana's last page"),
+            (M, "Basket note"),
+            (M, "Valley office copy"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Dog's tag",
+        mentions: &[(M, "Rusty's note"), (M, "Marek tag")],
+    },
+    Lead {
+        map: M,
+        note: "Holm tag",
+        mentions: &[(M, "Shelter note"), (M, "Village note"), (M, "Marek tag")],
+    },
     Lead {
         map: M,
         note: "Barricade note",
@@ -530,15 +564,13 @@ const BEAT_FIRST: f32 = 12.0;
 
 /// Tells the beats that open while you play: a job handed in at base that
 /// finishes a rank, or the recall. The driver speaks a few seconds after
-/// (the fitting's own line goes first), one line at a time, and leaves his
-/// gift in the stash. A career loaded at a rank has heard its beats.
+/// (the fitting's own line goes first), one line at a time, and hands his
+/// gift back through the cab's hatch. A career loaded at a rank has heard its beats.
 pub fn tell_beats(
-    mut commands: Commands,
+    mut handover: MessageWriter<crate::raid::lev::HandOver>,
     progression: Option<Res<crate::progression::Progression>>,
     mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
-    catalog: Res<crate::items::Catalog>,
-    stashes: Query<Entity, With<crate::raid::truck::Stash>>,
     mut state: Local<(
         Option<(u32, bool)>,
         std::collections::VecDeque<&'static str>,
@@ -560,8 +592,12 @@ pub fn tell_beats(
             if beat.gate.open(at(now)) && !beat.gate.open(at(before)) {
                 info!("story beat: {:?}", beat.gate);
                 queue.extend(beat.radio.iter().copied());
-                if let (Some(id), Some(stash)) = (beat.gift, stashes.iter().next()) {
-                    gift(&mut commands, &catalog, stash, id);
+                if let Some(id) = beat.gift {
+                    // Passed back through the cab's hatch.
+                    handover.write(crate::raid::lev::HandOver {
+                        id: id.into(),
+                        condition: 0.6,
+                    });
                 }
                 *timer = BEAT_FIRST;
             }
@@ -577,36 +613,6 @@ pub fn tell_beats(
             raid.say(line);
         }
     }
-}
-
-/// Puts an item in the stash crate, as the driver's fittings do.
-fn gift(commands: &mut Commands, catalog: &crate::items::Catalog, stash: Entity, id: &str) {
-    use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
-    let Some(kind) = catalog.kind(id) else {
-        return;
-    };
-    let local = Vec3::new(-0.25, 0.08, -0.3);
-    let e = crate::items::spawn_item(
-        commands,
-        catalog,
-        crate::items::SpawnItem {
-            kind,
-            transform: Transform::from_translation(local),
-            condition: 0.6,
-        },
-    );
-    commands.entity(e).insert((
-        crate::interact::body::InBackpack { bag: stash },
-        ChildOf(stash),
-        Transform::from_translation(local),
-        RigidBodyDisabled,
-        ColliderDisabled,
-    ));
-    commands.queue(move |world: &mut World| {
-        if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(stash) {
-            b.contents.push(e);
-        }
-    });
 }
 
 #[cfg(test)]
@@ -682,6 +688,20 @@ mod tests {
     /// them clear of the CRT's own wrap.
     #[test]
     fn terminal_pages_keep_their_shape() {
+        for s in crate::world::scenes::all() {
+            let Some(t) = &s.terminal else {
+                continue;
+            };
+            for page in t.pages.iter().chain(&t.recalled) {
+                let lines = page.lines().count();
+                let widest = page.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+                assert!(
+                    lines <= 12 && widest <= 32,
+                    "{}: {lines} lines, {widest} wide",
+                    s.name
+                );
+            }
+        }
         for name in VALLEYS {
             for m in &map(name).markers {
                 let MarkerKind::Terminal { pages } = &m.kind else {

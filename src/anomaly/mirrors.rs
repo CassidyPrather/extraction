@@ -54,7 +54,12 @@ fn landing_ok(zone: &Zone, others: &[(Vec2, f32)], p: [f32; 2]) -> bool {
 
 #[allow(clippy::type_complexity)]
 pub fn mirrors(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(
+        Entity,
+        &mut Anomaly,
+        &GlobalTransform,
+        Has<super::surge::Forming>,
+    )>,
     mut bodies: Query<
         (
             Entity,
@@ -79,11 +84,11 @@ pub fn mirrors(
     let dt = time.delta_secs();
     let all: Vec<(Vec2, f32)> = anomalies
         .iter()
-        .map(|(_, a, g)| (g.translation().xz(), a.radius))
+        .map(|(_, a, g, _)| (g.translation().xz(), a.radius))
         .collect();
     let underground = |p: Vec3| crate::world::underground::floor_under(&zone, p).is_some();
-    for (e, mut a, gt) in &mut anomalies {
-        if a.kind != AnomalyKind::Mirror {
+    for (e, mut a, gt, forming) in &mut anomalies {
+        if a.kind != AnomalyKind::Mirror || forming {
             continue;
         }
         a.charge = (a.charge + dt / MIRROR_RECHARGE).min(1.0);
@@ -263,5 +268,86 @@ pub fn shards(
             from: feet,
             to,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rig::Side;
+    use crate::vr_harness::Vr;
+
+    /// Held in the right hand, the shard's use button steps you ahead the
+    /// way you face; a second press straight after does nothing.
+    #[test]
+    fn a_mirror_shard_steps_you_ahead_once_a_minute() {
+        let mut vr = Vr::new("marrow_creek");
+        let (feet, yaw) = {
+            let zone = vr.app.world().resource::<Zone>();
+            // Open ground with open ground 4 m north of it.
+            let p = (0..400)
+                .map(|i| [60.0 + (i % 20) as f32 * 7.0, 120.0 - (i / 20) as f32 * 7.0])
+                .find(|p| {
+                    (0..=8).all(|k| {
+                        extraction_core::anomaly::placeable(
+                            &zone.map,
+                            &zone.hm,
+                            [p[0], p[1] - k as f32 * 0.6],
+                        )
+                    })
+                })
+                .expect("somewhere open");
+            (zone.on_ground(p[0], p[1]), 0.0)
+        };
+        vr.stand(feet, yaw);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        vr.step(10);
+        let hand = feet + Vec3::new(0.25, 1.1, -0.35);
+        let shard = vr.spawn("art_shard", Transform::from_translation(hand));
+        vr.app
+            .world_mut()
+            .entity_mut(shard)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, hand, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(shard), "held");
+        let before = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        vr.primary(Side::Right, true);
+        vr.step(3);
+        vr.primary(Side::Right, false);
+        vr.step(3);
+        let after = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        let moved = after - before;
+        assert!(
+            moved.z < -SHARD_STEP * 0.7 && moved.x.abs() < 0.5,
+            "stepped about {SHARD_STEP} m north (-Z): {moved:.2}"
+        );
+        vr.primary(Side::Right, true);
+        vr.step(3);
+        vr.primary(Side::Right, false);
+        vr.step(3);
+        let again = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        assert!(
+            again.distance(after) < 0.5,
+            "not again so soon ({:.2} m)",
+            again.distance(after)
+        );
     }
 }

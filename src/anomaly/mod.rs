@@ -18,6 +18,7 @@ pub mod artifacts;
 pub mod detector;
 pub mod mirrors;
 pub mod offering;
+pub mod surge;
 pub mod visuals;
 pub mod wells;
 
@@ -154,7 +155,10 @@ impl Plugin for AnomalyPlugin {
             .add_message::<ArcStrike>()
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
+            .add_message::<wells::EnteredWell>()
             .init_resource::<AttentionBudget>()
+            .init_resource::<surge::Agitation>()
+            .add_observer(surge::remember_size)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
             })
@@ -163,6 +167,7 @@ impl Plugin for AnomalyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    surge::stir,
                     // Before anything can blink or fling what was thrown.
                     detector::reveal,
                     lifts,
@@ -175,6 +180,7 @@ impl Plugin for AnomalyPlugin {
                     measure_attention,
                     spend_attention,
                     age_blooms,
+                    surge::surge_blooms,
                 )
                     .chain()
                     .after(crate::robots::perceive),
@@ -274,8 +280,10 @@ fn falloff(d: f32, r: f32) -> f32 {
 
 /// Lifts: loose things float and circle; the longer something's in it, the
 /// sooner it pops and flings everything out.
+#[allow(clippy::too_many_arguments)]
 fn lifts(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut bodies: Query<
         (&GlobalTransform, &RigidBody, &ComputedMass, Forces),
         Without<RigidBodyDisabled>,
@@ -370,7 +378,8 @@ fn lifts(
                 what: AnomalyAct::Pop,
             });
         } else if occupied {
-            a.charge = (a.charge + dt / 4.0).min(1.0);
+            let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
+            a.charge = (a.charge + dt * hurry / 4.0).min(1.0);
         } else {
             a.charge = (a.charge - dt / 6.0).max(0.0);
         }
@@ -378,8 +387,10 @@ fn lifts(
 }
 
 /// Burners: heat that hurts whoever stands in it, and cooks robot parts.
+#[allow(clippy::too_many_arguments)]
 fn burners(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut players: Query<(&GlobalTransform, &mut Health), With<Player>>,
     parts: Query<(), With<crate::robots::RobotPart>>,
     spatial: SpatialQuery,
@@ -399,7 +410,7 @@ fn burners(
             if Vec2::new(rel.x, rel.z).length() < a.radius && rel.y < 2.5 {
                 inside = true;
                 if !h.down {
-                    h.hp -= 14.0 * dt;
+                    h.hp -= 14.0 * (1.0 + agitation.0) * dt;
                     h.since_hit = 0.0;
                 }
             }
@@ -439,7 +450,8 @@ fn burners(
 /// Snares: discharge into everything in reach when anything touches them.
 #[allow(clippy::too_many_arguments)]
 fn snares(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    agitation: Res<surge::Agitation>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
     held: Query<(&GlobalTransform, &Item, &crate::interact::Held)>,
     catalog: Res<Catalog>,
@@ -460,7 +472,8 @@ fn snares(
         if a.kind != AnomalyKind::Snare {
             continue;
         }
-        a.charge = (a.charge + dt / 3.5).min(1.0);
+        let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
+        a.charge = (a.charge + dt * hurry / 3.5).min(1.0);
         if a.charge < 1.0 {
             continue;
         }
@@ -774,6 +787,22 @@ mod tests {
         assert!(highest > 1.3, "the tin rose (to {highest:.2} m)");
     }
 
+    /// A round in flight, fired by no one: the only fields these tests
+    /// care about are where it goes and how heavy it is.
+    fn test_round(velocity: Vec3, mass_g: f32) -> crate::weapons::ballistics::Projectile {
+        crate::weapons::ballistics::Projectile {
+            velocity,
+            damage: 0.0,
+            shooter: None,
+            gun: Entity::PLACEHOLDER,
+            life: 2.0,
+            mods: Default::default(),
+            mass_g,
+            seed: 0,
+            passes: 0,
+        }
+    }
+
     fn player(app: &mut App) -> Entity {
         app.world_mut()
             .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
@@ -813,11 +842,21 @@ mod tests {
         let (_, at, _) = find(&mut app, AnomalyKind::Well);
         let p = player(&mut app);
         app.world_mut().get_mut::<Transform>(p).unwrap().translation = at;
+        let mut cursor = app
+            .world()
+            .resource::<Messages<wells::EnteredWell>>()
+            .get_cursor_current();
+        let mut told = 0;
         for _ in 0..30 {
             app.update();
+            told += cursor
+                .read(app.world().resource::<Messages<wells::EnteredWell>>())
+                .filter(|m| m.player == p)
+                .count();
         }
         let hp = app.world().get::<Health>(p).unwrap().hp;
         assert!(hp < 95.0, "the heart crushes ({hp})");
+        assert_eq!(told, 1, "going in was told once, not every tick");
     }
 
     /// Fires a round along +X past `heart` at `miss` metres and returns
@@ -827,17 +866,7 @@ mod tests {
         let round = app
             .world_mut()
             .spawn((
-                crate::weapons::ballistics::Projectile {
-                    velocity: Vec3::X * speed,
-                    damage: 0.0,
-                    shooter: None,
-                    gun: Entity::PLACEHOLDER,
-                    life: 2.0,
-                    mods: Default::default(),
-                    mass_g: 8.0,
-                    seed: 0,
-                    passes: 0,
-                },
+                test_round(Vec3::X * speed, 8.0),
                 Transform::from_translation(from),
             ))
             .id();
@@ -990,6 +1019,77 @@ mod tests {
         let near = count(&mut app, 2.0);
         assert!(far >= 1, "a tick now and then at 18 m ({far})");
         assert!(near > far * 4, "a rattle at 2 m ({near} vs {far})");
+    }
+
+    #[test]
+    fn a_carried_lodestone_turns_rounds_aside() {
+        let mut app = app(false);
+        let p = player(&mut app);
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == p && b.carried)
+            .map(|(e, _)| e)
+            .unwrap();
+        // Out in the open in the Hollow, away from trunks and the well.
+        let open = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(146.0, -10.0);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = open;
+        for _ in 0..3 {
+            app.update();
+        }
+        let chest = pos(&app, p) + Vec3::Y * 1.2;
+        let turn = |app: &mut App| {
+            // Fired from the south, passing a metre over the chest (clear
+            // of the body, its arms and its pack).
+            let round = app
+                .world_mut()
+                .spawn((
+                    test_round(Vec3::NEG_Z * 330.0, 6.1),
+                    Transform::from_translation(chest + Vec3::new(0.0, 1.0, 12.0)),
+                ))
+                .id();
+            let mut v = Vec3::NEG_Z;
+            for _ in 0..6 {
+                app.update();
+                match app
+                    .world()
+                    .get::<crate::weapons::ballistics::Projectile>(round)
+                {
+                    Some(p) => v = p.velocity,
+                    None => break,
+                }
+            }
+            v.y.atan2(-v.z).to_degrees()
+        };
+        let bare = turn(&mut app);
+        let stone = drop_item(&mut app, "art_lodestone", Vec3::ZERO);
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(stone);
+        app.world_mut().entity_mut(stone).insert((
+            crate::interact::body::InBackpack { bag: pack },
+            ChildOf(pack),
+            RigidBodyDisabled,
+            ColliderDisabled,
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(
+            app.world().get::<artifacts::CarriedBy>(stone).is_some(),
+            "carried"
+        );
+        let carried = turn(&mut app);
+        assert!(
+            carried - bare > 1.0,
+            "a lodestone pushes it up, away from you ({carried:.2}° against {bare:.2}° bare)"
+        );
     }
 
     #[test]

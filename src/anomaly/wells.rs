@@ -28,6 +28,17 @@ use crate::world::Layer;
 /// A lodestone's own little well round its carrier: radius of the lens it
 /// works like, and how far from the carrier's chest it reaches.
 pub const LODESTONE_RADIUS: f32 = 0.6;
+/// A lodestone's lens, as a share of a well's: enough to turn a graze
+/// into a miss, not to wrap a round round you.
+pub const LODESTONE_STRENGTH: f32 = 0.15;
+
+/// A player's chest crossed into a well's reach (for a first-time hint:
+/// sent each time they go in, not while they stay).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct EnteredWell {
+    pub player: Entity,
+    pub well: Entity,
+}
 
 /// Where a well's heart hangs, from its ground position.
 pub fn heart(at: Vec3) -> Vec3 {
@@ -38,7 +49,7 @@ pub fn heart(at: Vec3) -> Vec3 {
 /// heart.
 #[allow(clippy::type_complexity)]
 pub fn wells(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<super::surge::Forming>>,
     mut bodies: Query<
         (
             &GlobalTransform,
@@ -50,15 +61,18 @@ pub fn wells(
         ),
         Without<RigidBodyDisabled>,
     >,
-    mut players: Query<(&GlobalTransform, &mut Body, &mut Health), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Body, &mut Health), With<Player>>,
     parts: Query<(), With<crate::robots::RobotPart>>,
     catalog: Res<Catalog>,
+    mut entered: MessageWriter<EnteredWell>,
+    mut inside: Local<Vec<(Entity, Entity)>>,
     spatial: SpatialQuery,
     time: Res<Time>,
     mut hits: MessageWriter<Hit>,
     mut events: MessageWriter<AnomalyEvent>,
 ) {
     let dt = time.delta_secs();
+    let mut now_inside = Vec::new();
     for (e, mut a, gt) in &mut anomalies {
         if a.kind != AnomalyKind::Well {
             continue;
@@ -112,12 +126,19 @@ pub fn wells(
             let damp = -v * 2.5 * k * k;
             forces.apply_force((pull + Vec3::Y * 9.81 * k.sqrt() + swirl + damp) * m);
         }
-        for (pt, mut body, mut health) in &mut players {
+        for (pe, pt, mut body, mut health) in &mut players {
             let chest = pt.translation() + Vec3::Y * 1.0;
             let rel = chest - core;
             let flat = Vec3::new(rel.x, 0.0, rel.z);
             if flat.length() > reach || rel.y.abs() > 3.0 {
                 continue;
+            }
+            now_inside.push((pe, e));
+            if !inside.contains(&(pe, e)) {
+                entered.write(EnteredWell {
+                    player: pe,
+                    well: e,
+                });
             }
             let pull = Vec3::from_array(well_pull(flat.to_array(), a.radius, WELL_DRAG));
             body.velocity += pull * dt;
@@ -138,6 +159,7 @@ pub fn wells(
         }
         a.charge = if crushing { 1.0 } else { 0.0 };
     }
+    *inside = now_inside;
 }
 
 /// Bends rounds in flight: every well's lens over the tick each round is
@@ -192,7 +214,7 @@ pub fn bend_rounds(
                     p.velocity.to_array(),
                     dt,
                     LODESTONE_RADIUS,
-                ));
+                )) * LODESTONE_STRENGTH;
             }
         }
         if dv != Vec3::ZERO {

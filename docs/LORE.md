@@ -178,6 +178,14 @@ house by the well, in Marrow; it says she has written to Lev as well. The
 last of his jobs (`src/progression`) sends you for that second letter,
 sealed: "For Lev, when he comes back for me." He reads it alone.
 
+He's in the cab, never in the bed: he doesn't come where you've been.
+What he gives you he passes back through a hatch in the bed's front wall
+(`src/raid/lev.rs`): it slides open, his hand comes through with the
+thing (his old carbine, the gun from his man in town, his mother's
+photograph), sets it on the ledge, and goes back. And on the drive home
+he notices what you've brought: a stone humming in your kit, one of their
+eyes, a cell, a week of tins.
+
 The game reveals him slowly, a line at a time on the drive home
 (`src/raid/lines.rs`): first the job, then the bus, then the gate, then
 his mother. Notes in all three valleys mention him without his name;
@@ -281,6 +289,19 @@ October; Dusek had been up the raise to look):
 | 1st | **Fitter's bench** by the canal pumps: "FITTER'S BOOK - T.R."; furnace three hot all night, told Kral, told the inspector; "I was on the Hollow survey before this." | The fitter is T., who signed the stake readings at the Hollow |
 | 3rd | **Letters by hand** in the works yard: he carried the inspector's letters round the valleys the first winter; "The last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses." | He delivered the valley office letter to Hana (never named) |
 | 5th | **The far stair**, where the service tunnel comes up: valve three opened again, the canal took the pit, Kral didn't come up; "Going over the pass to Kettle. There's a shot-firer there who knows about shelters." | He went to Dusek: the threads meet |
+
+## The board
+
+A cork board on the truck's right canopy wall, over the first-aid box, is
+where the player pieces it together (`src/raid/board.rs`). Every note read
+(looked at from within arm's reach for a moment) gets a pinned copy with
+its name, in a column for its valley, in the order read; where two read
+notes name each other in the thread (`world::story::THREAD`), red string
+runs pin to pin. Nothing unread shows: no gaps, no blank cards, so the
+board never says what's missing. Press a card to take the note down and
+read it whole; press again to pin it back. The read notes are kept with
+the career (`Stats::notes_read`). The first note read, Lev says he keeps
+copies (`onboarding::firsts::First::NotePinned`, said once a career).
 
 ## Staged scenes
 

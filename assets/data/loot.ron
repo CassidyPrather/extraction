@@ -45,6 +45,9 @@
             Item(id: "ammo_762x38r", weight: 1.5),
             Item(id: "ammo_762x25", weight: 0.8),
             Item(id: "ppsh_drum", weight: 0.25, condition: (0.4, 1.0)),
+            Item(id: "rgd5", weight: 0.4),
+            Item(id: "f1", weight: 0.2),
+            Item(id: "helmet", weight: 0.6, condition: (0.4, 1.0)),
         ]),
         "weapons_rare": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 3.0, condition: (0.3, 0.9)),
@@ -54,6 +57,8 @@
             Item(id: "sks", weight: 0.8, condition: (0.3, 0.85)),
             Item(id: "nagant", weight: 1.8, condition: (0.3, 0.9)),
             Item(id: "ppsh", weight: 0.24, condition: (0.25, 0.8)),
+            Item(id: "steel_plate", weight: 0.35, condition: (0.4, 1.0)),
+            Item(id: "vest", weight: 0.3, condition: (0.4, 1.0)),
         ]),
         "tools": (rolls: (1, 2), entries: [
             Item(id: "multitool", weight: 1.0),
@@ -65,6 +70,7 @@
             Item(id: "matches", weight: 1.0),
             Item(id: "door_wedge", weight: 0.8),
             Item(id: "bolt", weight: 2.0),
+            Item(id: "knife", weight: 0.5),
             Nothing(weight: 2.0),
         ]),
         "workshop": (rolls: (2, 4), entries: [

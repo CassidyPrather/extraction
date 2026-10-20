@@ -229,6 +229,9 @@ it. Thirty seconds now versus archaeology later.
 | `assets/audio/machines/truck_arrive_*.ogg` | Freesound "small truck passes by" — <https://freesound.org/s/442528/> | AdrianoAnjos | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/truck_depart_*.ogg` | Freesound "Truck drives away old engine RUSSIA 920526.flac" — <https://freesound.org/s/567341/> | TRP | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/truck_depart_*.ogg` | Freesound "R19-48-Old Large Truck Start Idle Out.wav" — <https://freesound.org/s/487161/> | craigsmith | CC0 1.0 | 2026-10 |
+| `assets/audio/explosions/grenade_sharp_*.ogg` | OpenGameArt "25 CC0 bang / firework SFX" (bang_01.ogg, bang_02.ogg, bang_04.ogg, bang_05.ogg, bang_07.ogg, bang_10.ogg) — <https://opengameart.org/content/25-cc0-bang-firework-sfx> | rubberduck | CC0 1.0 | 2026-10 |
+| `assets/audio/explosions/grenade_heavy_*.ogg` | OpenGameArt "25 CC0 bang / firework SFX" (cannon_01.ogg, cannon_02.ogg, cannon_03.ogg, cannon_04.ogg, cannon_05.ogg) — <https://opengameart.org/content/25-cc0-bang-firework-sfx> | rubberduck | CC0 1.0 | 2026-10 |
+| `assets/audio/hrir/sadie_d2_kemar.bin` | SADIE II database, D2 (KEMAR) HRIRs, 48 kHz 256-tap — <https://zenodo.org/records/12092466>; built by `scripts/audio_hrir.py`, see `assets/audio/hrir/NOTICE` | University of York AudioLab (Armstrong, Thresh, Murphy, Kearney) | Apache-2.0 | 2026-10 |
 
 The texture rows are produced by `scripts/fetch_assets.py`. The exact source
 files (URL, sha256) and the processing recipe for each output are recorded in

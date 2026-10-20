@@ -849,6 +849,15 @@ mod tests {
             for plan in &plans {
                 for d in &plan.doors {
                     let Some(entry) = d.outside else { continue };
+                    // Held shut by an underground site's power: nobody's
+                    // in that way till it's on (the site's own tests).
+                    if app
+                        .world()
+                        .get::<crate::world::underground::PowerLocked>(d.entity)
+                        .is_some()
+                    {
+                        continue;
+                    }
                     let mid = (d.a + d.b) * 0.5;
                     // A metre and a half past the doorway, inside (or as near
                     // as the furniture allows).

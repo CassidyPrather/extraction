@@ -73,7 +73,7 @@ coming ("Do these and I'll fit a vice to the bench").
 | Tier | Jobs | Where | Fitted at the end |
 | - | - | - | - |
 | 1 **Odd jobs** | 3 | danger 1 (the village, the farm) | **Stash rack**: a timber rack over the crate, the stash grows 200 → 300 L |
-| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns six more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS) |
+| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns seven more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS, 7.62x25 for the PPSh) |
 | 3 **Runs** | 4 | danger 2-3 | **Whip aerial** on the cab: the truck radios a Surge warning at ten minutes instead of five, and robot chatter says how far |
 | 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (a dressing in it each raid) and a **second rack**: 400 L |
 
@@ -108,6 +108,70 @@ thing left to do. The arc ends where the game's story does.
 turn it): raids by valley, the tier and job count, what's fitted and
 what's next, the keys at home, the memorial's count. It's the one place
 the whole arc is written down, in pencil, in the truck.
+
+## After the ladder (raid 30 and on)
+
+By raid 30 the driver has fitted everything, the letter is home, and the
+keys are the last thing the story asks. What keeps raid 40 from being
+raid 30 again? Three things, all physical, none of them a number to spend:
+
+**Deep jobs.** Past the ladder the driver's standing jobs only send you to
+the worst places: danger 3, and the underground sites (the shelter, the
+mine gallery, the service tunnel). They're the same three kinds (fetch,
+recover, scout) but never easy, and the cache they pay is three piles
+instead of two. Raid 40 is a raid to the Hollow or the quarry because the
+card says so, not because the loot table does.
+
+**Your order.** With the ladder done the driver will take an order: a
+second card under the job, pressed to cycle, says what you want his caches
+to lean to: ROUNDS (ammunition), MEDICINE, GADGETS, or ANYTHING (as
+before). His caches are still found, carried and got home; you choose what
+kind of pile is waiting. It's the one choice the economy gives you over
+what enters the world, and you earn it by finishing his jobs.
+
+**Upkeep.** Fittings wear. Every six raids each one wants a little from
+the stash, taken when you get home and said on the wrist ("Driver: took
+two scrap for the rack"):
+
+| Fitting | Upkeep, every 6 raids |
+| - | - |
+| Stash rack, wall shelf | 2 scrap metal each |
+| Bench vice | 1 gun oil |
+| Whip aerial | 1 electronics |
+| Medicine cabinet | 1 field dressing |
+
+If the stash hasn't got it, that fitting is **laid up** until it has (the
+next time home with the parts): the rack's room shrinks back (what's on it
+stays, nothing more goes in), the vice's recipes go, the aerial goes
+quiet, the cabinet stops. The career page lists what's laid up and what it
+wants. It starts six raids after each fitting, so it's a sink across the
+middle of the career too, and it's the reason scrap and oil are worth a
+pocket at raid 50. It's deliberately small: about one item a raid against
+the bots' 3-4 of the kinds it asks for.
+
+**Measured** (the same 54 job-taking sim raids, careers walked on to raid
+60 by `scripts/progression_pacing.py`): past the ladder a deep job is done
+about **every 2.6 raids** (the ladder's last tier took about one every 2),
+so raid 40 is a run to a danger-3 place or underground most times, for
+three piles of what you ordered. Upkeep at the bots' loot rates:
+
+| Part | Home per raid | Upkeep per raid (all fitted) | Share of income |
+| - | - | - | - |
+| scrap metal | 1.56 | 0.67 | 43% |
+| gun oil | 1.00 | 0.17 | 17% |
+| electronics | 0.72 | 0.17 | 23% |
+| field dressing | 1.54 | 0.17 | 11% |
+
+It never lays a fitting up for a career that keeps what it finds (0% of
+raids, every fitting); what it does is take nearly half the scrap, which
+the bench also wants for rounds and spare parts. That's the intended
+size: a pull on what you carry home and what you strip at the bench, not
+a tax that shuts the truck down. A player who strips everything for rounds
+will see the rack lie up, and that's the decision it's there to make.
+
+Cut from this: a reputation number (the order card is what reputation
+would have bought); per-fitting repairs at the bench (upkeep is taken, not
+crafted, so it never becomes a menu); rotating "seasons".
 
 ## Where it lives
 
@@ -175,6 +239,13 @@ at danger 1, 52% at danger 2 and 2 times in 4 at danger 3, against 74% for
 raids in general: a job pulls you somewhere you'd not have gone, and that
 costs. Danger 3 has few samples; the script leans on how often raids
 reached danger 3 and got home (28%) until there are more.
+
+By play style the job comes out level: cautious bots saw the place and got
+home 5 times in 9, looters 10 in 18, hunters 8 in 18 (their artifacts draw
+response teams), reckless bots 6 in 9 (they get there fast, and get away
+with it on a short trip). Robot minds' sims say careful play all but ends
+drone deaths; a job is a short trip, which suits the bold, and the deep
+jobs past the ladder are where that stops being true.
 
 What it says:
 
