@@ -58,6 +58,10 @@ pub struct BuildingPlan {
     pub outside: Vec<bool>,
     /// Bounds of the cells inside the walls, building-local.
     pub inner: Option<(Vec2, Vec2)>,
+    /// For a building on more than one level (an underground site): the
+    /// floor under each cell, building-local y (NaN where there's none).
+    /// A point belongs to the plan only near its cell's floor.
+    pub levels: Option<Vec<f32>>,
 }
 
 impl BuildingPlan {
@@ -74,21 +78,39 @@ impl BuildingPlan {
         Vec2::new(w.x, w.z)
     }
 
-    /// Whether a world point is inside (or on) the building's footprint.
+    /// The floor under a building-local point, on a plan with levels.
+    fn level(&self, l: Vec3) -> Option<f32> {
+        let levels = self.levels.as_ref()?;
+        let (i, j) = self.grid.cell_of([l.x, l.z])?;
+        let y = levels[j * self.grid.n + i];
+        (!y.is_nan()).then_some(y)
+    }
+
+    /// Whether a world point is inside (or on) the building's footprint
+    /// (on a plan with levels: over one of its floors, near it).
     pub fn contains(&self, p: Vec3, pad: f32) -> bool {
         let l = self.to_local(p);
+        if self.levels.is_some() {
+            return self
+                .level(l)
+                .is_some_and(|y| l.y > y - 0.6 && l.y < y + MAX_REACH_UP + 0.5);
+        }
         l.x.abs() <= self.half.x + pad && l.z.abs() <= self.half.y + pad
     }
 
     /// Whether a world point is within the indoor grid.
     pub fn in_grid(&self, p: Vec3) -> bool {
         let l = self.to_local(p);
+        if self.levels.is_some() {
+            return self.level(l).is_some_and(|y| (l.y - y).abs() < 2.5);
+        }
         self.grid.cell_of([l.x, l.z]).is_some()
     }
 
     /// Whether loot at this world point can be reached from the floor.
     pub fn reachable_height(&self, p: Vec3) -> bool {
-        self.to_local(p).y - self.floor <= MAX_REACH_UP
+        let l = self.to_local(p);
+        l.y - self.level(l).unwrap_or(self.floor) <= MAX_REACH_UP
     }
 
     /// Whether a building-local point is within the walls.
@@ -141,6 +163,15 @@ pub fn plan_buildings(
         let Some(geo) = prefab(&b.prefab) else {
             continue;
         };
+        if let Some(r) = extraction_core::underground::raster(&b.prefab) {
+            let mine: Vec<(Entity, &DoorLeaf)> = doors
+                .iter()
+                .filter(|(_, _, p)| p.parent() == e)
+                .map(|(d, leaf, _)| (d, leaf))
+                .collect();
+            out.push(plan_site(e, b, xf, &geo, r, &mine));
+            continue;
+        }
         let foot = crate::world::structures::footprint(&b.prefab);
         let half = Vec2::new(foot.x * 0.5, foot.z * 0.5);
         let mine: Vec<(Entity, &DoorLeaf)> = doors
@@ -272,9 +303,179 @@ pub fn plan_buildings(
             doors: infos,
             entries,
             half,
+            levels: None,
         });
     }
     out
+}
+
+/// An underground site's plan: its rooms, corridors and stairs at their
+/// own floors, and a patch of ground round each kiosk to come in from.
+/// One grid serves every level: a layout never has a stair over a room
+/// (`underground::check`), and the rock between keeps them apart.
+fn plan_site(
+    e: Entity,
+    b: &Building,
+    xf: &Transform,
+    geo: &crate::world::buildings::Geo,
+    r: &'static extraction_core::underground::Raster,
+    mine: &[(Entity, &DoorLeaf)],
+) -> BuildingPlan {
+    use extraction_core::underground::{APRON, KIOSK, WALL};
+    // The ground round a kiosk, out past its apron; not where a room
+    // under it comes near.
+    let zone = |p: Vec2| -> Option<f32> {
+        r.portals.iter().find_map(|portal| {
+            let q = portal.to_portal(p.to_array());
+            (q[0].abs() < KIOSK[0] + WALL + APRON + 3.0
+                && q[1].abs() < KIOSK[1] + WALL + APRON + 3.0)
+                .then_some(portal.y)
+        })
+    };
+    let lo = Vec2::from(r.origin);
+    let hi = lo + Vec2::new(r.nx as f32, r.nz as f32) * CELL;
+    let extent = ((lo.abs().max(hi.abs()).max_element() + MARGIN) / CELL).ceil() * CELL;
+    let n = (extent * 2.0 / CELL).round() as usize;
+    let mut grid = NavGrid {
+        n,
+        cell: CELL,
+        origin: -extent,
+        cost: vec![BLOCKED; n * n],
+        lanes: Vec::new(),
+    };
+    let mut levels = vec![f32::NAN; n * n];
+    let mut ground = vec![false; n * n];
+    for j in 0..n {
+        for i in 0..n {
+            let p = Vec2::from(grid.centre(i, j));
+            let k = j * n + i;
+            if let Some(f) = r.floor_at(p.to_array()) {
+                levels[k] = f;
+            } else if let Some(y) = zone(p) {
+                // Not over (or beside) a room below.
+                let near_room = (-4..=4).any(|dj: i32| {
+                    (-4..=4).any(|di: i32| {
+                        r.at((p + Vec2::new(di as f32, dj as f32) * CELL).to_array())
+                            .flat()
+                    })
+                });
+                if !near_room {
+                    levels[k] = y;
+                    ground[k] = true;
+                }
+            }
+        }
+    }
+    // A cell's width off the rock: the body is wider than half a cell.
+    for j in 0..n {
+        for i in 0..n {
+            if levels[j * n + i].is_nan() {
+                continue;
+            }
+            let clear = (-1i64..=1).all(|dj| {
+                (-1i64..=1).all(|di| {
+                    let (a, c) = (i as i64 + di, j as i64 + dj);
+                    a >= 0
+                        && c >= 0
+                        && (a as usize) < n
+                        && (c as usize) < n
+                        && !levels[c as usize * n + a as usize].is_nan()
+                })
+            });
+            if clear {
+                grid.cost[j * n + i] = 1;
+            }
+        }
+    }
+    // Colliders in the way at their own floor (tilted ones are the stairs'
+    // ramps, walked on).
+    for piece in geo.pieces.iter().filter(|p| p.collide) {
+        let (_, pitch, roll) = piece.at.rotation.to_euler(EulerRot::YXZ);
+        if pitch.abs() > 0.05 || roll.abs() > 0.05 {
+            continue;
+        }
+        let c = piece.at.translation;
+        let Some((i, j)) = grid.cell_of([c.x, c.z]) else {
+            continue;
+        };
+        let floor = levels[j * n + i];
+        let floor = if floor.is_nan() { r.floor } else { floor };
+        if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
+            grid.block(ob, CLEARANCE);
+        }
+    }
+    for (_, leaf) in mine {
+        let def = leaf.0;
+        let open = Quat::from_rotation_y(def.yaw + OPEN_SWING);
+        let tip = def.hinge + open * Vec3::new(def.width, 0.0, 0.0);
+        let mid = (def.hinge + tip) * 0.5;
+        let along = (tip - def.hinge).xz().normalize_or_zero();
+        grid.block(
+            Obstacle::Rect {
+                at: [mid.x, mid.z],
+                half: [def.width * 0.5, 0.04],
+                yaw: along.y.atan2(along.x),
+            },
+            CLEARANCE,
+        );
+    }
+    let is_ground = |p: Vec2| {
+        grid.cell_of(p.to_array())
+            .is_some_and(|(i, j)| ground[j * n + i])
+    };
+    let mut entries = Vec::new();
+    let doors: Vec<DoorInfo> = mine
+        .iter()
+        .map(|(d, leaf)| {
+            let def = leaf.0;
+            let rot = Quat::from_rotation_y(def.yaw);
+            let a3 = def.hinge;
+            let b3 = def.hinge + rot * Vec3::new(def.width, 0.0, 0.0);
+            let (a, c) = (a3.xz(), b3.xz());
+            let mid = (a + c) * 0.5;
+            let along = (c - a).normalize_or_zero();
+            let normal = Vec2::new(-along.y, along.x);
+            // A kiosk's door: stand out on the ground, past the apron.
+            let outside = [1.0f32, -1.0]
+                .into_iter()
+                .find(|s| is_ground(mid + normal * *s * 0.9))
+                .map(|s| mid + normal * s * 2.6);
+            entries.extend(outside);
+            DoorInfo {
+                entity: *d,
+                a,
+                b: c,
+                outside,
+            }
+        })
+        .collect();
+    let mut inner: Option<(Vec2, Vec2)> = None;
+    for j in 0..n {
+        for i in 0..n {
+            let k = j * n + i;
+            if grid.cost[k] != BLOCKED && !ground[k] {
+                let c = Vec2::from_array(grid.centre(i, j));
+                inner = Some(match inner {
+                    None => (c, c),
+                    Some((lo, hi)) => (lo.min(c), hi.max(c)),
+                });
+            }
+        }
+    }
+    let foot = extraction_core::underground::FOOTPRINT;
+    BuildingPlan {
+        name: b.prefab.clone(),
+        entity: e,
+        xf: *xf,
+        grid,
+        floor: r.floor,
+        doors,
+        entries,
+        half: Vec2::new(foot[0] * 0.5, foot[2] * 0.5),
+        outside: ground,
+        inner,
+        levels: Some(levels),
+    }
 }
 
 /// A collider piece as an obstacle on the floor, if it's in the way.

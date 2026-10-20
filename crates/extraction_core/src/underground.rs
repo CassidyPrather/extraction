@@ -29,7 +29,7 @@ use crate::geom::P2;
 use crate::map::MapDef;
 
 /// Raster cell size, metres.
-pub const CELL: f32 = 0.5;
+pub const CELL: f32 = 0.25;
 /// Half the clear width of a stair (and of its kiosk inside).
 pub const STAIR_HALF: f32 = 0.75;
 /// Wall thickness everywhere underground.
@@ -1253,5 +1253,49 @@ mod scout {
             );
         }
         map.placements.clear();
+    }
+}
+
+#[cfg(test)]
+mod where_ {
+    use super::*;
+
+    /// Prints each placed site's footing and rooms in world space:
+    /// `cargo test -p extraction_core where_sites -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn where_sites() {
+        for text in [
+            crate::map::MARROW_CREEK,
+            crate::map::KETTLE_PASS,
+            crate::map::CINDER_WORKS,
+        ] {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = crate::terrain::Heightmap::build(&map);
+            for s in placed(&map) {
+                let footing = hm.footing(&s.id, s.at, s.rot);
+                let l = layout(&s.id).unwrap();
+                println!(
+                    "{} {} footing {footing:.2} floor {:.2}",
+                    map.name,
+                    s.id,
+                    footing + l.floor
+                );
+                for r in &l.rooms {
+                    let w = s.to_world(r.at);
+                    println!("  {:14} ({:.1}, {:.1})", r.id, w[0], w[1]);
+                }
+                for (k, p) in l.portals.iter().enumerate() {
+                    let w = s.to_world(p.at);
+                    println!(
+                        "  portal {k} ({:.1}, {:.1}) ground {:.2} rot {}",
+                        w[0],
+                        w[1],
+                        footing + p.y,
+                        s.rot + p.rot
+                    );
+                }
+            }
+        }
     }
 }

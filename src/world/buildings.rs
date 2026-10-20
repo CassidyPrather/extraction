@@ -1044,6 +1044,9 @@ pub const PREFABS: [&str; 27] = [
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
+    if let Some(g) = super::underground::geo(id) {
+        return Some(g);
+    }
     let mut b = Builder {
         drop: extraction_core::map::prefab_lift(id),
         ..Default::default()
@@ -3067,7 +3070,7 @@ mod tests {
     #[test]
     fn every_prop_model_exists() {
         let root = crate::asset_root_path();
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             let geo = prefab(id).unwrap();
             for d in &geo.props {
                 assert!(
@@ -3109,7 +3112,7 @@ mod tests {
     /// pose (a negative box gave the colliders a NaN mass).
     #[test]
     fn every_piece_is_sound() {
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             for (i, p) in prefab(id).unwrap().pieces.iter().enumerate() {
                 let ok = match p.shape {
                     Shape::Box(s) | Shape::Prism(s) => s.is_finite() && s.min_element() > 0.0,
