@@ -79,6 +79,7 @@ fn climbable(m: Mat) -> bool {
             | Mat::Charred
             | Mat::SootBrick
             | Mat::SootPlaster
+            | Mat::DressedStone
     )
 }
 

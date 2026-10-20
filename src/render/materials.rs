@@ -50,6 +50,8 @@ pub enum Mat {
     SootBrick,
     /// Plaster blackened by a fire.
     SootPlaster,
+    /// Dressed stone in courses (ashlar): a dam's face, a masonry tower.
+    DressedStone,
 }
 
 impl Mat {
@@ -146,6 +148,13 @@ impl Mat {
                 3.0,
                 Color::srgb(0.18, 0.17, 0.16),
                 0.95,
+            ),
+            // Blocks about 0.6 m high, six courses to a tile.
+            Mat::DressedStone => (
+                Some("dressed_stone"),
+                3.6,
+                Color::srgb(0.5, 0.49, 0.46),
+                0.85,
             ),
         }
     }

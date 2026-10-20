@@ -78,6 +78,7 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::Concrete
         | Mat::Asphalt
         | Mat::Boulder
+        | Mat::DressedStone
         | Mat::Polymer => ImpactKind::Masonry,
     }
 }
@@ -95,7 +96,7 @@ pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
         Mat::Plaster | Mat::SootPlaster => Stuff::Plaster,
         Mat::Brick | Mat::SootBrick => Stuff::Brick,
         Mat::Concrete => Stuff::Concrete,
-        Mat::Asphalt | Mat::Boulder => Stuff::Rock,
+        Mat::Asphalt | Mat::Boulder | Mat::DressedStone => Stuff::Rock,
         Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
         Mat::DarkMetal | Mat::GunMetal | Mat::RobotShell => Stuff::Plate,
         Mat::Glass | Mat::Canvas => Stuff::Glass,
