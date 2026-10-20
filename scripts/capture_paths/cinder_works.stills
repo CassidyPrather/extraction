@@ -10,3 +10,17 @@ c08_ash_pit     -170,0,0,270,-6      # the ash pit
 c09_sidings     75,0,-200,0,-3       # north sidings
 c10_chimney     -20,0,-100,115,6     # the chimney from the north-west
 c11_aerial      -110,45,300,15,-8    # over the gate, toward the chimney
+
+# Hero views of the landmarks: low from the south-east, high from the south-west.
+h_blast_furnace_low   -127,0,228,315,8
+h_blast_furnace_high  -184,~14,239,45,-12
+h_factory_hall_low   98,0,3,315,8
+h_factory_hall_high  41,~14,14,45,-12
+h_chimney_low   128,0,-22,315,8
+h_chimney_high  71,~14,-11,45,-12
+h_signal_box_low   123,0,-239,315,8
+h_signal_box_high  66,~14,-228,45,-12
+h_ranger_tower_low   -155,0,-145,315,8
+h_ranger_tower_high  -212,~14,-134,45,-12
+h_bus_depot_low   3,0,-7,315,8
+h_bus_depot_high  -54,~14,4,45,-12
