@@ -19,6 +19,7 @@ use extraction_core::underground::{
     self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
     STAIR_TOP, Stair, Style, TREAD, WALL,
 };
+use std::collections::{HashMap, HashSet};
 
 use super::Zone;
 use super::buildings::{Builder, Geo, Shape, door};
@@ -989,8 +990,11 @@ impl Plugin for UndergroundPlugin {
                 throw_switches.after(wire_power),
                 generator_hum,
                 splashing,
+                depot_visits,
             ),
-        );
+        )
+        .add_message::<DepotEntered>()
+        .add_message::<CarriedOutOfDepot>();
     }
 }
 
@@ -1826,6 +1830,11 @@ pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
 /// Where the floor is under a world point, if it's inside an underground
 /// site (on a stair or in a room, below the ground): the world y.
 pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
+    site_under(zone, p).map(|s| s.1)
+}
+
+/// The site a world point is down in, and its floor there.
+pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     for site in ug::placed(&zone.map) {
         let r = ug::raster(&site.id)?;
         let footing = zone.hm.footing(&site.id, site.at, site.rot);
@@ -1833,10 +1842,62 @@ pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
         let Some(f) = r.floor_at(local) else { continue };
         let floor = footing + f;
         if p.y > floor - 0.5 && p.y < floor + 4.5 && floor < zone.ground(p.x, p.z) - 0.5 {
-            return Some(floor);
+            return Some((site.id, floor));
         }
     }
     None
+}
+
+/// The Depot's site id.
+pub const DEPOT: &str = "depot_marrow";
+
+/// A player has gone down into the Depot (each time they do; the first
+/// of a raid is the reader's to pick out).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct DepotEntered {
+    pub player: Entity,
+}
+
+/// Something a player picked up in the Depot has left it with them (in
+/// a hand, on the body or in the pack), as they came out.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CarriedOutOfDepot {
+    pub player: Entity,
+    pub item: Entity,
+}
+
+/// Logic: who's in the Depot, what they had on them going in, and what
+/// they came out with that they hadn't.
+fn depot_visits(
+    zone: Res<Zone>,
+    players: Query<(Entity, &GlobalTransform), With<crate::player::Player>>,
+    carried: Query<(Entity, &crate::anomaly::artifacts::CarriedBy)>,
+    mut inside: Local<HashMap<Entity, HashSet<Entity>>>,
+    mut entered: MessageWriter<DepotEntered>,
+    mut out: MessageWriter<CarriedOutOfDepot>,
+) {
+    for (player, gt) in &players {
+        let here = site_under(&zone, gt.translation()).is_some_and(|s| s.0 == DEPOT);
+        let on = |p: Entity| {
+            carried
+                .iter()
+                .filter(move |(_, c)| c.0 == p)
+                .map(|(e, _)| e)
+        };
+        match (here, inside.contains_key(&player)) {
+            (true, false) => {
+                inside.insert(player, on(player).collect());
+                entered.write(DepotEntered { player });
+            }
+            (false, true) => {
+                let had = inside.remove(&player).unwrap_or_default();
+                for item in on(player).filter(|e| !had.contains(e)) {
+                    out.write(CarriedOutOfDepot { player, item });
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2417,6 +2478,75 @@ mod tests {
                 f.depth
             );
         }
+    }
+
+    /// Progression's hooks: going down into the Depot says so, and coming
+    /// out with something picked up there says what (not what you took
+    /// in).
+    #[test]
+    fn the_depot_knows_who_came_and_what_they_took() {
+        let mut app = app("marrow_creek");
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let (site, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .expect("the Depot on Marrow Creek");
+        let l = ug::layout(&site.id).unwrap();
+        let hall = l.rooms.iter().find(|r| r.id == "sorting_hall").unwrap();
+        let down = xf.transform_point(Vec3::new(hall.at[0], l.floor_of(hall) + 0.1, hall.at[1]));
+        assert_eq!(
+            floor_under(&zone, down).map(|f| (f - down.y).abs() < 0.2),
+            Some(true)
+        );
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::player::Player>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let mine = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let count = |app: &mut App| {
+            app.update();
+            let e = app.world().resource::<Messages<DepotEntered>>();
+            let o = app.world().resource::<Messages<CarriedOutOfDepot>>();
+            (
+                e.iter_current_update_messages().count(),
+                o.iter_current_update_messages()
+                    .map(|m| m.item)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let place = |app: &mut App, at: Vec3| {
+            *app.world_mut().get_mut::<Transform>(player).unwrap() =
+                Transform::from_translation(at);
+        };
+        place(&mut app, down);
+        let mut entered = 0;
+        for _ in 0..3 {
+            entered += count(&mut app).0;
+        }
+        assert_eq!(entered, 1, "going down into the Depot");
+        let found = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let up = zone.on_ground(xf.translation.x, xf.translation.z - 8.0) + Vec3::Y * 0.1;
+        place(&mut app, up);
+        let mut taken = Vec::new();
+        for _ in 0..3 {
+            taken.extend(count(&mut app).1);
+        }
+        assert_eq!(
+            taken,
+            vec![found],
+            "out with what was found there, not {mine:?}"
+        );
     }
 
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
