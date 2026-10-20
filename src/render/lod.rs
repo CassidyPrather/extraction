@@ -4,7 +4,8 @@
 //! past [`FAR_BUILDING`] its textures are a few pixels a metre and the fog
 //! has most of its contrast, so one vertex-coloured mesh of its shell
 //! stands in, coloured with each material's average albedo. Villages seen
-//! from a rise were 150-250 draws of buildings.
+//! from a rise were 150-250 draws of buildings. The forest's far LOD
+//! (trunks per bark, crowns) is one too, a chunk.
 
 use bevy::mesh::{Mesh, VertexAttributeValues};
 use bevy::prelude::*;
@@ -108,6 +109,17 @@ impl StandIn {
         }
     }
 
+    /// A mesh in its own vertex colours (white where it has none).
+    pub fn add_coloured(&mut self, mesh: &Mesh) {
+        let start = self.col.len();
+        self.add(mesh, LinearRgba::WHITE);
+        if let Some(VertexAttributeValues::Float32x4(c)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR) {
+            if c.len() == self.col.len() - start {
+                self.col[start..].copy_from_slice(c);
+            }
+        }
+    }
+
     pub fn build(self) -> Option<Mesh> {
         if self.idx.is_empty() {
             return None;
@@ -126,7 +138,8 @@ impl StandIn {
 }
 
 /// The stand-ins' one material: white, so the vertex colours are the
-/// colour; as rough as the walls it stands in for.
+/// colour; as rough as the walls it stands in for; both sides lit, as
+/// the far crowns it also stands in for are.
 #[derive(Resource)]
 pub struct StandInMaterial(pub Handle<StandardMaterial>);
 
@@ -137,6 +150,8 @@ impl FromWorld for StandInMaterial {
             base_color: Color::WHITE,
             perceptual_roughness: 0.9,
             reflectance: 0.3,
+            double_sided: true,
+            cull_mode: None,
             ..default()
         }))
     }

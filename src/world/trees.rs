@@ -149,6 +149,7 @@ fn spawn_forests(
     mut fade_materials: ResMut<Assets<FarCrownMaterial>>,
     mut sway_materials: ResMut<Assets<TreeSwayMaterial>>,
     mut impostor_materials: ResMut<Assets<super::impostors::ImpostorMaterial>>,
+    stand_in: Res<crate::render::lod::StandInMaterial>,
     mut images: ResMut<Assets<Image>>,
     mut library: ResMut<crate::render::materials::MaterialLibrary>,
     server: Res<AssetServer>,
@@ -379,6 +380,31 @@ fn spawn_forests(
                 }
             }
             let range = lod_range(far, FOG_CULL_DEFAULT);
+            if far {
+                // Past `FAR_LOD` bark is a few pixels a metre: trunks and
+                // crowns go in one vertex-coloured mesh (see
+                // `render::lod`), a draw a chunk instead of four or five.
+                let mut stand = crate::render::lod::StandIn::default();
+                for (bark, mesh) in &trunks {
+                    if let Some(m) = materials.get(bark) {
+                        stand.add(mesh, crate::render::lod::far_colour(m));
+                    }
+                }
+                if let Some(c) = &crowns {
+                    stand.add_coloured(c);
+                }
+                if let Some(mesh) = stand.build() {
+                    commands.spawn((
+                        crate::render::centred(&mut meshes, mesh),
+                        MeshMaterial3d(stand_in.0.clone()),
+                        bevy::light::NotShadowCaster,
+                        range.clone(),
+                        FarForest,
+                        ChildOf(parent),
+                    ));
+                }
+                continue;
+            }
             for (bark, mesh) in trunks {
                 let mut ec = commands.spawn((
                     crate::render::centred(&mut meshes, mesh),
@@ -386,21 +412,16 @@ fn spawn_forests(
                     range.clone(),
                     ChildOf(parent),
                 ));
-                if far {
-                    ec.insert(FarForest);
-                }
+                ec.insert(TRUNK_SHADOWS);
             }
             if let Some(c) = crowns {
-                let mut ec = commands.spawn((
+                commands.spawn((
                     crate::render::centred(&mut meshes, c),
                     MeshMaterial3d(assets.foliage.clone()),
                     bevy::light::NotShadowCaster,
                     range.clone(),
                     ChildOf(parent),
                 ));
-                if far {
-                    ec.insert(FarForest);
-                }
             }
         }
         // Far foliage: impostors, one mesh per variant per block of
@@ -563,6 +584,11 @@ fn impostor_range(fog: f32) -> bevy::camera::visibility::VisibilityRange {
 /// the trunks' shadows carry the wood, as they do past the impostors' cut
 /// (see `render::budget::ShadowReach`).
 const CARD_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(30.0);
+
+/// A chunk's near trunks cast the sun's shadow only while its centre is
+/// this close (the cascades reach 90 m; past about 60 m in drizzle a
+/// trunk's shadow is a faint ruled line).
+const TRUNK_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(60.0);
 
 /// The spruce's dark core, scaled inside its cards.
 const CORE_SCALE: Vec3 = Vec3::new(0.62, 0.96, 0.62);

@@ -874,7 +874,7 @@ mod tests {
             new_game: true,
             robots: false,
             data_dir: Some(dir),
-            weather: Some("drizzle".into()),
+            weather: Some(std::env::var("BUDGET_WEATHER").unwrap_or("clearing".into())),
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -967,6 +967,14 @@ mod tests {
             }
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+            }
+            let mut most = load.shadow_by.clone();
+            most.sort_by(|a, b| b.1.cmp(&a.1));
+            for (what, c, t) in most.iter().take(5) {
+                println!(
+                    "    many shadow {what}: {c} meshes, {:.0}k",
+                    *t as f64 / 1000.0
+                );
             }
             let o = load.over(&BUDGET);
             if !o.is_empty() {

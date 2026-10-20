@@ -112,6 +112,9 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Fence posts and plates fade by 90 m (`LodReach`) | `world::structures`, `budget::range_items` | Kettle Pass draws -20..-30% (gate 1491 > 1146) |
 | Buildings past 120 m: one vertex-coloured stand-in of the shell | `render::lod`, `world::buildings` | Gate 851 > 700, meadow 871 > 699, spruce 927 > 788 draws |
 | Sun shadow map 1024 a cascade (Bevy's default 2048) | `budget::SHADOW_MAP` | Software frame spruce -14%, pines -12%; looks the same, a touch softer |
+| Near trunk chunks cast the sun's shadow only within 60 m (`ShadowReach`) | `world::trees` | Shadow triangles spruce 232k > 153k, pines 193k > 121k, edge 111k > 59k |
+| Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
+| Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):
@@ -121,3 +124,31 @@ Shared tools for the next ones (in `render::budget`):
 - `ShadowReach(m)` on a mesh: it casts the sun's shadow only within `m`
   (a `VisibilityRange` can't do this: the cascades use the camera's).
 - Items get a range from their catalogue size by themselves.
+
+## Where it stands
+
+The gauges at every lookbook view of the four valleys (GPU-less client,
+one eye), in clear weather (the furthest you see, so the most drawn;
+`BUDGET_WEATHER=drizzle` for the reference look), worst view against
+the budget:
+
+| | Worst | Budget | Headroom |
+| - | - | - | - |
+| Draws | 1081 (Marrow Creek spruce) | 1200 | 10% |
+| Triangles | 570k (Marrow Creek spruce) | 900k | 37% |
+| Shadow draws | 706 (Training Yard aerial) | 900 | 22% |
+| Shadow triangles | 247k (Cinder Works gate) | 700k | 65% |
+
+At the start the worst views were 3316 draws and 970 shadow draws.
+
+Not yet known, and only the headset can say: what MSAA 4x costs on the
+3060 (`EXTRACTION_PERF=msaa=2`/`msaa=1` against the `gpu:` lines), and
+the main schedule's and render world's real CPU time (the `cpu:` line;
+under lavapipe both share four cores with the renderer and read 17-31
+ms, which says nothing about the laptop).
+
+Left on the list: interiors seen from
+outside within 25 m (furniture behind walls; measured small, no class
+in any view's top five); the truck's 47-94 shadow
+casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
+prepass, a second geometry pass per eye: not worth it at these counts).
