@@ -212,6 +212,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // People (Lev): weathered skin, a dark wool coat.
     "Skin",
     "DarkWool",
+    // Re-packed ammunition's tarnished brass.
+    "Tarnish",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -295,6 +297,7 @@ impl ModelMaterials {
             "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
             "DarkWool" => flat(materials, Color::srgb(0.14, 0.14, 0.15), 0.0, 0.95),
             "Skin" => flat(materials, Color::srgb(0.6, 0.44, 0.36), 0.0, 0.6),
+            "Tarnish" => flat(materials, Color::srgb(0.42, 0.31, 0.15), 1.0, 0.55),
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
             // Instrument paint: the grey-green of survey and signals kit.
             "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
