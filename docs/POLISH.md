@@ -163,9 +163,10 @@ Run the whole suite before each report (`cargo test --workspace`, with
 `-j 2 -- --test-threads=2` if it restarts your container), not just your
 own tests: `qa::` and `sim::` gauges catch cross-area breakage.
 
-The coordinator does every merge. Don't merge the coordinator's branch
-into yours (you can't, from a session); keep working on your own, and
-say in your report what you'd want from it.
+The coordinator merges every branch into main. You may merge main
+(`origin/claude/serene-clarke-rcgj62`) into your own branch whenever you
+need something from it: a plain merge commit, never a rebase or force-push.
+Your next merge into main is then easy. Run the suite after you do.
 
 ## Handing back
 
