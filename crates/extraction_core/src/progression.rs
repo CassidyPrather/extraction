@@ -66,7 +66,7 @@ impl Upgrade {
     pub fn does(self) -> &'static str {
         match self {
             Upgrade::StashRack => "stash +100 L",
-            Upgrade::BenchVice => "five more recipes",
+            Upgrade::BenchVice => "six more recipes",
             Upgrade::Aerial => "Surge warning at 10 min",
             Upgrade::MedCabinet => "a dressing each raid",
             Upgrade::StashRack2 => "stash +100 L",
