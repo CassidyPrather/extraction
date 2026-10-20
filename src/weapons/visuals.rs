@@ -48,7 +48,11 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
             ),
         )
-        .add_plugins((super::impacts::ImpactFxPlugin, super::sling::SlingPlugin));
+        .add_plugins((
+            super::impacts::ImpactFxPlugin,
+            super::sling::SlingPlugin,
+            super::tracers::TracerPlugin,
+        ));
     }
 }
 
