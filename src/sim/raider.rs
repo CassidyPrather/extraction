@@ -1732,6 +1732,11 @@ fn fight_on(
 }
 
 /// Anomalies it can see get routed round (unless it's reckless).
+/// An anomaly that has caught a bot it gives this much berth past its
+/// danger radius from then on (m): a path round it cuts its corners by
+/// up to a waypoint's reach (1.2 m), and still keeps out.
+const BURNED_BERTH: f32 = 2.0;
+
 fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     // In one it didn't mean to walk into: out the way it came, and never
     // that one again, reckless or not (a dive ends when it leaves).
@@ -1746,11 +1751,11 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             r.grid.block(
                 Obstacle::Circle {
                     at: at.to_array(),
-                    radius: danger + 1.0,
+                    radius: danger + BURNED_BERTH,
                 },
                 0.0,
             );
-            let out = at + (here - at).normalize_or(Vec2::X) * (danger + 1.5);
+            let out = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
             r.interrupted = true;
             bot.replace([Task::WalkTo {
                 to: out,
@@ -1758,6 +1763,23 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             }]);
             bot.sprint = true;
             return;
+        }
+    }
+    // Whatever it was going to (often the thing it was caught on the way
+    // to), it goes no nearer one that's caught it than the ring outside.
+    for (e, a, gt) in &scene.anomalies {
+        if !r.burned.contains(&e) {
+            continue;
+        }
+        let at = gt.translation().xz();
+        let danger = a.kind.danger_radius(a.radius);
+        let ring = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
+        for t in bot.tasks.iter_mut() {
+            if let Task::WalkTo { to, .. } = t {
+                if to.distance(at) < danger + BURNED_BERTH {
+                    *to = ring;
+                }
+            }
         }
     }
     let mut new = Vec::new();

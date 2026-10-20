@@ -471,11 +471,12 @@ fn walker_brain(
                 if is_hound {
                     let far = Vec2::new(pos.x - at.x, pos.z - at.z).length()
                         > super::hound_mind::STALK_WITHIN;
-                    intent.pace = if far {
-                        1.0
-                    } else {
-                        super::hound_mind::STALK_PACE
-                    };
+                    intent.pace = super::hound_mind::RUN
+                        * if far {
+                            1.0
+                        } else {
+                            super::hound_mind::STALK_PACE
+                        };
                     intent.low = !far;
                 }
                 indoors = Some(at);
@@ -501,7 +502,11 @@ fn walker_brain(
                 }
             }
             Brain::Search { .. } => {
-                intent.pace = if is_hound { 0.5 } else { 0.7 };
+                intent.pace = if is_hound {
+                    super::hound_mind::NOSE_PACE * super::hound_mind::RUN
+                } else {
+                    0.7
+                };
                 intent.low = grappler || is_hound;
                 match search::search_step(&mut brain, pos, 2.0, dt, sweep) {
                     Step::Go(p) => Some(p),
@@ -566,7 +571,8 @@ fn walker_brain(
                             None
                         } else if h.lunge > 0.0 {
                             h.lunge -= dt;
-                            intent.pace = 1.6;
+                            // Flat out (its gait holds it to what it can).
+                            intent.pace = super::hound_mind::RUN * 1.6;
                             if d < super::hound_mind::BITE_RANGE && !h.bit {
                                 h.bit = true;
                                 h.cooldown = super::hound_mind::BITE_COOLDOWN;
@@ -593,6 +599,7 @@ fn walker_brain(
                             let away = (pos - tp).with_y(0.0).normalize_or(Vec3::X);
                             Some(pos + away * 3.0)
                         } else {
+                            intent.pace = super::hound_mind::RUN;
                             let facing = aware
                                 .target
                                 .and_then(|p| targets.get(p).ok())
