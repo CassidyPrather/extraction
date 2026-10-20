@@ -126,6 +126,10 @@ impl Plugin for BudgetPlugin {
                 .run_if(resource_exists::<Triangles>)
                 .before(end_main),
         );
+        app.add_systems(
+            PostUpdate,
+            range_items.before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+        );
         let knobs = Knobs::from_env();
         if knobs != Knobs::default() {
             info!("perf knobs: {knobs:?}");
@@ -143,6 +147,59 @@ impl Plugin for BudgetPlugin {
             .add_systems(Update, second_eye)
             .add_systems(Last, bench.after(count_triangles).before(end_main));
         }
+    }
+}
+
+/// An item's meshes fade out where the item would be a few pixels: 300
+/// times its longest side, 15 to 60 m (a tin at 36 m, a rifle at 60).
+/// Loot had no range, so every tin in the valley the eye faced was drawn
+/// (40-odd in most views, 30k triangles, all casting shadows). Artifacts
+/// glow and are worth spotting: they keep theirs.
+pub fn item_range(size: f32) -> f32 {
+    (size * 300.0).clamp(15.0, 60.0)
+}
+
+fn range_items(
+    mut commands: Commands,
+    added: Query<
+        Entity,
+        (
+            Added<Mesh3d>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+        ),
+    >,
+    parents: Query<&ChildOf>,
+    items: Query<&crate::items::Item>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    for e in &added {
+        let mut at = e;
+        let mut item = None;
+        for _ in 0..6 {
+            if let Ok(i) = items.get(at) {
+                item = Some(i);
+                break;
+            }
+            match parents.get(at) {
+                Ok(p) => at = p.parent(),
+                Err(_) => break,
+            }
+        }
+        let Some(item) = item else {
+            continue;
+        };
+        let def = catalog.get(item.kind());
+        if def.category == extraction_core::items::Category::Artifact {
+            continue;
+        }
+        let far = item_range(def.size_m().into_iter().fold(0.0, f32::max));
+        commands
+            .entity(e)
+            .try_insert(bevy::camera::visibility::VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: (far * 0.8)..far,
+                use_aabb: false,
+            });
     }
 }
 
