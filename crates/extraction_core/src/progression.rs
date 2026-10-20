@@ -448,6 +448,24 @@ fn regions(map: &MapDef, (lo, hi): (u8, u8)) -> Vec<String> {
         .collect()
 }
 
+/// Underground sites in a valley: (its name, where its entrance is, its
+/// danger). Underground is never calm: danger 2 at least, or its region's.
+pub fn underground_sites(map: &MapDef) -> Vec<(String, [f32; 2], u8)> {
+    map.placements
+        .iter()
+        .filter_map(|p| {
+            let l = crate::underground::layout(&p.prefab)?;
+            let danger = map.region_at(p.at).map_or(2, |r| r.danger.max(2));
+            Some((l.name.clone(), p.at, danger))
+        })
+        .collect()
+}
+
+/// The underground site a Recover job's `region` names, if it names one.
+pub fn underground_site(map: &MapDef, region: &str) -> Option<(String, [f32; 2], u8)> {
+    underground_sites(map).into_iter().find(|s| s.0 == region)
+}
+
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
@@ -531,6 +549,22 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                 }
             }
             JobKind::Recover => {
+                // Half the time, down into an underground site of the
+                // tier's danger, when the valley has one.
+                let (lo, hi) = tier.danger;
+                let below: Vec<String> = underground_sites(v.map)
+                    .into_iter()
+                    .filter(|s| (lo..=hi).contains(&s.2))
+                    .map(|s| s.0)
+                    .collect();
+                if !below.is_empty() && rng.chance(0.5) {
+                    return Job::Recover {
+                        map: v.id.to_owned(),
+                        region: below[rng.below(below.len())].clone(),
+                        at: None,
+                        place: None,
+                    };
+                }
                 let r = regions(v.map, tier.danger);
                 if !r.is_empty() {
                     return Job::Recover {
@@ -689,6 +723,27 @@ mod tests {
             for w in tier.iter() {
                 assert!(w.0 == ANY_PARTS || cat.kind(w.0).is_some(), "{}", w.0);
             }
+        }
+    }
+
+    #[test]
+    fn some_recover_jobs_go_underground_in_every_valley() {
+        let v = valleys();
+        let valleys = as_valleys(&v);
+        for (id, map) in &v {
+            let sites = underground_sites(map);
+            assert!(!sites.is_empty(), "{id} has an underground site");
+            assert!(sites.iter().all(|s| s.2 >= 2), "{sites:?}");
+            let below = (1..200).any(|done| {
+                let p = Progress {
+                    tier: 2,
+                    done,
+                    ..Default::default()
+                };
+                matches!(roll_job(&p, 5, id, &valleys),
+                    Job::Recover { region, .. } if underground_site(map, &region).is_some())
+            });
+            assert!(below, "{id}: no recover job ever went underground");
         }
     }
 

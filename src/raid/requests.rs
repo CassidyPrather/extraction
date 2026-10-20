@@ -257,6 +257,16 @@ fn place_cache(
 /// "in the barn by the Low farm."
 pub fn describe_place(zone: &Zone, at: Vec3) -> String {
     let here = [at.x, at.z];
+    // Below ground: the site it's in ("down in the mine gallery by ...").
+    let below = (at.y < zone.ground(at.x, at.z) - 1.5)
+        .then(|| {
+            zone.map
+                .placements
+                .iter()
+                .filter(|p| extraction_core::geom::dist(p.at, here) < 60.0)
+                .find_map(|p| extraction_core::underground::layout(&p.prefab))
+        })
+        .flatten();
     let building = zone
         .map
         .placements
@@ -281,14 +291,18 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
             extraction_core::geom::dist(a.at, here)
                 .total_cmp(&extraction_core::geom::dist(b.at, here))
         });
-    let place = building.map_or("a spot".to_owned(), |b| format!("the {b}"));
+    let place = match below {
+        Some(l) => format!("the {}", l.name.to_lowercase()),
+        None => building.map_or("a spot".to_owned(), |b| format!("the {b}")),
+    };
+    let into = if below.is_some() { "down in" } else { "in" };
     match landmark {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
-            format!("in {place} {rel} the {}.", m.name)
+            format!("{into} {place} {rel} the {}.", m.name)
         }
-        None => format!("in {place}."),
+        None => format!("{into} {place}."),
     }
 }
 

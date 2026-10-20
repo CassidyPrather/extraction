@@ -37,6 +37,9 @@ pub struct JobDone;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TruckUpgradeProp(pub Upgrade);
 
+/// An underground site's rooms lie within this of its entrance.
+const UNDERGROUND_REACH: f32 = 60.0;
+
 /// The aerial warns of the Surge this many seconds out.
 pub const AERIAL_WARNING: f32 = 10.0 * 60.0;
 /// The cabinet holds at most this many dressings.
@@ -339,17 +342,25 @@ fn place_recorder(
     if *tried % 30 != 1 {
         return;
     }
-    let in_region = |p: Vec3| {
-        zone.map
+    // An underground site's name: its rooms (below ground, near its
+    // entrance); else a region's.
+    let site = extraction_core::progression::underground_site(&zone.map, region);
+    let in_region = |p: Vec3| match &site {
+        Some((_, at, _)) => {
+            p.xz().distance(Vec2::from_array(*at)) < UNDERGROUND_REACH
+                && p.y < zone.ground(p.x, p.z) - 1.5
+        }
+        None => zone
+            .map
             .region_at([p.x, p.z])
-            .is_some_and(|r| r.name == *region)
+            .is_some_and(|r| r.name == *region),
     };
     let mut candidates: Vec<Vec3> = spots
         .iter()
         .flat_map(|s| s.0.iter().map(|s| s.at))
         .filter(|p| in_region(*p))
         .collect();
-    if candidates.is_empty() {
+    if candidates.is_empty() && site.is_none() {
         // No building spots loaded: the region's point of interest.
         candidates = zone
             .map

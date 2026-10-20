@@ -520,3 +520,41 @@ fn the_last_job_is_hanas_letter_from_the_table() {
         .collect();
     assert!(log.iter().any(|l| l == lines::LETTER_HOME), "{log:?}");
 }
+
+#[test]
+fn a_recover_job_can_send_you_underground() {
+    let mut app = crate::raid::requests::tests::app();
+    let zone = app.world().resource::<Zone>().clone();
+    let (name, entrance, _) = extraction_core::progression::underground_sites(&zone.map)
+        .into_iter()
+        .next()
+        .expect("Marrow Creek has its shelter");
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Recover {
+        map: "marrow_creek".into(),
+        region: name.clone(),
+        at: None,
+        place: None,
+    });
+    for _ in 0..40 {
+        app.update();
+    }
+    let Some(Job::Recover { place, .. }) = progress(&app).job else {
+        panic!();
+    };
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(RECOVER_ITEM).unwrap();
+    let at = app
+        .world_mut()
+        .query::<(&Item, &GlobalTransform)>()
+        .iter(app.world())
+        .find(|(i, _)| i.kind() == kind)
+        .map(|(_, g)| g.translation())
+        .expect("the recorder is down there");
+    assert!(at.y < zone.ground(at.x, at.z) - 1.5, "below ground: {at:?}");
+    assert!(at.xz().distance(Vec2::from_array(entrance)) < 60.0);
+    let place = place.expect("said where");
+    assert!(
+        place.starts_with(&format!("down in the {}", name.to_lowercase())),
+        "{place}"
+    );
+}
