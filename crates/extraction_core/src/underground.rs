@@ -248,6 +248,12 @@ pub struct Layout {
     /// Flooded rooms and corridors.
     #[serde(default)]
     pub floods: Vec<Flood>,
+    /// Water that rises and falls: rooms and corridors sharing a level.
+    #[serde(default)]
+    pub basins: Vec<Basin>,
+    /// What lowers a basin: a valve wheel or a hand pump.
+    #[serde(default)]
+    pub drains: Vec<Drain>,
 }
 
 /// A round of rooms the crawlers on it walk, in order (one room: round
@@ -287,6 +293,47 @@ pub struct Flood {
     pub link: Option<(String, String)>,
     /// Water over the floor, metres.
     pub depth: f32,
+}
+
+/// Rooms and corridors under one water level (site y, not a depth: the
+/// same water is knee deep on a high floor and over your head in a sump).
+/// It falls as its drains are worked.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Basin {
+    pub id: String,
+    #[serde(default)]
+    pub rooms: Vec<String>,
+    /// Corridors by their ends, as their links name them.
+    #[serde(default)]
+    pub links: Vec<(String, String)>,
+    /// The level at the start, site y.
+    pub level: f32,
+}
+
+/// A way to lower a basin, standing in a room against a wall (as a power
+/// switch does: it faces the turned -Z).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Drain {
+    pub kind: DrainKind,
+    pub room: String,
+    pub at: P2,
+    #[serde(default)]
+    pub rot: f32,
+    /// The basin it lowers...
+    pub basin: String,
+    /// ... down to this level (site y), no further.
+    pub to: f32,
+    /// A valve's: metres a second once it's open. A pump's: metres a
+    /// stroke.
+    pub rate: f32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub enum DrainKind {
+    /// Turn the wheel once: it drains on its own, gurgling, till done.
+    Valve,
+    /// Work the handle: each stroke lifts a little.
+    Pump,
 }
 
 /// Water deeper than this is a wall to the walkers (as on the surface).
@@ -390,7 +437,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 4] = [
+pub const SITES: [(&str, &str); 5] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -406,6 +453,10 @@ pub const SITES: [(&str, &str); 4] = [
     (
         "depot_marrow",
         include_str!("../../../assets/underground/depot_marrow.ron"),
+    ),
+    (
+        "pump_marrow",
+        include_str!("../../../assets/underground/pump_marrow.ron"),
     ),
 ];
 
@@ -590,8 +641,10 @@ pub struct Raster {
     /// The floor under each open cell, site y (rooms on their own levels;
     /// a corridor between levels steps from one to the other).
     pub floors: Vec<f32>,
-    /// Water over the floor, flat cells (0: dry).
+    /// Water over the floor, flat cells (0: dry), as it starts.
     pub water: Vec<f32>,
+    /// The basin each cell's water belongs to, if it rises and falls.
+    pub basin: Vec<Option<u16>>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -645,6 +698,7 @@ impl Raster {
             ceil: vec![0.0; nx * nz],
             floors: vec![l.floor; nx * nz],
             water: vec![0.0; nx * nz],
+            basin: vec![None; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -842,6 +896,33 @@ impl Raster {
                 }
             }
         }
+        for (b, basin) in l.basins.iter().enumerate() {
+            let rooms: Vec<usize> = basin
+                .rooms
+                .iter()
+                .filter_map(|id| l.rooms.iter().position(|r| &r.id == id))
+                .collect();
+            let links: Vec<usize> = basin
+                .links
+                .iter()
+                .filter_map(|(a, z)| {
+                    l.links
+                        .iter()
+                        .position(|k| (&k.from, &k.to) == (a, z) || (&k.from, &k.to) == (z, a))
+                })
+                .collect();
+            for c in 0..r.cells.len() {
+                let mine = match r.cells[c] {
+                    Cell::Room(k) => rooms.contains(&(k as usize)),
+                    Cell::Hall(k) => links.contains(&(k as usize)),
+                    _ => false,
+                };
+                if mine {
+                    r.basin[c] = Some(b as u16);
+                    r.water[c] = (basin.level - r.floors[c]).max(0.0);
+                }
+            }
+        }
         // Stairs: from the kiosk down to the first flat cell ahead.
         for (k, p) in l.portals.iter().enumerate() {
             let bottom = r.stairs[k].bottom;
@@ -966,6 +1047,11 @@ impl Raster {
     }
 
     /// The floor under a site-space point, if it's an open cell.
+    /// The basin a site point's water belongs to, if any.
+    pub fn basin_at(&self, p: P2) -> Option<u16> {
+        self.cell_of(p).and_then(|(i, j)| self.basin[j * self.nx + i])
+    }
+
     pub fn floor_at(&self, p: P2) -> Option<f32> {
         match self.at(p) {
             Cell::Rock => None,
@@ -1203,6 +1289,41 @@ pub fn check(l: &Layout) -> Vec<String> {
     for id in l.rounds.iter().flat_map(|r| &r.rooms) {
         if !l.rooms.iter().any(|r| &r.id == id) {
             bad.push(format!("a round through no room `{id}`"));
+        }
+    }
+    for basin in &l.basins {
+        for id in &basin.rooms {
+            if !l.rooms.iter().any(|r| &r.id == id) {
+                bad.push(format!("basin `{}` over no room `{id}`", basin.id));
+            }
+        }
+        for (a, z) in &basin.links {
+            if !l
+                .links
+                .iter()
+                .any(|k| (&k.from, &k.to) == (a, z) || (&k.from, &k.to) == (z, a))
+            {
+                bad.push(format!("basin `{}` over no corridor {a}-{z}", basin.id));
+            }
+        }
+    }
+    for d in &l.drains {
+        let Some(basin) = l.basins.iter().find(|b| b.id == d.basin) else {
+            bad.push(format!("a drain for no basin `{}`", d.basin));
+            continue;
+        };
+        if d.to > basin.level || d.rate <= 0.0 {
+            bad.push(format!("a drain on `{}` that can't lower it", d.basin));
+        }
+        match l.rooms.iter().find(|r| r.id == d.room) {
+            None => bad.push(format!("a drain in no room `{}`", d.room)),
+            Some(room) => {
+                let at = add(room.at, d.at);
+                let front = add(at, turn([0.0, -0.9], d.rot));
+                if !r.at(at).open() || !r.at(front).flat() {
+                    bad.push(format!("{}: its drain is in the rock or faces the wall", room.id));
+                }
+            }
         }
     }
     for f in &l.floods {
@@ -1483,6 +1604,22 @@ pub fn plan_svg(id: &str) -> Option<String> {
             let ((x1, y1), (x2, y2)) = (px(a), px(b));
             out += &format!(
                 "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#f1c40f' stroke-width='4'/>\n"
+            );
+        }
+    }
+    // Drains: a valve wheel (V) or the hand pump (P), and the basin each
+    // lowers.
+    for d in &l.drains {
+        if let Some(room) = l.rooms.iter().find(|r| r.id == d.room) {
+            let (x, y) = px(add(room.at, d.at));
+            let mark = if d.kind == DrainKind::Valve { "V" } else { "P" };
+            out += &format!(
+                "<circle cx='{x:.1}' cy='{y:.1}' r='6' fill='#5dade2' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#5dade2'>{mark} {} to {:.1}</text>\n",
+                x + 8.0,
+                y + 4.0,
+                d.basin,
+                d.to
             );
         }
     }
