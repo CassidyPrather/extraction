@@ -332,6 +332,46 @@ mod tests {
         );
     }
 
+    /// Grabbing by closing the fingers is a comfort setting, off by
+    /// default: off, tracked fingers closing on a magazine leave it; on,
+    /// they take it (no squeeze either way).
+    #[test]
+    fn closing_tracked_fingers_grabs_only_when_asked() {
+        use crate::rig::comfort::Comfort;
+        use crate::rig::fingers::{fingers_from_joints, tests::synthetic_hand};
+        let hand_of = |curl: f32| {
+            fingers_from_joints(&synthetic_hand([curl; 5], [0.0; 4], Transform::IDENTITY))
+        };
+        for on in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app.world_mut().insert_resource(Comfort {
+                finger_grab: on,
+                ..Comfort::default()
+            });
+            let feet = on_ground(&vr, OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            let at = feet + Vec3::new(0.2, 1.0, -0.4);
+            let item = vr.spawn("pm_mag", Transform::from_translation(at));
+            vr.app
+                .world_mut()
+                .entity_mut(item)
+                .insert(RigidBody::Static);
+            vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.fingers(Side::Right, hand_of(0.1));
+            vr.step(3);
+            vr.fingers(Side::Right, hand_of(0.85));
+            vr.step(4);
+            let held = vr.hand_state(Side::Right).holding;
+            assert_eq!(held.is_some(), on, "finger grab {on}: holding {held:?}");
+            if on {
+                // Opening the fingers lets it go again.
+                vr.fingers(Side::Right, hand_of(0.1));
+                vr.step(4);
+                assert_eq!(vr.hand_state(Side::Right).holding, None);
+            }
+        }
+    }
+
     /// Pistol in the right hand; the left hand's trigger takes the slide
     /// and pulls it back. The grip alone never grabs the slide.
     #[test]
