@@ -402,6 +402,7 @@ Which looked better in the headset, and did the shadow lines bother you?
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
 | `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |

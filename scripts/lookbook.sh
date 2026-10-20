@@ -4,7 +4,7 @@
 #   scripts/lookbook.sh [maps...]          (default: all four)
 # Env: OUT (default target/lookbook), WEATHER (default drizzle, the
 # reference look), HOUR (dawn, day, dusk, night; default the cycle's,
-# which is day), SIZE (default 1200x675), ONLY (view-name filter).
+# which is day), MOON (a phase, for night), SIZE (default 1200x675), ONLY (view-name filter).
 # Software-rendered under Xvfb: a few seconds a view.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -21,6 +21,7 @@ for MAP in "${MAPS[@]}"; do
     EXTRA=()
     [ -n "${ONLY:-}" ] && EXTRA+=(--tour-only "$ONLY")
     [ -n "${HOUR:-}" ] && EXTRA+=(--hour "$HOUR")
+    [ -n "${MOON:-}" ] && EXTRA+=(--moon "$MOON")
     WGPU_BACKEND=vulkan timeout 3600 xvfb-run -a -s "-screen 0 ${SIZE}x24" \
         "$BIN" --map "$MAP" --data-dir "$DATA" --new-game --tour "$DIR" \
         --tour-views "scripts/lookbook/$MAP.views" --frames 60 \

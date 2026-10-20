@@ -67,10 +67,51 @@ impl Hour {
     }
 }
 
+/// The moon's month is this many Surge cycles: its phase is the cycle's.
+pub const MOON_CYCLES: u32 = 8;
+
+/// The moon's phase in a cycle, 0..1: 0 new, 0.25 first quarter, 0.5 full,
+/// 0.75 last quarter.
+pub fn moon_phase(cycle: u32) -> f32 {
+    (cycle % MOON_CYCLES) as f32 / MOON_CYCLES as f32
+}
+
+/// How much of the moon's face is lit, 0 (new) to 1 (full).
+pub fn moon_lit(phase: f32) -> f32 {
+    (1.0 - (phase * std::f32::consts::TAU).cos()) * 0.5
+}
+
+/// Where the moon is in a night raid, along the sun's own path (east at
+/// dawn, over the north at noon, west at dusk), so its bearing is a
+/// compass the player can learn: full, it stands where the noon sun does;
+/// waxing, it's down toward the west; waning, up from the east; within a
+/// few days of new, it isn't up. Returns (bearing from +X toward +Z in
+/// degrees, elevation in degrees), or None when it's down.
+pub fn moon_position(phase: f32) -> Option<(f32, f32)> {
+    let s = 1.0 - (phase - 0.25) / 0.5;
+    if !(0.0..=1.0).contains(&s) {
+        return None;
+    }
+    Some((
+        sun_path_bearing(s),
+        8.0 + 42.0 * (std::f32::consts::PI * s).sin(),
+    ))
+}
+
+/// The sun's path, 0 (dawn, the east) to 1 (dusk, the west), over the
+/// north (-Z): its bearing in degrees from +X toward +Z.
+pub fn sun_path_bearing(s: f32) -> f32 {
+    11.0 - 174.0 * s
+}
+
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct Conditions {
     pub kind: WeatherKind,
     pub hour: Hour,
+    /// The moon's phase (`moon_phase`) and how much of it lights the night:
+    /// its lit face if it's up, else 0 (and 0 by day).
+    pub moon_phase: f32,
+    pub moon: f32,
     /// The sky's light against a day's, 0..=1 (`Hour::light`).
     pub light: f32,
     /// Metres at which things fade out.
@@ -127,6 +168,12 @@ impl Conditions {
 
     /// A weather at an hour.
     pub fn compose(kind: WeatherKind, hour: Hour, cycle: u32) -> Self {
+        Self::compose_with_moon(kind, hour, cycle, moon_phase(cycle))
+    }
+
+    /// `compose` under a given moon phase (the cycle's, unless a dev
+    /// switch asks for another).
+    pub fn compose_with_moon(kind: WeatherKind, hour: Hour, cycle: u32, phase: f32) -> Self {
         let (visibility, rain, ground_fog, sun) = match kind {
             WeatherKind::Drizzle => (320.0, 0.35, 0.011, 1600.0),
             WeatherKind::PeaSouper => (150.0, 0.0, 0.024, 1100.0),
@@ -140,14 +187,36 @@ impl Conditions {
             Hour::Night => 1.3,
             Hour::Day => 1.0,
         };
+        let moon_phase = phase;
+        let up = moon_position(moon_phase).is_some();
+        let moon = if hour == Hour::Night && up {
+            moon_lit(moon_phase)
+        } else {
+            0.0
+        };
+        // At night the sky's light and the "sun" are the moon's: under
+        // cloud almost nothing (an overcast night really is black); in a
+        // clearing, starlight and more under a fuller moon, and the moon
+        // itself a cool light that casts shadows.
+        let (light, sun) = if hour == Hour::Night {
+            match kind {
+                WeatherKind::Clearing => (0.02 + 0.06 * moon, 220.0 * moon),
+                WeatherKind::Drizzle => (0.012 + 0.006 * moon, 15.0 * moon),
+                WeatherKind::PeaSouper | WeatherKind::Downpour => (0.01, 0.0),
+            }
+        } else {
+            (hour.light(), sun * hour.sun())
+        };
         Self {
             kind,
             hour,
-            light: hour.light(),
+            moon_phase,
+            moon,
+            light,
             visibility,
             rain,
             ground_fog: ground_fog * mist,
-            sun: sun * hour.sun(),
+            sun,
             cycle,
         }
     }
@@ -282,8 +351,9 @@ fn follow_cycle(
         .as_deref()
         .and_then(Hour::parse)
         .unwrap_or(want.hour);
-    if (kind, hour) != (want.kind, want.hour) {
-        want = Conditions::compose(kind, hour, raid.cycle);
+    let phase = opts.moon.unwrap_or(want.moon_phase);
+    if (kind, hour, phase) != (want.kind, want.hour, want.moon_phase) {
+        want = Conditions::compose_with_moon(kind, hour, raid.cycle, phase);
     }
     if *conditions != want {
         *conditions = want;
@@ -397,6 +467,51 @@ mod tests {
         let mut m = Wetness::default();
         run(&mut m, &mist, 3600);
         assert!((m.level - 0.3).abs() < 0.02);
+    }
+
+    #[test]
+    fn nights_are_lit_by_the_moon_and_black_under_cloud() {
+        let night = |k, cycle| Conditions::compose(k, Hour::Night, cycle);
+        // The moon's month: new at cycle 0, full at 4.
+        assert_eq!(moon_lit(moon_phase(0)), 0.0);
+        assert!((moon_lit(moon_phase(4)) - 1.0).abs() < 1e-5);
+        let full = night(WeatherKind::Clearing, 4);
+        let new = night(WeatherKind::Clearing, 0);
+        let quarter = night(WeatherKind::Clearing, 2);
+        // A clear full-moon night: the moon up, casting light, the sky
+        // brighter than a new moon's, which is brighter than any overcast.
+        assert!(full.moon > 0.99 && full.sun > 150.0);
+        assert!(full.light > quarter.light && quarter.light > new.light);
+        for k in [
+            WeatherKind::Drizzle,
+            WeatherKind::PeaSouper,
+            WeatherKind::Downpour,
+        ] {
+            for c in 0..MOON_CYCLES {
+                assert!(night(k, c).light < new.light, "{k:?} cycle {c}");
+                assert!(night(k, c).sun < 20.0);
+            }
+        }
+        // Not a moon by day.
+        assert_eq!(
+            Conditions::compose(WeatherKind::Clearing, Hour::Day, 4).moon,
+            0.0
+        );
+    }
+
+    #[test]
+    fn the_moon_keeps_to_the_suns_path() {
+        // Full: where the noon sun stands, high over the north (-Z side).
+        let (b, e) = moon_position(0.5).unwrap();
+        assert!((b - sun_path_bearing(0.5)).abs() < 1e-3 && e > 45.0);
+        assert!(b.to_radians().sin() < -0.9, "the north is -Z");
+        // Waxing: low in the west (the dusk end); waning: low in the east.
+        let (west, low) = moon_position(0.27).unwrap();
+        assert!(west.to_radians().cos() < -0.9 && low < 15.0);
+        let (east, _) = moon_position(0.73).unwrap();
+        assert!(east.to_radians().cos() > 0.9);
+        // Near new, it's down.
+        assert!(moon_position(0.05).is_none() && moon_position(0.95).is_none());
     }
 
     #[test]

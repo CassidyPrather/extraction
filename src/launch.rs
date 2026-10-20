@@ -91,6 +91,9 @@ pub struct LaunchOptions {
     pub weather: Option<String>,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
+    /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
+    /// `gibbous`, `full`, `waning`, or a number; `weather::moon_phase`).
+    pub moon: Option<f32>,
     /// The low sun's height at dawn and dusk, degrees (a playtest knob:
     /// lower is warmer light but longer shadows).
     pub sun_elevation: f32,
@@ -140,6 +143,7 @@ impl Default for LaunchOptions {
             gallery: None,
             weather: None,
             hour: None,
+            moon: None,
             sun_elevation: 20.0,
             map_explicit: false,
             sim: None,
@@ -192,6 +196,17 @@ impl LaunchOptions {
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--weather" => o.weather = Some(val()),
                 "--hour" => o.hour = Some(val()),
+                "--moon" => {
+                    o.moon = match val().as_str() {
+                        "new" => Some(0.0),
+                        "crescent" => Some(0.125),
+                        "quarter" => Some(0.25),
+                        "gibbous" => Some(0.375),
+                        "full" => Some(0.5),
+                        "waning" => Some(0.625),
+                        other => other.parse::<f32>().ok().map(|p| p.rem_euclid(1.0)),
+                    }
+                }
                 "--sun-elevation" => {
                     o.sun_elevation = val().parse().unwrap_or(20.0f32).clamp(5.0, 60.0)
                 }

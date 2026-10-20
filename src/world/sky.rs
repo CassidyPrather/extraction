@@ -56,6 +56,11 @@ pub struct Weather {
     pub glow: Vec4,
     /// How much of the sun's smear shows through the deck (the hour's).
     pub sun_through: f32,
+    /// At night, how much the moon lights the air (0 by day, or with no
+    /// moon up): the fog toward it, the cloud's edges round it.
+    pub moon: f32,
+    /// How much of the night sky there is (0 by day, 1 at night): stars.
+    pub night: f32,
 }
 
 impl Default for Weather {
@@ -75,6 +80,8 @@ impl Default for Weather {
             ambient: 1100.0,
             glow: Vec4::ZERO,
             sun_through: 1.0,
+            moon: 0.0,
+            night: 0.0,
         }
     }
 }
@@ -85,7 +92,18 @@ impl Weather {
             color: self.horizon,
             // Toward the sun the fog lights up: faintly through the deck by
             // day, warm along a low sun's side of the valley.
-            directional_light_color: if self.glow.w > 0.0 {
+            directional_light_color: if self.moon > 0.0 {
+                // The moon's side of the fog, silvered: the air round a
+                // bright moon lit, a compass even when the deck hides it.
+                let h = self.horizon.to_linear();
+                let k = 1.0 + 2.5 * self.moon;
+                Color::linear_rgba(
+                    h.red * k * 0.85,
+                    h.green * k * 0.95,
+                    h.blue * k * 1.15,
+                    0.6 * self.moon,
+                )
+            } else if self.glow.w > 0.0 {
                 Color::linear_rgba(
                     self.glow.x,
                     self.glow.y,
@@ -328,7 +346,8 @@ fn apply_weather(
         super::weather::WeatherKind::Drizzle => 1.0,
     };
     let haze = zone.map.haze.unwrap_or([1.0; 3]);
-    let hour = HourLook::of(conditions.hour, opts.sun_elevation);
+    let moon = super::weather::moon_position(conditions.moon_phase);
+    let hour = HourLook::of(conditions.hour, opts.sun_elevation, moon);
     let light = conditions.light;
     let scale = |c: Color, tint: Vec3| {
         let l = c.to_linear();
@@ -347,6 +366,15 @@ fn apply_weather(
     weather.ambient_color = hour.ambient_color;
     weather.ambient = base.ambient * k * light;
     weather.sun_through = conditions.hour.sun();
+    // How much the moon lights the air depends on how much cloud is
+    // between: in a clearing, all of it; under murk, nothing.
+    let moon_through = match conditions.kind {
+        super::weather::WeatherKind::Clearing => 1.0,
+        super::weather::WeatherKind::Drizzle => 0.45,
+        _ => 0.0,
+    };
+    weather.moon = conditions.moon * moon_through;
+    weather.night = (conditions.hour == super::weather::Hour::Night) as u8 as f32;
     // The glow needs a sun to come from: thick weather smothers it.
     let through = match conditions.kind {
         super::weather::WeatherKind::Clearing => 1.0,
@@ -370,11 +398,17 @@ fn apply_weather(
     }
     // Under a thick sky, or with the sun all but gone, it casts nothing
     // worth drawing (and the shadow passes are the dearest thing in a
-    // headset frame).
+    // headset frame). A bright moon in a clear sky does: long, soft-edged
+    // and blue, the way to tell which way you face.
+    let enough = if conditions.hour == super::weather::Hour::Night {
+        80.0
+    } else {
+        300.0
+    };
     let shadows = !matches!(
         conditions.kind,
         super::weather::WeatherKind::PeaSouper | super::weather::WeatherKind::Downpour
-    ) && weather.sun_lux > 300.0;
+    ) && weather.sun_lux > enough;
     for (mut sun, mut xf) in &mut suns {
         sun.illuminance = weather.sun_lux;
         sun.color = weather.sun_color;
@@ -393,13 +427,32 @@ fn apply_weather(
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
             mat.params.sun_dir = (-weather.sun_dir).extend(weather.sun_through);
-            mat.params.glow = weather.glow;
+            // At night the glow's strength is the moon's in the air.
+            mat.params.glow = if weather.night > 0.0 {
+                Vec4::new(0.0, 0.0, 0.0, weather.moon)
+            } else {
+                weather.glow
+            };
             mat.params.cloud = match conditions.kind {
                 super::weather::WeatherKind::Downpour => Vec4::new(1.35, 1.6, 0.0, 0.0),
                 super::weather::WeatherKind::PeaSouper => Vec4::new(1.1, 0.3, 0.0, 0.0),
                 super::weather::WeatherKind::Clearing => Vec4::new(0.45, 0.5, 0.0, 0.0),
                 super::weather::WeatherKind::Drizzle => Vec4::new(1.0, 1.0, 0.0, 0.0),
             };
+            // z: the moon's lit face (its phase, 0..1, sign: waxing +),
+            // w: how much night sky (stars).
+            let lit = super::weather::moon_lit(conditions.moon_phase);
+            let waxing = conditions.moon_phase < 0.5;
+            mat.params.cloud.z = if moon.is_some() && weather.night > 0.0 {
+                if waxing {
+                    lit.max(0.02)
+                } else {
+                    -lit.max(0.02)
+                }
+            } else {
+                0.0
+            };
+            mat.params.cloud.w = weather.night;
         }
     }
 }
@@ -419,7 +472,8 @@ struct HourLook {
 
 impl HourLook {
     /// `elevation`: the low sun's height at dawn and dusk, degrees.
-    fn of(hour: super::weather::Hour, elevation: f32) -> Self {
+    /// `moon`: where the moon is, if it's up (`weather::moon_position`).
+    fn of(hour: super::weather::Hour, elevation: f32, moon: Option<(f32, f32)>) -> Self {
         use super::weather::Hour;
         // Light travelling from a sun at this bearing (degrees from +X,
         // toward +Z) and height.
@@ -457,12 +511,13 @@ impl HourLook {
                 ambient_color: Color::srgb(0.6, 0.6, 0.74),
                 glow: Vec4::new(1.0, 0.52, 0.3, 1.0),
             },
-            // Moonless under cloud: what light there is, blue.
+            // What light there is, blue; the "sun" is the moon, where it
+            // stands on the sun's path, cool and silver.
             Hour::Night => Self {
                 horizon: Vec3::new(0.7, 0.8, 1.1),
                 zenith: Vec3::new(0.6, 0.7, 1.1),
-                sun_dir: None,
-                sun_color: Color::srgb(0.6, 0.7, 0.9),
+                sun_dir: moon.map(|(b, e)| from(b, e)),
+                sun_color: Color::srgb(0.66, 0.76, 1.0),
                 ambient_color: Color::srgb(0.5, 0.58, 0.8),
                 glow: Vec4::ZERO,
             },
