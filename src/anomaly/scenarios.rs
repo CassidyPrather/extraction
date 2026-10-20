@@ -13,22 +13,24 @@ use crate::rig::Side;
 use crate::weapons::flat::MacroKind;
 use crate::world::Zone;
 
-pub const NAMES: [&str; 5] = [
+pub const NAMES: [&str; 6] = [
     "harvest_snare",
     "harvest_lift",
     "harvest_burner",
     "harvest_well",
     "harvest_mirror",
+    "harvest_hush",
 ];
 
 /// Where each scenario's anomaly goes, from the insertion point: west of
 /// it, apart from each other, a short walk.
-const SPOTS: [[f32; 2]; 5] = [
+const SPOTS: [[f32; 2]; 6] = [
     [-22.0, -12.0],
     [-22.0, -36.0],
     [-48.0, -12.0],
     [-48.0, -38.0],
     [-35.0, -60.0],
+    [-10.0, -60.0],
 ];
 
 /// Open ground for the `i`th scenario's anomaly near its spot: off the
@@ -243,6 +245,31 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 stand(c, r + 3.0),
             ];
             t.extend(end("art_shard"));
+            t
+        }
+        "harvest_hush" => {
+            let r = 3.0;
+            let c = spot(zone, 5, AnomalyKind::Hush, r);
+            let mut t = vec![
+                Log(s(
+                    "harvest hush: in for the stone and out before the silence presses",
+                )),
+                stand(c, r + 2.0),
+                Stage {
+                    kind: AnomalyKind::Hush,
+                    at: c,
+                    radius: r,
+                    artifact: s("art_hushstone"),
+                    kit: Vec::new(),
+                },
+                Wait(1.0),
+                PickUp {
+                    id: s("art_hushstone"),
+                    side: Side::Right,
+                },
+                stand(c, r + 2.0),
+            ];
+            t.extend(end("art_hushstone"));
             t
         }
         _ => return None,

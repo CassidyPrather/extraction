@@ -226,6 +226,7 @@ struct AnomalyAssets {
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
+    hushed: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
 }
@@ -319,6 +320,7 @@ fn init_assets(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
+    let hushed = ground(Color::srgba(0.55, 0.55, 0.53, 0.45), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
@@ -334,6 +336,7 @@ fn init_assets(
         flattened,
         glassy,
         crushed,
+        hushed,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
             emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
@@ -620,6 +623,14 @@ fn dress_anomalies(
                     0.0,
                 )),
             ),
+            // Dead air: pale dust hanging still, a ground drained of colour,
+            // and no light of its own.
+            AnomalyKind::Hush => (
+                Some(&a.hushed),
+                vec![soft(7.0, 120, 0.05, Vec3::new(0.62, 0.62, 0.6), 0.75)],
+                (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
+                None,
+            ),
         };
         commands
             .entity(e)
@@ -771,6 +782,7 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
         AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
         AnomalyKind::Lift => 0.3 + 0.7 * charge,
         AnomalyKind::Mirror => 0.5 + 0.1 * (t * 0.7).sin(),
+        AnomalyKind::Hush => 0.5,
     };
     v.clamp(0.0, 1.0)
 }
@@ -1069,7 +1081,7 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 7] = [
+const OWN_LOOKS: [&str; 8] = [
     "bolt",
     "detector",
     "art_lodestone",
@@ -1077,6 +1089,7 @@ const OWN_LOOKS: [&str; 7] = [
     "art_stormglass",
     "detector_sweep",
     "detector_bear",
+    "art_hushstone",
 ];
 
 /// Claims the look of an anomaly item as it's spawned, before the item
@@ -1326,6 +1339,15 @@ fn dress_items(
                     ..default()
                 });
                 parts.push((meshes.add(shard_mesh()), glass, Transform::IDENTITY));
+            }
+            "art_hushstone" => {
+                // A flat grey pebble, matte as felt.
+                let felt = mat(Color::srgb(0.42, 0.42, 0.4), 0.0, 0.98, LinearRgba::BLACK);
+                parts.push((
+                    meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
+                    felt,
+                    Transform::from_scale(Vec3::new(0.025, 0.012, 0.02)),
+                ));
             }
             "art_stormglass" => {
                 // A clouded bead: milky glass with a cold light in it.

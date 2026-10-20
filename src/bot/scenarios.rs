@@ -36,6 +36,7 @@ pub const NAMES: &[&str] = &[
     crate::anomaly::scenarios::NAMES[2],
     crate::anomaly::scenarios::NAMES[3],
     crate::anomaly::scenarios::NAMES[4],
+    crate::anomaly::scenarios::NAMES[5],
     crate::onboarding::bot::SCENARIO,
 ];
 

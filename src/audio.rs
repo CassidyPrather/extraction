@@ -1624,6 +1624,8 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Mirror => {
                         ("anomaly/mirror_shimmer", "anomaly.mirror")
                     }
+                    // Dead air: nothing to hear (Anomalies).
+                    extraction_core::anomaly::AnomalyKind::Hush => continue,
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((

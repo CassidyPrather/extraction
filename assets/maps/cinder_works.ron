@@ -298,6 +298,7 @@
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (171.0, -172.0), name: "Slag heap hush"),
         (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
         (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
         (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),

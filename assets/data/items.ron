@@ -666,6 +666,11 @@
             category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1, lift_kg: -5.0,
         ),
         (
+            id: "art_hushstone", dims: Some((0.05, 0.03, 0.04)), name: "Hushstone",
+            description: "A flat grey pebble that's quiet in a way you can feel in your ears. Carried, nothing hears your steps or your shots; nor does any detector on you hear anything at all.",
+            category: Artifact, size: Tiny, mass: 0.3, bulk: 0.05, attention: 1.5,
+        ),
+        (
             id: "art_stormglass", dims: Some((0.04, 0.04, 0.04)), name: "Stormglass",
             description: "A clouded bead, cold as hail and never melting, grown only where the Surge itself broke the ground. Carry it and the Surge passes over you as if you were under a roof. The whole Zone knows where it is.",
             category: Artifact, size: Tiny, mass: 0.1, bulk: 0.03, attention: 3.0,
