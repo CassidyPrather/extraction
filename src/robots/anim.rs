@@ -454,7 +454,8 @@ pub fn step_walker(
             g.dangle[i] = hang;
         }
         let d = g.dangle[i].lerp(hang, (3.0 * dt).min(1.0));
-        let floor = ground(Vec3::new(d.x, probe_y, d.z)) + 0.04;
+        // (The ground under the body will do: it hangs within a metre.)
+        let floor = under + 0.04;
         g.dangle[i] = Vec3::new(d.x, d.y.max(floor), d.z);
     }
 }
@@ -894,6 +895,49 @@ mod tests {
             let ideal = t.translation + rot * rest_offset(i);
             let off = Vec2::new(w.feet[i].planted.x - ideal.x, w.feet[i].planted.z - ideal.z);
             assert!(off.length() < 0.4, "foot {i} {:.2} off", off.length());
+        }
+    }
+
+    /// The cost budget: ground probes (rays, in the game) per walker per
+    /// tick, walking and turning on three legs and four.
+    #[test]
+    fn ground_probes_stay_in_budget() {
+        let flat = |_: Vec3| 0.0;
+        for dead in [None, Some(2)] {
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            if let Some(i) = dead {
+                w.feet[i].alive = false;
+            }
+            let (mut total, mut worst) = (0usize, 0usize);
+            let ticks = 90 * 8;
+            for k in 0..ticks {
+                let drive = Drive {
+                    desired: Quat::from_rotation_y(k as f32 * 0.004) * Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.3,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                let mut n = 0;
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| {
+                        n += 1;
+                        0.0
+                    },
+                    &mut |_| {},
+                );
+                total += n;
+                worst = worst.max(n);
+            }
+            let mean = total as f32 / ticks as f32;
+            assert!(mean < 1.6, "{mean:.2} probes a tick on average ({dead:?})");
+            assert!(worst <= 4, "{worst} probes in one tick ({dead:?})");
         }
     }
 
