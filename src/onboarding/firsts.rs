@@ -104,10 +104,11 @@ impl First {
             First::Lamed => &["Truck: \"You've lamed it. It can't chase you now.\""],
             First::PackFull => &["Truck: \"Pack's full. Leave the worst of it behind.\""],
             First::Worn => &["Truck: \"That gun's worn. It'll jam. The bench mends it.\""],
+            // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
-                "Truck: \"I got you back. The crate's as you left it.\"",
-                "Truck: \"What you carried lies where you fell. They'll send for it.\"",
-                "Truck: \"Get there before their convoy and it's yours again.\"",
+                "Truck: \"I got you back. The crate's as you left it: {s} things.\"",
+                "Truck: \"{n} things you carried are where you fell.\"",
+                "Truck: \"Beat their convoy there and they're yours again.\"",
             ],
             First::ConvoyTook => &["Truck: \"That's through the Gate now. Gone. Be quicker.\""],
             First::KitRecovered => &["Truck: \"That's how you get it back. Take it home.\""],
@@ -189,12 +190,13 @@ fn meet(
     firsts: &mut Firsts,
     queue: &mut Queue,
     out: &mut MessageWriter<FirstMet>,
+    fill: &dyn Fn(&str) -> String,
 ) -> bool {
     if !firsts.0.insert(f.key()) {
         return false;
     }
     info!("first time: {f:?}");
-    queue.lines.extend(f.lines().iter().map(|l| l.to_string()));
+    queue.lines.extend(f.lines().iter().map(|l| fill(l)));
     out.write(FirstMet(f));
     true
 }
@@ -208,7 +210,13 @@ struct Meet<'w> {
 
 impl Meet<'_> {
     fn meet(&mut self, f: First) -> bool {
-        meet(f, &mut self.firsts, &mut self.queue, &mut self.out)
+        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, &|l| {
+            l.to_string()
+        })
+    }
+
+    fn meet_filled(&mut self, f: First, fill: &dyn Fn(&str) -> String) -> bool {
+        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, fill)
     }
 
     fn met(&self, f: First) -> bool {
@@ -350,13 +358,48 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
     }
 }
 
-/// The first time you wake in the truck after going down.
-fn deaths(raid: Res<Raid>, mut was_down: Local<bool>, mut m: Meet) {
+/// The first time you wake in the truck after going down: what's in the
+/// crate (all that came back), and how much lies where you fell.
+fn deaths(
+    raid: Res<Raid>,
+    bags: Query<(
+        &crate::interact::body::Backpack,
+        Has<crate::raid::truck::Stash>,
+        Option<&crate::raid::Remains>,
+    )>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut was_down: Local<bool>,
+    mut m: Meet,
+) {
     let down = matches!(raid.phase, Phase::Down { .. });
-    if *was_down && raid.phase == Phase::AtBase {
-        m.meet(First::Death);
+    if *was_down && raid.phase == Phase::AtBase && !m.met(First::Death) {
+        let me = locals.iter().next();
+        let crate_n: usize = bags
+            .iter()
+            .filter(|(_, stash, _)| *stash)
+            .map(|(b, ..)| b.contents.len())
+            .sum();
+        let fell_n: usize = bags
+            .iter()
+            .filter(|(_, _, r)| r.is_some_and(|r| Some(r.owner) == me))
+            .map(|(b, ..)| b.contents.len())
+            .sum();
+        m.meet_filled(First::Death, &|l| fill(l, crate_n, fell_n));
     }
     *was_down = down;
+}
+
+/// A line with its counts in.
+pub fn fill(line: &str, in_crate: usize, fell: usize) -> String {
+    let things = |n: usize| {
+        if n == 1 {
+            "1 thing".to_string()
+        } else {
+            format!("{n} things")
+        }
+    };
+    line.replace("{s} things", &things(in_crate))
+        .replace("{n} things", &things(fell))
 }
 
 /// What became of your kit, the first time each way.
@@ -411,6 +454,7 @@ mod tests {
         for f in ALL {
             assert!(!f.lines().is_empty(), "{f:?} says nothing");
             for l in f.lines() {
+                let l = &fill(l, 999, 999);
                 let n = crate::render::screen::wrap(l, 26, usize::MAX).len();
                 assert!(n <= 3, "{f:?}: {n} lines: {l}");
                 for w in l
@@ -486,7 +530,8 @@ mod tests {
             First::Death,
         ] {
             for l in f.lines() {
-                let n = spoken.iter().filter(|s| s.as_str() == *l).count();
+                let l = fill(l, 0, 0);
+                let n = spoken.iter().filter(|s| **s == l).count();
                 assert_eq!(n, 1, "{f:?} said {n} times: {l}");
             }
         }
@@ -549,6 +594,87 @@ mod tests {
         let spoken = &app.world().resource::<Spoken>().0;
         assert!(spoken.is_empty(), "said again after loading: {spoken:?}");
         drop(app);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Down for real (health out, the raid's own way home): waking in the
+    /// truck, the driver says how much the crate holds and how much lies
+    /// where you fell, with the counts right.
+    #[test]
+    fn the_first_death_says_what_came_back() {
+        let dir = std::env::temp_dir().join(format!("extraction-death-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let opts = crate::LaunchOptions {
+            robots: false,
+            save: Some(dir.join("career.ron")),
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // Out in the Zone, two things in the pack.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack");
+        for id in ["canned_stew", "field_dressing"] {
+            let catalog = app.world().resource::<crate::items::Catalog>().clone();
+            let kind = catalog.kind(id).unwrap();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut commands = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut commands,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: Transform::default(),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            app.world_mut()
+                .get_mut::<crate::interact::body::Backpack>(pack)
+                .unwrap()
+                .contents
+                .push(e);
+        }
+        let in_crate = app
+            .world_mut()
+            .query_filtered::<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>()
+            .iter(app.world())
+            .map(|b| b.contents.len())
+            .sum::<usize>();
+        app.world_mut()
+            .get_mut::<crate::health::Health>(player)
+            .unwrap()
+            .hp = 0.0;
+        // Down, the grey, the truck; then the driver's lines.
+        for _ in 0..(90 * 30) {
+            app.update();
+        }
+        assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+        let spoken = app.world().resource::<Spoken>().0.clone();
+        let want = fill(First::Death.lines()[0], in_crate, 2);
+        assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
+        let want = fill(First::Death.lines()[1], in_crate, 2);
+        assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
