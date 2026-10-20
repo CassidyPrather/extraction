@@ -169,7 +169,52 @@ pub struct IndoorSite {
     pub patrol: Vec<Vec3>,
     pub spawn: Vec3,
     pub crawlers: u32,
+    /// Full-size armed walkers on the same round, slower (a room with the
+    /// headroom: they don't fit a 1.5 m corridor).
+    pub heavy: u32,
+    /// Its residents start asleep in their bays, and wake on a loud
+    /// enough noise ([`WAKE_RADIUS`]).
+    pub dormant: bool,
 }
+
+/// A robot that lives in a site: where its bay is (it goes back there to
+/// sleep when the machines are recalled).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Resident {
+    pub bay: Vec3,
+}
+
+/// Asleep in its bay: blind, still. A noise that carries at least
+/// [`WAKE_RADIUS`] and reaches it wakes it.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Dormant;
+
+/// Waking: up in this many seconds (then off on its round, or to the
+/// noise that woke it).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Stirring {
+    pub left: f32,
+    pub toward: Option<Vec3>,
+}
+
+/// A resident woke (for its sound and the body's stir).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Waking {
+    pub robot: Entity,
+    pub at: Vec3,
+}
+
+/// A heavy resident: a full-size walker on a site's round.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Heavy;
+
+/// A noise must carry at least this far to wake a sleeping resident (m):
+/// a breaker's clank, a shot, a grenade; not a footstep.
+pub const WAKE_RADIUS: f32 = 25.0;
+/// Waking takes this long (s).
+pub const WAKE_TIME: f32 = 2.0;
+/// A heavy walks its round at this share of its pace.
+pub const HEAVY_PACE: f32 = 0.5;
 
 #[derive(Resource, Default, Debug)]
 pub struct IndoorSites {
@@ -231,9 +276,17 @@ impl Plugin for IndoorPlugin {
         app.init_resource::<IndoorSites>()
             .add_message::<CrawlerCharge>()
             .add_message::<CrawlerZap>()
+            .add_message::<Waking>()
             .add_systems(
                 FixedUpdate,
-                (spawn_residents, crawler_guns, clear_wrecks).after(super::perceive),
+                (
+                    spawn_residents,
+                    crawler_guns,
+                    clear_wrecks,
+                    wake_residents,
+                    recall_residents,
+                )
+                    .after(super::perceive),
             );
     }
 }
@@ -270,6 +323,7 @@ pub fn spawn_crawler(
             Name::new("Crawler"),
             Crawler::default(),
             super::Breed("Crawler"),
+            Resident { bay: at },
             site.nav.clone(),
             Patrol::new(route),
             Brain::Working {
@@ -316,7 +370,133 @@ fn spawn_residents(
             route.rotate_left(start.min(len));
             let at = route.first().copied().unwrap_or(site.spawn);
             info!("director: a crawler on its round at {at:.0}");
-            spawn_crawler(&mut commands, &zone, site, at, route);
+            let e = spawn_crawler(&mut commands, &zone, site, at, route);
+            if site.dormant {
+                commands.entity(e).insert(Dormant);
+            }
+        }
+        for k in 0..site.heavy as usize {
+            let mut route = site.patrol.clone();
+            let len = route.len();
+            route.rotate_left((k * n / site.heavy.max(1) as usize).min(len));
+            let at = route.first().copied().unwrap_or(site.spawn);
+            info!("director: a heavy on its round at {at:.0}");
+            let e = spawn_heavy(&mut commands, &zone, site, at, route);
+            if site.dormant {
+                commands.entity(e).insert(Dormant);
+            }
+        }
+    }
+}
+
+/// A full-size armed walker living on a site's round.
+pub fn spawn_heavy(
+    commands: &mut Commands,
+    zone: &Zone,
+    site: &IndoorSite,
+    at: Vec3,
+    route: Vec<Vec3>,
+) -> Entity {
+    let job = Job {
+        kind: JobKind::Watch,
+        site: at,
+        duration: f32::INFINITY,
+        exit: at,
+    };
+    let e =
+        super::walker::spawn_walker_sized(commands, zone, at, job, true, 130.0, 1.0, Some(at.y));
+    commands.entity(e).insert((
+        Name::new("Warden"),
+        Heavy,
+        super::Breed("Warden"),
+        Resident { bay: at },
+        site.nav.clone(),
+        Patrol::new(route),
+        Brain::Working {
+            at,
+            left: f32::INFINITY,
+        },
+    ));
+    e
+}
+
+/// Sleeping residents wake on a loud enough noise that reaches them.
+fn wake_residents(
+    mut commands: Commands,
+    mut noises: MessageReader<super::Noise>,
+    sleepers: Query<(Entity, &GlobalTransform, &super::Senses), (With<Dormant>, Without<Stirring>)>,
+    mut stirring: Query<(Entity, &mut Stirring, &mut Brain)>,
+    raid: Res<crate::raid::Raid>,
+    time: Res<Time>,
+    mut out: MessageWriter<Waking>,
+) {
+    let loud: Vec<super::Noise> = noises
+        .read()
+        .filter(|n| n.radius >= WAKE_RADIUS)
+        .cloned()
+        .collect();
+    // Recalled, they sleep for good.
+    if !raid.recalled {
+        for (e, gt, senses) in &sleepers {
+            let at = gt.translation();
+            let woke = loud
+                .iter()
+                .find(|n| n.at.distance(at) < n.radius * senses.hearing);
+            if let Some(n) = woke {
+                commands.entity(e).insert(Stirring {
+                    left: WAKE_TIME,
+                    toward: (n.source.is_some() || n.radius > WAKE_RADIUS * 1.5).then_some(n.at),
+                });
+                out.write(Waking { robot: e, at });
+            }
+        }
+    }
+    for (e, mut s, mut brain) in &mut stirring {
+        s.left -= time.delta_secs();
+        if s.left <= 0.0 {
+            commands.entity(e).remove::<(Dormant, Stirring)>();
+            if let Some(at) = s.toward {
+                *brain = Brain::Investigate {
+                    at,
+                    left: super::search::INVESTIGATE_TIME,
+                };
+            }
+        }
+    }
+}
+
+/// The machines recalled: residents walk back to their bays and go to
+/// sleep there (capstone leaves them be).
+fn recall_residents(
+    mut commands: Commands,
+    raid: Res<crate::raid::Raid>,
+    mut residents: Query<
+        (
+            Entity,
+            &Resident,
+            &GlobalTransform,
+            &mut Brain,
+            &mut Job,
+            &Robot,
+        ),
+        Without<Dormant>,
+    >,
+) {
+    if !raid.recalled {
+        return;
+    }
+    for (e, r, gt, mut brain, mut job, robot) in &mut residents {
+        if robot.wrecked {
+            continue;
+        }
+        let p = gt.translation();
+        if Vec2::new(p.x - r.bay.x, p.z - r.bay.z).length() < 3.2 {
+            commands.entity(e).insert(Dormant).remove::<Patrol>();
+            continue;
+        }
+        if !matches!(*brain, Brain::Transit { to } if to == r.bay) {
+            job.kind = JobKind::Collect; // single-minded: nothing distracts it now
+            *brain = Brain::Transit { to: r.bay };
         }
     }
 }

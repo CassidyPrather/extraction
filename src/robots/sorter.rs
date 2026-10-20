@@ -80,6 +80,30 @@ pub struct SorterThrow {
     pub from: Vec3,
 }
 
+/// The Sorter is about to throw at `at` (the tell: it stops, its head
+/// locks on and flares red, its grab draws back, for [`WINDUP`] seconds).
+/// A mind may send it before a `Throw`; the body sends its own as it
+/// winds up.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct SorterWindup {
+    pub sorter: Entity,
+    pub at: Vec3,
+}
+
+pub const WINDUP: f32 = 0.7;
+
+/// What the body tells a mind.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct SorterState {
+    /// The tote in its grab.
+    pub holding: Option<Entity>,
+    /// At a job (fetching, carrying, throwing, reaching) rather than resting.
+    pub busy: bool,
+    /// How far out the grab can get from straight under the carriage at
+    /// the floor, metres.
+    pub reach: f32,
+}
+
 /// A tote the Sorter shifts about. Not loot: it's heavy and orange.
 #[derive(Component, Debug)]
 pub struct Tote;
@@ -128,6 +152,9 @@ pub struct Sorter {
     pub arm_alive: bool,
     /// Where totes may be set down.
     pub spots: Vec<Vec2>,
+    /// Showing the throw's tell: seconds left, and at what.
+    pub windup: f32,
+    pub windup_at: Vec3,
     seed: u32,
 }
 
@@ -178,6 +205,7 @@ impl Plugin for SorterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SorterScript>()
             .add_message::<SorterThrow>()
+            .add_message::<SorterWindup>()
             .add_systems(
                 FixedUpdate,
                 (spawn_in_depot, sort, wreck_sorters, land)
@@ -236,6 +264,8 @@ pub fn spawn_sorter(
         head_yaw: 0.0,
         arm_alive: true,
         spots: spots.clone(),
+        windup: 0.0,
+        windup_at: Vec3::ZERO,
         seed: 0x50_27_e2,
     };
     let at = s.world(Vec3::new(start.x, s.carriage_y(), start.y));
@@ -272,6 +302,7 @@ pub fn spawn_sorter(
             RigidBody::Kinematic,
             ArmPose::default(),
             LegPoses::default(),
+            SorterState::default(),
         ))
         .id();
     commands.entity(robot).insert(s);
@@ -381,6 +412,7 @@ fn sort(
         Option<&SorterOrder>,
         Option<&Intent>,
         Has<super::Stunned>,
+        &mut SorterState,
     )>,
     mut parts: Query<(&super::RobotPart, &mut Transform), Without<Sorter>>,
     mut totes: Query<
@@ -392,18 +424,39 @@ fn sort(
     time: Res<Time>,
     mut commands: Commands,
     mut throws: MessageWriter<SorterThrow>,
+    mut windups: ParamSet<(MessageReader<SorterWindup>, MessageWriter<SorterWindup>)>,
 ) {
+    // A mind's windups: show the tell.
+    let told: Vec<SorterWindup> = windups.p0().read().copied().collect();
+    let mut windups = windups.p1();
     let dt = time.delta_secs();
     if dt <= 0.0 {
         return;
     }
-    for (e, mut s, mut t, mut pose, mut legs, robot, aware, children, order, intent, stunned) in
-        &mut sorters
+    for (
+        e,
+        mut s,
+        mut t,
+        mut pose,
+        mut legs,
+        robot,
+        aware,
+        children,
+        order,
+        intent,
+        stunned,
+        mut state,
+    ) in &mut sorters
     {
         if robot.wrecked {
             continue;
         }
         s.cooldown -= dt;
+        for w in told.iter().filter(|w| w.sorter == e) {
+            s.windup = WINDUP;
+            s.windup_at = w.at;
+        }
+        s.windup = (s.windup - dt).max(0.0);
         // Is the arm still on?
         s.arm_alive = children.iter().any(|c| {
             parts
@@ -664,7 +717,8 @@ fn sort(
                                 tote: Some(te),
                                 at,
                                 stage: if adv { stage + 1 } else { stage },
-                                t,
+                                // (The wind-up's clock starts when it does.)
+                                t: if adv && stage == 2 { 0.0 } else { t },
                             })
                         }
                         (Some(te), _) if s.holding != Some(te) => Some(Task::Rest(1.0)),
@@ -676,12 +730,19 @@ fn sort(
                             grab_to =
                                 shoulder + Vec3::new(-dir.x, 0.0, -dir.y) * 1.6 - Vec3::Y * 1.2;
                             grab_speed = GRAB_SPEED * 1.6;
-                            let ready = s.grab.distance(grab_to) < 0.15;
+                            // The tell, as it starts: it stops, its head
+                            // locks on, it draws back, for WINDUP seconds.
+                            if t <= dt * 1.5 && s.windup <= 0.0 {
+                                s.windup = WINDUP;
+                                s.windup_at = at;
+                                windups.write(SorterWindup { sorter: e, at });
+                            }
+                            let ready = s.grab.distance(grab_to) < 0.15 && t >= WINDUP;
                             Some(Task::Throw {
                                 tote: Some(te),
                                 at,
                                 stage: if ready { 4 } else { 3 },
-                                t: 0.0,
+                                t: if ready { 0.0 } else { t },
                             })
                         }
                         (Some(te), _) => {
@@ -725,6 +786,9 @@ fn sort(
             s.task = n;
         }
 
+        if s.windup > 0.0 {
+            car_to = s.pos;
+        }
         // The carriage: heavy, slow to start and stop.
         let lim = Vec2::new(s.half.x - 1.0, (s.half.y - 1.0).min(RAIL_Z - 0.6));
         let car_to = car_to.clamp(-lim, lim);
@@ -784,6 +848,7 @@ fn sort(
 
         // The head sweeps (or tracks what it's told to, or sees).
         let look = match order {
+            _ if s.windup > 0.0 => Some(s.windup_at),
             SorterOrder::Watch { at } => Some(at),
             _ => None,
         }
@@ -816,6 +881,13 @@ fn sort(
             grip: if s.holding.is_some() { 1.0 } else { 0.0 },
         };
         legs.0[0] = [pose.shoulder, pose.elbow, pose.wrist];
+        *state = SorterState {
+            holding: s.holding,
+            busy: !matches!(s.task, Task::Rest(_)),
+            reach: ((UPPER + LOWER + GRAB).powi(2) - shoulder.y.powi(2))
+                .max(0.0)
+                .sqrt(),
+        };
         // Arm collider on the forearm; head turned.
         let inv = t.compute_affine().inverse();
         let inv_rot = t.rotation.inverse();
@@ -1083,6 +1155,9 @@ mod tests {
             }
         }
         assert!(thrown, "it threw");
+        // After its tell (the carriage stopped, the head on the mark).
+        let state = app.world().get::<SorterState>(sorter).unwrap();
+        assert!(state.reach > 1.5, "reach {:.1}", state.reach);
         app.world_mut()
             .entity_mut(sorter)
             .insert(SorterOrder::Watch { at });

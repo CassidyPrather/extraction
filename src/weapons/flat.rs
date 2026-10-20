@@ -345,7 +345,7 @@ fn run_macros(
                 Vec::new()
             }
         };
-        emit(e, &name, &gun, gt, ev, &mut out, &mut ejected);
+        emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
         if matches!(step, Step::LoadRound) {
             commands.queue(move |world: &mut World| load_one_round(world, player_e, gun_e));
         }
@@ -391,9 +391,10 @@ fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
     let Some((ammo_e, _, socket, bag)) = mine.into_iter().min_by_key(|(_, r, _, _)| *r) else {
         return;
     };
+    let load = catalog.get(world.get::<Item>(ammo_e).unwrap().kind()).load;
     let loaded = world
         .get_mut::<Gun>(gun_e)
-        .is_some_and(|mut g| g.firearm.load_round());
+        .is_some_and(|mut g| g.firearm.load_round_of(load));
     if !loaded {
         return;
     }
@@ -454,6 +455,9 @@ pub fn apply_combines(
                         a.rounds -= moved;
                     }
                     if let Ok((mut b, _)) = items.get_mut(y) {
+                        // On top of what's in, a round at a time.
+                        let have = b.rounds;
+                        b.loads.fill(have, dx.load, moved);
                         b.rounds += moved;
                     }
                     let _ = my;

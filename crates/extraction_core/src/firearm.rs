@@ -11,6 +11,7 @@
 //! Because the handle position is continuous, VR hands, the flat-screen
 //! macros and the simulation bots all drive the same code.
 
+use crate::ammo::{Load, Loads};
 use serde::{Deserialize, Serialize};
 
 /// How the gun cycles.
@@ -136,11 +137,14 @@ impl Malfunction {
 }
 
 /// A detachable magazine as an inventory object.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Magazine {
     pub family: String,
     pub capacity: u32,
     pub rounds: u32,
+    /// What its rounds are loaded with, top last.
+    #[serde(default)]
+    pub loads: Loads,
 }
 
 /// Something that happened, for the game to show and play.
@@ -209,6 +213,25 @@ pub struct Firearm {
     pub magazine: Option<Magazine>,
     /// Rounds in a fixed internal magazine.
     pub internal_rounds: u32,
+    /// What those rounds are loaded with, top last.
+    #[serde(default)]
+    pub internal_loads: Loads,
+    /// What each live round in `chambers` is loaded with (by index).
+    #[serde(default)]
+    pub chamber_loads: Vec<Load>,
+    /// The round riding the bolt face's load.
+    #[serde(default)]
+    transit_load: Load,
+    /// The round last taken from the feed.
+    #[serde(default)]
+    fed: Load,
+    /// The load of the round last fired (for the shot it makes).
+    #[serde(default)]
+    pub last_fired: Load,
+    /// Loads of live rounds thrown clear, in the order their
+    /// [`Event::Ejected`] went out (drained by the game).
+    #[serde(default)]
+    pub ejected: Vec<Load>,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
     /// The magazine has slipped down in the well (a failure to feed): the
@@ -259,6 +282,12 @@ impl Firearm {
             in_transit: None,
             magazine: None,
             internal_rounds: 0,
+            internal_loads: Loads::default(),
+            chamber_loads: vec![Load::Standard; chambers],
+            transit_load: Load::Standard,
+            fed: Load::Standard,
+            last_fired: Load::Standard,
+            ejected: Vec::new(),
             mode: 0,
             malfunction: None,
             mag_unseated: false,
@@ -314,6 +343,40 @@ impl Firearm {
         self.magazine
             .as_ref()
             .map_or(self.internal_rounds, |m| m.rounds)
+    }
+
+    /// What the round in chamber `c` is loaded with.
+    pub fn chamber_load(&self, c: usize) -> Load {
+        self.chamber_loads.get(c).copied().unwrap_or_default()
+    }
+
+    fn set_chamber_load(&mut self, c: usize, load: Load) {
+        if self.chamber_loads.len() < self.chambers.len() {
+            self.chamber_loads
+                .resize(self.chambers.len(), Load::Standard);
+        }
+        if let Some(l) = self.chamber_loads.get_mut(c) {
+            *l = load;
+        }
+    }
+
+    /// Takes what's in chamber `c`, noting a live round's load as thrown
+    /// clear.
+    fn eject_chamber(&mut self, c: usize) -> Option<Round> {
+        let r = self.chambers.get_mut(c)?.take();
+        if r == Some(Round::Live) {
+            self.note_ejected(self.chamber_load(c));
+        }
+        r
+    }
+
+    /// A live round of `load` thrown clear (only the latest few are kept:
+    /// a game drains them as it shows the ejections).
+    fn note_ejected(&mut self, load: Load) {
+        if self.ejected.len() >= 8 {
+            self.ejected.remove(0);
+        }
+        self.ejected.push(load);
     }
 
     /// Total live rounds in the gun, chambers included.
@@ -405,6 +468,7 @@ impl Firearm {
                     return events;
                 }
                 self.chambers[c] = Some(Round::Spent);
+                self.last_fired = self.chamber_load(c);
                 events.push(Event::Fired { barrel });
                 self.wear();
                 self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
@@ -433,12 +497,14 @@ impl Firearm {
         if roll() < dud_chance {
             // A dud stays chambered under a closed bolt: rack it out.
             self.chambers[0] = Some(Round::Live);
+            self.set_chamber_load(0, self.fed);
             self.bolt_travel = 0.0;
             self.stroke_cleared = false;
             events.push(Event::Chambered);
             events.push(Event::Dud);
             return events;
         }
+        self.last_fired = self.fed;
         events.push(Event::Fired { barrel: 0 });
         self.wear();
         self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
@@ -517,8 +583,7 @@ impl Firearm {
         }
         self.rod = 1.0;
         let g = self.gate_chamber();
-        self.chambers[g]
-            .take()
+        self.eject_chamber(g)
             .map(Event::Ejected)
             .into_iter()
             .collect()
@@ -585,6 +650,7 @@ impl Firearm {
                     // The case stays put; the next round rams into it.
                     if self.take_from_feed() {
                         self.in_transit = Some(Round::Live);
+                        self.transit_load = self.fed;
                     }
                     self.bolt_travel = DOUBLE_FEED_AT;
                 }
@@ -599,6 +665,7 @@ impl Firearm {
         self.hammers_cocked[0] = true;
         if self.take_from_feed() {
             self.chambers[0] = Some(Round::Live);
+            self.set_chamber_load(0, self.fed);
             events.push(Event::Chambered);
         } else if self.def.last_round_hold_open && (self.magazine.is_some() || self.fixed_feed()) {
             self.locked_back = true;
@@ -619,12 +686,14 @@ impl Firearm {
         }
         if let Some(mag) = &mut self.magazine {
             if mag.rounds > 0 {
+                self.fed = mag.loads.pop(mag.rounds);
                 mag.rounds -= 1;
                 return true;
             }
             return false;
         }
         if self.def.magazine_family.is_none() && self.internal_rounds > 0 {
+            self.fed = self.internal_loads.pop(self.internal_rounds);
             self.internal_rounds -= 1;
             return true;
         }
@@ -676,10 +745,13 @@ impl Firearm {
                 }
             }
             if to >= EJECT_AT {
-                if let Some(round) = self.chambers[0].take() {
+                if let Some(round) = self.eject_chamber(0) {
                     events.push(Event::Ejected(round));
                 }
                 if let Some(round) = self.in_transit.take() {
+                    if round == Round::Live {
+                        self.note_ejected(self.transit_load);
+                    }
                     events.push(Event::Ejected(round));
                 }
                 // Racking throws out a stovepipe's case and a double feed's
@@ -695,11 +767,13 @@ impl Firearm {
                 self.stroke_cleared = false;
                 if self.take_from_feed() {
                     self.in_transit = Some(Round::Live);
+                    self.transit_load = self.fed;
                 }
             }
             if to <= CLOSED_AT && from > CLOSED_AT {
                 if let Some(round) = self.in_transit.take() {
                     self.chambers[0] = Some(round);
+                    self.set_chamber_load(0, self.transit_load);
                     events.push(Event::Chambered);
                 }
                 events.push(Event::BoltClosed);
@@ -847,7 +921,7 @@ impl Firearm {
         if self.def.action == ActionKind::BreakAction && self.bolt_travel < 0.5 {
             return None;
         }
-        self.chambers.get_mut(barrel as usize)?.take()
+        self.eject_chamber(barrel as usize)
     }
 
     /// Thumbs one round into wherever loose rounds go on this gun: an open
@@ -855,11 +929,17 @@ impl Firearm {
     /// open), or directly into an open chamber otherwise. Returns false if
     /// there is no room.
     pub fn load_round(&mut self) -> bool {
+        self.load_round_of(Load::Standard)
+    }
+
+    /// [`Self::load_round`] with a round of `load`.
+    pub fn load_round_of(&mut self, load: Load) -> bool {
         match self.def.action {
             ActionKind::Revolver => {
                 let c = self.gate_chamber();
                 if self.gate_open && self.chambers[c].is_none() {
                     self.chambers[c] = Some(Round::Live);
+                    self.set_chamber_load(c, load);
                     return true;
                 }
                 false
@@ -868,8 +948,9 @@ impl Firearm {
                 if self.bolt_travel < 0.5 {
                     return false;
                 }
-                if let Some(slot) = self.chambers.iter_mut().find(|c| c.is_none()) {
-                    *slot = Some(Round::Live);
+                if let Some(c) = self.chambers.iter().position(|c| c.is_none()) {
+                    self.chambers[c] = Some(Round::Live);
+                    self.set_chamber_load(c, load);
                     return true;
                 }
                 false
@@ -879,6 +960,7 @@ impl Firearm {
                     return false;
                 }
                 if self.internal_rounds < self.def.internal_capacity {
+                    self.internal_loads.push(self.internal_rounds, load);
                     self.internal_rounds += 1;
                     return true;
                 }
@@ -889,12 +971,14 @@ impl Firearm {
                 {
                     return false;
                 }
+                self.internal_loads.push(self.internal_rounds, load);
                 self.internal_rounds += 1;
                 true
             }
             ActionKind::SemiAuto => {
                 if self.bolt_travel >= EJECT_AT && self.chambers[0].is_none() {
                     self.chambers[0] = Some(Round::Live);
+                    self.set_chamber_load(0, load);
                     return true;
                 }
                 false
@@ -905,12 +989,19 @@ impl Firearm {
     /// Strips a clip of `n` rounds into an internal magazine through the open
     /// action. Returns how many went in.
     pub fn strip_clip(&mut self, n: u32) -> u32 {
+        self.strip_clip_of(n, &mut Loads::default())
+    }
+
+    /// [`Self::strip_clip`] from a clip of `n` rounds loaded as `loads`
+    /// (which lose the rounds that went in).
+    pub fn strip_clip_of(&mut self, n: u32, loads: &mut Loads) -> u32 {
         let clip_fed = self.def.action == ActionKind::BoltAction || self.fixed_feed();
         if !clip_fed || self.bolt_travel < EJECT_AT {
             return 0;
         }
         let room = self.def.internal_capacity - self.internal_rounds;
         let moved = room.min(n);
+        loads.move_to(n, &mut self.internal_loads, self.internal_rounds, moved);
         self.internal_rounds += moved;
         moved
     }
@@ -1001,7 +1092,30 @@ mod tests {
             family: family.into(),
             capacity: 8,
             rounds,
+            ..Default::default()
         }
+    }
+
+    /// AP thumbed on top of ball comes out first; a live round racked out
+    /// is noted with its load.
+    #[test]
+    fn rounds_keep_their_loads_through_the_gun() {
+        let mut gun = Firearm::new(pistol(), 1.0);
+        gun.cycle_mode();
+        let mut m = mag("pm", 3);
+        m.loads.fill(1, Load::Ap, 2);
+        gun.insert_magazine(m).unwrap();
+        rack(&mut gun);
+        assert_eq!(gun.chamber_load(0), Load::Ap);
+        let ev = shoot(&mut gun);
+        assert!(fired(&ev));
+        assert_eq!(gun.last_fired, Load::Ap);
+        assert_eq!(gun.chamber_load(0), Load::Ap, "the second AP chambered");
+        gun.ejected.clear();
+        rack(&mut gun);
+        assert_eq!(gun.ejected, vec![Load::Ap], "racked out live");
+        shoot(&mut gun);
+        assert_eq!(gun.last_fired, Load::Standard, "then the ball");
     }
 
     /// Never jams, never duds.
@@ -1081,6 +1195,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 30,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1116,6 +1231,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 1,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1201,6 +1317,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 10,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1429,6 +1546,7 @@ mod tests {
             family: "ppsh_drum".into(),
             capacity: 71,
             rounds: 71,
+            ..Default::default()
         })
         .unwrap();
         gun.cycle_mode(); // Auto

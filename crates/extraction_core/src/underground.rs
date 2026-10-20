@@ -133,6 +133,9 @@ pub struct Prop {
     /// Loot table rolled on it, if any.
     #[serde(default)]
     pub loot: Option<String>,
+    /// A name it's known by (a kept crate's tag: who's in it).
+    #[serde(default)]
+    pub tag: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

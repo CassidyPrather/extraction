@@ -246,6 +246,7 @@ fn burn_fuses(
                         ..default()
                     },
                     mass_g: def.fragment_g,
+                    load: Default::default(),
                     seed: rng.next_u64(),
                     passes: 0,
                 },
@@ -280,6 +281,7 @@ fn burn_fuses(
                     damage: harm,
                     shooter: thrower,
                     mass_g: 0.0,
+                    load: Default::default(),
                 });
             }
         }

@@ -17,7 +17,7 @@ use bevy::ecs::system::SystemParam;
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
-use extraction_core::firearm_terminal::{ArmourArea, Outcome, armour_strike};
+use extraction_core::firearm_terminal::{ArmourArea, Outcome, armour_strike_load};
 use extraction_core::inventory::SlotKind;
 use extraction_core::items::Mount;
 use extraction_core::noise::Rng;
@@ -266,7 +266,15 @@ impl Armour<'_, '_> {
         let roll =
             Rng::new(u64::from(hit.point.x.to_bits()) << 32 | u64::from(hit.point.z.to_bits()))
                 .f32();
-        let (outcome, wear) = armour_strike(&def, item.condition, hit.mass_g, speed, cos_in, roll);
+        let (outcome, wear) = armour_strike_load(
+            hit.load,
+            &def,
+            item.condition,
+            hit.mass_g,
+            speed,
+            cos_in,
+            roll,
+        );
         item.condition = (item.condition - wear).max(0.0);
         self.struck.write(ArmourStruck {
             player,
@@ -277,7 +285,9 @@ impl Armour<'_, '_> {
         match outcome {
             Outcome::Stop => hit.damage * BLUNT,
             Outcome::Ricochet { .. } => 0.0,
-            Outcome::Through { speed: out } => hit.damage * (out / speed.max(1e-3)).powi(2),
+            // What's left of it: its speed's share (a round through steel
+            // is slowed, not spent).
+            Outcome::Through { speed: out } => hit.damage * (out / speed.max(1e-3)),
         }
     }
 }
@@ -384,7 +394,8 @@ mod tests {
         let far = Transform::from_translation(feet + Vec3::new(5.0, 0.5, 5.0));
         let pm = vr.spawn("pm_pistol", far);
         let mosin = vr.spawn("mosin", far.with_translation(far.translation + Vec3::X));
-        for g in [pm, mosin] {
+        let ak = vr.spawn("ak74", far.with_translation(far.translation - Vec3::X));
+        for g in [pm, mosin, ak] {
             vr.app.world_mut().entity_mut(g).insert(RigidBody::Static);
         }
 
@@ -444,5 +455,20 @@ mod tests {
             rifle > 10.0,
             "a worn plate lets a rifle round through: {rifle}"
         );
+
+        // A worn plate holds an AK's ball; its AP goes through.
+        vr.app.world_mut().get_mut::<Item>(plate).unwrap().condition = 0.3;
+        vr.app.world_mut().get_mut::<Health>(vr.player).unwrap().hp = 100.0;
+        let ball = shoot_chest(&mut vr, ak, 5);
+        assert!(ball < 5.0, "ball stops in a worn plate: {ball}");
+        vr.app.world_mut().get_mut::<Health>(vr.player).unwrap().hp = 100.0;
+        vr.app
+            .world_mut()
+            .get_mut::<Gun>(ak)
+            .unwrap()
+            .firearm
+            .last_fired = extraction_core::ammo::Load::Ap;
+        let ap = shoot_chest(&mut vr, ak, 6);
+        assert!(ap > 10.0, "AP goes through it: {ap} (ball {ball})");
     }
 }

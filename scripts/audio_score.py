@@ -39,7 +39,7 @@ def heard_to(cue, sets, mix, masker_bands):
     """`audio_mix.audible_range`, over a masker given as band levels."""
     c = next(c for c in mix if c["name"] == cue)
     x = am.samples(c["set"], sets)
-    base = am.band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"]
+    base = am.band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"] + am.own_filter(cue)
     t = am.masked_threshold(masker_bands)
     best = 0.0
     for d in np.geomspace(1, 1000, 100):

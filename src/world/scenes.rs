@@ -48,6 +48,8 @@ pub enum Gate {
     Tier(u32),
     Recalled,
     Visits(u32),
+    /// The ending played: Lev has been down to the Depot with you.
+    Ended,
 }
 
 /// Where a career stands, as far as gates go.
@@ -57,6 +59,8 @@ pub struct Standing {
     pub recalled: bool,
     /// Raids set off in this valley.
     pub visits: u32,
+    /// The ending has been played (`raid::epilogue`).
+    pub ended: bool,
 }
 
 impl Gate {
@@ -65,6 +69,7 @@ impl Gate {
             Gate::Tier(t) => at.tier >= t,
             Gate::Recalled => at.recalled,
             Gate::Visits(n) => at.visits >= n,
+            Gate::Ended => at.ended,
         }
     }
 }
@@ -78,12 +83,14 @@ pub struct Staged(pub std::collections::HashSet<String>);
 pub fn standing(
     progression: Option<&crate::progression::Progression>,
     raid: Option<&crate::raid::Raid>,
+    epilogue: Option<&crate::raid::epilogue::Epilogue>,
     map: &str,
 ) -> Standing {
     Standing {
         tier: progression.map_or(0, |p| p.0.tier),
         recalled: raid.is_some_and(|r| r.recalled),
         visits: progression.map_or(0, |p| p.0.raids_in(map)),
+        ended: epilogue.is_some_and(|e| e.done),
     }
 }
 
@@ -92,6 +99,7 @@ pub fn gates(world: &World, map: &str) -> Standing {
     standing(
         world.get_resource::<crate::progression::Progression>(),
         world.get_resource::<crate::raid::Raid>(),
+        world.get_resource::<crate::raid::epilogue::Epilogue>(),
         map,
     )
 }
@@ -140,6 +148,8 @@ pub struct SceneTerminal {
 /// recalled.
 #[derive(Component, Debug)]
 pub struct SceneScreen {
+    /// The scene it stands in.
+    pub scene: String,
     pub recalled: Vec<String>,
 }
 
@@ -417,9 +427,15 @@ fn spawn_scenes(
     opts: Res<crate::launch::LaunchOptions>,
     progression: Option<Res<crate::progression::Progression>>,
     raid: Res<crate::raid::Raid>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     mut staged: ResMut<Staged>,
 ) {
-    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
+    let at = standing(
+        progression.as_deref(),
+        Some(&raid),
+        epilogue.as_deref(),
+        &opts.map,
+    );
     for (id, scene) in of(&opts.map) {
         if scene.open(at) {
             stage(&mut commands, &zone, &id, scene, raid.recalled);
@@ -437,13 +453,19 @@ fn unlock_scenes(
     opts: Res<crate::launch::LaunchOptions>,
     progression: Option<Res<crate::progression::Progression>>,
     raid: Res<crate::raid::Raid>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     catalog: Res<Catalog>,
     mut staged: ResMut<Staged>,
 ) {
     let Some(zone) = zone else {
         return;
     };
-    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
+    let at = standing(
+        progression.as_deref(),
+        Some(&raid),
+        epilogue.as_deref(),
+        &opts.map,
+    );
     for (id, scene) in of(&opts.map) {
         if staged.0.contains(&id) || !scene.open(at) {
             continue;
@@ -527,6 +549,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
             Name::new("Terminal screen"),
             screen,
             SceneScreen {
+                scene: scene.name.clone(),
                 recalled: term.recalled.clone(),
             },
             super::notes::terminal_panel(text),
