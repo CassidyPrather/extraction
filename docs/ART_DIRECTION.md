@@ -93,8 +93,9 @@ headset and smears on OLED/LCD). **Nothing pure white** except emissives.
 ## Legibility and comfort (VR)
 
 - Nothing flickers or crawls: thin things (grass blades, wires, fences,
-  far branches) are alpha-to-coverage or faded, never 1-pixel aliased
-  lines; procedural detail in shaders fades out before it would alias.
+  far branches) are widened to hold a pixel, faded, or alpha to coverage
+  where the headset can afford it, never 1-pixel aliased lines;
+  procedural detail in shaders fades out before it would alias.
 - Robots stand out from everything behind them at 30-60 m in drizzle:
   pale against the dark forest, dark-edged against the sky.
 - The darkest areas the player stands in (forest floor under spruce)
@@ -119,3 +120,25 @@ on uncovered sky; the terrain shader is the one to watch.
   without rebuilding (keys in `src/render/grade.rs`).
 - Before and after shots of the bigger changes are in
   `docs/shots/visual-design/`.
+
+## What the current look costs
+
+Measured A/B against the commit before this work, with the session log's
+`gpu:` line under the software renderer (relative only: lavapipe is not a
+3060), at three views (meadow edge, spruce interior, pine slope): with
+everything below, the opaque pass is within noise of the base (spruce
+interior 850 vs 840 ms a software frame). Geometry is from
+`EXTRACTION_RENDER_STATS=1`.
+
+| Change | Where | Cost |
+| - | - | - |
+| Per-valley grade, shadow lift | tonemapping pass | None: the pass already runs |
+| Sky deck | sky pixels only | 2D value noise, ~8 octaves plus 2 warp taps; cheaper than the old 10 3D octaves |
+| Water reflection | water pixels | A few ALU; the PBR specular it replaces is dropped |
+| Terrain macro colour, burn | every terrain pixel | 2 value-noise taps (~10 ALU), against 9 texture taps per layer already |
+| Cloud on the tops | every lit pixel, Kettle Pass only | A second closed-form fog integral (~10 ALU); compiled out elsewhere |
+| Alpha to coverage on foliage | foliage | **Off by default** (`EXTRACTION_A2C=1`): it cost the software opaque pass +40-70% wherever foliage filled the view. Time it on the headset machine before turning it on |
+| Grass widening | grass vertices | ~10 ALU a vertex; no new geometry |
+| Fuller pine crowns | pine near LOD | Densest pine view: tris drawn 321k to 332k, shadow 261k to 287k, draw calls unchanged |
+| Weather wetness, sky weight | uniforms | None |
+| Charred trees, tuft spread | vertex colour, geometry layout | None |

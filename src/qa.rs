@@ -187,6 +187,13 @@ fn inside(p: Vec3, s: Vec3, t: &Transform, pad: f32) -> bool {
 
 /// Coplanar, same-facing, overlapping faces of different materials.
 pub fn fighting_faces(geo: &Geo) -> Vec<Fight> {
+    fighting_faces_above(geo, f32::NEG_INFINITY)
+}
+
+/// [`fighting_faces`], leaving out faces lower than `buried`: on the most
+/// a building is ever lifted, the ground still covers everything below
+/// that (foundations and the steps down to the ground end there).
+pub fn fighting_faces_above(geo: &Geo, buried: f32) -> Vec<Fight> {
     let b = boxes(geo);
     let all = solids(geo);
     // A face nobody sees: just outside it is inside some other piece.
@@ -210,6 +217,9 @@ pub fn fighting_faces(geo: &Geo) -> Vec<Fight> {
             for fa in faces(sa, &ta) {
                 for fb in faces(sb, &tb) {
                     if fa.n.dot(fb.n) < 0.999 || fa.n.dot(fb.c - fa.c).abs() > 0.002 {
+                        continue;
+                    }
+                    if fa.c.y.max(fb.c.y) < buried {
                         continue;
                     }
                     let (bu, bv) = (fa.u, fa.v);
@@ -312,7 +322,12 @@ pub fn report() -> Vec<(String, Vec<Fight>, Vec<(usize, Vec3)>)> {
         .iter()
         .filter_map(|id| {
             let geo = crate::world::buildings::prefab(id)?;
-            Some((id.to_string(), fighting_faces(&geo), floating(&geo)))
+            let buried = -extraction_core::map::prefab_lift(id) - 0.05;
+            Some((
+                id.to_string(),
+                fighting_faces_above(&geo, buried),
+                floating(&geo),
+            ))
         })
         .collect()
 }

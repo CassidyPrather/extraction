@@ -1,5 +1,5 @@
 // A far tree's foliage: the captured picture on crossed quads, standard
-// PBR, alpha to coverage. Within the near cut of the tree's base (carried in
+// PBR, alpha-tested (or alpha to coverage: `trees::foliage_alpha`). Within the near cut of the tree's base (carried in
 // UV1; horizontal distance, as the cards are cut) the real cards are drawn
 // instead: the whole tree swaps at once.
 

@@ -139,8 +139,10 @@
         // The miners' old way to work: Row to the mine, over the beck.
         (
             name: "Mine path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-46.0, 119.0), (-85.0, 95.0), (-112.0, 78.0), (-127.0, 60.0), (-113.0, 37.0),
-                     (-130.0, 18.0), (-150.0, 8.0), (-180.0, 1.0), (-205.0, -10.0),
+            // The footbridge and its approaches are one straight line: a deck
+            // on a curve had routes stepping off its end into the rail.
+            points: [(-46.0, 119.0), (-85.0, 95.0), (-112.1, 77.5), (-116.1, 63.1), (-123.9, 34.1),
+                     (-127.9, 19.6), (-150.0, 8.0), (-180.0, 1.0), (-205.0, -10.0),
                      (-222.0, -26.0)],
             bridges: [(at: (-120.0, 48.6), length: 30.0)],
         ),

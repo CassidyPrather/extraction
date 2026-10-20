@@ -146,6 +146,8 @@ fn convert(
 /// Every material name [`ModelMaterials::get`] knows; any other name renders
 /// a flat grey. `art/common.py` must list the same names (a test checks it,
 /// and that every exported model uses only these).
+// One name a line, so that branches adding names merge without a fight.
+#[rustfmt::skip]
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
     "Wood",
@@ -187,6 +189,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Warn",
     "Eye",
     "Strange",
+    "Beacon",
     // World props (art/props).
     "Timber",
     "Rusty",
@@ -347,6 +350,8 @@ impl ModelMaterials {
             "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
             "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
+            // A robot's beacon (robots blink theirs; see robots::visuals).
+            "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
             "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),

@@ -188,9 +188,7 @@ fn spawn_forests(
             materials.add(StandardMaterial {
                 base_color: tint,
                 base_color_texture: Some(tex),
-                // Alpha to coverage: the 4x MSAA smooths the cards' cut
-                // edges, where an alpha test leaves them to crawl.
-                alpha_mode: AlphaMode::AlphaToCoverage,
+                alpha_mode: foliage_alpha(0.45),
                 perceptual_roughness: 0.8,
                 reflectance: 0.2,
                 double_sided: true,
@@ -747,6 +745,21 @@ struct TreeAssets {
     foliage: Handle<FarCrownMaterial>,
     core: Handle<StandardMaterial>,
     handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
+}
+
+/// Foliage's alpha: a test by default; `EXTRACTION_A2C=1` turns it into
+/// alpha to coverage, which lets the 4x MSAA smooth the cards' cut edges
+/// (an alpha-tested edge crawls in a headset as the head moves). It's off
+/// until it's been timed on the headset machine: in the software
+/// renderer it cost the opaque pass 40-70% wherever foliage filled the
+/// view. Compare the session log's `gpu:` lines with and without it.
+pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
+    static A2C: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *A2C.get_or_init(|| std::env::var("EXTRACTION_A2C").is_ok_and(|v| v == "1")) {
+        AlphaMode::AlphaToCoverage
+    } else {
+        AlphaMode::Mask(cutoff)
+    }
 }
 
 fn trunk_radius(s: TreeSpecies) -> f32 {

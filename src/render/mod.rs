@@ -4,6 +4,7 @@ pub mod bench;
 pub mod comfort;
 pub mod fog;
 pub mod grade;
+pub mod kit;
 pub mod kitchen;
 pub mod logistics;
 pub mod materials;
@@ -41,6 +42,7 @@ impl Plugin for RenderPlugin {
             comfort::ComfortPlugin,
             stats::RenderStatsPlugin,
             world_props::WorldPropsPlugin,
+            kit::KitVisualsPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }

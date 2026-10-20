@@ -21,8 +21,10 @@ import math
 import os
 import sys
 
+import bmesh
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, T, S, export, fillet, join, main_guard, make, report,
+from common import (Part, RX, RY, T, S, empty, export, fillet, join, main_guard, make, report,
                     section_rect)
 
 main_guard()
@@ -45,8 +47,9 @@ top = [p for p in prof if p[1] >= -0.012]
 belly = [p for p in prof if p[1] <= -0.012]
 core.lathe(top + [(0.0, -0.012)], "Shell", segs=48, xf=S(0.96, 1.0, 1.1) @ UP)
 core.lathe([(0.0, -0.012)] + belly, "Dark", segs=48, xf=S(0.96, 1.0, 1.1) @ UP)
-# Dark equator seam band.
-core.lathe([(0.2095, -0.0075), (0.2125, -0.0075), (0.2125, 0.0005), (0.2095, 0.0005)], "Dark",
+# The equator band lit cyan, the drone's widest line: edge-on in fog, at
+# eye height, it reads as a bright bar between the four duct bands.
+core.lathe([(0.205, -0.0095), (0.2165, -0.0095), (0.2165, 0.0025), (0.205, 0.0025)], "Glow",
            segs=48, xf=S(0.96, 1.0, 1.1) @ UP, closed=True)
 # Top spine: a raised dark sensor strip with vents either side.
 spine = fillet([(-0.016, -0.17), (0.016, -0.17), (0.022, 0.12), (-0.022, 0.12)], 0.012, 3)
@@ -67,6 +70,16 @@ for i, (sx, sz) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
                xf=RY(yaw) @ T(0, 0.02, 0) @ T(0, 0, 0))
     # Dark joint collar where the arm meets the body.
     core.cyl(0.03, 0.15, 0.165, "Dark", segs=20, xf=RY(yaw) @ T(0, 0.02, 0) @ S(1.0, 0.65, 1.0))
+
+# A beacon dome on top and one under the belly: amber, blinking (the game
+# animates `Beacon`), so a drone shows from far off in fog, edge-on or not.
+core.lathe([(0.0, 0.0), (0.034, 0.0), (0.03, 0.012), (0.018, 0.022), (0.0, 0.026)], "Beacon",
+           segs=20, xf=T(0, 0.066, 0.03) @ UP)
+core.lathe([(0.0, 0.0), (0.03, 0.0), (0.026, -0.01), (0.016, -0.019), (0.0, -0.022)], "Beacon",
+           segs=20, xf=T(0, -0.054, 0.08) @ UP)
+# Thicker than the collider's 13 cm: edge-on, at eye height, the lens was a
+# line two pixels tall at 45 m.
+bmesh.ops.transform(core.bm, matrix=S(1.0, 1.45, 1.0), verts=core.bm.verts)
 
 # --- Camera dome --------------------------------------------------------------------------
 SENSOR = (0.0, -0.06, -0.22)
@@ -116,10 +129,13 @@ for k in range(3):
     a = math.radians(30 + 120 * k)
     rotor.box((0.118, 0.008, 0.012), (0.091, -0.016, 0.0), "Dark", bevel=0.003, segs=1,
               xf=at @ RY(a))
-# A glowing ring round the duct's waist: four of them mark the rotors out
+# A glowing band round the duct's waist: four of them mark the rotors out
 # from far off, and each goes dark when its rotor is shot away.
-rotor.lathe([(0.1705, -0.005), (0.176, -0.005), (0.176, 0.005), (0.1705, 0.005)], "Glow",
+rotor.lathe([(0.1705, -0.014), (0.1765, -0.014), (0.1765, 0.014), (0.1705, 0.014)], "Glow",
             segs=48, xf=at @ UP, closed=True)
+# Taller than modelled, like the body (the blades still turn inside).
+bmesh.ops.transform(rotor.bm, matrix=T(*ROTOR) @ S(1.0, 1.4, 1.0) @ T(*(-c for c in ROTOR)),
+                    verts=rotor.bm.verts)
 
 # --- Propeller --------------------------------------------------------------------------
 BLADES = (ARM, 0.07, ARM)
@@ -135,5 +151,7 @@ for k in range(3):
 
 for p in (core, sensor, gun, rotor, blades):
     make(p)
+# Where the game hangs the top beacon's halo (a glow seen from far off).
+empty("halo", (0.0, 0.112, 0.03))
 report()
 export("assets/models/robots/drone.glb")

@@ -192,7 +192,9 @@ fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
     let blades = if sedge { 10 } else { 6 + r.below(5) };
     let (tall, width) = if sedge { (0.55, 0.014) } else { (0.27, 0.011) };
     let dry = r.f32();
-    let root = lin(Color::srgb(0.16, 0.17, 0.09));
+    // The root takes the ground's own olive, so a tuft grows out of the
+    // sward instead of sitting on it as a dark dot.
+    let root = lin(Color::srgb(0.2, 0.21, 0.11));
     let tip = if burnt {
         // Scorched: grey-brown and straw, a little green coming back.
         if dry < 0.8 {
@@ -212,8 +214,10 @@ fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
         let out = Vec3::new(a.cos(), 0.0, a.sin());
         let side = Vec3::new(-a.sin(), 0.0, a.cos());
         let h = tall * s.scale * r.range(0.6, 1.15);
-        let lean = h * r.range(0.12, 0.5);
-        let foot = base + out * r.range(0.0, 0.07);
+        let lean = h * r.range(0.2, 0.6);
+        // Spread wide and leaning out: the same blades cover more ground,
+        // and the meadow reads as a sward rather than tufts in rows.
+        let foot = base + out * r.range(0.0, 0.16);
         let spine: Vec<(Vec3, Vec3, f32)> = (0..3)
             .map(|i| {
                 let t = i as f32 / 2.0;
@@ -326,7 +330,7 @@ fn stream_cover(
                 base: StandardMaterial {
                     base_color: Color::srgb(0.85, 0.9, 0.78),
                     base_color_texture: Some(fern_tex),
-                    alpha_mode: AlphaMode::AlphaToCoverage,
+                    alpha_mode: super::trees::foliage_alpha(0.45),
                     perceptual_roughness: 0.8,
                     reflectance: 0.2,
                     double_sided: true,

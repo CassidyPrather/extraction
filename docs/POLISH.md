@@ -83,10 +83,17 @@ reformatting their code.
 | - | - |
 | Onboarding | `assets/maps/training_yard.ron`; `src/camp.rs`; tutorial/onboarding systems (new modules welcome, e.g. `src/onboarding/`); signs' wording; the truck's first-run experience; first-run docs in `PLAYTEST.md` |
 | Models: world | `art/props/` (new), building and furniture visuals (`src/world/buildings.rs` visual parts, `src/render/props.rs` furniture), fences, gates, signposts, the camp; new `art/` scripts for world props |
-| Models: kit | `art/guns`, `art/mags`, `art/robots`, `art/vehicles`, `art/items`, and the Rust that places their nodes (`src/weapons` layouts, `src/robots/visuals.rs`) only where a model change needs it |
+| Models: kit | `art/guns`, `art/mags`, `art/vehicles`, `art/items`, and the Rust that places their nodes (`src/weapons` layouts) only where a model change needs it (robots moved to Robot bodies) |
 | Visual design | `src/world/sky.rs`, `src/render/terrain_material.rs` + `assets/shaders/`, `src/world/terrain.rs` (visual), `src/world/trees.rs`, `src/render/materials.rs`, ground cover, rocks visuals, weather, post-processing, colour grading, per-valley atmosphere |
 | Map design | `assets/maps/{marrow_creek,kettle_pass,cinder_works}.ron`, map validation and lint (`crates/extraction_core/src/map*.rs`, new modules), `scripts/map_preview.py`, a map design guide in `docs/` |
 | Hands | the gloves and how they look holding things: the glove meshes and finger bones in `src/render/props.rs` (`pose_hands` and the glove builders), new `art/hands/` scripts; the poses' look, not the grab logic |
+| Performance | the VR frame budget: new `src/render/budget.rs`/`lod.rs`/culling modules, `RenderDiagnosticsPlugin` and its logs, render scale, LOD and visibility ranges everywhere (a one-line `VisibilityRange` in someone else's spawn is fine), perf gauges as tests; shaders' cost only by agreement with Visual design |
+| Robot bodies | how robots move and break: `src/robots/visuals.rs`, procedural animation and IK (new `src/robots/anim.rs`), damage states, wrecks and debris physics; `art/robots` (taken over from Models: kit) |
+| Robot minds | how robots sense and decide: perception, hearing, investigate/search/flank behaviour, `src/robots/director.rs` and the per-robot brains in `drone.rs`/`walker.rs`/`grappler.rs` (not their visuals); new `src/robots/senses.rs` |
+| Weapon feel | how guns handle: recoil, two-handed steadying, sway with weight, malfunctions and clearing them, in `src/weapons/mod.rs`, `ballistics.rs`, `flat.rs` and `crates/extraction_core/src/firearm*`; layouts only together with Hands/Models: kit |
+| Progression | the long loop: contracts from the driver (`src/raid/requests.rs`), truck upgrades, stash growth, career goals; new `src/progression/`; `logbook.rs` |
+| Underground | underground sites: new `src/world/underground.rs`, its prefabs and `art/props/bunker`, its lighting; placement in the valleys together with Map design |
+| Story | the Zone's story and its telling: `src/world/notes.rs` text, terminals' text, radio lines (`src/raid/chatter.rs` text), staged scenes (remains, abandoned camps) as data, a lore bible in `docs/LORE.md` |
 | Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
 
 The coordinator handles the player body, locomotion and interaction
@@ -106,6 +113,15 @@ your own:
 - `MATERIAL_NAMES` in `src/models.rs` and `MATERIALS` in `art/common.py`
   must list the same names (a test holds them together); add new model
   materials to both.
+
+Shared lists (`MATERIAL_NAMES`, `PREFABS`, plugin registration in
+`src/lib.rs`/`src/render/mod.rs`, `sounds.json`) take one entry a line
+where they can: add yours on its own line, at the end of its group, and
+expect the coordinator to keep both sides of a conflict there.
+
+Run the whole suite before each report (`cargo test --workspace`, with
+`-j 2 -- --test-threads=2` if it restarts your container), not just your
+own tests: `qa::` and `sim::` gauges catch cross-area breakage.
 
 The coordinator does every merge. Don't merge the coordinator's branch
 into yours (you can't, from a session); keep working on your own, and

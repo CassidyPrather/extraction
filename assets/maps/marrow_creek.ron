@@ -109,6 +109,15 @@
                      (-156.0, -171.0), (-149.0, -184.0), (-138.0, -191.0), (-128.0, -191.0),
                      (-120.0, -180.0)],
         ),
+        // The ranger's path: off the forest path at the footbridge, north
+        // under the ridge to the tower. With the logging road and the forest
+        // path it makes the west way to the ranger tower rendezvous: camp,
+        // pumping station, tower.
+        (
+            name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-179.0, -36.0), (-182.0, -62.0), (-192.0, -95.0), (-196.0, -118.0), (-212.0, -128.0),
+                     (-226.0, -131.0)],
+        ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
         (
@@ -256,7 +265,7 @@
         (kind: Insertion, at: (40.0, 270.0), rot: 0.0, name: "South gate"),
         (kind: TruckStop, at: (40.0, 300.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (46.0, 276.0), name: "South gate (fuel)"),
-        (kind: Rendezvous, at: (25.0, -255.0), name: "Bus depot"),
+        (kind: Rendezvous, at: (22.0, -196.0), name: "Bus depot"),
         (kind: Rendezvous, at: (215.0, -235.0), name: "Rail yard"),
         (kind: Rendezvous, at: (-232.0, -128.0), name: "Ranger tower"),
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
@@ -297,12 +306,14 @@
         // notes:end
     ],
 
+    // The logging camp and the pumping station roll a little over their
+    // danger's due: off the road north, they're worth the walk.
     regions: [
         (name: "South gate", danger: 0, polygon: [(-20.0, 320.0), (120.0, 320.0), (120.0, 230.0), (-20.0, 230.0)]),
-        (name: "Logging camp", danger: 1, polygon: [(-230.0, 120.0), (-100.0, 120.0), (-100.0, 230.0), (-230.0, 230.0)]),
+        (name: "Logging camp", danger: 1, loot: Some(1.1), polygon: [(-230.0, 120.0), (-100.0, 120.0), (-100.0, 230.0), (-230.0, 230.0)]),
         (name: "Old farm", danger: 1, polygon: [(110.0, 90.0), (260.0, 90.0), (260.0, 220.0), (110.0, 220.0)]),
         (name: "Village", danger: 1, loot: Some(0.6), polygon: [(-70.0, 20.0), (70.0, 20.0), (70.0, 120.0), (-70.0, 120.0)]),
-        (name: "Pumping station", danger: 2, polygon: [(-240.0, -40.0), (-140.0, -40.0), (-140.0, 50.0), (-240.0, 50.0)]),
+        (name: "Pumping station", danger: 2, loot: Some(1.35), polygon: [(-240.0, -40.0), (-140.0, -40.0), (-140.0, 50.0), (-240.0, 50.0)]),
         (name: "The Hollow", danger: 3, polygon: [(90.0, 10.0), (210.0, 10.0), (210.0, -95.0), (90.0, -95.0)]),
         (name: "Radio mast", danger: 2, polygon: [(-190.0, -230.0), (-60.0, -230.0), (-60.0, -120.0), (-190.0, -120.0)]),
         (name: "Bus depot", danger: 2, polygon: [(-20.0, -270.0), (70.0, -270.0), (70.0, -190.0), (-20.0, -190.0)]),
