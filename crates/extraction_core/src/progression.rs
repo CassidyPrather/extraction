@@ -87,7 +87,7 @@ impl Upgrade {
     pub fn does(self) -> &'static str {
         match self {
             Upgrade::StashRack => "stash +100 L",
-            Upgrade::BenchVice => "six more recipes",
+            Upgrade::BenchVice => "seven more recipes",
             Upgrade::Aerial => "Surge warning at 10 min",
             Upgrade::MedCabinet => "a dressing each raid",
             Upgrade::StashRack2 => "stash +100 L",
@@ -1005,13 +1005,15 @@ mod tests {
             done: TIERS.iter().map(|t| t.jobs).sum(),
             ..Default::default()
         };
-        // No depot on the map: an ordinary deep job.
+        // Marrow Creek has the depot; without it, an ordinary deep job.
+        assert!(
+            v[0].1.placements.iter().any(|p| p.prefab == DEPOT_PREFAB),
+            "the depot is on Marrow Creek's map"
+        );
+        assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
+        v[0].1.placements.retain(|p| p.prefab != DEPOT_PREFAB);
         assert_ne!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
-        let depot = crate::map::Placement {
-            prefab: DEPOT_PREFAB.into(),
-            ..v[0].1.placements[0].clone()
-        };
-        v[0].1.placements.push(depot);
+        let v = valleys();
         assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
         // Only the first.
         let later = Progress {
