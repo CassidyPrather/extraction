@@ -388,6 +388,8 @@ fn spawn_forests(
                 ));
                 if far {
                     ec.insert(FarForest);
+                } else {
+                    ec.insert(TRUNK_SHADOWS);
                 }
             }
             if let Some(c) = crowns {
@@ -563,6 +565,11 @@ fn impostor_range(fog: f32) -> bevy::camera::visibility::VisibilityRange {
 /// the trunks' shadows carry the wood, as they do past the impostors' cut
 /// (see `render::budget::ShadowReach`).
 const CARD_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(30.0);
+
+/// A chunk's near trunks cast the sun's shadow only while its centre is
+/// this close (the cascades reach 90 m; past about 60 m in drizzle a
+/// trunk's shadow is a faint ruled line).
+const TRUNK_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(60.0);
 
 /// The spruce's dark core, scaled inside its cards.
 const CORE_SCALE: Vec3 = Vec3::new(0.62, 0.96, 0.62);
