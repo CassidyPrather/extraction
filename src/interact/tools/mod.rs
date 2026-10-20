@@ -1,6 +1,6 @@
-//! Tools worked with the hands: the crowbar ([`crowbar`]). Each sets up
-//! its grips when the item appears, and reads what the hands do with it
-//! while it's held.
+//! Tools worked with the hands: the crowbar ([`crowbar`]) and bolt
+//! cutters ([`cutters`]). Each sets up its grips when the item appears,
+//! and reads what the hands do with it while it's held.
 //!
 //! What gives way is the target's business. A tool sends a message (see
 //! [`crowbar::PriedFree`]) and whoever owns the thing decides what that
@@ -13,12 +13,13 @@ use crate::rig::Side;
 use crate::rig::haptics::Haptic;
 
 pub mod crowbar;
+pub mod cutters;
 
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(crowbar::CrowbarPlugin);
+        app.add_plugins((crowbar::CrowbarPlugin, cutters::CuttersPlugin));
     }
 }
 

@@ -2923,3 +2923,120 @@ mod tools {
         assert!(!pry(0.25, 0.12), "hands by the claw prised it");
     }
 }
+
+/// Bolt cutters, worked with both hands.
+mod cutters {
+    use super::*;
+    use crate::interact::tools::cutters::{ChainLink, Cuttable, JAWS, LEFT, Padlock};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Chain-link 0.6 m ahead (or a gate in it, padlocked). Cutters in both
+    /// hands (or only one), jaws to the wire (or the shackle), then the
+    /// hands squeezed together. Is the panel open?
+    fn cut(both: bool, locked: bool) -> bool {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let wire = feet + Vec3::new(0.0, 1.0, -0.6);
+        let panel = vr
+            .app
+            .world_mut()
+            .spawn((
+                ChainLink::default(),
+                RigidBody::Static,
+                Collider::cuboid(2.0, 2.0, 0.04),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(wire),
+            ))
+            .id();
+        let cuttable = Cuttable {
+            at: Vec3::new(0.0, 0.0, 0.04),
+            radius: 0.1,
+        };
+        if locked {
+            vr.app.world_mut().spawn((
+                Padlock { holds: panel },
+                cuttable,
+                Collider::cuboid(0.05, 0.07, 0.02),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                Transform::from_translation(wire),
+            ));
+        } else {
+            vr.app.world_mut().entity_mut(panel).insert(cuttable);
+        }
+        vr.step(2);
+        let tool = vr.spawn(
+            "bolt_cutters",
+            Transform::from_translation(feet + Vec3::new(0.0, 0.9, -0.3)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let l = vr.point(tool, |r| *r == GripRole::Primary);
+        let r = vr.point(tool, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, l, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        if both {
+            vr.hand(Side::Right, r, Quat::IDENTITY, 1.0, 0.0);
+            vr.step(3);
+        }
+        // Handles spread, the jaws onto the wire.
+        let reach = (LEFT.z - JAWS.z) + 0.04;
+        let spread = 0.3;
+        let at = |s: f32| {
+            let back = wire + Vec3::Z * reach;
+            (back - Vec3::X * s * 0.5, back + Vec3::X * s * 0.5)
+        };
+        let (l1, r1) = at(spread);
+        for i in 1..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, l.lerp(l1, k));
+            if both {
+                vr.move_hand(Side::Right, r.lerp(r1, k));
+            }
+            vr.step(1);
+        }
+        vr.step(8);
+        // Squeeze.
+        for i in 1..=12 {
+            let (l2, r2) = at(spread - (spread - 0.1) * i as f32 / 12.0);
+            vr.move_hand(Side::Left, l2);
+            if both {
+                vr.move_hand(Side::Right, r2);
+            }
+            vr.step(1);
+        }
+        vr.step(4);
+        vr.app.world().get::<ChainLink>(panel).unwrap().cut
+            && vr.app.world().get::<ColliderDisabled>(panel).is_some()
+    }
+
+    /// Both hands squeezing the handles cut through the wire: the panel is
+    /// a gap.
+    #[test]
+    fn bolt_cutters_squeezed_with_both_hands_cut_chain_link() {
+        assert!(cut(true, false), "the wire held");
+    }
+
+    /// One hand can't close them.
+    #[test]
+    fn bolt_cutters_in_one_hand_cut_nothing() {
+        assert!(!cut(false, false), "one hand cut the wire");
+    }
+
+    /// A padlocked gate: cut the shackle and the gate opens.
+    #[test]
+    fn bolt_cutters_through_a_padlock_open_its_gate() {
+        assert!(cut(true, true), "the padlock held");
+    }
+}
