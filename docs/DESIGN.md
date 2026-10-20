@@ -218,7 +218,8 @@ twelve loud seconds before tearing it off its hinges.
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover
-the body and drive it out to a government facility. The Zone clock keeps
+the body and take it back through the Gate to the Custodian's depot, "pending
+review" (`docs/LORE.md`). The Zone clock keeps
 running, so you can suit up again from the truck and race to intercept the
 convoy before it leaves the map. Everything the convoy delivers is gone for
 good and counted on a memorial board in the truck.

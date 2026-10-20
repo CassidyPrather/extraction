@@ -474,13 +474,17 @@ impl Firearm {
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
             return events;
         }
-        let to = travel.clamp(0.0, 1.0);
+        let mut to = travel.clamp(0.0, 1.0);
         let from = self.bolt_travel;
-        if self.malfunction == Some(Malfunction::DoubleFeed) && self.magazine.is_some() {
-            // Wedged against the magazine's lips: the bolt comes back but
-            // nothing comes out, and it won't go home.
-            self.bolt_travel = to.max(DOUBLE_FEED_AT);
-            return Vec::new();
+        if self.malfunction == Some(Malfunction::DoubleFeed) {
+            // The pair is jammed together: the bolt won't go home past it.
+            to = to.max(DOUBLE_FEED_AT);
+            if self.magazine.is_some() {
+                // Wedged against the magazine's lips: the bolt comes back
+                // but nothing comes out.
+                self.bolt_travel = to;
+                return Vec::new();
+            }
         }
         if self.locked_back && to < 1.0 {
             // Tugging the slide back off the stop releases it.
@@ -1052,6 +1056,19 @@ mod tests {
         assert!(rack(&mut gun).contains(&Event::Chambered));
         assert!(fired(&shoot(&mut gun)));
         assert_eq!(gun.live_rounds(), before - 2, "one thrown out, one fired");
+    }
+
+    /// A hand takes the handle at rest, so its first pull asks for zero
+    /// travel: a double-fed bolt still can't go home on the pair.
+    #[test]
+    fn a_double_fed_bolt_never_closes_on_the_pair() {
+        let (mut gun, _) = jam(0.95);
+        gun.remove_magazine();
+        assert!(gun.set_bolt_travel(0.0).is_empty());
+        assert!(!gun.is_closed());
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::Ejected(Round::Spent)), "{ev:?}");
+        assert!(ev.contains(&Event::Ejected(Round::Live)), "{ev:?}");
     }
 
     #[test]

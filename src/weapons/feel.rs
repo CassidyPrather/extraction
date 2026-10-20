@@ -349,7 +349,8 @@ pub fn jam_visuals(
         ));
         // Double feed: the case still in the chamber's mouth, the next
         // round tipped up into it from below.
-        let bore = Vec3::new(0.0, port.y, port.z);
+        // Set into the port's opening, so it shows past the cover or slide.
+        let bore = Vec3::new(port.x * 0.6, port.y + r, port.z);
         let pair = commands
             .spawn((
                 Name::new("Double feed"),
@@ -366,12 +367,12 @@ pub fn jam_visuals(
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, Vec3::NEG_Z)),
             ChildOf(pair),
         ));
-        let tip = Quat::from_rotation_x(0.3) * Vec3::NEG_Z;
+        let tip = Quat::from_rotation_x(0.6) * Vec3::NEG_Z;
         let round = commands
             .spawn((
                 Mesh3d(case),
                 MeshMaterial3d(brass.clone()),
-                Transform::from_xyz(0.0, -r * 2.2, len * 0.55)
+                Transform::from_xyz(0.0, -r * 0.5, len * 0.5)
                     .with_rotation(Quat::from_rotation_arc(Vec3::Y, tip)),
                 ChildOf(pair),
             ))
@@ -537,7 +538,14 @@ mod vr_tests {
     /// Holds the trigger until `n` shots are out (or a few seconds pass),
     /// returning each projectile's direction as it left.
     fn fire(r: &mut Range, n: usize, pulse: bool) -> Vec<Vec3> {
-        let mut seen = HashSet::new();
+        // Rounds already in the air aren't this burst's.
+        let mut seen: HashSet<Entity> = {
+            let mut q =
+                r.vr.app
+                    .world_mut()
+                    .query_filtered::<Entity, With<Projectile>>();
+            q.iter(r.vr.app.world()).collect()
+        };
         let mut dirs = Vec::new();
         for i in 0..400 {
             let down = !pulse || (i / 6) % 2 == 0;
@@ -693,18 +701,14 @@ mod vr_tests {
         assert_eq!(fire(&mut r, 1, true).len(), 1, "cleared: it fires");
     }
 
-    /// A failure to feed on the AK: it clicks; racking alone doesn't help;
-    /// a palm slapped up on the magazine, then a rack, does.
-    #[test]
-    fn a_failure_to_feed_wants_tap_rack() {
-        let mut r = hold("ak74", false, false);
-        // A real magazine in the well, seated by hand.
+    /// A real magazine of `id` with `rounds`, seated in the gun's well.
+    fn seat_mag(r: &mut Range, id: &str, rounds: u32) -> Entity {
         let mag = r.vr.spawn(
-            "ak_mag",
+            id,
             Transform::from_translation(r.feet + Vec3::new(-0.3, 1.0, -0.3)),
         );
-        let well = gun_mut(&mut r).magwell.unwrap();
-        r.vr.app.world_mut().get_mut::<Item>(mag).unwrap().rounds = 30;
+        let well = gun_mut(r).magwell.unwrap();
+        r.vr.app.world_mut().get_mut::<Item>(mag).unwrap().rounds = rounds;
         r.vr.app.world_mut().commands().queue(move |w: &mut World| {
             let mut socket = w.get_mut::<crate::interact::Socket>(well).unwrap().clone();
             {
@@ -718,7 +722,87 @@ mod vr_tests {
             });
         });
         r.vr.step(4);
-        assert!(gun_mut(&mut r).firearm.magazine.is_some(), "seated");
+        assert!(gun_mut(r).firearm.magazine.is_some(), "seated");
+        mag
+    }
+
+    /// A double feed on the pistol: racking does nothing with the magazine
+    /// in; thumb the mag release, rack, and the pair falls out; a fresh
+    /// magazine and a rack, and it fires.
+    #[test]
+    fn a_double_feed_clears_with_the_magazine_out() {
+        let mut r = hold("pm_pistol", false, false);
+        seat_mag(&mut r, "pm_mag", 8);
+        {
+            let mut g = gun_mut(&mut r);
+            let f = &mut g.firearm;
+            while f.fire_mode() != FireMode::Semi {
+                f.cycle_mode();
+            }
+        }
+        rack(&mut r);
+        // Wear it out and let the next shot jam as a double feed.
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 0.0;
+            g.firearm.fouling = 1.0;
+        }
+        let mut tries = 0;
+        while gun_mut(&mut r).firearm.malfunction != Some(Malfunction::DoubleFeed) {
+            tries += 1;
+            assert!(tries < 400, "never double-fed");
+            let jammed = gun_mut(&mut r).firearm.malfunction.is_some();
+            let empty = gun_mut(&mut r).firearm.rounds_in_feed() < 2;
+            if jammed || empty {
+                // Not the one we want: start over with a full magazine.
+                let mut g = gun_mut(&mut r);
+                let f = &mut g.firearm;
+                f.malfunction = None;
+                f.mag_unseated = false;
+                f.locked_back = false;
+                f.bolt_travel = 0.0;
+                f.chambers[0] = Some(extraction_core::firearm::Round::Live);
+                f.hammers_cocked[0] = true;
+                if let Some(m) = &mut f.magazine {
+                    m.rounds = 8;
+                }
+            }
+            fire(&mut r, 1, true);
+        }
+        let ejected = |r: &mut Range| {
+            let mut q = r.vr.app.world_mut().query::<&crate::weapons::Casing>();
+            q.iter(r.vr.app.world()).count()
+        };
+        let cases = ejected(&mut r);
+        rack(&mut r);
+        assert_eq!(
+            gun_mut(&mut r).firearm.malfunction,
+            Some(Malfunction::DoubleFeed),
+            "the magazine holds them"
+        );
+        assert_eq!(ejected(&mut r), cases, "nothing came out");
+        // Mag release: the thumb button on the gun hand.
+        r.vr.primary(Side::Right, true);
+        r.vr.step(3);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(3);
+        assert!(gun_mut(&mut r).firearm.magazine.is_none(), "dropped");
+        rack(&mut r);
+        assert!(gun_mut(&mut r).firearm.malfunction.is_none(), "cleared");
+        assert!(ejected(&mut r) > cases, "the case flew");
+        seat_mag(&mut r, "pm_mag", 8);
+        gun_mut(&mut r).firearm.condition = 1.0;
+        gun_mut(&mut r).firearm.fouling = 0.0;
+        rack(&mut r);
+        assert_eq!(fire(&mut r, 1, true).len(), 1, "back in the fight");
+    }
+
+    /// A failure to feed on the AK: it clicks; racking alone doesn't help;
+    /// a palm slapped up on the magazine, then a rack, does.
+    #[test]
+    fn a_failure_to_feed_wants_tap_rack() {
+        let mut r = hold("ak74", false, false);
+        let mag = seat_mag(&mut r, "ak_mag", 30);
         {
             let mut g = gun_mut(&mut r);
             let f = &mut g.firearm;

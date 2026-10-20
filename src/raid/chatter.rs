@@ -40,6 +40,7 @@ fn listen(
     radios: Query<(Entity, &Item, &CarriedBy)>,
     catalog: Res<Catalog>,
     mut out: MessageWriter<RobotChatter>,
+    mut heard_count: Local<u32>,
 ) {
     let Some(mut director) = director else {
         return;
@@ -70,14 +71,19 @@ fn listen(
         };
         let d = Vec2::new(at.x - me.x, at.z - me.z);
         let close = d.length() < CLOSE;
-        raid.say(if close {
-            "Robot chatter on the radio. They're coming here.".to_string()
+        // A different way of hearing it each time, round and round.
+        *heard_count += 1;
+        let ways = if close {
+            super::lines::CHATTER_CLOSE
         } else {
-            format!(
-                "Robot chatter on the radio: something's moving, off to the {}.",
-                crate::anomaly::offering::bearing(d)
-            )
-        });
+            super::lines::CHATTER_FAR
+        };
+        raid.say(super::lines::fill(
+            super::lines::pick(ways, *heard_count),
+            "",
+            0.0,
+            crate::anomaly::offering::bearing(d),
+        ));
         out.write(RobotChatter { radio, at, close });
     }
 }
