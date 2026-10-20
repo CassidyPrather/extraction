@@ -2400,9 +2400,18 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        vr.primary(Side::Right, true);
-        vr.step(3);
-        vr.primary(Side::Right, false);
+        // Wound round the left forearm (`interact::first_aid`).
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        let centre = wrist + Vec3::Z * 0.12;
+        for i in 0..=48 {
+            let a = std::f32::consts::TAU * i as f32 / 24.0;
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+            );
+            vr.step(1);
+        }
         vr.step(3);
         assert!(done(&vr, Goal::Dressing), "the dressing counted");
     }
