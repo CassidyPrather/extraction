@@ -254,6 +254,7 @@ fn load_save(
     mut logbook: ResMut<crate::raid::logbook::Logbook>,
     mut requests: ResMut<crate::raid::requests::Requests>,
     mut progression: ResMut<crate::progression::Progression>,
+    mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -300,6 +301,7 @@ fn load_save(
         .progress
         .clone()
         .unwrap_or_else(|| progress_from_requests(&save.requests));
+    firsts.0 = save.firsts.iter().cloned().collect();
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
         save.item_count(),
@@ -715,6 +717,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     save.progress = world
         .get_resource::<crate::progression::Progression>()
         .map(|p| p.0.clone());
+    save.firsts = world
+        .get_resource::<crate::onboarding::firsts::Firsts>()
+        .map(|f| f.0.iter().cloned().collect())
+        .unwrap_or_default();
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()
