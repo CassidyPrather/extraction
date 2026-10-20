@@ -7,6 +7,7 @@ use extraction_core::progression::Upgrade;
 
 use crate::progression::TruckUpgradeProp;
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
+use crate::render::world_props::{Blockout, SwapIn};
 
 pub struct UpgradeVisualsPlugin;
 
@@ -49,7 +50,7 @@ fn dress_upgrades(
                     for z in [-0.52, 0.52] {
                         parts.push((
                             Vec3::new(0.04, 0.5, 0.04),
-                            Vec3::new(x, 0.0, z),
+                            Vec3::new(x, 0.55, z),
                             timber.clone(),
                         ));
                     }
@@ -57,13 +58,13 @@ fn dress_upgrades(
                 for i in 0..4 {
                     parts.push((
                         Vec3::new(0.08, 0.025, 1.12),
-                        Vec3::new(-0.41 + 0.105 * i as f32, 0.24, 0.0),
+                        Vec3::new(-0.41 + 0.105 * i as f32, 0.79, 0.0),
                         timber.clone(),
                     ));
                 }
                 parts.push((
                     Vec3::new(0.02, 0.08, 1.08),
-                    Vec3::new(-0.45, 0.1, 0.0),
+                    Vec3::new(-0.45, 0.65, 0.0),
                     timber,
                 ));
             }
@@ -148,7 +149,7 @@ fn dress_upgrades(
                 ));
                 parts.push((
                     Vec3::new(0.4, 0.02, 0.14),
-                    Vec3::new(0.0, -0.18, 0.0),
+                    Vec3::new(0.0, -0.22, 0.0),
                     enamel.clone(),
                 ));
                 parts.push((
@@ -168,12 +169,16 @@ fn dress_upgrades(
                 ));
             }
         }
+        // The modelled fitting replaces the boxes once it's loaded
+        // (`art/props/truck_kit.py`); the boxes stay if it's missing.
+        commands.entity(e).insert(SwapIn::one(prop.0.id()));
         commands.entity(e).with_children(|c| {
             for (size, at, mat) in parts {
                 c.spawn((
                     Mesh3d(meshes.add(metric_box(size))),
                     MeshMaterial3d(mat),
                     Transform::from_translation(at),
+                    Blockout,
                 ));
             }
         });

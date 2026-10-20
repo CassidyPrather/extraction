@@ -41,8 +41,11 @@ pub struct TruckUpgradeProp(pub Upgrade);
 pub const AERIAL_WARNING: f32 = 10.0 * 60.0;
 /// The cabinet holds at most this many dressings.
 const CABINET_HOLDS: usize = 2;
-/// The cabinet's shelf, truck space (on the front wall).
-pub const CABINET_AT: Vec3 = Vec3::new(0.62, FLOOR + 0.6, -1.70);
+/// The cabinet's floor, truck space (on the front wall), where its
+/// dressing is left.
+pub const CABINET_AT: Vec3 = Vec3::new(0.6, FLOOR + 0.74, -1.70);
+/// From the cabinet's floor up to its centre (the model's origin).
+const CABINET_SHELF_BELOW: Vec3 = Vec3::new(0.0, 0.21, -0.04);
 
 pub struct ProgressionPlugin;
 
@@ -402,17 +405,20 @@ fn fit_props(
     }
 }
 
-/// Where each fitting sits, truck space.
+/// Where each fitting sits, truck space: its model's origin
+/// (`art/props/truck_kit.py`, `models/props/<id>.glb`).
 pub fn prop_at(u: Upgrade) -> Vec3 {
     match u {
-        // Over the stash crate.
-        Upgrade::StashRack => Vec3::new(-0.55, FLOOR + 1.2, -1.0),
-        Upgrade::StashRack2 => Vec3::new(-0.95, FLOOR + 0.55, 0.15),
-        // At the bench's front end.
-        Upgrade::BenchVice => Vec3::new(0.72, FLOOR + 0.85, -0.45),
+        // The stash crate's centre: posts at its corners.
+        Upgrade::StashRack => Vec3::new(-0.55, FLOOR + 0.65, -1.0),
+        // On the left wall by the bench end, clear of the crate.
+        Upgrade::StashRack2 => Vec3::new(-0.95, FLOOR + 0.45, 0.15),
+        // On the bench top at its front end.
+        Upgrade::BenchVice => Vec3::new(0.72, FLOOR + 0.8, -0.45),
         // On the cab roof, right rear corner.
         Upgrade::Aerial => Vec3::new(0.95, 2.6, -2.1),
-        Upgrade::MedCabinet => CABINET_AT + Vec3::Y * 0.17,
+        // On the front wall, clear of the memorial note and the bell pull.
+        Upgrade::MedCabinet => CABINET_AT + CABINET_SHELF_BELOW,
     }
 }
 

@@ -283,7 +283,23 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
         .find(|(_, i)| i.kind() == kind)
         .unwrap()
         .0;
-    app.world_mut().entity_mut(radio).insert(CarriedBy(player));
+    // In the worn pack: carried.
+    let pack = app
+        .world_mut()
+        .query::<(Entity, &Backpack)>()
+        .iter(app.world())
+        .find(|(_, b)| b.owner == player && b.carried)
+        .unwrap()
+        .0;
+    app.world_mut()
+        .get_mut::<Backpack>(pack)
+        .unwrap()
+        .contents
+        .push(radio);
+    app.world_mut().entity_mut(radio).insert((
+        crate::interact::body::InBackpack { bag: pack },
+        ChildOf(pack),
+    ));
     {
         let mut raid = app.world_mut().resource_mut::<Raid>();
         raid.phase = Phase::Out;
