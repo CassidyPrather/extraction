@@ -202,6 +202,15 @@ impl Vr {
         input.hand_mut(side).primary = down;
     }
 
+    pub fn secondary(&mut self, side: Side, down: bool) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).secondary = down;
+    }
+
     pub fn stick_click(&mut self, side: Side, down: bool) {
         let mut input = self
             .app
@@ -1203,6 +1212,144 @@ mod tests {
             .map(|c| c.vignette);
         if before.is_some() {
             assert_ne!(before, after, "the setting moved on");
+        }
+    }
+
+    /// One-handed: the pistol's empty well brought down onto a magazine in a
+    /// pouch takes it, and the second button racks a round in; no second
+    /// hand anywhere. With two hands, the same move does nothing.
+    #[test]
+    fn one_handed_reload_from_a_pouch() {
+        for one_handed in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .one_handed = one_handed;
+            let feet = vr.root().translation;
+            vr.step(10);
+            // A loaded magazine into a pouch, with the one hand.
+            let mag = vr.spawn(
+                "pm_mag",
+                Transform::from_translation(feet + Vec3::new(0.2, 1.0, -0.4)),
+            );
+            vr.app
+                .world_mut()
+                .get_mut::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds = 8;
+            vr.app.world_mut().entity_mut(mag).insert(RigidBody::Static);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.2, 1.0, -0.4),
+                Quat::IDENTITY,
+                0.0,
+                0.0,
+            );
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(mag));
+            let pouch = {
+                let mut q = vr.app.world_mut().query::<(
+                    &crate::interact::Socket,
+                    &crate::interact::SocketOwner,
+                    &GlobalTransform,
+                )>();
+                q.iter(vr.app.world())
+                    .find(|(s, o, _)| {
+                        o.0 == vr.player
+                            && s.occupant.is_none()
+                            && s.kind
+                                == crate::interact::SocketKind::Body(
+                                    extraction_core::inventory::SlotKind::Pouch,
+                                )
+                    })
+                    .map(|(_, _, g)| g.translation())
+                    .expect("a pouch")
+            };
+            vr.move_hand(Side::Right, pouch);
+            vr.step(2);
+            vr.grip(Side::Right, 0.0);
+            vr.step(4);
+            assert!(
+                vr.app
+                    .world()
+                    .get::<crate::interact::InSocket>(mag)
+                    .is_some(),
+                "pouched"
+            );
+            // The pistol, empty, in the same hand.
+            let pistol = vr.spawn(
+                "pm_pistol",
+                Transform::from_translation(feet + Vec3::new(0.3, 1.0, -0.45)),
+            );
+            vr.app
+                .world_mut()
+                .entity_mut(pistol)
+                .insert(RigidBody::Static);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.3, 1.0, -0.45),
+                Quat::IDENTITY,
+                0.0,
+                0.0,
+            );
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(pistol));
+            vr.primary(Side::Right, true);
+            vr.step(3);
+            vr.primary(Side::Right, false);
+            vr.step(20);
+            let well = |vr: &mut Vr| {
+                let mut q = vr.app.world_mut().query::<(
+                    &crate::interact::Socket,
+                    &crate::interact::SocketOwner,
+                    &GlobalTransform,
+                )>();
+                q.iter(vr.app.world())
+                    .find(|(s, o, _)| {
+                        o.0 == pistol && matches!(s.kind, crate::interact::SocketKind::MagWell(_))
+                    })
+                    .map(|(s, _, g)| (s.occupant, g.translation()))
+                    .expect("a well")
+            };
+            assert_eq!(well(&mut vr).0, None, "empty to start");
+            // The well brought down onto the pouched magazine's top.
+            let mag_top = {
+                let g = *vr.app.world().get::<GlobalTransform>(mag).unwrap();
+                let h = vr
+                    .app
+                    .world()
+                    .get::<crate::weapons::Mag>(mag)
+                    .unwrap()
+                    .height;
+                g.transform_point(Vec3::Y * h * 0.5)
+            };
+            let hand_now = vr.hand_state(Side::Right).world.translation;
+            let off = well(&mut vr).1 - hand_now;
+            for k in 0..=10 {
+                let above = Vec3::Y * 0.15 * (1.0 - k as f32 / 10.0);
+                vr.move_hand(Side::Right, mag_top - off + above);
+                vr.step(1);
+            }
+            vr.step(3);
+            let seated = well(&mut vr).0 == Some(mag);
+            assert_eq!(seated, one_handed, "seated from the pouch: {seated}");
+            if !one_handed {
+                continue;
+            }
+            // The second button racks a round in.
+            let before = vr.app.world().get::<Gun>(pistol).unwrap().firearm.chambers[0].is_some();
+            assert!(!before, "nothing chambered yet");
+            vr.secondary(Side::Right, true);
+            vr.step(3);
+            vr.secondary(Side::Right, false);
+            vr.step(60);
+            let gun = vr.app.world().get::<Gun>(pistol).unwrap();
+            assert!(gun.firearm.chambers[0].is_some(), "racked: a round in");
         }
     }
 
@@ -2258,6 +2405,91 @@ mod onboarding {
         vr.primary(Side::Right, false);
         vr.step(3);
         assert!(done(&vr, Goal::Dressing), "the dressing counted");
+    }
+
+    /// Left-handed: the holster is on the left hip (a pistol let go there
+    /// from the left hand goes in it), and the watch is on the right wrist
+    /// (looking at the left one doesn't count).
+    #[test]
+    fn left_handed_holster_and_watch() {
+        let mut vr = Vr::first_run();
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .left_handed = true;
+        let feet = ground(&vr, [2.0, 8.0]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        let holster = {
+            let mut q = vr.app.world_mut().query::<(
+                Entity,
+                &crate::interact::Socket,
+                &crate::interact::SocketOwner,
+                &GlobalTransform,
+            )>();
+            q.iter(vr.app.world())
+                .find(|(_, s, o, _)| {
+                    o.0 == vr.player
+                        && s.kind
+                            == crate::interact::SocketKind::Body(
+                                extraction_core::inventory::SlotKind::Holster,
+                            )
+                })
+                .map(|(e, _, _, g)| (e, g.translation()))
+                .expect("a holster")
+        };
+        assert!(
+            holster.1.x < feet.x - 0.1,
+            "on the left hip: {:?}",
+            holster.1
+        );
+        let pistol = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(-0.25, 1.0, -0.4)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(pistol)
+            .insert(RigidBody::Static);
+        take(&mut vr, Side::Left, pistol);
+        let from = at(&vr, pistol);
+        for i in 0..=12 {
+            vr.move_hand(Side::Left, from.lerp(holster.1, i as f32 / 12.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::InSocket>(pistol)
+            .map(|s| s.socket);
+        assert_eq!(seated, Some(holster.0), "holstered on the left");
+
+        // The left wrist, looked at: nothing.
+        let look_at = |vr: &mut Vr, side: Side, x: f32| {
+            let hand_at = feet + Vec3::new(x, 1.35, -0.3);
+            let hand_rot = Quat::from_rotation_z(0.95 * side.sign());
+            vr.hand(side, hand_at, hand_rot, 0.0, 0.0);
+            vr.step(2);
+            let panel = Transform::from_translation(hand_at)
+                .with_rotation(hand_rot)
+                .transform_point(
+                    crate::onboarding::WRIST_PANEL * Vec3::new(-side.sign(), 1.0, 1.0),
+                );
+            let eye = feet + Vec3::new(0.0, 1.65, 0.0);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_translation(Vec3::new(0.0, 1.65, 0.0))
+                .looking_to(panel - eye, Vec3::Y);
+            vr.step(60);
+        };
+        look_at(&mut vr, Side::Left, -0.05);
+        assert!(!done(&vr, Goal::Wrist), "the gun hand's wrist has no watch");
+        look_at(&mut vr, Side::Right, 0.05);
+        assert!(done(&vr, Goal::Wrist), "the right wrist's watch");
     }
 
     /// The shimmer: a part thrown by hand (grip, swing, open) sets off the

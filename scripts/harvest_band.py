@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Checks a batch of sim raids for harvesting that is risky but not
+murderous: a share of deliberate dives into anomalies end in death, and a
+share of them bring a stone out.
+
+    scripts/sim.sh marrow_creek 9 --personality hunter --jobs 3 --sim-minutes 10
+    scripts/harvest_band.py target/sim/marrow_creek
+
+Exits non-zero when out of band. Deaths count against harvesting when
+their cause is an anomaly kind.
+"""
+import collections
+import glob
+import json
+import os
+import sys
+
+KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror"}
+# Deaths in anomalies per deliberate dive: some, never most.
+MAX_DEATHS_PER_DIVE = 0.2
+# Stones brought out per deliberate dive.
+MIN_STONES_PER_DIVE = 0.3
+
+
+def main(path: str) -> int:
+    runs = sorted(glob.glob(os.path.join(path, "*.jsonl")))
+    if not runs:
+        print(f"no runs in {path}")
+        return 2
+    dives = 0
+    deaths = collections.Counter()
+    stones = collections.Counter()
+    for r in runs:
+        with open(r) as f:
+            for line in f:
+                e = json.loads(line)
+                ev = e.get("ev") or e.get("event")
+                if ev == "anomaly_enter" and e.get("deliberate"):
+                    dives += 1
+                elif ev == "death":
+                    deaths[e.get("cause", "?")] += 1
+                elif ev == "loot" and str(e.get("item", "")).startswith("art_"):
+                    stones[e["item"]] += 1
+    harvest_deaths = sum(n for c, n in deaths.items() if c in KINDS)
+    taken = sum(stones.values())
+    per_dive = harvest_deaths / dives if dives else 0.0
+    yield_ = taken / dives if dives else 0.0
+    print(f"{len(runs)} runs, {dives} deliberate dives")
+    print(f"deaths in anomalies: {harvest_deaths} ({per_dive:.0%} a dive); all deaths {dict(deaths)}")
+    print(f"stones taken: {taken} ({yield_:.0%} a dive) {dict(stones)}")
+    ok = True
+    if dives == 0:
+        print("FAIL no deliberate dives: nobody tried")
+        ok = False
+    if per_dive > MAX_DEATHS_PER_DIVE:
+        print(f"FAIL more than {MAX_DEATHS_PER_DIVE:.0%} of dives kill")
+        ok = False
+    if dives and yield_ < MIN_STONES_PER_DIVE:
+        print(f"FAIL fewer than {MIN_STONES_PER_DIVE:.0%} of dives bring a stone out")
+        ok = False
+    print("harvest band OK" if ok else "harvest band out of range")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "target/sim/marrow_creek"))

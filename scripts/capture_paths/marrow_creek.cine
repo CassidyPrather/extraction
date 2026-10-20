@@ -1,0 +1,26 @@
+# Marrow Creek: cinematic shots (see src/capture/cinematic.rs, docs/CAPTURE.md).
+# Points are x,y,z; ~h is h metres over the ground. Yaw 0 looks toward -Z.
+
+# In through the south gate and up the district road.
+shot mc_arrival gen=road index=0 from=0.03 to=0.18 height=2.6 dur=12 pitch=3
+
+# Over the gate, drifting up the valley.
+shot mc_aerial dur=14 ease=0.3 weather=clearing
+  at 40,~40,310  look 30,~5,180
+  at 35,~55,250  look 15,~5,110
+  at 25,~70,190  look 0,~5,40
+
+# Round the sawmill.
+shot mc_sawmill gen=orbit target=sawmill turns=0.3 dur=12
+
+# Low along the creek.
+shot mc_creek gen=river index=0 from=0.35 to=0.55 height=2.2 dur=12 pitch=4
+
+# A crane up the ranger tower.
+shot mc_tower gen=rise target=ranger_tower dur=10
+
+# Down the village street.
+shot mc_village dur=12
+  at 5,~1.8,160  look 5,~2,120
+  at 6,~2.2,135  look 5,~2,95
+  at 8,~3,110    look 2,~2,70

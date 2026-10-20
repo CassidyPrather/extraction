@@ -210,12 +210,17 @@ carry by calibre (a pistol 150 m, the AK 220, a Mosin 250), footsteps by
 what's underfoot (gravel and boards loud, grass soft), how fast and how
 low you go, doors when you open them, and things that land; a wall or a
 hill between cuts a sound's reach by more than half. A heard sound tells
-a robot where the *sound* was.
+a robot roughly where the *sound* was: a guess a fifth of the distance
+out, never on the spot, so it comes to look nearby, not at you. A glimpse
+of you moving is a guess the same way; a glimpse of you keeping still
+places you nowhere new. Crouched still in grass, a robot makes you out
+only within 4 m: shoot once from the grass at 40 m and keep still, and
+the one that comes to look finds you about half the time.
 
 **Light and dark.** Robot eyes follow the same light the player sees
 (`Conditions::light_at`, Visual design's time of day): exposure scales by
 its square root, so dusk leaves about 0.6 of the day's, a room by day
-0.55, a night 0.2. A torch lights you up wherever the sky doesn't, and its
+0.55, a full-moon night 0.28 and a black one 0.14. A torch lights you up wherever the sky doesn't, and its
 beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
 carries a shot a third as far. Robots hear round open doorways and
 through walls by the same rule the player's ears do (`acoustics`).
@@ -426,6 +431,20 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   proportion to the speed it keeps. A 6 mm plate stops pistol rounds and buckshot. A
   new one dents under a rifle round, and a worn one lets it through.
   Blasts and blades go round plates.
+- **Loads** (`extraction_core::ammo`): rifle calibres come as ball, AP
+  and tracer, and 12 gauge as buckshot or slug. Each round keeps its load
+  from the box through the magazine and the chamber to the shot. Loading
+  by hand is how you choose: touch rounds to a magazine and they go on
+  top, last in first out. A box can come packed with every fourth round a
+  tracer, and that order carries into the magazine.
+  - AP: half the cost through hard plate (armour steel, sheet, a helmet),
+    so it goes through a worn plate where ball stops. It does 1.6 times
+    ball's harm to a robot's armour plate and 0.85 to soft targets.
+  - Tracers (`weapons/tracers.rs`): a red-orange streak from 8 m out to
+    800 m, a pixel or two wide however far off, and fog doesn't hide it.
+    At most 32 are drawn.
+  - A slug: one 32 g ball with 0.8 of the buckshot's summed harm, and a
+    rifle's group.
 
 ### Gadgets and attachments
 
@@ -442,6 +461,15 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Optics**: the scope moves the sight line to its eyepiece and
   magnifies when your eye is on it: in the headset, a picture-in-picture
   lens (with a PU reticle in the scope); flat mode zooms the camera.
+- **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
+  (to 1300 m) have an elevation drum. Take it with the other hand's
+  trigger and turn your wrist, clockwise from above for more range, one
+  click per 100 m. The zero comes from the game's own ballistics (the
+  gun's muzzle velocity, the scope's height over the bore), so at the set
+  range the round goes where the reticle is. Nearer it strikes high,
+  farther low: under a 300 m zero, a robot at 400 m needs holdover (the
+  PSO's lower chevrons are a thousandth apart). The PSO's rangefinder
+  reads range off a 1.7 m man between its baseline and curve.
 - **Artifact adapter**: featherstone rounds fly flat, hearth rounds hit
   half again as hard, aegis rounds knock robots senseless for two
   seconds, glass-eye rounds bend toward robots.

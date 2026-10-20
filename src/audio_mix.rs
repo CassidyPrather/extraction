@@ -71,6 +71,12 @@ pub const MUFFLE_FULL: f32 = 900.0;
 /// under the wind and hides no robot (`scripts/audio_score.py`).
 pub const SCORE_DB: f32 = -42.0;
 
+/// The score steps aside for a robot speaking within `SCORE_DUCK_NEAR` m:
+/// down this many dB while it speaks (the voices are the information; the
+/// score only the mood). `scripts/audio_score.py` checks voices with it.
+pub const SCORE_DUCK_DB: f32 = 12.0;
+pub const SCORE_DUCK_NEAR: f32 = 80.0;
+
 #[rustfmt::skip]
 pub const MIX: &[Cue] = &[
     // Your own body and hands.
@@ -152,15 +158,19 @@ pub const MIX: &[Cue] = &[
     cue!("drone.rotor", "machines/drone_rotor", -4.0, 75.0, 20.0, Signal),
     cue!("drone.lock", "machines/drone_lock", -28.0, 80.0, 20.0, Signal, 25.0),
     cue!("walker.step", "footsteps/metal", -2.5, 85.0, 25.0, Signal, 16.0),
-    cue!("robot.notice", "machines/servo", -9.5, 70.0, 15.0, Signal, 7.0),
     cue!("convoy.loaded", "machines/clank", -2.0, 90.0, 40.0, Event, 15.0),
     cue!("convoy.delivered", "machines/groan", -2.0, 90.0, 60.0, Event, 15.0),
     cue!("dirigible.engine", "machines/drone_rotor", -12.0, 80.0, 60.0, Signal, 20.0),
-    cue!("robot.investigate", "machines/servo", -10.0, 65.0, 20.0, Signal),
-    cue!("robot.search", "machines/servo", -9.5, 60.0, 15.0, Detail, 8.0),
-    cue!("robot.lost", "machines/servo", -12.0, 60.0, 20.0, Signal),
-    cue!("robot.voice", "machines/robot_voice", -17.0, 70.0, 20.0, Signal, 11.0),
-    cue!("robot.callout", "machines/radio_squelch", -8.0, 75.0, 20.0, Signal),
+    cue!("voice.idle", "voice/walker/idle", -10.0, 55.0, 15.0, Detail, 6.0),
+    cue!("voice.noticed", "voice/walker/noticed", -8.0, 72.0, 15.0, Signal, 10.0),
+    cue!("voice.investigating", "voice/walker/investigating", -10.0, 68.0, 15.0, Signal, 8.0),
+    cue!("voice.searching", "voice/walker/searching", -11.0, 65.0, 15.0, Signal, 8.0),
+    cue!("voice.engaging", "voice/walker/engaging", -9.0, 78.0, 15.0, Signal, 12.0),
+    cue!("voice.lost", "voice/walker/lost", -11.0, 65.0, 15.0, Signal, 8.0),
+    cue!("voice.calling", "voice/walker/calling", -8.5, 85.0, 30.0, Signal, 18.0),
+    cue!("voice.answering", "voice/walker/answering", -8.0, 85.0, 30.0, Signal, 18.0),
+    cue!("voice.hurt", "voice/walker/hurt", -8.0, 75.0, 15.0, Signal, 8.0),
+    cue!("voice.dying", "voice/walker/dying", -15.0, 80.0, 15.0, Signal, 10.0),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),
@@ -227,11 +237,14 @@ pub const MIX: &[Cue] = &[
     cue!("rain", "ambience/rain_light", -15.0, 60.0, 0.0, Bed),
     cue!("room", "ambience/room_tone", -18.0, 35.0, 0.0, Bed),
     cue!("creek", "ambience/creek", -4.0, 60.0, 15.0, Bed),
+    cue!("insects", "ambience/insects_night", -27.0, 45.0, 0.0, Bed),
+    cue!("rustle", "ambience/rustle_leaves", -30.0, 45.0, 0.0, Bed),
     cue!("birds", "ambience/crow", -2.0, 70.0, 45.0, Event),
     cue!("valley.distant", "ambience/rockfall", 2.0, 90.0, 110.0, Event),
     cue!("works.groan", "machines/groan", -2.0, 85.0, 80.0, Event),
     cue!("works.clank", "machines/clank", -4.0, 85.0, 80.0, Event),
     cue!("thunder", "ambience/thunder_distant", -14.0, 75.0, 0.0, Event),
+    cue!("thunder.surge", "ambience/thunder_distant", -11.0, 80.0, 0.0, Event),
 ];
 
 /// Narrow dynamics (the comfort board's sound card), dB per role: the
@@ -353,8 +366,18 @@ mod tests {
         let index: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let mut seen = std::collections::HashSet::new();
+        // Robots' words are synthesised (`robot_voice`), not files.
+        let voices: Vec<String> = crate::robot_voice::Utterance::ALL
+            .iter()
+            .map(|u| crate::robot_voice::set_name(crate::robot_voice::VoiceKind::Walker, *u))
+            .collect();
         for c in MIX {
-            assert!(index.get(c.set).is_some(), "{}: no set {}", c.name, c.set);
+            assert!(
+                index.get(c.set).is_some() || voices.iter().any(|v| v == c.set),
+                "{}: no set {}",
+                c.name,
+                c.set
+            );
             assert!(seen.insert(c.name), "{} twice", c.name);
         }
         // Every lower-case literal in audio.rs without a slash is a cue

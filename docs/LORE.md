@@ -78,6 +78,36 @@ woods, the woodward's cabin, the north sidings.
 - The **memorial plinth** in Ash Row (its bronze long gone to the
   furnace) and the **burnt chapel** in the woods take offerings.
 
+### Sallow Reservoir: the water
+
+Upstream of the three, over the hills: the Authority's water works. A
+masonry dam across a hill valley, the draw-off tower out on the bed with
+its bridge to the crest, the valve house at the dam's toe, the keeper's
+cottages and the filter house below, the catchwater and its gauge house
+on the east side. The reservoir filled the three valleys' taps.
+
+- **Old Sallow** was drowned when the water board built the dam, sixty-odd
+  years before the Lift. **New Sallow** was built up the upper arm for the
+  people moved out; it went on the Marrow buses with everyone else ("we
+  were moved for the water once already").
+- **The drain**: in December of the second winter the Custodian opened the
+  scour valves. Collect everything meant what was under the water too.
+  The level came down a hand a day for a month and the old village came
+  up: church tower, bridge, house walls. The upper arm, behind the
+  causeway, never drained; its culverts silted shut and it rose over New
+  Sallow's lower street.
+- **The stock ground**: with the depots full, the machines keep stock on
+  the bed in rows, tagged "pending review": buses (Marrow depot's, by
+  number; bus four isn't there), bicycles in racks, bins in ranks.
+- Its Gate on the north-east shore is an overflow store under the Marrow
+  depot. There is no fourth key; the recall reaches it.
+- The **drowned font** by the church tower and **the village pump** in New
+  Sallow take offerings.
+- **Alois Pech**, the keeper, was seven when they moved his family up the
+  hill. He stayed with the dam at the evacuation, watched his village come
+  back up, and kept reading the catchwater gauge on Sundays until his legs
+  gave out.
+
 ## Timeline
 
 Year 0 is the year of the Lift. The game is set in the twelfth autumn
@@ -96,6 +126,7 @@ the Lift ("the second winter").
 | Winter | The works burns what the machines haul in. |
 | February | The fire gets out. The north-west wood burns for a month. |
 | 1 April, year 1 | The review date. It is postponed, then not set. The soldiers stand down and leave the gates. Authority staff on site: none. |
+| December, year 1 | The second winter. The Custodian opens Sallow's scour valves; by January the reservoir bed is dry and Old Sallow stands in the mud. |
 | Years 1 to 11 | The few who stayed die, leave or are tidied away. The Surge comes every few weeks. Drivers start bringing people in. |
 | Now | The twelfth autumn. |
 
@@ -144,13 +175,29 @@ grown somewhere new.
 ### The stones (artifacts)
 
 "Bright stones", to the people who stayed; "field-active material" to the
-Authority. They grow where the ground is wrong (the Hollow, the quarry,
-the slag heaps, the ash pit) and are gone at the next Surge if no one
-takes them. Each does something odd and useful while carried
-(featherstone, hearth, glass eye, aegis are scavengers' names). Each also
-**hums**, and the machines hear it. "If you hear the hum, you're carrying
-too many of the bright stones. Put some down." A lead-lined case quiets
-them.
+Authority. Each kind of wrong ground grows its own, and they are gone at
+the next Surge if no one takes them. The scavengers' names: a lift grows
+a **featherstone**, a burner a **hearth**, a snare an **aegis knot**, a
+well a **lodestone**, a mirror a **mirror shard**. A **glass eye** turns
+up anywhere, rarely. Rarest is the **stormglass**, which grows only where
+the Surge itself breaks the ground, about one a Surge, in its last
+minutes.
+
+Each does something odd and useful while carried, and each costs you
+something in the body:
+
+| Stone | What it asks of you | How it's got out (what they call it) |
+| - | - | - |
+| Featherstone | It wants home: lifts you pass wind up and pop | "Let it throw": it rides the column until something winds the lift up and it flings the stone |
+| Hearth | Runs you hot; your wind comes back slowly | "Wait for the coals": too hot to hold until it cools or is quenched |
+| Aegis knot | Holds a charge and bites when wet | "Earth it first": safe only once something metal has drawn the charge |
+| Lodestone | Far heavier on you than in the hand | "Go to the heart": it hangs at the crushing middle of the well |
+| Mirror shard | Its reflection runs late, and glints where anything can see | "Catch the fold": reachable as the mirror closes after something's gone through |
+| Stormglass | The Surge passes over you as if under a roof; the whole Zone knows where it is | Taken from the Surge's own ground, in its last minutes |
+
+Each also **hums**, and the machines hear it. "If you hear the hum,
+you're carrying too many of the bright stones. Put some down." A
+lead-lined case quiets the hum, the cost and the gift together.
 
 ### The offering places
 
@@ -159,6 +206,16 @@ the burnt chapel. They take what's left in them and, once in a while,
 answer: a calm hour, a whisper of where a stone lies, the Surge held off.
 Nobody in the notes claims to know why. The pump keeper thinks the well
 was like this before the Lift, just slower.
+
+Most take any stone alike. A few answer one stone in their own way
+(`src/anomaly/offering.rs`):
+
+| Place | Stone | Answer |
+| - | - | - |
+| The well (Marrow) | Stormglass | The Surge held off far longer: "the well drinks the storm" |
+| The cairn (Kettle) | Lodestone | Refused: the stone rolls back out at your feet |
+| The burnt chapel (Cinder) | Hearth | Taken gladly: a calm hour, the machines slow |
+| The chapel font (Kettle) | Mirror shard | A whisper: where the nearest stone lies |
 
 ### The driver
 
@@ -211,6 +268,11 @@ only his mother's letter names him.
 | **Vlasta Králová** | Cinder, the foreman's house | His wife; the ash |
 | **The lookout** | Cinder, fire lookout | The fire's spread, hour by hour |
 | **A scavenger** | Cinder, Ash Row | Someone who came in on Lev's truck before you |
+| **Tomas**, logging crew | Marrow, logging camp cabin | A tally that stops on bus day; pears under the bed |
+| **Mirek Hájek**, charcoal burner | Kettle, the charcoal hut | Stayed four days for his kiln |
+| **T. Veselý**, woodward | Cinder, the woodward's cabin | Wet the roof and stayed; where the matches are |
+| **Alois Pech**, keeper | Sallow, the keeper's cottage and the gauge house | Born in the drowned village; few words |
+| **J. Rybář**, shopkeeper | Sallow, New Sallow's shop | Moved twice; left the key for a neighbour |
 
 The **terminals** are the Custodian's and the Authority's: status,
 inventory, schedule, in a clipped machine voice that slowly gives away

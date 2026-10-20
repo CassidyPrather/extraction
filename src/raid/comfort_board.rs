@@ -54,6 +54,7 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Sound, 1.80, -1.25),
             (ComfortCard::Sharpness, 1.62, -0.85),
             (ComfortCard::FingerGrab, 1.44, -0.85),
+            (ComfortCard::Climb, 1.80, -0.85),
             // A row under them, over the stash.
             (ComfortCard::Binaural, 1.26, -1.25),
             (ComfortCard::Score, 1.26, -0.85),
@@ -62,7 +63,6 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Seated, 1.62, -0.50),
             (ComfortCard::OneHanded, 1.44, -0.50),
             (ComfortCard::Captions, 1.26, -0.50),
-            (ComfortCard::Climb, 1.80, -0.85),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),

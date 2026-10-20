@@ -67,8 +67,10 @@ pub const BRACE_REST: f32 = 8.0;
 pub const BRACED_SWAY: f32 = 0.15;
 pub const BRACED_LAG: f32 = 0.5;
 /// How near the handguard must be to something solid to rest on it, and
-/// how long a rest outlasts losing touch (so it doesn't flicker), s.
-pub const BRACE_REACH: f32 = 0.05;
+/// how long a rest outlasts losing touch (so it doesn't flicker), s. A
+/// hand-driven gun stops 4 to 5 cm short of what it's pressed onto, so the
+/// reach is that and a margin.
+pub const BRACE_REACH: f32 = 0.07;
 pub const BRACE_HOLD: f32 = 0.15;
 /// Rests are looked for every this many fixed ticks (the hold above covers
 /// the gap), each gun on its own beat.
@@ -93,6 +95,16 @@ pub struct Hold {
     /// The handguard rests on something solid (a wall top, a sill).
     pub braced: bool,
     pub crouched: bool,
+}
+
+/// How many hands count as holding the gun: a second hand on it; or,
+/// played one-handed (`Comfort::one_handed`), a rest under it.
+pub fn hands_holding(support: bool, braced: bool, one_handed_play: bool) -> u8 {
+    if support || (one_handed_play && braced) {
+        2
+    } else {
+        1
+    }
 }
 
 impl Hold {
@@ -315,9 +327,13 @@ fn handle_guns(
     statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
     terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut checks: ResMut<BraceChecks>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
+    // Played one-handed, a gun rested on something is held as well as two
+    // hands hold it: what the surface is for.
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
@@ -375,7 +391,7 @@ fn handle_guns(
             .get(held.player)
             .is_ok_and(|i| i.crouch || i.head.translation.y < CROUCH_HEAD);
         handling.hold = Hold {
-            hands: 1 + u8::from(support.is_some()),
+            hands: hands_holding(support.is_some(), braced, one_handed),
             shouldered,
             braced,
             crouched,
@@ -570,6 +586,38 @@ pub fn jam_visuals(
         if *vis != want {
             *vis = want;
         }
+    }
+}
+
+#[cfg(test)]
+mod one_hand_tests {
+    use super::*;
+
+    /// Played one-handed, a rifle rested on a surface is held as two hands
+    /// hold it rested: the same spring, mass, lag and steadiness, and no
+    /// one-handed droop or sway. Without the rest it's one hand.
+    #[test]
+    fn one_hand_on_a_rest_is_two() {
+        let hold = |hands: u8| Hold {
+            hands,
+            shouldered: false,
+            braced: true,
+            crouched: false,
+        };
+        let one = hold(hands_holding(false, true, true));
+        let two = hold(hands_holding(true, true, false));
+        assert_eq!(one, two);
+        assert_eq!(one.recover(), two.recover());
+        assert_eq!(one.mass(3.3), two.mass(3.3));
+        assert_eq!(one.lag(3.3), two.lag(3.3));
+        assert_eq!(one.steadiness(), two.steadiness());
+        assert!(one.hands >= 2, "no one-handed droop or sway");
+        assert_eq!(hands_holding(false, false, true), 1, "unrested: one hand");
+        assert_eq!(
+            hands_holding(false, true, false),
+            1,
+            "two-handed play: as before"
+        );
     }
 }
 

@@ -15,16 +15,19 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod costs;
 pub mod detector;
+pub mod harvest;
 pub mod mirrors;
 pub mod offering;
+pub mod scenarios;
 pub mod surge;
 pub mod visuals;
 pub mod wells;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::anomaly::{AnomalyKind, layout};
+use extraction_core::anomaly::{AnomalyKind, LIFT_STONE_FLUNG, LIFT_STONE_RIDE, layout};
 use extraction_core::noise::Rng;
 
 use crate::health::Health;
@@ -155,7 +158,10 @@ impl Plugin for AnomalyPlugin {
             .add_message::<ArcStrike>()
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
+            .add_message::<detector::StonePing>()
             .add_message::<wells::EnteredWell>()
+            .add_message::<costs::ArtifactBite>()
+            .add_message::<harvest::Burned>()
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
             .add_observer(surge::remember_size)
@@ -167,20 +173,32 @@ impl Plugin for AnomalyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
-                    surge::stir,
-                    // Before anything can blink or fling what was thrown.
-                    detector::reveal,
-                    lifts,
-                    burners,
-                    snares,
-                    wells::wells,
-                    mirrors::mirrors,
-                    mirrors::shards,
-                    detector::detectors,
-                    measure_attention,
-                    spend_attention,
-                    age_blooms,
-                    surge::surge_blooms,
+                    // The anomalies themselves.
+                    (
+                        surge::stir,
+                        // Before anything can blink or fling what was thrown.
+                        detector::reveal,
+                        costs::feathers_wake_lifts,
+                        lifts,
+                        burners,
+                        snares,
+                        wells::wells,
+                        mirrors::mirrors,
+                    )
+                        .chain(),
+                    // What they leave on whoever carries their stones, and
+                    // the Zone's attention.
+                    (
+                        mirrors::shards,
+                        detector::detectors,
+                        costs::bites,
+                        harvest::heat,
+                        measure_attention,
+                        spend_attention,
+                        age_blooms,
+                        surge::surge_blooms,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .after(crate::robots::perceive),
@@ -285,10 +303,17 @@ fn lifts(
     mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
     agitation: Res<surge::Agitation>,
     mut bodies: Query<
-        (&GlobalTransform, &RigidBody, &ComputedMass, Forces),
+        (
+            &GlobalTransform,
+            &RigidBody,
+            &ComputedMass,
+            Forces,
+            Option<&Item>,
+        ),
         Without<RigidBodyDisabled>,
     >,
     mut players: Query<(&GlobalTransform, &mut Body, &mut Health), With<Player>>,
+    catalog: Res<Catalog>,
     spatial: SpatialQuery,
     time: Res<Time>,
     mut events: MessageWriter<AnomalyEvent>,
@@ -317,7 +342,7 @@ fn lifts(
         let mut occupied = false;
         let popping = a.charge >= 1.0;
         for hit in hits {
-            let Ok((bt, rb, mass, mut forces)) = bodies.get_mut(hit) else {
+            let Ok((bt, rb, mass, mut forces, item)) = bodies.get_mut(hit) else {
                 continue;
             };
             if *rb != RigidBody::Dynamic {
@@ -327,6 +352,19 @@ fn lifts(
             let rel = p - core;
             let d = Vec2::new(rel.x, rel.z).length();
             let m = mass.value().max(0.05);
+            let artifact = item.is_some_and(|i| {
+                catalog.get(i.kind()).category == extraction_core::items::Category::Artifact
+            });
+            // Its stone rides the column out of reach, keeping it calm,
+            // until something else winds it up and it pops (and throws
+            // the stone like everything else). Being thrown, it's let go.
+            let v = forces.linear_velocity();
+            if artifact && d <= a.radius && !popping && v.length() < LIFT_STONE_FLUNG {
+                let target = core + Vec3::Y * LIFT_STONE_RIDE;
+                let pull = (target - p) * 12.0 - v * 5.0 + Vec3::Y * 9.81;
+                forces.apply_force(pull * m);
+                continue;
+            }
             if d > a.radius {
                 if !popping {
                     let inward = -Vec3::new(rel.x, 0.0, rel.z).normalize_or_zero();
@@ -454,7 +492,8 @@ fn snares(
     mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
     agitation: Res<surge::Agitation>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
-    held: Query<(&GlobalTransform, &Item, &crate::interact::Held)>,
+    items: Query<(&GlobalTransform, &Item, Option<&crate::interact::Held>)>,
+    hands: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHand>>,
     catalog: Res<Catalog>,
     positions: Query<&GlobalTransform>,
     mut arcs: MessageWriter<ArcStrike>,
@@ -479,30 +518,49 @@ fn snares(
             continue;
         }
         let c = gt.translation() + Vec3::Y * 0.8;
-        let touched: Vec<Entity> = spatial.shape_intersections(
-            &Collider::sphere(a.radius),
-            c,
-            Quat::IDENTITY,
-            &SpatialQueryFilter::from_mask([Layer::Item, Layer::Robot]),
-        );
-        let player_in = players
-            .iter()
-            .any(|(_, pt, _)| (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3);
-        // Metal in a hand draws an arc from further off, through you.
-        let metal: Vec<(Entity, Vec3)> = held
-            .iter()
-            .filter(|(g, item, _)| {
-                g.translation().distance(c) < a.radius + SNARE_METAL_REACH
-                    && catalog.get(item.kind()).tags.iter().any(|t| t == "metal")
+        // Its own stone sits in it quietly: what sets it off is anything
+        // else, or a hand reaching in for the stone (ground it first, with
+        // something thrown).
+        let touched: Vec<Entity> = spatial
+            .shape_intersections(
+                &Collider::sphere(a.radius),
+                c,
+                Quat::IDENTITY,
+                &SpatialQueryFilter::from_mask([Layer::Item, Layer::Robot]),
+            )
+            .into_iter()
+            .filter(|t| {
+                items.get(*t).map_or(true, |(_, i, _)| {
+                    catalog.get(i.kind()).category != extraction_core::items::Category::Artifact
+                })
             })
-            .map(|(g, _, h)| (h.player, g.translation()))
+            .collect();
+        let reaching: Vec<Entity> = hands
+            .iter()
+            .filter(|(g, _)| g.translation().distance(c) < a.radius)
+            .map(|(_, p)| p.parent())
+            .collect();
+        let player_in = players.iter().any(|(pe, pt, _)| {
+            (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
+                || reaching.contains(&pe)
+        });
+        // Metal in a hand draws an arc from further off, through you.
+        let metal: Vec<(Entity, Vec3)> = items
+            .iter()
+            .filter_map(|(g, item, h)| {
+                let h = h?;
+                (g.translation().distance(c) < a.radius + SNARE_METAL_REACH
+                    && catalog.get(item.kind()).tags.iter().any(|t| t == "metal"))
+                .then(|| (h.player, g.translation()))
+            })
             .collect();
         if touched.is_empty() && !player_in && metal.is_empty() {
             continue;
         }
         a.charge = 0.0;
         for (pe, pt, mut h) in &mut players {
-            let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3;
+            let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
+                || reaching.contains(&pe);
             let grounded = metal.iter().any(|(p, _)| *p == pe);
             if (inside || grounded) && !h.down {
                 h.hp -= 22.0;
@@ -517,7 +575,7 @@ fn snares(
             });
         }
         for t in touched {
-            if held.contains(t) {
+            if items.get(t).is_ok_and(|(_, _, h)| h.is_some()) {
                 // Struck above, through whoever holds it.
                 continue;
             }
