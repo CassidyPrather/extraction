@@ -38,7 +38,8 @@ impl Plugin for TrailerPlugin {
             .add_systems(
                 Update,
                 (direct, aim).chain().after(crate::sim::raider::think),
-            );
+            )
+            .add_systems(Update, (show_body, dress_body));
     }
 }
 
@@ -328,6 +329,55 @@ fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
 
 #[derive(Component)]
 struct DroneCamera;
+
+/// The player has no body a camera draws (in the headset you see your
+/// gloves and sleeves); its shadow comes from a proxy of capsules on a
+/// layer only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's
+/// cameras see that layer too: the bot as a figure.
+fn show_body(
+    mut commands: Commands,
+    cams: Query<Entity, (With<Camera>, Or<(Added<FreeCamera>, Added<DroneCamera>)>)>,
+) {
+    use crate::render::arms::SHADOW_ONLY;
+    for e in &cams {
+        commands
+            .entity(e)
+            .insert(bevy::camera::visibility::RenderLayers::from_layers(&[
+                0,
+                SHADOW_ONLY,
+            ]));
+    }
+}
+
+/// And dressed: the proxy's plain white in a field jacket's drab.
+fn dress_body(
+    mut commands: Commands,
+    parts: Query<
+        (Entity, &bevy::camera::visibility::RenderLayers),
+        (Added<bevy::camera::visibility::RenderLayers>, With<Mesh3d>),
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut drab: Local<Option<Handle<StandardMaterial>>>,
+) {
+    use crate::render::arms::SHADOW_ONLY;
+    for (e, layers) in &parts {
+        if !layers.intersects(&bevy::camera::visibility::RenderLayers::layer(SHADOW_ONLY))
+            || layers.intersects(&bevy::camera::visibility::RenderLayers::layer(0))
+        {
+            continue;
+        }
+        let m = drab
+            .get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.24, 0.26, 0.19),
+                    perceptual_roughness: 0.9,
+                    ..default()
+                })
+            })
+            .clone();
+        commands.entity(e).insert(MeshMaterial3d(m));
+    }
+}
 
 /// Points the cameras: the chase camera eases to a spot behind and above
 /// the bot's shoulder (pulled in where a wall or the ground is in the
