@@ -438,6 +438,18 @@
             tags: ["metal", "electronics"],
         ),
         (
+            id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
+            description: "A survey detector with a long whip antenna. Held, it hears only what it points at, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
+            category: Gadget, size: Small, mass: 0.45, bulk: 0.35,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "detector_bear", dims: Some((0.09, 0.05, 0.16)), name: "Bear detector",
+            description: "The Authority's own field set, its round green screen scratched. Held up, it shows the stones near you as dots and the anomalies as rings, the way you face.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4,
+            tags: ["metal", "electronics"],
+        ),
+        (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,
@@ -678,12 +690,12 @@
         // ---------------------------------------------------------------
         (
             id: "art_featherstone", dims: Some((0.036, 0.031, 0.03)), name: "Featherstone",
-            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
+            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up. It wants to go home: lifts you pass wind up and pop.",
             category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
         (
             id: "art_hearth", dims: Some((0.053, 0.054, 0.054)), name: "Hearth",
-            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down.",
+            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down. Carried, it runs you hot; your wind comes back slowly.",
             category: Artifact, size: Small, mass: 0.8, bulk: 0.3, attention: 1.2,
         ),
         (
@@ -693,17 +705,22 @@
         ),
         (
             id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
-            description: "A tangle of something like copper. While you carry it, the first hit always glances.",
+            description: "A tangle of something like copper. While you carry it, the first hit always glances. It holds a charge, and wet it bites.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
         ),
         (
             id: "art_lodestone", dims: Some((0.06, 0.05, 0.055)), name: "Lodestone",
-            description: "A fist of dark iron, heavier than it looks and heavier the nearer you hold it to your chest. Rounds fired at whoever carries it curve aside.",
-            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1,
+            description: "A fist of dark iron, far heavier than it looks once it's on you. Rounds fired at whoever carries it curve aside.",
+            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1, lift_kg: -5.0,
+        ),
+        (
+            id: "art_stormglass", dims: Some((0.04, 0.04, 0.04)), name: "Stormglass",
+            description: "A clouded bead, cold as hail and never melting, grown only where the Surge itself broke the ground. Carry it and the Surge passes over you as if you were under a roof. The whole Zone knows where it is.",
+            category: Artifact, size: Tiny, mass: 0.1, bulk: 0.03, attention: 3.0,
         ),
         (
             id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
-            description: "A sliver of something not quite glass. Your reflection in it moves a moment late. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
+            description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
 

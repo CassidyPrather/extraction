@@ -46,7 +46,7 @@ pub const POSTURE_MIN: f32 = 0.45;
 /// Crouched in grass or undergrowth, this much of you shows...
 pub const GRASS_HIDE: f32 = 0.35;
 /// ...beyond this range (closer, the robot sees into the grass).
-pub const GRASS_NEAR: f32 = 6.0;
+pub const GRASS_NEAR: f32 = 4.0;
 /// Looked down on from steeper than this (radians), grass hides half as
 /// well: a drone overhead sees into it.
 pub const GRASS_STEEP: f32 = 0.6;
@@ -65,9 +65,11 @@ pub struct MotionSight(pub f32);
 /// Running: more than walking.
 pub const RUNNING: f32 = 1.35;
 /// Light: the sky's (`Conditions::light_at`: a day outdoors 1, dusk 0.36,
-/// a room by day 0.3, night 0.04) counts as its square root, so dusk
-/// leaves 0.6 of the day's exposure, a room 0.55, a night 0.2.
-pub const NIGHT_LIGHT: f32 = 0.04;
+/// a room by day 0.3, a clear night 0.02 new moon to 0.08 full, 0.01 under
+/// fog) counts as its square root, so dusk leaves 0.6 of the day's
+/// exposure, a room 0.55, a full-moon night 0.28, a black one this floor's
+/// 0.14: a robot makes out a standing body moving within about 20 m.
+pub const NIGHT_LIGHT: f32 = 0.02;
 /// Within this, a robot sees you whatever: cone, fog, grass.
 pub const POINT_BLANK: f32 = 4.0;
 /// Exposure at which a robot has you: aims, fires, suspicion climbs.
@@ -76,6 +78,12 @@ pub const SEEN: f32 = 0.12;
 pub const GLIMPSE: f32 = 0.045;
 /// How far suspicion climbs on glimpses alone.
 pub const GLIMPSE_CAP: f32 = 0.5;
+/// A glimpse places you this share of the distance out (a guess, as a
+/// sound is: [`heard_guess`])...
+pub const GLIMPSE_SPREAD: f32 = 0.1;
+/// ...and at least this (m). A glimpse of you keeping still doesn't place
+/// you at all, once it has a guess: nothing moved.
+pub const GLIMPSE_SPREAD_MIN: f32 = 3.0;
 /// Suspicion per second while seen, at exposure 1: `1.5 + 30 / distance`.
 pub const SIGHT_GAIN: f32 = 1.5;
 pub const SIGHT_GAIN_NEAR: f32 = 30.0;
@@ -147,9 +155,12 @@ pub const HEARD_BASE: f32 = 0.3;
 pub const HEARD_LOUD: f32 = 0.5;
 /// Where a sound came from, from afar, is a guess: the uncertainty is
 /// this share of the distance (more through a wall)...
-pub const HEARD_SPREAD: f32 = 0.12;
+pub const HEARD_SPREAD: f32 = 0.2;
 /// ...and at least this.
 pub const HEARD_SPREAD_MIN: f32 = 1.5;
+/// Its guess lands at least this share of the spread off the true spot:
+/// it heard roughly where, so a still shooter isn't walked straight onto.
+pub const HEARD_MISS: f32 = 0.35;
 /// A rifle's report (AK-74: 900 m/s, 48 damage) carries this far.
 pub const GUNSHOT: f32 = 220.0;
 /// Walking pace footsteps (1.4 m/s) on firm ground carry this far.
@@ -567,13 +578,17 @@ pub(crate) fn perceive(
                     aware.unseen = 0.0;
                     aware.suspicion = (aware.suspicion + gain).min(1.0);
                 } else {
-                    // Something moved over there.
+                    // Something over there.
                     if aware.target.is_none() {
                         aware.target = Some(t.e);
                     }
-                    if !aware.can_see_target {
-                        aware.last_known = Some(t.feet);
-                        aware.uncertainty = 3.0;
+                    // If it moved, roughly there; a still shape it can't
+                    // place, beyond what it already had.
+                    let moved = t.speed > 0.3;
+                    if !aware.can_see_target && (moved || aware.last_known.is_none()) {
+                        let spread = (dist * GLIMPSE_SPREAD).max(GLIMPSE_SPREAD_MIN);
+                        aware.last_known = Some(heard_guess(t.feet, spread, robot_e));
+                        aware.uncertainty = spread;
                     }
                     if aware.suspicion < GLIMPSE_CAP {
                         aware.suspicion = (aware.suspicion + gain).min(GLIMPSE_CAP);
@@ -642,7 +657,7 @@ pub(crate) fn perceive(
             if !aware.can_see_target {
                 let spread =
                     (d * HEARD_SPREAD * if occluded { 1.5 } else { 1.0 }).max(HEARD_SPREAD_MIN);
-                aware.last_known = Some(s.at);
+                aware.last_known = Some(heard_guess(s.at, spread, robot_e));
                 aware.uncertainty = spread;
                 aware.news = true;
                 if let Some(p) = s.source.filter(|s| players.contains(*s)) {
@@ -657,6 +672,24 @@ pub(crate) fn perceive(
             });
         }
     }
+}
+
+/// Where a robot guesses a sound at `at` came from, `spread` out: a point
+/// [`HEARD_MISS`]..1 of the spread off it, the same for the same robot and
+/// spot (so a second shot from there doesn't walk its guess about) but
+/// different between robots.
+pub fn heard_guess(at: Vec3, spread: f32, robot: Entity) -> Vec3 {
+    let mut h = robot.to_bits()
+        ^ (at.x.to_bits() as u64).rotate_left(21)
+        ^ (at.z.to_bits() as u64).rotate_left(42);
+    // splitmix64
+    h = h.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    h ^= h >> 31;
+    let angle = (h & 0xffff) as f32 / 65536.0 * std::f32::consts::TAU;
+    let r = spread * (HEARD_MISS + (1.0 - HEARD_MISS) * ((h >> 16) & 0xffff) as f32 / 65536.0);
+    at + Vec3::new(angle.cos(), 0.0, angle.sin()) * r
 }
 
 #[cfg(test)]

@@ -53,17 +53,46 @@ Rules: `extraction_core::anomaly::surge_*`; game side `src/anomaly/surge.rs`.
   workshops), a nut, a tin. The moment a loose thing first crosses into an
   anomaly it shows itself for six seconds: its light, particles and haze
   surge, whatever kind it is.
-- **The detector.** Carried anywhere on you it clicks for the nearest
-  anomaly's edge: about 1.5 s apart at 25 m, a rattle at the edge.
-  Held, it listens the way its antenna points (one behind you sounds half
-  as far again), so sweep it about. Its lamp blinks with each click.
+- **Detectors**, cheapest first (`DetectorTier`):
+  - **Clicker** (`detector`): carried anywhere on you it clicks for the
+    nearest anomaly's edge, about 1.5 s apart at 25 m, a rattle at the
+    edge. Held, it favours the way its antenna points.
+  - **Sweep** (`detector_sweep`, rarer): held, it hears only what lies in
+    a 25° cone ahead, so you sweep to find it; and a second, higher
+    voice (`StonePing`, its green lamp) sings for a loose stone in the
+    cone within 20 m, quicker the nearer. Worn, it's a plain clicker.
+  - **Bear** (`detector_bear`, rarest): held up, its round screen shows
+    the stones within 20 m as bright dots and the anomalies within 25 m
+    as dim ones sized by their reach, the way you face. It still clicks.
+  Shot: `docs/shots/anomalies/detectors.png`.
 
-## Artifacts
+## Artifacts: what they give, what they cost, how to get them
 
-- **Lodestone**: rounds fired at whoever carries it curve aside (a small
-  well turned inside out).
-- **Mirror shard**: held and used, it steps you up to 4 m the way you
-  face, short of walls and water, once a minute.
+Every stone does something for you while you carry it, and costs you
+something physical; nothing shows a number. Each draws the Zone's
+attention too (the hum). Sealed in a lead-lined case it does neither:
+carry it safe, or carry it live.
+
+| Stone | From | Gives | Costs | Getting it out |
+| - | - | - | - | - |
+| Featherstone | lift | takes 6 kg off your load | it wants home: lifts within 15 m wind up toward it and pop | it rides the column out of reach; throw something in, stand clear, catch it as the pop throws it |
+| Hearth | burner | power gadgets plugged into it never run down | you run hot: your wind comes back at half the pace | it's hot in the coals and burns the hand that holds it; shoot or flick it out, let it cool 20 s or drop it in water |
+| Aegis knot | snare | the first hit glances, then 90 s to knot back up | it holds a charge: wet (soaked ground, wading) it shocks you every 8–15 s, with a crack robots hear | the snare ignores its own stone but strikes a hand reaching in; ground it with thrown metal and reach in while it recharges |
+| Lodestone | well | rounds fired at you curve aside | five kilograms more on your back | it hangs at the crushing heart; dash in and out |
+| Mirror shard | mirror | use it to step up to 4 m ahead, once a minute | every 20–40 s its late reflection glints, and robots within 35 m hear where you are | it hangs in the fold; throw something through and reach in while it closes (1.5 s) |
+| Glass eye | rare, any field | held to your eye, walls go thin | strong attention | as its anomaly's stone |
+| Stormglass | only the Surge's own blooms (about one a Surge) | the Surge passes over you as if you were under a roof | the whole Zone knows where you are (attention 3/s) | as its bloom's kind, once it has finished forming |
+
+Rules and numbers: `extraction_core::anomaly` (costs, harvesting);
+game side `src/anomaly/costs.rs`, `harvest.rs`, `artifacts.rs`.
+Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
+`harvest_well`, `harvest_mirror` (in `--scenario all`).
+
+**Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
+`hunter` sim raids, at most 20% of deliberate dives into anomalies may
+end in death, and at least 30% must bring a stone out. Last measured (9
+hunter raids on Marrow Creek, 10 minutes each): 20 dives, 1 death in a
+snare (5%), 12 stones (60%).
 
 ## Looks, and what they cost
 

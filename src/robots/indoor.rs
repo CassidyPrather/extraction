@@ -12,6 +12,9 @@
 //!
 //! Sites register themselves in [`IndoorSites`]; the director's
 //! [`spawn_residents`] puts each site's crawlers on their routes once.
+//! When what's passable changes (water rises, gas fills a gallery, a
+//! furnace vents) the site sends a new grid ([`SiteGrid`]) and its
+//! residents path on that from then on.
 
 use std::sync::Arc;
 
@@ -177,6 +180,14 @@ pub struct IndoorSite {
     pub dormant: bool,
 }
 
+/// A site's grid has changed (new costs, cells blocked or opened): `site`
+/// is its index in [`IndoorSites`]. Its residents path on `grid` from now.
+#[derive(Message, Clone, Debug)]
+pub struct SiteGrid {
+    pub site: usize,
+    pub grid: Arc<NavGrid>,
+}
+
 /// A robot that lives in a site: where its bay is (it goes back there to
 /// sleep when the machines are recalled).
 #[derive(Component, Debug, Clone, Copy)]
@@ -277,9 +288,11 @@ impl Plugin for IndoorPlugin {
             .add_message::<CrawlerCharge>()
             .add_message::<CrawlerZap>()
             .add_message::<Waking>()
+            .add_message::<SiteGrid>()
             .add_systems(
                 FixedUpdate,
                 (
+                    regrid_sites,
                     spawn_residents,
                     crawler_guns,
                     clear_wrecks,
@@ -384,6 +397,30 @@ fn spawn_residents(
             let e = spawn_heavy(&mut commands, &zone, site, at, route);
             if site.dormant {
                 commands.entity(e).insert(Dormant);
+            }
+        }
+    }
+}
+
+/// A site's new grid: the site keeps it for residents yet to come out, and
+/// those already out (the ones carrying its old grid) take it and plan
+/// their way again.
+fn regrid_sites(
+    mut grids: MessageReader<SiteGrid>,
+    mut sites: ResMut<IndoorSites>,
+    mut residents: Query<(&mut LocalNav, &mut super::walker::Walker), With<Resident>>,
+) {
+    for g in grids.read() {
+        let Some(site) = sites.sites.get_mut(g.site) else {
+            warn!("a new grid for site {}, which isn't there", g.site);
+            continue;
+        };
+        let old = std::mem::replace(&mut site.nav.grid, g.grid.clone());
+        for (mut nav, mut w) in &mut residents {
+            if Arc::ptr_eq(&nav.grid, &old) {
+                nav.grid = g.grid.clone();
+                w.path.clear();
+                w.goal = None;
             }
         }
     }
