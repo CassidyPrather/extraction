@@ -658,3 +658,55 @@ fn a_lame_walker_does_not_chase() {
         moved(lame, l0, &app)
     );
 }
+
+/// A drone searching comes down to a doorway on its round and hangs
+/// outside it, low, looking in.
+#[test]
+fn a_searching_drone_looks_in_at_a_doorway() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let door = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .first()
+        .expect("a door");
+    let start = door.mid + door.out * 25.0 + Vec3::Y * 10.0;
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            start,
+            Job {
+                kind: JobKind::Survey,
+                site: start,
+                duration: 999.0,
+                exit: start,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let stand = door.mid + door.out * 1.8;
+    let mut best = f32::MAX;
+    for _ in 0..90 * 20 {
+        if let Brain::Search { .. } = app.world().get::<Brain>(drone).unwrap() {
+        } else {
+            *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Search {
+                at: door.mid + door.out * 6.0,
+                left: 60.0,
+                spots: vec![stand],
+                dwell: 0.0,
+            };
+        }
+        app.update();
+        let p = app.world().get::<Transform>(drone).unwrap().translation;
+        let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
+        let low = p.y - zone.ground(p.x, p.z) < 4.0;
+        if low {
+            best = best.min(flat(p - hover));
+        }
+    }
+    assert!(best < 2.5, "hung low outside the doorway ({best:.1} m off)");
+}

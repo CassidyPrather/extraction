@@ -209,8 +209,12 @@ pub const FIGHT_ALTITUDE: (f32, f32) = (8.0, 13.0);
 /// ...circling (rad/s), faster while you're looking at it: it slides out
 /// of your aim, round to your flank.
 pub const ORBIT: (f32, f32) = (0.35, 0.9);
-/// Searching, it sweeps the spots this high (m).
+/// Searching, it sweeps the spots this high (m)...
 const SEARCH_ALTITUDE: f32 = 6.0;
+/// ...and comes down to a doorway on its round, this high and this far
+/// out from it, to look in (m).
+pub const DOORWAY_ALTITUDE: f32 = 2.7;
+pub const DOORWAY_STANDOFF: f32 = 3.5;
 
 /// Picks where the drone wants to be, from its brain state.
 #[allow(clippy::too_many_arguments)]
@@ -306,14 +310,51 @@ fn drone_brain(
                     );
                 }
             }
-            Brain::Search { .. } => match search::search_step(&mut brain, pos, 4.0, dt, sweep) {
-                Step::Go(p) => {
-                    d.goal = cruise(p, SEARCH_ALTITUDE);
+            Brain::Search { .. } => {
+                // A doorway on the round: down to it, hanging back, and
+                // look in.
+                let doorway = |p: Vec3| {
+                    entrances.doors.iter().find(|e| {
+                        let s = e.mid + e.out * 1.8;
+                        Vec2::new(p.x - s.x, p.z - s.z).length() < 2.6
+                    })
+                };
+                // Not there till it's down at the doorway, not just over it.
+                let next = match &*brain {
+                    Brain::Search { spots, dwell, .. } if *dwell <= 0.0 => spots.first().copied(),
+                    _ => None,
+                };
+                let descending = next.and_then(doorway).map(|e| {
+                    let h = e.mid + e.out * DOORWAY_STANDOFF;
+                    Vec3::new(h.x, zone.ground(h.x, h.z) + DOORWAY_ALTITUDE, h.z)
+                });
+                if let Some(h) = descending.filter(|h| h.distance(pos) > 1.5) {
+                    if let Brain::Search { left, .. } = &mut *brain {
+                        *left -= dt;
+                    }
+                    // Over it first, then down (not low across the yard).
+                    let over = Vec2::new(h.x - pos.x, h.z - pos.z).length() < 4.0;
+                    d.goal = if over { h } else { cruise(h, SEARCH_ALTITUDE) };
                     intent.pace = 0.7;
+                    continue;
                 }
-                Step::Look(l) => intent.look = Some(l),
-                Step::Done => search::give_up(&mut brain, &mut job),
-            },
+                match search::search_step(&mut brain, pos, 4.0, dt, sweep) {
+                    Step::Go(p) => {
+                        d.goal = match doorway(p) {
+                            Some(e) => {
+                                let h = e.mid + e.out * DOORWAY_STANDOFF;
+                                Vec3::new(h.x, zone.ground(h.x, h.z) + DOORWAY_ALTITUDE, h.z)
+                            }
+                            None => cruise(p, SEARCH_ALTITUDE),
+                        };
+                        intent.pace = 0.7;
+                    }
+                    Step::Look(l) => {
+                        intent.look = Some(doorway(pos).map_or(l, |e| e.mid - e.out * 3.0));
+                    }
+                    Step::Done => search::give_up(&mut brain, &mut job),
+                }
+            }
             Brain::Engage => {
                 let seen = aware
                     .target
