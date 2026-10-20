@@ -36,6 +36,7 @@ impl Plugin for HeavyLookPlugin {
                 dress_doors,
                 gallery,
                 felt_footfalls,
+                scorch_wrecks,
             ),
         );
     }
@@ -67,6 +68,40 @@ struct Lights {
     vents: [Handle<StandardMaterial>; 2],
     strips: Handle<StandardMaterial>,
     eye: Handle<StandardMaterial>,
+}
+
+/// A shell mesh of a heavy, scorched once it's down.
+#[derive(Component, Clone, Copy)]
+struct Burns {
+    robot: Entity,
+}
+
+/// A fallen heavy's shell goes scorched and dull: a wreck, not a machine
+/// switched off.
+fn scorch_wrecks(
+    mut commands: Commands,
+    shells: Query<(Entity, &Burns, &MeshMaterial3d<StandardMaterial>)>,
+    robots: Query<&Robot>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut burnt: Local<Option<Handle<StandardMaterial>>>,
+) {
+    for (e, b, mat) in &shells {
+        if !robots.get(b.robot).is_ok_and(|r| r.wrecked) {
+            continue;
+        }
+        let h = burnt
+            .get_or_insert_with(|| {
+                let mut m = materials.get(&mat.0).cloned().unwrap_or_default();
+                m.base_color = Color::srgb(0.24, 0.22, 0.2);
+                m.emissive = LinearRgba::BLACK;
+                m.perceptual_roughness = 0.85;
+                materials.add(m)
+            })
+            .clone();
+        if mat.0 != h {
+            commands.entity(e).insert(MeshMaterial3d(h));
+        }
+    }
 }
 
 /// A mesh lit by one of a heavy's lights.
@@ -206,6 +241,20 @@ fn dress_heavies(
                         l.filter(|_| matches!(p.material.as_deref(), Some("Glow" | "Eye")))
                     {
                         ec.insert(l);
+                    }
+                    // It wears its valley like the others (soot, rust, moss),
+                    // and its shell burns when it falls.
+                    match p.material.as_deref() {
+                        Some("Shell") => {
+                            ec.insert((
+                                super::weathering::Weather { shell: true },
+                                Burns { robot },
+                            ));
+                        }
+                        Some("Dark") | None => {
+                            ec.insert(super::weathering::Weather { shell: false });
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -416,10 +465,10 @@ fn dress_doors(
     }
 }
 
-/// `--gallery heavy[:open|:hot|:down][,YAW[,DIST]]`: a heavy standing in
+/// `--gallery heavy[:STATE[+STATE..]][,YAW[,DIST]]`: a heavy standing in
 /// front of the `--camera`, still (its senses off). `open` has its left
 /// plate and hatch off and a knee shot out; `hot` runs it near a stall;
-/// `down` is its wreck.
+/// `down` is its wreck; `walker` stands a walker beside it for scale.
 ///
 /// ```text
 /// scripts/shot.sh docs/shots/heavy/front.png 40,0,262,0,0 60 --gallery heavy,200
@@ -475,6 +524,29 @@ fn gallery(
                 wk.yaw = yaw;
             }
         });
+        // `+walker`: a walker beside it, for scale.
+        if state.contains("walker") {
+            let side = Vec3::new(-fwd.z, 0.0, fwd.x);
+            let w_at = zone.on_ground(at.x + side.x * 5.0, at.z + side.z * 5.0);
+            let w = super::walker::spawn_walker(
+                &mut commands,
+                &zone,
+                w_at,
+                super::Job {
+                    kind: super::JobKind::Survey,
+                    site: w_at,
+                    duration: 1.0e6,
+                    exit: w_at,
+                },
+            );
+            commands
+                .entity(w)
+                .remove::<super::Senses>()
+                .insert(super::Brain::Working {
+                    at: w_at,
+                    left: 1.0e6,
+                });
+        }
         *made = Some((e, state.trim_start_matches(':').to_owned()));
     }
     let Some((e, state)) = made.as_ref() else {
@@ -483,10 +555,15 @@ fn gallery(
     let Ok((mut h, mut robot, children)) = heavies.get_mut(*e) else {
         return;
     };
-    match state.as_str() {
-        "hot" => h.heat = 0.9,
-        "down" if *stage == 30 => robot.wrecked = true,
-        "open" if *stage == 30 => {
+    let has = |s: &str| state.split('+').any(|t| t == s);
+    if has("hot") {
+        h.heat = 0.9;
+    }
+    if has("down") && *stage == 30 {
+        robot.wrecked = true;
+    }
+    if has("open") && *stage == 30 {
+        {
             for c in children.iter() {
                 let Ok((pe, part)) = parts.get(c) else {
                     continue;
@@ -506,7 +583,6 @@ fn gallery(
                 }
             }
         }
-        _ => {}
     }
 }
 

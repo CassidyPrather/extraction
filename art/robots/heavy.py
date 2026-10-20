@@ -144,6 +144,59 @@ def build(lod):
                          xf=T(sx * (HX - 0.08) + k * 0.075, 0, 0.44) @ UP)
         # Hazard chevrons over the bay.
         hull.box((0.36, 0.03, 0.006), (0.0, 0.205, HZ + 0.0035), "Warn", segs=1)
+    # --- What makes it a heavy and not a big walker ------------------------
+    # A demolition ram across its front, low: the face it leads with.
+    hull.box((0.9, 0.12, 0.1), (0.0, -0.13, -0.6), "Dark", bevel=0.02 if lod < 2 else 0.0,
+             segs=2 if full else 1)
+    hull.box((0.94, 0.05, 0.06), (0.0, -0.205, -0.63), "Steel", bevel=0.01 if lod < 2 else 0.0,
+             segs=1)
+    for sx in (-1, 1):
+        # Rams bracing it back into the belly.
+        hull.cyl(0.03, -0.62, -0.42, "Steel", segs=max(6, n // 2), xf=T(sx * 0.3, -0.16, 0))
+    # Two exhaust stacks up its back on the left, sooted at the tips: the
+    # arm's on the right, these lean it the other way.
+    for x, z, h in ((-0.27, 0.26, 0.36), (-0.17, 0.33, 0.28)):
+        hull.cyl(0.045, HY1 - 0.02, HY1 + h, "Dark", segs=max(6, n // 2), xf=T(x, 0, z) @ UP,
+                 chamfer=0.006 if lod < 2 else 0.0)
+        if lod < 2:
+            hull.tube(0.052, 0.03, HY1 + h - 0.05, HY1 + h + 0.005, "Char", segs=max(6, n // 2),
+                      xf=T(x, 0, z) @ UP)
+    # A sensor mast on the front left, its own little red eye on top.
+    hull.cyl(0.018, HY1 - 0.02, HY1 + 0.42, "Dark", segs=max(6, n // 3), xf=T(-0.3, 0, -0.38) @ UP)
+    hull.box((0.1, 0.06, 0.08), (-0.3, HY1 + 0.45, -0.38), "Shell", bevel=0.01 if lod < 2 else 0.0,
+             segs=1)
+    hull.box((0.05, 0.015, 0.012), (-0.3, HY1 + 0.45, -0.425), "Eye", segs=1)
+    if lod < 2:
+        # A handrail round its back, on posts: the Custodian's crews stood
+        # up there once. (Each rail a metre and a half up, at your scale.)
+        rail_y = HY1 + 0.07
+        for sx in (-1, 1):
+            x = sx * (HX - 0.05)
+            hull.cyl(0.009, -0.3, 0.42, "Steel", segs=6, xf=T(x, rail_y, 0))
+            for z in (-0.28, 0.06, 0.4):
+                hull.cyl(0.008, HY1 - 0.005, rail_y, "Steel", segs=6, xf=T(x, 0, z) @ UP)
+        # A ladder up its right flank, behind the plate.
+        lx, z0, z1 = HX + 0.03, 0.35, 0.45
+        for z in (z0, z1):
+            hull.cyl(0.008, HY0 - 0.03, HY1 + 0.07, "Steel", segs=6, xf=T(lx, 0, z) @ UP)
+        k = 0
+        y = HY0 + 0.02
+        while y < HY1 + 0.05:
+            hull.cyl(0.006, z0, z1, "Steel", segs=6, xf=T(lx, y, 0))
+            y += 0.13
+            k += 1
+        for z in (z0, z1):
+            hull.box((0.03, 0.012, 0.012), (HX + 0.016, 0.0, z), "Steel", segs=1)
+    if full:
+        # Its number stencilled on each flank behind the plate, and hazard
+        # bands on the ram.
+        for sx in (-1, 1):
+            for i, (dy, dz, h) in enumerate(((0.0, 0.0, 0.08), (0.0, 0.035, 0.08), (0.03, 0.07, 0.02),
+                                              (0.0, 0.1, 0.08))):
+                hull.box((0.006, h, 0.012), (sx * (HX + 0.003), 0.06 + dy, 0.32 + dz), "Dark",
+                         segs=1)
+        for x in (-0.3, -0.1, 0.1, 0.3):
+            hull.box((0.08, 0.1, 0.006), (x, -0.13, -0.6535), "Warn", segs=1)
     out.append(hull)
 
     # --- Eye -----------------------------------------------------------------
@@ -172,9 +225,11 @@ def build(lod):
 
     # --- Bolt ------------------------------------------------------------------
     if lod < 2:
+        # Big, and ringed amber: the weak point a player learns to look for.
         bolt = Part("bolt" + suffix(lod))
-        bolt.cyl(0.026, -0.012, 0.012, "Steel", segs=6, chamfer=0.004 if full else 0.0)
-        bolt.cyl(0.012, 0.012, 0.022, "Steel", segs=8)
+        bolt.cyl(0.04, -0.016, 0.016, "Steel", segs=6, chamfer=0.006 if full else 0.0)
+        bolt.cyl(0.018, 0.016, 0.03, "Steel", segs=8)
+        bolt.tube(0.054, 0.044, -0.012, 0.004, "Warn", segs=max(8, n))
         out.append(bolt)
 
     # --- Legs ------------------------------------------------------------------
@@ -211,26 +266,35 @@ def build(lod):
     out.append(knee)
 
     # --- Arm -----------------------------------------------------------------
+    # The demolition arm: heavier than a leg, rams along it.
     up_ = Part("arm_upper" + suffix(lod))
-    up_.box((0.12, UPPER - 0.1, 0.13), (0.0, UPPER / 2, 0.0), "Shell", bevel=0.025 if lod < 2 else 0.0,
+    up_.box((0.22, UPPER - 0.12, 0.22), (0.0, UPPER / 2, 0.0), "Shell", bevel=0.035 if lod < 2 else 0.0,
             segs=2 if full else 1)
-    up_.sphere(0.07, (0, UPPER, 0), "Dark", segs=n, rings=max(4, n // 2))
+    up_.sphere(0.11, (0, UPPER, 0), "Dark", segs=n, rings=max(4, n // 2))
     if lod < 2:
-        up_.cyl(0.025, 0.1, UPPER - 0.1, "Dark", segs=max(6, n // 2), xf=T(0, 0, -0.085) @ UP)
+        for sx in (-1, 1):
+            up_.cyl(0.035, 0.12, UPPER - 0.1, "Dark", segs=max(6, n // 2),
+                    xf=T(sx * 0.06, 0, -0.135) @ UP)
+        up_.box((0.23, 0.04, 0.006), (0.0, UPPER / 2, 0.1135), "Warn", segs=1)
     out.append(up_)
 
     fore = Part("arm_fore" + suffix(lod))
-    fore.box((0.1, LOWER - 0.22, 0.11), (0.0, (LOWER - 0.22) / 2 + 0.04, 0.0), "Shell",
-             bevel=0.02 if lod < 2 else 0.0, segs=2 if full else 1)
-    # The palm.
-    fore.cyl(0.08, LOWER - 0.2, LOWER - 0.08, "Dark", segs=n, xf=UP, chamfer=0.01 if lod < 2 else 0.0)
-    # Three fingers, curled a little.
+    fore.box((0.17, LOWER - 0.255, 0.18), (0.0, (LOWER - 0.255) / 2 + 0.075, 0.0), "Shell",
+             bevel=0.03 if lod < 2 else 0.0, segs=2 if full else 1)
+    if lod < 2:
+        fore.cyl(0.03, 0.1, LOWER - 0.22, "Dark", segs=max(6, n // 2), xf=T(0, 0, -0.11) @ UP)
+    # The palm: a drum the fingers hinge on.
+    fore.cyl(0.13, LOWER - 0.22, LOWER - 0.06, "Dark", segs=n, xf=UP, chamfer=0.015 if lod < 2 else 0.0)
+    # Three long fingers, curled: a hand that tears doors off.
     for k in range(3):
         a = k * 2 * math.pi / 3
-        fx, fz = math.cos(a) * 0.055, math.sin(a) * 0.055
-        rot = RY(-a) @ RZ(0.25)
-        fore.box((0.03, 0.17, 0.04), (0.0, 0.085, 0.0), "Steel", bevel=0.008 if lod < 2 else 0.0,
-                 segs=1, xf=T(fx, LOWER - 0.1, fz) @ rot)
+        fx, fz = math.cos(a) * 0.09, math.sin(a) * 0.09
+        rot = RY(-a) @ RZ(0.3)
+        fore.box((0.05, 0.3, 0.07), (0.0, 0.15, 0.0), "Steel", bevel=0.012 if lod < 2 else 0.0,
+                 segs=1, xf=T(fx, LOWER - 0.08, fz) @ rot)
+        if lod < 2:
+            fore.box((0.045, 0.1, 0.065), (0.0, 0.33, -0.02), "Dark", bevel=0.01, segs=1,
+                     xf=T(fx, LOWER - 0.08, fz) @ rot @ RX(0.5, about=(0, 0.3, 0)))
     out.append(fore)
     return out
 

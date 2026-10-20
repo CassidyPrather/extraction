@@ -72,7 +72,7 @@ impl Shape {
         match self {
             Shape::Orb => rest_offset(i),
             Shape::Hound => quadrant(i) * Vec3::new(0.42, 0.0, 0.62),
-            Shape::Heavy => quadrant(i) * Vec3::new(0.72, 0.0, 0.82),
+            Shape::Heavy => quadrant(i) * Vec3::new(0.9, 0.0, 0.9),
         }
     }
     /// How high the body rides, at size 1.

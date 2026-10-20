@@ -77,7 +77,7 @@ pub const CELL_AT: Vec3 = Vec3::new(0.0, -0.02, 0.475);
 pub const CELL_HALF: Vec3 = Vec3::new(0.11, 0.07, 0.045);
 /// A vent, behind each flank plate.
 pub const VENT_HALF: Vec3 = Vec3::new(0.03, 0.12, 0.22);
-pub const BOLT_RADIUS: f32 = 0.03;
+pub const BOLT_RADIUS: f32 = 0.04;
 pub const KNEE_RADIUS: f32 = 0.11;
 
 /// Plate `i`'s place: the hatch on its back, the flanks either side.
@@ -94,8 +94,8 @@ pub fn plate_transform(i: usize) -> Transform {
 
 /// Bolt `k` of plate `i`: at its corners, standing proud of it.
 pub fn bolt_at(i: usize, k: usize) -> Vec3 {
-    let x = if k % 2 == 0 { -1.0 } else { 1.0 } * (PLATE_HALF.x - 0.04);
-    let y = if k < 2 { -1.0 } else { 1.0 } * (PLATE_HALF.y - 0.035);
+    let x = if k % 2 == 0 { -1.0 } else { 1.0 } * (PLATE_HALF.x - 0.045);
+    let y = if k < 2 { -1.0 } else { 1.0 } * (PLATE_HALF.y - 0.045);
     plate_transform(i).transform_point(Vec3::new(x, y, PLATE_HALF.z + BOLT_RADIUS * 0.6))
 }
 
@@ -1345,7 +1345,12 @@ fn fell_heavy(
             let seed = e.index_u32() as f32;
             // Forward onto its face or over on a side: seeded, so no two
             // lie the same.
-            h.lean = Vec3::new(0.18 + 0.08 * seed.sin(), 0.0, 0.14 * (seed * 1.7).cos());
+            // (Well over: a wreck, not something parked.)
+            h.lean = Vec3::new(
+                0.3 + 0.08 * seed.sin(),
+                0.0,
+                0.22 * (seed * 1.7).cos().signum(),
+            ) + Vec3::new(0.0, 0.0, 0.06 * (seed * 2.3).sin());
             out.write(HeavyEvent {
                 heavy: e,
                 at: t.translation,
