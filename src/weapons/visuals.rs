@@ -347,43 +347,6 @@ fn animate_parts(
     }
 }
 
-/// A revolver's `cylinder_round_N` / `cylinder_case_N` nodes show what
-/// chamber N holds: a live round, a spent case, or neither.
-fn show_chambers(
-    guns: Query<(&Gun, &Children)>,
-    mut nodes: Query<(&Name, &mut Visibility), With<GunPart>>,
-) {
-    for (gun, children) in &guns {
-        if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
-            continue;
-        }
-        for c in children.iter() {
-            let Ok((name, mut vis)) = nodes.get_mut(c) else {
-                continue;
-            };
-            let (want, n) = if let Some(n) = name.as_str().strip_prefix("cylinder_round_") {
-                (extraction_core::firearm::Round::Live, n)
-            } else if let Some(n) = name.as_str().strip_prefix("cylinder_case_") {
-                (extraction_core::firearm::Round::Spent, n)
-            } else {
-                continue;
-            };
-            let held = n
-                .parse::<usize>()
-                .ok()
-                .and_then(|i| gun.firearm.chambers.get(i).copied().flatten());
-            let v = if held == Some(want) {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
-            if *vis != v {
-                *vis = v;
-            }
-        }
-    }
-}
-
 /// A seated magazine is placed by the layout's seat (gameplay); its drawn
 /// model goes where the gun model's own `magwell` says, so the two line up
 /// whatever the layout's numbers are.
