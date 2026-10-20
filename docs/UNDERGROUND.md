@@ -122,6 +122,16 @@ tests it through the headset harness. Sim raiders whose way to an item
 runs through a held door throw the switch first (a `power` event in the
 telemetry); cautious ones leave it.
 
+The power comes in stages (`power` is a list): each stage's switch is
+dead ("Nothing upstream.") until the one before is on, each holds its
+own doors (a room's, or `portal<N>`: an exit stair's, kiosk and foot)
+and lights its own rooms (a room's `stage`). The layout check floods
+the plan with each stage's doors and every later one's shut and wants
+the switch reached (`power_stages_are_reached_in_order`); the headset
+test throws a late switch first, then each in turn. Raiders throw the
+switches in order up to the stage a door needs, and never leave by an
+exit still held.
+
 ## Water
 
 Floods are layout data too (a room or a corridor, and a depth): a drain

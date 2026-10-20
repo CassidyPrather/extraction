@@ -157,12 +157,8 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
             prop(&mut b, p.kind, at, -p.rot.to_radians(), p.loot.as_deref());
         }
     }
-    // A breaker board on its wall (a generator is the room's machine).
-    if let Some(p) = l
-        .power
-        .as_ref()
-        .filter(|p| p.kind == ug::PowerKind::Breaker)
-    {
+    // Breaker boards on their walls (a generator is the room's machine).
+    for p in l.power.iter().filter(|p| p.kind == ug::PowerKind::Breaker) {
         if let Some(room) = l.rooms.iter().find(|room| room.id == p.room) {
             let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
             prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
@@ -998,30 +994,51 @@ impl Plugin for UndergroundPlugin {
     }
 }
 
-/// A site's power ([`ug::PowerDef`]): off until its switch is thrown.
+/// A site's power ([`ug::PowerDef`]), stage by stage: each off until its
+/// switch is thrown, and a switch does nothing until the stage before is
+/// on.
 #[derive(Component, Debug)]
 pub struct SitePower {
+    pub stages: Vec<Stage>,
+}
+
+#[derive(Debug)]
+pub struct Stage {
     pub on: bool,
     pub kind: ug::PowerKind,
     pub switch: Entity,
 }
 
+impl SitePower {
+    pub fn on(&self, stage: usize) -> bool {
+        self.stages.get(stage).is_some_and(|s| s.on)
+    }
+
+    /// The stage its next switch turns on, if any are still off.
+    pub fn next(&self) -> Option<usize> {
+        self.stages.iter().position(|s| !s.on)
+    }
+}
+
 /// The lever (a breaker's) or pull-start (a generator's) that turns a
-/// site's power on.
+/// stage of a site's power on.
 #[derive(Component, Debug)]
 pub struct PowerSwitch {
     pub site: Entity,
+    pub stage: usize,
 }
 
-/// A door held shut until its site's power is on.
+/// A door held shut until its stage of its site's power is on.
 #[derive(Component, Debug)]
 pub struct PowerLocked {
     pub site: Entity,
+    pub stage: usize,
 }
 
-/// Where a site's power switch is, building space, and which way it faces.
-pub fn switch_pose(l: &Layout) -> Option<Transform> {
-    let p = l.power.as_ref()?;
+/// Where a stage's power switch is, building space, and which way it
+/// faces.
+pub fn switch_pose(l: &Layout, stage: usize) -> Option<Transform> {
+    let p = l.power.get(stage)?;
     let room = l.rooms.iter().find(|room| room.id == p.room)?;
     let rot = Quat::from_rotation_y(-p.rot.to_radians());
     let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
@@ -1037,28 +1054,28 @@ pub fn switch_pose(l: &Layout) -> Option<Transform> {
     )
 }
 
-/// The door leaves (building space hinges) a site's power holds shut.
-pub fn powered_hinges(id: &str) -> Vec<Vec3> {
+/// The door leaves (building space hinges) a stage of a site's power
+/// holds shut.
+pub fn powered_hinges(id: &str, stage: usize) -> Vec<Vec3> {
     let (Some(l), Some(r), Some(g)) = (ug::layout(id), ug::raster(id), geo(id)) else {
         return Vec::new();
     };
-    let Some(p) = &l.power else {
+    let Some(p) = l.power.get(stage) else {
         return Vec::new();
     };
     // The geometry's doors: each kiosk's, then the raster's in order.
     let first = r.portals.len();
+    let kiosks = p.portals().filter_map(|k| g.doors.get(k).map(|d| d.hinge));
     r.doors
         .iter()
         .enumerate()
-        .filter(|(_, d)| {
-            d.room
-                .is_some_and(|k| p.doors.iter().any(|id| l.rooms[k as usize].id == *id))
-        })
+        .filter(|(_, d)| p.holds(l, d))
         .filter_map(|(k, _)| g.doors.get(first + k).map(|d| d.hinge))
+        .chain(kiosks)
         .collect()
 }
 
-/// Logic, once: each powered site gets its switch, its state, and its
+/// Logic, once: each powered site gets its switches, its state, and its
 /// held doors.
 fn wire_power(
     mut commands: Commands,
@@ -1074,42 +1091,48 @@ fn wire_power(
         let Some(l) = ug::layout(&b.prefab) else {
             continue;
         };
-        let (Some(p), Some(pose)) = (&l.power, switch_pose(l)) else {
-            continue;
-        };
-        let switch = commands
-            .spawn((
-                Name::new("Power switch"),
-                PowerSwitch { site },
-                crate::raid::truck::Pressable::BenchRun,
-                crate::interact::Grabbable {
-                    points: vec![crate::interact::GrabPoint::free()],
-                },
-                Collider::cuboid(0.3, 0.3, 0.15),
-                CollisionLayers::new(super::Layer::Item, LayerMask::NONE),
-                pose,
-                Visibility::default(),
-                ChildOf(site),
-            ))
-            .id();
-        commands.entity(site).insert(SitePower {
-            on: false,
-            kind: p.kind,
-            switch,
-        });
-        for hinge in powered_hinges(&b.prefab) {
-            for (d, leaf, parent) in &doors {
-                if parent.parent() == site && leaf.0.hinge.distance(hinge) < 1e-3 {
-                    commands.entity(d).insert(PowerLocked { site });
+        let mut stages = Vec::new();
+        for (stage, p) in l.power.iter().enumerate() {
+            let Some(pose) = switch_pose(l, stage) else {
+                continue;
+            };
+            let switch = commands
+                .spawn((
+                    Name::new(format!("Power switch {}", stage + 1)),
+                    PowerSwitch { site, stage },
+                    crate::raid::truck::Pressable::BenchRun,
+                    crate::interact::Grabbable {
+                        points: vec![crate::interact::GrabPoint::free()],
+                    },
+                    Collider::cuboid(0.3, 0.3, 0.15),
+                    CollisionLayers::new(super::Layer::Item, LayerMask::NONE),
+                    pose,
+                    Visibility::default(),
+                    ChildOf(site),
+                ))
+                .id();
+            stages.push(Stage {
+                on: false,
+                kind: p.kind,
+                switch,
+            });
+            for hinge in powered_hinges(&b.prefab, stage) {
+                for (d, leaf, parent) in &doors {
+                    if parent.parent() == site && leaf.0.hinge.distance(hinge) < 1e-3 {
+                        commands.entity(d).insert(PowerLocked { site, stage });
+                    }
                 }
             }
+        }
+        if !stages.is_empty() {
+            commands.entity(site).insert(SitePower { stages });
         }
     }
 }
 
-/// Throwing a switch: the power comes on (for good), the held doors are
-/// free, the lamps on the power light (and the robots know it), and it
-/// clanks or roars loud enough to bring the crawlers.
+/// Throwing a switch: its stage comes on (for good), the doors it held
+/// are free, its lamps light (and the robots know it), and it clanks or
+/// roars loud enough to bring the crawlers. Out of turn, it's dead.
 #[allow(clippy::too_many_arguments)]
 fn throw_switches(
     mut commands: Commands,
@@ -1132,16 +1155,23 @@ fn throw_switches(
         let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
             continue;
         };
-        if power.on {
+        if power.on(sw.stage) {
             continue;
         }
-        power.on = true;
+        if power.next() != Some(sw.stage) {
+            raid.say(match power.stages[sw.stage].kind {
+                ug::PowerKind::Generator => "The starter turns over on nothing. No feed.",
+                ug::PowerKind::Breaker => "The breaker drops home, dead. Nothing upstream.",
+            });
+            continue;
+        }
+        power.stages[sw.stage].on = true;
         for (d, l) in &locked {
-            if l.site == sw.site {
+            if l.site == sw.site && l.stage == sw.stage {
                 commands.entity(d).remove::<PowerLocked>();
             }
         }
-        let (radius, line) = match power.kind {
+        let (radius, line) = match power.stages[sw.stage].kind {
             ug::PowerKind::Generator => (45.0, "The generator coughs, catches and roars. Lights."),
             ug::PowerKind::Breaker => (30.0, "The breaker slams home. Somewhere, relays clack."),
         };
@@ -1152,7 +1182,11 @@ fn throw_switches(
         });
         raid.say(line);
         if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
-            for room in l.rooms.iter().filter(|room| room.lamp == ug::Lamp::Powered) {
+            for room in l
+                .rooms
+                .iter()
+                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage)
+            {
                 let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
                 lighting
                     .lamps
@@ -1205,6 +1239,7 @@ fn generator_hum(
     *wait = 4.0;
     for p in sites
         .iter()
+        .flat_map(|p| &p.stages)
         .filter(|p| p.on && p.kind == ug::PowerKind::Generator)
     {
         if let Ok(at) = switches.get(p.switch) {
@@ -1345,8 +1380,8 @@ const LAMP_RANGE: f32 = 45.0;
 #[derive(Component)]
 pub struct EmergencyLamp {
     pub stutter: bool,
-    /// On its site's power (dark until it's on).
-    pub site: Option<Entity>,
+    /// On a stage of its site's power (dark until it's on).
+    pub site: Option<(Entity, usize)>,
     seed: f32,
     base: f32,
     lens: Handle<StandardMaterial>,
@@ -1389,7 +1424,7 @@ fn light_lamps(
                     Name::new("Emergency lamp"),
                     EmergencyLamp {
                         stutter: room.lamp == ug::Lamp::Flicker,
-                        site: (room.lamp == ug::Lamp::Powered).then_some(e),
+                        site: (room.lamp == ug::Lamp::Powered).then_some((e, room.stage)),
                         seed: k as f32 * 3.7 + room.at[0] * 0.13,
                         base,
                         lens: lens.clone(),
@@ -1485,7 +1520,9 @@ fn flicker(
         .map(|(g, _)| g.translation())
         .next();
     for (lamp, at, mut light, mut vis) in &mut lamps {
-        let powered = lamp.site.is_none_or(|s| power.get(s).is_ok_and(|p| p.on));
+        let powered = lamp
+            .site
+            .is_none_or(|(s, k)| power.get(s).is_ok_and(|p| p.on(k)));
         let near = powered && eye.is_none_or(|e| e.distance(at.translation()) < LAMP_RANGE);
         let want = if near {
             Visibility::Inherited
@@ -2168,10 +2205,10 @@ mod tests {
         assert!(seen, "the torch gave you away");
     }
 
-    /// Power, through the headset: in every site the powered door won't
-    /// open; a hand squeezed on the breaker or the generator's pull-start
-    /// turns the power on; then the robots know the powered lamps, and the
-    /// door opens.
+    /// Power, through the headset: in every site the powered doors won't
+    /// open; a switch out of turn does nothing; a hand squeezed on each
+    /// stage's breaker or generator pull-start, in order, turns it on;
+    /// then the robots know its lamps, and its doors open.
     #[test]
     fn a_hand_on_the_switch_powers_the_site() {
         use crate::interact::InteractEvent;
@@ -2180,102 +2217,130 @@ mod tests {
         for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
             let mut vr = crate::vr_harness::Vr::new(map);
             vr.step(3);
-            let (switch, at, site) = {
-                let mut q = vr
-                    .app
-                    .world_mut()
-                    .query::<(Entity, &PowerSwitch, &GlobalTransform)>();
-                let (e, sw, g) = q.iter(vr.app.world()).next().expect("a power switch");
-                (e, *g, sw.site)
-            };
-            let held: Vec<Entity> = vr
+            let player = vr.player;
+            let sites: Vec<Entity> = vr
                 .app
                 .world_mut()
-                .query::<(Entity, &PowerLocked)>()
+                .query_filtered::<Entity, With<SitePower>>()
                 .iter(vr.app.world())
-                .filter(|(_, l)| l.site == site)
-                .map(|(e, _)| e)
                 .collect();
-            assert!(!held.is_empty(), "{map}: a door on the power");
-            let player = vr.player;
-            for d in &held {
-                vr.app
-                    .world_mut()
-                    .write_message(InteractEvent::Pressed { item: *d, player });
-            }
-            vr.step(60);
-            for d in &held {
-                assert!(
-                    !vr.app.world().get::<Door>(*d).unwrap().open,
-                    "{map}: held shut"
-                );
-            }
-            let lamps = vr
-                .app
-                .world()
-                .resource::<crate::robots::senses::Lighting>()
-                .lamps
-                .len();
-            // Stand in front of it, a hand on it, squeeze.
-            let handle = at.translation();
-            let out = at.rotation() * Vec3::NEG_Z;
-            let feet = handle + out * 0.6;
-            let zone = vr.app.world().resource::<Zone>().clone();
-            let floor = floor_under(&zone, feet).unwrap_or_else(|| {
-                panic!(
-                    "{map}: the switch at {handle:?} (in front {feet:?}) isn't underground; ground {}",
-                    zone.ground(feet.x, feet.z)
-                )
-            });
-            vr.stand(Vec3::new(feet.x, floor + 0.05, feet.z), 0.0);
-            vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
-            vr.step(2);
-            vr.grip(Side::Right, 1.0);
-            vr.step(3);
-            assert!(
-                vr.pressed().contains(&switch),
-                "{map}: the switch answered the hand"
-            );
-            vr.grip(Side::Right, 0.0);
-            vr.step(5);
-            assert!(
-                vr.app.world().get::<SitePower>(site).unwrap().on,
-                "{map}: power on"
-            );
-            let now = vr
-                .app
-                .world()
-                .resource::<crate::robots::senses::Lighting>()
-                .lamps
-                .len();
-            let powered = ug::layout(
-                &vr.app
+            assert!(!sites.is_empty(), "{map}: a powered site");
+            for site in sites {
+                let id = vr
+                    .app
                     .world()
                     .get::<super::super::buildings::Building>(site)
                     .unwrap()
-                    .prefab,
-            )
-            .unwrap()
-            .rooms
-            .iter()
-            .filter(|r| r.lamp == ug::Lamp::Powered)
-            .count();
-            assert_eq!(now, lamps + powered, "{map}: the robots see the new lamps");
-            for d in &held {
-                assert!(
-                    vr.app.world().get::<PowerLocked>(*d).is_none(),
-                    "{map}: unbolted"
-                );
-                vr.app
-                    .world_mut()
-                    .write_message(InteractEvent::Pressed { item: *d, player });
-            }
-            vr.step(90);
-            for d in &held {
-                assert!(
-                    vr.app.world().get::<Door>(*d).unwrap().open,
-                    "{map}: the door opens"
-                );
+                    .prefab
+                    .clone();
+                let l = ug::layout(&id).unwrap();
+                let switches: Vec<(Entity, GlobalTransform)> = (0..l.power.len())
+                    .map(|k| {
+                        let mut q = vr
+                            .app
+                            .world_mut()
+                            .query::<(Entity, &PowerSwitch, &GlobalTransform)>();
+                        q.iter(vr.app.world())
+                            .find(|(_, sw, _)| sw.site == site && sw.stage == k)
+                            .map(|(e, _, g)| (e, *g))
+                            .unwrap_or_else(|| panic!("{id}: a switch for stage {k}"))
+                    })
+                    .collect();
+                // Out of turn: the last stage's switch, thrown first.
+                if switches.len() > 1 {
+                    let (last, _) = switches[switches.len() - 1];
+                    vr.app
+                        .world_mut()
+                        .write_message(InteractEvent::Pressed { item: last, player });
+                    vr.step(3);
+                    let power = vr.app.world().get::<SitePower>(site).unwrap();
+                    assert!(
+                        power.stages.iter().all(|s| !s.on),
+                        "{id}: a switch out of turn did something"
+                    );
+                }
+                for (stage, (switch, at)) in switches.into_iter().enumerate() {
+                    let held: Vec<Entity> = vr
+                        .app
+                        .world_mut()
+                        .query::<(Entity, &PowerLocked)>()
+                        .iter(vr.app.world())
+                        .filter(|(_, l)| l.site == site && l.stage == stage)
+                        .map(|(e, _)| e)
+                        .collect();
+                    assert!(!held.is_empty(), "{id}: a door on stage {stage}");
+                    for d in &held {
+                        vr.app
+                            .world_mut()
+                            .write_message(InteractEvent::Pressed { item: *d, player });
+                    }
+                    vr.step(60);
+                    for d in &held {
+                        assert!(
+                            !vr.app.world().get::<Door>(*d).unwrap().open,
+                            "{id}: held shut"
+                        );
+                    }
+                    let lamps = vr
+                        .app
+                        .world()
+                        .resource::<crate::robots::senses::Lighting>()
+                        .lamps
+                        .len();
+                    // Stand in front of it, a hand on it, squeeze.
+                    let handle = at.translation();
+                    let out = at.rotation() * Vec3::NEG_Z;
+                    let feet = handle + out * 0.6;
+                    let zone = vr.app.world().resource::<Zone>().clone();
+                    let floor = floor_under(&zone, feet).unwrap_or_else(|| {
+                        panic!(
+                            "{id}: the switch at {handle:?} (in front {feet:?}) isn't underground"
+                        )
+                    });
+                    vr.stand(Vec3::new(feet.x, floor + 0.05, feet.z), 0.0);
+                    vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
+                    vr.step(2);
+                    vr.grip(Side::Right, 1.0);
+                    vr.step(3);
+                    assert!(
+                        vr.pressed().contains(&switch),
+                        "{id}: switch {stage} answered the hand"
+                    );
+                    vr.grip(Side::Right, 0.0);
+                    vr.step(5);
+                    assert!(
+                        vr.app.world().get::<SitePower>(site).unwrap().on(stage),
+                        "{id}: stage {stage} on"
+                    );
+                    let now = vr
+                        .app
+                        .world()
+                        .resource::<crate::robots::senses::Lighting>()
+                        .lamps
+                        .len();
+                    let powered = l
+                        .rooms
+                        .iter()
+                        .filter(|r| r.lamp == ug::Lamp::Powered && r.stage == stage)
+                        .count();
+                    assert_eq!(now, lamps + powered, "{id}: the robots see the new lamps");
+                    for d in &held {
+                        assert!(
+                            vr.app.world().get::<PowerLocked>(*d).is_none(),
+                            "{id}: unbolted"
+                        );
+                        vr.app
+                            .world_mut()
+                            .write_message(InteractEvent::Pressed { item: *d, player });
+                    }
+                    vr.step(90);
+                    for d in &held {
+                        assert!(
+                            vr.app.world().get::<Door>(*d).unwrap().open,
+                            "{id}: the door opens"
+                        );
+                    }
+                }
             }
         }
     }
@@ -2460,7 +2525,7 @@ mod tests {
                     continue;
                 }
                 let from = Vec2::from_array(plan.grid.centre(i, j));
-                if let Some(to) = crate::sim::raider::way_out(&plan, from) {
+                if let Some(to) = crate::sim::raider::way_out(&plan, from, &|_| false) {
                     assert!(
                         plan.entries.iter().any(|e| e.distance(to) < 0.1),
                         "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
