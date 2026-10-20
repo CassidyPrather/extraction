@@ -30,7 +30,25 @@ impl Plugin for CapturePlugin {
             cinematic::CinematicPlugin,
             sweep::SweepPlugin,
             trailer::TrailerPlugin,
-        ));
+        ))
+        .add_systems(PostUpdate, keep_alive);
+    }
+}
+
+/// In a still capture the player stands idle at the insertion while the
+/// camera looks round; the Surge kills anyone in the open in seconds,
+/// which would end the raid (and the Surge's look) partway through a
+/// press kit. A trailer's bot takes its chances.
+fn keep_alive(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut players: Query<&mut crate::health::Health, With<crate::rig::LocalPlayer>>,
+) {
+    if !opts.capture.still() {
+        return;
+    }
+    for mut h in &mut players {
+        h.hp = h.max;
+        h.bleeding = 0.0;
     }
 }
 
