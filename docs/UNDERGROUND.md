@@ -227,3 +227,10 @@ site on a map.
 **Budget.** Everything below is in the `Below` group, drawn only from
 inside or near the ramp and the hatch; five lamps (three on the power),
 range-hidden.
+
+**Shots** (`docs/shots/underground/d_*.jpg`, torch on, power off): the
+ramp kiosk (`d_ramp`; still the shelter's kiosk, a wider shuttered one
+is to come), the intake down the haul ramp (`d_intake`), the dark
+sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
+`d_bay`), the flooded cistern (`d_cistern`), the service stair up
+(`d_stair`) and the hatch (`d_hatch`).
