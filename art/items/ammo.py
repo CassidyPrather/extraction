@@ -74,6 +74,12 @@ def carton(p, sx, sy, sz, y0, mat, top=None, wall=0.0012, sides=True):
 
 
 # --- Loose rounds ----------------------------------------------------------------------------
+C762X39 = ([(0.0, 0.0), (0.0053, 0.0), (0.0056, -0.0005), (0.0056, -0.0013), (0.0047, -0.0016),
+            (0.0047, -0.0026), (0.0056, -0.0032), (0.0052, -0.0295), (0.0043, -0.0325),
+            (0.0042, -0.0387), (0.0, -0.0387)],
+           [(0.0, -0.037), (0.0039, -0.037), (0.0039, -0.044), (0.0035, -0.049), (0.0024, -0.053),
+            (0.0011, -0.0555), (0.0, -0.056)], 0.056)
+
 
 def round_9x18():
     p = Part("body")
@@ -176,6 +182,40 @@ def ammo_545():
     p.box((0.03, 0.0004, 0.022), (-0.008, 0.0171, 0.0125), "Paper", xf=RY(0.04))
     text(p, "5.45", 0.0075, "Black", T(-0.008, 0.0174, 0.0125) @ ON_TOP,
          depth=0.0004)
+    return [p]
+
+
+def round_762x39():
+    p = Part("body")
+    # The intermediate round: a short tapered case, a pointed bullet.
+    cartridge(p, C762X39, T(0, 0, C762X39[2] / 2), segs=14)
+    return [p]
+
+
+def ammo_762x39():
+    p = Part("body")
+    # A cream card box of twenty standing on end, two rows of ten, its lid
+    # torn off over the bullets; a green band and the calibre on the sides.
+    sx, sy, sz = 0.06, 0.03, 0.026
+    y0 = -0.0235
+    wall = 0.0012
+    carton(p, sx, sy, sz, y0, "Cream", wall=wall, sides=False)
+    for sx_ in (-1, 1):
+        panel(p, "x", -sz / 2, sz / 2, y0, y0 + sy, sx_ * (sx / 2 - wall), sx_ * sx / 2,
+              "Cream", [(-sz / 2, sz / 2, y0 + 0.007, y0 + 0.013, "Olive")])
+    ragged(p, sx - 0.003, -sz / 2 + wall, 0.004, y0 + sy - 0.0012, y0 + sy, "Cream", seed=7)
+    # The dark between the rounds, under the tops of the cases.
+    p.box((sx - 0.004, 0.003, sz - 0.004), (0.0, y0 + sy - 0.006, 0.0), "Black")
+    for i in range(10):
+        for j in range(2):
+            x = -0.0255 + i * 0.00567
+            z = -0.0058 + j * 0.0116
+            base = y0 + sy - 0.006 - 0.034
+            nose(p, C762X39, -0.034, T(x, base, z) @ RX(math.pi / 2), segs=8)
+    for sz_ in (-1, 1):
+        rot = RY(math.pi) if sz_ < 0 else T()
+        text(p, "7.62x39", 0.0075, "Black", T(0.0, y0 + 0.012, sz_ * (sz / 2 + 0.0001)) @ rot,
+             depth=0.0004)
     return [p]
 
 
@@ -293,6 +333,7 @@ def robot_ammo_belt():
 if __name__ == "__main__":
     for item_id, fn in (("round_9x18", round_9x18), ("round_545", round_545),
                         ("round_762r", round_762r), ("shell_12ga", shell_12ga),
+                        ("round_762x39", round_762x39), ("ammo_762x39", ammo_762x39),
                         ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
                         ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
                         ("robot_ammo_belt", robot_ammo_belt)):
