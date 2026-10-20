@@ -844,6 +844,10 @@ const SPRIGS: [[f32; 4]; 4] = [
 ];
 /// The hanging birch branch, stem at the top.
 const BIRCH_LEAVES: [f32; 4] = [0.21, 0.0, 0.81, 1.0];
+/// Every atlas rect a card is cut from (each has an outline in
+/// `render::cards`).
+#[cfg(test)]
+pub const CARD_RECTS: [[f32; 4]; 5] = [SPRIGS[0], SPRIGS[1], SPRIGS[2], SPRIGS[3], BIRCH_LEAVES];
 
 impl MeshBuilder {
     fn vertex(&mut self, p: Vec3, n: Vec3, c: [f32; 4]) -> u32 {
@@ -873,16 +877,41 @@ impl MeshBuilder {
         hanging: bool,
     ) {
         let side = across.normalize_or(Vec3::X) * width * 0.5;
-        let tip = base + along;
         let [u0, v0, u1, v1] = rect;
         let (vb, vt) = if hanging { (v0, v1) } else { (v1, v0) };
         let n = |p: Vec3| ((p - centre).normalize_or(Vec3::Y) + Vec3::Y * 0.6).normalize();
         let c = [1.0, 1.0, 1.0, 1.0];
-        let i0 = self.vertex_uv(base - side, n(base - side), c, [u0, vb]);
-        let i1 = self.vertex_uv(base + side, n(base + side), c, [u1, vb]);
-        let i2 = self.vertex_uv(tip + side, n(tip + side), c, [u1, vt]);
-        let i3 = self.vertex_uv(tip - side, n(tip - side), c, [u0, vt]);
-        self.idx.extend_from_slice(&[i0, i1, i2, i0, i2, i3]);
+        // The polygon round the rect's leaves, not the whole quad: the
+        // empty corners were shaded for nothing (`render::cards`). Points
+        // as (across 0..1, base-to-tip 0..1).
+        let pts: Vec<(f32, f32, [f32; 2])> = crate::render::cards::outline(rect)
+            .iter()
+            .map(|&[s, t]| {
+                let v = v0 + t * (v1 - v0);
+                (s, (v - vb) / (vt - vb), [u0 + s * (u1 - u0), v])
+            })
+            .collect();
+        // Wound as the quad was (counter-clockwise in those terms).
+        let wound: f32 = (0..pts.len())
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum();
+        let ids: Vec<u32> = pts
+            .iter()
+            .map(|&(s, f, uv)| {
+                let p = base - side + side * 2.0 * s + along * f;
+                self.vertex_uv(p, n(p), c, uv)
+            })
+            .collect();
+        for i in 1..ids.len() - 1 {
+            if wound > 0.0 {
+                self.idx.extend_from_slice(&[ids[0], ids[i], ids[i + 1]]);
+            } else {
+                self.idx.extend_from_slice(&[ids[0], ids[i + 1], ids[i]]);
+            }
+        }
     }
 
     /// Two cards crossed along the same spine.
