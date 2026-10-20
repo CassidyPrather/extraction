@@ -431,12 +431,17 @@ impl Firearm {
         if self.take_from_feed() {
             self.chambers[0] = Some(Round::Live);
             events.push(Event::Chambered);
-        } else if self.def.last_round_hold_open && self.magazine.is_some() {
+        } else if self.def.last_round_hold_open && (self.magazine.is_some() || self.fixed_feed()) {
             self.locked_back = true;
             self.bolt_travel = 1.0;
             events.push(Event::BoltLocked);
         }
         events
+    }
+
+    /// A fixed magazine on a self-loader (an SKS), loaded from clips.
+    fn fixed_feed(&self) -> bool {
+        self.def.magazine_family.is_none() && self.def.internal_capacity > 0
     }
 
     fn take_from_feed(&mut self) -> bool {
@@ -530,7 +535,8 @@ impl Firearm {
         match self.def.action {
             ActionKind::SemiAuto => {
                 let empty_hold = self.def.last_round_hold_open
-                    && self.magazine.as_ref().is_some_and(|m| m.rounds == 0)
+                    && (self.magazine.as_ref().is_some_and(|m| m.rounds == 0)
+                        || (self.fixed_feed() && self.internal_rounds == 0))
                     && self.stroke_cleared
                     && self.bolt_travel >= EJECT_AT;
                 if empty_hold {
@@ -664,6 +670,14 @@ impl Firearm {
                 }
                 false
             }
+            ActionKind::SemiAuto if self.fixed_feed() => {
+                if self.bolt_travel < EJECT_AT || self.internal_rounds >= self.def.internal_capacity
+                {
+                    return false;
+                }
+                self.internal_rounds += 1;
+                true
+            }
             ActionKind::SemiAuto => {
                 if self.bolt_travel >= EJECT_AT && self.chambers[0].is_none() {
                     self.chambers[0] = Some(Round::Live);
@@ -677,7 +691,8 @@ impl Firearm {
     /// Strips a clip of `n` rounds into an internal magazine through the open
     /// action. Returns how many went in.
     pub fn strip_clip(&mut self, n: u32) -> u32 {
-        if self.def.action != ActionKind::BoltAction || self.bolt_travel < EJECT_AT {
+        let clip_fed = self.def.action == ActionKind::BoltAction || self.fixed_feed();
+        if !clip_fed || self.bolt_travel < EJECT_AT {
             return 0;
         }
         let room = self.def.internal_capacity - self.internal_rounds;
@@ -1048,6 +1063,35 @@ mod tests {
         assert!((0.02..0.06).contains(&half), "{half}");
         gun.repair(0.45, 0.95);
         assert!(gun.malfunction_chance() < half / 4.0, "the bench helps");
+    }
+
+    /// An SKS-pattern rifle: semi-auto, ten-round fixed magazine charged
+    /// from clips through the locked-back action.
+    #[test]
+    fn a_fixed_magazine_self_loader_takes_clips_and_holds_open() {
+        let mut gun = Firearm::new(
+            FirearmDef {
+                magazine_family: None,
+                internal_capacity: 10,
+                double_action: false,
+                ..pistol()
+            },
+            1.0,
+        );
+        gun.cycle_mode();
+        gun.set_bolt_travel(1.0);
+        assert!(
+            gun.release_bolt().contains(&Event::BoltLocked),
+            "held open, empty"
+        );
+        assert_eq!(gun.strip_clip(10), 10);
+        assert!(gun.release_slide_stop().contains(&Event::Chambered));
+        for _ in 0..10 {
+            assert!(fired(&shoot(&mut gun)));
+        }
+        assert!(gun.locked_back, "locks back on the last round");
+        assert!(gun.load_round(), "thumbs one in");
+        assert_eq!(gun.internal_rounds, 1);
     }
 
     #[test]
