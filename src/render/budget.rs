@@ -968,6 +968,14 @@ mod tests {
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
+            let mut most = load.shadow_by.clone();
+            most.sort_by(|a, b| b.1.cmp(&a.1));
+            for (what, c, t) in most.iter().take(5) {
+                println!(
+                    "    many shadow {what}: {c} meshes, {:.0}k",
+                    *t as f64 / 1000.0
+                );
+            }
             let o = load.over(&BUDGET);
             if !o.is_empty() {
                 over.push(format!("{view}: {}", o.join(", ")));
