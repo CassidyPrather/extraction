@@ -125,6 +125,7 @@ impl Plugin for AudioPlugin {
                     notice_sounds,
                     convoy_sounds,
                     dirigible_loops,
+                    drone_and_zip_sounds,
                 ),
             )
             .add_systems(
@@ -2114,6 +2115,85 @@ fn dirigible_loops(
             }
             (None, true) => {}
         }
+    }
+}
+
+/// The camera drone: the switch as its rotors spin up, a click in your
+/// ear as it marks a robot, a knock as it settles back by you. A zipline: the clank
+/// of its anchor biting, and its line coiled away.
+#[allow(clippy::too_many_arguments)]
+fn drone_and_zip_sounds(
+    mut commands: Commands,
+    drones: Query<(
+        Entity,
+        &crate::gadgets::camera_drone::CameraDrone,
+        &GlobalTransform,
+    )>,
+    spotted: Query<(), Added<crate::gadgets::camera_drone::Spotted>>,
+    ropes: Query<(Entity, &crate::gadgets::climbing::Rope)>,
+    mut flight_was: Local<HashMap<Entity, crate::gadgets::camera_drone::Flight>>,
+    mut zips: Local<HashMap<Entity, Vec3>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::gadgets::camera_drone::Flight;
+    let mut out: Vec<(&str, &str, Vec3)> = Vec::new();
+    for (e, d, gt) in &drones {
+        let before = flight_was.insert(e, d.flight);
+        match (before, d.flight) {
+            (Some(Flight::Idle), Flight::SpunUp) => {
+                out.push(("physical/switch", "camera_drone.on", gt.translation()))
+            }
+            (Some(Flight::Up | Flight::Returning), Flight::Idle) => out.push((
+                "physical/handle_plastic",
+                "camera_drone.land",
+                gt.translation(),
+            )),
+            _ => {}
+        }
+    }
+    // A robot marked: a click in your ear, as from the drone's handset.
+    for _ in &spotted {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/switch",
+            None,
+            "camera_drone.spot",
+            0.0,
+            1.3,
+            0.03,
+        );
+    }
+    let mut live = Vec::new();
+    for (e, r) in &ropes {
+        if !r.zip {
+            continue;
+        }
+        live.push(e);
+        if zips.insert(e, r.top).is_none() {
+            out.push(("impacts/metal", "zip.rig", r.top));
+        }
+    }
+    zips.retain(|e, at| {
+        let kept = live.contains(e);
+        if !kept {
+            out.push(("physical/cloth", "zip.pack", *at));
+        }
+        kept
+    });
+    for (set, cue, at) in out {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            0.06,
+        );
     }
 }
 
