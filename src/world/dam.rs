@@ -41,7 +41,7 @@ const TOWER_W: f32 = 8.0;
 const TOWER_WALL: f32 = 0.6;
 pub const TOWER_BRIDGE: f32 = 20.5;
 const TOWER_H: f32 = 34.0;
-const BRIDGE_RUN: f32 = 28.5;
+const BRIDGE_RUN: f32 = 24.6;
 /// Treads in the tower's stair: rise and run.
 const RISE: f32 = 0.2;
 const TREAD: f32 = 0.28;
@@ -185,7 +185,7 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
 
 /// The draw-off tower on the bed: a square stone tower with a doorway at
 /// its foot (on the bed side, -Z) and another at the bridge floor, where a
-/// bridge runs 28 m to the crest (+Z). Inside, a stair climbs the four
+/// bridge runs 25 m to the crest (+Z). Inside, a stair climbs the four
 /// walls round an open well from the foot to the bridge floor; above it
 /// the valve room under the roof.
 fn tower(b: &mut Builder) {
