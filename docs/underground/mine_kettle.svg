@@ -6478,6 +6478,9 @@
 <line x1='198.0' y1='642.0' x2='198.0' y2='660.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='207.0' y1='170.9' x2='225.0' y2='170.9' stroke='#c0392b' stroke-width='4'/>
 <line x1='225.0' y1='669.0' x2='207.0' y2='669.0' stroke='#c0392b' stroke-width='4'/>
+<rect x='340.0' y='293.2' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
+<text x='353.0' y='302.2' fill='#f1c40f'>Breaker</text>
+<line x1='303.0' y1='459.0' x2='321.0' y2='459.0' stroke='#f1c40f' stroke-width='4'/>
 <circle cx='235.2' cy='207.0' r='4' fill='#5a5650'/>
 <circle cx='241.2' cy='178.2' r='4' fill='#5a5650'/>
 <text x='216.0' y='189.0' fill='#1d1c1a' text-anchor='middle'>station ~</text>
@@ -6494,12 +6497,12 @@
 <circle cx='38.4' cy='511.8' r='4' fill='#5a5650'/>
 <circle cx='91.2' cy='444.6' r='4' fill='#5a5650'/>
 <circle cx='54.0' cy='478.2' r='4' fill='#d4a017'/>
-<text x='72.0' y='465.0' fill='#1d1c1a' text-anchor='middle'>stope x</text>
+<text x='72.0' y='465.0' fill='#1d1c1a' text-anchor='middle'>stope +</text>
 <text x='312.0' y='405.0' fill='#1d1c1a' text-anchor='middle'>east_crosscut</text>
 <circle cx='297.6' cy='497.4' r='4' fill='#d4a017'/>
 <circle cx='326.4' cy='497.4' r='4' fill='#d4a017'/>
 <circle cx='331.8' cy='473.4' r='4' fill='#d4a017'/>
-<text x='312.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>magazine</text>
+<text x='312.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>magazine +</text>
 <circle cx='294.0' cy='303.0' r='4' fill='#5a5650'/>
 <circle cx='339.6' cy='269.4' r='4' fill='#5a5650'/>
 <circle cx='339.6' cy='277.2' r='4' fill='#5a5650'/>
@@ -6511,5 +6514,5 @@
 <circle cx='163.2' cy='571.8' r='4' fill='#d4a017'/>
 <text x='144.0' y='549.0' fill='#1d1c1a' text-anchor='middle'>refuge *</text>
 <text x='216.0' y='645.0' fill='#1d1c1a' text-anchor='middle'>raise_foot</text>
-<text x='8' y='858' fill='#e8e2d0'>Mine gallery (mine_kettle): floor -6.0 m; grid 0.2 m; gold = loot, red = door, blue = stair; lamp * on, ~ flickering, x dead</text>
+<text x='8' y='858' fill='#e8e2d0'>Mine gallery (mine_kettle): floor -6.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

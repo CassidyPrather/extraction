@@ -81,6 +81,9 @@ pub enum Lamp {
     Flicker,
     /// A fitting, dead.
     Dead,
+    /// On the site's power: dark until the breaker's thrown or the
+    /// generator's started ([`PowerDef`]), then steady.
+    Powered,
 }
 
 /// Furniture and junk, placed in a room (relative to its centre).
@@ -211,6 +214,34 @@ pub struct Layout {
     pub patrol: Vec<String>,
     #[serde(default)]
     pub crawlers: u32,
+    #[serde(default)]
+    pub power: Option<PowerDef>,
+}
+
+/// The site's power: a breaker board or a generator somewhere awkward.
+/// Switching it on lights the `Lamp::Powered` rooms, lets the powered
+/// doors open, and makes a noise the crawlers hear.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PowerDef {
+    pub kind: PowerKind,
+    /// The room it's in, and where (relative to the room's centre, against
+    /// a wall: the switch faces the turned -Z).
+    pub room: String,
+    pub at: P2,
+    #[serde(default)]
+    pub rot: f32,
+    /// The rooms whose doors stay shut until it's on (the door of the
+    /// corridor into each).
+    #[serde(default)]
+    pub doors: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub enum PowerKind {
+    /// A board of breakers: one big lever, a clank.
+    Breaker,
+    /// A diesel generator: pull-start, and it runs (loud) from then on.
+    Generator,
 }
 
 /// An anomaly in a room: `kind` names an `anomaly::AnomalyKind` (Lift,
@@ -414,6 +445,8 @@ pub struct DoorSpot {
     pub width: f32,
     /// Floor under it, site y.
     pub y: f32,
+    /// The room it opens into (a corridor's door), if any.
+    pub room: Option<u16>,
 }
 
 /// The layout on a grid.
@@ -519,7 +552,12 @@ impl Raster {
                 (&l.rooms[a], pts[1], pts[0], from_door),
                 (&l.rooms[b], pts[n - 2], pts[n - 1], to_door),
             ] {
-                if let Some(d) = r.mouth(room, outer, inner, link.width) {
+                if let Some(mut d) = r.mouth(room, outer, inner, link.width) {
+                    d.room = Some(if std::ptr::eq(room, &l.rooms[a]) {
+                        a
+                    } else {
+                        b
+                    } as u16);
                     r.mouths.push(d);
                     if door {
                         r.doors.push(d);
@@ -569,6 +607,7 @@ impl Raster {
                     along: turn([1.0, 0.0], p.rot),
                     width: 2.0 * STAIR_HALF,
                     y: l.floor,
+                    room: None,
                 });
             }
         }
@@ -592,6 +631,7 @@ impl Raster {
                 along: [0.0, 1.0],
                 width,
                 y: self.floor,
+                room: None,
             })
         } else if d[1].abs() > 0.0 {
             let z = if d[1] > 0.0 {
@@ -604,6 +644,7 @@ impl Raster {
                 along: [1.0, 0.0],
                 width,
                 y: self.floor,
+                room: None,
             })
         } else {
             None
@@ -803,6 +844,34 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    if let Some(p) = &l.power {
+        match l.rooms.iter().find(|r| r.id == p.room) {
+            None => bad.push(format!("power in no room `{}`", p.room)),
+            Some(room) => {
+                let at = add(room.at, p.at);
+                if !r.at(at).open() {
+                    bad.push(format!("{}: its power switch is in the rock", room.id));
+                }
+                // Facing into the room (its turned -Z): you stand there.
+                let front = add(at, turn([0.0, -0.9], p.rot));
+                if !r.at(front).flat() {
+                    bad.push(format!("{}: its power switch faces the wall", room.id));
+                }
+            }
+        }
+        for id in &p.doors {
+            let Some(k) = l.rooms.iter().position(|r| &r.id == id) else {
+                bad.push(format!("a powered door into no room `{id}`"));
+                continue;
+            };
+            if !r.doors.iter().any(|d| d.room == Some(k as u16)) {
+                bad.push(format!("no door into `{id}` for the power to hold"));
+            }
+            if p.room == *id {
+                bad.push(format!("the power's behind its own door in `{id}`"));
+            }
+        }
+    }
     for id in &l.patrol {
         if !l.rooms.iter().any(|r| &r.id == id) {
             bad.push(format!("a patrol through no room `{id}`"));
@@ -844,6 +913,7 @@ pub fn check(l: &Layout) -> Vec<String> {
                 along: turn([1.0, 0.0], p.rot),
                 width: 2.0 * STAIR_HALF,
                 y: l.floor,
+                room: None,
             });
             for m in r.mouths.iter().copied().chain(feet) {
                 let off = sub(at, m.at);
@@ -1004,6 +1074,38 @@ pub fn plan_svg(id: &str) -> Option<String> {
             "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#c0392b' stroke-width='4'/>\n"
         );
     }
+    if let Some(p) = &l.power {
+        if let Some(room) = l.rooms.iter().find(|r| r.id == p.room) {
+            let (x, y) = px(add(room.at, p.at));
+            out += &format!(
+                "<rect x='{:.1}' y='{:.1}' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#f1c40f'>{:?}</text>\n",
+                x - 5.0,
+                y - 5.0,
+                x + 8.0,
+                y + 4.0,
+                p.kind
+            );
+        }
+        // The doors on the power, drawn over in yellow.
+        for d in r.doors.iter().filter(|d| {
+            d.room
+                .is_some_and(|k| p.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+        }) {
+            let a = sub(
+                d.at,
+                [d.along[0] * d.width * 0.5, d.along[1] * d.width * 0.5],
+            );
+            let b = add(
+                d.at,
+                [d.along[0] * d.width * 0.5, d.along[1] * d.width * 0.5],
+            );
+            let ((x1, y1), (x2, y2)) = (px(a), px(b));
+            out += &format!(
+                "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#f1c40f' stroke-width='4'/>\n"
+            );
+        }
+    }
     for room in &l.rooms {
         for p in &room.props {
             let (x, y) = px(add(room.at, p.at));
@@ -1020,6 +1122,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
             Lamp::Steady => " *",
             Lamp::Flicker => " ~",
             Lamp::Dead => " x",
+            Lamp::Powered => " +",
         };
         out += &format!(
             "<text x='{x:.1}' y='{:.1}' fill='#1d1c1a' text-anchor='middle'>{}{lamp}</text>\n",
@@ -1029,7 +1132,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door, blue = stair; lamp * on, ~ flickering, x dead</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,

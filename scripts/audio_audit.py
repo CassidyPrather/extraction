@@ -236,6 +236,14 @@ def main():
         return
     import audio_mix  # noqa: E402  (the mix and scene passes)
     flagged = audio_mix.run(sets, out)
+    import audio_acoustics  # noqa: E402  (what the rooms do)
+    room_flags, lines = audio_acoustics.run(sets, out)
+    if lines:
+        text = "\n".join(lines)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n\n" + text + "\n")
+    flagged += room_flags
     if args.check and flagged:
         sys.exit(f"{flagged} cue(s) flagged: see {out / 'mix.txt'}")
 

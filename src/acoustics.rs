@@ -148,6 +148,22 @@ impl Space {
     }
 }
 
+/// Freeverb's comb filters average this long (1378 samples at 44.1 kHz).
+pub const FREEVERB_COMB: f32 = 0.0312;
+/// Measured by the audit (`scripts/audio_acoustics.py`).
+pub const FREEVERB_DAMPED: f32 = 1.16;
+
+/// The `room_size` that gives Freeverb a decay of `rt60` seconds: its
+/// feedback is `0.7 + 0.28 * room_size`, and a comb of delay `d` with
+/// feedback `g` falls 60 dB in `3 d / -log10 g`. The shortest it does
+/// is about 0.6 s (room_size 0). Its damping shortens the tail too: the
+/// audit renders it and measures 0.86 of the comb's decay at every size,
+/// so the comb is asked for [`FREEVERB_DAMPED`] more.
+pub fn freeverb_room(rt60: f32) -> f32 {
+    let feedback = 10f32.powf(-3.0 * FREEVERB_COMB / (rt60 * FREEVERB_DAMPED).max(0.05));
+    ((feedback - 0.7) / 0.28).clamp(0.0, 1.0)
+}
+
 pub fn surface_of(m: Mat) -> Surface {
     match m {
         Mat::RustyMetal
@@ -300,16 +316,23 @@ pub const WALL_CUTOFF: f32 = 700.0;
 pub const DOORWAY_DB: f32 = -3.0;
 pub const DOORWAY_CUTOFF: f32 = 3_000.0;
 
-/// Is the straight path from `from` to `to` blocked? The same test robots
-/// hear by: from `HEARD_OVER` above the source, so a hump in a field
-/// doesn't count.
+/// Is the straight path from `from` to `to` blocked? As robots hear:
+/// the sound bends over what stands less than `HEARD_OVER` above its
+/// source (a hump in a field), so the path counts as blocked only if the
+/// line from just above the source and the line from `HEARD_OVER` above
+/// it are both cut. (Robots try only the raised line, which through a
+/// doorway runs into the lintel.)
 pub fn blocked(spatial: &SpatialQuery, from: Vec3, to: Vec3) -> bool {
-    let src = from + Vec3::Y * HEARD_OVER.min((to.y - from.y).abs().max(0.3));
-    let d = src.distance(to);
     let world = SpatialQueryFilter::from_mask([Layer::World]);
-    Dir3::new(to - src)
-        .ok()
-        .is_some_and(|dir| spatial.cast_ray(src, dir, d - 0.5, true, &world).is_some())
+    [0.3, HEARD_OVER].into_iter().all(|up| {
+        let src = from + Vec3::Y * up;
+        let d = src.distance(to);
+        Dir3::new(to - src).ok().is_some_and(|dir| {
+            spatial
+                .cast_ray(src, dir, (d - 0.5).max(0.0), true, &world)
+                .is_some()
+        })
+    })
 }
 
 /// How a sound at `from` reaches a listener at `to`: in the clear, round
@@ -493,6 +516,83 @@ mod tests {
         assert!(!rts.is_empty(), "no underground site on the map");
         rts.sort_by(f32::total_cmp);
         assert!(rts[rts.len() / 2] >= 1.2, "underground echoes: {rts:?}");
+    }
+
+    /// A sound inside a building, heard from outside its door: through
+    /// the wall while the door is shut, round the doorway when it's open.
+    #[test]
+    fn a_shut_door_muffles_and_an_open_one_lets_it_out() {
+        let mut app = app("marrow_creek");
+        let entrances: Vec<_> = app
+            .world()
+            .resource::<crate::robots::doors::Entrances>()
+            .doors
+            .clone();
+        let occ = |app: &mut App, openings: Vec<Vec3>, from: Vec3, to: Vec3| {
+            app.world_mut()
+                .run_system_once(move |spatial: SpatialQuery| {
+                    occlusion(&spatial, &openings, from, to)
+                })
+                .unwrap()
+        };
+        let (mut passed, mut failed) = (0, Vec::new());
+        for e in entrances.iter().take(30) {
+            // Underground, a door leads to the next room, not out.
+            let site = app
+                .world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| extraction_core::underground::is_site(&b.prefab));
+            if site {
+                continue;
+            }
+            // Shut it, let the leaf swing to.
+            if let Some(mut d) = app
+                .world_mut()
+                .get_mut::<crate::world::buildings::Door>(e.door)
+            {
+                d.open = false;
+            } else {
+                continue;
+            }
+            for _ in 0..90 {
+                app.update();
+            }
+            let outward = e.out.normalize_or_zero();
+            let inside = e.mid - outward * 1.5 + Vec3::Y * 0.2;
+            let outside = e.mid + outward * 5.0 + Vec3::Y * 1.4;
+            let shut = occ(&mut app, vec![], inside, outside);
+            if shut == CLEAR {
+                // A doorway with no leaf, or a window in line: no test.
+                continue;
+            }
+            assert_eq!(shut.db, wall_db(), "{e:?}");
+            if let Some(mut d) = app
+                .world_mut()
+                .get_mut::<crate::world::buildings::Door>(e.door)
+            {
+                d.open = true;
+            }
+            for _ in 0..90 {
+                app.update();
+            }
+            let open = occ(&mut app, vec![e.mid], inside, outside);
+            // (A door whose way out runs into something else, a porch post
+            // or the next building, stays muffled.)
+            if open.db > shut.db && open.cutoff > shut.cutoff {
+                passed += 1;
+            } else {
+                failed.push(*e);
+            }
+        }
+        assert!(passed >= 5, "only {passed} doors let sound out");
+        assert!(failed.len() * 3 <= passed, "{passed} passed; {failed:?}");
+    }
+
+    #[test]
+    fn freeverb_room_follows_the_decay() {
+        assert_eq!(freeverb_room(0.3), 0.0);
+        assert!(freeverb_room(1.0) < freeverb_room(2.0));
+        assert!(freeverb_room(3.5) < 0.9 && freeverb_room(3.5) > 0.8);
     }
 
     /// Through a wall a sound loses what robots say it loses; round an

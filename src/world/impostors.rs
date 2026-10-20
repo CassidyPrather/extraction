@@ -520,6 +520,10 @@ pub struct ImpostorCut {
 }
 
 impl bevy::pbr::MaterialExtension for ImpostorCut {
+    fn vertex_shader() -> bevy::shader::ShaderRef {
+        "shaders/impostor.wgsl".into()
+    }
+
     fn fragment_shader() -> bevy::shader::ShaderRef {
         "shaders/impostor.wgsl".into()
     }

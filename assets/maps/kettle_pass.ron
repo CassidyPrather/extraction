@@ -153,6 +153,15 @@
             points: [(142.0, -31.0), (170.0, -18.0), (198.0, -16.0), (222.0, -40.0), (226.0, -86.0),
                      (226.0, -122.0), (222.0, -165.0)],
         ),
+        // Footpaths from the pass road to the small places beside it.
+        (
+            name: "Hut path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(1.0, -129.0), (-18.0, -130.0), (-34.0, -129.0)],
+        ),
+        (
+            name: "Cottage path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(98.0, 207.0), (90.0, 214.0), (82.0, 219.0)],
+        ),
         // Up from the pass to the ranger tower on the west summit.
         (
             name: "Tower path", kind: Path, width: 1.4, shoulder: 0.8, smoothing: 4.0,

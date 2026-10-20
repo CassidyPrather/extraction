@@ -33,6 +33,7 @@ impl Plugin for GunVisualsPlugin {
                 animate_parts,
                 seat_mag_visuals,
                 show_mag_rounds,
+                show_chambers,
             )
                 .chain()
                 .before(TransformSystems::Propagate),
@@ -102,6 +103,9 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("trigger", Moves::Trigger),
         ("selector", Moves::Selector),
         ("hammer", Moves::Hammer),
+        ("cylinder", Moves::Cylinder),
+        ("gate", Moves::Gate),
+        ("ejector", Moves::Rod),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -240,6 +244,10 @@ fn finish_gun_models(
 
 /// How far back a cocked hammer tips, radians.
 const HAMMER_BACK: f32 = 0.5;
+/// How far a revolver's gate swings open, radians.
+const GATE_OPEN: f32 = 1.4;
+/// A revolver's ejector rod's stroke, metres.
+const ROD_STROKE: f32 = 0.042;
 
 fn animate_parts(
     guns: Query<(&Gun, &Children, Option<&Handling>)>,
@@ -267,6 +275,24 @@ fn animate_parts(
                 Moves::WithBolt => {
                     let mut r = part.rest;
                     r.translation.z += bolt * travel;
+                    r
+                }
+                Moves::Cylinder => {
+                    let n = f.chambers.len().max(1) as f32;
+                    let turn = f.cylinder as f32 * std::f32::consts::TAU / n;
+                    let mut r = part.rest;
+                    r.rotation = Quat::from_rotation_z(-turn) * r.rotation;
+                    r
+                }
+                Moves::Gate => {
+                    let mut r = part.rest;
+                    let open = if f.gate_open { GATE_OPEN } else { 0.0 };
+                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
+                    r
+                }
+                Moves::Rod => {
+                    let mut r = part.rest;
+                    r.translation.z += f.rod * ROD_STROKE;
                     r
                 }
                 Moves::Hammer => {
@@ -317,6 +343,43 @@ fn animate_parts(
                     r
                 }
             };
+        }
+    }
+}
+
+/// A revolver's `cylinder_round_N` / `cylinder_case_N` nodes show what
+/// chamber N holds: a live round, a spent case, or neither.
+fn show_chambers(
+    guns: Query<(&Gun, &Children)>,
+    mut nodes: Query<(&Name, &mut Visibility), With<GunPart>>,
+) {
+    for (gun, children) in &guns {
+        if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
+            continue;
+        }
+        for c in children.iter() {
+            let Ok((name, mut vis)) = nodes.get_mut(c) else {
+                continue;
+            };
+            let (want, n) = if let Some(n) = name.as_str().strip_prefix("cylinder_round_") {
+                (extraction_core::firearm::Round::Live, n)
+            } else if let Some(n) = name.as_str().strip_prefix("cylinder_case_") {
+                (extraction_core::firearm::Round::Spent, n)
+            } else {
+                continue;
+            };
+            let held = n
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| gun.firearm.chambers.get(i).copied().flatten());
+            let v = if held == Some(want) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != v {
+                *vis = v;
+            }
         }
     }
 }

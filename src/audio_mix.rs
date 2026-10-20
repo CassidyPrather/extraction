@@ -237,6 +237,11 @@ pub fn db(name: &str) -> f32 {
     })
 }
 
+/// A cue's role, if it's in the mix.
+pub fn role(name: &str) -> Option<Role> {
+    MIX.iter().find(|c| c.name == name).map(|c| c.role)
+}
+
 fn find(name: &str) -> Option<&'static Cue> {
     let c = MIX.iter().find(|c| c.name == name);
     if c.is_none() {

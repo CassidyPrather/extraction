@@ -625,11 +625,17 @@ fn buttons(
         last.insert(e, (p, s, c));
         let name = catalog.get(item.kind()).id.clone();
         let mut events = Vec::new();
+        let revolver = gun.firearm.def.action == ActionKind::Revolver;
         if p && !p0 {
             match gun.firearm.def.action {
                 ActionKind::BreakAction => {
                     let open = gun.firearm.bolt_travel < 0.5;
                     events.extend(gun.firearm.set_break_open(open));
+                }
+                // A revolver's thumb button swings the loading gate.
+                ActionKind::Revolver => {
+                    let open = !gun.firearm.gate_open;
+                    events.extend(gun.firearm.set_gate(open));
                 }
                 _ => {
                     drop_mag.write(DropMagazine { gun: e });
@@ -637,10 +643,25 @@ fn buttons(
             }
         }
         if s && !s0 {
-            events.extend(gun.firearm.release_slide_stop());
+            if revolver {
+                // Gate open: turn the cylinder a chamber; shut: thumb the
+                // hammer back.
+                if gun.firearm.gate_open {
+                    events.extend(gun.firearm.rotate_cylinder());
+                } else {
+                    events.extend(gun.firearm.cock_hammer());
+                }
+            } else {
+                events.extend(gun.firearm.release_slide_stop());
+            }
         }
         if c && !c0 {
-            events.extend(gun.firearm.cycle_mode());
+            if revolver {
+                // The ejector rod, at the gate.
+                events.extend(gun.firearm.eject_at_gate());
+            } else {
+                events.extend(gun.firearm.cycle_mode());
+            }
         }
         emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
         // A hand that let go of the handle this tick: spring return.

@@ -69,7 +69,7 @@ pub fn roll_zone_loot(world: &mut World) {
             &opts.map,
             zone,
             catalog,
-            crate::world::scenes::gates(world),
+            crate::world::scenes::gates(world, &opts.map),
         );
         if let Some(spots) = spots {
             spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
