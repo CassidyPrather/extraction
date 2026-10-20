@@ -2301,6 +2301,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let pull = match s.kind {
             // The driver's scout job: a player goes for it, as long as
             // they're fit to.
+            // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
+            _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
