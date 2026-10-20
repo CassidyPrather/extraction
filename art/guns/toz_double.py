@@ -127,7 +127,7 @@ act.prism(tl, 0.0, 0.0, "Blued", axis="y", bevel=0.0008, segs=1,
           width=lambda x, z: (0.042 - (z + 0.05) * 0.06, 0.0475 - (z + 0.05) * 0.06))
 act.box((0.006, 0.004, 0.009), (0.0, 0.0405, -0.004), "Blued", bevel=0.0012)
 # Top tang onto the wrist.
-act.prism(fillet([(-0.03, 0.0355), (0.025, 0.0275), (0.03, 0.0305), (-0.03, 0.041)], 0.003, 2),
+act.prism(fillet([(-0.03, 0.0355), (0.025, 0.0275), (0.03, 0.0305), (-0.03, 0.041)], 0.0025, 3),
           -0.0065, 0.0065, "Steel", axis="x", bevel=0.001, segs=1)
 
 # Trigger guard with its long tang, and the rear trigger (the front one moves).
@@ -176,7 +176,7 @@ wrist_check.checkering(sc, stock_prof,
 stock.cut(sc)
 # Rubber butt pad.
 pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
-             [0.001, 0.004, 0.004, 0.001], 3)
+             [0.0032, 0.004, 0.004, 0.0032], 3)
 stock.prism(pad, -0.0215, 0.0215, "Black", axis="x", bevel=0.003, segs=2)
 # Rear sling swivel under the butt.
 loop = [(0.25 + 0.009 * math.cos(a), -0.104 + 0.009 * math.sin(a))

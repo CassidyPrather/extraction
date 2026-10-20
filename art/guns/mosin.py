@@ -89,7 +89,7 @@ furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
 
 # Upper handguard over the barrel.
 hg_sec = fillet([(-0.0145, 0.0365), (0.0145, 0.0365), (0.0145, 0.052), (0.0, 0.0615),
-                 (-0.0145, 0.052)], [0.001, 0.001, 0.006, 0.011, 0.006], 4)
+                 (-0.0145, 0.052)], [0.0042, 0.0042, 0.006, 0.011, 0.006], 4)
 furn.prism(hg_sec, -0.47, -0.245, "Wood", axis="z", bevel=0.004, segs=2)
 
 # Barrel bands, with sling swivels on the left.
@@ -152,7 +152,7 @@ recv.tube(0.0148, 0.0094, -0.170, -0.014, "Blued", segs=24, xf=T(0, BORE, 0))
 recv.box((0.025, 0.018, 0.156), (0, BORE - 0.012, -0.092), "Blued", bevel=0.002)
 # Rear tang running down onto the wrist.
 tang = fillet([(-0.016, BORE - 0.014), (0.004, BORE - 0.014), (0.045, 0.024), (0.05, 0.0275),
-               (0.04, 0.0305), (-0.016, 0.034)], 0.003, 2)
+               (0.04, 0.0305), (-0.016, 0.034)], [0.0014, 0.003, 0.003, 0.003, 0.003, 0.0014], 3)
 recv.prism(tang, -0.0075, 0.0075, "Blued", axis="x", bevel=0.0012, segs=1)
 rcut = Part("cut")
 # Loading/ejection opening on top, and the bolt-handle slot on the right.

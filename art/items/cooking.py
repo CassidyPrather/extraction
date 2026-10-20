@@ -571,7 +571,7 @@ def cook_omelette():
     half = [(0.02 * math.cos(math.pi * k / 12), 0.022 * math.sin(math.pi * k / 12))
             for k in range(13)]
     p.prism(fillet([(a, b - 0.009) for a, b in half], 0.0045, 3), top, top + 0.0095, "Yellow",
-            axis="y", bevel=0.0042, segs=2, xf=RY(0.3))
+            axis="y", bevel=0.0024, segs=2, xf=RY(0.3))  # (no rounder than its corners)
     p.box((0.036, 0.0015, 0.0026), (0.0, top + 0.0083, -0.008), "Rope", bevel=0.0006, segs=1,
           xf=RY(0.3))
     bits(p, 8, "Leaf", 0.0, 0.0, 0.012, top + 0.0098, 0.0028, seed=24, shape="fleck")

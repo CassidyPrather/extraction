@@ -86,6 +86,7 @@ MATERIALS = {
     "Plaster": ((0.62, 0.6, 0.55), 0.0, 0.9, None),
     "Concrete": ((0.45, 0.45, 0.43), 0.0, 0.85, None),
     "Zinc": ((0.5, 0.52, 0.53), 0.9, 0.45, None),
+    "GreyGreen": ((0.36, 0.4, 0.34), 0.0, 0.6, None),
     "Straw": ((0.58, 0.5, 0.3), 0.0, 0.95, None),
     "Brick": ((0.45, 0.25, 0.2), 0.0, 0.85, None),
     "Corrugated": ((0.4, 0.3, 0.25), 0.6, 0.6, None),
@@ -342,6 +343,7 @@ class Part:
         bm = self.bm
         pts = [Vector(p) for p in profile]
         n = len(pts)
+        _check_fold(pts, r)
         rings = []
         for i in range(n):
             p = pts[i]
@@ -579,7 +581,7 @@ class Part:
         return self.loft(rings, mat, xf)
 
     def checkering(self, cutter, outline, width, power, panel, pitch=0.0028, angle=30.0,
-                   depth=0.0006, sides=(-1, 1)):
+                   depth=0.0006, sides=(-1, 1), mat="Wood"):
         """Checkering on a `stock`, both sides: `cutter` (cut from the stock)
         gets a recess 4 mm deep over `panel` = (z0, z1, y0, y1), and this
         Part (joined to the stock after the cut, or the cut eats it) an
@@ -587,8 +589,9 @@ class Part:
         tips on the stock's surface and the grooves between `depth` below
         it, the grooves at +-`angle` degrees to the bore, `pitch` apart.
         (Cutting each groove with a boolean costs ten times the triangles.)
-        Give it the stock's outline, width and power."""
-        surf = stock_surface(outline, width, power)
+        Give it the stock's outline, width and power, or as `outline` a
+        function x(z, y) of the surface's +X side (None off it)."""
+        surf = outline if callable(outline) else stock_surface(outline, width, power)
         z0, z1, y0, y1 = panel
         a = math.radians(angle)
         e1 = Vector((math.cos(a), math.sin(a)))
@@ -640,11 +643,36 @@ class Part:
                             faces.append(bm.faces.new((tc[(k + 1) % 4], tc[k], bc[k],
                                                        bc[(k + 1) % 4])))
                 verts += list(top.values()) + list(bot.values())
-                part._finish_piece(verts, faces, "Wood")
+                part._finish_piece(verts, faces, mat)
 
-    def cut(self, part):
-        """Subtract another Part (a cutter) when the object is made."""
+    def cut(self, part, paint=False):
+        """Subtract another Part (a cutter) when the object is made. With
+        `paint`, the faces the cut leaves take the cutter's materials:
+        engraved lettering whose floor is painted, which nothing raised
+        a few tenths of a millimetre could do without z-fighting."""
+        part.paint = paint
         self.cutters.append(part)
+
+
+FOLDS = []
+
+
+def _check_fold(pts, r):
+    """Record outline corners a bevel of radius r folds over: a convex turn
+    whose rounding (edge length over turn angle) is tighter than r. The
+    folded side z-fights and spoils boolean cuts nearby."""
+    n = len(pts)
+    for i in range(n):
+        a, p, b = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e0, e1 = p - a, b - p
+        if e0.length < 1e-9 or e1.length < 1e-9:
+            continue
+        turn = math.atan2(e0.x * e1.y - e0.y * e1.x, e0.dot(e1))
+        if turn < math.radians(20):
+            continue  # straight on, or a concave corner
+        local = min(e0.length, e1.length) / turn
+        if local < r * 0.7:
+            FOLDS.append((tuple(round(c, 4) for c in p), round(local, 4), r))
 
 
 def section_rect(w, h, r=0.0, segs=2):
@@ -707,8 +735,11 @@ def _bm_to_object(part, name=None):
     return obj
 
 
-def _apply_boolean(obj, cutter_obj):
+def _apply_boolean(obj, cutter_obj, paint=False):
     mod = obj.modifiers.new("cut", "BOOLEAN")
+    if paint:
+        # The cut's walls and floor take the cutter's own materials.
+        mod.material_mode = "TRANSFER"
     mod.operation = "DIFFERENCE"
     mod.solver = "EXACT"
     mod.object = cutter_obj
@@ -793,7 +824,7 @@ def make(part, sharp_angle=40.0, worn=None):
         c.origin = part.origin.copy()
         cobj = _bm_to_object(c, part.name + "_cutter")
         cobj.location = obj.location
-        _apply_boolean(obj, cobj)
+        _apply_boolean(obj, cobj, getattr(c, "paint", False))
     me = obj.data
     box_uv(me, obj.location)
     me.shade_smooth()
@@ -845,6 +876,13 @@ def parent(child, par):
 
 
 def report():
+    if FOLDS:
+        print(f"  WARNING {len(FOLDS)} bevelled outline corners tighter than their bevel "
+              f"(they fold; round them at least as much as the bevel), e.g. "
+              f"{FOLDS[:3]}")
+        if os.environ.get("FOLD_DETAIL") == "1":
+            for f in FOLDS:
+                print("    fold at", f)
     total = 0
     for obj in bpy.context.scene.objects:
         if obj.type != "MESH":
