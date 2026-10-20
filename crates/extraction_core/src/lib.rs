@@ -14,6 +14,7 @@ pub mod firearm;
 pub mod firearm_terminal;
 pub mod fit;
 pub mod forest;
+pub mod fracture;
 pub mod geom;
 pub mod grenade;
 pub mod inventory;
