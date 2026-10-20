@@ -171,6 +171,18 @@
             tags: ["glass", "metal"],
         ),
         (
+            id: "pso_scope", dims: Some((0.06, 0.06, 0.36)), name: "PSO-1 scope",
+            description: "A 4x marksman's scope with a lit reticle and a long rubber eyecup. Side-mounts on a dovetail.",
+            category: Attachment, size: Medium, mass: 0.6, bulk: 0.7, mount: Some(Dovetail),
+            tags: ["glass", "metal"],
+        ),
+        (
+            id: "pbs_suppressor", dims: Some((0.036, 0.036, 0.2)), name: "PBS suppressor",
+            description: "A long can that threads onto a rifle's muzzle. The shot is a cough, not a crack: robots hear it from a third as far.",
+            category: Attachment, size: Small, mass: 0.45, bulk: 0.25, mount: Some(Muzzle),
+            tags: ["metal", "suppressor"],
+        ),
+        (
             id: "side_rail", dims: Some((0.027, 0.013, 0.1)), name: "Side-mount rail",
             description: "Bolts onto a dovetail and gives you a short rail.",
             category: Attachment, size: Small, mass: 0.15, bulk: 0.1, mount: Some(Dovetail),
