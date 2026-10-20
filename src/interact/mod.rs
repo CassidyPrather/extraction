@@ -640,8 +640,10 @@ fn find_grab(
         if let (Some(z), Reach::Grip | Reach::Hover) = (zone, reach_for) {
             let local = gt.affine().inverse().transform_point3(hand.translation) - z.centre;
             if local.abs().cmple(z.half).all() {
-                // Anything you've actually got your hand on comes first.
-                let d = 0.12;
+                // Anything you've actually got your hand on comes first;
+                // of two zones, the smaller (a slung gun's over the
+                // pack's) is the one meant.
+                let d = 0.12 * (z.half.length() / 0.6).min(1.0);
                 if best.is_none_or(|b| d < b.0) {
                     best = Some((d, e, 0));
                 }
@@ -704,6 +706,7 @@ fn apply_hand_actions(
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
     time: Res<Time>,
+    slot_places: Query<&Transform, With<body::BodySlot>>,
 ) {
     for action in actions.read() {
         match *action {
@@ -890,8 +893,19 @@ fn apply_hand_actions(
                     if owner.is_some_and(|o| o.0 == item) {
                         continue;
                     }
-                    let d = sgt.translation().distance(pos);
-                    if d < socket.radius && target.is_none_or(|(bd, _)| d < bd) {
+                    let mut d = sgt.translation().distance(pos);
+                    let mut radius = socket.radius;
+                    // A long gun let go near a shoulder goes onto that side's
+                    // sling, front or back.
+                    if socket.kind == SocketKind::Body(SlotKind::Sling) {
+                        if let Ok(local) = slot_places.get(se) {
+                            let shoulder =
+                                sgt.transform_point(body::sling_shoulder(local.translation));
+                            d = d.min(shoulder.distance(pos));
+                            radius = radius.max(body::SLING_REACH);
+                        }
+                    }
+                    if d < radius && target.is_none_or(|(bd, _)| d < bd) {
                         target = Some((d, se));
                     }
                 }
