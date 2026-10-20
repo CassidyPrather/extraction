@@ -138,6 +138,28 @@
             melee: Some((min_speed: 1.5, damage: 40.0, blade: 0.14)),
             tags: ["steel"],
         ),
+        // Armour: the vest takes a plate in either pocket; the pocket decides
+        // front or back.
+        (
+            id: "vest", dims: Some((0.34, 0.42, 0.24)), name: "Plate carrier",
+            description: "Two plate pockets, front and back. Let it go at your chest to wear it.",
+            category: Tool, size: Large, mass: 1.4, bulk: 4.0, mount: Some(Vest),
+            tags: ["fabric"],
+        ),
+        (
+            id: "steel_plate", dims: Some((0.25, 0.30, 0.031)), name: "Steel plate",
+            description: "6 mm armour steel. Stops pistol rounds and buckshot; a rifle round dents it, and a worn one lets it through.",
+            category: Material, size: Medium, mass: 3.5, bulk: 1.2, mount: Some(Plate),
+            armour: Some((stuff: ArmourPlate, thickness_mm: 6.0, area: Front)),
+            tags: ["steel"],
+        ),
+        (
+            id: "helmet", dims: Some((0.22, 0.17, 0.26)), name: "Steel helmet",
+            description: "For fragments and a glancing round. Let it go at your head to wear it.",
+            category: Tool, size: Large, mass: 1.3, bulk: 2.0, mount: Some(Helmet),
+            armour: Some((stuff: Helmet, thickness_mm: 1.2, area: Head)),
+            tags: ["steel"],
+        ),
         // Magazines and clips
         // ---------------------------------------------------------------
         (

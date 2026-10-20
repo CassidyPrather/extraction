@@ -88,6 +88,7 @@ pub fn wells(
                         velocity: Vec3::ZERO,
                         damage: 20.0 * dt,
                         shooter: None,
+                        mass_g: 0.0,
                     });
                 }
                 continue;

@@ -402,6 +402,15 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   one (A). Harm from the point's speed along the blade or across the
   edge, nothing below about 1.5 m/s; eyes take double, joints half again,
   a robot's core and plate a fraction.
+- **Armour** (`weapons/armour.rs`): a plate carrier goes on when you let
+  it go at your chest, a helmet at your head, and a steel plate in either
+  of the vest's pockets (the pocket decides front or back). A round that
+  lands where a plate or the helmet covers goes through `armour_strike`:
+  a stop leaves a bruise (5% of the damage) and wears the plate, a
+  ricochet does nothing, and a round that goes through keeps the square of
+  its remaining speed. A 6 mm plate stops pistol rounds and buckshot. A
+  new one dents under a rifle round, and a worn one lets it through.
+  Blasts and blades go round plates.
 
 ### Gadgets and attachments
 

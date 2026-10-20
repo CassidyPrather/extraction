@@ -28,6 +28,10 @@ pub enum SlotKind {
     Pocket,
     /// Wrist or chest gadget mount: small items.
     Mount,
+    /// Worn on the torso: a plate carrier (the vest), nothing else.
+    Vest,
+    /// Worn on the head: a helmet, nothing else.
+    Head,
 }
 
 impl SlotKind {
@@ -38,6 +42,8 @@ impl SlotKind {
             Self::Holster => size == SizeClass::Medium,
             Self::Pouch | Self::Mount => size <= SizeClass::Small,
             Self::Pocket => size == SizeClass::Tiny,
+            // Only what's made to be worn there (the game checks the mount).
+            Self::Vest | Self::Head => false,
         }
     }
 }
@@ -54,6 +60,8 @@ pub const DEFAULT_SLOTS: &[SlotKind] = &[
     SlotKind::Pocket,
     SlotKind::Pocket,
     SlotKind::Mount,
+    SlotKind::Vest,
+    SlotKind::Head,
 ];
 
 /// Why something can't be stowed.

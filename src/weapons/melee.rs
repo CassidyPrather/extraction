@@ -243,6 +243,7 @@ fn strike_blades(
             velocity: v,
             damage: harm * soft,
             shooter: Some(held.player),
+            mass_g: 0.0,
         });
         haptics.write(crate::rig::haptics::Haptic {
             side: held.side,
