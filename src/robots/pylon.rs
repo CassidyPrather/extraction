@@ -380,6 +380,14 @@ mod tests {
             .get_mut::<Transform>(player)
             .unwrap()
             .translation = near;
+        // Standing (nothing drives the rig here, and its head starts on the
+        // floor).
+        app.world_mut()
+            .get_mut::<crate::rig::RigInput>(player)
+            .unwrap()
+            .head
+            .translation
+            .y = 1.65;
         let mut reported = false;
         for _ in 0..90 * 10 {
             app.update();

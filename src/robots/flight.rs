@@ -16,9 +16,8 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use super::anim::MoveIntent;
 use super::drone::{ARM, Drone, MASS, MAX_ROTOR_N, ROTORS};
-use super::{Awareness, Robot, RobotPart};
+use super::{Awareness, Intent, Robot, RobotPart};
 use crate::world::Zone;
 
 /// The body's own state, beside the brain's [`Drone`].
@@ -88,7 +87,7 @@ pub(crate) fn fly_drones(
         &Robot,
         &Transform,
         &Awareness,
-        Option<&MoveIntent>,
+        Option<&Intent>,
         Has<super::Stunned>,
         Forces,
     )>,
@@ -124,7 +123,8 @@ pub(crate) fn fly_drones(
         // Position controller.
         let err = d.goal + drift - pos;
         let mut acc = err * 1.2 - lin.0 * 1.6;
-        let horiz = Vec2::new(acc.x, acc.z).clamp_length_max(5.0);
+        let pace = intent.map_or(1.0, |i| i.pace);
+        let horiz = Vec2::new(acc.x, acc.z).clamp_length_max(5.0 * pace.max(0.3));
         acc = Vec3::new(horiz.x, acc.y.clamp(-4.0, 5.0), horiz.y);
         // Don't scrape the ground.
         if pos.y - zone.ground(pos.x, pos.z) < 2.5 {
@@ -151,22 +151,18 @@ pub(crate) fn fly_drones(
         }
         let up = t.rotation * Vec3::Y;
         let thrust_total = f_world.dot(up).max(0.0);
-        // Attitude: tilt toward up_des, yaw toward what it's told to look
-        // at, the target it sees, or (leading with its nose) where it's
+        // Attitude: tilt toward up_des, yaw toward the target it sees, what
+        // its brain says to look at, or (leading with its nose) where it's
         // headed.
         let tilt_axis = up.cross(up_des);
         let tilt_err = tilt_axis.normalize_or_zero() * up.angle_between(up_des);
         let headed = Vec3::new(err.x, 0.0, err.z);
-        let face = intent
-            .and_then(|i| i.face)
-            .map(|f| f - pos)
-            .or_else(|| {
-                aware
-                    .target
-                    .filter(|_| aware.can_see_target)
-                    .and_then(|p| targets.get(p).ok())
-                    .map(|g| g.translation() - pos)
-            })
+        let face = aware
+            .target
+            .filter(|_| aware.can_see_target)
+            .and_then(|p| targets.get(p).ok())
+            .map(|g| g.translation() - pos)
+            .or_else(|| intent.and_then(|i| i.look).map(|l| l - pos))
             .unwrap_or(if headed.length() > 2.0 { headed } else { lin.0 });
         let fwd = t.rotation * Vec3::NEG_Z;
         let face_flat = Vec3::new(face.x, 0.0, face.z);

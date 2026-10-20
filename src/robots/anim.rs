@@ -1,7 +1,7 @@
 //! How walker bodies move: procedural legs under a heavy orb.
 //!
-//! The brain (`walker.rs`) says where to go (`Walker::path`) and, if it
-//! likes, where to look and how fast ([`MoveIntent`]). This module turns
+//! The brain (`walker.rs`) says where to go (`Walker::path`) and where to
+//! look, how fast and whether to keep low ([`super::Intent`]). This module turns
 //! that into a body: velocity that takes time to build and bleed off, a
 //! yaw that swings round with some inertia, and feet that stay planted
 //! until the place they *should* be has drifted too far, then lift and arc
@@ -42,25 +42,9 @@ const TURN_RATE: f32 = 1.7;
 const TURN_RESPONSE: f32 = 5.0;
 const STEP_HEIGHT: f32 = 0.26;
 
-/// What the brain would like the body to do, besides following its path.
-/// Optional: without it a walker faces whoever it can see, or where it's
-/// going, at its normal pace.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct MoveIntent {
-    /// A world point to turn toward.
-    pub face: Option<Vec3>,
-    /// Speed scale: 1 normal, below 1 creeping, above 1 hurrying.
-    pub pace: f32,
-}
-
-impl Default for MoveIntent {
-    fn default() -> Self {
-        Self {
-            face: None,
-            pace: 1.0,
-        }
-    }
-}
+/// Kept low (a grappler lying in wait, `Intent::low`), the orb sits this
+/// much lower on bent legs.
+pub const LOW: f32 = 0.35;
 
 /// The body's own state, beside the brain's [`Walker`].
 #[derive(Component, Debug, Clone)]
@@ -170,6 +154,8 @@ pub struct Drive {
     pub down: bool,
     /// Stunned only: it sags on its legs rather than falling.
     pub stunned: bool,
+    /// Keeping low: crouched on bent legs.
+    pub low: bool,
 }
 
 /// Moves the body and its feet one tick. `ground(p)` is the height of the
@@ -346,7 +332,10 @@ pub fn step_walker(
     } else if drive.stunned {
         0.55
     } else {
-        missing as f32 * 0.14 + g.limp * 0.05 + g.brace.length() * 0.12
+        missing as f32 * 0.14
+            + g.limp * 0.05
+            + g.brace.length() * 0.12
+            + if drive.low { LOW } else { 0.0 }
     };
     g.sag += (target_sag - g.sag) * (3.0 * dt).min(1.0);
     let rest_y = if drive.down && !drive.stunned {
@@ -470,7 +459,7 @@ pub(crate) fn walk(
         &Awareness,
         &Children,
         &Robot,
-        Option<&MoveIntent>,
+        Option<&super::Intent>,
         Has<super::Stunned>,
     )>,
     mut legs: Query<(&WalkerLeg, &RobotPart, &mut Transform), Without<Walker>>,
@@ -499,19 +488,22 @@ pub(crate) fn walk(
                 g.leg_health[leg.index] = (part.hp / part.max_hp).clamp(0.0, 1.0);
             }
         }
-        let intent = intent.copied().unwrap_or_default();
+        let intent = intent.cloned().unwrap_or_default();
         let seen = aware
             .target
             .filter(|_| aware.can_see_target)
             .and_then(|p| targets.get(p).ok())
             .map(|g| g.translation() - pos);
-        let face = intent.face.map(|f| f - pos).or(seen);
+        // The one it can see, else where its brain says to look, else
+        // where it's going.
+        let face = seen.or(intent.look.map(|l| l - pos));
         let drive = Drive {
             desired,
             face,
             pace: intent.pace,
             down: w.collapsed || robot.wrecked || stunned,
             stunned: stunned && !w.collapsed && !robot.wrecked,
+            low: intent.low,
         };
         let mut ground = |p: Vec3| {
             let h = zone.ground(p.x, p.z);
@@ -644,6 +636,10 @@ mod tests {
             phase: 0,
             collapsed: false,
             goal: None,
+            aim: 0.0,
+            cover: None,
+            rethink: 0.0,
+            waited: 0.0,
         };
         (w, Gait::default(), Transform::from_translation(pos))
     }
@@ -670,6 +666,7 @@ mod tests {
                 pace: 1.0,
                 down: false,
                 stunned: false,
+                low: false,
             };
             let mut gr = |p: Vec3| ground(p);
             let mut landed = |at: Vec3| {
@@ -759,6 +756,7 @@ mod tests {
                 pace: 1.0,
                 down: false,
                 stunned: false,
+                low: false,
             };
             step_walker(
                 &mut w,
@@ -787,6 +785,7 @@ mod tests {
                 pace: 1.0,
                 down: false,
                 stunned: false,
+                low: false,
             };
             step_walker(
                 &mut w,

@@ -1,0 +1,579 @@
+//! How robots sense the world: sight and hearing, in one place.
+//!
+//! **Sight** is an *exposure*: how much of you a robot can make out, from
+//! 0 (nothing) to about 1 (stood in the open, close, moving). It is the
+//! product of range, fog, light, your posture, the ground cover you're in
+//! and whether you're moving ([`exposure`]). Above [`SEEN`] the robot has
+//! you: it can aim and fire, and its suspicion climbs fast. Between
+//! [`GLIMPSE`] and [`SEEN`] it has caught something — a shape in the fog,
+//! grass moving — and its suspicion creeps up, but only to [`GLIMPSE_CAP`]:
+//! enough to come and look, never enough to shoot. Below that, nothing.
+//! Crouch in grass, in fog, keep still, and a robot thirty metres off
+//! looks straight through you.
+//!
+//! **Hearing**: every sound has a reach in metres for ordinary ears
+//! ([`Noise::radius`]): gunshots by calibre ([`gunshot_reach`]), footsteps
+//! by surface, speed and crouch ([`footstep_reach`]), doors, things that
+//! land (`items::impacts`), robots at work. A wall or a hill between the
+//! sound and the robot cuts its reach to [`OCCLUDED`]. A heard sound tells
+//! the robot *where the sound was*, not where you are: it goes there.
+//! Quiet sounds only nudge suspicion ([`HEARD_FULL`]), so one footstep
+//! behind a walker makes it turn, a few make it look.
+//!
+//! **Memory**: what a robot believes is in [`Awareness`]: a last-known
+//! position and an uncertainty, in metres, that grows while it hasn't
+//! seen or heard you ([`UNCERTAINTY_GROWTH`]). For a moment after you
+//! break line of sight ([`TRACK_GRACE`]) it still knows which way you
+//! went; after that it is guessing, and searches (see `search`).
+
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use extraction_core::terrain::Surface;
+
+use super::{Awareness, NOTICED, Noise, Noticed, PartRole, Robot, RobotPart, Senses, Stunned};
+use crate::player::{Body, Footstep, Player};
+use crate::rig::RigHead;
+use crate::world::{Layer, Zone};
+
+// --- Sight -------------------------------------------------------------
+
+/// A full-height body (m): posture is measured against it.
+pub const STANDING: f32 = 1.75;
+/// Below this body height you count as crouched (ground cover hides you).
+pub const CROUCHED: f32 = 1.3;
+/// The least posture counts for, lying as flat as the body goes.
+pub const POSTURE_MIN: f32 = 0.45;
+/// Crouched in grass or undergrowth, this much of you shows...
+pub const GRASS_HIDE: f32 = 0.35;
+/// ...beyond this range (closer, the robot sees into the grass).
+pub const GRASS_NEAR: f32 = 6.0;
+/// Looked down on from steeper than this (radians), grass hides half as
+/// well: a drone overhead sees into it.
+pub const GRASS_STEEP: f32 = 0.6;
+/// Ground fog: exposure falls as `exp(-density * FOG_SIGHT * distance)`
+/// (density per `Conditions::ground_fog`, 0.006 clear to 0.024 thick).
+pub const FOG_SIGHT: f32 = 1.6;
+/// Keeping still: how much of a moving body's exposure a still one has.
+pub const STILL: f32 = 0.55;
+/// Running: more than walking.
+pub const RUNNING: f32 = 1.35;
+/// Daylight a robot's eyes are tuned to, lux (a drizzly day).
+pub const DAYLIGHT: f32 = 1600.0;
+/// Seen through a doorway or window from outside, indoors is dim.
+pub const INDOORS_DIM: f32 = 0.65;
+/// Within this, a robot sees you whatever: cone, fog, grass.
+pub const POINT_BLANK: f32 = 4.0;
+/// Exposure at which a robot has you: aims, fires, suspicion climbs.
+pub const SEEN: f32 = 0.12;
+/// Exposure at which it has caught something.
+pub const GLIMPSE: f32 = 0.045;
+/// How far suspicion climbs on glimpses alone.
+pub const GLIMPSE_CAP: f32 = 0.5;
+/// Suspicion per second while seen, at exposure 1: `1.5 + 30 / distance`.
+pub const SIGHT_GAIN: f32 = 1.5;
+pub const SIGHT_GAIN_NEAR: f32 = 30.0;
+/// Suspicion lost per second with nothing seen.
+pub const SUSPICION_DECAY: f32 = 0.05;
+
+// --- Hearing -----------------------------------------------------------
+
+/// A wall or a hill in the way: the sound carries this share as far.
+pub const OCCLUDED: f32 = 0.45;
+/// Sound bends over a low rise: it counts as blocked only by what stands
+/// this high over its source (a wall, a hill; not a hump in a field) (m).
+pub const HEARD_OVER: f32 = 1.2;
+/// Sounds with at least this reach (m) raise suspicion fully; quieter ones
+/// by their share of it.
+pub const HEARD_FULL: f32 = 15.0;
+/// Suspicion from a sound: `HEARD_BASE + HEARD_LOUD * loudness` (loudness
+/// 1 at the source, 0 at the edge of its reach), scaled as above.
+pub const HEARD_BASE: f32 = 0.3;
+pub const HEARD_LOUD: f32 = 0.5;
+/// Where a sound came from, from afar, is a guess: the uncertainty is
+/// this share of the distance (more through a wall)...
+pub const HEARD_SPREAD: f32 = 0.12;
+/// ...and at least this.
+pub const HEARD_SPREAD_MIN: f32 = 1.5;
+/// A rifle's report (AK-74: 900 m/s, 48 damage) carries this far.
+pub const GUNSHOT: f32 = 220.0;
+/// Walking pace footsteps (1.4 m/s) on firm ground carry this far.
+pub const FOOTSTEP: f32 = 7.0;
+/// A door swinging.
+pub const DOOR: f32 = 14.0;
+
+// --- Memory ------------------------------------------------------------
+
+/// Unseen, where you might be spreads at about walking pace (m/s)...
+pub const UNCERTAINTY_GROWTH: f32 = 1.2;
+/// ...up to this.
+pub const UNCERTAINTY_MAX: f32 = 30.0;
+/// Just after losing sight it still knows which way you went (s).
+pub const TRACK_GRACE: f32 = 1.0;
+
+/// Everything sight depends on, for [`exposure`].
+#[derive(Clone, Copy, Debug)]
+pub struct SightCase {
+    pub distance: f32,
+    /// How far the robot's eyes reach today (`Conditions::sight`).
+    pub reach: f32,
+    pub ground_fog: f32,
+    /// Direct sun, lux.
+    pub sun: f32,
+    /// The body's height now (`Body::height`).
+    pub height: f32,
+    /// Horizontal speed, m/s.
+    pub speed: f32,
+    /// Standing in grass or undergrowth.
+    pub cover: bool,
+    /// Indoors, seen from outside.
+    pub indoors: bool,
+    /// Angle below the horizontal the robot looks down at you, radians.
+    pub depression: f32,
+}
+
+/// How much of you a robot makes out (see the module docs).
+pub fn exposure(c: &SightCase) -> f32 {
+    if c.distance > c.reach {
+        return 0.0;
+    }
+    let range = 1.0 - (c.distance / c.reach).powi(2);
+    let fog = (-c.ground_fog * FOG_SIGHT * c.distance).exp();
+    let light =
+        (c.sun / DAYLIGHT).clamp(0.5, 1.3).sqrt() * if c.indoors { INDOORS_DIM } else { 1.0 };
+    let height = if c.height > 0.0 { c.height } else { STANDING };
+    let posture = (height / STANDING).clamp(POSTURE_MIN, 1.0);
+    let hidden = if c.cover && height < CROUCHED && c.distance > GRASS_NEAR {
+        if c.depression > GRASS_STEEP {
+            (1.0 + GRASS_HIDE) * 0.5
+        } else {
+            GRASS_HIDE
+        }
+    } else {
+        1.0
+    };
+    let motion = if c.speed > 3.0 {
+        RUNNING
+    } else if c.speed > 0.3 {
+        1.0
+    } else {
+        STILL
+    };
+    let e = range * fog * light * posture * hidden * motion;
+    if c.distance < POINT_BLANK {
+        e.max(0.9)
+    } else {
+        e
+    }
+}
+
+/// How far a gunshot carries, by its calibre: muzzle energy (speed squared
+/// times damage per projectile, times projectiles) against the AK's, to
+/// the 0.3 power. A pistol is heard at about 150 m, a Mosin at 250.
+pub fn gunshot_reach(speed: f32, damage: f32, projectiles: u32) -> f32 {
+    let energy = (speed / 900.0).powi(2) * damage * projectiles.max(1) as f32 / 48.0;
+    (GUNSHOT * energy.max(0.01).powf(0.15)).clamp(120.0, 280.0)
+}
+
+/// How loud each surface is underfoot, against firm ground.
+pub fn surface_loudness(s: Surface) -> f32 {
+    match s {
+        Surface::Grass => 0.65,
+        Surface::Forest => 0.9,
+        Surface::Dirt => 0.75,
+        Surface::Mud => 0.9,
+        Surface::Rock => 1.0,
+        Surface::Gravel => 1.45,
+        Surface::Asphalt => 1.0,
+        Surface::Water => 1.6,
+    }
+}
+
+/// Built floors (boards, a deck, a stair) are louder than earth.
+pub const FLOOR_LOUDNESS: f32 = 1.2;
+
+/// How far a footstep carries: by surface loudness, speed (a run is
+/// heard about twice as far as a walk, a creep a third as far) and crouch.
+pub fn footstep_reach(loudness: f32, speed: f32, height: f32) -> f32 {
+    let pace = (speed / 1.4).clamp(0.3, 2.6).powf(0.8);
+    let crouch = if height > 0.0 && height < CROUCHED {
+        0.6
+    } else {
+        1.0
+    };
+    FOOTSTEP * loudness * pace * crouch
+}
+
+/// Something heard this tick.
+#[derive(Clone, Copy, Debug)]
+struct Sound {
+    at: Vec3,
+    radius: f32,
+    source: Option<Entity>,
+}
+
+/// Shots are heard a long way off: how far by calibre.
+pub(crate) fn gunshot_noise(
+    mut shots: MessageReader<crate::weapons::ballistics::Shot>,
+    mut noise: MessageWriter<Noise>,
+) {
+    for s in shots.read() {
+        noise.write(Noise {
+            at: s.origin,
+            radius: gunshot_reach(s.speed, s.damage, s.projectiles),
+            source: s.shooter,
+        });
+    }
+}
+
+/// A door swinging open or shut is heard: whoever's next to it did it.
+pub(crate) fn door_noise(
+    doors: Query<(Entity, &crate::world::buildings::Door, &GlobalTransform)>,
+    players: Query<(Entity, &GlobalTransform), With<Player>>,
+    mut was_open: Local<std::collections::HashMap<Entity, bool>>,
+    mut noise: MessageWriter<Noise>,
+) {
+    for (e, door, gt) in &doors {
+        let before = was_open.insert(e, door.open);
+        if before.is_none_or(|b| b == door.open) {
+            continue;
+        }
+        let at = gt.translation();
+        // A robot opening it isn't news; a player is.
+        if let Some((p, _)) = players
+            .iter()
+            .find(|(_, pg)| pg.translation().distance(at) < 3.0)
+        {
+            noise.write(Noise {
+                at,
+                radius: DOOR,
+                source: Some(p),
+            });
+        }
+    }
+}
+
+/// Sight and hearing, into each robot's [`Awareness`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn perceive(
+    mut robots: Query<(
+        Entity,
+        &Robot,
+        &Senses,
+        &GlobalTransform,
+        &mut Awareness,
+        Has<Stunned>,
+    )>,
+    players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
+    heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
+    sensors: Query<&RobotPart>,
+    parts_of: Query<&Children>,
+    mut noises: MessageReader<Noise>,
+    mut steps: MessageReader<Footstep>,
+    spatial: SpatialQuery,
+    time: Res<Time>,
+    cloaks: Res<crate::gadgets::Cloaks>,
+    conditions: Res<crate::world::weather::Conditions>,
+    zone: Res<Zone>,
+    entrances: Res<super::doors::Entrances>,
+    mut noticed: MessageWriter<Noticed>,
+) {
+    let dt = time.delta_secs();
+    let world = SpatialQueryFilter::from_mask([Layer::World]);
+    let mut sounds: Vec<Sound> = noises
+        .read()
+        .map(|n| Sound {
+            at: n.at,
+            radius: n.radius,
+            source: n.source,
+        })
+        .collect();
+    // Footsteps: by what's underfoot, how fast, how low.
+    for s in steps.read() {
+        let Ok((_, _, body)) = players.get(s.entity) else {
+            continue;
+        };
+        let p = [s.position.x, s.position.z];
+        let loud = if entrances.building_at(s.position + Vec3::Y * 0.5).is_some() {
+            FLOOR_LOUDNESS
+        } else {
+            surface_loudness(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
+        };
+        sounds.push(Sound {
+            at: s.position + Vec3::Y * 0.1,
+            radius: footstep_reach(loud, s.speed, body.height),
+            source: Some(s.entity),
+        });
+    }
+    // Where each player's eyes are, and what they stand in.
+    struct Seen {
+        e: Entity,
+        feet: Vec3,
+        head: Vec3,
+        height: f32,
+        speed: f32,
+        cover: bool,
+        indoors: bool,
+    }
+    let targets: Vec<Seen> = players
+        .iter()
+        .filter(|(_, gt, _)| !cloaks.hides(gt.translation()))
+        .map(|(e, gt, body)| {
+            let feet = gt.translation();
+            let height = if body.height > 0.0 {
+                body.height
+            } else {
+                STANDING
+            };
+            let head = heads
+                .iter()
+                .find(|(c, _)| c.parent() == e)
+                .map(|(_, h)| h.translation())
+                .unwrap_or(feet + Vec3::Y * (height - 0.15));
+            let p = [feet.x, feet.z];
+            let indoors = entrances.building_at(feet + Vec3::Y * 0.5).is_some();
+            let surface = zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5);
+            Seen {
+                e,
+                feet,
+                head,
+                height,
+                speed: Vec2::new(body.velocity.x, body.velocity.z).length(),
+                cover: !indoors && matches!(surface, Surface::Grass | Surface::Forest),
+                indoors,
+            }
+        })
+        .collect();
+    for (robot_e, robot, senses, gt, mut aware, stunned) in &mut robots {
+        aware.news = false;
+        if robot.wrecked {
+            continue;
+        }
+        if stunned {
+            // Senseless: it can't see you, so it can't shoot you.
+            aware.can_see_target = false;
+            aware.exposure = 0.0;
+            continue;
+        }
+        // Blind if every sensor part is gone.
+        let has_eyes = parts_of
+            .get(robot_e)
+            .map(|c| {
+                let mut any = false;
+                let mut alive = false;
+                for p in c.iter() {
+                    if let Ok(part) = sensors.get(p) {
+                        if part.role == PartRole::Sensor {
+                            any = true;
+                            alive |= part.alive();
+                        }
+                    }
+                }
+                !any || alive
+            })
+            .unwrap_or(true);
+        let eye = gt.transform_point(senses.eye);
+        let forward = gt.forward().as_vec3();
+        let reach = conditions.sight(senses.sight);
+        let was = aware.suspicion;
+        aware.can_see_target = false;
+        let mut best = 0.0f32;
+        let robot_indoors = entrances.building_at(eye).is_some();
+        if has_eyes {
+            for t in &targets {
+                let to = t.head - eye;
+                let dist = to.length();
+                if dist > reach || dist < 0.01 {
+                    continue;
+                }
+                let angle = forward.angle_between(to / dist).to_degrees();
+                if angle > senses.fov_deg * 0.5 && dist > POINT_BLANK {
+                    continue;
+                }
+                let blocked = Dir3::new(to)
+                    .ok()
+                    .and_then(|dir| spatial.cast_ray(eye, dir, dist - 0.3, true, &world));
+                if blocked.is_some() {
+                    continue;
+                }
+                let e = exposure(&SightCase {
+                    distance: dist,
+                    reach,
+                    ground_fog: conditions.ground_fog,
+                    sun: conditions.sun,
+                    height: t.height,
+                    speed: t.speed,
+                    cover: t.cover,
+                    indoors: t.indoors && !robot_indoors,
+                    depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
+                });
+                if e < GLIMPSE {
+                    continue;
+                }
+                best = best.max(e);
+                let gain = dt * (SIGHT_GAIN + SIGHT_GAIN_NEAR / dist.max(1.0)) * e;
+                aware.news = true;
+                if e >= SEEN {
+                    aware.can_see_target = true;
+                    aware.target = Some(t.e);
+                    aware.last_known = Some(t.feet);
+                    aware.uncertainty = 0.5;
+                    aware.unseen = 0.0;
+                    aware.suspicion = (aware.suspicion + gain).min(1.0);
+                } else {
+                    // Something moved over there.
+                    if aware.target.is_none() {
+                        aware.target = Some(t.e);
+                    }
+                    if !aware.can_see_target {
+                        aware.last_known = Some(t.feet);
+                        aware.uncertainty = 3.0;
+                    }
+                    if aware.suspicion < GLIMPSE_CAP {
+                        aware.suspicion = (aware.suspicion + gain).min(GLIMPSE_CAP);
+                    }
+                }
+            }
+        }
+        aware.exposure = best;
+        if !aware.can_see_target {
+            aware.unseen += dt;
+            aware.suspicion = (aware.suspicion - dt * SUSPICION_DECAY).max(0.0);
+            // It saw which way you went; then it's guessing.
+            let tracked = aware
+                .target
+                .and_then(|p| targets.iter().find(|t| t.e == p))
+                .filter(|_| aware.unseen < TRACK_GRACE && aware.uncertainty < 1.0);
+            if let Some(t) = tracked {
+                aware.last_known = Some(t.feet);
+            } else {
+                aware.uncertainty =
+                    (aware.uncertainty + dt * UNCERTAINTY_GROWTH).min(UNCERTAINTY_MAX);
+            }
+        }
+        let ear = gt.translation();
+        for s in &sounds {
+            if s.source == Some(robot_e) {
+                continue;
+            }
+            let d = s.at.distance(ear);
+            let mut reach = s.radius * senses.hearing * conditions.hearing();
+            if d >= reach {
+                continue;
+            }
+            // Through a wall or over a hill it carries less far.
+            let occluded = Dir3::new(ear - s.at - Vec3::Y * HEARD_OVER)
+                .ok()
+                .is_some_and(|dir| {
+                    spatial
+                        .cast_ray(s.at + Vec3::Y * HEARD_OVER, dir, d - 0.5, true, &world)
+                        .is_some()
+                });
+            if occluded {
+                reach *= OCCLUDED;
+                if d >= reach {
+                    continue;
+                }
+            }
+            let loud = 1.0 - d / reach;
+            let share = (s.radius / HEARD_FULL).min(1.0);
+            aware.suspicion = (aware.suspicion + (HEARD_BASE + loud * HEARD_LOUD) * share).min(1.0);
+            // Heard, not seen: they know roughly where, not exactly.
+            if !aware.can_see_target {
+                let spread =
+                    (d * HEARD_SPREAD * if occluded { 1.5 } else { 1.0 }).max(HEARD_SPREAD_MIN);
+                aware.last_known = Some(s.at);
+                aware.uncertainty = spread;
+                aware.news = true;
+                if let Some(p) = s.source.filter(|s| players.contains(*s)) {
+                    aware.target = Some(p);
+                }
+            }
+        }
+        if was < NOTICED && aware.suspicion >= NOTICED {
+            noticed.write(Noticed {
+                robot: robot_e,
+                at: eye,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn case() -> SightCase {
+        SightCase {
+            distance: 30.0,
+            reach: 75.0,
+            ground_fog: 0.011,
+            sun: 1600.0,
+            height: STANDING,
+            speed: 1.4,
+            cover: true,
+            indoors: false,
+            depression: 0.05,
+        }
+    }
+
+    /// Stood walking in the open at 30 m on a drizzly day, you're seen;
+    /// crouched still in the grass, in a pea-souper, you're not even
+    /// glimpsed. Crouching alone, or fog alone, isn't enough.
+    #[test]
+    fn crouch_grass_and_fog_hide_you() {
+        let open = exposure(&case());
+        assert!(open > SEEN * 2.0, "walking in the open: {open}");
+        let hidden = exposure(&SightCase {
+            height: 0.95,
+            speed: 0.0,
+            ground_fog: 0.024,
+            ..case()
+        });
+        assert!(hidden < GLIMPSE, "crouched in grass in fog: {hidden}");
+        let crouched = exposure(&SightCase {
+            height: 0.95,
+            cover: false,
+            ..case()
+        });
+        assert!(crouched > GLIMPSE, "crouched on a road: {crouched}");
+        // A drone straight overhead sees into the grass.
+        let above = exposure(&SightCase {
+            height: 0.95,
+            speed: 0.0,
+            depression: 1.2,
+            ..case()
+        });
+        let level = exposure(&SightCase {
+            height: 0.95,
+            speed: 0.0,
+            ..case()
+        });
+        assert!(above > level * 1.5, "{above} vs {level}");
+        // Point blank, nothing hides you.
+        let near = exposure(&SightCase {
+            distance: 3.0,
+            height: 0.95,
+            speed: 0.0,
+            ground_fog: 0.024,
+            ..case()
+        });
+        assert!(near >= SEEN);
+    }
+
+    #[test]
+    fn calibre_and_footing_set_how_far_you_are_heard() {
+        let pistol = gunshot_reach(315.0, 34.0, 1);
+        let ak = gunshot_reach(900.0, 48.0, 1);
+        let mosin = gunshot_reach(865.0, 110.0, 1);
+        let shotgun = gunshot_reach(400.0, 14.0, 9);
+        assert!((ak - GUNSHOT).abs() < 1.0, "{ak}");
+        assert!(pistol < shotgun && shotgun < ak && ak < mosin);
+        assert!(pistol > 150.0, "a pistol still gets reported: {pistol}");
+        let walk = footstep_reach(surface_loudness(Surface::Asphalt), 1.4, STANDING);
+        let run = footstep_reach(surface_loudness(Surface::Gravel), 4.5, STANDING);
+        let creep = footstep_reach(surface_loudness(Surface::Grass), 0.7, 1.0);
+        assert!((walk - FOOTSTEP).abs() < 0.01);
+        assert!(run > walk * 2.5, "{run}");
+        assert!(creep < 2.5, "{creep}");
+    }
+}

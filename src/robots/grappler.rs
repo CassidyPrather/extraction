@@ -13,6 +13,19 @@ use crate::world::Zone;
 #[derive(Component, Debug, Default)]
 pub struct Grappler {
     pub cooldown: f32,
+    /// Seconds into winding up a throw (0: not winding up).
+    pub windup: f32,
+}
+
+/// A grappler winds up this long before it throws: it rears back, and
+/// [`HarpoonWindup`] says so (the tell).
+pub const WINDUP: f32 = 0.6;
+
+/// A grappler began winding up a throw at `to` (for its tell).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct HarpoonWindup {
+    pub from: Entity,
+    pub to: Entity,
 }
 
 /// A player with a harpoon line in them: slow, and pulled toward `by`.
@@ -41,18 +54,24 @@ pub struct GrapplerPlugin;
 
 impl Plugin for GrapplerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Harpoon>().add_systems(
-            FixedUpdate,
-            (harpoons, tethers).chain().after(super::perceive),
-        );
+        app.add_message::<Harpoon>()
+            .add_message::<HarpoonWindup>()
+            .add_systems(
+                FixedUpdate,
+                (harpoons, tethers).chain().after(super::perceive),
+            );
     }
 }
 
 pub fn spawn_grappler(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> Entity {
     let e = spawn_walker_with(commands, zone, at, job, false, 110.0);
-    commands
-        .entity(e)
-        .insert((Name::new("Grappler"), Grappler { cooldown: 3.0 }));
+    commands.entity(e).insert((
+        Name::new("Grappler"),
+        Grappler {
+            cooldown: 3.0,
+            windup: 0.0,
+        },
+    ));
     e
 }
 
@@ -71,6 +90,7 @@ fn harpoons(
     players: Query<&GlobalTransform, With<Player>>,
     time: Res<Time>,
     mut shots: MessageWriter<Harpoon>,
+    mut windups: MessageWriter<HarpoonWindup>,
     stunned: Query<(), With<super::Stunned>>,
     mut seed: Local<u64>,
 ) {
@@ -83,6 +103,7 @@ fn harpoons(
             || !aware.can_see_target
             || g.cooldown > 0.0
         {
+            g.windup = 0.0;
             continue;
         }
         // Needs its eye to aim.
@@ -98,8 +119,21 @@ fn harpoons(
             continue;
         };
         if !eye || pt.translation().distance(gt.translation()) > TETHER_RANGE {
+            g.windup = 0.0;
             continue;
         }
+        // Tell first: it rears back, then throws.
+        if g.windup < WINDUP {
+            if g.windup == 0.0 {
+                windups.write(HarpoonWindup {
+                    from: e,
+                    to: target,
+                });
+            }
+            g.windup += dt;
+            continue;
+        }
+        g.windup = 0.0;
         g.cooldown = 9.0;
         // Most throws land; some don't.
         *seed = seed

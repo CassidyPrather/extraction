@@ -195,6 +195,42 @@ street and a walker goes to look where it landed, not where you are
 (`items/impacts.rs`). Only gunfire and what the dirigible and pylons see
 get a response team sent; a clatter just gets looked at.
 
+**Robots sense like animals, not cameras** (`robots/senses.rs`, every
+tunable named and documented there). Sight is an *exposure*: range, fog
+(ground fog thickest of all), light, your posture (`Body::height`, so a
+real crouch counts), the grass you're crouched in and whether you're
+moving all multiply. Over a threshold it has you and can fire; under it, a
+glimpse only makes it curious, never enough to shoot; crouched still in
+grass in a fog, thirty metres off, you're nothing at all. Hearing: shots
+carry by calibre (a pistol 150 m, the AK 220, a Mosin 250), footsteps by
+what's underfoot (gravel and boards loud, grass soft), how fast and how
+low you go, doors when you open them, and things that land; a wall or a
+hill between cuts a sound's reach by more than half. A heard sound tells
+a robot where the *sound* was.
+
+**Robots remember and search** (`robots/search.rs`). Each keeps a
+last-known position and an uncertainty that grows at walking pace while
+you're out of sight (it knows which way you went for a second, then it's
+guessing). Suspicious, it **investigates**: walks over (a walker
+carefully, a grappler creeping low) and looks round. Then it
+**searches**: the doorways (it opens a shut door and looks in) and the
+ground hard by walls and cover within its uncertainty, a pause and a look
+round at each. Nothing, and it **gives up**: back to its job, cut short,
+or home if finding you was the job. Lose a robot mid-fight and it does
+the same from where it last saw you. A robot that notices you calls the
+others within 45 m to come and look (they don't open fire until they see
+you themselves), and a radio you carry hears the chatter. Each step is a
+message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
+for sound and the wrist.
+
+**Every attack has a tell.** Drones chirp and settle 0.9 s; walkers'
+turrets settle 0.7 s (`WalkerAim`); grapplers rear back 0.6 s before a
+throw (`HarpoonWindup`). Tactics differ by kind: drones stand off at 20 m
+and 8 m up, slide round to your flank when you aim at them and climb to
+look over what you're behind; walkers move between pieces of cover in
+range and push through doors; grapplers lie low and wait for you to come
+within reach, then rush.
+
 **The radio listens.** Whenever a response team is sent — gunfire heard,
 the airship or a pylon reporting you, the Zone's attention coming due —
 the robots talk about it, and a radio you carry picks it up: a squelch

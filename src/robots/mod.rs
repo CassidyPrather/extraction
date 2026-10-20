@@ -3,10 +3,12 @@
 //! Every robot is built from **parts** (child entities with colliders on
 //! [`Layer::Robot`]): shooting a part damages it, and parts matter — a drone
 //! that loses a rotor falls out of the sky, a walker that loses legs limps
-//! and then goes down. Robots **perceive** (sight cones through the fog,
-//! hearing [`Noise`]), think with a small **brain** state machine around
-//! their current **job**, and arrive and leave diegetically through the
-//! Gate (see [`director`]).
+//! and then goes down. Robots **perceive** (sight through the fog that
+//! crouching and grass defeat, hearing [`Noise`] and footsteps through
+//! walls: [`senses`]), remember where you were and search for you
+//! ([`search`]), think with a small **brain** state machine around their
+//! current **job**, and arrive and leave diegetically through the Gate
+//! (see [`director`]).
 
 pub mod anim;
 pub mod collector;
@@ -17,8 +19,12 @@ pub mod drone;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+#[cfg(test)]
+mod mind_tests;
 pub mod pylon;
 pub mod reel;
+pub mod search;
+pub mod senses;
 pub mod visuals;
 pub mod walker;
 pub mod wreck;
@@ -26,9 +32,10 @@ pub mod wreck;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::player::Player;
 use crate::weapons::ballistics::Hit;
+
 use crate::world::Layer;
+pub(crate) use senses::perceive;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RobotKind {
@@ -108,11 +115,38 @@ pub struct Awareness {
     pub target: Option<Entity>,
     /// Where it last saw or heard something.
     pub last_known: Option<Vec3>,
+    /// How far from `last_known` you might be by now, metres: small when
+    /// just seen, a guess when heard from afar, growing while unseen.
+    pub uncertainty: f32,
     /// Seconds since the target was last seen.
     pub unseen: f32,
     /// 0..1 how sure it is something's there.
     pub suspicion: f32,
     pub can_see_target: bool,
+    /// How much of its target it makes out this tick (`senses::exposure`).
+    pub exposure: f32,
+    /// It saw, glimpsed, heard or was told something this tick.
+    pub news: bool,
+}
+
+/// What a robot's brain wants of its body this tick, for locomotion and
+/// for how it looks: where to look when it has nobody in sight, how fast
+/// to go (1 = its usual pace), and whether to keep low.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Intent {
+    pub look: Option<Vec3>,
+    pub pace: f32,
+    pub low: bool,
+}
+
+impl Default for Intent {
+    fn default() -> Self {
+        Self {
+            look: None,
+            pace: 1.0,
+            low: false,
+        }
+    }
 }
 
 /// A robot's suspicion just rose past [`NOTICED`]: it has noticed someone
@@ -141,8 +175,16 @@ pub enum Brain {
     Transit { to: Vec3 },
     /// Doing the job until the timer runs out.
     Working { at: Vec3, left: f32 },
-    /// Checking out a disturbance.
+    /// Going to look at a disturbance (`left`: how long it gives it).
     Investigate { at: Vec3, left: f32 },
+    /// Looking round where it was: stands and looks for `dwell`, then the
+    /// next of `spots`, for `left` seconds at most (see [`search`]).
+    Search {
+        at: Vec3,
+        left: f32,
+        spots: Vec<Vec3>,
+        dwell: f32,
+    },
     /// Fighting.
     Engage,
     /// Done; heading out through the Gate.
@@ -193,10 +235,17 @@ impl Plugin for RobotsPlugin {
                 anim::AnimPlugin,
                 flight::FlightPlugin,
                 wreck::WreckPlugin,
+                search::SearchPlugin,
             ))
             .add_systems(
                 FixedUpdate,
-                (damage_parts, perceive, gunshot_noise, wreck_loot)
+                (
+                    damage_parts,
+                    senses::door_noise,
+                    perceive,
+                    senses::gunshot_noise,
+                    wreck_loot,
+                )
                     .chain()
                     .after(crate::weapons::ballistics::BallisticsSystems),
             );
@@ -237,139 +286,6 @@ fn damage_parts(
                     r.wrecked = true;
                 }
             }
-        }
-    }
-}
-
-/// Shots are heard a long way off.
-fn gunshot_noise(
-    mut shots: MessageReader<crate::weapons::ballistics::Shot>,
-    mut noise: MessageWriter<Noise>,
-) {
-    for s in shots.read() {
-        noise.write(Noise {
-            at: s.origin,
-            radius: 220.0,
-            source: s.shooter,
-        });
-    }
-}
-
-/// Sight and hearing. Sight needs a clear line through the world (and
-/// trees) to the player's head, inside the cone and within range; fog
-/// shortens everyone's range equally.
-pub(crate) fn perceive(
-    mut robots: Query<(
-        Entity,
-        &Robot,
-        &Senses,
-        &GlobalTransform,
-        &mut Awareness,
-        Has<Stunned>,
-    )>,
-    players: Query<(Entity, &GlobalTransform, &crate::player::Body), With<Player>>,
-    sensors: Query<&RobotPart>,
-    parts_of: Query<&Children>,
-    mut noises: MessageReader<Noise>,
-    spatial: SpatialQuery,
-    time: Res<Time>,
-    cloaks: Res<crate::gadgets::Cloaks>,
-    conditions: Res<crate::world::weather::Conditions>,
-    mut noticed: MessageWriter<Noticed>,
-) {
-    let dt = time.delta_secs();
-    let noises: Vec<Noise> = noises.read().cloned().collect();
-    for (robot_e, robot, senses, gt, mut aware, stunned) in &mut robots {
-        if robot.wrecked {
-            continue;
-        }
-        if stunned {
-            // Senseless: it can't see you, so it can't shoot you.
-            aware.can_see_target = false;
-            continue;
-        }
-        // Blind if every sensor part is gone.
-        let has_eyes = parts_of
-            .get(robot_e)
-            .map(|c| {
-                let mut any = false;
-                let mut alive = false;
-                for p in c.iter() {
-                    if let Ok(part) = sensors.get(p) {
-                        if part.role == PartRole::Sensor {
-                            any = true;
-                            alive |= part.alive();
-                        }
-                    }
-                }
-                !any || alive
-            })
-            .unwrap_or(true);
-        let eye = gt.transform_point(senses.eye);
-        let forward = gt.forward().as_vec3();
-        let was = aware.suspicion;
-        aware.can_see_target = false;
-        if has_eyes {
-            for (pe, pgt, _) in &players {
-                // Inside a running cloak, nothing sees you.
-                if cloaks.hides(pgt.translation()) {
-                    continue;
-                }
-                let head = pgt.translation() + Vec3::Y * 1.55;
-                let to = head - eye;
-                let dist = to.length();
-                if dist > conditions.sight(senses.sight) || dist < 0.01 {
-                    continue;
-                }
-                let flat_fwd = forward;
-                let angle = flat_fwd.angle_between(to / dist).to_degrees();
-                if angle > senses.fov_deg * 0.5 && dist > 4.0 {
-                    continue;
-                }
-                let blocked = Dir3::new(to).ok().and_then(|dir| {
-                    spatial.cast_ray(
-                        eye,
-                        dir,
-                        dist - 0.3,
-                        true,
-                        &SpatialQueryFilter::from_mask([Layer::World]),
-                    )
-                });
-                if blocked.is_none() {
-                    aware.can_see_target = true;
-                    aware.target = Some(pe);
-                    aware.last_known = Some(pgt.translation());
-                    aware.unseen = 0.0;
-                    // Closer is quicker to notice.
-                    aware.suspicion =
-                        (aware.suspicion + dt * (1.5 + 30.0 / dist.max(1.0))).min(1.0);
-                }
-            }
-        }
-        if !aware.can_see_target {
-            aware.unseen += dt;
-            aware.suspicion = (aware.suspicion - dt * 0.05).max(0.0);
-        }
-        for n in &noises {
-            let d = n.at.distance(gt.translation());
-            let reach = n.radius * senses.hearing * conditions.hearing();
-            if d < reach {
-                let loud = 1.0 - d / reach;
-                aware.suspicion = (aware.suspicion + 0.3 + loud * 0.5).min(1.0);
-                // Heard, not seen: they know roughly where, not exactly.
-                if !aware.can_see_target {
-                    aware.last_known = Some(n.at);
-                    if aware.target.is_none() {
-                        aware.target = n.source.filter(|s| players.contains(*s));
-                    }
-                }
-            }
-        }
-        if was < NOTICED && aware.suspicion >= NOTICED {
-            noticed.write(Noticed {
-                robot: robot_e,
-                at: eye,
-            });
         }
     }
 }
