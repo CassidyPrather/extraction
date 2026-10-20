@@ -287,7 +287,11 @@ pub fn ensure_colours(mesh: &mut Mesh) {
 /// isn't made at all; one that's evenly lit is one quad; one that darkens
 /// is cut in bands a quarter and three quarters of a metre in from its
 /// edges, where the darkening is (a short face, into cells of [`CELL`]).
-pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders) -> Mesh {
+///
+/// `sky`: carry the sky over each vertex in the colours' alpha (see the
+/// module docs); false for a blended material (glass), whose alpha is its
+/// own.
+pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders, sky: bool) -> Mesh {
     let h = size * 0.5;
     let offset = at.rotation.inverse() * at.translation;
     // (normal, u axis, v axis) per face, as `metric_box`.
@@ -370,7 +374,17 @@ pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders) -> Mesh {
                 } else {
                     light(su, sv)
                 };
-                col.push([l, l, l, 1.0]);
+                let open = if sky && enabled() {
+                    let inset =
+                        |s: f32, half: f32| s * (half - 0.02).max(half * 0.5) / half.max(1e-4);
+                    occ.sky(
+                        world(centre + u * hu * inset(su, hu) + v * hv * inset(sv, hv)),
+                        wn,
+                    )
+                } else {
+                    1.0
+                };
+                col.push([l, l, l, open]);
             }
         }
         let row = us.len() as u32;
@@ -449,19 +463,45 @@ mod tests {
             1.0,
             "on the roof"
         );
-        // And the bake carries it in the colours' alpha.
-        let mut m = shaded_box(
-            Vec3::new(1.0, 0.2, 1.0),
-            Transform::from_xyz(0.0, 0.1, 0.0),
-            &occ,
-        );
-        occ.bake(&mut m);
-        let Some(VertexAttributeValues::Float32x4(c)) = m.attribute(Mesh::ATTRIBUTE_COLOR) else {
-            panic!("no colours");
+        // The building's boxes carry it in their colours' alpha (a box
+        // under the roof, all sheltered), glass keeps its own alpha, and
+        // other shapes' bake carries it too.
+        let alphas = |m: &Mesh| -> Vec<f32> {
+            let Some(VertexAttributeValues::Float32x4(c)) = m.attribute(Mesh::ATTRIBUTE_COLOR)
+            else {
+                panic!("no colours");
+            };
+            c.iter().map(|c| c[3]).collect()
         };
+        let under = Transform::from_xyz(0.0, 0.1, 0.0);
+        let boxed = shaded_box(Vec3::new(1.0, 0.2, 1.0), under, &occ, true);
         assert!(
-            c.iter().all(|c| c[3] == 0.0),
-            "a box under the roof is all sheltered"
+            alphas(&boxed).iter().all(|a| *a == 0.0),
+            "a box under the roof"
+        );
+        let glass = shaded_box(Vec3::new(1.0, 0.2, 1.0), under, &occ, false);
+        assert!(
+            alphas(&glass).iter().all(|a| *a == 1.0),
+            "glass keeps its alpha"
+        );
+        let outside = shaded_box(
+            Vec3::new(1.0, 0.2, 1.0),
+            Transform::from_xyz(3.0, 0.1, 0.0),
+            &occ,
+            true,
+        );
+        assert!(
+            alphas(&outside).iter().all(|a| *a == 1.0),
+            "a box in the open"
+        );
+        let mut m = Cuboid::new(1.0, 0.2, 1.0)
+            .mesh()
+            .build()
+            .transformed_by(under);
+        occ.bake(&mut m);
+        assert!(
+            alphas(&m).iter().all(|a| *a == 0.0),
+            "a baked shape under the roof"
         );
     }
 
@@ -473,6 +513,7 @@ mod tests {
             Vec3::new(2.0, 1.0, 3.0),
             Transform::from_xyz(0.0, 0.0, 9.0),
             &occ,
+            true,
         );
         let Some(VertexAttributeValues::Float32x3(p)) = m.attribute(Mesh::ATTRIBUTE_POSITION)
         else {

@@ -3726,7 +3726,12 @@ pub fn dress_buildings(
                     }
                 }
                 let group = if is_below { BELOW } else { OUTER };
-                add(group, mat, super::ao::shaded_box(s, piece.at, &occluders));
+                add(
+                    group,
+                    mat,
+                    // Glass keeps its own alpha (the rest carries the sky).
+                    super::ao::shaded_box(s, piece.at, &occluders, piece.mat != Mat::Glass),
+                );
                 continue;
             }
             let mut mesh = match piece.shape {
