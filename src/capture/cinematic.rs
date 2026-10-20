@@ -330,7 +330,8 @@ impl Trees {
     /// How much of a shot is spent in trees (camera within [`CROWN`] of a
     /// trunk), and how often its view is blocked by one near the camera
     /// (a trunk within 1.2 m of the line to what it looks at, in its first
-    /// 25 m), each as a share of samples.
+    /// 10 m, where it would fill the frame; further off it's foreground),
+    /// each as a share of samples.
     pub fn score(&self, flight: &Flight) -> (f32, f32) {
         let n = (flight.path.length() / 0.5).ceil().max(8.0) as usize;
         let mut inside = 0;
@@ -341,8 +342,8 @@ impl Trees {
                 inside += 1;
             }
             let dir = (at - eye).normalize_or(Vec3::NEG_Z);
-            let reach = eye.distance(at).min(25.0);
-            if (1..(reach / 1.5) as usize).any(|k| self.hits(eye + dir * (k as f32 * 1.5), 1.2)) {
+            let reach = eye.distance(at).min(10.0);
+            if (1..=(reach / 1.0) as usize).any(|k| self.hits(eye + dir * k as f32, 1.2)) {
                 blocked += 1;
             }
         }

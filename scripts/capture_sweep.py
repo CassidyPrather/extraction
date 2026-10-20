@@ -2,13 +2,11 @@
 """Reads a looks-wrong sweep (`--sweep`, see src/capture/sweep.rs) and flags
 what looks wrong.
 
-    scripts/capture_sweep.py SWEEP_DIR [--zfight-px N]
+    scripts/capture_sweep.py SWEEP_DIR
 
-Per subject, from <light>/<subject>.png and the day's two extra pictures
-(`_nearb`: the near plane moved; `_empty`: the subject hidden):
+Per subject, from <light>/<subject>.png and the day's picture with the
+subject hidden (`_empty`):
 
-- z-fighting: pixels that change when only the near plane moved (the
-  picture is otherwise identical), in clumps;
 - fallback colours: magenta in the subject (an engine's missing texture);
 - blank views: a view where the subject covers almost nothing;
 - size: a model's size against its folder's range, a prefab's against the
@@ -18,8 +16,9 @@ Per subject, from <light>/<subject>.png and the day's two extra pictures
 
 Writes SWEEP_DIR/report.md (findings, worst first), SWEEP_DIR/index.html
 (a contact sheet of every subject under every light, flagged ones
-outlined, each linking to its pictures) and, for each z-fighting subject,
-SWEEP_DIR/zfight/<subject>.png with the changed pixels in red.
+outlined, each linking to its pictures). Z-fighting isn't looked for here:
+a still picture doesn't show it; `cargo test --lib capture::fighting`
+finds it from the geometry.
 """
 import html
 import json
@@ -32,12 +31,10 @@ from PIL import Image
 # What a model in each folder may measure (largest side, metres); the same
 # table as `capture::checks::size_range`.
 SIZE = {
-    "guns": (0.15, 1.7), "mags": (0.04, 0.5), "items": (0.01, 1.6),
-    "kit": (0.15, 1.0), "hands": (0.08, 0.4), "props": (0.03, 45.0),
+    "guns": (0.15, 1.8), "mags": (0.04, 0.5), "items": (0.01, 1.6),
+    "kit": (0.15, 1.0), "hands": (0.08, 0.4), "props": (0.03, 70.0),
     "robots": (0.3, 40.0), "vehicles": (0.3, 12.0),
 }
-# A pixel "changed" past this (0-255, any channel).
-CHANGE = 24
 # The subject is where the picture differs from the empty studio past this.
 SUBJECT = 10
 
@@ -65,21 +62,21 @@ def clumped(mask):
     return mask & (n >= 2)
 
 
-def analyse(out, rec, grid, zfight_px):
+def analyse(out, rec, grid):
     f = rec["file"]
     flags = []
     day = load(os.path.join(out, "day", f + ".png"))
-    nearb = load(os.path.join(out, "day", f + "_nearb.png"))
     empty = load(os.path.join(out, "day", f + "_empty.png"))
     stats = {}
     if rec.get("failed"):
         flags.append(("error", "didn't load"))
     if day is None:
         flags.append(("error", "no day picture"))
-        return flags, stats, None
+        return flags, stats
     subject = None
     if empty is not None and empty.shape == day.shape:
-        subject = np.abs(day - empty).max(axis=2) > SUBJECT
+        # Clumped, so a drifting cloud's edge doesn't count as subject.
+        subject = clumped(np.abs(day - empty).max(axis=2) > SUBJECT)
         cover = [float(c.mean()) for c in cells(subject, grid)]
         stats["cover"] = cover
         if max(cover) < 0.002:
@@ -94,20 +91,6 @@ def analyse(out, rec, grid, zfight_px):
         stats["magenta"] = float(frac)
         if frac > 0.01:
             flags.append(("error", f"magenta (missing texture) on {frac:.0%} of it"))
-    overlay = None
-    if nearb is not None and nearb.shape == day.shape:
-        changed = np.abs(day - nearb).max(axis=2) > CHANGE
-        clumps = clumped(changed)
-        per = [int(c.sum()) for c in cells(clumps, grid)]
-        stats["zfight"] = per
-        worst = max(per)
-        if worst >= zfight_px:
-            views = [i for i, n in enumerate(per) if n >= zfight_px]
-            flags.append(("error" if worst >= zfight_px * 8 else "warn",
-                          f"z-fighting: {worst} px flicker (views {views})"))
-            o = (day * 0.45).astype(np.uint8)
-            o[changed] = [255, 40, 40]
-            overlay = Image.fromarray(o)
     lo, hi = np.array(rec["lo"]), np.array(rec["hi"])
     size = hi - lo
     if rec["kind"] == "model":
@@ -125,24 +108,18 @@ def analyse(out, rec, grid, zfight_px):
     if rec.get("floating"):
         names = sorted(set(rec["floating"]))
         flags.append(("warn", f"floating: {', '.join(names[:6])}" + (" ..." if len(names) > 6 else "")))
-    return flags, stats, overlay
+    return flags, stats
 
 
 def main(argv):
     out = argv[0]
-    zfight_px = 40
-    if "--zfight-px" in argv:
-        zfight_px = int(argv[argv.index("--zfight-px") + 1])
     with open(os.path.join(out, "sweep.json")) as f:
         sweep = json.load(f)
     grid = tuple(sweep["grid"])
     lights = sweep["lights"]
     results = []
-    os.makedirs(os.path.join(out, "zfight"), exist_ok=True)
     for rec in sweep["subjects"]:
-        flags, stats, overlay = analyse(out, rec, grid, zfight_px)
-        if overlay is not None:
-            overlay.save(os.path.join(out, "zfight", rec["file"] + ".png"))
+        flags, stats = analyse(out, rec, grid)
         results.append((rec, flags, stats))
     rank = {"error": 0, "warn": 1}
     flagged = sorted(
@@ -181,8 +158,6 @@ def main(argv):
                         f"<a href='{img}'><img loading=lazy src='{img}'></a>")
                 if flags and l == "day":
                     f.write("<ul>" + "".join(f"<li>{html.escape(m)}</li>" for _, m in flags) + "</ul>")
-                    if os.path.exists(os.path.join(out, "zfight", rec["file"] + ".png")):
-                        f.write(f"<a href='zfight/{rec['file']}.png'>z-fight pixels</a>")
                 f.write("</div>")
             f.write("</div>")
     print(f"{len(results)} subjects, {len(flagged)} flagged: {out}/report.md, {out}/index.html")

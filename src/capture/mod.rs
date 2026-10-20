@@ -16,6 +16,7 @@ use std::path::PathBuf;
 
 pub mod checks;
 pub mod cinematic;
+pub mod fighting;
 pub mod glb;
 pub mod path;
 pub mod sweep;

@@ -6,14 +6,12 @@
 //! `<capture-out>/<light>/<subject>.png`; `sweep.json` says what each
 //! subject measured.
 //!
-//! The day is shot twice, the second time with the cameras' near plane
-//! moved. With an infinite reverse-Z projection that changes no pixel's
-//! place, only the depth values' rounding, so where the two pictures
-//! differ two surfaces are fighting over the depth buffer: z-fighting,
-//! found without edges or noise to confuse it. `scripts/capture_sweep.py`
-//! compares them, and looks for fallback colours, blank views, absurd
-//! sizes, blockouts left standing and floating pieces, and writes the
-//! report.
+//! The day is shot a second time with the subject hidden, to tell it from
+//! the studio; time stands still while a subject is photographed.
+//! `scripts/capture_sweep.py` looks for fallback colours, blank views,
+//! absurd sizes, blockouts left standing and floating pieces, and writes
+//! the report. Z-fighting is found from the geometry instead
+//! (`capture::fighting`): a still picture doesn't show it.
 //!
 //! FILTER is `all`, `models`, `prefabs`, or text a subject's name must
 //! contain (`props/bed`, `prefab:barn`). `--sweep-lights day` shoots only
@@ -46,10 +44,8 @@ fn sweep_run(opts: Res<LaunchOptions>) -> bool {
 pub const STUDIO: Vec3 = Vec3::new(0.0, 900.0, 0.0);
 /// The grid of views: columns, rows.
 pub const GRID: (u32, u32) = (4, 2);
-/// The near planes of the day's two pictures (not a power of two apart, so
-/// every depth value rounds differently).
-pub const NEAR_A: f32 = 0.03;
-pub const NEAR_B: f32 = 0.0413;
+/// The cameras' near plane.
+pub const NEAR: f32 = 0.03;
 /// How far under the subjects the studio floor's top is, metres.
 pub const FLOOR_GAP: f32 = 0.004;
 
@@ -68,6 +64,10 @@ pub enum Subject {
     Model(String),
     /// A generated prefab (buildings and underground sites).
     Prefab(String),
+    /// A test piece that fights on purpose (`probe`, never in `all`): a
+    /// block with a differently coloured sheet lying exactly on its top,
+    /// and one 1 mm above it, to show the z-fighting check works.
+    Probe,
 }
 
 impl Subject {
@@ -75,6 +75,7 @@ impl Subject {
         match self {
             Subject::Model(m) => m.clone(),
             Subject::Prefab(p) => format!("prefab:{p}"),
+            Subject::Probe => "probe:zfight".into(),
         }
     }
 
@@ -95,7 +96,9 @@ pub fn subjects(filter: &str) -> Vec<Subject> {
             .chain(crate::world::underground::ids())
             .map(|p| Subject::Prefab(p.to_string())),
     );
+    out.push(Subject::Probe);
     out.retain(|s| match filter {
+        _ if *s == Subject::Probe => filter.split(',').any(|f| f == "probe"),
         "all" => true,
         "models" => matches!(s, Subject::Model(_)),
         "prefabs" => matches!(s, Subject::Prefab(_)),
@@ -166,8 +169,8 @@ struct Sweep {
     extra: Vec<Entity>,
     frames: u32,
     stable: (usize, u32),
-    /// Pictures to take of this subject under this light: (suffix, near).
-    shots: Vec<(&'static str, f32)>,
+    /// Pictures to take of this subject under this light, by file suffix.
+    shots: Vec<&'static str>,
     records: Vec<Record>,
     /// The subject is hidden for its `_empty` picture.
     hidden: bool,
@@ -224,7 +227,7 @@ fn sweep(
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<Mesh>>,
     ),
-    mut exit: MessageWriter<AppExit>,
+    (mut exit, mut time): (MessageWriter<AppExit>, ResMut<Time<Virtual>>),
     mut boot: Local<u32>,
 ) {
     let Some(_zone) = zone else {
@@ -245,6 +248,16 @@ fn sweep(
     };
     let out = opts.capture.out_dir();
     let st = &mut *state;
+    // Time stands still while a subject is photographed, so its pictures
+    // differ only in what was changed on purpose (the clouds drift).
+    let still = matches!(st.stage, Stage::Shoot | Stage::Waiting) && st.frames >= 2;
+    if still != time.is_paused() {
+        if still {
+            time.pause();
+        } else {
+            time.unpause();
+        }
+    }
     match st.stage {
         Stage::Start => {
             let filter = opts.capture.sweep.clone().unwrap_or_default();
@@ -271,7 +284,7 @@ fn sweep(
             let floor = commands
                 .spawn((
                     Name::new("Sweep floor"),
-                    Mesh3d(meshes.add(Cylinder::new(150.0, 0.2))),
+                    Mesh3d(meshes.add(Cylinder::new(3000.0, 0.2))),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::srgb(0.42, 0.42, 0.40),
                         perceptual_roughness: 0.95,
@@ -362,6 +375,39 @@ fn sweep(
                 .id();
             match &subject {
                 Subject::Model(_) => {}
+                Subject::Probe => {
+                    let mut mat = |c: Color| {
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: c,
+                            perceptual_roughness: 0.8,
+                            ..default()
+                        }))
+                    };
+                    commands.spawn((
+                        Name::new("block"),
+                        Mesh3d(meshes.add(Cuboid::new(1.0, 0.5, 1.0))),
+                        mat(Color::srgb(0.7, 0.7, 0.68)),
+                        Transform::from_xyz(0.0, 0.25, 0.0),
+                        ChildOf(root),
+                    ));
+                    // On the top face exactly: fights.
+                    commands.spawn((
+                        Name::new("sheet on the face"),
+                        Mesh3d(meshes.add(Plane3d::default().mesh().size(0.6, 0.6))),
+                        mat(Color::srgb(0.75, 0.15, 0.1)),
+                        Transform::from_xyz(-0.15, 0.5, -0.15)
+                            .with_rotation(Quat::from_rotation_y(0.3)),
+                        ChildOf(root),
+                    ));
+                    // A millimetre proud of it: from a few metres, still fights.
+                    commands.spawn((
+                        Name::new("sheet 1 mm up"),
+                        Mesh3d(meshes.add(Plane3d::default().mesh().size(0.3, 0.3))),
+                        mat(Color::srgb(0.1, 0.2, 0.7)),
+                        Transform::from_xyz(0.25, 0.501, 0.25),
+                        ChildOf(root),
+                    ));
+                }
                 Subject::Prefab(p) => {
                     commands
                         .entity(root)
@@ -507,7 +553,6 @@ fn sweep(
             let radius = ((hi - lo).length() * 0.5).max(0.05);
             let fov = 40f32.to_radians();
             let dist = radius / (fov * 0.5).sin() * 1.05;
-            let near = NEAR_A;
             let place = |i: usize, tf: &mut Transform, proj: &mut Projection| {
                 let (az, el) = angles()[i];
                 let (az, el) = (az.to_radians(), el.to_radians());
@@ -515,7 +560,7 @@ fn sweep(
                 *tf = Transform::from_translation(centre + dir * dist).looking_at(centre, Vec3::Y);
                 *proj = Projection::Perspective(PerspectiveProjection {
                     fov,
-                    near,
+                    near: NEAR,
                     far: 4000.0,
                     ..default()
                 });
@@ -548,11 +593,10 @@ fn sweep(
                 ..default()
             });
             st.shots = if st.lights[st.light] == Light::Day {
-                // The second near plane; then without the subject, for
-                // telling it from the studio.
-                vec![("", NEAR_A), ("_nearb", NEAR_B), ("_empty", NEAR_A)]
+                // Then without the subject, for telling it from the studio.
+                vec!["", "_empty"]
             } else {
-                vec![("", NEAR_A)]
+                vec![""]
             };
             // A few frames for the move to settle (shadows, the lamp).
             st.frames = 0;
@@ -563,30 +607,10 @@ fn sweep(
             if st.frames < 3 {
                 return;
             }
-            let Some((suffix, near)) = st.shots.first().copied() else {
+            let Some(suffix) = st.shots.first().copied() else {
                 st.stage = Stage::Next;
                 return;
             };
-            // The near plane for this picture, on every camera.
-            let set_near = |p: &mut Projection| {
-                if let Projection::Perspective(pp) = p {
-                    pp.near = near;
-                }
-            };
-            let mut changed = false;
-            if let Projection::Perspective(pp) = &*proj {
-                changed |= pp.near != near;
-            }
-            if changed {
-                set_near(&mut proj);
-                for e in &st.extra {
-                    if let Ok((_, _, mut p)) = extra_cams.get_mut(*e) {
-                        set_near(&mut p);
-                    }
-                }
-                st.frames = 1;
-                return;
-            }
             if suffix == "_empty" {
                 if let Some(root) = st.root {
                     if !st.hidden {
@@ -685,6 +709,7 @@ fn record(
         kind: match s {
             Subject::Model(_) => "model",
             Subject::Prefab(_) => "prefab",
+            Subject::Probe => "probe",
         },
         lo: lo.to_array(),
         hi: hi.to_array(),
@@ -693,7 +718,7 @@ fn record(
         floating,
         footprint: match s {
             Subject::Prefab(p) => Some(crate::world::structures::footprint(p).to_array()),
-            Subject::Model(_) => None,
+            _ => None,
         },
         load_frames,
         failed,
@@ -842,5 +867,8 @@ mod tests {
         );
         // File names are flat.
         assert!(all.iter().all(|s| !s.file().contains('/')));
+        // The probe only when asked for.
+        assert!(!all.contains(&Subject::Probe));
+        assert_eq!(subjects("probe"), vec![Subject::Probe]);
     }
 }

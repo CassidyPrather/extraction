@@ -196,3 +196,150 @@ pub fn all_models() -> Vec<(String, String, std::path::PathBuf)> {
     out.sort();
     out
 }
+
+/// One triangle of a model, in the model's space.
+#[derive(Clone, Debug)]
+pub struct Tri {
+    /// The mesh node it belongs to.
+    pub node: String,
+    pub material: String,
+    pub p: [Vec3; 3],
+}
+
+/// Every triangle of a model's meshes (triangle-list primitives), through
+/// the node hierarchy.
+pub fn triangles(path: &Path) -> Result<Vec<Tri>, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let j = json(path)?;
+    let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    // The BIN chunk follows the JSON one (padded to four bytes).
+    let at = 20 + len.div_ceil(4) * 4;
+    let bin: &[u8] = if bytes.len() >= at + 8 && &bytes[at + 4..at + 8] == b"BIN\0" {
+        let n = u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+        &bytes[at + 8..(at + 8 + n).min(bytes.len())]
+    } else {
+        &[]
+    };
+    let num = |v: &serde_json::Value| v.as_u64().unwrap_or(0) as usize;
+    // An accessor's elements as f32 components (`comps` a row).
+    let read = |acc: usize| -> Option<(Vec<f32>, usize)> {
+        let a = &j["accessors"][acc];
+        let view = &j["bufferViews"][a["bufferView"].as_u64()? as usize];
+        let comps = match a["type"].as_str()? {
+            "SCALAR" => 1,
+            "VEC2" => 2,
+            "VEC3" => 3,
+            "VEC4" => 4,
+            _ => return None,
+        };
+        let ctype = a["componentType"].as_u64()?;
+        let size = match ctype {
+            5120 | 5121 => 1,
+            5122 | 5123 => 2,
+            5125 | 5126 => 4,
+            _ => return None,
+        };
+        let count = num(&a["count"]);
+        let start = num(&view["byteOffset"]) + num(&a["byteOffset"]);
+        let stride = view["byteStride"]
+            .as_u64()
+            .map_or(comps * size, |s| s as usize);
+        let mut out = Vec::with_capacity(count * comps);
+        for i in 0..count {
+            for c in 0..comps {
+                let o = start + i * stride + c * size;
+                let b = bin.get(o..o + size)?;
+                out.push(match ctype {
+                    5126 => f32::from_le_bytes(b.try_into().ok()?),
+                    5125 => u32::from_le_bytes(b.try_into().ok()?) as f32,
+                    5123 => u16::from_le_bytes(b.try_into().ok()?) as f32,
+                    5122 => i16::from_le_bytes(b.try_into().ok()?) as f32,
+                    5121 => b[0] as f32,
+                    _ => b[0] as i8 as f32,
+                });
+            }
+        }
+        Some((out, comps))
+    };
+    let f = |v: &serde_json::Value, i: usize, d: f32| {
+        v.get(i).and_then(|x| x.as_f64()).map_or(d, |x| x as f32)
+    };
+    let nodes = j["nodes"].as_array().cloned().unwrap_or_default();
+    let materials: Vec<String> = j["materials"]
+        .as_array()
+        .map(|ms| {
+            ms.iter()
+                .map(|m| m["name"].as_str().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    let roots: Vec<usize> = j["scenes"][j["scene"].as_u64().unwrap_or(0) as usize]["nodes"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_u64())
+                .map(|v| v as usize)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    let mut stack: Vec<(usize, Mat4)> = roots.into_iter().map(|r| (r, Mat4::IDENTITY)).collect();
+    while let Some((i, parent)) = stack.pop() {
+        let Some(n) = nodes.get(i) else { continue };
+        let (t, r, s) = (&n["translation"], &n["rotation"], &n["scale"]);
+        let world = parent
+            * Mat4::from_scale_rotation_translation(
+                Vec3::new(f(s, 0, 1.0), f(s, 1, 1.0), f(s, 2, 1.0)),
+                Quat::from_xyzw(f(r, 0, 0.0), f(r, 1, 0.0), f(r, 2, 0.0), f(r, 3, 1.0)),
+                Vec3::new(f(t, 0, 0.0), f(t, 1, 0.0), f(t, 2, 0.0)),
+            );
+        for c in n["children"].as_array().into_iter().flatten() {
+            if let Some(c) = c.as_u64() {
+                stack.push((c as usize, world));
+            }
+        }
+        let Some(mesh) = n["mesh"].as_u64() else {
+            continue;
+        };
+        let name = n["name"].as_str().unwrap_or("").to_string();
+        for prim in j["meshes"][mesh as usize]["primitives"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            if prim["mode"].as_u64().unwrap_or(4) != 4 {
+                continue;
+            }
+            let Some((pos, 3)) = prim["attributes"]["POSITION"]
+                .as_u64()
+                .and_then(|a| read(a as usize))
+            else {
+                continue;
+            };
+            let verts: Vec<Vec3> = pos
+                .chunks(3)
+                .map(|c| world.transform_point3(Vec3::new(c[0], c[1], c[2])))
+                .collect();
+            let idx: Vec<usize> = match prim["indices"].as_u64().and_then(|a| read(a as usize)) {
+                Some((i, 1)) => i.into_iter().map(|v| v as usize).collect(),
+                _ => (0..verts.len()).collect(),
+            };
+            let material = prim["material"]
+                .as_u64()
+                .and_then(|m| materials.get(m as usize).cloned())
+                .unwrap_or_default();
+            for t in idx.chunks(3) {
+                if let (3, Some(a), Some(b), Some(c)) =
+                    (t.len(), verts.get(t[0]), verts.get(t[1]), verts.get(t[2]))
+                {
+                    out.push(Tri {
+                        node: name.clone(),
+                        material: material.clone(),
+                        p: [*a, *b, *c],
+                    });
+                }
+            }
+        }
+    }
+    Ok(out)
+}
