@@ -10,13 +10,9 @@
 
 use extraction_core::progression::Upgrade;
 
-/// "the quarry", "the gatekeeper's cottage": a place in a sentence (as
-/// `raid::lines::the` on the main branch, which this can call once merged).
+/// "the quarry", "the gatekeeper's cottage": a place in a sentence.
 fn the(place: &str) -> String {
-    match place.strip_prefix("The ") {
-        Some(rest) => format!("the {rest}"),
-        None => format!("the {place}"),
-    }
+    crate::raid::lines::the(place)
 }
 
 /// "The quarry", at the start of a line.
