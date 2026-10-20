@@ -21,11 +21,14 @@ MAPS=("$@")
 for MAP in "${MAPS[@]}"; do
     for MOOD in ${MOODS:-golden night rain surge}; do
         TORCH=()
+        FRAMES=60
         case "$MOOD" in
             golden) ARGS=(--hour dusk --weather clearing --sun-elevation 7) ;;
             night) ARGS=(--hour night --weather clearing); TORCH=(env EXTRACTION_TORCH=1) ;;
             rain) ARGS=(--hour day --weather downpour) ;;
-            surge) ARGS=(--hour day --weather drizzle --surge-in -40) ;;
+            # Longer to settle: the Surge shows once you're out of the
+            # truck's pull-in, a few seconds in.
+            surge) ARGS=(--hour day --weather drizzle --surge-in -40); FRAMES=300 ;;
             day) ARGS=(--hour day --weather drizzle) ;;
             *) echo "unknown mood $MOOD"; exit 1 ;;
         esac
@@ -37,7 +40,7 @@ for MAP in "${MAPS[@]}"; do
         WGPU_BACKEND=vulkan timeout 3600 "${TORCH[@]}" xvfb-run -a -s "-screen 0 ${SIZE}x24" \
             "$BIN" --map "$MAP" --data-dir "$DATA" --new-game --no-robots \
             --seed "${SEED:-1}" --cinematic "scripts/capture_paths/$MAP.stills" \
-            --capture-out "$DIR" --frames 60 \
+            --capture-out "$DIR" --frames "$FRAMES" \
             --size "$SIZE" "${ARGS[@]}" "${EXTRA[@]}" 2>&1 \
             | grep -E 'panicked|cinematic: done' || true
         rm -rf "$DATA"
