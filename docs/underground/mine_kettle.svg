@@ -6748,7 +6748,7 @@
 <line x1='207.0' y1='170.9' x2='225.0' y2='170.9' stroke='#c0392b' stroke-width='4'/>
 <line x1='225.0' y1='669.0' x2='207.0' y2='669.0' stroke='#c0392b' stroke-width='4'/>
 <rect x='340.0' y='293.2' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
-<text x='353.0' y='302.2' fill='#f1c40f'>Breaker</text>
+<text x='353.0' y='302.2' fill='#f1c40f'>Breaker 1</text>
 <line x1='303.0' y1='459.0' x2='321.0' y2='459.0' stroke='#f1c40f' stroke-width='4'/>
 <circle cx='235.2' cy='207.0' r='4' fill='#5a5650'/>
 <circle cx='241.2' cy='178.2' r='4' fill='#5a5650'/>
