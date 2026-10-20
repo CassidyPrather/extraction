@@ -31,6 +31,7 @@ impl Plugin for WorldPropsPlugin {
                 swap_in,
                 crate::world::overgrowth::setup_ivy,
                 crate::world::overgrowth::blow_ivy,
+                crate::world::decay::setup_stains,
                 crate::world::buildings::dress_buildings
                     .after(crate::world::buildings::building_visuals),
             ),

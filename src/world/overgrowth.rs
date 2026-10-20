@@ -47,7 +47,7 @@ pub struct Growth {
 /// `EXTRACTION_NO_DECAY=1` shows the buildings as built, for comparisons.
 pub fn enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("EXTRACTION_NO_DECAY").is_none())
+    *ON.get_or_init(|| std::env::var("EXTRACTION_NO_DECAY").map_or(true, |v| v != "1"))
 }
 
 /// A building's seed, from where it stands: the same building grows the
@@ -131,7 +131,11 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 fn vigour(seed: u64) -> f32 {
     let mut rng = fastrand::Rng::with_seed(seed ^ 0x51ed);
     let r = rng.f32();
-    if r < 0.12 { 0.0 } else { ((r - 0.12) / 0.88).powf(0.7) }
+    if r < 0.12 {
+        0.0
+    } else {
+        ((r - 0.12) / 0.88).powf(0.7)
+    }
 }
 
 /// The ivy on a building: its pieces, its occlusion and sky (`occ`), its
@@ -377,6 +381,178 @@ fn depth(nodes: &[(Vec2, Option<usize>)], mut i: usize) -> usize {
     d
 }
 
+/// A young tree or a bush, grown into `out`: stems up from `at` (its
+/// foot, building-local), leaf cards along their upper parts.
+fn sapling(out: &mut Growth, at: Vec3, height: f32, stems: usize, rng: &mut fastrand::Rng) {
+    // Within the budget: one that would overrun it isn't grown.
+    let (nv, nl) = (out.vines.len(), out.leaves.len());
+    grow_sapling(out, at, height, stems, rng);
+    if triangles(out) > WILD_BUDGET {
+        out.vines.truncate(nv);
+        out.leaves.truncate(nl);
+    }
+}
+
+fn grow_sapling(out: &mut Growth, at: Vec3, height: f32, stems: usize, rng: &mut fastrand::Rng) {
+    for s in 0..stems {
+        let lean =
+            Vec3::new(rng.f32() - 0.5, 0.0, rng.f32() - 0.5) * if stems > 1 { 0.9 } else { 0.25 };
+        let h = height * (0.6 + 0.4 * rng.f32()) * if s == 0 { 1.0 } else { 0.8 };
+        let n = 6;
+        let mut points = Vec::new();
+        let mut radius = Vec::new();
+        let side = Vec3::new(lean.z, 0.0, -lean.x).normalize_or(Vec3::X);
+        for i in 0..=n {
+            let t = i as f32 / n as f32;
+            let bend = lean * (t * t) * h * 0.5;
+            points.push(at + Vec3::Y * (t * h) + bend);
+            radius.push((0.004 + 0.012 * height * (1.0 - t)).max(0.004));
+        }
+        // Leaves up the top two thirds, thickest at the tip.
+        for i in 2..=n {
+            let t = i as f32 / n as f32;
+            let c = points[i];
+            for _ in 0..(2 + (t * 3.0) as usize) {
+                let off = Vec3::new(rng.f32() - 0.5, rng.f32() * 0.3 - 0.1, rng.f32() - 0.5)
+                    * (0.15 + 0.35 * t)
+                    * height.min(1.6);
+                let normal =
+                    Vec3::new(rng.f32() - 0.5, 0.6 + rng.f32(), rng.f32() - 0.5).normalize();
+                let up = (Vec3::Y - normal * normal.y).normalize_or(Vec3::X);
+                out.leaves.push(Leaf {
+                    at: c + off,
+                    normal,
+                    up,
+                    size: 0.1 + rng.f32() * 0.08,
+                    sway: t,
+                });
+            }
+        }
+        out.vines.push(Vine {
+            points,
+            radius,
+            normal: side,
+        });
+    }
+}
+
+/// Nature taking the inside back too: saplings up through a ruin's floor
+/// where the roof's open over it, bushes at a house's feet, weeds in its
+/// gutters. Clear of its doorways, its loot and its furniture.
+pub fn reclaim(geo: &Geo, occ: &Occluders, seed: u64, ruin: bool) -> Growth {
+    let mut out = Growth::default();
+    let v = vigour(seed);
+    if v <= 0.0 {
+        return out;
+    }
+    let mut rng = fastrand::Rng::with_seed(seed ^ 0x7ee5);
+    // Where the building is: its pieces' bounds.
+    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+    for p in &geo.pieces {
+        if let Shape::Box(s) = p.shape {
+            if p.collide && s.y > 1.5 {
+                lo = lo.min(p.at.translation - s * 0.5);
+                hi = hi.max(p.at.translation + s * 0.5);
+            }
+        }
+    }
+    if lo.x > hi.x {
+        return out;
+    }
+    let clear_of_ways = |p: Vec3| {
+        geo.entrances
+            .iter()
+            .all(|e| Vec2::new(e.at[0], e.at[1]).distance(p.xz()) > 1.6)
+            && geo.loot.iter().all(|l| l.at.xz().distance(p.xz()) > 0.9)
+            && geo
+                .doors
+                .iter()
+                .all(|d| d.hinge.xz().distance(p.xz()) > d.width + 0.6)
+    };
+    // Room for it: nothing solid round its stem.
+    let free = |p: Vec3, h: f32| {
+        (1..=4).all(|k| {
+            let y = p.y + h * k as f32 / 4.0;
+            [
+                Vec3::ZERO,
+                Vec3::X * 0.2,
+                Vec3::NEG_X * 0.2,
+                Vec3::Z * 0.2,
+                Vec3::NEG_Z * 0.2,
+            ]
+            .iter()
+            .all(|o| !occ.inside(Vec3::new(p.x, y, p.z) + *o))
+        })
+    };
+    // Inside a ruin: up through its floor, under open sky.
+    if ruin {
+        for _ in 0..40 {
+            if out.vines.len() >= 3 + (v * 6.0) as usize {
+                break;
+            }
+            let p = Vec3::new(
+                lo.x + 0.4 + rng.f32() * (hi.x - lo.x - 0.8),
+                0.0,
+                lo.z + 0.4 + rng.f32() * (hi.z - lo.z - 0.8),
+            );
+            // The floor: down from above to the first thing it meets.
+            let Some(floor) = (0..30)
+                .map(|k| 2.5 - k as f32 * 0.1)
+                .find(|y| occ.inside(Vec3::new(p.x, *y, p.z)))
+            else {
+                continue;
+            };
+            let foot = Vec3::new(p.x, floor + 0.08, p.z);
+            if occ.sky(foot, Vec3::Y) < 0.5 || !clear_of_ways(foot) {
+                continue;
+            }
+            let h = 0.8 + rng.f32() * 1.6;
+            if !free(foot, h.min(2.0)) {
+                continue;
+            }
+            let stems = if rng.f32() < 0.5 {
+                1
+            } else {
+                3 + (rng.f32() * 3.0) as usize
+            };
+            sapling(
+                &mut out,
+                foot,
+                if stems > 1 { h * 0.5 } else { h },
+                stems,
+                &mut rng,
+            );
+        }
+    }
+    // Bushes at the walls' feet outside.
+    let bushes = (v * 4.0) as usize;
+    for _ in 0..bushes * 4 {
+        if out.vines.len() >= 40 {
+            break;
+        }
+        // A point just outside the bounds, on a random side.
+        let t = rng.f32();
+        let (x, z) = match rng.usize(0..4) {
+            0 => (lo.x - 0.35, lo.z + t * (hi.z - lo.z)),
+            1 => (hi.x + 0.35, lo.z + t * (hi.z - lo.z)),
+            2 => (lo.x + t * (hi.x - lo.x), lo.z - 0.35),
+            _ => (lo.x + t * (hi.x - lo.x), hi.z + 0.35),
+        };
+        let foot = Vec3::new(x, 0.0, z);
+        if !clear_of_ways(foot) || !free(foot, 0.8) {
+            continue;
+        }
+        sapling(
+            &mut out,
+            foot,
+            0.45 + rng.f32() * 0.5,
+            4 + rng.usize(0..4),
+            &mut rng,
+        );
+    }
+    out
+}
+
 /// The triangles a growth costs drawn in full: vines as three-sided tubes,
 /// leaves as two-triangle cards.
 pub fn triangles(g: &Growth) -> usize {
@@ -389,6 +565,8 @@ pub fn triangles(g: &Growth) -> usize {
 
 /// Most a building's ivy may cost, triangles (`triangles`).
 pub const BUDGET: usize = 6000;
+/// And its saplings and bushes (`reclaim`), at most.
+pub const WILD_BUDGET: usize = 3000;
 
 // --- Drawing --------------------------------------------------------------------------------
 
@@ -573,11 +751,24 @@ mod tests {
                 };
                 let occ = crate::world::buildings::occluders(&geo);
                 let seed = seed(Vec2::from(p.at), &p.prefab);
+                let ruin = extraction_core::map::prefab_base(&p.prefab) != p.prefab;
                 let a = grow(&geo, &occ, seed, Vec3::NEG_Z);
                 let b = grow(&geo, &occ, seed, Vec3::NEG_Z);
                 assert_eq!(a, b, "{name} {}: grew differently", p.prefab);
-                let t = triangles(&a);
-                assert!(t <= BUDGET, "{name} {} at {:?}: {t} tris", p.prefab, p.at);
+                let wa = reclaim(&geo, &occ, seed, ruin);
+                assert_eq!(
+                    wa,
+                    reclaim(&geo, &occ, seed, ruin),
+                    "{name} {}: saplings",
+                    p.prefab
+                );
+                let t = triangles(&a) + triangles(&wa);
+                assert!(
+                    t <= BUDGET + WILD_BUDGET,
+                    "{name} {} at {:?}: {t} tris",
+                    p.prefab,
+                    p.at
+                );
                 total += t;
                 grown += (t > 0) as usize;
             }

@@ -8,6 +8,7 @@ pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
+pub mod decay;
 pub mod impostors;
 pub mod notes;
 pub mod overgrowth;

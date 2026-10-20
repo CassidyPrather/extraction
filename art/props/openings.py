@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import Wear, board, bolt, prop, rod  # noqa: E402
-from common import RX, Part, T, fillet  # noqa: E402
+from common import RX, RY, Part, T, fillet  # noqa: E402
 
 UP_Z = RX(-math.pi / 2)  # a cylinder's axis (Z) -> +Y
 
@@ -80,8 +80,11 @@ def door_leaf():
 SW, SH = 1.0, 1.1
 
 
-def window_sash():
+def window_sash(broken=False):
+    """A window's frame and casements; `broken`, the panes smashed out,
+    shards left in the sashes' corners, one casement swung open."""
     p = Part("static")
+    w = Wear(77)
     # The frame round the opening.
     f, d = 0.06, 0.07
     for sx in (-1, 1):
@@ -98,21 +101,42 @@ def window_sash():
     p.box((0.04, SH / 2 - f - ty - 0.025 + 0.004, d - 0.02),
           (0.1, (SH / 2 - f + ty + 0.025) / 2, 0.0), "Timber", bevel=0.003, segs=1)
     # Casement sashes inside the frame, set back, each a bar across.
-    def sash(x0, x1, y0, y1, bar=True):
+    def sash(x0, x1, y0, y1, bar=True, xf=None):
         s = 0.04
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         for xx in (x0 + s / 2, x1 - s / 2):
-            p.box((s, y1 - y0, 0.04), (xx, cy, -0.01), "Painted")
+            p.box((s, y1 - y0, 0.04), (xx, cy, -0.01), "Painted", xf=xf)
         for yy in (y0 + s / 2, y1 - s / 2):
-            p.box((x1 - x0 - 2 * s + 0.004, s, 0.04), (cx, yy, -0.01), "Painted")
+            p.box((x1 - x0 - 2 * s + 0.004, s, 0.04), (cx, yy, -0.01), "Painted", xf=xf)
         if bar:
-            p.box((x1 - x0 - 2 * s + 0.004, 0.025, 0.03), (cx, cy + 0.06, -0.01), "Painted")
-        # The pane, in its middle.
-        p.box((x1 - x0 - 2 * s + 0.006, y1 - y0 - 2 * s + 0.006, 0.004), (cx, cy, -0.01),
-              "Glass")
+            p.box((x1 - x0 - 2 * s + 0.004, 0.025, 0.03), (cx, cy + 0.06, -0.01), "Painted",
+                  xf=xf)
+        if not broken:
+            # The pane, in its middle.
+            p.box((x1 - x0 - 2 * s + 0.006, y1 - y0 - 2 * s + 0.006, 0.004), (cx, cy, -0.01),
+                  "Glass", xf=xf)
+            return
+        # Smashed: jagged shards left in some of the corners.
+        ix0, ix1, iy0, iy1 = x0 + s, x1 - s, y0 + s, y1 - s
+        for (px, py, dx, dy) in ((ix0, iy0, 1, 1), (ix1, iy0, -1, 1), (ix1, iy1, -1, -1),
+                                 (ix0, iy1, 1, -1)):
+            if w.chance(0.35):
+                continue
+            # Under half the pane each way, so two corners' never meet.
+            a = min(0.06 + w.rng.random() * 0.18, (ix1 - ix0) * 0.45) * dx
+            b = min(0.06 + w.rng.random() * 0.22, (iy1 - iy0) * 0.45) * dy
+            m = (px + a * 0.35 + w.j(0.02), py + b * 0.35 + w.j(0.02))
+            pts = [(px, py), (px + a, py), m, (px, py + b)]
+            p.prism(pts, -0.012, -0.008, "Glass", axis="z", xf=xf)
     xin, yin = SW / 2 - f, SH / 2 - f
     sash(-xin, -0.025, -yin, ty - 0.025)
-    sash(0.025, xin, -yin, ty - 0.025)
+    if broken:
+        # The right casement swung in on its hinge (at its outer stile).
+        hinge = (xin, 0.0, -0.03)
+        sash(0.025, xin, -yin, ty - 0.025,
+             xf=T(*hinge) @ RY(-0.9) @ T(*(-v for v in hinge)))
+    else:
+        sash(0.025, xin, -yin, ty - 0.025)
     sash(-xin, 0.08, ty + 0.025, yin, bar=False)
     sash(0.12, xin, ty + 0.025, yin, bar=False)
     # Latch handles on the casements' meeting stiles.
@@ -156,6 +180,7 @@ def window_casing():
 
 prop("door_leaf", door_leaf)
 prop("window_sash", window_sash)
+prop("window_sash_broken", lambda: window_sash(broken=True))
 prop("window_casing", window_casing)
 
 def door_metal():

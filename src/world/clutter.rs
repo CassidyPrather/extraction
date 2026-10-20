@@ -139,7 +139,8 @@ pub fn dress(
     xf: &Transform,
 ) -> Vec<(&'static str, Transform)> {
     // `EXTRACTION_NO_CLUTTER=1`: the bare rooms, for comparisons.
-    let Some(valley) = valley(map).filter(|_| std::env::var_os("EXTRACTION_NO_CLUTTER").is_none())
+    let Some(valley) =
+        valley(map).filter(|_| std::env::var("EXTRACTION_NO_CLUTTER").map_or(true, |v| v != "1"))
     else {
         return Vec::new();
     };
