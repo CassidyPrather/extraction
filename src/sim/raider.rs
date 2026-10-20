@@ -2079,6 +2079,7 @@ fn raid_step(
         match r.act {
             Act::Idle => {
                 add_job_site(r, scene);
+                add_safehouse_site(r, scene);
                 let Some(s) = choose_site(r, scene, here) else {
                     r.pack_full = true; // nothing left worth the walk
                     return vec![Task::Wait(0.2)];
@@ -2271,7 +2272,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
 /// The scout job on the card, as a site to walk to (once).
 fn add_job_site(r: &mut Raider, scene: &Scene) {
     // `SIM_NO_JOB=1`: play as before the bots took jobs (to compare runs).
-    if r.sites.iter().any(|s| s.job) || std::env::var_os("SIM_NO_JOB").is_some() {
+    if r.sites.iter().any(|s| s.job && s.name.starts_with("job:"))
+        || std::env::var_os("SIM_NO_JOB").is_some()
+    {
         return;
     }
     let Some(extraction_core::progression::Job::Scout { map, place, at, .. }) =
@@ -2286,6 +2289,36 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
         name: format!("job: {place}"),
         kind: SiteKind::Spot,
         at: Vec2::from_array(at),
+        spots: 0,
+        visited: false,
+        tries: 0,
+        job: true,
+    });
+}
+
+/// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend
+/// the night in (`progression::safehouse::sim_overnight` does the claiming
+/// and the sleeping once it's inside).
+fn add_safehouse_site(r: &mut Raider, scene: &Scene) {
+    if std::env::var_os("SIM_OVERNIGHT").is_none() || r.sites.iter().any(|s| s.name == "safehouse")
+    {
+        return;
+    }
+    let Some(at) = extraction_core::safehouse::safehouse(&scene.opts.map) else {
+        return;
+    };
+    let at = Vec2::from_array(at);
+    let Some(b) = r
+        .plans
+        .iter()
+        .position(|p| p.xf.translation.xz().distance(at) < 2.0)
+    else {
+        return;
+    };
+    r.sites.push(Site {
+        name: "safehouse".into(),
+        kind: SiteKind::Building(b),
+        at,
         spots: 0,
         visited: false,
         tries: 0,

@@ -91,7 +91,7 @@ impl Plugin for SafehousePlugin {
                 )
                     .chain(),
             )
-            .add_systems(Update, (furnish, scenario::direct));
+            .add_systems(Update, (furnish, scenario::direct, sim::sim_overnight));
     }
 }
 
@@ -470,6 +470,7 @@ fn homecoming(
 }
 
 pub mod scenario;
+pub mod sim;
 
 #[cfg(test)]
 mod tests;
