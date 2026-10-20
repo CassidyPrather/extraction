@@ -18,6 +18,8 @@ pub mod body;
 pub mod far;
 pub mod flat;
 pub mod hand_climb;
+#[cfg(test)]
+mod physics_audit;
 pub mod physics_hands;
 pub mod poke;
 
