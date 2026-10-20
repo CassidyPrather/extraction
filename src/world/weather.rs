@@ -193,8 +193,7 @@ impl Plugin for WeatherPlugin {
 
 /// New Surge cycle (or a loaded save), new weather.
 /// Night raids are open once the career's third tier is done
-/// (Progression's `NIGHTS_FROM`; `Progress::nights` when that's merged).
-const NIGHTS_FROM: u32 = 3;
+/// (`Progress::nights`).
 
 fn follow_cycle(
     raid: Res<crate::raid::Raid>,
@@ -205,7 +204,7 @@ fn follow_cycle(
 ) {
     // Whether nights are open is read when the cycle starts and kept: a
     // tier finished at base mustn't turn the raid's day to night.
-    let open = progression.is_some_and(|p| p.0.tier >= NIGHTS_FROM);
+    let open = progression.is_some_and(|p| p.0.nights());
     let nights = match *latched {
         Some((cycle, n)) if cycle == raid.cycle => n,
         _ => {
