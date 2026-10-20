@@ -98,8 +98,14 @@ def main():
     maps = ["marrow_creek", "kettle_pass", "cinder_works"] if map_name == "all" else [map_name]
     paths = []
     for m in maps:
-        runs_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "target", "sim", m)
-        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl")))]
+        if len(sys.argv) > 2:
+            # A runs dir; with `all`, a dir holding one folder per map
+            # (and they may hold a folder per batch).
+            runs_dir = os.path.join(sys.argv[2], m) if map_name == "all" else sys.argv[2]
+        else:
+            runs_dir = os.path.join(ROOT, "target", "sim", m)
+        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl"))
+                                          + glob.glob(os.path.join(runs_dir, "*", "*.jsonl")))]
     regs_by = {m: regions(m) for m in maps}
     runs = []
     for m, path in paths:

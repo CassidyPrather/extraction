@@ -1937,7 +1937,12 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         // are worth the walk, picked-over ones less so. Loot richness
         // already rises with danger (docs/MAP_DESIGN.md, "what the bots
         // value").
-        let rich = scene.zone.map.richness_at(s.at.to_array());
+        // (A job is worth the walk whatever's on the shelves there.)
+        let rich = if s.job {
+            1.0
+        } else {
+            scene.zone.map.richness_at(s.at.to_array())
+        };
         let score = pull * rich / (1.0 + d / 80.0)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
