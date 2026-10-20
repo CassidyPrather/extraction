@@ -2692,7 +2692,14 @@ fn blast_furnace(b: &mut Builder) {
     let back = (w1 - w0).normalize();
     let r = Vec3::new(0.47, 0.525, 0.0);
     // From two metres back down the slope, into the ground.
-    strut(b, w0 + r - back * 2.0, w1 + r, 0.05, 1.05, Mat::PaintedMetal);
+    strut(
+        b,
+        w0 + r - back * 2.0,
+        w1 + r,
+        0.05,
+        1.05,
+        Mat::PaintedMetal,
+    );
     // The stockhouse pit and the hoist house.
     b.bx(
         Vec3::new(4.0, 0.6, 5.0),

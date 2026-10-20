@@ -693,7 +693,20 @@ fn second_eye(
 ) {
     use bevy::camera::RenderTarget;
     use bevy::render::render_resource::TextureFormat;
+    // `EXTRACTION_BENCH_EYES=1`: one eye, to see what the second costs.
+    let one = std::env::var("EXTRACTION_BENCH_EYES").is_ok_and(|v| v == "1");
     for cam in &cams {
+        if one {
+            commands
+                .entity(cam)
+                .insert(Projection::Perspective(PerspectiveProjection {
+                    fov: EYE_FOV_DEG.to_radians(),
+                    near: crate::render::NEAR_CLIP,
+                    far: 2000.0,
+                    ..default()
+                }));
+            continue;
+        }
         let size = windows
             .iter()
             .next()
