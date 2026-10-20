@@ -66,8 +66,8 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 15 | Held at the worst measured (wood views); to come down |
-| Overdraw, 95th percentile | 50 | |
+| Overdraw, mean layers a pixel | 11 | Held just above the worst measured (wood views) |
+| Overdraw, 95th percentile | 45 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
 
@@ -133,6 +133,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
 | Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
 | Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3 |
+| Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):
