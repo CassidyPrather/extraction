@@ -337,7 +337,8 @@ pub fn step_walker(
     let rot = Quat::from_rotation_y(w.yaw);
     let top = SPEED * s * g.shape.pace().0;
     let fast = (speed / top).clamp(0.0, 1.5);
-    let step_time = 0.36 - 0.1 * fast;
+    // (A runner's feet are quicker.)
+    let step_time = (0.36 - 0.1 * fast) * if g.shape == Shape::Hound { 0.7 } else { 1.0 };
     let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
