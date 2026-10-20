@@ -251,7 +251,7 @@
         // The mine gallery behind the office (assets/underground).
         (prefab: "mine_kettle", at: (-55.0, 36.0), rot: 90.0),
         // The mine's headframe over its shaft, beside the gallery's kiosk.
-        (prefab: "headframe", at: (-72.0, 36.0), rot: 90.0),
+        (prefab: "headframe", at: (-72.0, 28.0), rot: 90.0),
         (prefab: "shed", at: (-72.0, 112.0), rot: 0.0),
 
         // The low farm.
