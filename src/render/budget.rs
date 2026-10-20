@@ -53,8 +53,8 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
-    overdraw_mean: 11.0,
-    overdraw_p95: 45,
+    overdraw_mean: 10.0,
+    overdraw_p95: 35,
 };
 
 /// The sun's shadow map, a side, per cascade per eye. Bevy's default is
@@ -963,7 +963,32 @@ mod tests {
         out
     }
 
+    /// Whether the game's own textures are here (`scripts/fetch_assets.py`).
+    /// Without them the trees fall back to untextured crowns with no
+    /// cards and no impostors (a dev fallback, not what ships, and a
+    /// heavier one: 1.1M triangles at the Kettle Pass gate), so a gauge
+    /// that counted it would measure the wrong game.
+    fn shipped_assets() -> bool {
+        let root = crate::asset_root_path().join("textures");
+        [
+            "foliage/spruce_branch/albedo.ktx2",
+            "foliage/birch_leaves/albedo.ktx2",
+            "foliage/fern/albedo.ktx2",
+            "terrain/albedo.ktx2",
+        ]
+        .iter()
+        .all(|f| root.join(f).exists())
+    }
+
     fn holds(map: &str) {
+        if !shipped_assets() {
+            eprintln!(
+                "\n*** {map} frame budget NOT CHECKED: the textures aren't fetched, and \
+                 without them the trees are a heavier dev fallback. Run \
+                 `python3 scripts/fetch_assets.py` (or `--offline` from assets/.cache). ***\n"
+            );
+            return;
+        }
         let loads = loads(map);
         let mut over = Vec::new();
         for (view, load, od) in &loads {
