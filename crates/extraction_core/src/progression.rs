@@ -148,6 +148,9 @@ pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
 pub const STASH_RACK: f32 = 100.0;
 
+/// Raids the driver waits on a fetch before asking for something else.
+pub const FETCH_PATIENCE: u32 = 4;
+
 /// What a Recover job sends you for.
 pub const RECOVER_ITEM: &str = "field_recorder";
 /// A Scout job's place counts once you're this close to it.
@@ -285,6 +288,12 @@ pub struct Progress {
     /// The raid the last job was handed in after: one job a raid.
     #[serde(default)]
     pub last_raid: Option<u32>,
+    /// The raid count when the job went on the card.
+    #[serde(default)]
+    pub job_raid: u32,
+    /// Fetches the driver gave up waiting for (varies the next roll).
+    #[serde(default)]
+    pub swaps: u32,
 }
 
 impl Progress {
@@ -343,6 +352,12 @@ impl Progress {
         for _ in 0..jobs {
             self.complete();
         }
+    }
+
+    /// A fetch still unmet after [`FETCH_PATIENCE`] raids: the driver
+    /// wants something else (some parts may just not be turning up).
+    pub fn fetch_gone_stale(&self, raids: u32) -> bool {
+        matches!(self.job, Some(Job::Fetch { .. })) && raids >= self.job_raid + FETCH_PATIENCE
     }
 
     pub fn count_raid(&mut self, map: &str) {
@@ -446,7 +461,8 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
         }
     }
     let tier = progress.tier_def();
-    let mut rng = Rng::new(seed ^ 0x10B5_0F7E ^ (number as u64).wrapping_mul(0x9E37_79B9));
+    let roll = number as u64 + 1000 * progress.swaps as u64;
+    let mut rng = Rng::new(seed ^ 0x10B5_0F7E ^ roll.wrapping_mul(0x9E37_79B9));
     // Which valley: here, or for far jobs the one you've raided least.
     let valley = if tier.far && valleys.len() > 1 {
         valleys

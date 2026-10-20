@@ -159,16 +159,36 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
 }
 
 fn count_raids(
-    raid: Res<Raid>,
+    mut raid: ResMut<Raid>,
     opts: Res<LaunchOptions>,
     mut progression: ResMut<Progression>,
+    catalog: Res<Catalog>,
     mut was_out: Local<bool>,
 ) {
     let out = raid.phase != Phase::AtBase;
-    if out && !*was_out && opts.map != crate::camp::TRAINING_YARD {
+    let set_off = out && !*was_out;
+    let home = !out && *was_out;
+    *was_out = out;
+    if opts.map == crate::camp::TRAINING_YARD {
+        return;
+    }
+    if set_off {
         progression.0.count_raid(&opts.map);
     }
-    *was_out = out;
+    // Back from a raid with a fetch the Zone isn't giving up: something
+    // else instead (rolled by `offer_job`).
+    if home && progression.0.fetch_gone_stale(raid.raids) {
+        if let Some(Job::Fetch { item, .. }) = progression.0.job.take() {
+            let name = catalog
+                .kind(&item)
+                .map(|k| catalog.get(k).name.clone())
+                .unwrap_or(item);
+            raid.say(format!(
+                "Driver: \"Forget the {name}. I'll get it elsewhere. New job on the card.\""
+            ));
+        }
+        progression.0.swaps += 1;
+    }
 }
 
 /// A job handed in: count it, and fit what a finished tier earns.
@@ -198,7 +218,7 @@ fn job_done(
 }
 
 /// There's always a job on the card.
-fn offer_job(opts: Res<LaunchOptions>, mut progression: ResMut<Progression>) {
+fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<Progression>) {
     if progression.0.job.is_some() {
         return;
     }
@@ -210,6 +230,7 @@ fn offer_job(opts: Res<LaunchOptions>, mut progression: ResMut<Progression>) {
     let job = extraction_core::progression::roll_job(&progression.0, opts.seed, &here, &valleys);
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);
+    progression.0.job_raid = raid.raids;
 }
 
 /// A Recover job in this valley with no recorder anywhere (not yet put

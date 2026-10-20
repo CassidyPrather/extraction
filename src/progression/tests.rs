@@ -403,3 +403,34 @@ fn the_longest_job_and_career_page_still_read() {
     }
     assert_eq!(seen, 2);
 }
+
+#[test]
+fn a_fetch_nobody_can_find_gives_way_to_another_job() {
+    let mut app = crate::raid::requests::tests::app();
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.done = 1;
+        p.0.job = Some(Job::Fetch {
+            item: "rotor_assembly".into(),
+            n: 2,
+        });
+        p.0.job_raid = 0;
+    }
+    for raid in 1..=extraction_core::progression::FETCH_PATIENCE {
+        let at = progress(&app).job.clone();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.world_mut().resource_mut::<Raid>().raids = raid;
+        app.update();
+        home(&mut app);
+        app.update();
+        if raid < extraction_core::progression::FETCH_PATIENCE {
+            assert_eq!(progress(&app).job, at, "still waiting after {raid}");
+        }
+    }
+    let job = progress(&app).job.expect("a new job");
+    assert!(
+        !matches!(&job, Job::Fetch { item, .. } if item == "rotor_assembly"),
+        "{job:?}"
+    );
+    assert_eq!(progress(&app).done, 1, "a swap isn't a job done");
+}
