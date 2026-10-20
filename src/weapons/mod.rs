@@ -23,6 +23,7 @@ pub mod range;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
+pub mod zero;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -190,6 +191,7 @@ impl Plugin for WeaponsPlugin {
             .add_plugins((
                 armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
+                zero::ZeroPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -409,7 +411,8 @@ fn work_handles(
             .is_ok_and(|(_, hand)| hand.handle.map(|x| x.0) == Some(*g))
     });
     for (hand_e, hand) in &hands {
-        let Some((gun_e, _)) = hand.handle else {
+        // (A scope's turret is worked in `zero`.)
+        let Some((gun_e, 0)) = hand.handle else {
             continue;
         };
         let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
@@ -1001,7 +1004,7 @@ pub fn handle_released(
     // Guns whose handle is held this tick.
     let held_handles: Vec<Entity> = hands
         .iter()
-        .filter_map(|h| h.handle.map(|(g, _)| g))
+        .filter_map(|h| h.handle.filter(|(_, id)| *id == 0).map(|(g, _)| g))
         .collect();
     for g in watching.clone() {
         if !held_handles.contains(&g) {

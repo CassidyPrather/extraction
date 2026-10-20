@@ -67,8 +67,10 @@ pub const BRACE_REST: f32 = 8.0;
 pub const BRACED_SWAY: f32 = 0.15;
 pub const BRACED_LAG: f32 = 0.5;
 /// How near the handguard must be to something solid to rest on it, and
-/// how long a rest outlasts losing touch (so it doesn't flicker), s.
-pub const BRACE_REACH: f32 = 0.05;
+/// how long a rest outlasts losing touch (so it doesn't flicker), s. A
+/// hand-driven gun stops 4 to 5 cm short of what it's pressed onto, so the
+/// reach is that and a margin.
+pub const BRACE_REACH: f32 = 0.07;
 pub const BRACE_HOLD: f32 = 0.15;
 /// Rests are looked for every this many fixed ticks (the hold above covers
 /// the gap), each gun on its own beat.
