@@ -178,6 +178,14 @@ house by the well, in Marrow; it says she has written to Lev as well. The
 last of his jobs (`src/progression`) sends you for that second letter,
 sealed: "For Lev, when he comes back for me." He reads it alone.
 
+He's in the cab, never in the bed: he doesn't come where you've been.
+What he gives you he passes back through a hatch in the bed's front wall
+(`src/raid/lev.rs`): it slides open, his hand comes through with the
+thing (his old carbine, the gun from his man in town, his mother's
+photograph), sets it on the ledge, and goes back. And on the drive home
+he notices what you've brought: a stone humming in your kit, one of their
+eyes, a cell, a week of tins.
+
 The game reveals him slowly, a line at a time on the drive home
 (`src/raid/lines.rs`): first the job, then the bus, then the gate, then
 his mother. Notes in all three valleys mention him without his name;
