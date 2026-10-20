@@ -1950,7 +1950,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
 
 /// The scout job on the card, as a site to walk to (once).
 fn add_job_site(r: &mut Raider, scene: &Scene) {
-    if r.sites.iter().any(|s| s.job) {
+    // `SIM_NO_JOB=1`: play as before the bots took jobs (to compare runs).
+    if r.sites.iter().any(|s| s.job) || std::env::var_os("SIM_NO_JOB").is_some() {
         return;
     }
     let Some(extraction_core::progression::Job::Scout { map, place, at, .. }) =
