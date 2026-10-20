@@ -612,8 +612,11 @@ cv.lathe([(0.0, 0.0), (0.03, 0.0), (0.045, 0.06), (0.06, 0.08), (0.0, 0.08)], "B
          segs=16, xf=T(0.45, 2.9, -1.74) @ RX(math.pi / 2))
 cv.box((0.015, 0.015, 0.08), (0.45, 2.91, -1.78), "Iron")
 
-for p_ in (wheel, ch, cab2, bed, cv):
+for p_ in (wheel, ch, cab2, cv):
     make(p_)
+# The bed's painted steel (stakes, the top cap, the tie-down rails) wears
+# to bare metal on its edges, where cargo and boots rub it.
+make(bed, worn={"mats": ("Paint",), "width": 0.012, "amount": 0.35, "seed": 3.0})
 # The cab shell and its fittings are one object.
 bpy.ops.object.select_all(action="DESELECT")
 cab_parts = bpy.data.objects["cab_parts"]
