@@ -505,12 +505,13 @@ and the hound's makes sense.
 rotors; the walker a hollow mid voice; the grappler the walker's with a
 metal ring; the dirigible a slow deep horn; the crawler fast insect
 chirps; the hound a rough bark; the warden a low heavy walker. Pylons
-and sorters are mute. Each word is rendered on first use, at the
-stream's rate, deterministically from its kind, mind and variant (three
-of each), and levelled to one loudness; it plays as an ordinary placed
-sound, so it's heard through the head-related filter, muffled by walls
-and doors, and sent to the room's reverb. Synthesis costs nothing after
-the first time a kind says a word.
+and sorters are mute. Every word is rendered at start-up, in the
+background on the compute pool (never on a frame: rendering on first
+use cost a 340 ms hitch when a walker first died), at the stream's
+rate, deterministically from its kind, mind and variant (three of each),
+and levelled to one loudness. It plays as an ordinary placed sound, so
+it's heard through the head-related filter, muffled by walls and doors,
+and sent to the room's reverb.
 
 **Who says what** (`VoicePlugin`, headless): it reads Robot minds'
 one hook, `robots::search::MindShift` (one per change of mind, never the
