@@ -638,7 +638,7 @@ pub fn underground_site(map: &MapDef, region: &str) -> Option<(String, [f32; 2],
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
-        prefab,
+        crate::map::prefab_base(prefab),
         "house_plank"
             | "house_brick"
             | "cabin_log"

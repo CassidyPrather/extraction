@@ -42,6 +42,9 @@ import _kit  # noqa: E402
 
 # Big structures: their decks and galleries shade further.
 _kit.AO_DISTANCE = 2.0
+# Outdoors with roofs over floors (the cast house, the ropeway's shed): rain
+# reaches only what's open to the sky.
+_kit.AO_SKY = True
 
 
 def beam(p, a, b, w, mat, d=None, bevel=0.0, xf=None):

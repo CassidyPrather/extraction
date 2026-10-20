@@ -49,12 +49,15 @@ AIRBORNE = {"door_leaf", "door_metal", "window_sash", "window_casing", "stash_ra
 # fully shut-in corner gets (the shading's own lighting does the rest).
 AO_DISTANCE = 0.6
 AO_STRENGTH = 0.75
+# Bake the sky term into alpha too (see `common.bake_ao`): for structures
+# with floors under their own roofs, outdoors.
+AO_SKY = False
 
 
 def bake_ao(ground=True, distance=None, rays=40):
     """Bake this prop's ambient occlusion (see `common.bake_ao`)."""
     common_bake_ao(ground=ground, distance=distance or AO_DISTANCE, strength=AO_STRENGTH,
-                   rays=rays)
+                   rays=rays, sky=AO_SKY)
 
 
 def wanted(name):
