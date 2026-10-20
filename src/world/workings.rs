@@ -639,7 +639,8 @@ fn canary_glow(
                     shadow_maps_enabled: false,
                     ..default()
                 },
-                Transform::from_xyz(0.0, 0.08, 0.0),
+                // At the bird's breast (Kit's `glow`).
+                Transform::from_xyz(0.0, -0.04, -0.022),
                 ChildOf(e),
             ));
         }

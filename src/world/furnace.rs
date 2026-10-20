@@ -29,6 +29,7 @@ impl Plugin for FurnacePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Heat>()
             .add_message::<Vented>()
+            .add_message::<CraneRidden>()
             .add_systems(Update, (wire_furnace, open_vents, cool, scorch))
             .add_systems(
                 FixedUpdate,
@@ -96,6 +97,13 @@ pub struct VentLever {
 pub struct Vented {
     pub site: Entity,
     pub vent: usize,
+}
+
+/// Someone rode the crane end to end, holding its chain.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CraneRidden {
+    pub player: Entity,
+    pub site: Entity,
 }
 
 /// How hot it is where a body is (for the shimmer and the sound).
@@ -369,7 +377,8 @@ fn run_crane(
         (&mut crate::gadgets::climbing::Rope, &mut Transform),
         (Without<Crane>, Without<Building>),
     >,
-    mut grips: Query<&mut crate::gadgets::climbing::RopeGrip>,
+    mut grips: Query<(&mut crate::gadgets::climbing::RopeGrip, &ChildOf)>,
+    mut ridden: MessageWriter<CraneRidden>,
     time: Res<Time>,
 ) {
     for (mut c, mut t) in &mut cranes {
@@ -384,7 +393,8 @@ fn run_crane(
         };
         let len = Vec2::from(def.from).distance(Vec2::from(def.to)).max(0.1);
         c.t = (c.t + c.dir * CRANE_SPEED / len * time.delta_secs()).clamp(0.0, 1.0);
-        if c.t <= 0.0 || c.t >= 1.0 {
+        let arrived = c.t <= 0.0 || c.t >= 1.0;
+        if arrived {
             c.dir = 0.0;
         }
         let top = hook_at(def, xf, c.t);
@@ -397,9 +407,15 @@ fn run_crane(
             rope.bottom = top - Vec3::Y * def.drop;
             rt.translation = top - Vec3::Y * def.drop * 0.5;
         }
-        for mut g in &mut grips {
+        for (mut g, hand) in &mut grips {
             if g.rope == chain {
                 g.at += moved;
+                if arrived {
+                    ridden.write(CraneRidden {
+                        player: hand.parent(),
+                        site: c.site,
+                    });
+                }
             }
         }
     }
@@ -529,6 +545,14 @@ mod tests {
         );
         app.finish();
         app.cleanup();
+        #[derive(Resource, Default)]
+        struct Rode(Vec<Entity>);
+        app.init_resource::<Rode>().add_systems(
+            Update,
+            |mut m: MessageReader<CraneRidden>, mut d: ResMut<Rode>| {
+                d.0.extend(m.read().map(|m| m.player));
+            },
+        );
         for _ in 0..3 {
             app.update();
         }
@@ -731,6 +755,11 @@ mod tests {
         assert!(
             app.world().get::<Crane>(crane).unwrap().t >= 1.0,
             "the crane got across"
+        );
+        app.update();
+        assert!(
+            app.world().resource::<Rode>().0.contains(&player),
+            "the ride's told"
         );
         // Let go.
         let hands: Vec<Entity> = app
