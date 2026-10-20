@@ -377,7 +377,9 @@ fn walker_brain(
                 intent.low = grappler;
                 intent.look = Some(at);
                 indoors = Some(at);
-                let there = Vec2::new(pos.x - at.x, pos.z - at.z).length() < 3.0;
+                // (Indoors, "there" is through the door: see below.)
+                let there = Vec2::new(pos.x - at.x, pos.z - at.z).length() < 3.0
+                    && entrances.building_at(at).is_none();
                 if there || *left <= 0.0 {
                     *brain = search::begin_search(at, aware, pos, &nav.0, &entrances);
                     None
@@ -528,7 +530,7 @@ fn walker_brain(
                                 noise.write(super::Noise {
                                     at: ent.mid,
                                     radius: 30.0,
-                                    source: None,
+                                    source: Some(e),
                                 });
                                 blows.write(super::doors::DoorBlow {
                                     at: ent.mid,

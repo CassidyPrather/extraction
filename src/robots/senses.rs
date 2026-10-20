@@ -79,9 +79,12 @@ pub const SUSPICION_DECAY: f32 = 0.05;
 
 /// A wall or a hill in the way: the sound carries this share as far.
 pub const OCCLUDED: f32 = 0.45;
+/// Sound bends over a low rise: it counts as blocked only by what stands
+/// this high over its source (a wall, a hill; not a hump in a field) (m).
+pub const HEARD_OVER: f32 = 1.2;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
-pub const HEARD_FULL: f32 = 30.0;
+pub const HEARD_FULL: f32 = 15.0;
 /// Suspicion from a sound: `HEARD_BASE + HEARD_LOUD * loudness` (loudness
 /// 1 at the source, 0 at the edge of its reach), scaled as above.
 pub const HEARD_BASE: f32 = 0.3;
@@ -458,11 +461,13 @@ pub(crate) fn perceive(
                 continue;
             }
             // Through a wall or over a hill it carries less far.
-            let occluded = Dir3::new(ear - s.at).ok().is_some_and(|dir| {
-                spatial
-                    .cast_ray(s.at + Vec3::Y * 0.3, dir, d - 0.5, true, &world)
-                    .is_some()
-            });
+            let occluded = Dir3::new(ear - s.at - Vec3::Y * HEARD_OVER)
+                .ok()
+                .is_some_and(|dir| {
+                    spatial
+                        .cast_ray(s.at + Vec3::Y * HEARD_OVER, dir, d - 0.5, true, &world)
+                        .is_some()
+                });
             if occluded {
                 reach *= OCCLUDED;
                 if d >= reach {
