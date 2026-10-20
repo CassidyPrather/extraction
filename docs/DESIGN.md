@@ -220,7 +220,7 @@ the one that comes to look finds you about half the time.
 **Light and dark.** Robot eyes follow the same light the player sees
 (`Conditions::light_at`, Visual design's time of day): exposure scales by
 its square root, so dusk leaves about 0.6 of the day's, a room by day
-0.55, a night 0.2. A torch lights you up wherever the sky doesn't, and its
+0.55, a full-moon night 0.28 and a black one 0.14. A torch lights you up wherever the sky doesn't, and its
 beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
 carries a shot a third as far. Robots hear round open doorways and
 through walls by the same rule the player's ears do (`acoustics`).

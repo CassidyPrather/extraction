@@ -65,9 +65,11 @@ pub struct MotionSight(pub f32);
 /// Running: more than walking.
 pub const RUNNING: f32 = 1.35;
 /// Light: the sky's (`Conditions::light_at`: a day outdoors 1, dusk 0.36,
-/// a room by day 0.3, night 0.04) counts as its square root, so dusk
-/// leaves 0.6 of the day's exposure, a room 0.55, a night 0.2.
-pub const NIGHT_LIGHT: f32 = 0.04;
+/// a room by day 0.3, a clear night 0.02 new moon to 0.08 full, 0.01 under
+/// fog) counts as its square root, so dusk leaves 0.6 of the day's
+/// exposure, a room 0.55, a full-moon night 0.28, a black one this floor's
+/// 0.14: a robot makes out a standing body moving within about 20 m.
+pub const NIGHT_LIGHT: f32 = 0.02;
 /// Within this, a robot sees you whatever: cone, fog, grass.
 pub const POINT_BLANK: f32 = 4.0;
 /// Exposure at which a robot has you: aims, fires, suspicion climbs.
