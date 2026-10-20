@@ -920,6 +920,115 @@ mod vr_tests {
         assert_eq!(fire(&mut r, 1, true).len(), 1);
     }
 
+    /// A gun-hand button for one press (the headset's B is `secondary`).
+    fn press(r: &mut Range, which: &str) {
+        for down in [true, false] {
+            {
+                let mut input =
+                    r.vr.app
+                        .world_mut()
+                        .get_mut::<crate::rig::RigInput>(r.vr.player)
+                        .unwrap();
+                let h = input.hand_mut(Side::Right);
+                match which {
+                    "a" => h.primary = down,
+                    "b" => h.secondary = down,
+                    _ => h.stick_click = down,
+                }
+            }
+            r.vr.step(2);
+        }
+    }
+
+    /// The Nagant by hand: A swings the gate open; a round to the gate
+    /// goes in and B turns the cylinder, seven times; A shuts it; seven
+    /// double-action shots; open again, and the rod (stick click) and B
+    /// clear the seven cases.
+    #[test]
+    fn the_nagant_loads_at_the_gate_fires_and_clears_by_hand() {
+        let mut r = hold("nagant", false, false);
+        press(&mut r, "a");
+        assert!(gun_mut(&mut r).firearm.gate_open, "A opens the gate");
+        for n in 1..=7 {
+            take(&mut r, "round_762x38r", 1);
+            let (port, _) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port, 12);
+            r.vr.step(2);
+            r.vr.grip(Side::Left, 0.0);
+            r.vr.step(2);
+            assert_eq!(gun_mut(&mut r).firearm.live_rounds(), n, "round {n} in");
+            press(&mut r, "b");
+        }
+        press(&mut r, "a");
+        assert!(!gun_mut(&mut r).firearm.gate_open);
+        assert_eq!(fire(&mut r, 7, true).len(), 7, "seven double-action shots");
+        assert!(fire(&mut r, 1, true).is_empty(), "then clicks");
+        press(&mut r, "a");
+        let cases = |r: &mut Range| {
+            let mut q = r.vr.app.world_mut().query::<&crate::weapons::Casing>();
+            q.iter(r.vr.app.world()).count()
+        };
+        let before = cases(&mut r);
+        for _ in 0..7 {
+            press(&mut r, "stick");
+            press(&mut r, "b");
+        }
+        r.vr.step(3);
+        assert_eq!(cases(&mut r) - before, 7, "the rod pushed out seven cases");
+        assert!(gun_mut(&mut r).firearm.chambers.iter().all(|c| c.is_none()));
+    }
+
+    /// The PPSh by hand: a drum in, the bolt racked back onto the sear; a
+    /// second of trigger on auto is about fifteen rounds, and it ends back
+    /// on the sear.
+    #[test]
+    fn the_ppsh_racks_onto_its_sear_and_runs_on_auto() {
+        let mut r = hold("ppsh", true, true);
+        seat_mag(&mut r, "ppsh_drum", 71);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 1.0;
+            g.firearm.fouling = 0.0;
+        }
+        // Off the support to rack, then back on it.
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(3);
+        rack(&mut r);
+        assert!(gun_mut(&mut r).firearm.locked_back, "on the sear");
+        assert_eq!(
+            gun_mut(&mut r).firearm.live_rounds(),
+            71,
+            "nothing chambered"
+        );
+        while gun_mut(&mut r).firearm.fire_mode() != FireMode::Auto {
+            press(&mut r, "stick");
+        }
+        // Hold the trigger a second (90 ticks).
+        let shots = {
+            let mut seen: HashSet<Entity> = HashSet::new();
+            r.vr.trigger(Side::Right, 1.0);
+            for _ in 0..90 {
+                r.vr.step(1);
+                let mut q =
+                    r.vr.app
+                        .world_mut()
+                        .query_filtered::<Entity, With<Projectile>>();
+                seen.extend(q.iter(r.vr.app.world()));
+            }
+            r.vr.trigger(Side::Right, 0.0);
+            r.vr.step(3);
+            seen.len()
+        };
+        assert!((13..=16).contains(&shots), "{shots} rounds in a second");
+        assert!(gun_mut(&mut r).firearm.locked_back, "back on the sear");
+        assert_eq!(
+            gun_mut(&mut r).firearm.live_rounds() as usize,
+            71 - shots,
+            "every round fired, none lost"
+        );
+    }
+
     /// A double feed on the pistol: racking does nothing with the magazine
     /// in; thumb the mag release, rack, and the pair falls out; a fresh
     /// magazine and a rack, and it fires.
