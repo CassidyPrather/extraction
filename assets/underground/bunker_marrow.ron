@@ -1,0 +1,93 @@
+// Marrow Creek: the village's civil-defence shelter (see
+// crates/extraction_core/src/underground.rs for the format, and
+// docs/UNDERGROUND.md). Site space: the entrance kiosk's centre on the
+// ground, +Z the way its stair goes down. Props are relative to their
+// room's centre; rot as placements turn.
+(
+    name: "Civil-defence shelter",
+    style: Bunker,
+    floor: -7.0,
+    rooms: [
+        // The blast door at the stair's foot, a gas lock, decontamination.
+        (id: "lock", at: (0.0, 11.0), size: (3.0, 3.0), height: 2.4, lamp: Dead, props: [
+            (kind: Cabinet, at: (1.2, 0.0), rot: 90.0),
+        ]),
+        (id: "decon", at: (0.0, 16.5), size: (4.0, 4.0), height: 2.4, props: [
+            (kind: Locker, at: (-1.65, -1.0), rot: 270.0),
+            (kind: Locker, at: (-1.65, -0.4), rot: 270.0),
+            (kind: Barrel, at: (1.5, 1.4)),
+        ]),
+        // The spine: everything opens off it.
+        (id: "hall", at: (0.0, 24.0), size: (16.0, 3.0), lamp: Flicker, props: [
+            (kind: Rubble, at: (-3.2, 0.9)),
+            (kind: Crate, at: (6.6, -1.0), loot: Some("food_common")),
+        ]),
+        (id: "dorm", at: (-5.0, 31.0), size: (8.0, 6.0), lamp: Dead, props: [
+            (kind: Bunk, at: (-3.3, -1.6)),
+            (kind: Bunk, at: (-3.3, 1.6)),
+            (kind: Bunk, at: (-1.6, 2.3), rot: 90.0),
+            (kind: SmallCrate, at: (2.8, 2.4), loot: Some("house")),
+            (kind: Locker, at: (3.65, -2.3), rot: 90.0),
+            (kind: Rubble, at: (1.0, -1.8)),
+        ]),
+        (id: "mess", at: (5.0, 31.0), size: (6.0, 6.0), props: [
+            (kind: Table, at: (0.3, 0.0), loot: Some("kitchen")),
+            (kind: Chair, at: (0.3, -0.75)),
+            (kind: Chair, at: (0.3, 0.75), rot: 180.0),
+            (kind: Counter, at: (2.6, 0.0), rot: 90.0, loot: Some("food_common")),
+        ]),
+        // Filters and the generator: the plant keeps one lamp alight.
+        (id: "plant", at: (-12.0, 24.0), size: (6.0, 7.0), height: 3.0, lamp: Steady, props: [
+            (kind: Machine, at: (-1.5, -1.8)),
+            (kind: Machine, at: (-1.5, 1.6)),
+            (kind: Workbench, at: (2.2, -2.3), rot: 90.0, loot: Some("tools")),
+        ]),
+        (id: "generator", at: (-12.0, 31.0), size: (5.0, 5.0), height: 3.0, props: [
+            (kind: Machine, at: (-0.9, 0.6)),
+            (kind: Barrel, at: (-2.0, -1.0)),
+            (kind: Barrel, at: (1.9, -1.9)),
+            (kind: Shelf, at: (1.0, 2.1), rot: 180.0, loot: Some("workshop")),
+        ]),
+        (id: "command", at: (12.0, 24.0), size: (6.0, 6.0), lamp: Flicker, props: [
+            (kind: Table, at: (0.0, -0.4), loot: Some("gadgets")),
+            (kind: Chair, at: (0.0, 0.4), rot: 180.0),
+            (kind: Cabinet, at: (2.65, 1.5), rot: 90.0),
+            (kind: Shelf, at: (2.6, -1.4), rot: 90.0, loot: Some("ammo_common")),
+        ]),
+        // The armoury, past the command post: the best of it.
+        (id: "armoury", at: (12.0, 33.0), size: (5.0, 5.0), lamp: Dead, props: [
+            (kind: Shelf, at: (2.1, 0.0), rot: 90.0, loot: Some("weapons_rare")),
+            (kind: Crate, at: (-1.4, 1.4), loot: Some("ammo_common")),
+            (kind: SmallCrate, at: (-1.6, -1.6), loot: Some("medical")),
+            (kind: Locker, at: (0.4, 2.2), rot: 180.0),
+        ]),
+        (id: "medical", at: (0.0, 39.0), size: (5.0, 4.0), props: [
+            (kind: Bunk, at: (-1.5, 0.2)),
+            (kind: Shelf, at: (1.7, 1.75), rot: 180.0, loot: Some("medical")),
+            (kind: Table, at: (1.1, -0.9), loot: Some("medical")),
+        ]),
+        // The way out that isn't the way in.
+        (id: "escape", at: (0.0, 46.0), size: (1.5, 8.0), height: 2.2),
+    ],
+    links: [
+        (from: "lock", to: "decon", doors: Both),
+        (from: "decon", to: "hall", doors: To),
+        (from: "hall", to: "dorm", via: [(-5.0, 24.0)], doors: To),
+        (from: "hall", to: "mess", via: [(5.0, 24.0)], doors: To),
+        (from: "dorm", to: "mess"),
+        (from: "hall", to: "plant", doors: To),
+        (from: "plant", to: "generator", doors: To),
+        (from: "generator", to: "dorm", doors: To),
+        (from: "hall", to: "command", doors: To),
+        (from: "command", to: "armoury", doors: To),
+        (from: "mess", to: "medical", via: [(5.0, 39.0)], doors: To),
+        (from: "medical", to: "escape", doors: To),
+    ],
+    anomalies: [
+        (kind: "Snare", room: "generator", at: (-1.2, 1.5), radius: 0.9),
+    ],
+    portals: [
+        (),
+        (at: (0.0, 60.0), rot: 180.0, y: 0.6),
+    ],
+)

@@ -203,6 +203,10 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
             let b = a + 1;
             let c = a + w as u32;
             let d = c + 1;
+            // Cells opened over underground stairwells stay open.
+            if holed(hm, is[i], is[i + 1], js[j], js[j + 1]) {
+                continue;
+            }
             // Alternate the diagonal to avoid a visible grain.
             if (i + j) % 2 == 0 {
                 indices.extend_from_slice(&[a, c, b, b, c, d]);
@@ -254,6 +258,17 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
     .with_inserted_indices(Indices::U32(indices));
     mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
     mesh
+}
+
+/// Whether any heightmap cell in `i0..i1` by `j0..j1` is a hole.
+fn holed(
+    hm: &extraction_core::terrain::Heightmap,
+    i0: usize,
+    i1: usize,
+    j0: usize,
+    j1: usize,
+) -> bool {
+    (j0..j1).any(|j| (i0..i1).any(|i| hm.holes[hm.idx(i, j)]))
 }
 
 /// The tangent for world-space UVs (u along +X, v along +Z) on ground with

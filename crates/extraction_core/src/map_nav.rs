@@ -31,6 +31,17 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
             0.6,
         );
     }
+    // Underground sites' exit kiosks stand on the surface like placements.
+    for (at, rot, half) in crate::underground::exit_footprints(map) {
+        g.block(
+            Obstacle::Rect {
+                at,
+                half,
+                yaw: rot.to_radians(),
+            },
+            0.6,
+        );
+    }
     for t in crate::forest::scatter_trees(map, hm) {
         g.block(
             Obstacle::Circle {
