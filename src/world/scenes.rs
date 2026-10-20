@@ -37,20 +37,31 @@ impl Plugin for ScenesPlugin {
     }
 }
 
-/// What opens a scene (and a beat of the story, `world::story::BEATS`):
-/// a rank on the driver's job ladder (`Progress::tier` reached), or the
-/// machines recalled.
+/// What opens a scene (and a beat of the story, `world::story::THREADS`):
+/// a rank on the driver's job ladder (`Progress::tier` reached), the
+/// machines recalled, or this many raids set off in the scene's valley.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gate {
     Tier(u32),
     Recalled,
+    Visits(u32),
+}
+
+/// Where a career stands, as far as gates go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Standing {
+    pub tier: u32,
+    pub recalled: bool,
+    /// Raids set off in this valley.
+    pub visits: u32,
 }
 
 impl Gate {
-    pub fn open(self, tier: u32, recalled: bool) -> bool {
+    pub fn open(self, at: Standing) -> bool {
         match self {
-            Gate::Tier(t) => tier >= t,
-            Gate::Recalled => recalled,
+            Gate::Tier(t) => at.tier >= t,
+            Gate::Recalled => at.recalled,
+            Gate::Visits(n) => at.visits >= n,
         }
     }
 }
@@ -59,16 +70,27 @@ impl Gate {
 #[derive(Resource, Default, Debug)]
 pub struct Staged(pub std::collections::HashSet<String>);
 
-/// The rank reached and whether the machines are recalled, as the career
-/// has them (rank 0 and not recalled where there's no career).
-pub fn gates(world: &World) -> (u32, bool) {
-    let tier = world
-        .get_resource::<crate::progression::Progression>()
-        .map_or(0, |p| p.0.tier);
-    let recalled = world
-        .get_resource::<crate::raid::Raid>()
-        .is_some_and(|r| r.recalled);
-    (tier, recalled)
+/// Where the career stands in `map` (rank 0, nothing done, where there's
+/// no career).
+pub fn standing(
+    progression: Option<&crate::progression::Progression>,
+    raid: Option<&crate::raid::Raid>,
+    map: &str,
+) -> Standing {
+    Standing {
+        tier: progression.map_or(0, |p| p.0.tier),
+        recalled: raid.is_some_and(|r| r.recalled),
+        visits: progression.map_or(0, |p| p.0.raids_in(map)),
+    }
+}
+
+/// [`standing`], from the world.
+pub fn gates(world: &World, map: &str) -> Standing {
+    standing(
+        world.get_resource::<crate::progression::Progression>(),
+        world.get_resource::<crate::raid::Raid>(),
+        map,
+    )
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -180,8 +202,8 @@ pub struct Note {
 }
 
 impl Scene {
-    pub fn open(&self, tier: u32, recalled: bool) -> bool {
-        self.after.is_none_or(|g| g.open(tier, recalled))
+    pub fn open(&self, at: Standing) -> bool {
+        self.after.is_none_or(|g| g.open(at))
     }
 }
 
@@ -368,9 +390,9 @@ fn spawn_scenes(
     raid: Res<crate::raid::Raid>,
     mut staged: ResMut<Staged>,
 ) {
-    let tier = progression.map_or(0, |p| p.0.tier);
+    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
     for (id, scene) in of(&opts.map) {
-        if scene.open(tier, raid.recalled) {
+        if scene.open(at) {
             stage(&mut commands, &zone, &id, scene);
             staged.0.insert(id);
         }
@@ -392,9 +414,9 @@ fn unlock_scenes(
     let Some(zone) = zone else {
         return;
     };
-    let tier = progression.map_or(0, |p| p.0.tier);
+    let at = standing(progression.as_deref(), Some(&raid), &opts.map);
     for (id, scene) in of(&opts.map) {
-        if staged.0.contains(&id) || !scene.open(tier, raid.recalled) {
+        if staged.0.contains(&id) || !scene.open(at) {
             continue;
         }
         info!("scene opens: {}", scene.name);
@@ -474,10 +496,10 @@ pub fn spawn_things(
     map: &str,
     zone: &Zone,
     catalog: &Catalog,
-    (tier, recalled): (u32, bool),
+    at: Standing,
 ) {
     for (_, scene) in of(map) {
-        if scene.open(tier, recalled) {
+        if scene.open(at) {
             lay_things(commands, zone, scene, catalog);
         }
     }

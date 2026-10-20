@@ -125,6 +125,11 @@ group of buildings, a site, a hazard with artifacts. The valley is about
   minute and a half) without something to find within 60 m
   (`NEAR_ROUTE`): a point of interest, a building, a loot spot, an
   offering, an artifact field.
+- A road, track or footpath leads to every point of interest: one within
+  30 m (`FUNNEL`) of it. Hazards you approach across country (an artifact
+  field within 40 m, `HAZARD_NEAR`) are the exception. Paths are the
+  paths of least resistance: people (and the sim's bots, on the cheaper
+  road cells) follow them to the door.
 - Small things fill the gaps: a shed by a field, a boxcar on a siding, a
   hut on a switchback. They're each one or two loot spots and a roof.
 - The truck takes about two minutes to come; a scavenging crossing takes
@@ -171,7 +176,9 @@ robot that's investigating or searching is in sight within 30 m. Any
 but the reckless, with junk in its pack, **throws it** about 15 m off to
 one side when a walker within 45 m is about but not onto it (at work, or
 already looking for someone: the sims showed that's when bots meet
-walkers), so the walker goes to look there instead. None of this
+walkers), so the walker goes to look there instead. The cautious play it properly: they creep, crouched,
+round behind an unaware walker within 40 m (outside its sight cone), to
+10 m off, and lob the junk 5 m past it. None of this
 happens in a fight, with the truck waiting, or when hurrying home hurt.
 Telemetry: `crouch` (seconds crouched), `freeze`, `distract`. Cover and
 grass along a route now matter to the sims as they do to a player: a

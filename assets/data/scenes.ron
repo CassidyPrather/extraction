@@ -434,4 +434,129 @@
             rot: 0.0,
         )),
     ),
+    // --- The last shift (Kettle; world::story::THREADS): opens as you
+    // come back to the valley.
+    (
+        map: "kettle_pass",
+        name: "Top of the raise",
+        // Where the mine's escape raise comes up on the west slope.
+        at: (-117.0, 41.0),
+        rot: 90.0,
+        after: Some(Visits(1)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.6),
+            Lantern(at: (0.12, 0.6, 0.1)),
+        ],
+        note: Some((
+            name: "Raise note",
+            text: "17 Oct. Up the raise to look. Trains gone. The Row empty. A white machine sweeping the chapel steps.\nTold the lads we walk out at two. I'm stopping. Somebody has to watch that shelter.\n- K.D.",
+            at: (-0.12, 0.6, -0.05),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "Dusek's hide",
+        // On the quarry's lip by the pump house: a winter's watching.
+        at: (136.0, -43.0),
+        rot: 150.0,
+        after: Some(Visits(3)),
+        pieces: [
+            Bedroll(at: (0.0, 0.0), rot: 0.0),
+            Campfire(at: (1.2, -0.4)),
+            Crate(at: (-1.0, -0.6), size: 0.5),
+        ],
+        items: [
+            (id: "binoculars", at: (-1.0, 0.5, -0.5)),
+            (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
+            (id: "matches", at: (1.0, 0.0, 0.2)),
+        ],
+        note: Some((
+            name: "Hide note",
+            text: "They've put a roof over the shelter. Pipe going in, cable, a door off a bus. It hums at night like the Hollow did that summer.\nMy sister would tell me to come home. She never left hers either.\n- K.",
+            at: (-1.1, 0.5, -0.6),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "The shelter door",
+        // At the quarry shelter: he went in for his key.
+        at: (187.5, -50.5),
+        rot: 240.0,
+        after: Some(Visits(5)),
+        pieces: [
+            Remains(at: (0.0, 0.0), rot: 0.0, seated: false),
+        ],
+        items: [
+            (id: "flashlight", at: (0.5, 0.0, -0.5), condition: 0.1),
+        ],
+        note: Some((
+            name: "Shot-firer's last",
+            text: "Four hundred shots in this pit. The door's warm to the hand. The machines don't come near it now.\nI'm going in for my key.\n- K. Dusek, shot-firer",
+            at: (0.6, 0.0, 0.4),
+            rot: 0.0,
+        )),
+    ),
+    // --- Valve three (Cinder; world::story::THREADS).
+    (
+        map: "cinder_works",
+        name: "Fitter's bench",
+        // By the canal pumps: the fitter's own book.
+        at: (166.0, 40.0),
+        rot: 0.0,
+        after: Some(Visits(1)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.7),
+            Barrel(at: (1.0, 0.1)),
+        ],
+        items: [
+            (id: "gun_oil", at: (0.2, 0.7, 0.1)),
+            (id: "spare_parts", at: (-0.2, 0.7, -0.1)),
+        ],
+        note: Some((
+            name: "Fitter's book",
+            text: "FITTER'S BOOK - T.R.\n9 Feb. Valve three sticking. Greased it.\n11 Feb. Furnace three hot all night. Told Kral. Told the inspector.\nI was on the Hollow survey before this. I know what the needle does before the ground lifts. It's doing it here.",
+            at: (0.0, 0.7, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Letters by hand",
+        // The inspector's satchel, left in the works yard.
+        at: (228.0, 4.0),
+        rot: 90.0,
+        after: Some(Visits(3)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.5),
+            Chair(at: (0.0, 0.6), rot: 0.0),
+        ],
+        note: Some((
+            name: "Letters note",
+            text: "No post since October, so I carried the inspector's letters round the valleys for him that first winter.\nThe last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses.\n- T.R.",
+            at: (0.0, 0.5, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "The far stair",
+        // Where the service tunnel comes up behind the works.
+        at: (67.0, -60.0),
+        rot: 0.0,
+        after: Some(Visits(5)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.6),
+        ],
+        items: [
+            (id: "multitool", at: (0.1, 0.6, 0.1), condition: 0.4),
+        ],
+        note: Some((
+            name: "Far stair note",
+            text: "Up the far stair at 1700, the fire over my head. Opened valve three again; the canal took the pit. Kral didn't come up.\nGoing over the pass to Kettle. There's a shot-firer there who knows about shelters.\n- T.R.",
+            at: (-0.05, 0.6, -0.05),
+            rot: 0.0,
+        )),
+    ),
 ]

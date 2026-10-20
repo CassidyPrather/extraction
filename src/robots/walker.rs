@@ -380,12 +380,17 @@ fn walker_brain(
         }
         if !matches!(*brain, Brain::Engage) {
             w.cover = None;
+        }
+        let ambushing = crawler && matches!(*brain, Brain::Investigate { .. });
+        if !matches!(*brain, Brain::Engage) && !ambushing {
             w.waited = 0.0;
         }
         // Where the one it's after is hiding, if that's indoors.
         let mut indoors: Option<Vec3> = None;
         // Arrived at a doorway it was looking for someone through.
         let mut at_door = false;
+        // Lying in wait where it is (a crawler's ambush).
+        let mut continue_goal = false;
         let goal = match &mut *brain {
             Brain::Transit { to } => {
                 let to = *to;
@@ -421,10 +426,21 @@ fn walker_brain(
                 intent.low = grappler;
                 intent.look = Some(at);
                 indoors = Some(at);
+                // A crawler that hears you close by in the dark keeps still
+                // and low, facing it, and lets you come to it (a while).
+                let near =
+                    Vec2::new(pos.x - at.x, pos.z - at.z).length() < super::indoor::ZAP_RANGE + 3.0;
+                if crawler && near && w.waited < super::indoor::AMBUSH {
+                    w.waited += dt;
+                    intent.low = true;
+                    continue_goal = true;
+                }
                 // (Indoors, "there" is through the door: see below.)
                 let there = Vec2::new(pos.x - at.x, pos.z - at.z).length() < 3.0
                     && entrances.building_at(at).is_none();
-                if there || *left <= 0.0 {
+                if continue_goal {
+                    None
+                } else if there || *left <= 0.0 {
                     *brain = search::begin_search(at, aware, pos, navr, &entrances);
                     None
                 } else {

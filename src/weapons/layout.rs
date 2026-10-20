@@ -35,6 +35,14 @@ pub enum Moves {
     /// An exposed hammer: tips back about its pin (the origin, local X)
     /// when cocked.
     Hammer,
+    /// A revolver's cylinder: turns about its axis (the origin, local Z) a
+    /// chamber at a time.
+    Cylinder,
+    /// A revolver's loading gate: swings about its upright hinge (the
+    /// origin, local Y) out to the right when open.
+    Gate,
+    /// A revolver's ejector rod: strokes back along +Z as it pushes a case.
+    Rod,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -138,6 +146,8 @@ pub fn layout(id: &str) -> Option<GunLayout> {
         "mosin" => Some(mosin()),
         "toz_double" => Some(toz()),
         "sks" => Some(sks()),
+        "nagant" => Some(nagant()),
+        "ppsh" => Some(ppsh()),
         _ => None,
     }
 }
@@ -476,6 +486,113 @@ fn sks() -> GunLayout {
     }
 }
 
+/// The Nagant revolver (art/guns/nagant.py): no handle; the gate, the
+/// cylinder and the ejector rod work from the gun hand's buttons. Loose
+/// rounds go in, and cases come out, at the loading gate on the right.
+fn nagant() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.074;
+    let gate = Vec3::new(0.016, 0.053, -0.012);
+    GunLayout {
+        grip: Transform::IDENTITY,
+        support: None,
+        muzzle: Vec3::new(0.0, bore, -0.178),
+        port: gate,
+        eject: Vec3::new(1.0, -0.2, 0.3),
+        sight: at(0.0, 0.086, 0.012),
+        magwell: None,
+        handle: None,
+        load_port: gate,
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // Frame and grip.
+            part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
+            part(
+                bx(0.026, 0.085, 0.032),
+                Transform::from_xyz(0.0, -0.04, 0.012).with_rotation(Quat::from_rotation_x(-0.2)),
+                Wood,
+                Static,
+            ),
+            // Barrel and cylinder.
+            part(
+                Shape::Cylinder(0.0082, 0.11),
+                at(0.0, bore, -0.123),
+                Blued,
+                Static,
+            ),
+            part(
+                Shape::Cylinder(0.0198, 0.04),
+                at(0.0, 0.0618, -0.039),
+                Blued,
+                Static,
+            ),
+            part(
+                bx(0.004, 0.02, 0.005),
+                at(0.0, -0.005, -0.024),
+                Black,
+                Trigger,
+            ),
+        ],
+    }
+}
+
+/// The PPSh-41 (art/guns/ppsh.py): an open-bolt gun, its charging handle
+/// pulled right back to the sear; the drum seats under the receiver.
+fn ppsh() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.052;
+    GunLayout {
+        grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
+        support: Some(Vec3::new(0.0, 0.03, -0.3)),
+        muzzle: Vec3::new(0.0, bore, -0.52),
+        port: Vec3::new(0.004, 0.062, -0.16),
+        eject: Vec3::new(0.9, 0.7, 0.1),
+        sight: at(0.0, 0.08, 0.0),
+        magwell: Some(Transform::from_xyz(0.0, 0.03, -0.152)),
+        handle: Some(HandleLayout {
+            kind: HandleKind::ChargingHandle,
+            grab: Vec3::new(0.04, 0.046, -0.115),
+            travel: 0.1,
+        }),
+        load_port: Vec3::new(0.004, 0.062, -0.16),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // Stock from the well to the butt.
+            part(bx(0.04, 0.04, 0.2), at(0.0, 0.015, -0.1), Wood, Static),
+            part(
+                bx(0.04, 0.115, 0.27),
+                Transform::from_xyz(0.0, -0.04, 0.18).with_rotation(Quat::from_rotation_x(0.1)),
+                Wood,
+                Static,
+            ),
+            // Receiver and the perforated jacket.
+            part(bx(0.033, 0.04, 0.21), at(0.0, 0.05, -0.094), Blued, Static),
+            part(
+                Shape::Cylinder(0.0175, 0.34),
+                at(0.0, bore, -0.375),
+                Blued,
+                Static,
+            ),
+            part(bx(0.005, 0.022, 0.006), at(0.0, 0.0, -0.04), Black, Trigger),
+            // Bolt and its handle.
+            part(
+                bx(0.025, 0.022, 0.12),
+                at(0.0, 0.047, -0.14),
+                Steel,
+                WithBolt,
+            ),
+            part(
+                bx(0.03, 0.012, 0.012),
+                at(0.03, 0.046, -0.115),
+                Steel,
+                WithBolt,
+            ),
+        ],
+    }
+}
+
 fn toz() -> GunLayout {
     use Mat::*;
     use Moves::*;
@@ -557,7 +674,15 @@ mod tests {
 
     #[test]
     fn muzzles_are_ahead_of_grips() {
-        for id in ["pm_pistol", "ak74", "mosin", "toz_double", "sks"] {
+        for id in [
+            "pm_pistol",
+            "ak74",
+            "mosin",
+            "toz_double",
+            "sks",
+            "nagant",
+            "ppsh",
+        ] {
             let l = layout(id).unwrap();
             assert!(l.muzzle.z < l.grip.translation.z - 0.1, "{id}");
             if let Some(s) = l.support {

@@ -155,6 +155,9 @@ pub const LETTER_MAP: &str = "marrow_creek";
 /// The "Village note" on that table.
 pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
 
+/// The tier index from which nights come (after "Runs").
+pub const NIGHTS_FROM: u32 = 3;
+
 /// Raids the driver waits on a fetch before asking for something else.
 pub const FETCH_PATIENCE: u32 = 3;
 
@@ -384,6 +387,13 @@ impl Progress {
         }
     }
 
+    /// Whether the Surge may bring night raids: once the third tier
+    /// ("Runs") is done and the aerial is up, the jobs are the Zone's worst
+    /// and night joins the weather's table (`world::weather`).
+    pub fn nights(&self) -> bool {
+        self.tier >= NIGHTS_FROM
+    }
+
     /// A fetch still unmet after [`FETCH_PATIENCE`] raids: the driver
     /// wants something else (some parts may just not be turning up).
     pub fn fetch_gone_stale(&self, raids: u32) -> bool {
@@ -601,6 +611,7 @@ mod tests {
         assert_eq!(p.complete(), &[Upgrade::StashRack]);
         assert_eq!(p.tier, 1);
         assert_eq!(p.stash_capacity(), STASH_BASE + STASH_RACK);
+        assert!(!p.nights(), "no nights early");
         let all: u32 = TIERS.iter().map(|t| t.jobs).sum();
         p.credit(all);
         assert_eq!(p.tier as usize, TIERS.len());
@@ -608,6 +619,7 @@ mod tests {
             assert!(p.has(u), "{u:?}");
         }
         assert_eq!(p.stash_capacity(), STASH_BASE + 2.0 * STASH_RACK);
+        assert!(p.nights(), "nights at the top");
         assert_eq!(p.tier_def().name, STANDING.name);
         // Standing jobs go on, fitting nothing more.
         assert!(p.complete().is_empty());

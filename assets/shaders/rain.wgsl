@@ -14,6 +14,8 @@ struct RainParams {
     params: vec4<f32>,
     // xz: wind, m/s; y: 1 for ash (pale flakes that tumble); w: width m
     wind: vec4<f32>,
+    // x: brightness against a day's (the hour's light).
+    light: vec4<f32>,
 }
 
 // The nearest roofs: per roof, (centre x, centre z, bottom y, top y) then
@@ -102,8 +104,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // A soft grey flake.
         let r = length(in.uv - vec2<f32>(0.5, 0.5)) * 2.0;
         let a = 0.55 * in.fade * (1.0 - smoothstep(0.5, 1.0, r));
-        return vec4<f32>(0.6, 0.58, 0.55, a);
+        return vec4<f32>(vec3<f32>(0.6, 0.58, 0.55) * rain.light.x, a);
     }
     let a = 0.22 * in.fade * edge * (0.4 + 0.6 * in.uv.y);
-    return vec4<f32>(0.62, 0.66, 0.70, a);
+    return vec4<f32>(vec3<f32>(0.62, 0.66, 0.70) * rain.light.x, a);
 }

@@ -358,6 +358,16 @@ pub fn wreck_table(kind: RobotKind) -> &'static str {
     }
 }
 
+/// What telemetry and logs call a robot: its kind, or "Crawler" for the
+/// small walkers that live underground.
+pub fn robot_name(kind: RobotKind, crawler: bool) -> String {
+    if crawler {
+        "Crawler".into()
+    } else {
+        format!("{kind:?}")
+    }
+}
+
 /// Builds a part child with a collider.
 pub fn part_bundle(
     robot: Entity,

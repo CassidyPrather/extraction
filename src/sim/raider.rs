@@ -82,6 +82,9 @@ pub struct Traits {
     /// Throws junk past a walker at its post to send it looking the other
     /// way.
     pub distract: bool,
+    /// Creeps up on an unaware walker from outside its sight, to throw a
+    /// distraction from close enough to be heard (see [`stalk`]).
+    pub stalk: bool,
 }
 
 impl Traits {
@@ -106,6 +109,7 @@ impl Traits {
             duck: 0.75,
             sneak_range: 35.0,
             distract: true,
+            stalk: false,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -136,6 +140,7 @@ impl Traits {
                 duck: 0.9,
                 sneak_range: 45.0,
                 distract: true,
+                stalk: true,
                 ..base
             },
             "reckless" => Traits {
@@ -302,6 +307,21 @@ pub struct Raider {
     /// When it last froze for a searching robot, or threw a distraction.
     froze_at: f32,
     distracted_at: f32,
+    /// Creeping up on a walker to throw a distraction past it.
+    stalking: Option<Stalk>,
+}
+
+/// A creep-and-throw in progress (see [`stalk`]).
+#[derive(Clone, Copy, Debug)]
+struct Stalk {
+    walker: Entity,
+    /// The junk it means to throw.
+    item: Entity,
+    /// Where the junk is meant to land.
+    landing: Vec2,
+    started: f32,
+    /// When the throw went (its tasks ran out), if it has.
+    thrown: Option<f32>,
 }
 
 impl Raider {
@@ -465,6 +485,7 @@ pub fn attach_raider(
                 crouched_since: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
+                stalking: None,
             },
         ));
     }
@@ -557,7 +578,19 @@ pub struct Scene<'w, 's> {
     anomalies: Query<'w, 's, (Entity, &'static Anomaly, &'static GlobalTransform)>,
     trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    /// Underground sites' power: doors held shut, and the switches.
+    power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    power_switches: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::underground::PowerSwitch,
+            &'static GlobalTransform,
+        ),
+    >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
+    crawlers: Query<'w, 's, (), With<crate::robots::indoor::Crawler>>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
@@ -1034,12 +1067,17 @@ fn react_to_robots(
             continue;
         }
         if threat.as_ref().is_none_or(|t| d < t.1) {
-            threat = Some((e, d, onto_me, format!("{:?}", robot.kind), at));
+            let name = crate::robots::robot_name(robot.kind, scene.crawlers.contains(e));
+            threat = Some((e, d, onto_me, name, at));
         }
     }
     let Some((target, d, onto_me, kind, at)) = threat else {
         return;
     };
+    // Creeping up on it to throw a distraction: neither back off nor fight.
+    if r.stalking.is_some() && !onto_me {
+        return;
+    }
     if r.traits.evade && !onto_me {
         // Back off the way it came, out of sight.
         if r.clock > r.retreat_until {
@@ -1138,6 +1176,21 @@ fn sneak(
     let mut wary = false;
     let mut freeze = false;
     let mut calm_walker: Option<Vec3> = None;
+    if r.traits.stalk && !hurrying {
+        if stalk(me, bot, r, scene, log, eye) {
+            // Crouched all the way: creeping.
+            if !input.crouch {
+                input.crouch = true;
+                r.crouched_since = Some(r.clock);
+            }
+            return;
+        }
+    } else if let Some(st) = r.stalking.take() {
+        log.event(
+            "distract_result",
+            json!({"outcome": "broke_off", "why": "hurrying", "thrown": st.thrown.is_some()}),
+        );
+    }
     if r.traits.sneak_range > 0.0 && !hurrying {
         for (_, robot, gt, aware, brain, job) in &scene.robots {
             if robot.wrecked || job.kind == JobKind::Collect {
@@ -1230,6 +1283,189 @@ fn sneak(
             Task::Wait(2.0),
         ]);
     }
+}
+
+/// Unaware walkers this far off are worth creeping up on (m)...
+const STALK_FROM: f32 = 40.0;
+/// ...to this far from them, behind them...
+const STALK_TO: f32 = 10.0;
+/// ...outside their sight: more than this off their facing (radians; a
+/// walker sees 200 degrees round)...
+const STALK_BEHIND: f32 = 2.0;
+/// ...then throw it this far past them, the far side from the bot (m).
+const STALK_PAST: f32 = 5.0;
+
+/// The classic distraction, played properly (the stalking personality
+/// only): see a walker that hasn't noticed you, creep round behind it
+/// (crouched, from outside its sight cone) to within a throw, and lob junk
+/// past it so it walks off to look there. Telemetry: `stalk` when it sets
+/// off, `distract` at the throw, `distract_result` 8 s after (`drawn`: the
+/// walker went to look; `spotted`: it turned on the bot instead;
+/// `ignored`; or `broke_off`). True while it's at it.
+fn stalk(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+) -> bool {
+    if let Some(mut st) = r.stalking {
+        let Ok((_, robot, gt, aware, brain, _)) = scene.robots.get(st.walker) else {
+            r.stalking = None;
+            return false;
+        };
+        let onto_me =
+            aware.target == Some(me) && (matches!(brain, Brain::Engage) || aware.suspicion > 0.5);
+        if robot.wrecked || onto_me || r.combat.is_some() {
+            let outcome = if onto_me { "spotted" } else { "broke_off" };
+            log.event(
+                "distract_result",
+                json!({"outcome": outcome, "why": if onto_me { "seen" } else { "fight" },
+                       "thrown": st.thrown.is_some()}),
+            );
+            r.stalking = None;
+            return false;
+        }
+        // Thrown once it's left the hand (not held, not in the pack).
+        let gone = scene
+            .items
+            .get(st.item)
+            .map_or(true, |(_, _, _, held, _, bag)| {
+                held.is_none() && bag.is_none()
+            });
+        if st.thrown.is_none() && gone {
+            st.thrown = Some(r.clock);
+            log.event(
+                "distract",
+                json!({"x": round(st.landing.x, 1), "z": round(st.landing.y, 1),
+                       "walker_dist": round(gt.translation().distance(eye), 0)}),
+            );
+        }
+        if let Some(t) = st.thrown {
+            if r.clock - t > 8.0 {
+                let drawn = match brain {
+                    Brain::Investigate { at, .. } | Brain::Search { at, .. } => {
+                        at.xz().distance(st.landing) < 6.0
+                    }
+                    _ => false,
+                };
+                log.event(
+                    "distract_result",
+                    json!({"outcome": if drawn { "drawn" } else { "ignored" }, "thrown": true}),
+                );
+                r.stalking = None;
+                r.interrupted = true;
+                return false;
+            }
+            r.stalking = Some(st);
+            // Stay down and still while it goes to look.
+            if bot.done() {
+                bot.replace([Task::Wait(1.0)]);
+            }
+            return true;
+        }
+        // Its tasks ran out without a throw (a duck from a drone, a step
+        // round something it was stuck on): give it up, and try again soon.
+        let late = r.clock - st.started > 90.0;
+        if late || (st.thrown.is_none() && bot.done()) {
+            log.event(
+                "distract_result",
+                json!({"outcome": "broke_off", "why": if late { "too_long" } else { "interrupted" },
+                       "thrown": false}),
+            );
+            r.stalking = None;
+            r.interrupted = true;
+            if !late {
+                r.distracted_at = r.clock - 60.0;
+            }
+            return false;
+        }
+        r.stalking = Some(st);
+        return true;
+    }
+    if r.stage != Stage::Raid || r.clock - r.distracted_at < 90.0 {
+        return false;
+    }
+    let Some(item) = junk(r, scene) else {
+        return false;
+    };
+    // An unaware walker in sight.
+    let pick = scene
+        .robots
+        .iter()
+        .find(|(_, robot, gt, aware, brain, job)| {
+            !robot.wrecked
+            && robot.kind == crate::robots::RobotKind::Walker
+            && job.kind != JobKind::Collect
+            && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+            // Not onto it: not looking its way, at most wondering.
+            && aware.suspicion < 0.35
+            && !(aware.target == Some(me) && aware.can_see_target)
+            && gt.translation().distance(eye) < STALK_FROM
+            && gt.translation().distance(eye) > STALK_TO + 2.0
+            && scene.visible(eye, gt.translation())
+        });
+    let Some((walker, _, gt, ..)) = pick else {
+        return false;
+    };
+    let w = gt.translation().xz();
+    let facing = {
+        let f = gt.forward().as_vec3().xz();
+        f.normalize_or(Vec2::NEG_Y)
+    };
+    // Behind it, walkable, and the way there: nearest first.
+    let mut best: Option<(f32, Vec2, Vec<Task>)> = None;
+    for k in 0..16 {
+        let a = k as f32 * std::f32::consts::TAU / 16.0;
+        let dir = Vec2::from_angle(a);
+        if dir.angle_to(facing).abs() < STALK_BEHIND {
+            continue;
+        }
+        let spot = w + dir * STALK_TO;
+        if !r.grid.walkable([spot.x, spot.y]) {
+            continue;
+        }
+        let d = spot.distance(eye.xz());
+        if best.as_ref().is_some_and(|b| b.0 <= d) {
+            continue;
+        }
+        if let Some(t) = travel(&r.grid, eye.xz(), spot, 1.0) {
+            best = Some((d, spot, t));
+        }
+    }
+    let Some((d, spot, mut tasks)) = best else {
+        return false;
+    };
+    let landing = w + (w - spot).normalize_or(Vec2::X) * STALK_PAST;
+    if !r.grid.walkable([landing.x, landing.y]) {
+        return false;
+    }
+    r.distracted_at = r.clock;
+    log.event(
+        "stalk",
+        json!({"dist": round(d, 0), "x": round(eye.x, 1), "z": round(eye.z, 1)}),
+    );
+    tasks.extend([
+        Task::Grab {
+            item,
+            side: Side::Left,
+        },
+        Task::Throw {
+            side: Side::Left,
+            at: scene.zone.on_ground(landing.x, landing.y),
+        },
+    ]);
+    r.interrupted = true;
+    bot.replace(tasks);
+    r.stalking = Some(Stalk {
+        walker,
+        item,
+        landing,
+        started: r.clock,
+        thrown: None,
+    });
+    true
 }
 
 /// A drone chirped its lock on this bot: get somewhere it can't see, if
@@ -1470,7 +1706,9 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
         let at = gt.translation().xz();
         if at.distance(here) < 30.0 {
             r.known.insert(e);
-            new.push((at, a.radius));
+            // The berth a careful walker gives it: a well's pull and a
+            // mirror's far side reach past its edge.
+            new.push((at, a.kind.danger_radius(a.radius)));
         }
     }
     if new.is_empty() || !r.traits.avoid_anomalies {
@@ -1688,13 +1926,20 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
+    let mut in_door: Option<(f32, Vec2)> = None;
     let solid = has_no_floor(plan);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
         let d = c.distance(goal);
-        let reach = reaches_with(plan, solid, c, goal);
-        if best.is_none_or(|b| d < b.0) && reach {
-            best = Some((d, c));
+        // Not in a doorway if anywhere else will do: the door leaf swings
+        // through it, and a bot standing there to reach in is shut out by
+        // its own door.
+        if reaches_with(plan, solid, c, goal) {
+            let doorway = plan.doors.iter().any(|d| seg_dist(d.a, d.b, c) < DOOR_KEEP);
+            let slot = if doorway { &mut in_door } else { &mut best };
+            if slot.is_none_or(|b| d < b.0) {
+                *slot = Some((d, c));
+            }
         }
         for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
             let (ni, nj) = (i as i64 + di, j as i64 + dj);
@@ -1708,7 +1953,9 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
             }
         }
     }
-    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+    best.filter(|b| b.0 < 2.0)
+        .or(in_door.filter(|b| b.0 < 2.0))
+        .map(|b| b.1)
 }
 
 /// Whether a bot standing at `from` (building-local) can reach `goal`:
@@ -1747,6 +1994,9 @@ fn clear_reach(g: &extraction_core::nav::NavGrid, from: Vec2, goal: Vec2) -> boo
     let n = ((d - SHELF).max(0.0) / 0.1).ceil() as usize;
     (0..=n).all(|k| g.walkable(from.lerp(goal, (k as f32 * 0.1 / d).min(1.0)).to_array()))
 }
+
+/// How far from a doorway a bot stands to reach for something, metres.
+const DOOR_KEEP: f32 = 0.9;
 
 /// How deep a shelf, table or crate may be between a bot and what's on it.
 const SHELF: f32 = 1.1;
@@ -1846,6 +2096,15 @@ fn raid_step(
                     Some(item) => {
                         r.act = Act::Take(s, item);
                         if let Some(t) = take_item(r, scene, s, item, pos) {
+                            let power = t.iter().any(|t| {
+                                matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
+                            });
+                            if power {
+                                log.event(
+                                    "power",
+                                    json!({"site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+                                );
+                            }
                             return t;
                         }
                         r.skip.insert(item);
@@ -1948,7 +2207,12 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         // are worth the walk, picked-over ones less so. Loot richness
         // already rises with danger (docs/MAP_DESIGN.md, "what the bots
         // value").
-        let rich = scene.zone.map.richness_at(s.at.to_array());
+        // (A job is worth the walk whatever's on the shelves there.)
+        let rich = if s.job {
+            1.0
+        } else {
+            scene.zone.map.richness_at(s.at.to_array())
+        };
         let score = pull * rich / (1.0 + d / 80.0)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
@@ -2161,7 +2425,28 @@ fn take_item(
             if !plan.in_grid(pos) {
                 return None;
             }
-            tasks.extend(indoor(plan, pos, plan.to_local(at).xz(), 0.3)?);
+            let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
+            // Behind a door on an underground site's power: throw the
+            // switch first (it's loud: the crawlers come), unless careful.
+            let held = route
+                .iter()
+                .any(|t| matches!(t, Task::OpenDoor(d) if scene.power_locked.contains(*d)));
+            if held {
+                if r.traits.name == "cautious" {
+                    return None;
+                }
+                let (switch, _, gt) = scene
+                    .power_switches
+                    .iter()
+                    .find(|(_, sw, _)| sw.site == plan.entity)?;
+                let at_switch = gt.translation();
+                tasks.extend(indoor(plan, pos, plan.to_local(at_switch).xz(), 0.5)?);
+                tasks.push(Task::Press(switch));
+                tasks.push(Task::Wait(1.0));
+                tasks.extend(indoor(plan, at_switch, plan.to_local(at).xz(), 0.3)?);
+            } else {
+                tasks.extend(route);
+            }
         }
         _ => {
             // Artifacts sit in anomalies: test the snare, then dive.
@@ -2171,14 +2456,17 @@ fn take_item(
                 .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
-                // Not hurt, it doesn't.
-                if r.hp < 60.0 && r.traits.avoid_anomalies {
+                // Not hurt, it doesn't; and nobody careful reaches into a
+                // well's heart.
+                if r.traits.avoid_anomalies && (r.hp < 60.0 || kind == AnomalyKind::Well) {
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
-                if kind == AnomalyKind::Snare && r.traits.test_anomalies {
+                if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
+                    && r.traits.test_anomalies
+                {
                     if let Some(junk) = junk(r, scene) {
                         tasks.push(Task::Grab {
                             item: junk,

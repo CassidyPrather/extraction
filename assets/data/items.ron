@@ -64,6 +64,32 @@
             tags: ["metal", "wood"],
         ),
         (
+            id: "nagant", dims: Some((0.035, 0.185, 0.215)),
+            name: "Nagant revolver",
+            description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
+            category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
+            firearm: Some((
+                action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
+                modes: [Semi], double_action: true,
+                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1,
+                wear_per_shot: 0.0004,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "ppsh", dims: Some((0.07, 0.25, 0.85)),
+            name: "PPSh-41",
+            description: "Seventy-one rounds in a drum and nine hundred a minute: it fires from an open bolt, so pull the handle back to the sear and let go. Hold it short and close.",
+            category: Firearm, size: Bulky, mass: 3.6, bulk: 5.5,
+            firearm: Some((
+                action: SemiAuto, open_bolt: true, cartridge: "7.62x25", magazine_family: Some("ppsh_drum"),
+                modes: [Safe, Auto, Semi], rpm: 900.0,
+                muzzle_velocity: 490.0, damage: 32.0, spread_moa: 8.0, recoil: 1.6,
+                wear_per_shot: 0.0006,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
             id: "toz_double", dims: Some((0.075, 0.16, 1.12)),
             name: "Double-barrel shotgun",
             description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
@@ -114,6 +140,13 @@
             tags: ["brass", "powder"],
         ),
         (
+            id: "ppsh_drum", dims: Some((0.072, 0.18, 0.127)), name: "PPSh drum",
+            description: "Seventy-one rounds on a spiral. Wind the key after filling it. The window on its side shows how many are left.",
+            category: Magazine, size: Medium, mass: 1.6, bulk: 1.4,
+            magazine: Some((fits: "ppsh_drum", cartridge: "7.62x25", capacity: 71)),
+            tags: ["metal"],
+        ),
+        (
             id: "sks_clip", dims: Some((0.014, 0.06, 0.085)), name: "Stripper clip (7.62x39)",
             description: "Ten rounds on a strip of spring steel, for the SKS.",
             category: Magazine, size: Tiny, mass: 0.012, bulk: 0.03,
@@ -123,6 +156,16 @@
         (
             id: "ammo_762x39", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 rounds (box)",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x38r", dims: Some((0.072, 0.023, 0.046)), name: "7.62 Nagant rounds (packet)",
+            category: Ammo, size: Small, mass: 0.19, bulk: 0.08, cartridge: Some("7.62x38R"), rounds: 14,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x25", dims: Some((0.1, 0.037, 0.074)), name: "7.62x25 rounds (box)",
+            category: Ammo, size: Small, mass: 0.85, bulk: 0.5, cartridge: Some("7.62x25"), rounds: 70,
             tags: ["brass", "powder"],
         ),
         (
@@ -140,6 +183,8 @@
         (id: "round_9x18", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_545", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_762x39", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, tags: ["brass", "powder"]),
+        (id: "round_762x38r", dims: Some((0.0098, 0.0098, 0.039)), name: "7.62 Nagant round", category: Ammo, size: Tiny, mass: 0.0123, bulk: 0.004, cartridge: Some("7.62x38R"), rounds: 1, tags: ["brass", "powder"]),
+        (id: "round_762x25", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_762r", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, tags: ["brass", "powder"]),
         (id: "shell_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, tags: ["brass", "powder", "polymer"]),
         (
@@ -229,6 +274,12 @@
             id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
             category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
             tags: ["glass", "metal"],
+        ),
+        (
+            id: "detector", dims: Some((0.07, 0.04, 0.16)), name: "Anomaly detector",
+            description: "A survey clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
+            category: Gadget, size: Small, mass: 0.35, bulk: 0.3,
+            tags: ["metal", "electronics"],
         ),
         (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
@@ -388,6 +439,7 @@
         (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
         (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
+        (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
 
         // ---------------------------------------------------------------
         // Robot parts
@@ -443,6 +495,16 @@
             id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
             description: "A tangle of something like copper. While you carry it, the first hit always glances.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
+        ),
+        (
+            id: "art_lodestone", dims: Some((0.06, 0.05, 0.055)), name: "Lodestone",
+            description: "A fist of dark iron, heavier than it looks and heavier the nearer you hold it to your chest. Rounds fired at whoever carries it curve aside.",
+            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1,
+        ),
+        (
+            id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
+            description: "A sliver of something not quite glass. Your reflection in it moves a moment late. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
+            category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
 
         // ---------------------------------------------------------------

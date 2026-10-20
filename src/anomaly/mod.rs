@@ -3,8 +3,11 @@
 //! - **Anomalies** sit where the Surge left them ([`extraction_core::anomaly`]
 //!   lays them out per cycle). A *lift* floats and swirls anything loose and
 //!   flings it when it pops; a *burner* cooks whoever stands in it; a
-//!   *snare* discharges into whatever touches it, robots included. Throw
-//!   something in first.
+//!   *snare* discharges into whatever touches it, robots included; a
+//!   *well* ([`wells`]) drags everything in toward a heart that crushes,
+//!   and bends bullets; a *mirror* ([`mirrors`]) blinks whatever crosses
+//!   it out the far side. Throw something in first, or carry a detector
+//!   ([`detector`]).
 //! - **Artifacts** grow at their hearts. Carried, they do odd, useful
 //!   things (see [`artifacts`]) — and they draw **attention**.
 //! - **Attention** (carried artifacts, plus recent gunfire) is what the
@@ -12,8 +15,11 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod detector;
+pub mod mirrors;
 pub mod offering;
 pub mod visuals;
+pub mod wells;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -30,6 +36,7 @@ use crate::weapons::ballistics::Hit;
 use crate::world::{Layer, Zone};
 
 #[derive(Component, Debug, Clone)]
+#[require(detector::Touched)]
 pub struct Anomaly {
     pub kind: AnomalyKind,
     pub radius: f32,
@@ -59,7 +66,28 @@ pub enum AnomalyAct {
     Flare,
     /// A bloom opened up.
     Bloom,
+    /// A mirror blinked something away.
+    Blink,
+    /// Something thrown in showed it up.
+    Reveal,
+    /// A well's heart started crushing something.
+    Crush,
 }
+
+/// A snare's discharge reached out to something (an arc to draw): metal
+/// in a hand draws it from further off.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ArcStrike {
+    pub anomaly: Entity,
+    pub from: Vec3,
+    pub to: Vec3,
+}
+
+/// How much further a snare reaches for metal in a hand, metres.
+pub const SNARE_METAL_REACH: f32 = 0.8;
+/// A lift draws loose things in from this many radii out as it nears
+/// popping.
+pub const LIFT_SUCTION: f32 = 1.8;
 
 /// How much the Zone has noticed a player. Per second; the director turns
 /// it into budget.
@@ -123,6 +151,9 @@ pub struct AnomalyPlugin;
 impl Plugin for AnomalyPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<AnomalyEvent>()
+            .add_message::<ArcStrike>()
+            .add_message::<mirrors::Blinked>()
+            .add_message::<detector::DetectorClick>()
             .init_resource::<AttentionBudget>()
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
@@ -132,15 +163,25 @@ impl Plugin for AnomalyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    // Before anything can blink or fling what was thrown.
+                    detector::reveal,
                     lifts,
                     burners,
                     snares,
+                    wells::wells,
+                    mirrors::mirrors,
+                    mirrors::shards,
+                    detector::detectors,
                     measure_attention,
                     spend_attention,
                     age_blooms,
                 )
                     .chain()
                     .after(crate::robots::perceive),
+            )
+            .add_systems(
+                FixedUpdate,
+                wells::bend_rounds.before(crate::weapons::ballistics::BallisticsSystems),
             );
     }
 }
@@ -182,7 +223,11 @@ pub fn spawn_anomaly(
             Anomaly {
                 kind,
                 radius,
-                charge: if kind == AnomalyKind::Snare { 1.0 } else { 0.0 },
+                charge: if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror) {
+                    1.0
+                } else {
+                    0.0
+                },
                 bloom,
             },
             Transform::from_translation(at),
@@ -247,8 +292,16 @@ fn lifts(
         }
         let c = gt.translation();
         let core = c + Vec3::Y * 1.2;
+        // Winding up to pop, it draws loose things in from further out:
+        // leaves and junk sliding toward it is the warning.
+        let windup = ((a.charge - 0.5) * 2.0).clamp(0.0, 1.0);
+        let reach = if windup > 0.0 {
+            a.radius * LIFT_SUCTION
+        } else {
+            a.radius
+        };
         let hits = spatial.shape_intersections(
-            &Collider::sphere(a.radius),
+            &Collider::sphere(reach),
             core,
             Quat::IDENTITY,
             &SpatialQueryFilter::from_mask([Layer::Item, Layer::Robot]),
@@ -262,12 +315,19 @@ fn lifts(
             if *rb != RigidBody::Dynamic {
                 continue;
             }
-            occupied = true;
             let p = bt.translation();
             let rel = p - core;
             let d = Vec2::new(rel.x, rel.z).length();
-            let k = falloff(d, a.radius);
             let m = mass.value().max(0.05);
+            if d > a.radius {
+                if !popping {
+                    let inward = -Vec3::new(rel.x, 0.0, rel.z).normalize_or_zero();
+                    forces.apply_force((inward * 7.0 + Vec3::Y * 3.0) * windup * m);
+                }
+                continue;
+            }
+            occupied = true;
+            let k = falloff(d, a.radius);
             if popping {
                 let out = Vec3::new(rel.x, 0.0, rel.z).normalize_or(Vec3::X);
                 forces.apply_linear_impulse((out * 4.0 + Vec3::Y * 7.0) * m);
@@ -376,9 +436,14 @@ fn burners(
 }
 
 /// Snares: discharge into everything in reach when anything touches them.
+#[allow(clippy::too_many_arguments)]
 fn snares(
     mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
-    mut players: Query<(&GlobalTransform, &mut Health), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
+    held: Query<(&GlobalTransform, &Item, &crate::interact::Held)>,
+    catalog: Res<Catalog>,
+    positions: Query<&GlobalTransform>,
+    mut arcs: MessageWriter<ArcStrike>,
     mut bodies: Query<(&RigidBody, Forces), Without<RigidBodyDisabled>>,
     parts: Query<(), With<crate::robots::RobotPart>>,
     spatial: SpatialQuery,
@@ -407,18 +472,47 @@ fn snares(
         );
         let player_in = players
             .iter()
-            .any(|(pt, _)| (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3);
-        if touched.is_empty() && !player_in {
+            .any(|(_, pt, _)| (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3);
+        // Metal in a hand draws an arc from further off, through you.
+        let metal: Vec<(Entity, Vec3)> = held
+            .iter()
+            .filter(|(g, item, _)| {
+                g.translation().distance(c) < a.radius + SNARE_METAL_REACH
+                    && catalog.get(item.kind()).tags.iter().any(|t| t == "metal")
+            })
+            .map(|(g, _, h)| (h.player, g.translation()))
+            .collect();
+        if touched.is_empty() && !player_in && metal.is_empty() {
             continue;
         }
         a.charge = 0.0;
-        for (pt, mut h) in &mut players {
-            if (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3 && !h.down {
+        for (pe, pt, mut h) in &mut players {
+            let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3;
+            let grounded = metal.iter().any(|(p, _)| *p == pe);
+            if (inside || grounded) && !h.down {
                 h.hp -= 22.0;
                 h.since_hit = 0.0;
             }
         }
+        for (_, to) in &metal {
+            arcs.write(ArcStrike {
+                anomaly: e,
+                from: c,
+                to: *to,
+            });
+        }
         for t in touched {
+            if held.contains(t) {
+                // Struck above, through whoever holds it.
+                continue;
+            }
+            if let Ok(g) = positions.get(t) {
+                arcs.write(ArcStrike {
+                    anomaly: e,
+                    from: c,
+                    to: g.translation(),
+                });
+            }
             if parts.contains(t) {
                 hits.write(Hit {
                     entity: t,
@@ -560,7 +654,7 @@ fn spend_attention(
         let side = Vec3::new(-dir.z, 0.0, dir.x) * director.rng.range(-6.0, 6.0);
         let p = here + dir * dist + side;
         if extraction_core::anomaly::placeable(&zone.map, &zone.hm, [p.x, p.z]) {
-            let kind = AnomalyKind::ALL[director.rng.below(3)];
+            let kind = AnomalyKind::ALL[director.rng.below(AnomalyKind::ALL.len())];
             let (lo, hi) = kind.radius_range();
             let radius = director.rng.range(lo, hi);
             let at = zone.on_ground(p.x, p.z);
@@ -676,6 +770,224 @@ mod tests {
             highest = highest.max(y);
         }
         assert!(highest > 1.3, "the tin rose (to {highest:.2} m)");
+    }
+
+    fn player(app: &mut App) -> Entity {
+        app.world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+    }
+
+    fn pos(app: &App, e: Entity) -> Vec3 {
+        app.world().get::<GlobalTransform>(e).unwrap().translation()
+    }
+
+    #[test]
+    fn a_well_drags_loose_things_into_its_heart() {
+        let mut app = app(false);
+        let (_, at, r) = find(&mut app, AnomalyKind::Well);
+        let heart = wells::heart(at);
+        let start = at + Vec3::new(r * 2.2, 0.6, 0.0);
+        let tin = drop_item(&mut app, "canned_stew", start);
+        let mut closest = f32::MAX;
+        for _ in 0..400 {
+            app.update();
+            closest = closest.min(pos(&app, tin).distance(heart));
+        }
+        assert!(
+            closest < r * 0.6,
+            "dropped {:.1} m out, the tin was drawn in to {closest:.2} m of the heart",
+            r * 2.2
+        );
+        let end = pos(&app, tin).distance(heart);
+        assert!(end < r, "and circles there ({end:.2} m)");
+    }
+
+    #[test]
+    fn a_wells_heart_crushes_and_its_edge_lets_you_go() {
+        let mut app = app(false);
+        let (_, at, _) = find(&mut app, AnomalyKind::Well);
+        let p = player(&mut app);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = at;
+        for _ in 0..30 {
+            app.update();
+        }
+        let hp = app.world().get::<Health>(p).unwrap().hp;
+        assert!(hp < 95.0, "the heart crushes ({hp})");
+    }
+
+    /// Fires a round along +X past `heart` at `miss` metres and returns
+    /// how far it turned, degrees.
+    fn shot_past(app: &mut App, heart: Vec3, miss: f32, speed: f32) -> f32 {
+        let from = heart + Vec3::new(-25.0, miss, 0.0);
+        let round = app
+            .world_mut()
+            .spawn((
+                crate::weapons::ballistics::Projectile {
+                    velocity: Vec3::X * speed,
+                    damage: 0.0,
+                    shooter: None,
+                    gun: Entity::PLACEHOLDER,
+                    life: 2.0,
+                    mods: Default::default(),
+                    mass_g: 8.0,
+                    seed: 0,
+                    passes: 0,
+                },
+                Transform::from_translation(from),
+            ))
+            .id();
+        let mut v = Vec3::X;
+        for _ in 0..12 {
+            app.update();
+            match app
+                .world()
+                .get::<crate::weapons::ballistics::Projectile>(round)
+            {
+                Some(p) => v = p.velocity,
+                None => break,
+            }
+        }
+        // Gravity drops it a little either way; only the turn in y counts
+        // against the round fired far from any well.
+        v.y.atan2(v.x).to_degrees()
+    }
+
+    #[test]
+    fn a_well_bends_rounds_that_pass_close() {
+        let mut app = app(false);
+        let (_, at, _) = find(&mut app, AnomalyKind::Well);
+        let heart = wells::heart(at);
+        let far = shot_past(&mut app, heart + Vec3::new(0.0, 0.0, 60.0), 1.0, 330.0);
+        let near = shot_past(&mut app, heart, 1.0, 330.0);
+        assert!(
+            (near - far).abs() > 2.0,
+            "a pistol round a metre over the heart turns down toward it ({near:.2}° vs {far:.2}°)"
+        );
+        assert!(near < far, "toward the heart, below it");
+    }
+
+    #[test]
+    fn a_mirror_blinks_a_thrown_bolt_out_the_far_side() {
+        let mut app = app(false);
+        let (m, at, r) = find(&mut app, AnomalyKind::Mirror);
+        // Someone near enough to see it.
+        let p = player(&mut app);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = at + Vec3::Z * 12.0;
+        let bolt = drop_item(
+            &mut app,
+            "bolt",
+            at + Vec3::new(-r - 1.0, mirrors::MIRROR_HEIGHT + 0.3, 0.0),
+        );
+        app.update();
+        app.world_mut()
+            .entity_mut(bolt)
+            .insert(LinearVelocity(Vec3::new(5.0, 1.0, 0.0)));
+        let mut blinked = false;
+        for _ in 0..90 {
+            app.update();
+            if app.world().get::<Anomaly>(m).unwrap().charge < 0.5 {
+                blinked = true;
+            }
+        }
+        assert!(blinked, "the mirror fired");
+        let p = pos(&app, bolt);
+        assert!(
+            p.x > at.x + r + 1.0,
+            "thrown in from the west, the bolt came out east of it ({:.1} vs centre {:.1})",
+            p.x,
+            at.x
+        );
+        assert!(
+            app.world().get::<detector::Touched>(m).unwrap().revealed > 0.0,
+            "and showed it up"
+        );
+    }
+
+    #[test]
+    fn walking_into_a_mirror_puts_you_out_beyond_it() {
+        let mut app = app(false);
+        let (_, at, r) = find(&mut app, AnomalyKind::Mirror);
+        let p = player(&mut app);
+        let entry = at + Vec3::new(0.0, 0.0, r * 0.6);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = entry;
+        for _ in 0..5 {
+            app.update();
+        }
+        let now = pos(&app, p);
+        let d = Vec2::new(now.x - at.x, now.z - at.z).length();
+        assert!(d > r + 1.5, "blinked {d:.1} m from its centre");
+    }
+
+    #[test]
+    fn a_thrown_bolt_shows_up_a_burner() {
+        let mut app = app(false);
+        let (b, at, _) = find(&mut app, AnomalyKind::Burner);
+        assert_eq!(
+            app.world().get::<detector::Touched>(b).unwrap().revealed,
+            0.0
+        );
+        let p = player(&mut app);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = at + Vec3::X * 15.0;
+        drop_item(&mut app, "bolt", at + Vec3::Y * 1.5);
+        let mut seen = false;
+        for _ in 0..60 {
+            app.update();
+            seen |= app.world().get::<detector::Touched>(b).unwrap().revealed > 0.0;
+        }
+        assert!(seen, "the bolt showed it up");
+    }
+
+    #[test]
+    fn a_detector_clicks_faster_near_an_anomaly() {
+        let mut app = app(false);
+        let (_, at, r) = find(&mut app, AnomalyKind::Snare);
+        let p = player(&mut app);
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == p && b.carried)
+            .map(|(e, _)| e)
+            .unwrap();
+        let det = drop_item(&mut app, "detector", Vec3::ZERO);
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(det);
+        app.world_mut().entity_mut(det).insert((
+            crate::interact::body::InBackpack { bag: pack },
+            ChildOf(pack),
+            RigidBodyDisabled,
+            ColliderDisabled,
+        ));
+        let count = |app: &mut App, d: f32| {
+            app.world_mut().get_mut::<Transform>(p).unwrap().translation =
+                at + Vec3::new(r + d, 0.0, 0.0);
+            for _ in 0..10 {
+                app.update();
+            }
+            let mut cursor = app
+                .world()
+                .resource::<Messages<detector::DetectorClick>>()
+                .get_cursor_current();
+            let mut n = 0;
+            for _ in 0..300 {
+                app.update();
+                n += cursor
+                    .read(app.world().resource::<Messages<detector::DetectorClick>>())
+                    .filter(|c| c.detector == det)
+                    .count();
+            }
+            n
+        };
+        let far = count(&mut app, 18.0);
+        let near = count(&mut app, 2.0);
+        assert!(far >= 1, "a tick now and then at 18 m ({far})");
+        assert!(near > far * 4, "a rattle at 2 m ({near} vs {far})");
     }
 
     #[test]

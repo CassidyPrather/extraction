@@ -22,7 +22,7 @@
             (kind: Rubble, at: (-3.2, 0.9)),
             (kind: Crate, at: (6.6, -1.0), loot: Some("food_common")),
         ]),
-        (id: "dorm", at: (-5.0, 31.0), size: (8.0, 6.0), lamp: Dead, props: [
+        (id: "dorm", at: (-5.0, 31.0), size: (8.0, 6.0), lamp: Powered, props: [
             (kind: Bunk, at: (-3.3, -1.6)),
             (kind: Bunk, at: (-3.3, 1.6)),
             (kind: Bunk, at: (-1.6, 2.3), rot: 90.0),
@@ -42,7 +42,7 @@
             (kind: Machine, at: (-1.5, 1.6)),
             (kind: Workbench, at: (2.2, -2.3), rot: 90.0, loot: Some("tools")),
         ]),
-        (id: "generator", at: (-12.0, 31.0), size: (5.0, 5.0), height: 3.0, props: [
+        (id: "generator", at: (-12.0, 31.0), size: (5.0, 5.0), height: 3.0, lamp: Powered, props: [
             (kind: Machine, at: (-0.9, 0.6)),
             (kind: Barrel, at: (-2.0, -1.0)),
             (kind: Barrel, at: (1.9, -1.9)),
@@ -56,7 +56,7 @@
         ]),
         // The armoury, past the command post: near the gate, so modest
         // (the rare guns are deeper in the other valleys' sites).
-        (id: "armoury", at: (12.0, 33.0), size: (5.0, 5.0), lamp: Dead, props: [
+        (id: "armoury", at: (12.0, 33.0), size: (5.0, 5.0), lamp: Powered, props: [
             (kind: Shelf, at: (2.1, 0.0), rot: 90.0, loot: Some("shelter_armoury")),
             (kind: Crate, at: (-1.4, 1.4), loot: Some("ammo_common")),
             (kind: SmallCrate, at: (-1.6, -1.6), loot: Some("medical")),
@@ -83,6 +83,9 @@
         (from: "command", to: "armoury", doors: To),
         (from: "mess", to: "medical", via: [(5.0, 39.0)], doors: To),
         (from: "medical", to: "escape", doors: To),
+        // The drain: a flooded culvert from the gas lock to the filter
+        // plant, chest deep, round the decon room and the hall.
+        (from: "lock", to: "plant", via: [(-12.0, 11.0)]),
     ],
     anomalies: [
         (kind: "Snare", room: "generator", at: (-1.2, 1.5), radius: 0.9),
@@ -90,6 +93,13 @@
     // Resident maintenance crawlers walk this round (robots::indoor).
     patrol: ["hall", "command", "armoury", "command", "hall", "plant", "generator", "dorm", "mess"],
     crawlers: 2,
+    // The generator, by its live snare: start it and the dorm, the
+    // generator room and the armoury light up, and the armoury's door
+    // (held shut) opens. It's loud.
+    power: Some((kind: Generator, room: "generator", at: (-0.9, -0.05), doors: ["armoury"])),
+    floods: [
+        (link: Some(("lock", "plant")), depth: 1.0),
+    ],
     portals: [
         (),
         (at: (0.0, 60.0), rot: 180.0, y: 0.6),

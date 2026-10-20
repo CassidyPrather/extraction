@@ -69,7 +69,7 @@ pub fn roll_zone_loot(world: &mut World) {
             &opts.map,
             zone,
             catalog,
-            crate::world::scenes::gates(world),
+            crate::world::scenes::gates(world, &opts.map),
         );
         if let Some(spots) = spots {
             spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
@@ -254,6 +254,11 @@ fn spawn_dev_cache(
         ("sks", 0),
         ("ammo_762x39", 20),
         ("sks_clip", 10),
+        ("nagant", 0),
+        ("ammo_762x38r", 14),
+        ("ppsh", 0),
+        ("ppsh_drum", 71),
+        ("ammo_762x25", 70),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {

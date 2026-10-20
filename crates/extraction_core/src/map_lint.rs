@@ -58,6 +58,8 @@ pub enum Rule {
     /// A supply crate (a loot marker in the open) in a wall or where the
     /// truck appears.
     Crate,
+    /// A point of interest no road or path leads to.
+    Funnel,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +203,11 @@ pub const SEALED: f32 = 0.6;
 /// from its nearest neighbour, metres.
 pub const POI_MIN: f32 = 60.0;
 pub const POI_MAX: f32 = 190.0;
+/// Every point of interest has a road or path within this distance,
+/// unless it's a hazard you approach across country (an artifact field
+/// within [`HAZARD_NEAR`] of it).
+pub const FUNNEL: f32 = 30.0;
+pub const HAZARD_NEAR: f32 = 40.0;
 /// A thing to find counts as on a route within this distance of it.
 pub const NEAR_ROUTE: f32 = 60.0;
 /// Longest stretch of a main route with nothing to find near it (about a
@@ -842,6 +849,25 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         "points of interest: {}, nearest neighbours {nn_min:.0}-{nn_max:.0} m",
         pois.len()
     ));
+    // Paths of least resistance: a road or track leads to every place.
+    for (name, at) in &pois {
+        let hazard = map
+            .markers_of(&MarkerKind::ArtifactField)
+            .any(|f| dist(f.at, *at) <= HAZARD_NEAR);
+        let road = hm
+            .road_lines
+            .iter()
+            .map(|rl| polyline_closest(&rl.points, *at).0 - rl.width * 0.5)
+            .fold(f32::INFINITY, f32::min);
+        if !hazard && road > FUNNEL {
+            find(
+                &mut r,
+                Rule::Funnel,
+                format!("no road or path leads to {name} ({road:.0} m to the nearest)"),
+                *at,
+            );
+        }
+    }
     let interest: Vec<P2> = map
         .markers
         .iter()

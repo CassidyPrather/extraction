@@ -25,12 +25,18 @@ pub const NAMES: &[&str] = &[
     "rifle_drill",
     "bolt_drill",
     "carbine_drill",
+    "revolver_drill",
+    "smg_drill",
     "shotgun_drill",
     "pack_mule",
     "drone_duel",
     "walker_hunt",
     crate::onboarding::bot::SCENARIO,
 ];
+
+/// Longer runs, not in `all`: run them by name.
+/// - `second_hour`: a short career past the yard (`onboarding::second_hour`).
+pub const OPT_IN: &[&str] = &[crate::onboarding::second_hour::SCENARIO];
 
 /// Targets sit north of the insertion point at these distances.
 const TARGET_DISTANCES: [f32; 3] = [10.0, 25.0, 50.0];
@@ -150,6 +156,51 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::GunRounds(10, 10)),
             Stow(Side::Right),
         ],
+        "revolver_drill" => vec![
+            Log(s(
+                "revolver drill: load a Nagant through the gate, shoot it dry double-action, reload",
+            )),
+            PickUp {
+                id: s("nagant"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_762x38r"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(7, 7)),
+            Fire { at: t0, shots: 7 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(4)),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(7, 7)),
+            Stow(Side::Right),
+        ],
+        "smg_drill" => vec![
+            Log(s(
+                "smg drill: seat the drum, rack to the sear, a burst on auto",
+            )),
+            PickUp {
+                id: s("ppsh"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ppsh_drum"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(71, 71)),
+            Support,
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 10 },
+            Expect(super::Expect::GunRounds(40, 66)),
+            Expect(super::Expect::Hits(4)),
+            Release(Side::Left),
+            Stow(Side::Right),
+        ],
         "shotgun_drill" => vec![
             Log(s("shotgun drill: break, load two, fire two")),
             PickUp {
@@ -266,6 +317,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             ]
         }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
+        crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         _ => return None,
     })
 }

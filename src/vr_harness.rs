@@ -2195,6 +2195,43 @@ mod onboarding {
         assert!(said(&vr, "Mind your head"));
     }
 
+    /// From where you start in the bed, walk at the cord: you get within an
+    /// arm of its toggle (the bench, the crate and the stand are all in the
+    /// bed with you).
+    #[test]
+    fn the_cord_is_in_reach_from_the_bed() {
+        let mut vr = Vr::first_run();
+        in_the_bed(&mut vr);
+        let toggle = {
+            let mut q = vr.app.world_mut().query::<(&Pressable, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(p, _)| **p == Pressable::BellPull)
+                .map(|(_, g)| g.transform_point(Vec3::new(0.0, -0.26, 0.0)))
+                .unwrap()
+        };
+        // Face it and walk at it for four seconds.
+        let feet = super::tests_feet(&vr);
+        let to = (toggle - feet).with_y(0.0).normalize();
+        vr.stand(feet, (-to.x).atan2(-to.z));
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::Y;
+        let mut closest = f32::MAX;
+        for _ in 0..(90 * 4) {
+            vr.step(1);
+            let f = super::tests_feet(&vr);
+            closest = closest.min(f.xz().distance(toggle.xz()));
+        }
+        eprintln!("nearest to the cord: {closest:.2} m");
+        // An arm, from the body's middle, reaches about 0.65 m.
+        assert!(
+            closest < 0.65,
+            "the nearest the body gets to the cord is {closest:.2} m (from {feet:.2?} to {toggle:.2?})"
+        );
+    }
+
     /// Walk up to a card and squeeze it.
     fn take_card(vr: &mut Vr, card: Entity) {
         let p = at(vr, card);
