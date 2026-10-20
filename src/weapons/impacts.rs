@@ -76,6 +76,35 @@ pub fn kind_of(m: Mat) -> ImpactKind {
     }
 }
 
+/// What a built material is to a round going through it.
+pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
+    use extraction_core::firearm_terminal::Stuff;
+    match m {
+        Mat::Planks | Mat::WoodFloor | Mat::Timber | Mat::Shingles | Mat::GunWood => Stuff::Planks,
+        Mat::Polymer => Stuff::Planks,
+        Mat::LogWall | Mat::BarkSpruce | Mat::BarkBirch | Mat::BarkPine => Stuff::Logs,
+        Mat::Plaster => Stuff::Plaster,
+        Mat::Brick => Stuff::Brick,
+        Mat::Concrete => Stuff::Concrete,
+        Mat::Asphalt | Mat::Boulder => Stuff::Rock,
+        Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
+        Mat::DarkMetal | Mat::GunMetal | Mat::RobotShell => Stuff::Plate,
+        Mat::Glass | Mat::Canvas => Stuff::Glass,
+    }
+}
+
+/// The impact class of what a round went through (its exit mark).
+pub fn kind_of_stuff(s: extraction_core::firearm_terminal::Stuff) -> ImpactKind {
+    use extraction_core::firearm_terminal::Stuff;
+    match s {
+        Stuff::Planks | Stuff::Logs => ImpactKind::Wood,
+        Stuff::Plaster | Stuff::Brick | Stuff::Concrete | Stuff::Rock => ImpactKind::Masonry,
+        Stuff::Sheet | Stuff::Plate => ImpactKind::Metal,
+        Stuff::Glass => ImpactKind::Glass,
+        Stuff::Soil => ImpactKind::Soil,
+    }
+}
+
 /// A round struck something (or the water).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Impact {
