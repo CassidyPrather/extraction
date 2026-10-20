@@ -287,6 +287,39 @@ non-firearm pass replaces models and numbers, not systems. Starting set:
 Robot weapons can be carried home but are awkward to hold and their ammo
 must be broken down at the bench and re-packed into compatible rounds.
 
+### Weapon feel
+
+How a gun handles is the game's main verb, so it is physical and fair,
+and it moves the gun, never the head (`src/weapons/feel.rs`).
+
+- **Recoil** is a kick of momentum per shot (`recoil` in `items.ron`,
+  per gun and cartridge) shared with the mass behind the gun: muzzle
+  rise about the grip, a little random yaw, a push back along the bore.
+  The hands are a damped spring that brings it back. One hand is a
+  soft spring with a wrist behind it; two hands stiffer with both arms;
+  a stock within 30 cm of the head (shoulder pocket or cheek weld)
+  stiffest, with the body behind it. Fast fire from one hand stacks up.
+  Ten rounds of automatic from a still AK group at about 5° (RMS) in one
+  hand, 1° in two, 0.3° shouldered (a test holds this ordering).
+- **Weight**: a held gun follows the controller with a lag of
+  `mass x LAG_*` (an AK: 40 ms in one hand, 17 ms in two, 13 ms
+  shouldered; a pistol under 10 ms), smoothed in the player's space
+  so walking and riding never trail it.
+- **Strain**: a long gun held out in one hand droops (`DROOP` per kg m
+  of moment about the wrist: an AK about 4°, a Mosin 7°) and sways
+  slowly (`SWAY_*`, under 1°). Sprint fatigue adds up to `SWAY_TIRED`
+  (0.35°) to any hold, shared by a second hand and a shoulder.
+- **Malfunctions** come from wear and dirt (one in a thousand on a
+  clean gun in good order, about one in twenty-five at half condition)
+  and each has its own cure. A *stovepipe* (a case standing in the
+  port, drawn on the gun): rack. A *failure to feed* (the magazine
+  slipped; the trigger clicks): tap the magazine home with a palm, then
+  rack. A *double feed* (a case and a round wedged together, drawn in the
+  port): the bolt won't close or clear until the magazine is out, so
+  drop it, rack, reload. The bench's repair and a cleaning kit make
+  them rare again. Flat mode's rack key tap-racks, or strips, racks and
+  reloads on a double feed.
+
 ### Gadgets and attachments
 
 Things go where they physically fit (`gadgets/mod.rs`): the AK and the

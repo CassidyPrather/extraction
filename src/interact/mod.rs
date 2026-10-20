@@ -93,6 +93,19 @@ pub struct Supported {
     pub point: usize,
 }
 
+/// How a held item handles, set by whoever owns its feel (the weapons
+/// module: recoil, sway, a heavy gun's lag). The hand's target is smoothed
+/// in the player's space (so walking or riding never trails it), then
+/// `offset` (in the item's own space) is applied on top.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct HoldFeel {
+    pub offset: Transform,
+    /// Seconds: how softly the item follows the hand (0 snaps).
+    pub lag: f32,
+    /// The smoothed target, player space.
+    pub smoothed: Option<Transform>,
+}
+
 /// Per-hand state, on the rig hand entity.
 #[derive(Component, Default, Debug, Clone)]
 pub struct Hand {
@@ -1155,11 +1168,13 @@ fn follow_hands(
         &mut LinearVelocity,
         &mut AngularVelocity,
         Option<&Mass>,
+        Option<&mut HoldFeel>,
     )>,
+    roots: Query<&GlobalTransform, With<Player>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass) in &mut held {
+    for (h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel) in &mut held {
         let Ok(hand) = hands.get(h.hand) else {
             continue;
         };
@@ -1198,6 +1213,24 @@ fn follow_hands(
         let max_ang = if two_handed { 30.0 } else { 22.0 } / heft.sqrt();
         if !target.translation.is_finite() || !target.rotation.is_finite() {
             continue;
+        }
+        if let (Some(mut feel), Ok(root)) = (feel, roots.get(h.player)) {
+            let root = root.compute_transform();
+            let local = Transform::from_matrix(
+                (root.compute_affine().inverse() * target.compute_affine()).into(),
+            );
+            let k = if feel.lag > 0.0 {
+                1.0 - (-dt / feel.lag).exp()
+            } else {
+                1.0
+            };
+            let s = feel.smoothed.map_or(local, |s| Transform {
+                translation: s.translation.lerp(local.translation, k),
+                rotation: s.rotation.slerp(local.rotation, k),
+                scale: Vec3::ONE,
+            });
+            feel.smoothed = Some(s);
+            target = root.mul_transform(s).mul_transform(feel.offset);
         }
         // Snagged on a door frame and left behind: back into the hand.
         if pos.0.distance(target.translation) > LEASH {
