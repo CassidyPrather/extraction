@@ -40,6 +40,7 @@ impl Plugin for SimPlugin {
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
             .add_systems(Startup, spawn_sim_kit)
             .add_systems(PostStartup, raider::attach_raider)
+            .add_systems(Update, armour_up)
             .add_systems(
                 Update,
                 (raider::think, telemetry::record, telemetry::finish).chain(),
@@ -186,3 +187,106 @@ mod tests {
         }
     }
 }
+
+/// `SIM_ARMOUR=late`: a bot on a job of the third tier or later (the late
+/// game) goes out in a plate carrier with a front plate, and a helmet, as
+/// a player that far up the ladder would. Seated straight into the body
+/// slots at the start, like the sim's kit cache; once.
+fn armour_up(world: &mut World) {
+    use crate::interact::body::BodySlot;
+    use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+    use extraction_core::inventory::SlotKind;
+    if std::env::var("SIM_ARMOUR").as_deref() != Ok("late") {
+        return;
+    }
+    let Some(tier) = world
+        .get_resource::<crate::progression::Progression>()
+        .filter(|p| p.0.job.is_some())
+        .map(|p| p.0.tier)
+    else {
+        return;
+    };
+    let Some(player) = world
+        .query_filtered::<Entity, (With<crate::rig::LocalPlayer>, With<raider::Raider>)>()
+        .iter(world)
+        .next()
+    else {
+        return;
+    };
+    if world.get::<ArmouredUp>(player).is_some() {
+        return;
+    }
+    world.entity_mut(player).insert(ArmouredUp);
+    if tier < 2 {
+        return;
+    }
+    let catalog = world.resource::<crate::items::Catalog>().clone();
+    let slot = |world: &mut World, kind: SlotKind| -> Option<Entity> {
+        world
+            .query::<(Entity, &Socket, &SocketOwner, &BodySlot)>()
+            .iter(world)
+            .find(|(_, s, o, _)| {
+                o.0 == player && s.kind == SocketKind::Body(kind) && s.occupant.is_none()
+            })
+            .map(|(e, ..)| e)
+    };
+    // Spawned already worn (in the socket, its body off), so physics never
+    // sees it loose.
+    let wear = |world: &mut World, id: &str, socket: Entity| -> Option<Entity> {
+        let kind = catalog.kind(id)?;
+        let seat = world.get::<Socket>(socket)?.seat;
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let e = {
+            let mut c = Commands::new(&mut queue, world);
+            let e = crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: 1.0,
+                },
+            );
+            c.entity(e).insert((
+                InSocket { socket },
+                avian3d::prelude::RigidBodyDisabled,
+                avian3d::prelude::ColliderDisabled,
+                ChildOf(socket),
+                seat,
+            ));
+            e
+        };
+        queue.apply(world);
+        world.flush();
+        world.get_mut::<Socket>(socket)?.occupant = Some(e);
+        Some(e)
+    };
+    if let Some(s) = slot(world, SlotKind::Vest) {
+        if let Some(vest) = wear(world, "vest", s) {
+            // Its pockets come with it; the plate goes in the front one.
+            let pocket = world
+                .query::<(
+                    Entity,
+                    &Socket,
+                    &SocketOwner,
+                    &crate::weapons::armour::PlatePocket,
+                )>()
+                .iter(world)
+                .find(|(_, _, o, p)| {
+                    o.0 == vest && p.0 == extraction_core::firearm_terminal::ArmourArea::Front
+                })
+                .map(|(e, ..)| e);
+            if let Some(pocket) = pocket {
+                wear(world, "steel_plate", pocket);
+            }
+        }
+    }
+    if let Some(s) = slot(world, SlotKind::Head) {
+        wear(world, "helmet", s);
+    }
+    info!("sim: armoured up for a tier-{tier} job");
+}
+
+/// [`armour_up`] has looked at this bot.
+#[derive(Component)]
+struct ArmouredUp;
