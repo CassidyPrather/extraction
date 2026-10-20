@@ -84,8 +84,12 @@ MR_TANK = (4.4, 2.4)      # side, height of the header tank on the deck
 MR_WALK = (0.75, 1.0)     # the walkway's centre x, width
 MR_WALK_TOP = (3.2, 40.0)  # z where the walkway meets the deck, the ground
 MR_TROUGH = (-0.5, 1.2)   # the trough's centre x, width
-MR_LEVEL = 3.6            # the trough runs level at this floor at its foot
-MR_WHEEL = (2.4, 1.0, 43.0)  # radius, axle y, axle z
+MR_LEVEL = 5.1            # the trough runs level at this floor at its foot
+MR_WHEEL = (2.4, 2.55, 43.0)  # radius, axle y, axle z
+MR_PIT = (-3.0, 0.22)     # the wheel pit's inside, x
+MR_CURB = -1.3            # the curb between the tailrace and the dry floor
+MR_FLOOR = 0.05           # the wheel house's floor (on the ground: no pit below it)
+MR_WALL_TOP = 1.6         # its walls' top
 
 
 def mr_walk_y(z):
@@ -298,16 +302,23 @@ def mill_race(lv):
         z += 4.0
     # The wheel in its stone pit at the foot.
     wr, wy, wz = MR_WHEEL
-    # The pit: a floor, four walls, dark water in its bottom.
-    px, pz = tw / 2 + 0.6, wr + 0.5
-    p.box((2 * px + 0.8, 0.3, 2 * pz + 0.8), (tx, -1.75, wz), "Concrete", bevel=0.02, segs=1)
-    for sx in (-1, 1):
-        p.box((0.4, 1.9, 2 * pz + 0.8), (tx + sx * (px + 0.2), -0.65, wz), "Concrete",
-              bevel=0.02, segs=1)
-    for sz in (-1, 1):
-        p.box((2 * px, 1.9, 0.4), (tx, -0.65, wz + sz * (pz + 0.2)), "Concrete", bevel=0.02,
+    # The wheel house: a stone-walled pen on the ground round the wheel's
+    # foot, the tailrace's dark water under the wheel behind a curb, a
+    # dry floor on the -X side, a doorway at the +Z end of the -X wall.
+    (px0, px1), pz = MR_PIT, wr + 0.5
+    pcx, pw = (px0 + px1) / 2, px1 - px0
+    fl = MR_FLOOR
+    p.box((pw + 0.8, 0.3, 2 * pz + 0.8), (pcx, fl - 0.15, wz), "Concrete", bevel=0.02, segs=1)
+    wh, wy0 = MR_WALL_TOP - fl, fl + (MR_WALL_TOP - fl) / 2
+    door0, door1 = wz + pz - 1.65, wz + pz - 0.25
+    for z0, z1 in ((wz - pz - 0.4, door0), (door1, wz + pz + 0.4)):
+        p.box((0.4, wh, z1 - z0), (px0 - 0.2, wy0, (z0 + z1) / 2), "Concrete", bevel=0.02,
               segs=1)
-    p.box((2 * px, 0.04, 2 * pz), (tx, -1.0, wz), "Char")
+    p.box((0.4, wh, 2 * pz + 0.8), (px1 + 0.2, wy0, wz), "Concrete", bevel=0.02, segs=1)
+    for sz in (-1, 1):
+        p.box((pw, wh, 0.4), (pcx, wy0, wz + sz * (pz + 0.2)), "Concrete", bevel=0.02, segs=1)
+    p.box((0.2, 0.55, 2 * pz), (MR_CURB - 0.1, fl + 0.275, wz), "Concrete")
+    p.box((px1 - MR_CURB, 0.04, 2 * pz), ((px1 + MR_CURB) / 2, fl + 0.3, wz), "Char")
     hub = (tx, wy, wz)
     segs = 32 if lv == 0 else (16 if lv == 1 else 10)
     for x in (tx - tw / 2 + 0.05, tx + tw / 2 - 0.05):
