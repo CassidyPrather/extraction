@@ -209,6 +209,42 @@ for it in the open beside the Custodian's ground.
 - The fit gauge and the frame-budget gauge run it with the others.
 - The headless scenario `sallow` drives there and extracts.
 
+## What the sims said, and what changed
+
+Four batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
+
+| Batch | Out | Died | What it showed | Change |
+| - | -: | -: | - | - |
+| seed 1 | 4 | 0 (4 crashed) | A wrecked walker's torn-leg joints crashed avian; the bed's ruins hold next to nothing, so nobody went in | Robot bodies' joint fix (1aefd75); six caches on the bed; the silt fans off the walkers' track |
+| seed 1 | 5 | 3 | Bots in Old Sallow now, but every raid west to New Sallow | A tagging shed on the sorting ground |
+| seed 11 | 7 | 1 | Still west: a danger-2 street of full houses outweighed everything | New Sallow picked over (loot 0.9) |
+| seed 21 | 6 | 2 | The shed looted (30 items); all three ways out used (Inflow bridge 4, Sallow Head 3, gauge house 1); both deaths in the danger-3 east under the Gate | |
+
+Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
+visited yet: the valve house and filter house, the draw-off tower (no
+path goes through it, by design: it's for players), the gauge house and
+the spillway. Progression's scout jobs are to send players to the first
+two.
+
+`--scenario crossing` (opt-in; `bot::crossing`) walks the lint's
+shortest route, the face stair, the crest and the east shore road, to
+the gauge house and out: 262 s.
+
+## Waiting on others (at merge)
+
+- Story's ten notes and terminals: run `python3 scripts/place_notes.py`
+  once `claude/polish-story` and this branch are merged.
+- Anomalies' Hush: `(kind: Anomaly(kind: "Hush", radius: 3.0), at:
+  (-120.0, -5.0), name: "Old Sallow hush")` once their sixth kind is in.
+- Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
+  (0ff156b), Audio's slapback off the dam face, Wildlife's perches
+  (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
+  World models' masonry material and drowned ruins, Underground's
+  inspection gallery.
+
 ## Status
 
-Design (this file), then a whitebox, sims, and dressing. See the commits.
+Whitebox lint clean, sims iterated, the dam, tower and stock built
+(`src/world/dam.rs`, `art/props/dam.py`). Next: World models' drowned
+ruins and masonry in place of the stand-ins, a pass through the valley
+in fog with screenshots, and Performance's gauge on it.
