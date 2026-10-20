@@ -337,6 +337,8 @@ pub fn finish(
     mut bots: Query<(Entity, &Transform, &mut Raider), With<LocalPlayer>>,
     opts: Res<crate::launch::LaunchOptions>,
     mut exit: MessageWriter<AppExit>,
+    progression: Option<Res<crate::progression::Progression>>,
+    zone: Res<crate::world::Zone>,
 ) {
     if log.finished {
         return;
@@ -398,6 +400,14 @@ pub fn finish(
             "heals": s.heals,
             "extract_reason": s.extract_reason,
             "death_cause": death.map(|d| d.0),
+            // The driver's scout job (`progression`), when there is one here.
+            "job": progression.as_ref().and_then(|p| match &p.0.job {
+                Some(extraction_core::progression::Job::Scout { map, place, at, seen }) if *map == opts.map => {
+                    Some(json!({"kind": "scout", "place": place, "seen": seen,
+                                "danger": zone.map.region_at(*at).map(|r| r.danger)}))
+                }
+                _ => None,
+            }),
             "x": round(pos.x, 1),
             "z": round(pos.z, 1),
         }),

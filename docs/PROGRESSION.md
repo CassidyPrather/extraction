@@ -149,62 +149,69 @@ card, and the cache it pays shows up as a red cross on the map.
 How many raids each tier takes, at the sim bots' rates (see "Measuring it"
 below for how the numbers were made).
 
-Measured on 24 sim raids (8 in each valley, seed 11, bots of every
-personality: 79% home, 9 minutes a raid). `python3
+Measured on 36 sim raids on the merged polish build (12 in each valley,
+seed 21, bots of every personality: 53% home, 9 minutes a raid). `python3
 scripts/progression_pacing.py all` walks 3000 careers through the tiers
 on those raids:
 
 | Tier | Jobs | Danger | Raids for the tier (median) | Career so far: median (1 in 10 take) |
 | - | - | - | - | - |
-| 1 Odd jobs | 3 | 1-1 | 5 | 5 (9) |
-| 2 Errands | 3 | 1-2 | 7 | 12 (19) |
-| 3 Runs | 4 | 2-3 | 8 | 20 (29) |
-| 4 Far jobs | 4 | 2-3 (another valley) | 5 | 25 (34) |
+| 1 Odd jobs | 3 | 1-1 | 7 | 7 (12) |
+| 2 Errands | 3 | 1-2 | 8 | 15 (22) |
+| 3 Runs | 4 | 2-3 | 11 | 26 (36) |
+| 4 Far jobs | 4 | 2-3 (another valley) | 7 | 33 (44) |
 
-By valley, the whole ladder takes a median of 24 raids in Marrow Creek, 23
-in Kettle Pass and 36 in Cinder Works (its bots reach danger 3 and get home
-less often).
+By valley, the whole ladder takes a median of 34 raids in Marrow Creek, 39
+in Kettle Pass and 31 in Cinder Works. An earlier run, before the robots
+and guns of this polish round were merged, had bots home 79% of the time
+and the ladder at 23 raids (Cinder 36 then, from fetches the valley can't
+give: its bots bring home no food or robot parts; fetches of "robot parts,
+any" and a three-raid swap brought it to 32).
 
 What it says:
 
-- **The first evening has a fitting in it.** Tier 1 is about five raids:
-  the stash rack comes in the first session.
-- **The middle of the career is the danger ladder.** Tier 3 asks for
-  danger-2 and -3 places; only 38% of bot raids reach danger 3 and get
-  home, against 79% for danger 2:
+- **The first evening has a fitting in it.** Tier 1 is about seven raids:
+  the stash rack comes in the first or second session.
+- **Getting home is the pace.** Every job but a fetch from the stash needs
+  the raid to end at the truck; only half of the bots' raids do now, and a
+  quarter reach a danger-3 place and get home:
 
 | Danger reached and home | Share of raids |
 | - | - |
-| 0 | 79% |
-| 1 | 79% |
-| 2 | 79% |
-| 3 | 38% |
+| 0 | 53% |
+| 1 | 53% |
+| 2 | 53% |
+| 3 | 25% |
 
-- **Robot parts are the bottleneck of fetches.** The bots bring home about
-  one sensor eye or robot cell in twelve raids and a servo in twenty-five
-  (they fight what comes for them and rarely strip the wreck). A fetch for
-  them was the one way a career could stall for good (one in ten never got
-  past tier 2 in the first model), so the driver gives up on a fetch after
-  four raids (`FETCH_PATIENCE`) and asks for something else. A player who
-  hunts robots will meet them far sooner.
-- **The ladder ends around raid 25 (1 in 10: past 34)**, a dozen hours of
-  play at a player's pace. Then the standing jobs and the keys: by then
-  tier 3 has walked you through the danger-3 places where the keys lie.
-  Raid 30 is about the capstone, not the driver.
+- **Robot parts are the bottleneck of fetches.** The bots bring home a
+  robot part (any kind) about once in twelve raids (they fight what comes
+  for them and rarely strip the wreck). A fetch for one used to be the way
+  a career could stall for good, so a fetch may take any robot part, and
+  the driver gives up on an unmet fetch after three raids
+  (`FETCH_PATIENCE`). A player who hunts robots meets them far sooner.
+- **The ladder ends around raid 33 (1 in 10: past 44)**: fifteen hours or
+  so at a player's pace. Then the standing jobs and the keys: by then tier
+  3 has walked you through the danger-3 places where the keys lie, and
+  the last job (Hana's letter) has closed the driver's story.
 
 The bots don't take jobs, and their raids are short and timid next to a
 player's, so read the numbers as the shape of the arc, not its minutes.
 
 ## Measuring it
 
-`scripts/progression_pacing.py target/sim/<map>` reads the sims' telemetry
-(each run's `end` line: outcome, loot ids, and its `pos` trail through the
-regions) and works out, per job kind and tier, the chance a raid finishes
-it: a fetch needs the items to come home, a recover or scout needs a visit
-to a region of the right danger and the raid to end at home. Tier length
-is the jobs it needs over those chances. The bots don't take jobs (they'd
-need a planner for it); the estimate assumes a player who goes for the job,
-which is the point of a job.
+`scripts/progression_pacing.py <map|all> [runs-dir]` reads the sims'
+telemetry (each run's `end` line: outcome, loot ids, the job, and its
+`pos` trail through the regions) and walks a few thousand careers through
+the tiers, raid by raid, on those raids: every raid home adds its loot to
+the stash, so a fetch is often met from what's piled up.
+
+Sim bots take jobs: each sim run is handed a scout job of one of the first
+three tiers (the run's seed picks which), and the raider treats the job's
+place as a site worth a long walk (while it's fit for it). The `end` line
+says whether the place was seen and the bot got home, and the pacing
+script uses that, by the place's danger, as a place job's odds per raid
+(falling back on "reached that danger and got home" for runs from before).
+Fetches aren't played: the bots don't hunt items to order.
 
 ## What's cut
 

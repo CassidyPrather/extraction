@@ -272,7 +272,26 @@ fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<
         .iter()
         .map(|(id, map)| Valley { id, map })
         .collect();
-    let job = extraction_core::progression::roll_job(&progression.0, opts.seed, &here, &valleys);
+    let roll = |p: &Progress| extraction_core::progression::roll_job(p, opts.seed, &here, &valleys);
+    if opts.sim_run.is_some() && progression.0.done == 0 {
+        // A sim bot takes a scout job of the first three tiers (the run's
+        // seed picks which), to measure what a job pulls: the telemetry's
+        // `end` says whether it was seen and got home.
+        let tier = (opts.seed % 3) as u32;
+        progression.0.tier = tier;
+        progression.0.done = 1 + 3 * tier;
+        for _ in 0..40 {
+            let job = roll(&progression.0);
+            if matches!(job, Job::Scout { .. }) {
+                progression.0.job = Some(job);
+                break;
+            }
+            progression.0.swaps += 1;
+        }
+        info!("sim job: {:?}", progression.0.job);
+        return;
+    }
+    let job = roll(&progression.0);
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);
     progression.0.job_raid = raid.raids;

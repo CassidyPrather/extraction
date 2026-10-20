@@ -152,7 +152,7 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
 | `extract` | `x`, `z` | Pulled the bell with the truck waiting: out. |
 | `death` | `cause` (what did the most harm in the last 90 s, bleeding aside), `finisher` (what dealt the last point), `x`, `z`, `doing` | Went down. |
-| `end` | `outcome` (`extracted`, `died`, `timeout`), `raid_time`, `distance`, `loot` (ids), `loot_count`, `shots`, `hits`, `blocked`, `engagements`, `kills` (by kind), `damage` (by cause), `anomaly_entries`, `heals`, `extract_reason`, `death_cause`, `x`, `z` | Last line. |
+| `end` | `outcome` (`extracted`, `died`, `timeout`), `raid_time`, `distance`, `loot` (ids), `loot_count`, `shots`, `hits`, `blocked`, `engagements`, `kills` (by kind), `damage` (by cause), `anomaly_entries`, `heals`, `extract_reason`, `death_cause`, `x`, `z`, `job` (the driver's scout job the bot was handed: `place`, `danger`, `seen`; see `docs/PROGRESSION.md`) | Last line. |
 
 ## The report
 
