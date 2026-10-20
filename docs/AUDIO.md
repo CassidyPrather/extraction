@@ -403,6 +403,49 @@ its combs' decay, so `freeverb_room` asks for that much more
 [decay](shots/audio/acoustics_decay.png),
 [spectra](shots/audio/acoustics_spectra.png).
 
+## Binaural in the headset
+
+In the headset, placed sounds go through a head-related filter
+(firewheel's `HrtfNode`): each ear hears the sound as a dummy head's ear
+would from that direction. That gives the delay between the ears, the
+level difference, and the pinna's colouring, which is what tells ahead
+from behind and above from level. Panning gives only the level
+difference, so behind sounds like ahead.
+
+- **The responses** are SADIE II's KEMAR (University of York, Apache-2.0;
+  `assets/audio/hrir/NOTICE`). They were measured at 48 kHz, and
+  `scripts/audio_hrir.py` writes them on a 266-direction sphere in the
+  listener's frame. The node also embeds IRCAM subjects, which localise
+  about as well (the audit prints one beside ours), but the IRCAM Listen
+  data states no licence.
+- **What goes binaural** (`audio::place`): a placed sound within
+  `BINAURAL_REACH` (40 m), while fewer than `HRTF_VOICES` (24) are
+  playing; each costs a convolution. Farther sounds, and sounds past the
+  cap, are panned: at that distance the muffle and the reverb say more
+  than the ears' filter does. Both chains share the cue's falloff, distance
+  muffle, occlusion (`occlude`) and reverb send, so which chain a sound
+  takes changes its direction cues, not how it fades.
+- **When:** in the headset only, and only when the comfort setting
+  `binaural` is on (on by default; `--no-binaural` turns it off). Flat
+  mode always pans, because on speakers a head filter just colours.
+- **FFT size.** The node convolves 128-sample slices with 512-point FFTs.
+  The sphere is zero-padded to 385 taps so that slice + taps − 1 = 512
+  points. A length that factors badly makes rustfft use an algorithm
+  that needs more scratch than the node allocates, and the audio thread
+  panics. A test (`binaural_tells_front_from_back`) guards this.
+
+**The audit check** (`scripts/audio_binaural.py`): the test above renders
+a click from eight directions through the `hrtf` crate (the node's own
+convolution) and writes `target/audio_audit/binaural.json`. The audit
+measures the cues on that output:
+
+| Cue | Measure | Wants | KEMAR | IRCAM 1040 |
+| --- | --- | --- | --- | --- |
+| Side level | near ear over far, 0.5–10 kHz | ≥ 6 dB | 15 dB | 12 dB |
+| Side arrival | cross-correlation lag | ≥ 400 µs | 729 µs | 562 µs |
+| Front/back | 4–10 kHz over 0.5–3 kHz, ahead minus behind | ≥ 2.5 dB | 4.0 dB | 6.3 dB |
+| Up | the same, above minus ahead | ≥ 2.0 dB | 3.7 dB | 2.7 dB |
+
 ## Listening in the headset
 
 The numbers place each sound; only ears say whether it's the right one.
@@ -440,7 +483,11 @@ words ("too bright", "sounds like plastic", "late"):
     into a bunker, clapping or firing a shot in each: does each sound
     its size? A walker behind a wall: muffled but readable? Rain from
     under a roof?
-13. **Overall.** Anything that made you flinch, or that you didn't hear
+13. **Where things are.** With binaural on (the default), close your
+    eyes by a running generator or the truck and turn round: does it stay
+    put, and is behind clearly behind? A drone overhead: above? Then
+    with `--no-binaural`: is the difference worth its cost?
+14. **Overall.** Anything that made you flinch, or that you didn't hear
     at all. The audit's "Loudest up close" list in `target/audio_audit/
     mix.txt` names the loudest suspects.
 

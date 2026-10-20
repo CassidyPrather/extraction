@@ -255,6 +255,26 @@ pub fn db(name: &str) -> f32 {
     })
 }
 
+/// A cue's name as the table holds it (for components that keep it).
+pub fn static_name(name: &str) -> &'static str {
+    find(name).map_or("step", |c| c.name)
+}
+
+/// The head-related node a cue plays through in the headset: the same
+/// reach and muffle as `spatial`.
+pub fn hrtf(name: &str) -> bevy_seedling::prelude::HrtfNode {
+    use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
+    let reach = find(name).map_or(5.0, |c| c.reach);
+    bevy_seedling::prelude::HrtfNode {
+        distance_attenuation: DistanceAttenuation {
+            reference_distance: reach,
+            max_muffle_distance: MUFFLE_FULL,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 /// A cue's role, if it's in the mix.
 pub fn role(name: &str) -> Option<Role> {
     MIX.iter().find(|c| c.name == name).map(|c| c.role)
