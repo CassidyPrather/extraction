@@ -369,24 +369,38 @@ fn deaths(
     )>,
     locals: Query<Entity, With<LocalPlayer>>,
     mut was_down: Local<bool>,
+    mut waking: Local<Option<u32>>,
     mut m: Meet,
 ) {
     let down = matches!(raid.phase, Phase::Down { .. });
     if *was_down && !down && !m.met(First::Death) {
-        let me = locals.iter().next();
-        let crate_n: usize = bags
-            .iter()
-            .filter(|(_, stash, _)| *stash)
-            .map(|(b, ..)| b.contents.len())
-            .sum();
-        let fell_n: usize = bags
-            .iter()
-            .filter(|(_, _, r)| r.is_some_and(|r| Some(r.owner) == me))
-            .map(|(b, ..)| b.contents.len())
-            .sum();
-        m.meet_filled(First::Death, &|l| fill(l, crate_n, fell_n));
+        *waking = Some(0);
     }
     *was_down = down;
+    // Count once what was carried has been laid down where you fell (that
+    // happens later in the frame you wake, in its own system), or after a
+    // moment if there was nothing to lay down.
+    let Some(frames) = waking.as_mut() else {
+        return;
+    };
+    *frames += 1;
+    let me = locals.iter().next();
+    let fell: Vec<usize> = bags
+        .iter()
+        .filter(|(_, _, r)| r.is_some_and(|r| Some(r.owner) == me))
+        .map(|(b, ..)| b.contents.len())
+        .collect();
+    if fell.is_empty() && *frames < 30 {
+        return;
+    }
+    *waking = None;
+    let crate_n: usize = bags
+        .iter()
+        .filter(|(_, stash, _)| *stash)
+        .map(|(b, ..)| b.contents.len())
+        .sum();
+    let fell_n: usize = fell.iter().sum();
+    m.meet_filled(First::Death, &|l| fill(l, crate_n, fell_n));
 }
 
 /// A line with its counts in.
