@@ -130,6 +130,22 @@ impl Comfort {
         }
     }
 
+    pub fn binaural_label(&self) -> String {
+        if self.binaural {
+            "HEARING\nall around you".into()
+        } else {
+            "HEARING\nflat STEREO".into()
+        }
+    }
+
+    pub fn score_label(&self) -> String {
+        if self.score {
+            "MUSIC\nrises with danger".into()
+        } else {
+            "MUSIC\nOFF".into()
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
