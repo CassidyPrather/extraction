@@ -291,6 +291,30 @@ pub fn probe(
     }
 }
 
+/// Rain as heard from where you are: the open-air rain bed's gain (dB) and
+/// low-pass (Hz), and the roof's own drumming bed if there's one for it
+/// (it plays at the rain's level). Under a porch or an overhang (a roof
+/// but open sides) a little of both.
+pub fn rain_under(space: &Space) -> (f32, f32, Option<&'static str>) {
+    if space.kind == SpaceKind::Underground {
+        return (-80.0, 400.0, None);
+    }
+    let Some(roof) = space.roof else {
+        return (0.0, 20_480.0, None);
+    };
+    let (db, cutoff, drum) = match roof {
+        Roof::Tin => (-12.0, 1_200.0, Some("ambience/rain_tin")),
+        Roof::Wood => (-14.0, 900.0, Some("ambience/rain_wood")),
+        Roof::Canvas => (-6.0, 3_000.0, Some("ambience/rain_canvas")),
+        Roof::Solid => (-18.0, 600.0, None),
+    };
+    match space.kind {
+        SpaceKind::Room | SpaceKind::Hall => (db, cutoff, drum),
+        // A porch, an overhang: the open rain all round, a little duller.
+        _ => (-3.0, 8_000.0, drum),
+    }
+}
+
 /// How a sound gets from `from` to `to`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Occlusion {
@@ -586,6 +610,30 @@ mod tests {
         }
         assert!(passed >= 5, "only {passed} doors let sound out");
         assert!(failed.len() * 3 <= passed, "{passed} passed; {failed:?}");
+    }
+
+    /// Rain is loudest in the open, duller under a roof, gone underground.
+    #[test]
+    fn rain_is_heard_through_the_roof() {
+        let open = Space::default();
+        let shed = Space {
+            kind: SpaceKind::Room,
+            enclosed: 1.0,
+            size: 3.0,
+            length: 4.0,
+            surface: Surface::Wood,
+            roof: Some(Roof::Tin),
+        };
+        let tunnel = Space {
+            kind: SpaceKind::Underground,
+            roof: Some(Roof::Solid),
+            ..shed
+        };
+        let (o, oc, _) = rain_under(&open);
+        let (s, sc, drum) = rain_under(&shed);
+        let (t, _, _) = rain_under(&tunnel);
+        assert!(o > s && s > t && sc < oc);
+        assert_eq!(drum, Some("ambience/rain_tin"));
     }
 
     #[test]
