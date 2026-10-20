@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # ranger tower's table is up in its cabin).
 SPOTS = {
     "house_plank": [(-1.6 + 0.3, -0.7)],
+    "house_plank_damaged": [(-1.6 + 0.3, -0.7)],
     "farmhouse": [(-2.0 + 0.3, -0.8)],
     "house_brick": [(-2.0 + 0.3, -0.8)],
     "cabin_log": [(0.3, 0.55)],
@@ -207,6 +208,15 @@ ground lifts. Bring a light. Don't run.
 Lamp to Kettle tower, 2100: no answer from Emil three nights now.
 
 - M. Sedlak""", "Ranger's note"),
+        ("cabin_log", (-145.0, 190.0), "Note", """Crew tally, on the wall by the bed:
+
+Mon 14 logs   Tue 16   Wed 15
+Thu - buses
+
+There's a tin of pears under the bed for whoever's next. Wedge the door
+at night with the split log, the latch is no good.
+
+- Tomas, J.'s crew""", "Cabin tally"),
     ],
     "kettle_pass": [
         ("guard_booth", (127.8, 285.0), "Note", """SOUTH GATE, KETTLE - DUTY LOG
@@ -338,6 +348,14 @@ night, very slowly, as if counting the posts.
 If you hear the hum, you're carrying too many of the bright stones. Put some down.
 
 - Fiala""", "Lodge book"),
+        ("cabin_log", (119.0, -138.0), "Note", """The kiln wants four days' watching, so it's getting four days.
+
+They say the buses are the last. Fine. If it's cold when you come, it went
+out without me and I walked down after all.
+
+Bed's dry. My name's on the frame so you know whose it was.
+
+- Mirek Hajek, burner""", "Burner's note"),
     ],
     "cinder_works": [
         ("guard_booth", (-102.2, 285.0), "Note", """SOUTH GATE, CINDER - DUTY LOG
@@ -400,7 +418,7 @@ The chimney is the best landmark: walk toward it in the fog and you'll
 find the road.
 
 - V.""", "Foreman's house note"),
-        ("house_plank", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
+        ("house_plank_damaged", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
 you, I expect. He's all right. He won't come past the fence. I asked
 him why once. He said he tried, the first day, and they turned him back,
 and now he's used to it.
@@ -441,6 +459,15 @@ Repair requested: 1 APR.
 
 Requests held for uplink.""",
         ], "Mast terminal"),
+        ("cabin_log", (-75.0, -159.0), "Note", """Woodward's book, last page.
+
+The works' smoke came down the valley at noon and didn't lift. I've wet
+the roof and the woodpile and I'm stopping here.
+
+Matches in the tin on the stove. The door sticks, kick it at the
+bottom, then wedge it.
+
+- V. Kral, woodward""", "Woodward's book"),
     ],
 }
 

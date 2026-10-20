@@ -367,6 +367,7 @@
         (kind: Note(text: "Lorry 12, 15 Oct.\nStuck on the third bend with forty from Miners' Row in the back. Walked them over the pass on foot, the old ones on the soldiers' shoulders.\nLeft the lorry on the bend with the keys in. The machines had it by morning."), at: (-41.24, -126.97), rot: 50.3, name: "Lorry driver's note"),
         (kind: Note(text: "QUARRY PUMPS\nPit dry at 0600. Pumps one and two running.\nSince November the pit fills again every night, and the water comes up warm.\nTurned the pumps off. Whatever is down there, it wants to be under water. Let it."), at: (128.52, -47.50), rot: 212.7, name: "Quarry pumps note"),
         (kind: Note(text: "Lodge book.\nSnow on the saddle again. The machines walked the fence line all night, very slowly, as if counting the posts.\nIf you hear the hum, you're carrying too many of the bright stones. Put some down.\n- Fiala"), at: (205.30, -204.45), rot: 331.4, name: "Lodge book"),
+        (kind: Note(text: "The kiln wants four days' watching, so it's getting four days.\nThey say the buses are the last. Fine. If it's cold when you come, it went out without me and I walked down after all.\nBed's dry. My name's on the frame so you know whose it was.\n- Mirek Hajek, burner"), at: (118.88, -137.39), rot: 11.4, name: "Burner's note"),
         // notes:end
     ],
 
