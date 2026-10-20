@@ -99,7 +99,16 @@ impl Plugin for ZeroPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<TurretClicked>()
             .add_observer(fit_turrets)
-            .add_systems(Update, (turret_points, turn_turrets, zero_scopes).chain());
+            .add_systems(
+                Update,
+                (
+                    turret_points,
+                    turn_turrets,
+                    flat_drum.run_if(resource_exists::<ButtonInput<KeyCode>>),
+                    zero_scopes,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -230,6 +239,47 @@ fn turn_turrets(
                     seconds: 0.012,
                 });
             }
+        }
+    }
+}
+
+/// Flat mode: `]` and `[` click the drum of the scope on the gun in your
+/// right hand up and down.
+fn flat_drum(
+    keys: Res<ButtonInput<KeyCode>>,
+    players: Query<&Children, (With<crate::rig::LocalPlayer>, Without<crate::bot::Bot>)>,
+    hands: Query<(&crate::rig::RigHand, &Hand)>,
+    mut scopes: Query<(Entity, &MountedOn, &GlobalTransform, &mut Turret)>,
+    mut clicked: MessageWriter<TurretClicked>,
+) {
+    let step: i64 = if keys.just_pressed(KeyCode::BracketRight) {
+        1
+    } else if keys.just_pressed(KeyCode::BracketLeft) {
+        -1
+    } else {
+        return;
+    };
+    let Some(gun) = players.iter().next().and_then(|c| {
+        c.iter()
+            .filter_map(|h| hands.get(h).ok())
+            .find(|(rh, _)| rh.side == crate::rig::Side::Right)
+            .and_then(|(_, h)| h.holding)
+    }) else {
+        return;
+    };
+    for (scope, m, sgt, mut turret) in &mut scopes {
+        if m.0 != gun {
+            continue;
+        }
+        let setting =
+            (turret.setting as i64 + step).clamp(turret.min as i64, turret.max as i64) as u32;
+        if setting != turret.setting {
+            turret.setting = setting;
+            clicked.write(TurretClicked {
+                scope,
+                setting,
+                at: sgt.transform_point(turret.drum),
+            });
         }
     }
 }

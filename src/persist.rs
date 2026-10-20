@@ -340,6 +340,7 @@ fn fresh_save(map: &str) -> SaveGame {
         local: at,
         gun: None,
         inserted: Vec::new(),
+        loads: Default::default(),
     };
     let mut pistol = item("pm_pistol", 0, [0.2, 0.05, -0.4]);
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
@@ -392,6 +393,7 @@ fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<E
     if let Some(mut it) = world.get_mut::<Item>(e) {
         it.condition = saved.condition;
         it.rounds = saved.rounds;
+        it.loads = saved.loads.clone();
         if saved.charge_wh >= 0.0 {
             it.charge_wh = saved.charge_wh;
         }
@@ -405,6 +407,10 @@ fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<E
             f.hammers_cocked = g.hammers.clone();
         }
         f.internal_rounds = g.internal_rounds;
+        f.internal_loads = g.internal_loads.clone();
+        if g.chamber_loads.len() == f.chambers.len() {
+            f.chamber_loads = g.chamber_loads.clone();
+        }
         f.mode = g.mode.min(f.def.modes.len().saturating_sub(1));
         f.condition = g.condition;
         f.fouling = g.fouling;
@@ -658,6 +664,7 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
         local: local.to_array(),
         gun: None,
         inserted: Vec::new(),
+        loads: item.loads.clone(),
     };
     if let Some(gun) = world.get::<Gun>(e) {
         let f = &gun.firearm;
@@ -668,6 +675,8 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
             mode: f.mode,
             condition: f.condition,
             fouling: f.fouling,
+            internal_loads: f.internal_loads.clone(),
+            chamber_loads: f.chamber_loads.clone(),
         });
         saved.condition = f.condition;
         if let Some(m) = gun
@@ -679,6 +688,7 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
                 // The mechanism's count is the live one while seated.
                 if let Some(mag) = &f.magazine {
                     inner.rounds = mag.rounds;
+                    inner.loads = mag.loads.clone();
                 }
                 saved.inserted.push(inner);
             }
@@ -856,6 +866,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 local: [0.0; 3],
                 gun: None,
                 inserted: Vec::new(),
+                loads: Default::default(),
             },
         });
     }
@@ -1079,6 +1090,46 @@ mod tests {
         let again = snapshot(b.world_mut());
         assert_eq!(again.item_count(), save.item_count());
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// A pistol whose magazine has AP and then a tracer on top of ball,
+    /// and a round in the chamber that's AP: saved and loaded, the rounds
+    /// keep their loads and their order.
+    #[test]
+    fn a_mixed_magazine_survives_a_save() {
+        use extraction_core::ammo::Load;
+        let path = temp_save("mixed_mag.ron");
+        let mut a = app_with_save(&path);
+        let pistol = {
+            let w = a.world_mut();
+            let mut q = w.query::<(Entity, &Gun)>();
+            q.iter(w)
+                .find(|(_, g)| g.firearm.magazine.is_some())
+                .map(|(e, _)| e)
+                .expect("the starter pistol with its magazine")
+        };
+        let want = vec![Load::Ap, Load::Tracer];
+        {
+            let mut g = a.world_mut().get_mut::<Gun>(pistol).unwrap();
+            let m = g.firearm.magazine.as_mut().unwrap();
+            m.loads.0 = want.clone();
+            g.firearm.chamber_loads[0] = Load::Ap;
+        }
+        a.update();
+        let save = snapshot(a.world_mut());
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+
+        let mut b = app_with_save(&path);
+        let w = b.world_mut();
+        let mut q = w.query::<&Gun>();
+        let g = q
+            .iter(w)
+            .find(|g| g.firearm.magazine.is_some())
+            .expect("the pistol came back");
+        assert_eq!(g.firearm.magazine.as_ref().unwrap().loads.0, want);
+        assert_eq!(g.firearm.chamber_load(0), Load::Ap);
     }
 
     #[test]

@@ -459,7 +459,7 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one
-  click per 100 m. The zero comes from the game's own ballistics (the
+  click per 100 m (in flat mode, `]` and `[`). The zero comes from the game's own ballistics (the
   gun's muzzle velocity, the scope's height over the bore), so at the set
   range the round goes where the reticle is. Nearer it strikes high,
   farther low: under a 300 m zero, a robot at 400 m needs holdover (the

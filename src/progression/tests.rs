@@ -153,6 +153,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             local: [0.0, 0.05, -0.5 + i as f32 * 0.016],
             gun: None,
             inserted: Vec::new(),
+            loads: Default::default(),
         });
     }
     assert!(career.progress.is_none());
