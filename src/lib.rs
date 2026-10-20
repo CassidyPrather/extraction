@@ -30,6 +30,7 @@ pub mod qa;
 pub mod raid;
 pub mod render;
 pub mod rig;
+pub mod robot_voice;
 pub mod robots;
 pub mod sim;
 pub mod tour;
@@ -84,6 +85,7 @@ impl Plugin for GamePlugin {
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
                 foley::FoleyPlugin,
+                robot_voice::VoicePlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
