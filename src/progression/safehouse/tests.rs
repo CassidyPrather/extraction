@@ -271,3 +271,41 @@ fn the_surge_ends_the_claim() {
     assert!(h.crate_bag.is_none());
     assert_eq!(app.world().resource::<HourShift>().0, 0);
 }
+
+#[test]
+fn an_expedition_counts_only_after_a_night_out() {
+    use crate::raid::requests::tests::{press_card, stash};
+    let mut app = crate::raid::requests::tests::app();
+    app.world_mut()
+        .resource_mut::<super::super::Progression>()
+        .0
+        .job = Some(extraction_core::progression::Job::Recover {
+        map: "marrow_creek".into(),
+        region: "The Hollow".into(),
+        at: None,
+        place: None,
+        overnight: true,
+    });
+    // Whatever recorder the job put out, one is home in the stash.
+    stash(&mut app, extraction_core::progression::RECOVER_ITEM, 1);
+    let entry = |nights| crate::raid::logbook::RaidEntry {
+        number: 1,
+        home: true,
+        minutes: 30.0,
+        wrecked: Default::default(),
+        items: 3,
+        artifacts: Vec::new(),
+        nights,
+    };
+    app.world_mut()
+        .resource_mut::<crate::raid::logbook::Logbook>()
+        .last = Some(entry(0));
+    press_card(&mut app);
+    let done = |app: &App| app.world().resource::<super::super::Progression>().0.done;
+    assert_eq!(done(&app), 0, "a day trip doesn't count");
+    app.world_mut()
+        .resource_mut::<crate::raid::logbook::Logbook>()
+        .last = Some(entry(1));
+    press_card(&mut app);
+    assert_eq!(done(&app), 1, "a night out does");
+}
