@@ -40,8 +40,11 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 RANGE_TARGETS = {
     "drone.rotor": (120, 40), "drone.lock": (60, 40), "walker.step": (60, 30),
     "door.blow": (60, 25), "door.broken": (80, 30), "anomaly.snare": (15, 10),
-    "anomaly.burner": (20, 12), "anomaly.lift": (15, 10), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
-    "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2),
+    "anomaly.burner": (20, 12), "anomaly.lift": (15, 10),
+    "anomaly.well": (15, 10), "anomaly.mirror": (15, 10), "anomaly.reveal": (15, 8),
+    "detector.click": (3, 2), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
+    "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2), "chatter.voice": (3, 2),
+    "robot.voice": (30, 15),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
     "truck.arrive": (60, 15), "robot.notice": (30, 15), "robot.investigate": (30, 15),
     "robot.lost": (25, 10), "robot.callout": (40, 20), "walker.aim": (60, 30),
@@ -372,7 +375,8 @@ def loop_fades():
     text = (ROOT / "src" / "audio.rs").read_text()
     near = float(re.search(r"ANOMALY_FADE_NEAR: f32 = ([\d.]+)", text).group(1))
     keep = float(re.search(r"ANOMALY_KEEP: f32 = ([\d.]+)", text).group(1))
-    return {n: (near, keep) for n in ("anomaly.lift", "anomaly.burner", "anomaly.snare")}
+    return {n: (near, keep) for n in ("anomaly.lift", "anomaly.burner", "anomaly.snare",
+                                         "anomaly.well", "anomaly.mirror")}
 
 
 def fade_db(name, d):

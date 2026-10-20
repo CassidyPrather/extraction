@@ -1785,22 +1785,22 @@
     "files": [
       {
         "file": "audio/machines/detector_click_1.ogg",
-        "seconds": 0.03,
+        "seconds": 0.06,
         "source": "synth:scripts/synth_anomaly.py"
       },
       {
         "file": "audio/machines/detector_click_2.ogg",
-        "seconds": 0.03,
+        "seconds": 0.06,
         "source": "synth:scripts/synth_anomaly.py"
       },
       {
         "file": "audio/machines/detector_click_3.ogg",
-        "seconds": 0.03,
+        "seconds": 0.06,
         "source": "synth:scripts/synth_anomaly.py"
       },
       {
         "file": "audio/machines/detector_click_4.ogg",
-        "seconds": 0.03,
+        "seconds": 0.06,
         "source": "synth:scripts/synth_anomaly.py"
       }
     ]
@@ -1944,6 +1944,53 @@
         "file": "audio/machines/radio_static_2.ogg",
         "seconds": 12.0,
         "source": "fs_38693"
+      }
+    ]
+  },
+  "machines/robot_voice": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/robot_voice_1.ogg",
+        "seconds": 0.776,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_2.ogg",
+        "seconds": 0.624,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_3.ogg",
+        "seconds": 1.069,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_4.ogg",
+        "seconds": 0.764,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_5.ogg",
+        "seconds": 0.619,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_6.ogg",
+        "seconds": 0.936,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_7.ogg",
+        "seconds": 0.588,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_8.ogg",
+        "seconds": 0.475,
+        "source": "synth:scripts/synth_anomaly.py"
       }
     ]
   },
