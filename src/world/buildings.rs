@@ -4543,6 +4543,20 @@ pub fn dress_buildings(
                 }
             })
             .collect();
+        // And their meshes, not just their glTFs (`PropMeshes::get`).
+        if !loading {
+            loading = geo.props.iter().zip(&ready).any(|(d, r)| {
+                *r && d
+                    .models
+                    .iter()
+                    .map(|(n, _)| *n)
+                    .chain(d.lods.into_iter().flatten())
+                    .any(|n| {
+                        cache.get(n, &mut props, &meshes);
+                        !cache.has(n)
+                    })
+            });
+        }
         // Models load in a few frames; past ten seconds, build without.
         if loading && wait.0 < 600 {
             continue;
