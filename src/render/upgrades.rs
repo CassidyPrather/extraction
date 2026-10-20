@@ -13,7 +13,7 @@ pub struct UpgradeVisualsPlugin;
 
 impl Plugin for UpgradeVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, dress_upgrades);
+        app.add_systems(Update, (dress_upgrades, add_sleep_fade, sleep_fade));
     }
 }
 
@@ -182,5 +182,84 @@ fn dress_upgrades(
                 ));
             }
         });
+    }
+}
+
+/// Black over the eyes while a night passes (`progression::safehouse`).
+#[derive(Component)]
+struct SleepFade {
+    material: Handle<StandardMaterial>,
+    /// Seconds since lying down; none when awake.
+    t: Option<f32>,
+}
+
+/// Dark this long, then the eyes open over `OPEN` on different light.
+const CLOSE: f32 = 1.2;
+const DARK: f32 = 1.0;
+const OPEN: f32 = 2.5;
+
+fn add_sleep_fade(
+    mut commands: Commands,
+    heads: Query<(Entity, &ChildOf), Added<crate::rig::RigHead>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (head, parent) in &heads {
+        if !locals.contains(parent.parent()) {
+            continue;
+        }
+        let material = materials.add(StandardMaterial {
+            base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            fog_enabled: false,
+            ..default()
+        });
+        commands.entity(head).with_child((
+            SleepFade {
+                material: material.clone(),
+                t: None,
+            },
+            Mesh3d(meshes.add(Rectangle::new(0.6, 0.6))),
+            MeshMaterial3d(material),
+            Transform::from_xyz(0.0, 0.0, -0.06),
+            bevy::light::NotShadowCaster,
+            Visibility::Hidden,
+        ));
+    }
+}
+
+fn sleep_fade(
+    mut slept: MessageReader<crate::progression::safehouse::Slept>,
+    mut fades: Query<(&mut SleepFade, &mut Visibility)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    let new = slept.read().count() > 0;
+    for (mut f, mut vis) in &mut fades {
+        if new {
+            f.t = Some(0.0);
+        }
+        let Some(t) = f.t.as_mut() else {
+            continue;
+        };
+        *t += time.delta_secs();
+        let a = if *t < CLOSE {
+            *t / CLOSE
+        } else if *t < CLOSE + DARK {
+            1.0
+        } else {
+            1.0 - (*t - CLOSE - DARK) / OPEN
+        };
+        if a <= 0.0 {
+            f.t = None;
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        *vis = Visibility::Inherited;
+        if let Some(mut m) = materials.get_mut(&f.material) {
+            m.base_color = Color::srgba(0.0, 0.0, 0.0, a.clamp(0.0, 1.0));
+        }
     }
 }

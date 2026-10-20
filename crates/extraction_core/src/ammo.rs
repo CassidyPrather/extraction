@@ -93,6 +93,19 @@ impl Loads {
         load
     }
 
+    /// The top round comes off a box or a loose round of `count` whose
+    /// unlisted rounds are `base` (its own load).
+    pub fn pop_or(&mut self, count: u32, base: Load) -> Load {
+        let n = count as usize;
+        if self.0.len() > n {
+            self.0.drain(..self.0.len() - n);
+        }
+        if count == 0 {
+            return base;
+        }
+        self.0.pop().unwrap_or(base)
+    }
+
     /// The load of the round on top of a stack of `count`.
     pub fn top(&self, count: u32) -> Load {
         if count == 0 {

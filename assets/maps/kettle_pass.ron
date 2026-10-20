@@ -328,6 +328,7 @@
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-118.0, -85.0), name: "Spoil heap well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (194.0, -22.0), name: "Quarry mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (218.0, -69.0), name: "Quarry hush"),
         (kind: Offering, at: (-8.0, 140.0), name: "The chapel font"),
         (kind: Offering, at: (-120.0, -235.0), name: "The cairn"),
         (kind: WorkSite, at: (-110.0, 20.0), name: "Beck site"),
@@ -378,6 +379,7 @@
         (name: "Logging camp", danger: 1, polygon: [(160.0, 205.0), (260.0, 205.0), (260.0, 270.0), (160.0, 270.0)]),
         (name: "Kettle mine", danger: 2, polygon: [(-260.0, -125.0), (-130.0, -125.0), (-130.0, -15.0), (-260.0, -15.0)]),
         (name: "The quarry", danger: 3, polygon: [(110.0, 0.0), (240.0, 0.0), (240.0, -110.0), (110.0, -110.0)]),
+        (name: "Charcoal burners' hut", danger: 2, polygon: [(95.0, -115.0), (150.0, -115.0), (150.0, -158.0), (95.0, -158.0)]),
         (name: "Hunting lodge", danger: 2, polygon: [(160.0, -240.0), (260.0, -240.0), (260.0, -160.0), (160.0, -160.0)]),
         (name: "The pass", danger: 2, polygon: [(-75.0, -285.0), (100.0, -285.0), (100.0, -190.0), (-75.0, -190.0)]),
         (name: "The Gate", danger: 3, polygon: [(-300.0, -300.0), (-200.0, -300.0), (-200.0, -200.0), (-300.0, -200.0)]),

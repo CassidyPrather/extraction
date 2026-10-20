@@ -369,6 +369,10 @@ fn walker_brain(
         (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, heavy)),
     ) in &mut walkers
     {
+        // (The heavy thinks for itself: `heavy_mind`.)
+        if gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy) {
+            continue;
+        }
         let is_hound = hound.is_some();
         if let Some(h) = hound.as_deref_mut() {
             h.cooldown -= dt;

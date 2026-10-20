@@ -417,7 +417,7 @@ fn first_person_hands(
                     size: Vec2::new(0.075, 0.045),
                     style: crate::raid::bench::ScreenStyle::Lcd,
                 },
-                crate::render::props::wrist_mount(),
+                crate::render::props::wrist_mount(crate::rig::Side::Left),
                 ChildOf(h),
             ));
         }

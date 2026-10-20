@@ -17,6 +17,7 @@
 pub mod body;
 pub mod far;
 pub mod flat;
+pub mod hand_climb;
 pub mod physics_hands;
 pub mod poke;
 
@@ -291,6 +292,7 @@ impl Plugin for InteractPlugin {
                         far::far_grab,
                         apply_hand_actions,
                         seat_on_contact,
+                        seat_from_body,
                     )
                         .chain()
                         .in_set(InteractSystems::Grab),
@@ -302,7 +304,11 @@ impl Plugin for InteractPlugin {
             .add_observer(held_layers)
             .add_observer(poke::mount_button)
             .add_observer(unheld_layers)
-            .add_plugins((body::BodyPlugin, physics_hands::PhysicsHandsPlugin));
+            .add_plugins((
+                body::BodyPlugin,
+                physics_hands::PhysicsHandsPlugin,
+                hand_climb::HandClimbPlugin,
+            ));
     }
 }
 
@@ -372,6 +378,63 @@ fn seat_on_contact(
         }
     }
 }
+
+/// Played one-handed (`Comfort::one_handed`), the gun's empty well brought
+/// down onto a magazine in a pouch or pocket takes it: there's no other
+/// hand to bring the magazine up.
+fn seat_from_body(
+    mut commands: Commands,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mags: Query<(Entity, &InSocket, &GlobalTransform, &crate::weapons::Mag)>,
+    mut sockets: Query<(Entity, &mut Socket, &GlobalTransform, &SocketOwner)>,
+    held: Query<&Held>,
+    mut events: MessageWriter<InteractEvent>,
+) {
+    if !comfort.is_some_and(|c| c.one_handed) {
+        return;
+    }
+    let mut moves = Vec::new();
+    for (mag_e, in_socket, gt, mag) in &mags {
+        let Ok((_, from, _, from_owner)) = sockets.get(in_socket.socket) else {
+            continue;
+        };
+        let SocketKind::Body(_) = from.kind else {
+            continue;
+        };
+        let top = gt.transform_point(Vec3::Y * mag.height * 0.5);
+        let well = sockets.iter().find(|(_, s, sgt, owner)| {
+            matches!(&s.kind, SocketKind::MagWell(f) if *f == mag.family)
+                && s.occupant.is_none()
+                && held.get(owner.0).is_ok_and(|g| g.player == from_owner.0)
+                && top.distance(sgt.translation()) < BODY_SEAT
+        });
+        if let Some((well_e, ..)) = well {
+            moves.push((mag_e, in_socket.socket, well_e));
+        }
+    }
+    for (mag_e, from_e, well_e) in moves {
+        if let Ok((_, mut from, ..)) = sockets.get_mut(from_e) {
+            from.occupant = None;
+        }
+        events.write(InteractEvent::Unsocketed {
+            item: mag_e,
+            socket: from_e,
+        });
+        if let Ok((_, mut well, ..)) = sockets.get_mut(well_e) {
+            if well.occupant.is_some() {
+                continue;
+            }
+            seat_in_socket(&mut commands, mag_e, well_e, &mut well);
+        }
+        events.write(InteractEvent::Socketed {
+            item: mag_e,
+            socket: well_e,
+        });
+    }
+}
+
+/// How near a pouched magazine's top the gun's well has to come, one-handed.
+pub const BODY_SEAT: f32 = 0.06;
 
 /// World pose of every rig hand, from the root and the rig input (not last
 /// frame's propagated transforms, which lag a tick).
@@ -714,6 +777,7 @@ fn apply_hand_actions(
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
+    ladders: Query<(), With<hand_climb::Ladder>>,
     time: Res<Time>,
     slot_places: Query<&Transform, With<body::BodySlot>>,
 ) {
@@ -736,6 +800,20 @@ fn apply_hand_actions(
                         since: time.elapsed_secs(),
                         speed: 0.0,
                     });
+                events.write(InteractEvent::Grabbed { item, side });
+            }
+            HandAction::Grab {
+                player, side, item, ..
+            } if ladders.contains(item) => {
+                // A ladder: the hand holds on where it is.
+                let Some((hand_e, hand_world)) = hand_of(&players, &hands, player, side) else {
+                    continue;
+                };
+                commands.entity(hand_e).insert(hand_climb::HandHold {
+                    on: hand_climb::Hold::Ladder(item),
+                    at: hand_world.translation,
+                    since: time.elapsed_secs(),
+                });
                 events.write(InteractEvent::Grabbed { item, side });
             }
             HandAction::Grab {
@@ -841,7 +919,7 @@ fn apply_hand_actions(
                 };
                 commands
                     .entity(hand_e)
-                    .remove::<crate::gadgets::climbing::RopeGrip>();
+                    .remove::<(crate::gadgets::climbing::RopeGrip, hand_climb::HandHold)>();
                 let Ok((_, _, mut hand)) = hands.get_mut(hand_e) else {
                     continue;
                 };

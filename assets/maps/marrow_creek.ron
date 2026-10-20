@@ -291,6 +291,7 @@
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (158.0, -7.0), name: "The Hollow well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-144.0, -199.0), name: "Mast summit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (136.0, -7.0), name: "Hollow hush"),
         (kind: Offering, at: (-30.0, 110.0), name: "The well"),
         (kind: Offering, at: (230.0, -150.0), name: "The stone ring"),
         (kind: WorkSite, at: (-40.0, -60.0), name: "North bank site"),

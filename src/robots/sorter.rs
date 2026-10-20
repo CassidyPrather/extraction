@@ -18,7 +18,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use super::walker::LegPoses;
-use super::wreck::{Broken, Debris, Piece, Settling, WreckImpact, spawn_debris};
+use super::wreck::{Broken, Debris, Piece, Settling, WreckImpact, WreckJoint, spawn_debris};
 use super::{
     Awareness, Brain, Intent, Job, JobKind, PartRole, Robot, RobotKind, Senses, part_bundle,
 };
@@ -1000,7 +1000,7 @@ fn wreck_sorters(
                     .with_anchor(pose.shoulder)
                     .with_swing_limits(0.0, 1.6),
                 JointCollisionDisabled,
-                ChildOf(ids[0]),
+                WreckJoint { a: e, b: ids[0] },
             ));
             commands.spawn((
                 Name::new("Sorter elbow"),
@@ -1008,7 +1008,10 @@ fn wreck_sorters(
                     .with_anchor(pose.elbow)
                     .with_swing_limits(0.0, 2.2),
                 JointCollisionDisabled,
-                ChildOf(ids[1]),
+                WreckJoint {
+                    a: ids[0],
+                    b: ids[1],
+                },
             ));
             commands.entity(c).despawn();
         }

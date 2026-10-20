@@ -62,6 +62,15 @@ pub enum Task {
         kind: crate::robots::RobotKind,
         at: Vec3,
     },
+    /// Put an anomaly here holding a stone (`at` on the ground), and loose
+    /// kit to work it with (anomaly harvesting scenarios).
+    Stage {
+        kind: extraction_core::anomaly::AnomalyKind,
+        at: Vec3,
+        radius: f32,
+        artifact: String,
+        kit: Vec<(String, Vec3)>,
+    },
     /// Fight the nearest robot: aim at its core, shoot until it's wrecked
     /// or `shots` trigger pulls are spent.
     Engage {
@@ -99,6 +108,48 @@ pub enum Task {
         target: Entity,
         shots: u32,
     },
+    /// Stage a scenario's world by name, where the bot stands: the module
+    /// under test answers [`scenarios::Setup`] (a heavy and a well).
+    Setup(&'static str),
+}
+
+impl Task {
+    /// The same task with its hands swapped: scenarios are written for a
+    /// right-handed bot, and a left-handed one plays them mirrored.
+    pub fn mirrored(self, m: bool) -> Self {
+        if !m {
+            return self;
+        }
+        match self {
+            Task::PickUp { id, side } => Task::PickUp {
+                id,
+                side: side.other(),
+            },
+            Task::Stow(side) => Task::Stow(side.other()),
+            Task::Draw { slot, side } => Task::Draw {
+                slot,
+                side: side.other(),
+            },
+            Task::Release(side) => Task::Release(side.other()),
+            Task::Grab { item, side } => Task::Grab {
+                item,
+                side: side.other(),
+            },
+            Task::GrabFromHere { item, side } => Task::GrabFromHere {
+                item,
+                side: side.other(),
+            },
+            Task::Use(side) => Task::Use(side.other()),
+            Task::Throw { side, at } => Task::Throw {
+                side: side.other(),
+                at,
+            },
+            Task::Expect(Expect::Holding(side, id)) => {
+                Task::Expect(Expect::Holding(side.other(), id))
+            }
+            other => other,
+        }
+    }
 }
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
@@ -127,6 +178,10 @@ pub enum Expect {
     Wrecked(usize),
     /// The bot is still standing.
     Alive,
+    /// The player would have heard at least this many robots' words (of
+    /// this mind, if given): `robot_voice::Heard`, in the listening
+    /// scenario.
+    Heard(Option<crate::robot_voice::Utterance>, usize),
 }
 
 #[derive(Component, Debug)]
@@ -236,12 +291,14 @@ fn drive_bots(
     >,
     hands: Query<(&RigHand, &Hand)>,
     time: Res<Time>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
+    let gun_side = comfort.as_ref().map_or(Side::Right, |c| c.gun_side());
     for (bot, mut input, mut root, hint, children) in &mut bots {
         let supporting = children.iter().any(|c| {
             hands
                 .get(c)
-                .is_ok_and(|(rh, h)| rh.side == Side::Left && h.supporting.is_some())
+                .is_ok_and(|(rh, h)| rh.side == gun_side.other() && h.supporting.is_some())
         });
         // Crouched, the head comes down as flat mode's C does (and the
         // body with it).
@@ -294,15 +351,15 @@ fn drive_bots(
             let eye_target =
                 Transform::from_translation(eye + head_rot * Vec3::new(0.0, 0.0, -0.32))
                     .with_rotation(head_rot);
-            let right = input.hand_mut(Side::Right);
+            let right = input.hand_mut(gun_side);
             right.pose = Transform::from_matrix(
                 (eye_target.compute_affine() * sight.compute_affine().inverse()).into(),
             );
             right.trigger = if bot.trigger { 1.0 } else { 0.0 };
         }
         if let (true, Some(support)) = (supporting, hint.support) {
-            let right_pose = input.hand(Side::Right).pose;
-            input.hand_mut(Side::Left).pose =
+            let right_pose = input.hand(gun_side).pose;
+            input.hand_mut(gun_side.other()).pose =
                 Transform::from_translation(right_pose.transform_point(support))
                     .with_rotation(right_pose.rotation);
         }
@@ -327,6 +384,8 @@ struct TaskExtras<'w, 's> {
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
+    heard: Option<Res<'w, crate::robot_voice::Heard>>,
+    setups: MessageWriter<'w, scenarios::Setup>,
 }
 
 /// Advances each bot's current task.
@@ -364,12 +423,18 @@ fn run_tasks(
         TaskExtras,
     ),
     mut commands: Commands,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let dt = time.delta_secs();
+    // The gun hand, and the other: a left-handed bot plays mirrored.
+    let mirror = comfort.as_ref().is_some_and(|c| c.left_handed);
+    let gun_side = Side::Right.mirrored(mirror);
+    let off_side = gun_side.other();
     for (player, mut bot, root, body, children, mut mac) in &mut bots {
         let Some(task) = bot.tasks.front().cloned() else {
             continue;
         };
+        let task = task.mirrored(mirror);
         bot.elapsed += dt;
         let hand = |side: Side| {
             children.iter().find_map(|c| {
@@ -404,6 +469,14 @@ fn run_tasks(
             }
             Task::Log(msg) => {
                 bot.note(msg);
+                bot.next();
+            }
+            Task::Setup(name) => {
+                ext.setups.write(scenarios::Setup {
+                    name,
+                    at: root.translation,
+                    facing: root.forward().as_vec3(),
+                });
                 bot.next();
             }
             Task::LookAt(p) => {
@@ -486,15 +559,15 @@ fn run_tasks(
                 bot.next();
             }
             Task::Support => {
-                if hand(Side::Left).is_some_and(|h| h.supporting.is_some()) {
+                if hand(off_side).is_some_and(|h| h.supporting.is_some()) {
                     bot.next();
                     continue;
                 }
-                if let Some(item) = hand(Side::Right).and_then(|h| h.holding) {
+                if let Some(item) = hand(gun_side).and_then(|h| h.holding) {
                     if !bot.pending {
                         actions.write(HandAction::Grab {
                             player,
-                            side: Side::Left,
+                            side: off_side,
                             item,
                             point: Some(1),
                         });
@@ -507,7 +580,7 @@ fn run_tasks(
             }
             Task::Gun(kind) => {
                 if !bot.pending {
-                    let Some(gun_e) = hand(Side::Right).and_then(|h| h.holding) else {
+                    let Some(gun_e) = hand(gun_side).and_then(|h| h.holding) else {
                         bot.failed += 1;
                         bot.note("FAIL no gun in hand".into());
                         bot.next();
@@ -524,7 +597,7 @@ fn run_tasks(
             Task::Fire { at, shots } => {
                 bot.look = at;
                 bot.aim = true;
-                let Some(gun) = hand(Side::Right)
+                let Some(gun) = hand(gun_side)
                     .and_then(|h| h.holding)
                     .and_then(|e| guns.get(e).ok())
                 else {
@@ -548,8 +621,8 @@ fn run_tasks(
             }
             Task::Combine => {
                 if let (Some(a), Some(b)) = (
-                    hand(Side::Right).and_then(|h| h.holding),
-                    hand(Side::Left).and_then(|h| h.holding),
+                    hand(gun_side).and_then(|h| h.holding),
+                    hand(off_side).and_then(|h| h.holding),
                 ) {
                     combine.write(Combine { a, b });
                 }
@@ -592,6 +665,20 @@ fn run_tasks(
                 bot.note(format!("spawned a {kind:?}"));
                 bot.next();
             }
+            Task::Stage {
+                kind,
+                at,
+                radius,
+                artifact,
+                kit,
+            } => {
+                let (artifact, kit) = (artifact.clone(), kit.clone());
+                commands.queue(move |world: &mut World| {
+                    crate::anomaly::harvest::stage(world, kind, at, radius, &artifact, &kit);
+                });
+                bot.note(format!("staged a {kind:?}"));
+                bot.next();
+            }
             Task::Engage { shots } => {
                 let nearest = robots.iter().filter(|(_, r, _)| !r.wrecked).min_by(|a, b| {
                     a.2.translation()
@@ -606,7 +693,7 @@ fn run_tasks(
                 };
                 bot.look = rgt.translation();
                 bot.aim = true;
-                let gun = hand(Side::Right)
+                let gun = hand(gun_side)
                     .and_then(|h| h.holding)
                     .and_then(|e| guns.get(e).ok());
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
@@ -703,7 +790,7 @@ fn run_tasks(
                     bot.walk = None;
                     actions.write(HandAction::Grab {
                         player,
-                        side: Side::Left,
+                        side: off_side,
                         item,
                         point: None,
                     });
@@ -732,7 +819,7 @@ fn run_tasks(
                     }
                     actions.write(HandAction::Grab {
                         player,
-                        side: Side::Left,
+                        side: off_side,
                         item: door,
                         point: None,
                     });
@@ -799,7 +886,7 @@ fn run_tasks(
                 let flight = at.distance(root.translation) / 700.0;
                 bot.look = at + vel * (1.0 / AIM_RATE + flight);
                 bot.aim = true;
-                let gun = hand(Side::Right)
+                let gun = hand(gun_side)
                     .and_then(|h| h.holding)
                     .and_then(|e| guns.get(e).ok());
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
@@ -837,7 +924,7 @@ fn run_tasks(
                         )
                     }
                     Expect::GunRounds(lo, hi) => {
-                        let n = hand(Side::Right)
+                        let n = hand(gun_side)
                             .and_then(|h| h.holding)
                             .and_then(|e| guns.get(e).ok())
                             .map(|g| g.firearm.live_rounds());
@@ -875,6 +962,13 @@ fn run_tasks(
                     Expect::Wrecked(n) => {
                         let w = robots.iter().filter(|(_, r, _)| r.wrecked).count();
                         (w >= *n, format!("at least {n} robots wrecked (got {w})"))
+                    }
+                    Expect::Heard(said, n) => {
+                        let got = ext.heard.as_ref().map_or(0, |h| h.count(*said));
+                        (
+                            got >= *n,
+                            format!("heard at least {n} {said:?} words (got {got})"),
+                        )
                     }
                     Expect::Alive => {
                         let h = healths
