@@ -109,6 +109,50 @@ turn it): raids by valley, the tier and job count, what's fitted and
 what's next, the keys at home, the memorial's count. It's the one place
 the whole arc is written down, in pencil, in the truck.
 
+## After the ladder (raid 30 and on)
+
+By raid 30 the driver has fitted everything, the letter is home, and the
+keys are the last thing the story asks. What keeps raid 40 from being
+raid 30 again? Three things, all physical, none of them a number to spend:
+
+**Deep jobs.** Past the ladder the driver's standing jobs only send you to
+the worst places: danger 3, and the underground sites (the shelter, the
+mine gallery, the service tunnel). They're the same three kinds (fetch,
+recover, scout) but never easy, and the cache they pay is three piles
+instead of two. Raid 40 is a raid to the Hollow or the quarry because the
+card says so, not because the loot table does.
+
+**Your order.** With the ladder done the driver will take an order: a
+second card under the job, pressed to cycle, says what you want his caches
+to lean to: ROUNDS (ammunition), MEDICINE, GADGETS, or ANYTHING (as
+before). His caches are still found, carried and got home; you choose what
+kind of pile is waiting. It's the one choice the economy gives you over
+what enters the world, and you earn it by finishing his jobs.
+
+**Upkeep.** Fittings wear. Every six raids each one wants a little from
+the stash, taken when you get home and said on the wrist ("Driver: took
+two scrap for the rack"):
+
+| Fitting | Upkeep, every 6 raids |
+| - | - |
+| Stash rack, wall shelf | 2 scrap metal each |
+| Bench vice | 1 gun oil |
+| Whip aerial | 1 electronics |
+| Medicine cabinet | 1 field dressing |
+
+If the stash hasn't got it, that fitting is **laid up** until it has (the
+next time home with the parts): the rack's room shrinks back (what's on it
+stays, nothing more goes in), the vice's recipes go, the aerial goes
+quiet, the cabinet stops. The career page lists what's laid up and what it
+wants. It starts six raids after each fitting, so it's a sink across the
+middle of the career too, and it's the reason scrap and oil are worth a
+pocket at raid 50. It's deliberately small: about one item a raid against
+the bots' 3-4 of the kinds it asks for.
+
+Cut from this: a reputation number (the order card is what reputation
+would have bought); per-fitting repairs at the bench (upkeep is taken, not
+crafted, so it never becomes a menu); rotating "seasons".
+
 ## Where it lives
 
 - `extraction_core::progression`: tiers, upgrades, contracts and how

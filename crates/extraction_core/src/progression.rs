@@ -62,6 +62,27 @@ impl Upgrade {
         }
     }
 
+    /// One word for it, on the wrist and the career page.
+    pub fn short(self) -> &'static str {
+        match self {
+            Upgrade::StashRack => "rack",
+            Upgrade::BenchVice => "vice",
+            Upgrade::Aerial => "aerial",
+            Upgrade::MedCabinet => "cabinet",
+            Upgrade::StashRack2 => "shelf",
+        }
+    }
+
+    /// What it wants every [`UPKEEP_EVERY`] raids, from the stash.
+    pub fn upkeep(self) -> &'static [(&'static str, u32)] {
+        match self {
+            Upgrade::StashRack | Upgrade::StashRack2 => &[("scrap_metal", 2)],
+            Upgrade::BenchVice => &[("gun_oil", 1)],
+            Upgrade::Aerial => &[("electronics", 1)],
+            Upgrade::MedCabinet => &[("field_dressing", 1)],
+        }
+    }
+
     /// What it does, in a few words, for the career page.
     pub fn does(self) -> &'static str {
         match self {
@@ -73,6 +94,58 @@ impl Upgrade {
         }
     }
 }
+
+/// A fitting's upkeep, at a homecoming.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Upkept {
+    /// Its parts were taken.
+    Paid,
+    /// The stash hadn't them: laid up.
+    LaidUp,
+    /// Laid up until now; its parts were found.
+    Back,
+}
+
+/// Raids between a fitting's upkeep.
+pub const UPKEEP_EVERY: u32 = 6;
+
+/// What the driver's caches can lean to, past the ladder.
+#[derive(Clone, Debug)]
+pub struct Order {
+    pub id: &'static str,
+    /// On the card.
+    pub name: &'static str,
+    /// The loot table each pile rolls from, and how many times.
+    pub table: &'static str,
+    pub rolls: u32,
+}
+
+pub const ORDERS: [Order; 4] = [
+    Order {
+        id: "anything",
+        name: "ANYTHING",
+        table: "driver_cache",
+        rolls: 1,
+    },
+    Order {
+        id: "rounds",
+        name: "ROUNDS",
+        table: "ammo_common",
+        rolls: 4,
+    },
+    Order {
+        id: "medicine",
+        name: "MEDICINE",
+        table: "medical",
+        rolls: 4,
+    },
+    Order {
+        id: "gadgets",
+        name: "GADGETS",
+        table: "gadgets",
+        rolls: 3,
+    },
+];
 
 /// What kinds of job a tier hands out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,10 +207,12 @@ pub const TIERS: [Tier; 4] = [
 ];
 
 /// After the last tier: the driver keeps asking.
+/// Past the ladder, deep jobs: the worst places (and underground), and
+/// bigger caches (`docs/PROGRESSION.md`, "After the ladder").
 pub const STANDING: Tier = Tier {
-    name: "Standing jobs",
+    name: "Deep jobs",
     jobs: 0,
-    danger: (2, 3),
+    danger: (3, 3),
     far: false,
     kinds: &[JobKind::Fetch, JobKind::Recover, JobKind::Scout],
     fits: &[],
@@ -327,11 +402,91 @@ pub struct Progress {
     /// Fetches the driver gave up waiting for (varies the next roll).
     #[serde(default)]
     pub swaps: u32,
+    /// What the driver's caches lean to, once the ladder's done (an
+    /// [`ORDERS`] id; none: anything).
+    #[serde(default)]
+    pub order: Option<String>,
+    /// When each fitting's upkeep is next due: (upgrade id, raid count).
+    #[serde(default)]
+    pub upkeep_due: Vec<(String, u32)>,
+    /// Fittings laid up for want of their upkeep (upgrade ids).
+    #[serde(default)]
+    pub laid_up: Vec<String>,
 }
 
 impl Progress {
     pub fn has(&self, u: Upgrade) -> bool {
         self.upgrades.iter().any(|id| id == u.id())
+    }
+
+    /// Fitted and not laid up.
+    pub fn works(&self, u: Upgrade) -> bool {
+        self.has(u) && !self.laid_up.iter().any(|id| id == u.id())
+    }
+
+    /// The ladder is done: deep jobs, and orders.
+    pub fn past_ladder(&self) -> bool {
+        self.tier as usize >= TIERS.len()
+    }
+
+    /// The order on the card, as [`ORDERS`] has it.
+    pub fn order_def(&self) -> &'static Order {
+        self.order
+            .as_deref()
+            .and_then(|id| ORDERS.iter().find(|o| o.id == id))
+            .unwrap_or(&ORDERS[0])
+    }
+
+    /// The next order on the card (pressing it).
+    pub fn next_order(&mut self) {
+        let i = ORDERS
+            .iter()
+            .position(|o| o.id == self.order_def().id)
+            .unwrap_or(0);
+        self.order = Some(ORDERS[(i + 1) % ORDERS.len()].id.to_owned());
+    }
+
+    /// Upkeep at a homecoming after raid `raids`: for each fitting due,
+    /// `take` is asked for its parts (and takes them if it can). Returns
+    /// what happened, for the driver to say.
+    pub fn upkeep(
+        &mut self,
+        raids: u32,
+        mut take: impl FnMut(&[(&'static str, u32)]) -> bool,
+    ) -> Vec<(Upgrade, Upkept)> {
+        let mut said = Vec::new();
+        for u in Upgrade::ALL {
+            if !self.has(u) {
+                continue;
+            }
+            let Some(i) = self.upkeep_due.iter().position(|(id, _)| id == u.id()) else {
+                // Fitted just now (or before there was upkeep): due in a
+                // while.
+                self.upkeep_due
+                    .push((u.id().to_owned(), raids + UPKEEP_EVERY));
+                continue;
+            };
+            if raids < self.upkeep_due[i].1 {
+                continue;
+            }
+            let was_laid_up = !self.works(u);
+            if take(u.upkeep()) {
+                self.upkeep_due[i].1 = raids + UPKEEP_EVERY;
+                self.laid_up.retain(|id| id != u.id());
+                said.push((
+                    u,
+                    if was_laid_up {
+                        Upkept::Back
+                    } else {
+                        Upkept::Paid
+                    },
+                ));
+            } else if !was_laid_up {
+                self.laid_up.push(u.id().to_owned());
+                said.push((u, Upkept::LaidUp));
+            }
+        }
+        said
     }
 
     /// The tier being worked on (standing jobs once they're all done).
@@ -348,14 +503,14 @@ impl Progress {
     pub fn stash_capacity(&self) -> f32 {
         let racks = [Upgrade::StashRack, Upgrade::StashRack2]
             .into_iter()
-            .filter(|u| self.has(*u))
+            .filter(|u| self.works(*u))
             .count();
         STASH_BASE + STASH_RACK * racks as f32
     }
 
     /// The bench's recipe tier (0: as it came; 1: with the vice).
     pub fn bench_tier(&self) -> u8 {
-        self.has(Upgrade::BenchVice) as u8
+        self.works(Upgrade::BenchVice) as u8
     }
 
     /// A job done. Returns what's fitted for it, if it finished a tier.
@@ -448,6 +603,24 @@ fn regions(map: &MapDef, (lo, hi): (u8, u8)) -> Vec<String> {
         .collect()
 }
 
+/// Underground sites in a valley: (its name, where its entrance is, its
+/// danger). Underground is never calm: danger 2 at least, or its region's.
+pub fn underground_sites(map: &MapDef) -> Vec<(String, [f32; 2], u8)> {
+    map.placements
+        .iter()
+        .filter_map(|p| {
+            let l = crate::underground::layout(&p.prefab)?;
+            let danger = map.region_at(p.at).map_or(2, |r| r.danger.max(2));
+            Some((l.name.clone(), p.at, danger))
+        })
+        .collect()
+}
+
+/// The underground site a Recover job's `region` names, if it names one.
+pub fn underground_site(map: &MapDef, region: &str) -> Option<(String, [f32; 2], u8)> {
+    underground_sites(map).into_iter().find(|s| s.0 == region)
+}
+
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
@@ -531,7 +704,24 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                 }
             }
             JobKind::Recover => {
-                let r = regions(v.map, tier.danger);
+                // Half the time, down into an underground site of the
+                // tier's danger, when the valley has one.
+                let (lo, hi) = tier.danger;
+                let below: Vec<String> = underground_sites(v.map)
+                    .into_iter()
+                    .filter(|s| (lo..=hi).contains(&s.2) || tier.jobs == 0)
+                    .map(|s| s.0)
+                    .collect();
+                let above = regions(v.map, tier.danger);
+                if !below.is_empty() && (rng.chance(0.5) || above.is_empty()) {
+                    return Job::Recover {
+                        map: v.id.to_owned(),
+                        region: below[rng.below(below.len())].clone(),
+                        at: None,
+                        place: None,
+                    };
+                }
+                let r = above;
                 if !r.is_empty() {
                     return Job::Recover {
                         map: v.id.to_owned(),
@@ -596,7 +786,13 @@ mod tests {
                     assert!(!places(map, tier.danger).is_empty(), "{id}: {}", tier.name);
                 }
                 if tier.kinds.contains(&JobKind::Recover) {
-                    assert!(!regions(map, tier.danger).is_empty(), "{id}: {}", tier.name);
+                    // Deep jobs may go underground instead.
+                    let below = tier.jobs == 0 && !underground_sites(map).is_empty();
+                    assert!(
+                        below || !regions(map, tier.danger).is_empty(),
+                        "{id}: {}",
+                        tier.name
+                    );
                 }
             }
         }
@@ -688,6 +884,93 @@ mod tests {
         for tier in WANTS {
             for w in tier.iter() {
                 assert!(w.0 == ANY_PARTS || cat.kind(w.0).is_some(), "{}", w.0);
+            }
+        }
+    }
+
+    #[test]
+    fn some_recover_jobs_go_underground_in_every_valley() {
+        let v = valleys();
+        let valleys = as_valleys(&v);
+        for (id, map) in &v {
+            let sites = underground_sites(map);
+            assert!(!sites.is_empty(), "{id} has an underground site");
+            assert!(sites.iter().all(|s| s.2 >= 2), "{sites:?}");
+            let below = (1..200).any(|done| {
+                let p = Progress {
+                    tier: 2,
+                    done,
+                    ..Default::default()
+                };
+                matches!(roll_job(&p, 5, id, &valleys),
+                    Job::Recover { region, .. } if underground_site(map, &region).is_some())
+            });
+            assert!(below, "{id}: no recover job ever went underground");
+        }
+    }
+
+    #[test]
+    fn fittings_want_upkeep_and_lie_up_without_it() {
+        let mut p = Progress::default();
+        p.credit(TIERS.iter().map(|t| t.jobs).sum());
+        assert!(p.past_ladder());
+        // The first homecoming sets every fitting's clock.
+        assert!(p.upkeep(30, |_| panic!("nothing due yet")).is_empty());
+        assert!(p.upkeep(35, |_| panic!("not yet")).is_empty());
+        // Due at 36: the stash has scrap but no electronics.
+        let said = p.upkeep(36, |parts| parts.iter().all(|(id, _)| *id == "scrap_metal"));
+        assert!(
+            said.contains(&(Upgrade::StashRack, Upkept::Paid)),
+            "{said:?}"
+        );
+        assert!(
+            said.contains(&(Upgrade::Aerial, Upkept::LaidUp)),
+            "{said:?}"
+        );
+        assert!(!p.works(Upgrade::Aerial));
+        assert!(p.works(Upgrade::StashRack));
+        assert!(!p.works(Upgrade::BenchVice), "no oil either");
+        assert_eq!(p.bench_tier(), 0, "a laid-up vice teaches nothing");
+        // Laid up isn't said twice; found parts bring it back.
+        let said = p.upkeep(37, |parts| parts.iter().all(|(id, _)| *id != "electronics"));
+        assert!(!said.iter().any(|s| s.0 == Upgrade::Aerial), "{said:?}");
+        let said = p.upkeep(38, |_| true);
+        assert!(said.contains(&(Upgrade::Aerial, Upkept::Back)), "{said:?}");
+        assert!(p.works(Upgrade::Aerial));
+        assert_eq!(p.bench_tier(), 1);
+        // Past the ladder, orders cycle through all and back.
+        assert_eq!(p.order_def().id, "anything");
+        for _ in 0..ORDERS.len() {
+            p.next_order();
+        }
+        assert_eq!(p.order_def().id, "anything");
+    }
+
+    #[test]
+    fn deep_jobs_go_to_the_worst_places() {
+        let v = valleys();
+        let valleys = as_valleys(&v);
+        for (id, map) in &v {
+            for done in 20..60 {
+                let p = Progress {
+                    tier: TIERS.len() as u32,
+                    done,
+                    ..Default::default()
+                };
+                match roll_job(&p, 9, id, &valleys) {
+                    Job::Scout { at, .. } => {
+                        assert_eq!(map.region_at(at).unwrap().danger, 3, "{id}")
+                    }
+                    Job::Recover { region, .. } => {
+                        let deep = underground_site(map, &region).is_some()
+                            || map
+                                .regions
+                                .iter()
+                                .any(|r| r.name == region && r.danger == 3);
+                        assert!(deep, "{id}: {region}");
+                    }
+                    Job::Fetch { .. } | Job::Letter => {}
+                }
             }
         }
     }

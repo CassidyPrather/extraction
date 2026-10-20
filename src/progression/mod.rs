@@ -37,6 +37,9 @@ pub struct JobDone;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TruckUpgradeProp(pub Upgrade);
 
+/// An underground site's rooms lie within this of its entrance.
+const UNDERGROUND_REACH: f32 = 60.0;
+
 /// The aerial warns of the Surge this many seconds out.
 pub const AERIAL_WARNING: f32 = 10.0 * 60.0;
 /// The cabinet holds at most this many dressings.
@@ -57,6 +60,10 @@ impl Plugin for ProgressionPlugin {
                 Update,
                 (
                     count_raids,
+                    upkeep,
+                    spawn_order_card,
+                    press_order_card,
+                    order_card_text,
                     job_done,
                     offer_job,
                     place_recorder,
@@ -206,6 +213,141 @@ pub fn gifts(u: Upgrade) -> &'static [(&'static str, u32, f32)] {
     }
 }
 
+/// Home from a raid: fittings due their upkeep take it from the stash, or
+/// lie up until they can (`Progress::upkeep`).
+#[allow(clippy::too_many_arguments)]
+fn upkeep(
+    mut commands: Commands,
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    mut progression: ResMut<Progression>,
+    mut stashes: Query<&mut Backpack, With<Stash>>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut was_out: Local<bool>,
+) {
+    let out = raid.phase != Phase::AtBase;
+    let home = !out && *was_out;
+    *was_out = out;
+    if !home || opts.map == crate::camp::TRAINING_YARD {
+        return;
+    }
+    let Some(mut stash) = stashes.iter_mut().next() else {
+        return;
+    };
+    let raids = raid.raids;
+    let said = progression.0.upkeep(raids, |parts| {
+        let mut taken: Vec<Entity> = Vec::new();
+        for (id, n) in parts {
+            let have: Vec<Entity> = stash
+                .contents
+                .iter()
+                .copied()
+                .filter(|e| !taken.contains(e))
+                .filter(|e| items.get(*e).is_ok_and(|i| catalog.get(i.kind()).id == *id))
+                .take(*n as usize)
+                .collect();
+            if (have.len() as u32) < *n {
+                return false;
+            }
+            taken.extend(have);
+        }
+        stash.contents.retain(|e| !taken.contains(e));
+        for e in taken {
+            commands.entity(e).despawn();
+        }
+        true
+    });
+    for (u, how) in said {
+        let parts = lines::parts(u.upkeep(), |id| want_name(&catalog, id).to_lowercase());
+        raid.say(match how {
+            extraction_core::progression::Upkept::Paid => lines::upkeep_paid(u.short(), &parts),
+            extraction_core::progression::Upkept::LaidUp => lines::laid_up(u.short(), &parts),
+            extraction_core::progression::Upkept::Back => lines::back_in_order(u.short()),
+        });
+    }
+}
+
+/// The order card, under the job: what the driver's caches lean to, once
+/// the ladder's done.
+#[derive(Component)]
+pub struct OrderCard;
+
+fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
+    for truck in &trucks {
+        commands.spawn((
+            Name::new("Order card"),
+            OrderCard,
+            crate::raid::truck::Pressable::Setting,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            Collider::cuboid(0.3, 0.12, 0.03),
+            CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::raid::bench::ScreenText {
+                text: String::new(),
+                size: Vec2::new(0.3, 0.12),
+                style: crate::raid::bench::ScreenStyle::Card,
+            },
+            // Under the request card.
+            Transform::from_xyz(-1.12, FLOOR + 1.42, 1.32)
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+            Visibility::Hidden,
+            ChildOf(truck),
+        ));
+    }
+}
+
+fn press_order_card(
+    mut events: MessageReader<crate::interact::InteractEvent>,
+    cards: Query<(), With<OrderCard>>,
+    mut progression: ResMut<Progression>,
+    mut raid: ResMut<Raid>,
+) {
+    for ev in events.read() {
+        let crate::interact::InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        if !cards.contains(*item) {
+            continue;
+        }
+        if !progression.0.past_ladder() {
+            raid.say(lines::ORDER_LATER);
+            continue;
+        }
+        progression.0.next_order();
+        let name = progression.0.order_def().name;
+        raid.say(lines::ordered(
+            &name[..1]
+                .to_uppercase()
+                .chars()
+                .chain(name[1..].to_lowercase().chars())
+                .collect::<String>(),
+        ));
+    }
+}
+
+fn order_card_text(
+    progression: Res<Progression>,
+    mut cards: Query<(&mut crate::raid::bench::ScreenText, &mut Visibility), With<OrderCard>>,
+) {
+    let open = progression.0.past_ladder();
+    let text = lines::order_card(progression.0.order_def().name);
+    for (mut c, mut vis) in &mut cards {
+        let want = if open {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
+        if open && c.text != text {
+            c.text = text.clone();
+        }
+    }
+}
+
 /// A job handed in: count it, and fit what a finished tier earns.
 fn job_done(
     mut commands: Commands,
@@ -339,17 +481,25 @@ fn place_recorder(
     if *tried % 30 != 1 {
         return;
     }
-    let in_region = |p: Vec3| {
-        zone.map
+    // An underground site's name: its rooms (below ground, near its
+    // entrance); else a region's.
+    let site = extraction_core::progression::underground_site(&zone.map, region);
+    let in_region = |p: Vec3| match &site {
+        Some((_, at, _)) => {
+            p.xz().distance(Vec2::from_array(*at)) < UNDERGROUND_REACH
+                && p.y < zone.ground(p.x, p.z) - 1.5
+        }
+        None => zone
+            .map
             .region_at([p.x, p.z])
-            .is_some_and(|r| r.name == *region)
+            .is_some_and(|r| r.name == *region),
     };
     let mut candidates: Vec<Vec3> = spots
         .iter()
         .flat_map(|s| s.0.iter().map(|s| s.at))
         .filter(|p| in_region(*p))
         .collect();
-    if candidates.is_empty() {
+    if candidates.is_empty() && site.is_none() {
         // No building spots loaded: the region's point of interest.
         candidates = zone
             .map
@@ -499,7 +649,7 @@ fn aerial_warning(
 ) {
     let now = raid.surge_in();
     let before = std::mem::replace(&mut *last, now);
-    if !progression.0.has(Upgrade::Aerial) || raid.phase == Phase::AtBase {
+    if !progression.0.works(Upgrade::Aerial) || raid.phase == Phase::AtBase {
         return;
     }
     if !(before > AERIAL_WARNING && now <= AERIAL_WARNING) {
@@ -608,7 +758,7 @@ fn stock_cabinet(
     catalog: Res<Catalog>,
 ) {
     if raid.phase != Phase::AtBase
-        || !progression.0.has(Upgrade::MedCabinet)
+        || !progression.0.works(Upgrade::MedCabinet)
         || progression.0.cabinet_raid >= raid.raids.max(1)
     {
         return;
@@ -681,6 +831,20 @@ pub fn career_page(
         .collect();
     if !fitted.is_empty() {
         lines.push(format!("Fitted: {}", fitted.join("; ")));
+    }
+    let laid: Vec<String> = Upgrade::ALL
+        .into_iter()
+        .filter(|u| progress.has(*u) && !progress.works(*u))
+        .map(|u| u.short().to_owned())
+        .collect();
+    if !laid.is_empty() {
+        lines.push(format!("Laid up: {}", laid.join(", ")));
+    }
+    if progress.past_ladder() {
+        lines.push(format!(
+            "Caches: {}",
+            progress.order_def().name.to_lowercase()
+        ));
     }
     lines.push(if raid.recalled {
         "The machines are recalled.".to_owned()
