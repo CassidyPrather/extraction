@@ -22,6 +22,10 @@ Prop space: metres, Y up, origin on the floor under the centre, the front
                      pt_tag on the front, pt_top on the lid
 - `depot_crate_small` the same family, 0.8 x 0.5 x 0.6: `lid`, pt_tag, and
                      pt_disc on the wire loop a collar disc hangs from
+- `depot_crate_long_open`, `depot_crate_small_open`  the same crates opened:
+                     hollow (zinc inside, the floor 6 cm up) with the lid
+                     swung back 105 degrees on its hinge; pt_top is the
+                     floor inside
 - `depot_disc`       that brass disc, 0.04 across, hole at the top
                      (origin at its centre)
 - `depot_intake_facade` a Custodian front for the kiosk at the ramp,
@@ -237,14 +241,20 @@ def depot_tagger():
 
 # --- Crates -------------------------------------------------------------------------------
 
-def crate(name, W, H, D, points_extra, strap_z, disc=False):
+def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
     """A white-painted steel crate: a body with skids and end handles, a
-    black stencil plate on the front, and a lid hinged on the back top edge
-    (shut), its straps buckled across."""
+    black stencil plate on the front, and a lid hinged on the back top edge,
+    its straps buckled across: shut, or (`open_`) the body hollow and the
+    lid swung back past upright onto its hinge."""
     reset()
     LID = 0.08
     b = Part("static_crate")
     b.box((W, H - LID, D), (0.0, (H - LID) / 2 + 0.03, 0.0), "Shell", bevel=0.01, segs=1)
+    if open_:
+        # Hollow it: walls 2 cm thick, the floor 6 cm up, zinc inside.
+        inside = Part("cut")
+        inside.box((W - 0.04, H, D - 0.04), (0.0, 0.09 + H / 2, 0.0), "Zinc", segs=1)
+        b.cut(inside, paint=True)
     for sx in (-1, 1):
         bar(b, (0.06, 0.03, D - 0.04), (sx * (W / 2 - 0.12), 0.015, 0.0), "Steel")
         bar(b, (0.012, 0.03, 0.18), (sx * (W / 2 + 0.006), H * 0.55, 0.0), "Black")
@@ -257,26 +267,31 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False):
                 segs=6, xf=T(W * 0.3, H * 0.4, -D / 2 - 0.004), closed=True)
     hinge = (0.0, H - LID + 0.03, D / 2)
     lid = Part("lid", origin=hinge)
+    # Open, the lid turns 105 degrees back about its hinge.
+    swing = RX(math.radians(105), about=hinge) if open_ else T()
     lid.box((W + 0.01, LID, D + 0.01), (0.0, H - LID / 2 + 0.03, 0.0), "Shell", bevel=0.01,
-            segs=1)
+            segs=1, xf=swing)
     for z in strap_z:
-        bar(lid, (W + 0.03, 0.006, 0.05), (0.0, H + 0.033, z), "Black")
-        bar(lid, (0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel")
+        lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.033, z), "Black", segs=1, xf=swing)
+        lid.box((0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel", segs=1, xf=swing)
     write(name, [b, lid], {
         "pt_tag": (W * 0.3, H * 0.62 - 0.02, -D / 2 - 0.01),
-        "pt_top": (0.0, H + 0.04, 0.0),
+        # Open, the top point is the crate's floor (what's in it).
+        "pt_top": (0.0, 0.09, 0.0) if open_ else (0.0, H + 0.04, 0.0),
         **points_extra,
     })
 
 
-def depot_crate_long():
-    crate("depot_crate_long", 2.1, 0.65 - 0.03, 0.7, {}, (-0.18, 0.18))
+def depot_crate_long(open_=False):
+    crate("depot_crate_long" + ("_open" if open_ else ""), 2.1, 0.65 - 0.03, 0.7, {},
+          (-0.18, 0.18), open_=open_)
 
 
-def depot_crate_small():
+def depot_crate_small(open_=False):
     W, H, D = 0.8, 0.5 - 0.03, 0.6
-    crate("depot_crate_small", W, H, D, {"pt_disc": (W * 0.3, H * 0.4 - 0.014, -D / 2 - 0.004)},
-          (0.0,), disc=True)
+    crate("depot_crate_small" + ("_open" if open_ else ""), W, H, D,
+          {"pt_disc": (W * 0.3, H * 0.4 - 0.014, -D / 2 - 0.004)}, (0.0,), disc=True,
+          open_=open_)
 
 
 def depot_disc():
@@ -399,6 +414,8 @@ if __name__ == "__main__":
     for name, build in (("depot_bin", depot_bin), ("depot_conveyor", depot_conveyor),
                         ("depot_tagger", depot_tagger), ("depot_crate_long", depot_crate_long),
                         ("depot_crate_small", depot_crate_small), ("depot_disc", depot_disc),
+                        ("depot_crate_long_open", lambda: depot_crate_long(True)),
+                        ("depot_crate_small_open", lambda: depot_crate_small(True)),
                         ("depot_cradle", depot_cradle),
                         ("depot_intake_facade", depot_intake_facade),
                         ("depot_sign", depot_sign)):

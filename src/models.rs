@@ -209,6 +209,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Glove",
     "Leather",
     "Padding",
+    // People (Lev): weathered skin, a dark wool coat.
+    "Skin",
+    "DarkWool",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -290,6 +293,8 @@ impl ModelMaterials {
                 m.perceptual_roughness = m.perceptual_roughness.max(0.75);
             }),
             "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
+            "DarkWool" => flat(materials, Color::srgb(0.14, 0.14, 0.15), 0.0, 0.95),
+            "Skin" => flat(materials, Color::srgb(0.6, 0.44, 0.36), 0.0, 0.6),
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
             // Instrument paint: the grey-green of survey and signals kit.
             "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
