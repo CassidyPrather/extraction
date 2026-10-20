@@ -772,6 +772,22 @@ mod tests {
         assert!(highest > 1.3, "the tin rose (to {highest:.2} m)");
     }
 
+    /// A round in flight, fired by no one: the only fields these tests
+    /// care about are where it goes and how heavy it is.
+    fn test_round(velocity: Vec3, mass_g: f32) -> crate::weapons::ballistics::Projectile {
+        crate::weapons::ballistics::Projectile {
+            velocity,
+            damage: 0.0,
+            shooter: None,
+            gun: Entity::PLACEHOLDER,
+            life: 2.0,
+            mods: Default::default(),
+            mass_g,
+            seed: 0,
+            passes: 0,
+        }
+    }
+
     fn player(app: &mut App) -> Entity {
         app.world_mut()
             .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
@@ -825,17 +841,7 @@ mod tests {
         let round = app
             .world_mut()
             .spawn((
-                crate::weapons::ballistics::Projectile {
-                    velocity: Vec3::X * speed,
-                    damage: 0.0,
-                    shooter: None,
-                    gun: Entity::PLACEHOLDER,
-                    life: 2.0,
-                    mods: Default::default(),
-                    mass_g: 8.0,
-                    seed: 0,
-                    passes: 0,
-                },
+                test_round(Vec3::X * speed, 8.0),
                 Transform::from_translation(from),
             ))
             .id();
@@ -1017,17 +1023,7 @@ mod tests {
             let round = app
                 .world_mut()
                 .spawn((
-                    crate::weapons::ballistics::Projectile {
-                        velocity: Vec3::NEG_Z * 330.0,
-                        damage: 0.0,
-                        shooter: None,
-                        gun: Entity::PLACEHOLDER,
-                        life: 2.0,
-                        mods: Default::default(),
-                        mass_g: 6.1,
-                        seed: 0,
-                        passes: 0,
-                    },
+                    test_round(Vec3::NEG_Z * 330.0, 6.1),
                     Transform::from_translation(chest + Vec3::new(0.0, 1.0, 12.0)),
                 ))
                 .id();
