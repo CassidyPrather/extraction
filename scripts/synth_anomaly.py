@@ -349,6 +349,33 @@ def robot_voice(seed, syllables=None):
     return np.stack([x, x])
 
 
+def generator(seed=60, seconds=8.0):
+    """A small diesel generator running, close to (a stand-in until a
+    recording can be had): its firing at about 27 Hz with the harmonics a
+    single cylinder's pulses make, the rate wandering a little, a
+    mechanical rattle riding each firing, and the exhaust's breath."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    out = []
+    for ch in range(2):
+        jitter = 1.0 + 0.012 * lowpass(rng.normal(size=n), 3.0) / 0.05
+        f = 27.0 * jitter
+        phase = np.cumsum(f) / SR
+        # Firing pulses: a sharp rise and a decay each cycle.
+        cyc = phase % 1.0
+        pulse = np.exp(-cyc / 0.12) * (1 + 0.15 * rng.normal(size=n))
+        thump = lowpass(pulse - pulse.mean(), 400)
+        # The rattle: bursts of bright noise riding each firing.
+        n_hi = rng.normal(size=n)
+        rattle = (n_hi - lowpass(n_hi, 1800)) * np.exp(-cyc / 0.04)
+        exhaust = lowpass(rng.normal(size=n), 250) - lowpass(rng.normal(size=n), 60)
+        x = 1.0 * thump / np.max(np.abs(thump)) + 0.25 * rattle / np.max(np.abs(rattle)) \
+            + 0.4 * exhaust / np.max(np.abs(exhaust))
+        out.append(loop_crossfade(x, 0.5))
+    return np.stack(out)
+
+
 def oneshots(entries, key, out, make, seeds):
     files = []
     name = key.split("/")[1]
@@ -371,6 +398,12 @@ def main():
     loopset(entries, "mirror_shimmer", mirror_shimmer())
     oneshots(entries, "anomaly/mirror_blink", OUT, mirror_blink, [41, 42, 43])
     oneshots(entries, "anomaly/reveal", OUT, reveal, [0, 1, 2])
+    path, secs = write("generator", generator(), out=ROOT / "assets" / "audio" / "machines")
+    entries["machines/generator"] = {
+        "type": "loop", "channels": 2, "loop": True,
+        "files": [{"file": str(path.relative_to(ROOT / "assets")), "seconds": round(secs, 3),
+                   "source": "synth:scripts/synth_anomaly.py"}],
+    }
     oneshots(entries, "machines/robot_voice", ROOT / "assets" / "audio" / "machines",
              robot_voice, [50, 51, 52, 53, 54, 55, 56, 57])
     oneshots(entries, "machines/detector_click", ROOT / "assets" / "audio" / "machines",

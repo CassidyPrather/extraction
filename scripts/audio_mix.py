@@ -44,7 +44,7 @@ RANGE_TARGETS = {
     "anomaly.well": (15, 10), "anomaly.mirror": (15, 10), "anomaly.reveal": (15, 8),
     "detector.click": (3, 2), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2), "chatter.voice": (3, 2),
-    "robot.voice": (30, 15),
+    "robot.voice": (30, 15), "power.generator": (40, 20),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
     "truck.arrive": (60, 15), "robot.notice": (30, 15), "robot.investigate": (30, 15),
     "robot.lost": (25, 10), "robot.callout": (40, 20), "walker.aim": (60, 30),
