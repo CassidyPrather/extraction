@@ -287,6 +287,76 @@ pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
     })
 }
 
+// --- The detector ladder ----------------------------------------------------
+
+/// What a detector can tell you, cheapest first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DetectorTier {
+    /// Ticks for the nearest anomaly's edge, wherever it is.
+    Clicker,
+    /// Held, hears only what it points at, and pings for a stone in its
+    /// cone.
+    Sweep,
+    /// Held, a screen shows the stones and anomalies round you.
+    Bear,
+}
+
+impl DetectorTier {
+    pub fn of(id: &str) -> Option<DetectorTier> {
+        match id {
+            "detector" => Some(DetectorTier::Clicker),
+            "detector_sweep" => Some(DetectorTier::Sweep),
+            "detector_bear" => Some(DetectorTier::Bear),
+            _ => None,
+        }
+    }
+}
+
+/// A sweep's cone, half-angle in degrees: what it points at, it hears.
+pub const SWEEP_CONE_DEG: f32 = 25.0;
+/// How far a sweep hears a stone, and a Bear shows one, metres.
+pub const STONE_RANGE: f32 = 20.0;
+/// How far a Bear's screen reaches for anomalies, metres.
+pub const BEAR_RANGE: f32 = 25.0;
+
+/// Whether `to` (from the detector) lies within `half_deg` of `dir`.
+pub fn in_cone(dir: [f32; 3], to: [f32; 3], half_deg: f32) -> bool {
+    let l = |v: [f32; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    let (ld, lt) = (l(dir), l(to));
+    if ld < 1e-6 || lt < 1e-6 {
+        return lt < 1e-6;
+    }
+    let cos = (dir[0] * to[0] + dir[1] * to[1] + dir[2] * to[2]) / (ld * lt);
+    cos >= half_deg.to_radians().cos()
+}
+
+/// Seconds between a sweep's stone pings `d` metres from a stone in its
+/// cone: slow at the edge of its range, quick close by.
+pub fn stone_ping_interval(d: f32) -> Option<f32> {
+    if d >= STONE_RANGE {
+        return None;
+    }
+    let t = (d / STONE_RANGE).clamp(0.0, 1.0);
+    Some(0.15 + 1.1 * t)
+}
+
+/// Where something at `rel` (x, z from the detector, world axes) shows on
+/// a Bear's round screen held facing `yaw` (radians, 0 = -Z): screen x
+/// right, y up (the way you face), both -1..1 across `range`. None past it.
+pub fn bear_blip(rel: [f32; 2], yaw: f32, range: f32) -> Option<[f32; 2]> {
+    let d = (rel[0] * rel[0] + rel[1] * rel[1]).sqrt();
+    if d > range {
+        return None;
+    }
+    // Into the holder's frame: forward is -Z turned by yaw.
+    let (s, c) = yaw.sin_cos();
+    let fwd = [-s, -c];
+    let right = [c, -s];
+    let x = rel[0] * right[0] + rel[1] * right[1];
+    let y = rel[0] * fwd[0] + rel[1] * fwd[1];
+    Some([x / range, y / range])
+}
+
 // --- What artifacts cost ----------------------------------------------------
 
 /// A carried featherstone wants home: lifts within this many metres of it
@@ -749,6 +819,33 @@ mod tests {
         assert!(heat_left(HOT_SECS * 0.5, false) > 0.4);
         assert_eq!(heat_left(HOT_SECS, false), 0.0);
         assert_eq!(heat_left(0.0, true), 0.0);
+    }
+
+    #[test]
+    fn the_detector_ladder_reads_what_it_should() {
+        assert_eq!(DetectorTier::of("detector"), Some(DetectorTier::Clicker));
+        assert_eq!(DetectorTier::of("detector_bear"), Some(DetectorTier::Bear));
+        assert_eq!(DetectorTier::of("bolt"), None);
+        // A sweep hears ahead, not to the side.
+        assert!(in_cone([0.0, 0.0, -1.0], [1.0, 0.0, -5.0], SWEEP_CONE_DEG));
+        assert!(!in_cone([0.0, 0.0, -1.0], [5.0, 0.0, -1.0], SWEEP_CONE_DEG));
+        assert!(stone_ping_interval(2.0).unwrap() < stone_ping_interval(15.0).unwrap());
+        assert_eq!(stone_ping_interval(STONE_RANGE), None);
+        // Facing -Z: a stone 10 m ahead is up the screen, one to the east
+        // is to the right; turned to face east, the east one is ahead.
+        let ahead = bear_blip([0.0, -10.0], 0.0, 20.0).unwrap();
+        assert!(
+            ahead[0].abs() < 1e-5 && (ahead[1] - 0.5).abs() < 1e-5,
+            "{ahead:?}"
+        );
+        let east = bear_blip([10.0, 0.0], 0.0, 20.0).unwrap();
+        assert!(
+            (east[0] - 0.5).abs() < 1e-5 && east[1].abs() < 1e-5,
+            "{east:?}"
+        );
+        let turned = bear_blip([10.0, 0.0], -std::f32::consts::FRAC_PI_2, 20.0).unwrap();
+        assert!((turned[1] - 0.5).abs() < 1e-4, "{turned:?}");
+        assert!(bear_blip([30.0, 0.0], 0.0, 20.0).is_none());
     }
 
     #[test]

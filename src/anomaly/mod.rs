@@ -158,6 +158,7 @@ impl Plugin for AnomalyPlugin {
             .add_message::<ArcStrike>()
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
+            .add_message::<detector::StonePing>()
             .add_message::<wells::EnteredWell>()
             .add_message::<costs::ArtifactBite>()
             .add_message::<harvest::Burned>()

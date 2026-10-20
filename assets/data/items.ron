@@ -396,6 +396,18 @@
             tags: ["metal", "electronics"],
         ),
         (
+            id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
+            description: "A survey detector with a long whip antenna. Held, it hears only what it points at, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
+            category: Gadget, size: Small, mass: 0.45, bulk: 0.35,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "detector_bear", dims: Some((0.09, 0.05, 0.16)), name: "Bear detector",
+            description: "The Authority's own field set, its round green screen scratched. Held up, it shows the stones near you as dots and the anomalies as rings, the way you face.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4,
+            tags: ["metal", "electronics"],
+        ),
+        (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,

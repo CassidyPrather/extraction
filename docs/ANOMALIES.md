@@ -53,10 +53,18 @@ Rules: `extraction_core::anomaly::surge_*`; game side `src/anomaly/surge.rs`.
   workshops), a nut, a tin. The moment a loose thing first crosses into an
   anomaly it shows itself for six seconds: its light, particles and haze
   surge, whatever kind it is.
-- **The detector.** Carried anywhere on you it clicks for the nearest
-  anomaly's edge: about 1.5 s apart at 25 m, a rattle at the edge.
-  Held, it listens the way its antenna points (one behind you sounds half
-  as far again), so sweep it about. Its lamp blinks with each click.
+- **Detectors**, cheapest first (`DetectorTier`):
+  - **Clicker** (`detector`): carried anywhere on you it clicks for the
+    nearest anomaly's edge, about 1.5 s apart at 25 m, a rattle at the
+    edge. Held, it favours the way its antenna points.
+  - **Sweep** (`detector_sweep`, rarer): held, it hears only what lies in
+    a 25° cone ahead, so you sweep to find it; and a second, higher
+    voice (`StonePing`, its green lamp) sings for a loose stone in the
+    cone within 20 m, quicker the nearer. Worn, it's a plain clicker.
+  - **Bear** (`detector_bear`, rarest): held up, its round screen shows
+    the stones within 20 m as bright dots and the anomalies within 25 m
+    as dim ones sized by their reach, the way you face. It still clicks.
+  Shot: `docs/shots/anomalies/detectors.png`.
 
 ## Artifacts: what they give, what they cost, how to get them
 
