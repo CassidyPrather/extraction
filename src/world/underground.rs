@@ -164,6 +164,53 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
             prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
+    // The drains' fittings: a valve wheel on its spindle, a pump's
+    // barrel and handle.
+    for d in &l.drains {
+        let up = if d.kind == ug::DrainKind::Valve {
+            1.1
+        } else {
+            0.95
+        };
+        let Some(pose) = wall_pose(l, &d.room, d.at, d.rot, up, 0.12) else {
+            continue;
+        };
+        let face = pose.rotation;
+        match d.kind {
+            ug::DrainKind::Valve => {
+                b.piece(
+                    Shape::Cylinder(0.28, 0.05),
+                    Transform::from_translation(pose.translation)
+                        .with_rotation(face * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    Mat::RustyMetal,
+                    false,
+                );
+                b.piece(
+                    Shape::Cylinder(0.05, 0.3),
+                    Transform::from_translation(pose.translation + face * Vec3::Z * 0.12)
+                        .with_rotation(face * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    Mat::DarkMetal,
+                    false,
+                );
+            }
+            ug::DrainKind::Pump => {
+                let foot = pose.translation - Vec3::Y * 0.95 + face * Vec3::Z * 0.05;
+                b.piece(
+                    Shape::Cylinder(0.14, 0.9),
+                    Transform::from_translation(foot + Vec3::Y * 0.45),
+                    Mat::PaintedMetal,
+                    true,
+                );
+                b.piece(
+                    Shape::Box(Vec3::new(0.06, 0.06, 0.7)),
+                    Transform::from_translation(pose.translation - face * Vec3::Z * 0.1)
+                        .with_rotation(face * Quat::from_rotation_x(-0.4)),
+                    Mat::DarkMetal,
+                    false,
+                );
+            }
+        }
+    }
     // Last, so each door can swing clear of what's there.
     doors(&mut b, l, r, &m);
     b.finish()
@@ -1103,8 +1150,12 @@ impl Plugin for UndergroundPlugin {
                 depot_visits,
                 fill_lost_bins,
                 spawn_kept_crates,
+                wire_drains,
+                work_drains.after(wire_drains),
             ),
         )
+        .init_resource::<Levels>()
+        .add_message::<BasinDrained>()
         .add_message::<DepotEntered>()
         .add_message::<CarriedOutOfDepot>();
     }
@@ -1502,6 +1553,7 @@ impl Plugin for UndergroundVisualsPlugin {
                 near_doors_only,
                 show_below,
                 water_surfaces,
+                basin_levels,
                 kept_crate_looks,
             ),
         )
@@ -1616,11 +1668,12 @@ fn water_surfaces(
             alpha_mode: AlphaMode::Blend,
             ..default()
         });
-        // By the water's surface (cm): each level's floods apart.
+        // By the water's surface (cm): each level's floods apart. (A
+        // basin's water is its own, below.)
         let class = |i: usize, j: usize| {
             let c = j * r.nx + i;
             let w = r.water[c];
-            (w > 0.0).then(|| ((r.floors[c] + w) * 100.0).round() as i32)
+            (w > 0.0 && r.basin[c].is_none()).then(|| ((r.floors[c] + w) * 100.0).round() as i32)
         };
         for (lo, hi, level) in rects(r, class) {
             let y = level as f32 / 100.0;
@@ -1634,6 +1687,50 @@ fn water_surfaces(
                 Transform::from_xyz(centre.x, y, centre.z),
                 ChildOf(e),
             ));
+        }
+        // A basin's surface over all its cells, at its level (where a
+        // floor's higher, the floor hides it), moved as the level falls.
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        for (k, basin) in l.basins.iter().enumerate() {
+            let class = |i: usize, j: usize| (r.basin[j * r.nx + i] == Some(k as u16)).then_some(0);
+            for (lo, hi, _) in rects(r, class) {
+                let (size, centre) = rect_box(r, lo, hi, basin.level - 0.01, basin.level);
+                commands.spawn((
+                    Name::new("Basin"),
+                    BasinSurface(k),
+                    Mesh3d(meshes.add(Plane3d::default().mesh().size(size.x, size.z))),
+                    MeshMaterial3d(water.clone()),
+                    bevy::light::NotShadowCaster,
+                    Below,
+                    Transform::from_xyz(centre.x, basin.level, centre.z),
+                    ChildOf(e),
+                ));
+            }
+        }
+    }
+}
+
+/// A basin's water surface (its index in the layout's basins).
+#[derive(Component)]
+pub struct BasinSurface(pub usize);
+
+/// Client: basins' surfaces at their levels now.
+fn basin_levels(
+    levels: Res<Levels>,
+    buildings: Query<&super::buildings::Building>,
+    mut surfaces: Query<(&BasinSurface, &ChildOf, &mut Transform)>,
+) {
+    if !levels.is_changed() {
+        return;
+    }
+    for (s, parent, mut t) in &mut surfaces {
+        let Ok(b) = buildings.get(parent.parent()) else {
+            continue;
+        };
+        if let Some(level) = levels.level(&b.prefab, s.0) {
+            t.translation.y = level;
         }
     }
 }
@@ -1944,7 +2041,7 @@ fn no_rain_below(
 /// Inside a site (below the ground, on its floor): `Some`, with the water
 /// over the floor there, if any (world y of its surface). Outside every
 /// site: `None`, and the ground's own water applies.
-pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
+pub fn site_water(zone: &Zone, levels: Option<&Levels>, feet: Vec3) -> Option<Option<f32>> {
     for site in ug::placed(&zone.map) {
         let Some(r) = ug::raster(&site.id) else {
             continue;
@@ -1955,11 +2052,214 @@ pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
         let floor = footing + f;
         if feet.y > floor - 0.5 && feet.y < floor + 4.5 && floor < zone.ground(feet.x, feet.z) - 0.5
         {
-            let w = r.water_at(local);
+            // A basin's water stands at its level now, wherever its floor.
+            let live = r
+                .basin_at(local)
+                .and_then(|b| levels?.level(&site.id, b as usize));
+            let w = match live {
+                Some(level) => (level - f).max(0.0),
+                None => r.water_at(local),
+            };
             return Some((w > 0.0).then_some(floor + w));
         }
     }
     None
+}
+
+/// Every site's basins' levels now (site y), by site id; set from the
+/// layouts as the sites are built, lowered by their drains.
+#[derive(Resource, Default, Debug, Clone)]
+pub struct Levels(pub HashMap<String, Vec<f32>>);
+
+impl Levels {
+    pub fn level(&self, site: &str, basin: usize) -> Option<f32> {
+        self.0.get(site).and_then(|v| v.get(basin)).copied()
+    }
+}
+
+/// A valve wheel or a hand pump ([`ug::Drain`]): press it.
+#[derive(Component, Debug)]
+pub struct DrainControl {
+    pub site: Entity,
+    pub drain: usize,
+    /// A valve once turned: draining.
+    pub open: bool,
+}
+
+/// A basin has gone down as far as its drains take it.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct BasinDrained {
+    pub site: Entity,
+    pub basin: usize,
+}
+
+/// Where a fitting on a room's wall is, building space, facing into the
+/// room (its turned -Z), `up` over the floor and `out` off the wall.
+fn wall_pose(
+    l: &Layout,
+    room: &str,
+    at: [f32; 2],
+    rot: f32,
+    up: f32,
+    out: f32,
+) -> Option<Transform> {
+    let room = l.rooms.iter().find(|r| r.id == room)?;
+    let q = Quat::from_rotation_y(-rot.to_radians());
+    let p = Vec3::new(room.at[0] + at[0], l.floor_of(room), room.at[1] + at[1]);
+    Some(
+        Transform::from_translation(p + Vec3::Y * up + q * Vec3::new(0.0, 0.0, -out))
+            .with_rotation(q),
+    )
+}
+
+/// Logic, as sites are built: their basins' levels, and a control on each
+/// drain.
+fn wire_drains(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+    mut levels: ResMut<Levels>,
+) {
+    for (site, b) in &buildings {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        if l.basins.is_empty() {
+            continue;
+        }
+        levels
+            .0
+            .insert(b.prefab.clone(), l.basins.iter().map(|b| b.level).collect());
+        for (k, d) in l.drains.iter().enumerate() {
+            let up = if d.kind == ug::DrainKind::Valve {
+                1.1
+            } else {
+                0.95
+            };
+            let Some(pose) = wall_pose(l, &d.room, d.at, d.rot, up, 0.12) else {
+                continue;
+            };
+            commands.spawn((
+                Name::new(match d.kind {
+                    ug::DrainKind::Valve => "Valve wheel",
+                    ug::DrainKind::Pump => "Hand pump",
+                }),
+                DrainControl {
+                    site,
+                    drain: k,
+                    open: false,
+                },
+                crate::raid::truck::Pressable::BenchRun,
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Collider::cuboid(0.4, 0.4, 0.2),
+                CollisionLayers::new(super::Layer::Item, LayerMask::NONE),
+                pose,
+                Visibility::default(),
+                ChildOf(site),
+            ));
+        }
+    }
+}
+
+/// Working the drains: a valve turned drains its basin on its own (a
+/// gurgle the crawlers hear), a pump stroke lowers it a little; each
+/// down to its level and no further.
+#[allow(clippy::too_many_arguments)]
+fn work_drains(
+    mut events: MessageReader<crate::interact::InteractEvent>,
+    mut controls: Query<(&mut DrainControl, &GlobalTransform)>,
+    buildings: Query<&super::buildings::Building>,
+    mut levels: ResMut<Levels>,
+    time: Res<Time>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut drained: MessageWriter<BasinDrained>,
+    mut raid: ResMut<crate::raid::Raid>,
+) {
+    for ev in events.read() {
+        let crate::interact::InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        let Ok((mut c, at)) = controls.get_mut(*item) else {
+            continue;
+        };
+        let Some(d) = buildings
+            .get(c.site)
+            .ok()
+            .and_then(|b| ug::layout(&b.prefab))
+            .and_then(|l| l.drains.get(c.drain))
+        else {
+            continue;
+        };
+        match d.kind {
+            ug::DrainKind::Valve if !c.open => {
+                c.open = true;
+                raid.say("The wheel shrieks round. Somewhere below, water starts to move.");
+                noise.write(crate::robots::Noise {
+                    at: at.translation(),
+                    radius: 20.0,
+                    source: None,
+                });
+            }
+            ug::DrainKind::Pump => {
+                let b = buildings.get(c.site).unwrap();
+                let basin = basin_of(&b.prefab, &d.basin);
+                if let Some((k, level)) = basin.and_then(|k| {
+                    levels
+                        .0
+                        .get_mut(&b.prefab)
+                        .and_then(|v| v.get_mut(k))
+                        .map(|l| (k, l))
+                }) {
+                    let was = *level;
+                    *level = (*level - d.rate).max(d.to);
+                    if was > d.to && *level <= d.to {
+                        drained.write(BasinDrained {
+                            site: c.site,
+                            basin: k,
+                        });
+                    }
+                }
+                noise.write(crate::robots::Noise {
+                    at: at.translation(),
+                    radius: 12.0,
+                    source: None,
+                });
+            }
+            _ => {}
+        }
+    }
+    // Open valves drain.
+    let dt = time.delta_secs();
+    for (c, _) in &controls {
+        let Ok(b) = buildings.get(c.site) else {
+            continue;
+        };
+        let Some(d) = ug::layout(&b.prefab).and_then(|l| l.drains.get(c.drain)) else {
+            continue;
+        };
+        if d.kind != ug::DrainKind::Valve || !c.open {
+            continue;
+        }
+        let Some(k) = basin_of(&b.prefab, &d.basin) else {
+            continue;
+        };
+        if let Some(level) = levels.0.get_mut(&b.prefab).and_then(|v| v.get_mut(k)) {
+            if *level > d.to {
+                *level = (*level - d.rate * dt).max(d.to);
+                if *level <= d.to {
+                    drained.write(BasinDrained {
+                        site: c.site,
+                        basin: k,
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn basin_of(site: &str, id: &str) -> Option<usize> {
+    ug::layout(site)?.basins.iter().position(|b| b.id == id)
 }
 
 /// Where the floor is under a world point, if it's inside an underground
@@ -3017,6 +3317,145 @@ mod tests {
                 "{name} at {at:?}: {site:?}"
             );
         }
+    }
+
+    /// The pump station, drained: the sump's over your head at the start;
+    /// a bot turns the inlet's valve in its dry gallery, then (the inlet
+    /// down) the screens' valve at the inlet's far wall, then (the
+    /// screens down) works the hand pump in the screen room till the sump
+    /// is empty, and walks down into it dry-shod.
+    #[test]
+    fn the_pump_station_drains() {
+        use crate::bot::{Bot, Task};
+        use crate::rig::LocalPlayer;
+        use crate::sim::indoor::{BuildingPlan, plan_buildings};
+        const SITE: &str = "pump_marrow";
+        #[derive(Resource, Default)]
+        struct Drained(Vec<usize>);
+        let mut app = app("marrow_creek");
+        app.init_resource::<Drained>().add_systems(
+            Update,
+            |mut m: MessageReader<BasinDrained>, mut d: ResMut<Drained>| {
+                d.0.extend(m.read().map(|m| m.basin));
+            },
+        );
+        let zone = app.world().resource::<Zone>().clone();
+        let plan: BuildingPlan = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &super::super::buildings::Building, &Transform)>,
+                 d: Query<(Entity, &super::super::buildings::DoorLeaf, &ChildOf)>| {
+                    plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == SITE)
+            .expect("the pump station placed");
+        let l = ug::layout(SITE).unwrap();
+        let sump = l.rooms.iter().find(|r| r.id == "sump").unwrap();
+        let bottom = plan.xf.transform_point(Vec3::new(
+            sump.at[0] + 1.0,
+            l.floor_of(sump) + 0.05,
+            sump.at[1],
+        ));
+        let depth = |app: &App| {
+            let levels = app.world().resource::<Levels>();
+            site_water(&zone, Some(levels), bottom)
+                .flatten()
+                .map_or(0.0, |w| w - bottom.y)
+        };
+        assert!(depth(&app) > 2.0, "the sump's deep: {}", depth(&app));
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let entry = *plan
+            .entries
+            .iter()
+            .min_by(|a, b| a.length().total_cmp(&b.length()))
+            .unwrap();
+        let start = plan.to_world(entry);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(start.x, zone.ground(start.x, start.z) + 0.1, start.z);
+        app.update();
+        let run = |app: &mut App, tasks: Vec<Task>, what: &str| {
+            app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+            for _ in 0..90 * 150 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let bot = app.world().get::<Bot>(player).unwrap();
+            assert_eq!(bot.failed, 0, "{what}: {:?}", bot.log);
+        };
+        let route = |app: &App, to: Vec3, within: f32| {
+            let pos = app.world().get::<Transform>(player).unwrap().translation;
+            crate::sim::raider::indoor_route(&plan, pos, plan.to_local(to).xz(), within)
+                .unwrap_or_else(|| panic!("no route from {pos:?} to {to:?}"))
+        };
+        let level = |app: &App, b: usize| app.world().resource::<Levels>().level(SITE, b).unwrap();
+        let mut controls: Vec<(usize, Entity, Vec3)> = app
+            .world_mut()
+            .query::<(Entity, &DrainControl, &GlobalTransform)>()
+            .iter(app.world())
+            .filter(|(_, c, _)| c.site == plan.entity)
+            .map(|(e, c, g)| (c.drain, e, g.translation()))
+            .collect();
+        controls.sort_by_key(|c| c.0);
+        assert_eq!(controls.len(), 3);
+        for (k, control, at) in controls {
+            let d = &l.drains[k];
+            let b = l.basins.iter().position(|x| x.id == d.basin).unwrap();
+            let mut tasks = route(&app, at, 0.6);
+            let strokes = if d.kind == ug::DrainKind::Pump {
+                ((level(&app, b) - d.to) / d.rate).ceil() as usize + 1
+            } else {
+                1
+            };
+            for _ in 0..strokes {
+                tasks.push(Task::Press(control));
+                tasks.push(Task::Wait(0.3));
+            }
+            run(&mut app, tasks, &format!("to drain {k}"));
+            // A valve takes its time.
+            for _ in 0..90 * 60 {
+                if level(&app, b) <= d.to + 1e-3 {
+                    break;
+                }
+                app.update();
+            }
+            app.update();
+            assert!(
+                level(&app, b) <= d.to + 1e-3,
+                "basin {} at {} after drain {k}",
+                d.basin,
+                level(&app, b)
+            );
+        }
+        let mut drained = app.world().resource::<Drained>().0.clone();
+        drained.sort();
+        drained.dedup();
+        assert_eq!(drained, vec![0, 1, 2], "every basin drained");
+        // Down into the sump, dry.
+        let tasks = route(&app, bottom, 0.6);
+        run(&mut app, tasks, "into the sump");
+        let at = app.world().get::<Transform>(player).unwrap().translation;
+        assert!(at.xz().distance(bottom.xz()) < 1.5, "in the sump: {at:?}");
+        assert!(depth(&app) < 0.01, "the sump's dry: {}", depth(&app));
+        assert!(
+            app.world()
+                .get::<crate::player::Body>(player)
+                .unwrap()
+                .wading
+                < 0.05,
+            "dry-shod"
+        );
     }
 
     /// The Depot's deep job, end to end: with the Ledger job on the card the

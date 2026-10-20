@@ -207,6 +207,7 @@ pub fn move_bodies(
     move_and_slide: MoveAndSlide,
     time: Res<Time>,
     zone: Res<Zone>,
+    levels: Option<Res<crate::world::underground::Levels>>,
     mut steps: MessageWriter<Footstep>,
 ) {
     let dt = time.delta_secs();
@@ -234,7 +235,7 @@ pub fn move_bodies(
         // Water: wading drags at you; deep enough and you float.
         let feet = root.translation + under;
         // (Underground, a site's own floods; the ground's water is above.)
-        let water = crate::world::underground::site_water(&zone, feet)
+        let water = crate::world::underground::site_water(&zone, levels.as_deref(), feet)
             .unwrap_or_else(|| zone.hm.water_level([feet.x, feet.z]));
         let depth = water.map_or(0.0, |w| (w - feet.y).max(0.0));
         body.wading = depth;

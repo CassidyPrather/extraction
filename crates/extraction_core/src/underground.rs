@@ -1049,7 +1049,8 @@ impl Raster {
     /// The floor under a site-space point, if it's an open cell.
     /// The basin a site point's water belongs to, if any.
     pub fn basin_at(&self, p: P2) -> Option<u16> {
-        self.cell_of(p).and_then(|(i, j)| self.basin[j * self.nx + i])
+        self.cell_of(p)
+            .and_then(|(i, j)| self.basin[j * self.nx + i])
     }
 
     pub fn floor_at(&self, p: P2) -> Option<f32> {
@@ -1321,7 +1322,10 @@ pub fn check(l: &Layout) -> Vec<String> {
                 let at = add(room.at, d.at);
                 let front = add(at, turn([0.0, -0.9], d.rot));
                 if !r.at(at).open() || !r.at(front).flat() {
-                    bad.push(format!("{}: its drain is in the rock or faces the wall", room.id));
+                    bad.push(format!(
+                        "{}: its drain is in the rock or faces the wall",
+                        room.id
+                    ));
                 }
             }
         }
