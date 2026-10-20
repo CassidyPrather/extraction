@@ -431,6 +431,12 @@
         (id: "wristwatch", name: "Stopped wristwatch", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
         (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
         (id: "chess_piece", name: "Wooden chess knight", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        // The last of the driver's jobs (`progression`, `docs/LORE.md`).
+        (
+            id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",
+            description: "A folded page in a careful hand, addressed to Lev.",
+            category: Curio, size: Tiny, mass: 0.01, bulk: 0.01, tags: ["paper"],
+        ),
         // What the driver's Recover jobs send you for (`progression`).
         (
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",

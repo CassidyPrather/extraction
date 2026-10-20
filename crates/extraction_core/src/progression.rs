@@ -148,6 +148,13 @@ pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
 pub const STASH_RACK: f32 = 100.0;
 
+/// The last job of the ladder: what's on the table in the house by the
+/// well in Marrow Creek (Hana's letter, `docs/LORE.md`).
+pub const LETTER_ITEM: &str = "hana_letter";
+pub const LETTER_MAP: &str = "marrow_creek";
+/// The "Village note" on that table.
+pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
+
 /// Raids the driver waits on a fetch before asking for something else.
 pub const FETCH_PATIENCE: u32 = 4;
 
@@ -232,6 +239,9 @@ pub enum Job {
         #[serde(default)]
         place: Option<String>,
     },
+    /// Bring home what's on the table in the house by the well
+    /// ([`LETTER_ITEM`]): the last job of the last tier.
+    Letter,
     /// Go and look at `place` in `map`, then get home.
     Scout {
         map: String,
@@ -247,6 +257,7 @@ impl Job {
     pub fn map(&self) -> Option<&str> {
         match self {
             Job::Fetch { .. } => None,
+            Job::Letter => Some(LETTER_MAP),
             Job::Recover { map, .. } | Job::Scout { map, .. } => Some(map),
         }
     }
@@ -255,6 +266,7 @@ impl Job {
     pub fn mark(&self) -> Option<(&str, [f32; 2])> {
         match self {
             Job::Fetch { .. } => None,
+            Job::Letter => Some((LETTER_MAP, LETTER_AT)),
             Job::Recover { map, at, .. } => at.map(|a| (map.as_str(), a)),
             Job::Scout { map, at, .. } => Some((map.as_str(), *at)),
         }
@@ -456,6 +468,9 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
         }
     }
     let tier = progress.tier_def();
+    if progress.tier as usize == TIERS.len() - 1 && progress.done_in_tier + 1 == tier.jobs {
+        return Job::Letter;
+    }
     let roll = number as u64 + 1000 * progress.swaps as u64;
     let mut rng = Rng::new(seed ^ 0x10B5_0F7E ^ roll.wrapping_mul(0x9E37_79B9));
     // Which valley: here, or for far jobs the one you've raided least.
@@ -602,6 +617,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_ladder_ends_with_the_letter() {
+        let v = valleys();
+        let last = TIERS.len() - 1;
+        let p = Progress {
+            tier: last as u32,
+            done_in_tier: TIERS[last].jobs - 1,
+            done: 13,
+            ..Default::default()
+        };
+        assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Letter);
+        let marrow = &v[0].1;
+        let note = marrow
+            .markers
+            .iter()
+            .find(|m| m.name == "Village note")
+            .expect("the note on the table");
+        assert!(crate::geom::dist(note.at, LETTER_AT) < 0.5);
     }
 
     #[test]

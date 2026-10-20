@@ -11,7 +11,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use extraction_core::noise::Rng;
-use extraction_core::progression::{Job, RECOVER_ITEM, TIERS};
+use extraction_core::progression::{Job, LETTER_ITEM, RECOVER_ITEM, TIERS};
 
 use super::truck::{FLOOR, Pressable, Stash, Truck};
 use super::{Phase, Raid};
@@ -19,7 +19,7 @@ use crate::interact::body::Backpack;
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::items::loot::Loot;
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
-use crate::progression::Progression;
+use crate::progression::{Progression, lines};
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::world::{Layer, Zone};
 
@@ -111,19 +111,19 @@ fn press_card(
             continue;
         }
         let Some(job) = progression.0.job.clone() else {
-            raid.say("Driver: \"Nothing else for now. Go on.\"");
+            raid.say(lines::NO_JOB);
             continue;
         };
         if raid.phase != Phase::AtBase {
-            raid.say("Driver: \"Back at base. Tell me there.\"");
+            raid.say(lines::NOT_AT_BASE);
             continue;
         }
         if progression.0.last_raid == Some(raid.raids) {
-            raid.say("Driver: \"One thing at a time. After your next run.\"");
+            raid.say(lines::ONE_A_RAID);
             continue;
         }
         if opts.map == crate::camp::TRAINING_YARD {
-            raid.say("Driver: \"That's for when we're out there for real.\"");
+            raid.say(lines::IN_THE_YARD);
             continue;
         }
         let Some(mut stash) = stashes.iter_mut().next() else {
@@ -142,11 +142,7 @@ fn press_card(
             Job::Fetch { item: id, n } => {
                 let have = in_stash(id, *n, &stash);
                 if (have.len() as u32) < *n {
-                    raid.say(format!(
-                        "Driver: \"That's {} of {n} {}. In the stash, mind.\"",
-                        have.len(),
-                        item_name(&catalog, id)
-                    ));
+                    raid.say(lines::fetch_short(have.len(), *n, &item_name(&catalog, id)));
                     continue;
                 }
                 have
@@ -154,16 +150,22 @@ fn press_card(
             Job::Recover { .. } => {
                 let have = in_stash(RECOVER_ITEM, 1, &stash);
                 if have.is_empty() {
-                    raid.say("Driver: \"No recorder in the stash. Still out there, is it?\"");
+                    raid.say(lines::NO_RECORDER);
+                    continue;
+                }
+                have
+            }
+            Job::Letter => {
+                let have = in_stash(LETTER_ITEM, 1, &stash);
+                if have.is_empty() {
+                    raid.say(lines::NO_LETTER);
                     continue;
                 }
                 have
             }
             Job::Scout { place, seen, .. } => {
                 if !seen {
-                    raid.say(format!(
-                        "Driver: \"You've not been to the {place} yet. Go and look.\""
-                    ));
+                    raid.say(lines::scout_not_seen(place));
                     continue;
                 }
                 Vec::new()
@@ -184,18 +186,19 @@ fn press_card(
             _ => None,
         };
         let thanks = match &job {
-            Job::Scout { place, .. } => format!("The {place}, eh. Good to know."),
-            _ => "Ta.".to_owned(),
+            Job::Scout { place, .. } => lines::thanks(Some(place)),
+            _ => lines::thanks(None),
         };
+        if job == Job::Letter {
+            raid.say(lines::LETTER_HOME);
+        }
         match placed {
             Some((where_, at)) => {
-                raid.say(format!(
-                    "Driver: \"{thanks} My cache: {where_} It's on your map.\""
-                ));
+                raid.say(lines::paid(&thanks, &where_));
                 requests.cache = Some(where_);
                 requests.cache_at = Some((opts.map.clone(), [at.x, at.z]));
             }
-            None => raid.say(format!("Driver: \"{thanks} I owe you one.\"")),
+            None => raid.say(lines::paid_nothing(&thanks)),
         }
         done.write(crate::progression::JobDone);
     }
@@ -330,7 +333,7 @@ fn find_cache(
     if near {
         requests.cache_at = None;
         requests.cache = None;
-        raid.say("The driver's cache. Just where they said.");
+        raid.say("The driver's cache. Just where he said.");
     }
 }
 
@@ -357,11 +360,12 @@ fn card_text(
     };
     match &p.job {
         Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map),
-        None => text += "Nothing yet.",
+        None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {
         if p.done_in_tier + 1 == tier.jobs {
-            text += &format!("\nDo this and I'll fit {}.", u.name());
+            text += "\n";
+            text += &lines::promise(u.name());
         }
     }
     if let Some(c) = &requests.cache {
@@ -383,7 +387,7 @@ fn card_text(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::progression::Progression;
+    use crate::progression::{Progression, lines};
 
     pub(crate) fn app() -> App {
         let opts = crate::LaunchOptions {

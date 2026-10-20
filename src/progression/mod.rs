@@ -60,6 +60,7 @@ impl Plugin for ProgressionPlugin {
                     job_done,
                     offer_job,
                     place_recorder,
+                    place_letter,
                     scout,
                     aerial_warning,
                     fit_props,
@@ -111,7 +112,7 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
         if m == map {
             String::new()
         } else {
-            format!("In {}: ", valley_name(m))
+            lines::elsewhere(&valley_name(m))
         }
     };
     match job {
@@ -120,11 +121,7 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
                 .kind(item)
                 .map(|k| catalog.get(k).name.clone())
                 .unwrap_or(item.clone());
-            let them = if *n == 1 { "it" } else { "them" };
-            format!(
-                "{n} x {name}\n\"{}\"\nStash {them}, press here.",
-                extraction_core::progression::why(item)
-            )
+            lines::ask_fetch(*n, &name, extraction_core::progression::why(item))
         }
         Job::Recover {
             map: m,
@@ -135,11 +132,9 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
             let where_ = place
                 .clone()
                 .unwrap_or_else(|| format!("somewhere in the {region}."));
-            format!(
-                "{}\"A surveyor's recorder, left {where_} Bring it home.\"\nStash it, press here.",
-                elsewhere(m)
-            )
+            elsewhere(m) + &lines::ask_recover(&where_)
         }
+        Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
         Job::Scout {
             map: m,
             place,
@@ -147,12 +142,9 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
             ..
         } => {
             if *seen {
-                format!("The {place}: seen.\nGet home, press here.")
+                lines::scout_seen(place)
             } else {
-                format!(
-                    "{}\"Walk up to the {place} and have a look round. Come back and tell me.\"",
-                    elsewhere(m)
-                )
+                elsewhere(m) + &lines::ask_scout(place)
             }
         }
     }
@@ -183,9 +175,7 @@ fn count_raids(
                 .kind(&item)
                 .map(|k| catalog.get(k).name.clone())
                 .unwrap_or(item);
-            raid.say(format!(
-                "Driver: \"Forget the {name}. I'll get it elsewhere. New job on the card.\""
-            ));
+            raid.say(lines::fetch_swapped(&name));
         }
         progression.0.swaps += 1;
     }
@@ -218,10 +208,7 @@ fn job_done(
     for _ in done.read() {
         let fitted = progression.0.complete();
         for u in fitted {
-            raid.say(format!(
-                "Driver: \"And I've put up {}. Have a look.\"",
-                u.name()
-            ));
+            raid.say(lines::fitted(*u));
             let Some(stash) = stashes.iter().next() else {
                 continue;
             };
@@ -257,7 +244,7 @@ fn job_done(
                 }
             }
             if gave {
-                raid.say("Driver: \"And my old carbine's in the crate. I'm past it.\"");
+                raid.say(lines::GIFT_CARBINE);
             }
         }
         if !fitted.is_empty() {
@@ -376,6 +363,58 @@ fn place_recorder(
     info!("recorder left at {p:?} ({region})");
 }
 
+/// The letter job: Hana's letter lies on the table in the house by the
+/// well until it's taken home (put back if the Surge or the convoy takes
+/// it).
+fn place_letter(
+    mut commands: Commands,
+    progression: Res<Progression>,
+    opts: Res<LaunchOptions>,
+    zone: Res<Zone>,
+    spatial: SpatialQuery,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut tried: Local<u32>,
+) {
+    use extraction_core::progression::{LETTER_AT, LETTER_ITEM, LETTER_MAP};
+    if progression.0.job != Some(Job::Letter) || opts.map != LETTER_MAP {
+        return;
+    }
+    let Some(kind) = catalog.kind(LETTER_ITEM) else {
+        return;
+    };
+    if items.iter().any(|i| i.kind() == kind) {
+        return;
+    }
+    // Only so often: the house may still be going up.
+    *tried += 1;
+    if *tried % 30 != 1 {
+        return;
+    }
+    // Onto the table: down from under the roof to the first thing hit.
+    let ground = zone.on_ground(LETTER_AT[0], LETTER_AT[1]);
+    let from = ground + Vec3::Y * 1.6;
+    let top = spatial
+        .cast_ray(
+            from,
+            Dir3::NEG_Y,
+            3.0,
+            true,
+            &SpatialQueryFilter::from_mask(Layer::World),
+        )
+        .map_or(ground, |hit| from - Vec3::Y * hit.distance);
+    spawn_item(
+        &mut commands,
+        &catalog,
+        SpawnItem {
+            kind,
+            transform: Transform::from_translation(top + Vec3::Y * 0.02),
+            condition: 0.9,
+        },
+    );
+    info!("Hana's letter on the table at {top:?}");
+}
+
 fn progression_seed(opts: &LaunchOptions, n: usize) -> usize {
     let mut rng = extraction_core::noise::Rng::new(opts.seed ^ 0x5EC0_4DE5);
     rng.below(n.max(1))
@@ -402,7 +441,7 @@ fn scout(
     };
     if *seen && down {
         *seen = false;
-        raid.say(format!("What you saw at the {place} goes with you."));
+        raid.say(lines::scout_forgotten(place));
         return;
     }
     if *seen || !out || down || *map != opts.map {
@@ -413,7 +452,7 @@ fn scout(
         .any(|p| p.translation().xz().distance(Vec2::from_array(*at)) < SCOUT_RADIUS);
     if near {
         *seen = true;
-        raid.say(format!("The {place}: noted. Now get it home."));
+        raid.say(lines::scout_noticed(place));
         crate::rig::haptics::step_done(&mut commands, None);
     }
 }
@@ -442,7 +481,7 @@ fn aerial_warning(
             .any(|(i, by)| by.0 == p && catalog.get(i.kind()).id == "radio")
     });
     if carried {
-        raid.say("Truck: \"Aerial's picking up the Surge. Ten minutes, maybe less.\"");
+        raid.say(lines::AERIAL_SURGE);
     }
 }
 
@@ -627,6 +666,8 @@ pub fn career_page(
     }
     lines.join("\n")
 }
+
+pub mod lines;
 
 #[cfg(test)]
 mod tests;

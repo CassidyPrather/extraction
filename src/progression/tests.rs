@@ -466,3 +466,56 @@ fn the_second_tier_leaves_the_drivers_carbine_in_the_stash() {
         assert_eq!(after.len(), before, "nothing given that doesn't exist yet");
     }
 }
+
+#[test]
+fn the_last_job_is_hanas_letter_from_the_table() {
+    use extraction_core::progression::LETTER_ITEM;
+    let mut app = crate::raid::requests::tests::app();
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.tier = (TIERS.len() - 1) as u32;
+        p.0.done_in_tier = TIERS[TIERS.len() - 1].jobs - 1;
+        p.0.done = 13;
+        p.0.job = None;
+    }
+    for _ in 0..40 {
+        app.update();
+    }
+    assert_eq!(progress(&app).job, Some(Job::Letter));
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(LETTER_ITEM).unwrap();
+    let at = app
+        .world_mut()
+        .query::<(&Item, &GlobalTransform)>()
+        .iter(app.world())
+        .find(|(i, _)| i.kind() == kind)
+        .map(|(_, g)| g.translation())
+        .expect("the letter is out there");
+    let zone = app.world().resource::<Zone>().clone();
+    let ground = zone.ground(at.x, at.z);
+    assert!(
+        at.y > ground + 0.4,
+        "on the table, not the floor: {at:?}, ground {ground}"
+    );
+    let loose = app
+        .world_mut()
+        .query::<(Entity, &Item)>()
+        .iter(app.world())
+        .find(|(_, i)| i.kind() == kind)
+        .unwrap()
+        .0;
+    app.world_mut().despawn(loose);
+    stash(&mut app, LETTER_ITEM, 1);
+    press_card(&mut app);
+    let p = progress(&app);
+    assert_eq!(p.done, 14);
+    assert!(p.has(Upgrade::MedCabinet), "the ladder's done");
+    let log: Vec<String> = app
+        .world()
+        .resource::<Raid>()
+        .log
+        .iter()
+        .map(|l| l.0.clone())
+        .collect();
+    assert!(log.iter().any(|l| l == lines::LETTER_HOME), "{log:?}");
+}
