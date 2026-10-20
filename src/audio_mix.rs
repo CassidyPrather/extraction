@@ -104,6 +104,7 @@ pub const MIX: &[Cue] = &[
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
     cue!("gun.distant", "guns/distant_shot", -6.0, 95.0, 100.0, Event),
+    cue!("gun.malfunction", "guns/bolt_close", -9.0, 75.0, 0.5, Signal),
     cue!("gun.dry_fire", "guns/dry_fire", -5.0, 70.0, 0.5, Signal),
     cue!("gun.mag_insert", "guns/mag_insert", -6.0, 75.0, 0.5, Detail),
     cue!("gun.mag_release", "guns/mag_release", -5.0, 70.0, 0.5, Detail),
