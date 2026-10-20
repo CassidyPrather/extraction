@@ -171,7 +171,7 @@ def sorter_servo_pack():
     fore = RX(math.pi / 2 + 0.7)
     p.box((0.17, 0.2, 0.24), (0.0, 0.0, 0.0), "Shell", bevel=0.01, segs=1,
           xf=fore @ T(0.0, 0.0, 0.24))
-    p.box((0.18, 0.205, 0.08), (0.0, 0.0, 0.0), "Warn", segs=1, xf=fore @ T(0.0, 0.0, 0.28))
+    p.box((0.19, 0.215, 0.08), (0.0, 0.0, 0.0), "Warn", segs=1, xf=fore @ T(0.0, 0.0, 0.28))
     # Torn ends: cables out of both stubs.
     tube_path(p, [(0.04, 0.42, 0.03), (0.07, 0.48, 0.06), (0.05, 0.52, 0.1)], 0.008, "Red",
               sides=6, closed=False)
