@@ -197,6 +197,15 @@ pub struct CrawlerCharge {
     pub at: Vec3,
 }
 
+/// A crawler zapped: from its emitter toward where it aimed (for the arc;
+/// the round itself is an ordinary `Shot` and hits or misses as one).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CrawlerZap {
+    pub crawler: Entity,
+    pub from: Vec3,
+    pub to: Vec3,
+}
+
 /// The spark gun reaches this far (m)...
 pub const ZAP_RANGE: f32 = 15.0;
 /// ...charges this long before each zap (s)...
@@ -216,6 +225,7 @@ impl Plugin for IndoorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<IndoorSites>()
             .add_message::<CrawlerCharge>()
+            .add_message::<CrawlerZap>()
             .add_systems(
                 FixedUpdate,
                 (spawn_residents, crawler_guns).after(super::perceive),
@@ -312,6 +322,7 @@ fn crawler_guns(
     time: Res<Time>,
     mut shots: MessageWriter<Shot>,
     mut charges: MessageWriter<CrawlerCharge>,
+    mut zaps: MessageWriter<CrawlerZap>,
     mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
@@ -365,6 +376,11 @@ fn crawler_guns(
             spread: 0.02,
             recoil: 0.0,
             seed: *seed,
+        });
+        zaps.write(CrawlerZap {
+            crawler: e,
+            from: muzzle,
+            to: target,
         });
     }
 }

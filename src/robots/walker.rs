@@ -32,6 +32,9 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Lamer than this (`anim::Gait::limp`), a walker fights from where it
+/// stands and doesn't chase.
+pub const LAME: f32 = 0.5;
 /// It fights from cover at about this range from you (m)...
 pub const COVER_RANGE: (f32, f32) = (14.0, 34.0);
 /// ...and looks for better cover this often (s).
@@ -324,6 +327,7 @@ fn walker_brain(
             Option<&super::indoor::LocalNav>,
             Option<&mut super::indoor::Patrol>,
             Has<super::indoor::Crawler>,
+            Option<&super::anim::Gait>,
         ),
     )>,
     targets: Query<&GlobalTransform>,
@@ -353,7 +357,7 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler),
+        (local, mut patrol, crawler, gait),
     ) in &mut walkers
     {
         // A site's own grid, or the Zone's.
@@ -365,11 +369,14 @@ fn walker_brain(
         }
         let pos = t.translation;
         *intent = Intent::default();
+        let lame = gait.is_some_and(|g| g.limp > LAME);
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
         if !single_minded {
             search::react(&mut brain, aware, ENGAGE_AT);
-            search::lost_sight(&mut brain, aware, PATIENCE, pos);
+            // A lame walker doesn't give chase, and gives up sooner.
+            let patience = if lame { PATIENCE * 0.5 } else { PATIENCE };
+            search::lost_sight(&mut brain, aware, patience, pos);
         }
         if !matches!(*brain, Brain::Engage) {
             w.cover = None;
@@ -458,7 +465,7 @@ fn walker_brain(
                     .and_then(|p| targets.get(p).ok())
                     .map(|g| g.translation());
                 match (seen, aware.last_known) {
-                    (Some(tp), _) if grappler => {
+                    (Some(tp), _) if grappler && !lame => {
                         // Lie in wait for you to come within reach; spring
                         // when you do, or once it's waited long enough.
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
@@ -473,6 +480,11 @@ fn walker_brain(
                             intent.low = true;
                             None
                         }
+                    }
+                    (Some(_), _) if lame => None,
+                    (None, Some(lk)) if lame => {
+                        intent.look = Some(lk);
+                        None
                     }
                     (Some(tp), _) if crawler => {
                         // Close in to spark range, then hold.

@@ -105,7 +105,7 @@ impl Traits {
             heat: 1.6,
             duck: 0.75,
             sneak_range: 35.0,
-            distract: false,
+            distract: true,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -153,6 +153,7 @@ impl Traits {
                 heat: f32::INFINITY,
                 duck: 0.3,
                 sneak_range: 0.0,
+                distract: false,
                 ..base
             },
             _ => base,
@@ -1111,8 +1112,9 @@ fn react_to_robots(
 ///   fighting it, or near where a robot is looking for someone;
 /// - **freeze** a few seconds, crouched and still, when a robot that's
 ///   onto something is investigating or searching close by;
-/// - **distract** (the cautious): throw junk well past a walker at its post
-///   that hasn't noticed it, so it walks off to look the other way.
+/// - **distract** (all but the reckless): throw junk past and to one side
+///   of a walker within 20 m that hasn't noticed it, so it walks off to look
+///   there.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
 fn sneak(
@@ -1155,12 +1157,11 @@ fn sneak(
             if seen && d < 30.0 && hunting.is_some() && aware.suspicion < 0.55 {
                 freeze = true;
             }
-            // (A thrown bolt carries 18 m or so: past a walker 11 m off.)
             if seen
-                && d < 11.0
+                && d < 20.0
                 && robot.kind == crate::robots::RobotKind::Walker
-                && matches!(brain, Brain::Working { .. })
-                && aware.suspicion < 0.2
+                && matches!(brain, Brain::Working { .. } | Brain::Transit { .. })
+                && aware.suspicion < 0.3
             {
                 calm_walker = Some(at);
             }
@@ -1189,11 +1190,17 @@ fn sneak(
         let Some(item) = junk(r, scene) else {
             return;
         };
-        let away = (w.xz() - eye.xz()).normalize_or(Vec2::X);
-        let to = w.xz() + away * 7.0;
-        if !r.grid.walkable([to.x, to.y]) {
+        // A thrown bolt carries 15 m or so: past it if it's close, else off
+        // to one side of it, whichever side there's ground to land on.
+        let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
+        let reach = (w.xz().distance(eye.xz()) + 6.0).min(15.0);
+        let Some(to) = [0.45f32, -0.45]
+            .into_iter()
+            .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * reach)
+            .find(|p| r.grid.walkable([p.x, p.y]))
+        else {
             return;
-        }
+        };
         r.distracted_at = r.clock;
         log.event(
             "distract",
