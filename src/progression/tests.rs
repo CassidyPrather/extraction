@@ -436,7 +436,7 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
 }
 
 #[test]
-fn the_second_tier_leaves_the_drivers_carbine_in_the_stash() {
+fn the_second_and_third_tiers_leave_guns_in_the_stash() {
     let mut app = crate::raid::requests::tests::app();
     let catalog = app.world().resource::<Catalog>().clone();
     let stash = one::<With<Stash>>(&mut app);
@@ -449,13 +449,14 @@ fn the_second_tier_leaves_the_drivers_carbine_in_the_stash() {
             .collect()
     };
     let before = ids(&mut app).len();
-    for _ in 0..TIERS[0].jobs + TIERS[1].jobs {
+    for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
         app.world_mut().write_message(JobDone);
         app.update();
     }
     let after = ids(&mut app);
     let known: Vec<&str> = gifts(Upgrade::BenchVice)
         .iter()
+        .chain(gifts(Upgrade::Aerial))
         .filter(|g| catalog.kind(g.0).is_some())
         .map(|g| g.0)
         .collect();

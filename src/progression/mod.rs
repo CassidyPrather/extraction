@@ -196,6 +196,12 @@ pub fn gifts(u: Upgrade) -> &'static [(&'static str, u32, f32)] {
             ("sks_clip", 2, 1.0),
             ("ammo_762x39", 1, 1.0),
         ],
+        // The end of the third: a sub-machine gun from his man in town.
+        Upgrade::Aerial => &[
+            ("ppsh", 1, 0.55),
+            ("ppsh_drum", 1, 1.0),
+            ("ammo_762x25", 1, 1.0),
+        ],
         _ => &[],
     }
 }
@@ -249,7 +255,7 @@ fn job_done(
                 }
             }
             if gave {
-                raid.say(lines::GIFT_CARBINE);
+                raid.say(lines::gift(*u));
             }
         }
         if !fitted.is_empty() {
