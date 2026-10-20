@@ -177,7 +177,10 @@ door's crash).
   cap), a whole valley's windows shot out at once, a building's crate
   broken and rebuilt by the Surge, a `Smash`, a crowbar's pull (too
   weak, too short, then enough), a step in broken glass, and a breach
-  torn, saved, reloaded and mended (plus `breach::tests` on the split).
+  torn, saved, reloaded and mended (plus `breach::tests` on the split);
+  through the headset path (`vr_harness`): a knife in a tracked hand
+  eased into a pane (holds) and driven through it (breaks), and stabbed
+  into a supply crate until it gives.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

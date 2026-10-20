@@ -876,3 +876,120 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     assert!(b.world().resource::<Breaches>().0.is_empty());
     let _ = std::fs::remove_file(&path);
 }
+
+/// The headset path: a knife in a tracked right hand, the player standing
+/// `back` metres out from `target` along `out`, facing it.
+fn knife_facing(target: Vec3, out: Vec3, back: f32) -> (crate::vr_harness::Vr, Vec3, Quat) {
+    use crate::interact::GripRole;
+    use crate::rig::Side;
+    let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+    let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+    let flat = out.with_y(0.0).normalize();
+    let stand = target + flat * back;
+    let feet = zone.on_ground(stand.x, stand.z);
+    // Facing back along `out`: -Z of the turn points at the target.
+    let yaw = f32::atan2(flat.x, flat.z);
+    vr.stand(feet, yaw);
+    let rot = Quat::from_rotation_y(yaw);
+    let at = target + flat * 0.6;
+    let knife = vr.spawn("knife", Transform::from_translation(at).with_rotation(rot));
+    vr.app
+        .world_mut()
+        .entity_mut(knife)
+        .insert(RigidBody::Static);
+    let grip = vr.point(knife, |r| *r == GripRole::Primary);
+    vr.hand(Side::Right, grip, rot, 1.0, 0.0);
+    vr.step(3);
+    vr.app
+        .world_mut()
+        .entity_mut(knife)
+        .insert(RigidBody::Dynamic);
+    vr.step(10);
+    assert_eq!(
+        vr.hand_state(Side::Right).holding,
+        Some(knife),
+        "the knife in hand"
+    );
+    (vr, grip, rot)
+}
+
+/// Drive the right hand from `from` along `dir` at `speed` m/s for
+/// `metres`, then back.
+fn thrust(vr: &mut crate::vr_harness::Vr, from: Vec3, dir: Vec3, speed: f32, metres: f32) {
+    use crate::rig::Side;
+    vr.move_hand(Side::Right, from);
+    vr.step(10);
+    let steps = (metres / (speed / 90.0)).ceil() as usize;
+    for i in 1..=steps {
+        vr.move_hand(Side::Right, from + dir * (speed / 90.0) * i as f32);
+        vr.step(1);
+    }
+    vr.move_hand(Side::Right, from);
+    vr.step(20);
+}
+
+#[test]
+fn a_knife_driven_through_a_pane_breaks_it_and_a_slow_push_doesnt() {
+    let mut probe = app(None);
+    let (_, at, out) = open_pane(&mut probe);
+    drop(probe);
+    let (mut vr, grip, _) = knife_facing(at, out, 0.9);
+    let pane = vr
+        .app
+        .world_mut()
+        .query::<(Entity, &Pane)>()
+        .iter(vr.app.world())
+        .find(|(_, p)| p.centre().distance(at) < 0.01)
+        .map(|(e, _)| e)
+        .unwrap();
+    let dir = -out.with_y(0.0).normalize();
+    // Eased up to the glass and a little past, at a walk: it holds.
+    thrust(&mut vr, grip, dir, 0.8, 0.75);
+    assert!(
+        vr.app.world().get::<Pane>(pane).unwrap().broken.is_none(),
+        "a slow push doesn't break glass"
+    );
+    // Driven through.
+    thrust(&mut vr, grip, dir, 4.5, 0.75);
+    assert!(
+        vr.app.world().get::<Pane>(pane).unwrap().broken.is_some(),
+        "a knife driven through breaks it"
+    );
+}
+
+#[test]
+fn a_knife_stabbed_into_a_crate_breaks_it_open() {
+    let mut probe = app(None);
+    let (c, t) = probe
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SupplyCrate>>()
+        .iter(probe.world())
+        .map(|(e, t)| (e, *t))
+        .next()
+        .unwrap();
+    let _ = c;
+    drop(probe);
+    // Stand off its side, and stab at its middle.
+    let side = t.rotation * Vec3::Z;
+    let face = t.translation + side * (crate::items::loot::SUPPLY_CRATE.z * 0.5);
+    let (mut vr, grip, _) = knife_facing(face, side, 0.9);
+    let crate_e = vr
+        .app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SupplyCrate>>()
+        .iter(vr.app.world())
+        .find(|(_, x)| x.translation.distance(t.translation) < 0.01)
+        .map(|(e, _)| e)
+        .unwrap();
+    let start = Vec3::new(grip.x, face.y + 0.1, grip.z);
+    let mut stabs = 0;
+    while vr.app.world().get_entity(crate_e).is_ok() && stabs < 12 {
+        thrust(&mut vr, start, -side, 5.5, 0.55);
+        stabs += 1;
+    }
+    assert!(
+        vr.app.world().get_entity(crate_e).is_err(),
+        "the crate gave way"
+    );
+    assert!(stabs >= 2, "after a few stabs ({stabs})");
+}
