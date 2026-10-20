@@ -329,7 +329,7 @@
         (kind: Note(text: "FIRE LOOKOUT - CINDER, 12 FEB\n1540. Black smoke, works yard.\n1610. Flame in the north-west wood. Phoned the works. No answer.\n1700. Wind south-east. Lamp to Marrow and Kettle: three short.\n2300. Machines walking into the fire with their arms full, and out empty.\nMarta answered. Kettle didn't."), at: (-177.70, -167.40), rot: 333.4, y: 8.5, name: "Lookout log"),
         (kind: Note(text: "SLUICE HOUSE - ASH PIT\nWorks order: drain the pit to the canal.\nThe pit won't drain. The ash floats. It drifts against the current, back toward the slag heaps.\nSluice shut. I'm not opening it again."), at: (-166.20, 29.00), rot: 242.7, name: "Sluice house note"),
         (kind: Terminal(pages: ["RELAY LOG - MAST C3\n\nHeat damage: housing, cabling.\nPylon reports: degraded.\nRepair requested: 1 FEB.\nRepair requested: 1 MAR.\nRepair requested: 1 APR.\n...\n\nRequests held for uplink."]), at: (96.03, -236.76), rot: 140.3, name: "Mast terminal"),
-        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches in the tin on the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-74.80, -158.41), rot: 341.4, name: "Woodward's book"),
+        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches by the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-74.80, -158.41), rot: 341.4, name: "Woodward's book"),
         // notes:end
     ],
 
