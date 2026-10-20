@@ -167,7 +167,7 @@ pub(super) fn direct(
                 ],
             ),
             First::DroneLock => (
-                "get behind something / fight",
+                "fight it (two hands, sound rifle)",
                 vec![Task::Engage { shots: 30 }],
             ),
             First::Death => ("go back for it", vec![]),
