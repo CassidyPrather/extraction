@@ -3,7 +3,8 @@
 //! about it, once a career. A jam (and how to clear that kind), a machine
 //! that heard you (and when it loses you), a drone's lock-on chirp, the
 //! air going wrong ahead, the way underground, the sky turning before the
-//! Surge, a walker you've lamed, a full pack, a gun that's getting worn.
+//! Surge, a walker you've lamed, a full pack, a gun that's getting worn,
+//! the first wound that bleeds.
 //! And the first time you go down, what came back and what didn't.
 //!
 //! What's been said is kept in the career (`firsts` in `career.ron`), so a
@@ -37,6 +38,8 @@ pub enum First {
     Lamed,
     PackFull,
     Worn,
+    /// Hit, and bleeding: it doesn't stop on its own.
+    Bleeding,
     Death,
     ConvoyTook,
     KitRecovered,
@@ -75,6 +78,7 @@ pub const ALL: &[First] = &[
     First::Lamed,
     First::PackFull,
     First::Worn,
+    First::Bleeding,
     First::Death,
     First::ConvoyTook,
     First::KitRecovered,
@@ -111,6 +115,7 @@ impl First {
             First::Worn => {
                 &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
             }
+            First::Bleeding => &["Truck: \"You're bleeding. Dressing on it now, or you'll drop.\""],
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
                 "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
@@ -187,6 +192,7 @@ impl Plugin for FirstsPlugin {
                         pack_full,
                         places,
                         worn,
+                        bleeding,
                         deaths,
                         convoy,
                         asked,
@@ -377,6 +383,21 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
         m.meet(First::Worn);
     }
 }
+
+/// Hit, and bleeding: the wrist's "BLEED" is easy to miss, and a wound
+/// doesn't stop on its own.
+fn bleeding(locals: Query<&crate::health::Health, With<LocalPlayer>>, mut m: Meet) {
+    if m.met(First::Bleeding) {
+        return;
+    }
+    if locals.iter().any(|h| !h.down && h.bleeding > BLEEDING) {
+        m.meet(First::Bleeding);
+    }
+}
+
+/// Bleeding faster than this (HP a second) is worth a word: a graze
+/// that's about to stop isn't.
+const BLEEDING: f32 = 0.1;
 
 /// The first time you wake in the truck after going down: what's in the
 /// crate (all that came back), and how much lies where you fell.
@@ -585,6 +606,41 @@ mod tests {
             .windows(2)
             .all(|w| w[1] - w[0] >= SPACING - 0.05);
         assert!(gaps, "lines too close together");
+    }
+
+    /// The first wound that bleeds is named once, not on every hit after.
+    #[test]
+    fn the_first_bleed_is_said_once() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .expect("a player");
+        let line = First::Bleeding.lines()[0];
+        for _ in 0..2 {
+            app.world_mut()
+                .get_mut::<crate::health::Health>(me)
+                .unwrap()
+                .bleeding = 0.5;
+            for _ in 0..90 {
+                app.update();
+            }
+            // Dressed.
+            app.world_mut()
+                .get_mut::<crate::health::Health>(me)
+                .unwrap()
+                .bleeding = 0.0;
+            for _ in 0..90 * 6 {
+                app.update();
+            }
+        }
+        let spoken = &app.world().resource::<Spoken>().0;
+        let n = spoken.iter().filter(|s| *s == line).count();
+        assert_eq!(n, 1, "said {n} times");
+        assert!(app.world().resource::<Firsts>().met(First::Bleeding));
     }
 
     /// Met once, kept in the career: a later session doesn't say it again.
