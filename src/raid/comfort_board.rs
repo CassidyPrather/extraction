@@ -1,4 +1,4 @@
-//! The comfort board: seven cards pinned on the bed's left wall, above the
+//! The comfort board: eleven cards pinned on the bed's left wall, above the
 //! stash, for the settings a headset player can't reach otherwise. Press
 //! one to step through its presets; the choice is kept in `settings.ron`.
 
@@ -23,6 +23,14 @@ pub enum ComfortCard {
     Binaural,
     /// The music that rises with danger.
     Score,
+    /// Which hand holds the gun.
+    Handed,
+    /// Standing or seated play.
+    Seated,
+    /// Two hands or one.
+    OneHanded,
+    /// Captions on the wrist.
+    Captions,
 }
 
 pub struct ComfortBoardPlugin;
@@ -48,6 +56,11 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             // A row under them, over the stash.
             (ComfortCard::Binaural, 1.26, -1.25),
             (ComfortCard::Score, 1.26, -0.85),
+            // A third column, nearer the tailgate: how you play.
+            (ComfortCard::Handed, 1.80, -0.50),
+            (ComfortCard::Seated, 1.62, -0.50),
+            (ComfortCard::OneHanded, 1.44, -0.50),
+            (ComfortCard::Captions, 1.26, -0.50),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -95,6 +108,10 @@ fn press_cards(
                 ComfortCard::FingerGrab => comfort.finger_grab = !comfort.finger_grab,
                 ComfortCard::Binaural => comfort.binaural = !comfort.binaural,
                 ComfortCard::Score => comfort.score = !comfort.score,
+                ComfortCard::Handed => comfort.left_handed = !comfort.left_handed,
+                ComfortCard::Seated => comfort.seated = !comfort.seated,
+                ComfortCard::OneHanded => comfort.one_handed = !comfort.one_handed,
+                ComfortCard::Captions => comfort.captions = !comfort.captions,
             }
             // Tests and sims don't touch the player's settings.
             if !opts.headless {
@@ -124,6 +141,10 @@ fn card_text(
             ComfortCard::FingerGrab => comfort.finger_grab_label(),
             ComfortCard::Binaural => comfort.binaural_label(),
             ComfortCard::Score => comfort.score_label(),
+            ComfortCard::Handed => comfort.handed_label(),
+            ComfortCard::Seated => comfort.seated_label(),
+            ComfortCard::OneHanded => comfort.one_handed_label(),
+            ComfortCard::Captions => comfort.captions_label(),
         };
         if text.text != t {
             text.text = t;
@@ -143,6 +164,53 @@ fn follow_sound(comfort: Option<Res<Comfort>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The cards for how you play each switch their setting, and say so.
+    #[test]
+    fn the_access_cards_switch_hand_seat_hands_and_captions() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        *app.world_mut().resource_mut::<Comfort>() = Comfort::default();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let read = |c: &Comfort, card: ComfortCard| match card {
+            ComfortCard::Handed => c.left_handed,
+            ComfortCard::Seated => c.seated,
+            ComfortCard::OneHanded => c.one_handed,
+            _ => !c.captions,
+        };
+        for (which, on_word) in [
+            (ComfortCard::Handed, "left"),
+            (ComfortCard::Seated, "seated"),
+            (ComfortCard::OneHanded, "one"),
+            (ComfortCard::Captions, "off"),
+        ] {
+            let card = app
+                .world_mut()
+                .query::<(Entity, &ComfortCard)>()
+                .iter(app.world())
+                .find(|(_, c)| **c == which)
+                .map(|(e, _)| e)
+                .unwrap_or_else(|| panic!("a {which:?} card in the truck"));
+            assert!(!read(app.world().resource::<Comfort>(), which));
+            app.world_mut()
+                .write_message(InteractEvent::Pressed { item: card, player });
+            app.update();
+            app.update();
+            assert!(read(app.world().resource::<Comfort>(), which), "{which:?}");
+            let text = &app.world().get::<ScreenText>(card).unwrap().text;
+            assert!(text.contains(on_word), "{which:?} card says: {text}");
+        }
+    }
 
     /// The binaural and score cards each switch their setting, and say so.
     #[test]
