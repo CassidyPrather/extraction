@@ -172,8 +172,10 @@ but the reckless, with junk in its pack, **throws it** about 15 m off to
 one side when a walker within 45 m is about but not onto it (at work, or
 already looking for someone: the sims showed that's when bots meet
 walkers), so the walker goes to look there instead. The cautious play it properly: they creep, crouched,
-round behind an unaware walker within 40 m (outside its sight cone), to
-10 m off, and lob the junk 5 m past it. None of this
+round behind an unaware walker within 70 m (by way of a point 25 m out
+behind it), to 10 m off, and lob the junk 5 m past it. So far the walkers
+spot most of them crossing open ground on the way in; they'd need routes
+through cover to get there. None of this
 happens in a fight, with the truck waiting, or when hurrying home hurt.
 Telemetry: `crouch` (seconds crouched), `freeze`, `distract`. Cover and
 grass along a route now matter to the sims as they do to a player: a
