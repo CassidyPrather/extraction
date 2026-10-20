@@ -69,8 +69,15 @@ fn plate_transform(kind: RobotKind, i: usize) -> Transform {
 /// Armour goes on as robots are made: three plates on walkers (grappler,
 /// collector and crawler too: they're walkers), one on drones, two down
 /// the sides of a dirigible's gondola.
-fn fit_plates(mut commands: Commands, robots: Query<(Entity, &Robot), Added<Robot>>) {
-    for (e, robot) in &robots {
+fn fit_plates(
+    mut commands: Commands,
+    robots: Query<(Entity, &Robot, Has<super::hound::Hound>), Added<Robot>>,
+) {
+    for (e, robot, hound) in &robots {
+        // (A hound's body is all legs and speed.)
+        if hound {
+            continue;
+        }
         let (n, hp, collider) = match robot.kind {
             RobotKind::Walker => (
                 WALKER_PLATES.len(),

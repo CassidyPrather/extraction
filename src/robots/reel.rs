@@ -13,7 +13,7 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
 
-//! `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
+//! `hound` (a hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
@@ -122,6 +122,10 @@ fn reel(
             "turn" => {
                 let start = eye + flat * 9.0 - right * 3.5;
                 spawn_walker(&mut commands, &zone, start, job(start))
+            }
+            "hound" => {
+                let start = eye + flat * 6.0 - right * 7.0;
+                super::hound::spawn_hound(&mut commands, &zone, start, job(start))
             }
             "eyes" => {
                 // Three walkers and a drone, calm, suspicious and seeing
@@ -240,6 +244,7 @@ fn reel(
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
                 "wreck" | "zap" | "shot" => vec![],
+                "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
