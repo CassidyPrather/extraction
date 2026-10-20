@@ -448,6 +448,7 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
                 grow: 3.0,
                 gravity: -0.5,
                 drag: 1.5,
+                wind: 0.8,
                 ..SPRAY
             },
         ],
@@ -480,6 +481,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         grow: 2.2,
         gravity: -0.25,
         drag: 2.5,
+        wind: 0.7,
         ..SPRAY
     };
     match kind {

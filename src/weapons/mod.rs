@@ -55,10 +55,48 @@ pub struct Mag {
     pub height: f32,
 }
 
-/// A spent case on the ground (for sounds), despawned after a while.
+/// A spent case or hull thrown from the gun: it tumbles, lands with a
+/// clink ([`CasingLanded`]) and lies there a while ([`CASING_LIFE`]); the
+/// oldest goes once there are [`CASING_CAP`].
 #[derive(Component)]
 pub struct Casing {
     pub life: f32,
+    /// Radius and length, metres.
+    pub size: (f32, f32),
+    /// A shotgun hull rather than brass.
+    pub hull: bool,
+    /// Vertical speed last tick, and landings so far.
+    fall: f32,
+    bounces: u8,
+}
+
+/// How long a case lies on the ground, seconds.
+pub const CASING_LIFE: f32 = 120.0;
+/// Cases on the ground at once.
+pub const CASING_CAP: usize = 64;
+
+/// What a case landed on, for its clink.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CasingFloor {
+    Metal,
+    Wood,
+    /// Concrete, asphalt, rock, gravel.
+    Hard,
+    /// Grass, earth, mud, the forest floor.
+    Soft,
+    Water,
+}
+
+/// A case hit the floor (each of its first few bounces), for the clink.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CasingLanded {
+    pub at: Vec3,
+    pub floor: CasingFloor,
+    /// How fast it came down, m/s.
+    pub speed: f32,
+    /// Its first landing (later ones are the bounces, quieter).
+    pub first: bool,
+    pub hull: bool,
 }
 
 /// Something a gun did, with where it did it: for audio and effects.
@@ -697,6 +735,47 @@ fn emit(
     }
 }
 
+/// A case whose fall stopped or turned has landed: say where, on what.
+fn land_casings(
+    mut casings: Query<(&mut Casing, &LinearVelocity, &GlobalTransform)>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &crate::world::surfaces::Surfaces)>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut out: MessageWriter<CasingLanded>,
+) {
+    for (mut c, v, gt) in &mut casings {
+        let was = c.fall;
+        c.fall = v.y;
+        if was > -0.8 || v.y < was * 0.3 || c.bounces >= 3 {
+            continue;
+        }
+        c.bounces += 1;
+        let at = gt.translation();
+        let floor = match crate::world::surfaces::underfoot(&spatial, &built, at) {
+            Some(m) => match impacts::kind_of(m) {
+                impacts::ImpactKind::Metal => CasingFloor::Metal,
+                impacts::ImpactKind::Wood => CasingFloor::Wood,
+                _ => CasingFloor::Hard,
+            },
+            None => {
+                use extraction_core::terrain::Surface;
+                match zone.as_ref().map(|z| z.hm.surface([at.x, at.z], false)) {
+                    Some(Surface::Water) => CasingFloor::Water,
+                    Some(Surface::Rock | Surface::Gravel | Surface::Asphalt) => CasingFloor::Hard,
+                    _ => CasingFloor::Soft,
+                }
+            }
+        };
+        out.write(CasingLanded {
+            at,
+            floor,
+            speed: -was,
+            first: c.bounces == 1,
+            hull: c.hull,
+        });
+    }
+}
+
 fn age_casings(mut commands: Commands, mut casings: Query<(Entity, &mut Casing)>, time: Res<Time>) {
     for (e, mut c) in &mut casings {
         c.life -= time.delta_secs();
@@ -712,26 +791,42 @@ pub fn spawn_ejections(
     mut commands: Commands,
     mut ejections: MessageReader<Ejection>,
     catalog: Res<Catalog>,
+    mut pool: Local<std::collections::VecDeque<Entity>>,
 ) {
     for ej in ejections.read() {
         let spin = Vec3::new(ej.velocity.z, 0.0, -ej.velocity.x) * 8.0;
         match ej.round {
             Round::Spent => {
-                commands.spawn((
-                    Name::new("Case"),
-                    Casing { life: 40.0 },
-                    Visibility::default(),
-                    Transform::from_translation(ej.at)
-                        .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
-                    RigidBody::Dynamic,
-                    Collider::cylinder(0.005, 0.022),
-                    Mass(0.005),
-                    NoAutoMass,
-                    CollisionLayers::new(Layer::Item, [Layer::World]),
-                    LinearVelocity(ej.velocity),
-                    AngularVelocity(spin),
-                    Restitution::new(0.4),
-                ));
+                let (r, len) = feel::case_size(&ej.cartridge);
+                let e = commands
+                    .spawn((
+                        Name::new("Case"),
+                        Casing {
+                            life: CASING_LIFE,
+                            size: (r, len),
+                            hull: ej.cartridge == "12ga",
+                            fall: 0.0,
+                            bounces: 0,
+                        },
+                        Visibility::default(),
+                        Transform::from_translation(ej.at)
+                            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                        RigidBody::Dynamic,
+                        Collider::cylinder(r, len),
+                        Mass(0.005),
+                        NoAutoMass,
+                        CollisionLayers::new(Layer::Item, [Layer::World]),
+                        LinearVelocity(ej.velocity),
+                        AngularVelocity(spin),
+                        Restitution::new(0.4),
+                    ))
+                    .id();
+                pool.push_back(e);
+                if pool.len() > CASING_CAP {
+                    if let Some(old) = pool.pop_front() {
+                        commands.entity(old).try_despawn();
+                    }
+                }
             }
             Round::Live => {
                 let id = match ej.cartridge.as_str() {
@@ -853,12 +948,14 @@ impl Plugin for WeaponEffectsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Ejection>()
             .add_message::<DropMagazine>()
+            .add_message::<CasingLanded>()
             .add_systems(
                 FixedUpdate,
                 (
                     handle_released,
                     drop_magazines,
                     spawn_ejections,
+                    land_casings,
                     feel::kick_guns,
                 )
                     .chain()
@@ -867,31 +964,49 @@ impl Plugin for WeaponEffectsPlugin {
     }
 }
 
-/// Brass on spent cases (client side).
+/// Brass on spent cases, a red hull on spent shells (client side): one
+/// unit cylinder scaled to each, so they batch.
 pub fn casing_visuals(
     mut commands: Commands,
-    added: Query<Entity, Added<Casing>>,
+    added: Query<(Entity, &Casing), Added<Casing>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut brass: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    mut kit: Local<
+        Option<(
+            Handle<Mesh>,
+            Handle<StandardMaterial>,
+            Handle<StandardMaterial>,
+        )>,
+    >,
 ) {
-    for e in &added {
-        let (mesh, mat) = brass
+    for (e, c) in &added {
+        let (mesh, brass, hull) = kit
             .get_or_insert_with(|| {
                 (
-                    meshes.add(Cylinder::new(0.0048, 0.022)),
+                    meshes.add(Cylinder::new(1.0, 1.0)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.78, 0.6, 0.3),
                         metallic: 1.0,
                         perceptual_roughness: 0.35,
                         ..default()
                     }),
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.55, 0.08, 0.06),
+                        perceptual_roughness: 0.6,
+                        ..default()
+                    }),
                 )
             })
             .clone();
-        commands
-            .entity(e)
-            .insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+        let (r, len) = c.size;
+        let child = commands
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(if c.hull { hull } else { brass }),
+                Transform::from_scale(Vec3::new(r, len, r)),
+            ))
+            .id();
+        commands.entity(e).add_child(child);
     }
 }
 
@@ -906,4 +1021,68 @@ pub fn held_gun<'a>(hands: &'a Query<(&RigHand, &Hand)>, side: crate::rig::Side)
         .iter()
         .find(|(rh, _)| rh.side == side)
         .and_then(|(_, h)| h.holding)
+}
+
+#[cfg(test)]
+mod casing_tests {
+    use super::*;
+
+    /// Brass thrown from a gun tumbles down and clinks once on landing
+    /// (then a quieter bounce or two), on the floor it hit; however many
+    /// rounds are fired, no more than the cap lie about.
+    #[test]
+    fn cases_land_with_a_clink_and_are_capped() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        #[derive(Resource, Default)]
+        struct Heard(Vec<CasingLanded>);
+        app.init_resource::<Heard>().add_systems(
+            FixedUpdate,
+            (|mut r: MessageReader<CasingLanded>, mut h: ResMut<Heard>| {
+                h.0.extend(r.read().copied())
+            })
+            .after(land_casings),
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let ground = {
+            let zone = app.world().resource::<crate::world::Zone>();
+            Vec3::new(0.0, zone.on_ground(0.0, 30.0).y, 30.0)
+        };
+        app.world_mut().write_message(Ejection {
+            round: Round::Spent,
+            cartridge: "5.45x39".into(),
+            at: ground + Vec3::Y * 1.3,
+            velocity: Vec3::new(2.0, 1.0, 0.0),
+        });
+        for _ in 0..240 {
+            app.update();
+        }
+        let heard = &app.world().resource::<Heard>().0;
+        assert!(!heard.is_empty(), "no clink");
+        assert!(heard[0].first && heard[0].speed > 2.0, "{heard:?}");
+        assert!(heard.iter().filter(|h| h.first).count() == 1, "{heard:?}");
+        assert!(heard.len() <= 3, "{heard:?}");
+        assert!(matches!(
+            heard[0].floor,
+            CasingFloor::Soft | CasingFloor::Hard
+        ));
+        // A long burst: the oldest cases go.
+        for i in 0..100 {
+            app.world_mut().write_message(Ejection {
+                round: Round::Spent,
+                cartridge: "5.45x39".into(),
+                at: ground + Vec3::new(i as f32 * 0.05, 1.3, 0.0),
+                velocity: Vec3::X,
+            });
+            app.update();
+        }
+        app.update();
+        let n = app.world_mut().query::<&Casing>().iter(app.world()).count();
+        assert!(n <= CASING_CAP, "{n} cases");
+    }
 }
