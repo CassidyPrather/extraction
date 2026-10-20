@@ -50,6 +50,12 @@ mean, p95 and max, and the classes (tree cards, impostors, terrain,
 ground cover, or what a mesh belongs to) that make up the mean. It's an
 upper bound (no early depth rejection), but it ranks the classes right.
 
+Rain and ash streaks are placed by their vertex shader in a box round
+the eye, so the gauge replays them at the worst weather wherever its own
+is (a downpour, or full ashfall in a burnt valley) and adds them to every
+view. They come to about 0.01 layers a pixel: 2500 streaks 6 mm wide are
+very little area, even counting the few right at the eye.
+
 Open views sit at 1-2.5 layers (terrain about 0.8, the sky 1); woods
 are where it piles up: the Marrow Creek spruce view was 16.3 (cards
 6.95, impostors 6.45), pines 9.3, Kettle Pass's quarry 7.0.
@@ -147,10 +153,15 @@ Shared tools for the next ones (in `render::budget`):
 
 ## Where it stands
 
-The gauges need the game's own textures (`scripts/fetch_assets.py`):
-without them the trees are an untextured fallback with no cards and no
-impostors, a different and heavier game (1.1M triangles at the Kettle
-Pass gate), and the gauges say so and skip rather than count it.
+Without the game's own textures (`scripts/fetch_assets.py` not run) the
+trees are an untextured fallback with no cards and no impostors. A
+playtest has run from a bare checkout, so it holds the budget too: it
+draws no near crowns (their material dissolves within 74 m, where cards
+would be, so they were over a million triangles unseen), switches to the
+far LOD at 75 m, and a pine's or birch's far crown is one coarse blob.
+Worst fallback view: 549k triangles. The gauges print which path they
+measured (`foliage fetched` / `FALLBACK`), and so does the session log
+(`forest: foliage ...`).
 
 The gauges at every lookbook view of the four valleys (GPU-less client,
 one eye), in clear weather (the furthest you see, so the most drawn;

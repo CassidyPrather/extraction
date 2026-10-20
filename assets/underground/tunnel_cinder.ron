@@ -77,7 +77,7 @@
     // The breaker board at the back of the cable vault, a dead end:
     // throw it and the vault and the overflow chamber light, and the
     // overflow chamber's door opens.
-    power: Some((kind: Breaker, room: "cable_vault", at: (2.2, 0.5), rot: 270.0, doors: ["overflow"])),
+    power: [(kind: Breaker, room: "cable_vault", at: (2.2, 0.5), rot: 270.0, doors: ["overflow"])],
     floods: [
         (link: Some(("stair_hall", "pump_room")), depth: 1.1),
         (room: Some("overflow"), depth: 0.7),

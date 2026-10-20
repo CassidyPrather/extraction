@@ -964,31 +964,25 @@ mod tests {
     }
 
     /// Whether the game's own textures are here (`scripts/fetch_assets.py`).
-    /// Without them the trees fall back to untextured crowns with no
-    /// cards and no impostors (a dev fallback, not what ships, and a
-    /// heavier one: 1.1M triangles at the Kettle Pass gate), so a gauge
-    /// that counted it would measure the wrong game.
-    fn shipped_assets() -> bool {
-        let root = crate::asset_root_path().join("textures");
-        [
-            "foliage/spruce_branch/albedo.ktx2",
-            "foliage/birch_leaves/albedo.ktx2",
-            "foliage/fern/albedo.ktx2",
-            "terrain/albedo.ktx2",
-        ]
-        .iter()
-        .all(|f| root.join(f).exists())
+    /// Without them the trees are an untextured fallback (no cards, no
+    /// impostors): a different load, which has to fit the budget too
+    /// (a playtest has run from a bare checkout). The gauges say which
+    /// they measured.
+    fn fetched_foliage() -> bool {
+        let root = crate::asset_root_path().join("textures/foliage");
+        root.join("spruce_branch/albedo.ktx2").exists()
+            && root.join("birch_leaves/albedo.ktx2").exists()
     }
 
     fn holds(map: &str) {
-        if !shipped_assets() {
-            eprintln!(
-                "\n*** {map} frame budget NOT CHECKED: the textures aren't fetched, and \
-                 without them the trees are a heavier dev fallback. Run \
-                 `python3 scripts/fetch_assets.py` (or `--offline` from assets/.cache). ***\n"
-            );
-            return;
-        }
+        println!(
+            "{map}: foliage {}",
+            if fetched_foliage() {
+                "fetched"
+            } else {
+                "FALLBACK (no foliage textures: scripts/fetch_assets.py not run)"
+            }
+        );
         let loads = loads(map);
         let mut over = Vec::new();
         for (view, load, od) in &loads {

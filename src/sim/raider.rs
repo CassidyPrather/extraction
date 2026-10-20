@@ -580,6 +580,7 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     /// Underground sites' power: doors held shut, and the switches.
     power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    site_power: Query<'w, 's, &'static crate::world::underground::SitePower>,
     power_switches: Query<
         'w,
         's,
@@ -2046,7 +2047,7 @@ fn raid_step(
                            "dist": round(site.at.distance(here), 0)}),
                 );
                 r.act = Act::Travel(s);
-                if let Some(t) = go_to_site(r, s, pos) {
+                if let Some(t) = go_to_site(r, scene, s, pos) {
                     return t;
                 }
                 r.sites[s].visited = true;
@@ -2085,7 +2086,7 @@ fn raid_step(
                     r.act = Act::Idle;
                     continue;
                 }
-                if let Some(t) = go_to_site(r, s, pos) {
+                if let Some(t) = go_to_site(r, scene, s, pos) {
                     return t;
                 }
                 r.sites[s].visited = true;
@@ -2279,18 +2280,24 @@ fn site_target(r: &Raider, s: usize, pos: Vec3) -> Vec2 {
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
-fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
+fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
     let plan = r
         .plans
         .iter()
         .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
-    let exit = way_out(plan, plan.to_local(pos).xz())?;
+    let exit = way_out(plan, plan.to_local(pos).xz(), &|d| {
+        scene.power_locked.contains(d)
+    })?;
     indoor_out(plan, pos, exit, 0.6)
 }
 
 /// Where to walk to be out of a building from a local point: the nearest
 /// door stand or point round the footprint by the walk.
-pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
+pub(crate) fn way_out(
+    plan: &BuildingPlan,
+    local: Vec2,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec2> {
     // All the way out of the footprint, the shortest way round: a hall
     // with open bays counts as "outside" for its doors, and leaving only
     // the office in its corner left a bot inside, walking at the wall.
@@ -2321,10 +2328,18 @@ pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
     // A door stand inside the footprint (the office's, in an open hall)
     // isn't out.
     let out = |e: &Vec2| e.x.abs() > plan.half.x || e.y.abs() > plan.half.y;
+    // Nor a door held shut (an exit on an underground site's power).
+    let open = |e: &Vec2| {
+        !plan
+            .doors
+            .iter()
+            .any(|d| shut(d.entity) && d.outside.is_some_and(|o| o.distance(*e) < 0.01))
+    };
     plan.entries
         .iter()
         .copied()
         .filter(out)
+        .filter(open)
         .chain(ring)
         .filter_map(|e| {
             let path = plan.path(local, e)?;
@@ -2336,11 +2351,11 @@ pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
         .map(|b| b.1)
 }
 
-fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {
+fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task>> {
     let to = site_target(r, s, pos);
     let same = matches!(r.sites[s].kind, SiteKind::Building(b) if r.plans[b].in_grid(pos));
     if !same {
-        if let Some(out) = leave_building(r, pos) {
+        if let Some(out) = leave_building(r, scene, pos) {
             return Some(out);
         }
     }
@@ -2427,23 +2442,33 @@ fn take_item(
             }
             let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
             // Behind a door on an underground site's power: throw the
-            // switch first (it's loud: the crawlers come), unless careful.
+            // switches first, stage by stage up to the one that holds it
+            // (it's loud: the crawlers come), unless careful.
             let held = route
                 .iter()
-                .any(|t| matches!(t, Task::OpenDoor(d) if scene.power_locked.contains(*d)));
-            if held {
+                .filter_map(|t| match t {
+                    Task::OpenDoor(d) => scene.power_locked.get(*d).ok().map(|l| l.stage),
+                    _ => None,
+                })
+                .max();
+            if let Some(stage) = held {
                 if r.traits.name == "cautious" {
                     return None;
                 }
-                let (switch, _, gt) = scene
-                    .power_switches
-                    .iter()
-                    .find(|(_, sw, _)| sw.site == plan.entity)?;
-                let at_switch = gt.translation();
-                tasks.extend(indoor(plan, pos, plan.to_local(at_switch).xz(), 0.5)?);
-                tasks.push(Task::Press(switch));
-                tasks.push(Task::Wait(1.0));
-                tasks.extend(indoor(plan, at_switch, plan.to_local(at).xz(), 0.3)?);
+                let first = scene.site_power.get(plan.entity).ok()?.next()?;
+                let mut from = pos;
+                for k in first..=stage {
+                    let (switch, _, gt) = scene
+                        .power_switches
+                        .iter()
+                        .find(|(_, sw, _)| sw.site == plan.entity && sw.stage == k)?;
+                    let at_switch = gt.translation();
+                    tasks.extend(indoor(plan, from, plan.to_local(at_switch).xz(), 0.5)?);
+                    tasks.push(Task::Press(switch));
+                    tasks.push(Task::Wait(1.0));
+                    from = at_switch;
+                }
+                tasks.extend(indoor(plan, from, plan.to_local(at).xz(), 0.3)?);
             } else {
                 tasks.extend(route);
             }
@@ -2574,7 +2599,7 @@ fn extract_step(
     }
     if here.distance(approach) > 4.0 {
         r.act = Act::ToRv;
-        if let Some(out) = leave_building(r, pos) {
+        if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
         return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {

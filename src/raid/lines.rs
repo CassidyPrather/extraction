@@ -180,6 +180,10 @@ pub const BEAT_RECALLED: &[&str] = &[
     "Driver: \"I'm going in. First time. The house by the well.\"",
 ];
 
+/// The first note read in a career: there's a board for them in the truck
+/// (`raid/board.rs`).
+pub const FIRST_PIN: &str = "Truck: \"Reading their notes? I keep copies. Board in the back.\"";
+
 /// A machine close by has stopped looking for you
 /// (`robots::search::LostYou`).
 pub const LOST_YOU: &[&str] = &[
@@ -244,7 +248,7 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 19] = [
+        let pools: [&[&str]; 20] = [
             BEAT_RUSTY,
             BEAT_HOLMS,
             BEAT_COLLECTOR,
@@ -264,6 +268,7 @@ mod tests {
             CHATTER_CLOSE,
             CHATTER_FAR,
             &[NO_FUEL],
+            &[FIRST_PIN],
         ];
         for pool in pools {
             for line in pool {

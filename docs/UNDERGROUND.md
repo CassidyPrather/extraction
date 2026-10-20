@@ -122,6 +122,16 @@ tests it through the headset harness. Sim raiders whose way to an item
 runs through a held door throw the switch first (a `power` event in the
 telemetry); cautious ones leave it.
 
+The power comes in stages (`power` is a list): each stage's switch is
+dead ("Nothing upstream.") until the one before is on, each holds its
+own doors (a room's, or `portal<N>`: an exit stair's, kiosk and foot)
+and lights its own rooms (a room's `stage`). The layout check floods
+the plan with each stage's doors and every later one's shut and wants
+the switch reached (`power_stages_are_reached_in_order`); the headset
+test throws a late switch first, then each in turn. Raiders throw the
+switches in order up to the stage a door needs, and never leave by an
+exit still held.
+
 ## Water
 
 Floods are layout data too (a room or a corridor, and a depth): a drain
@@ -154,3 +164,60 @@ not the shelter's). The entries are the stands outside every kiosk door, so
 a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
+
+## The Depot (design, in progress)
+
+The place the convoys go. The lore says each Gate is a depot, the
+machines keep everything they take "pending review", and only the three
+keys end it. The Depot makes that physical: the valleys' things, sorted
+and stacked under the Gate, your own lost kit among them.
+
+**Where.** Under the Marrow Gate (-250, -255), in the robots' corner of
+the valley where it began; Hana's dog was carried "to the Gate", and so
+was she. One depot is built (Marrow's), deeper and bigger than the three
+sites: four levels stepping down, about 60 x 45 m, 7 m to 20 m below
+the yard.
+
+**The way in: follow the haul.** The Depot's intake is a wide ramp in
+the Gate's yard behind a steel shutter. After every Surge the machines
+bring in what it swept: a haul convoy walks down the ramp and the
+shutter stands open for a few minutes; you go in behind it, or wait for
+the next. (In the recall's epilogue it stands open for good, the
+machines asleep in their bays.) Lev tells you about it on the radio at
+rank 4, after her letter ("she says they keep everything"), and
+Progression's late jobs send you there; Story places what you find.
+*Proposed to Progression and Story; theirs to decide.*
+
+**The way out** is the service stair from the bottom level, up to a
+hatch in the rim woods: only the last power stage opens it.
+
+**Levels** (each a set of rooms on its own floor; stairs between them;
+no level over another, so one plan grid still serves the bots):
+
+| Level | Floor | Rooms | Power |
+| - | - | - | - |
+| 1 Intake | -7 m | the ramp's foot, a receiving bay where the haulers set down, a guard post | stage 1: the intake breaker, by the bay |
+| 2 Sorting | -11 m | the sorting hall (24 x 16, 6 m high): rows of bins by kind, a gantry; the tag office (a terminal: "KEPT FOR REVIEW") | stage 2: the hall's control desk, opens the stacks |
+| 3 The kept | -15 m | long stacks by valley and house: crates with names on; one says MAREK | lights only on stage 2 |
+| 4 Cistern | -19 m | the pump gallery, flooded (1.2 m), the old pumps; the service stair's foot | stage 3: the pump room's breaker opens the stair out |
+
+**What's there.**
+- *Your lost kit.* Everything the memorial convoy carried off
+  (`Memorial::lost`) lies in the sorting hall's bins, tagged with the
+  raid it was taken on. You can take it back.
+- *The valleys' things.* Bicycles, the bins, bus four's destination
+  board, the chapel's candlesticks: what the notes say was taken.
+- *The kept.* Rusty's lead and whatever Story decides of Hana's in the
+  MAREK crate, and the Holms'.
+- *Danger.* Crawlers on every level, and on the sorting floor something
+  heavier (Robot minds and bodies). Every power stage is louder than
+  the last: the generator wakes the hall.
+
+**Budget.** Everything below the yard is in the `Below` group (drawn
+only from inside or near the ramp and the hatch); at most 8 unshadowed
+lamps, range-hidden; the bins and stacks are instanced props or merged
+boxes. Checked with Performance's gauges once built.
+
+**Built in stages:** per-room floors and stairs between levels; the
+layout and its placement; power in stages; the flooded level; the bins
+and the kept; robots; the way in. Each with its tests and shots.

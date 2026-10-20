@@ -147,6 +147,41 @@ pub fn fetch_swapped(name: &str) -> String {
     format!("Driver: \"Forget the {name}. Something else on the card.\"")
 }
 
+// --- Upkeep and orders (after the ladder) ---------------------------------
+
+/// "2 scrap metal", "1 electronics".
+pub fn parts(parts: &[(&str, u32)], name: impl Fn(&str) -> String) -> String {
+    parts
+        .iter()
+        .map(|(id, n)| format!("{n} {}", name(id)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub fn upkeep_paid(fitting: &str, parts: &str) -> String {
+    format!("Driver: \"Took {parts} for the {fitting}.\"")
+}
+
+pub fn laid_up(fitting: &str, parts: &str) -> String {
+    format!("Driver: \"The {fitting}'s laid up. Wants {parts}.\"")
+}
+
+pub fn back_in_order(fitting: &str) -> String {
+    format!("Driver: \"The {fitting}'s working again.\"")
+}
+
+/// The order card, past the ladder.
+pub fn order_card(order: &str) -> String {
+    format!("MY CACHES: {order}\n(press to change)")
+}
+
+/// The order card, before the ladder's done.
+pub const ORDER_LATER: &str = "Driver: \"Do my jobs first. Then you can ask.\"";
+
+pub fn ordered(order: &str) -> String {
+    format!("Driver: \"{order}, then. I'll see what I can find.\"")
+}
+
 // --- Out there ----------------------------------------------------------------
 
 pub fn scout_noticed(place: &str) -> String {
@@ -192,6 +227,11 @@ mod tests {
             scout_noticed(place),
             scout_forgotten(place),
             AERIAL_SURGE.into(),
+            upkeep_paid("cabinet", "1 field dressing"),
+            laid_up("cabinet", "1 field dressing"),
+            back_in_order("cabinet"),
+            ORDER_LATER.into(),
+            ordered("Medicine"),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(

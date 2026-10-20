@@ -69,7 +69,7 @@
             description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
             firearm: Some((
-                action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
+                action: Revolver, cartridge: "7.62x38R", internal_capacity: 7, gate_offset: 5,
                 modes: [Semi], double_action: true,
                 muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1,
                 wear_per_shot: 0.0004,
