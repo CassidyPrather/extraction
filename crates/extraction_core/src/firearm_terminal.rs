@@ -343,7 +343,10 @@ mod tests {
         assert!(matches!(glance, Outcome::Ricochet { .. }));
         let (_, wear_pm) = hit(PM, 25.0, 1.0);
         let (_, wear_ak) = hit(AK, 100.0, 1.0);
-        assert!(wear_pm > 0.0 && wear_ak > wear_pm * 2.0, "{wear_pm} {wear_ak}");
+        assert!(
+            wear_pm > 0.0 && wear_ak > wear_pm * 2.0,
+            "{wear_pm} {wear_ak}"
+        );
         assert!(wear_ak < 0.1, "a plate takes a good few: {wear_ak}");
     }
 
