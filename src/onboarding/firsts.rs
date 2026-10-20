@@ -372,7 +372,7 @@ fn deaths(
     mut m: Meet,
 ) {
     let down = matches!(raid.phase, Phase::Down { .. });
-    if *was_down && raid.phase == Phase::AtBase && !m.met(First::Death) {
+    if *was_down && !down && !m.met(First::Death) {
         let me = locals.iter().next();
         let crate_n: usize = bags
             .iter()
@@ -661,6 +661,17 @@ mod tests {
             .iter(app.world())
             .map(|b| b.contents.len())
             .sum::<usize>();
+        // Well out from the truck.
+        {
+            let zone = app.world().resource::<Zone>().clone();
+            let truck = crate::raid::truck::base_pose(&zone).translation;
+            let at = zone.on_ground(truck.x + 60.0, truck.z + 20.0) + Vec3::Y * 0.1;
+            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+            t.translation = at;
+        }
+        for _ in 0..30 {
+            app.update();
+        }
         app.world_mut()
             .get_mut::<crate::health::Health>(player)
             .unwrap()
@@ -669,7 +680,11 @@ mod tests {
         for _ in 0..(90 * 30) {
             app.update();
         }
-        assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+        assert_eq!(
+            app.world().resource::<Raid>().phase,
+            Phase::AtBase,
+            "awake in the truck, not straight back out in the Zone"
+        );
         let spoken = app.world().resource::<Spoken>().0.clone();
         let want = fill(First::Death.lines()[0], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
