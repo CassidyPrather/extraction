@@ -10,6 +10,7 @@ and their origins (each the spawn offset of its part):
 - `turret`  (0, 0.46, 0)       gun turret; collider cuboid 0.16 x 0.12 x 0.4
 - `leg_upper`  origin at the hip, modelled along +Y, 0.8 m to the knee
 - `leg_lower`  origin at the knee, modelled along +Y, 0.95 m to the foot
+- `panel`   a loose shell panel for wrecks, origin at its middle (on the orb's surface)
 
 Leg segments have their bend axis along X (the game points X along the
 normal of the leg's plane) so knees hinge the right way.
@@ -159,7 +160,17 @@ lower.sphere(0.045, (0, LOWER - 0.01, 0), "Dark", segs=20, rings=10)
 lower.lathe([(0.0, LOWER - 0.06), (0.03, LOWER - 0.06), (0.042, LOWER - 0.035), (0.0, LOWER - 0.035)],
             "Dark", segs=18, xf=UP)
 
-for p in (core, sensor, turret, upper, lower):
+# --- A loose shell panel, for wrecks ----------------------------------------------------------
+# One of the orb's upper-band panels on its own (a wreck throws a couple
+# off; the game spins it to land wherever). Its origin is its middle, so
+# the game can find its outward normal from it.
+PANEL_LAT = 32.0
+panel = Part("panel", origin=(0.0, R * math.sin(math.radians(PANEL_LAT)),
+                              -R * math.cos(math.radians(PANEL_LAT))))
+panel.lathe(lat_arc(R - 0.016, R + 0.004, PANEL_LAT - 16, PANEL_LAT + 16, 6), "Shell", segs=7,
+            xf=UP, start=70, sweep=40, closed=True)
+
+for p in (core, sensor, turret, upper, lower, panel):
     make(p)
 report()
 export("assets/models/robots/walker.glb")

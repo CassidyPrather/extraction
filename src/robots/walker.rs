@@ -19,16 +19,11 @@ use super::{
 use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
 
-const LEGS: usize = 4;
-const BODY_HEIGHT: f32 = 1.15;
+pub use super::anim::solve_knee;
+use super::anim::{BODY_HEIGHT, LEGS, rest_offset};
+
 pub const UPPER: f32 = 0.8;
 pub const LOWER: f32 = 0.95;
-const HIP_RADIUS: f32 = 0.32;
-const FOOT_RADIUS: f32 = 1.05;
-const STEP_TRIGGER: f32 = 0.42;
-const STEP_TIME: f32 = 0.28;
-const STEP_HEIGHT: f32 = 0.28;
-const SPEED: f32 = 1.7;
 /// Suspicion at which a walker that sees you opens fire.
 pub const ENGAGE_AT: f32 = 0.55;
 /// Out of sight this long in a fight, it goes to where it last saw you.
@@ -40,8 +35,6 @@ pub const AIM_TIME: f32 = 0.7;
 pub const COVER_RANGE: (f32, f32) = (14.0, 34.0);
 /// ...and looks for better cover this often (s).
 pub const COVER_RETHINK: f32 = 4.0;
-/// Kept low (a grappler lying in wait), the orb sits this much lower (m).
-const LOW: f32 = 0.35;
 
 /// The shared navigation grid for ground robots (and bots).
 #[derive(Resource, Clone)]
@@ -57,7 +50,10 @@ pub struct Foot {
     pub alive: bool,
 }
 
+/// The body (`anim`) moves it; see [`super::Intent`] for what
+/// the brain can ask of it besides a path.
 #[derive(Component, Debug)]
+#[require(super::anim::Gait)]
 pub struct Walker {
     pub feet: [Foot; LEGS],
     pub path: Vec<Vec3>,
@@ -118,21 +114,17 @@ impl Plugin for WalkerPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                (walker_parts_destroyed, walker_brain, walk, walker_guns)
+                (
+                    walker_parts_destroyed,
+                    walker_brain,
+                    super::anim::walk,
+                    super::anim::aim_turrets,
+                    walker_guns,
+                )
                     .chain()
                     .before(PhysicsSystems::First),
             );
     }
-}
-
-fn hip_offset(i: usize) -> Vec3 {
-    let a = std::f32::consts::FRAC_PI_4 + i as f32 * std::f32::consts::FRAC_PI_2;
-    Vec3::new(a.cos() * HIP_RADIUS, -0.12, a.sin() * HIP_RADIUS)
-}
-
-fn rest_offset(i: usize) -> Vec3 {
-    let a = std::f32::consts::FRAC_PI_4 + i as f32 * std::f32::consts::FRAC_PI_2;
-    Vec3::new(a.cos() * FOOT_RADIUS, 0.0, a.sin() * FOOT_RADIUS)
 }
 
 /// Navigation for ground robots: terrain, structures and tree trunks
@@ -626,194 +618,6 @@ fn pick_cover(pos: Vec3, target: Vec3, nav: &NavGrid, spatial: &SpatialQuery) ->
     best.map(|(p, _)| p)
 }
 
-/// Body motion along the path, then feet, then IK.
-fn walk(
-    mut walkers: Query<(
-        &mut Walker,
-        &mut Transform,
-        &mut LegPoses,
-        &Awareness,
-        &Intent,
-        &Children,
-        &Robot,
-        Has<super::Stunned>,
-    )>,
-    mut legs: Query<(&WalkerLeg, &mut Transform), Without<Walker>>,
-    targets: Query<&GlobalTransform>,
-    zone: Res<Zone>,
-    time: Res<Time>,
-    mut steps: MessageWriter<WalkerStep>,
-) {
-    let dt = time.delta_secs();
-    for (mut w, mut t, mut poses, aware, intent, children, robot, stunned) in &mut walkers {
-        let pos = t.translation;
-        // Steering.
-        let mut desired = Vec3::ZERO;
-        if let Some(next) = w.path.first().copied() {
-            let to = Vec3::new(next.x - pos.x, 0.0, next.z - pos.z);
-            if to.length() < 0.8 {
-                w.path.remove(0);
-            } else {
-                desired = to.normalize() * SPEED * intent.pace;
-            }
-        }
-        let alive_legs = w.feet.iter().filter(|f| f.alive).count();
-        let down = w.collapsed || robot.wrecked || stunned;
-        if down {
-            desired = Vec3::ZERO;
-        } else if alive_legs < LEGS {
-            desired *= 0.45; // limping
-        }
-        let v = w.velocity.lerp(desired, (3.0 * dt).min(1.0));
-        w.velocity = v;
-        // Face the target when it has one in sight, else where its brain
-        // says to look, else where it's going.
-        let face = aware
-            .target
-            .filter(|_| aware.can_see_target)
-            .and_then(|p| targets.get(p).ok())
-            .map(|g| g.translation() - pos)
-            .or(intent.look.map(|l| l - pos))
-            .unwrap_or(v);
-        if Vec2::new(face.x, face.z).length() > 0.2 {
-            let want = (-face.x).atan2(-face.z);
-            let mut d = want - w.yaw;
-            while d > std::f32::consts::PI {
-                d -= std::f32::consts::TAU;
-            }
-            while d < -std::f32::consts::PI {
-                d += std::f32::consts::TAU;
-            }
-            w.yaw += d.clamp(-1.6 * dt, 1.6 * dt);
-        }
-        let mut next = pos + v * dt;
-        // Height: above the planted feet, with a little bob in mid-stride.
-        let feet_h: f32 = w
-            .feet
-            .iter()
-            .filter(|f| f.alive)
-            .map(|f| f.planted.y)
-            .sum::<f32>()
-            / alive_legs.max(1) as f32;
-        let ground = zone.ground(next.x, next.z);
-        let base = if down {
-            ground + 0.4
-        } else {
-            feet_h.max(ground - 0.2) + BODY_HEIGHT - if intent.low { LOW } else { 0.0 }
-        };
-        let stepping = w.feet.iter().any(|f| f.t < 1.0);
-        let bob = if stepping { 0.04 } else { 0.0 };
-        next.y += (base + bob - next.y) * (6.0 * dt).min(1.0);
-        t.translation = next;
-        // Lean into motion, tip toward a missing leg.
-        let lean = Vec3::new(v.z, 0.0, -v.x) * 0.05;
-        t.rotation = Quat::from_rotation_y(w.yaw) * Quat::from_scaled_axis(lean);
-
-        // Feet.
-        let rot = Quat::from_rotation_y(w.yaw);
-        let lookahead = v * 0.35;
-        let pair_busy = |w: &Walker, pair: usize| {
-            (0..LEGS)
-                .filter(|i| i % 2 == pair)
-                .any(|i| w.feet[i].t < 1.0)
-        };
-        for i in 0..LEGS {
-            if !w.feet[i].alive {
-                continue;
-            }
-            let ideal_xz = next + rot * rest_offset(i) + lookahead;
-            let ideal = Vec3::new(ideal_xz.x, zone.ground(ideal_xz.x, ideal_xz.z), ideal_xz.z);
-            let f = w.feet[i];
-            if f.t < 1.0 {
-                let nt = (f.t + dt / STEP_TIME).min(1.0);
-                let foot = &mut w.feet[i];
-                foot.t = nt;
-                let s = nt * nt * (3.0 - 2.0 * nt);
-                foot.planted = foot.from.lerp(foot.to, s)
-                    + Vec3::Y * (STEP_HEIGHT * (std::f32::consts::PI * nt).sin());
-                if nt >= 1.0 {
-                    foot.planted = foot.to;
-                    steps.write(WalkerStep { at: foot.to });
-                }
-            } else if f.planted.distance(ideal) > STEP_TRIGGER
-                && i % 2 == w.phase
-                && !pair_busy(&w, 1 - w.phase)
-            {
-                let foot = &mut w.feet[i];
-                foot.from = foot.planted;
-                foot.to = ideal;
-                foot.t = 0.0;
-            }
-        }
-        // Alternate pairs once the current pair has landed.
-        if !pair_busy(&w, w.phase)
-            && w.feet
-                .iter()
-                .enumerate()
-                .any(|(i, f)| i % 2 == w.phase && f.t >= 1.0)
-        {
-            let other = 1 - w.phase;
-            let other_needs = (0..LEGS).any(|i| {
-                i % 2 == other && w.feet[i].alive && {
-                    let ideal_xz = next + rot * rest_offset(i);
-                    w.feet[i].planted.distance(Vec3::new(
-                        ideal_xz.x,
-                        w.feet[i].planted.y,
-                        ideal_xz.z,
-                    )) > STEP_TRIGGER * 0.6
-                }
-            });
-            if other_needs {
-                w.phase = other;
-            }
-        }
-        // IK.
-        let tf = *t;
-        for i in 0..LEGS {
-            let hip = tf.transform_point(hip_offset(i));
-            let foot = if w.feet[i].alive {
-                w.feet[i].planted
-            } else {
-                // A dead leg dangles under its hip.
-                hip + rot * (hip_offset(i).normalize_or_zero() * 0.4)
-                    - Vec3::Y * (UPPER + LOWER) * 0.8
-            };
-            let knee = solve_knee(
-                hip,
-                foot,
-                (hip - tf.translation).normalize_or(Vec3::X) + Vec3::Y * 0.8,
-            );
-            poses.0[i] = [hip, knee, foot];
-        }
-        // Leg colliders follow the lower segments (local to the root).
-        // Built from parts rather than a matrix, so the scale stays exactly
-        // one: a capsule scaled by 0.9999999 is rebuilt as a convex hull,
-        // every tick, for every leg.
-        let inv = tf.compute_affine().inverse();
-        let inv_rot = tf.rotation.inverse();
-        for c in children.iter() {
-            if let Ok((leg, mut lt)) = legs.get_mut(c) {
-                let [_, knee, foot] = poses.0[leg.index];
-                let mid = (knee + foot) * 0.5;
-                let dir = (knee - foot).normalize_or(Vec3::Y);
-                *lt = Transform::from_translation(inv.transform_point3(mid))
-                    .with_rotation(inv_rot * Quat::from_rotation_arc(Vec3::Y, dir));
-            }
-        }
-    }
-}
-
-/// Two-bone IK: the knee, bent toward `pole`.
-pub fn solve_knee(hip: Vec3, foot: Vec3, pole: Vec3) -> Vec3 {
-    let d = (foot - hip).length().clamp(0.05, UPPER + LOWER - 0.001);
-    let dir = (foot - hip).normalize_or(Vec3::NEG_Y);
-    // Distance along hip->foot to the knee's projection, and the knee's offset.
-    let a = (UPPER * UPPER - LOWER * LOWER + d * d) / (2.0 * d);
-    let h = (UPPER * UPPER - a * a).max(0.0).sqrt();
-    let bend = (pole - dir * pole.dot(dir)).normalize_or(Vec3::Y);
-    hip + dir * a + bend * h
-}
-
 fn walker_guns(
     mut walkers: Query<(Entity, &mut Walker, &Brain, &Awareness, &Robot, &Children)>,
     turrets: Query<(&GlobalTransform, &RobotPart), With<WalkerTurret>>,
@@ -890,16 +694,6 @@ fn walker_guns(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn knee_keeps_segment_lengths() {
-        let hip = Vec3::new(0.0, 1.0, 0.0);
-        let foot = Vec3::new(1.0, 0.0, 0.2);
-        let knee = solve_knee(hip, foot, Vec3::Y + Vec3::X);
-        assert!((knee.distance(hip) - UPPER).abs() < 1e-3);
-        assert!((knee.distance(foot) - LOWER).abs() < 1e-3);
-        assert!(knee.y > hip.y - 0.2, "knee bends upward, like a spider's");
-    }
 
     /// On every map, every rendezvous can be walked to from the insertion
     /// (the bots path on this grid too: a missing bridge is a valley

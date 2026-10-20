@@ -18,9 +18,9 @@ use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
 
 /// Rotor arm length (x and z), metres.
-const ARM: f32 = 0.32;
-const MASS: f32 = 6.0;
-const MAX_ROTOR_N: f32 = MASS * 9.81 / 4.0 * 2.2;
+pub const ARM: f32 = 0.32;
+pub const MASS: f32 = 6.0;
+pub const MAX_ROTOR_N: f32 = MASS * 9.81 / 4.0 * 2.2;
 
 pub const ROTORS: [Vec3; 4] = [
     Vec3::new(ARM, 0.02, ARM),
@@ -29,7 +29,10 @@ pub const ROTORS: [Vec3; 4] = [
     Vec3::new(ARM, 0.02, -ARM),
 ];
 
+/// The body (`flight`) flies it toward `goal`; see
+/// [`super::Intent`] for where it looks and how hard it pushes.
 #[derive(Component, Debug)]
+#[require(super::flight::Flight)]
 pub struct Drone {
     /// Thrust per rotor this tick, newtons (for visuals and sound).
     pub thrust: [f32; 4],
@@ -69,7 +72,12 @@ impl Plugin for DronePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<DroneLock>().add_systems(
             FixedUpdate,
-            (drone_parts_destroyed, drone_brain, fly_drones, drone_guns)
+            (
+                drone_parts_destroyed,
+                drone_brain,
+                super::flight::fly_drones,
+                drone_guns,
+            )
                 .chain()
                 .before(PhysicsSystems::First),
         );
@@ -350,104 +358,6 @@ fn drone_brain(
             }
             Brain::Down => {}
         }
-    }
-}
-
-/// Position -> acceleration -> attitude -> per-rotor thrust.
-fn fly_drones(
-    mut drones: Query<(
-        &mut Drone,
-        &Robot,
-        &Transform,
-        &Awareness,
-        &Intent,
-        Has<super::Stunned>,
-        Forces,
-    )>,
-    targets: Query<&GlobalTransform>,
-    zone: Res<Zone>,
-    time: Res<Time>,
-) {
-    let dt = time.delta_secs();
-    let g = Vec3::new(0.0, -9.81, 0.0);
-    for (mut d, robot, t, aware, intent, stunned, mut forces) in &mut drones {
-        let pos = t.translation;
-        let lin = LinearVelocity(forces.linear_velocity());
-        let ang = AngularVelocity(forces.angular_velocity());
-        let near_ground = pos.y - zone.ground(pos.x, pos.z) < 0.6;
-        if robot.wrecked
-            || stunned
-            || d.rotor_alive.iter().filter(|a| **a).count() < 4 && near_ground
-        {
-            d.thrust = [0.0; 4];
-            if near_ground {
-                d.grounded += dt;
-            }
-            continue;
-        }
-        // Position controller.
-        let err = d.goal - pos;
-        let mut acc = err * 1.2 - lin.0 * 1.6;
-        let horiz = Vec2::new(acc.x, acc.z).clamp_length_max(5.0 * intent.pace.max(0.3));
-        acc = Vec3::new(horiz.x, acc.y.clamp(-4.0, 5.0), horiz.y);
-        // Don't scrape the ground.
-        if pos.y - zone.ground(pos.x, pos.z) < 2.5 {
-            acc.y = acc.y.max(3.0);
-        }
-        let f_world = (acc - g) * MASS;
-        // Desired up, tilted at most ~35 degrees.
-        let mut up_des = f_world.normalize_or(Vec3::Y);
-        let tilt = up_des.angle_between(Vec3::Y);
-        if tilt > 0.6 {
-            let axis = Vec3::Y.cross(up_des).normalize_or(Vec3::X);
-            up_des = Quat::from_axis_angle(axis, 0.6) * Vec3::Y;
-        }
-        let up = t.rotation * Vec3::Y;
-        let thrust_total = f_world.dot(up).max(0.0);
-        // Attitude: tilt toward up_des, yaw toward the target or travel.
-        let tilt_axis = up.cross(up_des);
-        let tilt_err = tilt_axis.normalize_or_zero() * up.angle_between(up_des);
-        let face = aware
-            .target
-            .filter(|_| aware.can_see_target)
-            .and_then(|p| targets.get(p).ok())
-            .map(|g| g.translation() - pos)
-            .or(intent.look.map(|l| l - pos))
-            .unwrap_or(lin.0);
-        let fwd = t.rotation * Vec3::NEG_Z;
-        let face_flat = Vec3::new(face.x, 0.0, face.z);
-        let yaw_err = if face_flat.length() > 0.5 {
-            let f = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
-            let to = face_flat.normalize();
-            // Signed angle, full turn when the target is behind (an arcsine
-            // of the cross product reads zero there, and it never turned).
-            f.cross(to).y.atan2(f.dot(to))
-        } else {
-            0.0
-        };
-        let torque_world = tilt_err * 9.0 - ang.0 * 2.2 + Vec3::Y * yaw_err * 2.0;
-        // Mix into rotor thrusts (body frame), X-quad allocation.
-        let torque_body = t.rotation.inverse() * torque_world;
-        let a2 = 4.0 * ARM * ARM;
-        let mut f = [0.0f32; 4];
-        for (i, r) in ROTORS.iter().enumerate() {
-            let fi = thrust_total / 4.0 - torque_body.x * r.z / a2 + torque_body.z * r.x / a2;
-            f[i] = if d.rotor_alive[i] {
-                fi.clamp(0.0, MAX_ROTOR_N)
-            } else {
-                0.0
-            };
-        }
-        d.thrust = f;
-        for (i, r) in ROTORS.iter().enumerate() {
-            if f[i] > 0.0 {
-                let at = t.transform_point(*r);
-                forces.apply_force_at_point(up * f[i], at);
-            }
-        }
-        // Yaw comes from rotor drag; apply it directly.
-        forces.apply_torque(Vec3::Y * torque_world.y.clamp(-3.0, 3.0));
-        d.grounded = 0.0;
     }
 }
 

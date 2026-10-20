@@ -10,19 +10,24 @@
 //! current **job**, and arrive and leave diegetically through the Gate
 //! (see [`director`]).
 
+pub mod anim;
 pub mod collector;
 pub mod director;
 pub mod dirigible;
 pub mod doors;
 pub mod drone;
+pub mod flight;
+pub mod fx;
 pub mod grappler;
 #[cfg(test)]
 mod mind_tests;
 pub mod pylon;
+pub mod reel;
 pub mod search;
 pub mod senses;
 pub mod visuals;
 pub mod walker;
+pub mod wreck;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -227,6 +232,9 @@ impl Plugin for RobotsPlugin {
                 grappler::GrapplerPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
+                anim::AnimPlugin,
+                flight::FlightPlugin,
+                wreck::WreckPlugin,
                 search::SearchPlugin,
             ))
             .add_systems(
