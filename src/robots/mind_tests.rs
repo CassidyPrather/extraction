@@ -1003,7 +1003,7 @@ fn an_open_door_lets_a_sound_out() {
     let post = ent.mid + ent.out * 8.0;
     let walker = walker_at(&mut app, &zone, zone.on_ground(post.x, post.z));
     let inside = ent.mid - ent.out * 2.0;
-    let mut heard = |app: &mut App, open: bool| {
+    let heard = |app: &mut App, open: bool| {
         app.world_mut()
             .get_mut::<crate::world::buildings::Door>(ent.door)
             .unwrap()
