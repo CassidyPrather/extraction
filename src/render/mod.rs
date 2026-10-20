@@ -54,6 +54,7 @@ impl Plugin for RenderPlugin {
             budget::BudgetPlugin,
         ))
         .add_plugins(crate::raid::board::BoardVisualsPlugin)
+        .add_plugins(crate::raid::lev::LevVisualsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()

@@ -355,43 +355,23 @@ fn job_done(
     mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
     mut save: MessageWriter<crate::persist::SaveNow>,
-    stashes: Query<Entity, With<Stash>>,
+    mut handover: MessageWriter<crate::raid::lev::HandOver>,
     catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
         let fitted = progression.0.complete();
         for u in fitted {
             raid.say(lines::fitted(*u));
-            let Some(stash) = stashes.iter().next() else {
-                continue;
-            };
+            // He passes them back through the cab's hatch (`raid::lev`).
             let mut gave = false;
-            for (i, (id, n, condition)) in gifts(*u).iter().enumerate() {
-                let Some(kind) = catalog.kind(id) else {
+            for (id, n, condition) in gifts(*u) {
+                if catalog.kind(id).is_none() {
                     continue;
-                };
-                for k in 0..*n {
-                    let local = Vec3::new(0.25, 0.08, -0.45 + 0.12 * (i as f32 + k as f32 * 0.5));
-                    let e = spawn_item(
-                        &mut commands,
-                        &catalog,
-                        SpawnItem {
-                            kind,
-                            transform: Transform::from_translation(local),
-                            condition: *condition,
-                        },
-                    );
-                    commands.entity(e).insert((
-                        crate::interact::body::InBackpack { bag: stash },
-                        ChildOf(stash),
-                        Transform::from_translation(local),
-                        RigidBodyDisabled,
-                        ColliderDisabled,
-                    ));
-                    commands.queue(move |world: &mut World| {
-                        if let Some(mut b) = world.get_mut::<Backpack>(stash) {
-                            b.contents.push(e);
-                        }
+                }
+                for _ in 0..*n {
+                    handover.write(crate::raid::lev::HandOver {
+                        id: id.to_string(),
+                        condition: *condition,
                     });
                     gave = true;
                 }

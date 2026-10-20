@@ -13,6 +13,7 @@ pub mod board;
 pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
+pub mod lev;
 pub mod lines;
 pub mod logbook;
 pub mod requests;
@@ -154,6 +155,7 @@ impl Plugin for RaidPlugin {
             logbook::LogbookPlugin,
             requests::RequestsPlugin,
             board::BoardPlugin,
+            lev::LevPlugin,
         ))
         .add_systems(
             Update,

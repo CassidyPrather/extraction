@@ -437,22 +437,28 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
 }
 
 #[test]
-fn the_second_and_third_tiers_leave_guns_in_the_stash() {
+fn the_second_and_third_tiers_hand_over_guns() {
     let mut app = crate::raid::requests::tests::app();
     let catalog = app.world().resource::<Catalog>().clone();
-    let stash = one::<With<Stash>>(&mut app);
+    // What Lev has passed back through the cab's hatch (`raid::lev`).
     let ids = |app: &mut App| -> Vec<String> {
-        let contents = app.world().get::<Backpack>(stash).unwrap().contents.clone();
-        contents
+        app.world()
+            .resource::<crate::raid::lev::Handovers>()
+            .handed
             .iter()
-            .filter_map(|e| app.world().get::<Item>(*e))
-            .map(|i| catalog.get(i.kind()).id.clone())
+            .map(|(id, _)| id.clone())
             .collect()
     };
     let before = ids(&mut app).len();
     for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
         app.world_mut().write_message(JobDone);
         app.update();
+    }
+    for _ in 0..2000 {
+        app.update();
+        if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
+            break;
+        }
     }
     let after = ids(&mut app);
     let known: Vec<&str> = gifts(Upgrade::BenchVice)
