@@ -9,6 +9,7 @@ pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
+pub mod halos;
 pub mod impostors;
 pub mod notes;
 pub mod puddles;
@@ -236,6 +237,7 @@ impl Plugin for WorldVisualsPlugin {
             underground::UndergroundVisualsPlugin,
             shafts::ShaftsPlugin,
             beams::BeamsPlugin,
+            halos::HalosPlugin,
         ));
     }
 }

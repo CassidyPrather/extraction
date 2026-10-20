@@ -43,6 +43,8 @@ def stats(px):
 
 
 GROUND_SKY = 12
+# Views under trees: the sky's a few gaps, so no ground-against-sky gauge.
+FOREST = ("spruce", "pines", "wood", "belt")
 HOLE = 0.25
 
 
@@ -75,7 +77,7 @@ def failures(seen):
         weather, moon = case.split("_")
         if s["black"] > HOLE:
             bad.append(f"{rel}: {s['black']*100:.0f}% near black")
-        if weather == "clearing" and moon != "new" and "spruce" not in view:
+        if weather == "clearing" and moon != "new" and not any(f in view for f in FOREST):
             if abs(sky["p50"] - ground["p50"]) < GROUND_SKY:
                 bad.append(f"{rel}: ground {ground['p50']} too like the sky {sky['p50']}")
         if weather in ("fog", "downpour"):
