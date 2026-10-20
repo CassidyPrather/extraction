@@ -132,6 +132,8 @@ fn spawn_sky(
             ..default()
         },
         Transform::IDENTITY.looking_to(weather.sun_dir, Vec3::Y),
+        // The world, and the body's shadow proxy (on a layer no camera has).
+        crate::render::arms::sun_layers(),
         // Cascades are per view: in a headset, two eyes each. Two cascades
         // out to 90 m (past that the fog has the shadows anyway), less at
         // lower `--detail`.
