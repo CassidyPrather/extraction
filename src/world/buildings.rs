@@ -432,10 +432,17 @@ impl Builder {
             }
             if !matches!(o.kind, OpeningKind::Gap | OpeningKind::Breach) {
                 // The lintel's underside a centimetre below the wall's over
-                // the opening (in the same plane they fight).
+                // the opening (in the same plane they fight). Under a
+                // carved casing it's slimmer, behind the casing's boards
+                // and below its head (not in their planes).
+                let cased = o.kind == OpeningKind::Window
+                    && self.exterior
+                    && matches!(mat, Mat::Planks | Mat::LogWall);
+                let (lh, ld) = if cased { (0.065, 0.03) } else { (0.08, 0.04) };
                 self.piece(
-                    Shape::Box(Vec3::new(o.width + 0.12, 0.08, thick + 0.04)),
-                    Transform::from_translation(mid + Vec3::Y * (o.top + 0.03)).with_rotation(rot),
+                    Shape::Box(Vec3::new(o.width + 0.12, lh, thick + ld)),
+                    Transform::from_translation(mid + Vec3::Y * (o.top - 0.01 + lh * 0.5))
+                        .with_rotation(rot),
                     frame,
                     false,
                 );
@@ -622,8 +629,10 @@ impl Builder {
                 for (s0, s1) in top_runs(-face, len + face + 0.04) {
                     strip(self, s0, s1, h - 0.18, h - 0.02, face, 0.04, mat);
                 }
+                // Its foot just off the steeple's base and the like,
+                // modelled to the footing's 5 cm.
                 for (s0, s1) in runs(len + face + 0.025, 0.06) {
-                    strip(self, s0, s1, -0.05, 0.3, face, 0.025, Mat::Concrete);
+                    strip(self, s0, s1, -0.056, 0.3, face, 0.025, Mat::Concrete);
                 }
             }
             _ => {}
@@ -711,8 +720,9 @@ impl Builder {
         let base = a + dir * s;
         let out = rot * Vec3::NEG_Z;
         for k in 0..n {
-            // k = 0 is the top step.
-            let top = -rise * k as f32;
+            // k = 0 is the top step, a few millimetres under the floor
+            // (out of the plinth's plane where it laps the plinth's edge).
+            let top = -rise * k as f32 - 0.004;
             let reach = (k + 1) as f32 * tread;
             let w = width + 0.4 + 2.0 * tread * k as f32;
             let c = Vec3::new(base.x, y0 + (top - sunk) * 0.5, base.y) + out * (reach * 0.5);
@@ -892,8 +902,9 @@ impl Builder {
             strut(self, low, high, 0.07, 0.14, mat);
         }
         if burnt && side > 0.0 {
-            // What's left of the ridge beam, under what's left of the roof.
-            let (z0, z1) = (-span * 0.5, -(d + 1.0) / 6.0);
+            // What's left of the ridge beam, under what's left of the roof
+            // (and stopping short of its torn edge).
+            let (z0, z1) = (-span * 0.5, -(d + 1.0) / 6.0 - 0.03);
             self.deco(
                 Vec3::new(0.14, 0.2, z1 - z0),
                 ridge((z0 + z1) * 0.5) + Vec3::Y * 0.02,
@@ -1670,15 +1681,20 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
                 ),
                 (
                     heap,
-                    Transform::from_translation(corner + Vec3::new(-0.75, f, 0.75))
+                    Transform::from_translation(corner + Vec3::new(-0.75, f + 0.03, 0.75))
                         .with_rotation(Quat::from_rotation_y(-0.7)),
                 ),
             ],
         );
         // Under the roof's hole; the breach's spill outside and in.
-        rubble(b, Vec3::new(x * 0.4, f, -z * 0.5), 0.0, "rubble_planks");
+        rubble(
+            b,
+            Vec3::new(x * 0.4, f + 0.03, -z * 0.5),
+            0.0,
+            "rubble_planks",
+        );
         rubble(b, Vec3::new(x + 0.75, 0.0, 0.14), 1.57, heap);
-        rubble(b, Vec3::new(x - 0.75, f, 0.14), -1.57, heap);
+        rubble(b, Vec3::new(x - 0.75, f + 0.03, 0.14), -1.57, heap);
         beam(
             b,
             Vec3::new(-x + 0.25, f + 1.7, -z * 0.15),
@@ -1721,7 +1737,12 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
             Vec3::new(-x * 0.1, f + 0.12, -z * 0.1),
             "beam_charred",
         );
-        rubble(b, Vec3::new(x * 0.45, f, -z * 0.15), 1.0, "rubble_planks");
+        rubble(
+            b,
+            Vec3::new(x * 0.45, f + 0.03, -z * 0.15),
+            1.0,
+            "rubble_planks",
+        );
         for (ax, az) in [(-0.45, -0.5), (0.6, 0.75), (-0.75, 0.55)] {
             let at = Vec3::new(x * ax, f, z * az);
             let from = b.geo.pieces.len();
@@ -2141,7 +2162,7 @@ fn pump_station(b: &mut Builder) {
         0.3,
         Mat::Brick,
         [
-            &[window(3.0), door(7.0), window(11.0)],
+            &[window(3.0), door(7.0), window(11.3)],
             &[window(5.0)],
             &[window(4.0), window(10.0)],
             &[door(5.0)],
@@ -2414,12 +2435,13 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
             Mat::Plaster,
             &[window(3.0)],
         );
+        // Clear of the bay's workbench's end.
         b.table(
-            Vec3::new(w * 0.5 - 3.0, f, d * 0.5 - 2.5),
+            Vec3::new(w * 0.5 - 2.6, f, d * 0.5 - 2.5),
             0.0,
             Some("house"),
         );
-        b.chair(Vec3::new(w * 0.5 - 3.1, f, d * 0.5 - 1.85), 0.15);
+        b.chair(Vec3::new(w * 0.5 - 2.7, f, d * 0.5 - 1.85), 0.15);
         b.locker(
             Vec3::new(w * 0.5 - 5.5, f, d * 0.5 - 0.45),
             std::f32::consts::PI,
@@ -2775,8 +2797,9 @@ fn mill_race(b: &mut Builder) {
         Transform::from_xyz(0.0, 0.0, MR_SHIFT),
         ["mill_race_lod1", "mill_race_lod2"],
     );
-    // Up on the deck, for whoever climbs.
-    b.crate_box(Vec3::new(-2.3, top, -2.4 + MR_SHIFT), 0.7, Some("tools"));
+    // Up on the deck, for whoever climbs, in its corner clear of the
+    // tank.
+    b.crate_box(Vec3::new(-2.7, top, -2.7 + MR_SHIFT), 0.1, Some("tools"));
     // In the wheel house by the wheel, the millwright's chest.
     b.furnish(
         "tool_chest",
