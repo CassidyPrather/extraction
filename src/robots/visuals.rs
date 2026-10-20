@@ -240,6 +240,7 @@ fn dress_parts(
             Has<DroneGun>,
             Has<WalkerTurret>,
             Has<WalkerLeg>,
+            Has<super::indoor::CrawlerGun>,
         ),
         With<Undressed>,
     >,
@@ -267,7 +268,7 @@ fn dress_parts(
         }
     };
     let mut cache: Vec<(RobotKind, Option<Vec<ModelNode>>)> = Vec::new();
-    for (e, part, gun, turret, leg) in &parts {
+    for (e, part, gun, turret, leg, emitter) in &parts {
         let Ok(robot) = robots.get(part.robot) else {
             continue;
         };
@@ -316,6 +317,7 @@ fn dress_parts(
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
+            (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
             (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {

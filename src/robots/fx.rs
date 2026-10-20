@@ -32,6 +32,8 @@ impl Plugin for RobotFxPlugin {
                 smoulder,
                 fly_sparks,
                 drift_puffs,
+                charge_emitters,
+                zap_arcs,
             )
                 .chain(),
         );
@@ -45,6 +47,8 @@ struct FxAssets {
     puff: Handle<Mesh>,
     smoke: Handle<StandardMaterial>,
     soot: Handle<StandardMaterial>,
+    /// Blue-white, for a crawler's arcs and crackle.
+    arc: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -75,6 +79,12 @@ fn assets(
             base_color: Color::srgba(0.16, 0.15, 0.14, 0.2),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
+            ..default()
+        }),
+        arc: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.8, 0.9, 1.0),
+            emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
+            unlit: true,
             ..default()
         }),
     };
@@ -377,5 +387,167 @@ fn drift_puffs(
         // Swells as it rises; thins away at the end.
         let fade = (p.life / (p.max * 0.3)).min(1.0);
         t.scale = Vec3::splat(p.size * (0.4 + 2.2 * age) * fade.sqrt());
+    }
+}
+
+/// A crawler's emitter charging: a blue glow that swells over the charge,
+/// and crackle.
+#[derive(Component)]
+struct Charging {
+    left: f32,
+    next: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn charge_emitters(
+    mut commands: Commands,
+    mut charges: MessageReader<super::indoor::CrawlerCharge>,
+    crawlers: Query<&Children>,
+    emitters: Query<&GlobalTransform, With<super::indoor::CrawlerGun>>,
+    mut glows: Query<(Entity, &mut Charging, &mut PointLight, &GlobalTransform)>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+    mut dice: Local<Dice>,
+) {
+    use super::indoor::ZAP_CHARGE;
+    for c in charges.read() {
+        let Some(emitter) = crawlers
+            .get(c.crawler)
+            .ok()
+            .and_then(|ch| ch.iter().find(|e| emitters.contains(*e)))
+        else {
+            continue;
+        };
+        commands.entity(emitter).with_child((
+            Charging {
+                left: ZAP_CHARGE,
+                next: 0.0,
+            },
+            PointLight {
+                color: Color::srgb(0.55, 0.75, 1.0),
+                intensity: 0.0,
+                range: 6.0,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, -0.08),
+        ));
+    }
+    let dt = time.delta_secs();
+    let mut n = sparks.iter().len();
+    let mut a = None;
+    for (e, mut ch, mut light, gt) in &mut glows {
+        ch.left -= dt;
+        ch.next -= dt;
+        if ch.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let k = 1.0 - ch.left / ZAP_CHARGE;
+        // Swelling, and stuttering like a bad contact.
+        let flick = if dice.f() < 0.25 { 0.3 } else { 1.0 };
+        light.intensity = 30_000.0 * k * k * flick;
+        if ch.next <= 0.0 && n < MAX_SPARKS {
+            let a = a.get_or_insert_with(|| {
+                assets(&mut commands, &existing, &mut meshes, &mut materials)
+            });
+            for _ in 0..2 {
+                let vel = dice.signed().normalize_or(Vec3::Y) * (1.0 + dice.f() * 2.0);
+                commands.spawn((
+                    Spark {
+                        vel,
+                        life: 0.08 + dice.f() * 0.1,
+                    },
+                    Mesh3d(a.spark.clone()),
+                    MeshMaterial3d(a.arc.clone()),
+                    Transform::from_translation(gt.translation()).with_scale(Vec3::ZERO),
+                    NotShadowCaster,
+                ));
+            }
+            n += 2;
+            ch.next = 0.04 + dice.f() * 0.06;
+        }
+    }
+}
+
+/// A zap: a jagged blue-white arc from the emitter to where it aimed, a
+/// tenth of a second long, and a flash.
+#[derive(Component)]
+struct Arc {
+    left: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn zap_arcs(
+    mut commands: Commands,
+    mut zaps: MessageReader<super::indoor::CrawlerZap>,
+    mut arcs: Query<(Entity, &mut Arc)>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+    mut dice: Local<Dice>,
+) {
+    const SEGMENTS: usize = 10;
+    for z in zaps.read() {
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let span = z.to - z.from;
+        let len = span.length();
+        if len < 0.05 {
+            continue;
+        }
+        let side = span.any_orthonormal_vector();
+        let up = span.cross(side).normalize_or(Vec3::Y);
+        // Kinks across the line, biggest in the middle.
+        let points: Vec<Vec3> = (0..=SEGMENTS)
+            .map(|i| {
+                let t = i as f32 / SEGMENTS as f32;
+                let bulge = (std::f32::consts::PI * t).sin().sqrt() * len * 0.1;
+                let j = if i == 0 || i == SEGMENTS {
+                    Vec3::ZERO
+                } else {
+                    (side * (dice.f() - 0.5) + up * (dice.f() - 0.5)) * 2.0 * bulge
+                };
+                z.from + span * t + j
+            })
+            .collect();
+        let root = commands
+            .spawn((
+                Arc { left: 0.1 },
+                Transform::from_translation(z.from),
+                Visibility::default(),
+                PointLight {
+                    color: Color::srgb(0.6, 0.8, 1.0),
+                    intensity: 60_000.0,
+                    range: 8.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+            ))
+            .id();
+        for w in points.windows(2) {
+            let d = w[1] - w[0];
+            let l = d.length().max(1e-3);
+            commands.spawn((
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(a.arc.clone()),
+                // Child of the root at `from`, so local = world - from.
+                Transform::from_translation((w[0] + w[1]) * 0.5 - z.from)
+                    .with_rotation(Quat::from_rotation_arc(Vec3::Y, d / l))
+                    .with_scale(Vec3::new(1.4, l, 1.4)),
+                NotShadowCaster,
+                ChildOf(root),
+            ));
+        }
+    }
+    let dt = time.delta_secs();
+    for (e, mut arc) in &mut arcs {
+        arc.left -= dt;
+        if arc.left <= 0.0 {
+            commands.entity(e).despawn();
+        }
     }
 }
