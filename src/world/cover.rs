@@ -363,6 +363,11 @@ fn stream_cover(
                         Name::new("Ground cover"),
                         Mesh3d(meshes.add(mesh)),
                         aabb,
+                        // Its bounds are exact from the start; `blow`
+                        // rewrites the material every frame, which marks
+                        // these meshes changed and had Bevy recompute
+                        // their bounds (millions of vertices) each frame.
+                        bevy::camera::visibility::NoAutoAabb,
                         at,
                         MeshMaterial3d(if fronds {
                             assets.fronds.clone()
