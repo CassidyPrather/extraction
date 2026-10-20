@@ -1488,6 +1488,16 @@ mod tests {
             );
             let ground = app.world().resource::<Zone>().ground(at.x, at.z);
             assert!(at.y > ground - 0.3, "{map}: out but under the ground");
+            // Out on the ground, it's out: a raider there doesn't try to
+            // leave the site again.
+            assert!(
+                !plan.contains(at, -0.1),
+                "{map}: out, but still in the site"
+            );
+            assert!(
+                plan.in_grid(at),
+                "{map}: the ground by the kiosk is on the plan"
+            );
         }
     }
 }
