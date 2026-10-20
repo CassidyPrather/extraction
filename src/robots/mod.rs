@@ -21,6 +21,9 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod heavy;
+pub mod heavy_look;
+pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
@@ -254,6 +257,8 @@ impl Plugin for RobotsPlugin {
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
+                    heavy::HeavyPlugin,
+                    heavy_mind::HeavyMindPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,

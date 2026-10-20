@@ -99,6 +99,9 @@ pub enum Task {
         target: Entity,
         shots: u32,
     },
+    /// Stage a scenario's world by name, where the bot stands: the module
+    /// under test answers [`scenarios::Setup`] (a heavy and a well).
+    Setup(&'static str),
 }
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
@@ -327,6 +330,7 @@ struct TaskExtras<'w, 's> {
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
+    setups: MessageWriter<'w, scenarios::Setup>,
 }
 
 /// Advances each bot's current task.
@@ -404,6 +408,14 @@ fn run_tasks(
             }
             Task::Log(msg) => {
                 bot.note(msg);
+                bot.next();
+            }
+            Task::Setup(name) => {
+                ext.setups.write(scenarios::Setup {
+                    name,
+                    at: root.translation,
+                    facing: root.forward().as_vec3(),
+                });
                 bot.next();
             }
             Task::LookAt(p) => {
