@@ -220,7 +220,7 @@ impl Plugin for AudioPlugin {
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
-                    (grenade_sounds, gear_sounds),
+                    (grenade_sounds, gear_sounds, armour_sounds),
                 ),
             )
             .add_systems(
@@ -613,6 +613,45 @@ pub fn gear_db(reach: f32) -> f32 {
 /// one nearly every step.
 fn gear_chance(reach: f32) -> f32 {
     (0.25 + reach / 10.0).min(0.95)
+}
+
+/// A round meeting worn armour (`weapons::armour::ArmourStruck`): stopped,
+/// a steel clang and the thump through it; turned, a ping; through, the
+/// clang and the wet hit after it.
+fn armour_sounds(
+    mut commands: Commands,
+    mut struck: MessageReader<crate::weapons::armour::ArmourStruck>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::firearm_terminal::Outcome;
+    for s in struck.read() {
+        let at = Some(s.at);
+        let parts: &[(&str, &str, f32, f64)] = match s.outcome {
+            Outcome::Stop => &[
+                ("impacts/metal", "armour.clang", 0.0, 0.9),
+                ("physical/body_hit", "armour.thump", -3.0, 0.85),
+            ],
+            Outcome::Ricochet { .. } => &[("impacts/ricochet", "armour.ping", 0.0, 1.0)],
+            Outcome::Through { .. } => &[
+                ("impacts/metal", "armour.clang", -3.0, 0.95),
+                ("physical/body_hit", "armour.thump", 0.0, 1.0),
+            ],
+        };
+        for &(set, cue, db, speed) in parts {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                at,
+                cue,
+                db,
+                speed,
+                0.06,
+            );
+        }
+    }
 }
 
 /// A grenade (`weapons::grenades`): the pin's click and the ring's scrape

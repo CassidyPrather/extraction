@@ -232,7 +232,8 @@ is what it did before.
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
-| Your kit as you move (`foley`): plates knocking, sling swivels, the pack's load shifting, water sloshing | `gear.plate`, `gear.swivel`, `gear.pack`, `gear.slosh` (low-passed: it's in a bottle), on a step, each louder the farther it carries (`gear_db`) and more often | — | silent |
+| A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
+| Your kit as you move (`foley`): worn plates knocking, sling swivels, the pack's load shifting, water sloshing | `gear.plate`, `gear.swivel`, `gear.pack`, `gear.slosh` (low-passed: it's in a bottle), on a step, each louder the farther it carries (`gear_db`) and more often | — | silent |
 | Robot chatter overheard on your radio | `chatter.squelch`, `chatter.static`, `chatter.voice`: their talk | — | servo chirps |
 | Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
 | A round landing (`weapons::impacts::Impact`, classed once for the spray and the sound) | `hit.impact` by surface: concrete, wood, steel, earth; `hit.glass` (window glass, a robot's eye); `hit.water` (a slap, harder for faster rounds); `hit.body`; out through a thin wall, a second crack 6 dB quieter | — | re-classed from the Hit; water silent |
@@ -416,7 +417,7 @@ runs headless), and robots hear it:
 
 | Part | Robots hear it to, at a walk |
 | --- | --- |
-| A steel plate knocking | 5 m per plate (two: √2 × as far) |
+| A plate worn in the vest (`weapons::armour::Worn`) knocking | 5 m per plate (two: √2 × as far) |
 | A slung gun's swivels | 3 m per gun |
 | The pack's load shifting | 0.6 m per kg over 2 kg, to 8 m |
 | Water sloshing | 2.5 m per bottle |

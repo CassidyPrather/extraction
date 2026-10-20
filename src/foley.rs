@@ -2,7 +2,8 @@
 //!
 //! On every step, whatever a player carries rattles a little:
 //!
-//! - **Plates** (`steel_plate` carried anywhere) knock in their carrier.
+//! - **Plates** worn in the vest (`weapons::armour::Worn`) knock in
+//!   their pockets.
 //! - **Sling swivels** jingle, one per slung long gun.
 //! - **The pack's contents** shift, the more the heavier it's loaded
 //!   (nothing under [`PACK_QUIET_KG`]).
@@ -26,6 +27,7 @@ use crate::interact::{InSocket, Socket, SocketKind};
 use crate::items::{Catalog, Item};
 use crate::player::{Body, Footstep, Player};
 use crate::robots::Noise;
+use crate::weapons::armour::Worn;
 use extraction_core::inventory::SlotKind;
 
 /// A plate knocking in its carrier, heard to (m), per plate.
@@ -111,21 +113,22 @@ impl Plugin for FoleyPlugin {
 /// What `player` carries that rattles.
 fn kit_of(
     player: Entity,
+    worn: Option<&Worn>,
     carried: &Query<(Entity, &Item, &CarriedBy, Option<&InSocket>)>,
     sockets: &Query<&Socket>,
     packs: &Query<&Backpack>,
     items: &Query<&Item>,
     catalog: &Catalog,
 ) -> Kit {
-    let mut kit = Kit::default();
+    let mut kit = Kit {
+        plates: worn.map_or(0, |w| w.plates.iter().flatten().count() as u32),
+        ..Kit::default()
+    };
     for (_, item, by, socket) in carried {
         if by.0 != player {
             continue;
         }
         let def = catalog.get(item.kind());
-        if def.id == "steel_plate" {
-            kit.plates += 1;
-        }
         if def.has_tag("food:Water") {
             kit.bottles += 1;
         }
@@ -150,7 +153,7 @@ fn kit_of(
 #[allow(clippy::too_many_arguments)]
 fn rattle_on_steps(
     mut steps: MessageReader<Footstep>,
-    players: Query<&Body, With<Player>>,
+    players: Query<(&Body, Option<&Worn>), With<Player>>,
     carried: Query<(Entity, &Item, &CarriedBy, Option<&InSocket>)>,
     sockets: Query<&Socket>,
     packs: Query<&Backpack>,
@@ -160,13 +163,13 @@ fn rattle_on_steps(
     mut noise: MessageWriter<Noise>,
 ) {
     for s in steps.read() {
-        let Ok(body) = players.get(s.entity) else {
+        let Ok((body, worn)) = players.get(s.entity) else {
             continue;
         };
         if body.swimming {
             continue;
         }
-        let kit = kit_of(s.entity, &carried, &sockets, &packs, &items, &catalog);
+        let kit = kit_of(s.entity, worn, &carried, &sockets, &packs, &items, &catalog);
         let r = rattle(&kit, s.speed, body.height);
         let reach = r.reach();
         if reach <= 0.0 {
