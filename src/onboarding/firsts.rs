@@ -369,24 +369,38 @@ fn deaths(
     )>,
     locals: Query<Entity, With<LocalPlayer>>,
     mut was_down: Local<bool>,
+    mut waking: Local<Option<u32>>,
     mut m: Meet,
 ) {
     let down = matches!(raid.phase, Phase::Down { .. });
-    if *was_down && raid.phase == Phase::AtBase && !m.met(First::Death) {
-        let me = locals.iter().next();
-        let crate_n: usize = bags
-            .iter()
-            .filter(|(_, stash, _)| *stash)
-            .map(|(b, ..)| b.contents.len())
-            .sum();
-        let fell_n: usize = bags
-            .iter()
-            .filter(|(_, _, r)| r.is_some_and(|r| Some(r.owner) == me))
-            .map(|(b, ..)| b.contents.len())
-            .sum();
-        m.meet_filled(First::Death, &|l| fill(l, crate_n, fell_n));
+    if *was_down && !down && !m.met(First::Death) {
+        *waking = Some(0);
     }
     *was_down = down;
+    // Count once what was carried has been laid down where you fell (that
+    // happens later in the frame you wake, in its own system), or after a
+    // moment if there was nothing to lay down.
+    let Some(frames) = waking.as_mut() else {
+        return;
+    };
+    *frames += 1;
+    let me = locals.iter().next();
+    let fell: Vec<usize> = bags
+        .iter()
+        .filter(|(_, _, r)| r.is_some_and(|r| Some(r.owner) == me))
+        .map(|(b, ..)| b.contents.len())
+        .collect();
+    if fell.is_empty() && *frames < 30 {
+        return;
+    }
+    *waking = None;
+    let crate_n: usize = bags
+        .iter()
+        .filter(|(_, stash, _)| *stash)
+        .map(|(b, ..)| b.contents.len())
+        .sum();
+    let fell_n: usize = fell.iter().sum();
+    m.meet_filled(First::Death, &|l| fill(l, crate_n, fell_n));
 }
 
 /// A line with its counts in.
@@ -661,6 +675,17 @@ mod tests {
             .iter(app.world())
             .map(|b| b.contents.len())
             .sum::<usize>();
+        // Well out from the truck.
+        {
+            let zone = app.world().resource::<Zone>().clone();
+            let truck = crate::raid::truck::base_pose(&zone).translation;
+            let at = zone.on_ground(truck.x + 60.0, truck.z + 20.0) + Vec3::Y * 0.1;
+            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+            t.translation = at;
+        }
+        for _ in 0..30 {
+            app.update();
+        }
         app.world_mut()
             .get_mut::<crate::health::Health>(player)
             .unwrap()
@@ -669,7 +694,11 @@ mod tests {
         for _ in 0..(90 * 30) {
             app.update();
         }
-        assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+        assert_eq!(
+            app.world().resource::<Raid>().phase,
+            Phase::AtBase,
+            "awake in the truck, not straight back out in the Zone"
+        );
         let spoken = app.world().resource::<Spoken>().0.clone();
         let want = fill(First::Death.lines()[0], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");

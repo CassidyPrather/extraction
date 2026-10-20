@@ -28,6 +28,7 @@
 
 pub mod firsts;
 pub mod hints;
+pub mod second_hour;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -453,6 +454,7 @@ impl Plugin for OnboardingPlugin {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
+            .add_systems(Update, second_hour::direct)
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),

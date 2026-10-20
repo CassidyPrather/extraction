@@ -30,6 +30,7 @@ pub const NAMES: &[&str] = &[
     "drone_duel",
     "walker_hunt",
     crate::onboarding::bot::SCENARIO,
+    crate::onboarding::second_hour::SCENARIO,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -266,6 +267,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             ]
         }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
+        crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         _ => return None,
     })
 }
