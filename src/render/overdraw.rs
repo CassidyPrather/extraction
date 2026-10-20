@@ -93,14 +93,37 @@ fn both_sides(w: &World, e: Entity) -> bool {
         .unwrap_or(false)
 }
 
+/// For an impostor mesh: the eye (x, z), the near cut, and each vertex's
+/// tree base.
+fn impostor_cut(
+    w: &World,
+    e: Entity,
+    mesh: &Mesh,
+    eye: Vec2,
+) -> Option<(Vec2, f32, Vec<[f32; 2]>)> {
+    let h = w.get::<MeshMaterial3d<crate::world::impostors::ImpostorMaterial>>(e)?;
+    let m = w
+        .resource::<Assets<crate::world::impostors::ImpostorMaterial>>()
+        .get(&h.0)?;
+    let Some(VertexAttributeValues::Float32x2(b)) = mesh.attribute(Mesh::ATTRIBUTE_UV_1) else {
+        return None;
+    };
+    Some((eye, m.extension.cut.x, b.clone()))
+}
+
 /// The overdraw of what `cam` sees.
 pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
-    let (view, f) = {
+    let (view, f, eye) = {
         let g = w.get::<GlobalTransform>(cam).unwrap();
         let Projection::Perspective(p) = w.get::<Projection>(cam).unwrap() else {
             return Overdraw::default();
         };
-        (g.affine().inverse(), 1.0 / (p.fov * 0.5).tan())
+        let eye = g.translation();
+        (
+            g.affine().inverse(),
+            1.0 / (p.fov * 0.5).tan(),
+            Vec2::new(eye.x, eye.z),
+        )
     };
     let near = crate::render::NEAR_CLIP;
     let seen: Vec<Entity> = w
@@ -132,8 +155,16 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
             None => (0..vs.len()).collect(),
         };
         let two = both_sides(w, e);
+        // Impostor quads of trees within the near cut collapse in the
+        // vertex shader (`impostor.wgsl`): they make no fragments.
+        let cut = impostor_cut(w, e, mesh, eye);
         let mut covered = 0u64;
         for t in idx.chunks_exact(3) {
+            if let Some((eye, near, bases)) = &cut {
+                if eye.distance(Vec2::from(bases[t[0]])) < *near {
+                    continue;
+                }
+            }
             let tri = [vs[t[0]], vs[t[1]], vs[t[2]]];
             covered += raster(&tri, near, f, two, &mut layers);
         }
