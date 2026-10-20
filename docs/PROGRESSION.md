@@ -240,6 +240,13 @@ raids in general: a job pulls you somewhere you'd not have gone, and that
 costs. Danger 3 has few samples; the script leans on how often raids
 reached danger 3 and got home (28%) until there are more.
 
+By play style the job comes out level: cautious bots saw the place and got
+home 5 times in 9, looters 10 in 18, hunters 8 in 18 (their artifacts draw
+response teams), reckless bots 6 in 9 (they get there fast, and get away
+with it on a short trip). Robot minds' sims say careful play all but ends
+drone deaths; a job is a short trip, which suits the bold, and the deep
+jobs past the ladder are where that stops being true.
+
 What it says:
 
 - **The first evening has a fitting in it.** Tier 1 is about six raids:
