@@ -7,7 +7,8 @@
 # table against the budget (src/render/budget.rs, docs/PERFORMANCE.md).
 #   scripts/bench.sh [maps...]          (default: all four)
 # Env: OUT (default target/bench), SIZE (one eye, default 1024x1024),
-# HOLD (frames a view, default 12), WEATHER (default drizzle), ONLY.
+# HOLD (frames a view, default 12), WEATHER (default drizzle), ONLY,
+# EYES (1 for one eye; default both).
 # Under Xvfb this is lavapipe, a CPU renderer: compare GPU times only
 # with each other, never with the headset's.
 set -euo pipefail
@@ -27,6 +28,7 @@ for MAP in "${MAPS[@]}"; do
     EXTRA=()
     [ -n "${ONLY:-}" ] && EXTRA=(--tour-only "$ONLY")
     EXTRACTION_BENCH="$OUT/$MAP.jsonl" EXTRACTION_BENCH_HOLD="${HOLD:-12}" \
+    EXTRACTION_BENCH_EYES="${EYES:-2}" \
     WGPU_BACKEND=vulkan timeout 3600 xvfb-run -a -s "-screen 0 ${SIZE}x24" \
         "$BIN" --map "$MAP" --data-dir "$DATA" --new-game --tour "$SHOTS" \
         --tour-views "scripts/lookbook/$MAP.views" --frames 60 \
