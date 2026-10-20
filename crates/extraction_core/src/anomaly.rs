@@ -330,6 +330,28 @@ pub fn shard_glint_in(roll: f32) -> f32 {
 /// How far a shard's glint gives you away, metres.
 pub const SHARD_GLINT_RADIUS: f32 = 35.0;
 
+// --- Harvesting ------------------------------------------------------------
+
+/// An artifact in a lift rides the column this high over its core, out of
+/// reach, until the lift pops and throws it.
+pub const LIFT_STONE_RIDE: f32 = 1.8;
+/// Faster than this (m/s), a stone in a lift is being thrown, not ridden.
+pub const LIFT_STONE_FLUNG: f32 = 3.0;
+/// Seconds a stone stays hot out of a burner's coals.
+pub const HOT_SECS: f32 = 20.0;
+/// Health a second a hot stone takes from the hand that holds it.
+pub const HOT_BURN: f32 = 10.0;
+
+/// How hot a stone still is, 0..1, `out` seconds out of the coals (and
+/// none at all once it has been in water).
+pub fn heat_left(out: f32, quenched: bool) -> f32 {
+    if quenched {
+        0.0
+    } else {
+        (1.0 - out / HOT_SECS).clamp(0.0, 1.0)
+    }
+}
+
 // --- The Surge ---------------------------------------------------------------
 
 /// How agitated the anomalies are with `surge_in` seconds to the Surge
@@ -716,6 +738,14 @@ mod tests {
         // A hearth halves recovery: still positive at rest.
         assert!(1.0 / 8.0 - HEARTH_TIRE > 0.0);
         assert!((20.0..=40.0).contains(&shard_glint_in(0.5)));
+    }
+
+    #[test]
+    fn a_stone_from_the_coals_cools_in_time_or_at_once_in_water() {
+        assert_eq!(heat_left(0.0, false), 1.0);
+        assert!(heat_left(HOT_SECS * 0.5, false) > 0.4);
+        assert_eq!(heat_left(HOT_SECS, false), 0.0);
+        assert_eq!(heat_left(0.0, true), 0.0);
     }
 
     #[test]
