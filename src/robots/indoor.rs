@@ -237,8 +237,18 @@ pub fn spawn_crawler(
         duration: f32::INFINITY,
         exit: at,
     };
-    // At merge with Robot bodies: `spawn_walker_sized(.., CRAWLER_SIZE)`.
-    let e = super::walker::spawn_walker_with(commands, zone, at, job, false, 70.0);
+    // A small walker standing on the site's floor (`at.y`), not on the
+    // terrain over it.
+    let e = super::walker::spawn_walker_sized(
+        commands,
+        zone,
+        at,
+        job,
+        false,
+        70.0,
+        CRAWLER_SIZE,
+        Some(at.y),
+    );
     commands
         .entity(e)
         .insert((
