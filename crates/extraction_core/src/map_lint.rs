@@ -311,6 +311,10 @@ pub const TRUCK_ROOM: f32 = 8.0;
 /// buildings, and this far from a rendezvous.
 pub const CRATE_ROOM: f32 = 1.5;
 pub const CRATE_FROM_RV: f32 = 10.0;
+/// Where you stand to climb into the truck, metres behind its middle.
+pub const TAILGATE: f32 = 3.6;
+/// Where you line up behind it to walk in, metres behind its middle.
+pub const TRUCK_APPROACH: f32 = 8.0;
 pub const RV_LEVEL: f32 = 12.0;
 
 // ---- Render load -------------------------------------------------------------
@@ -1458,6 +1462,28 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 *at,
             );
         }
+        // The truck parks with its bed toward the map's middle
+        // (`raid::truck::rv_pose`); you climb in from behind it.
+        let back = {
+            let l = (at[0] * at[0] + at[1] * at[1]).sqrt().max(1e-3);
+            [-at[0] / l, -at[1] / l]
+        };
+        // Both where you stand to climb in and where the bots line up for
+        // it (`sim::raider::extract_step`) must be walkable.
+        for (what, d) in [("tailgate", TAILGATE), ("approach", TRUCK_APPROACH)] {
+            let step = [at[0] + back[0] * d, at[1] + back[1] * d];
+            let open = walk
+                .cell_of(step)
+                .is_some_and(|(i, j)| walk_seen[j * walk.n + i]);
+            if !open {
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!("the truck's {what} at {name} can't be walked to"),
+                    step,
+                );
+            }
+        }
         if hm.slope_deg(*at) > RV_LEVEL {
             find(
                 &mut r,
@@ -1702,6 +1728,36 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Reach && f.what.contains("house_plank")),
+            "{}",
+            r.text()
+        );
+    }
+
+    #[test]
+    fn a_blocked_tailgate_is_found() {
+        let mut map = MapDef::from_ron(CINDER_WORKS).unwrap();
+        // A barn across the way in, behind the truck at an RV.
+        let rv = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .next()
+            .unwrap()
+            .clone();
+        let l = (rv.at[0] * rv.at[0] + rv.at[1] * rv.at[1]).sqrt();
+        let back = [-rv.at[0] / l, -rv.at[1] / l];
+        map.placements.push(crate::map::Placement {
+            prefab: "barn".into(),
+            at: [rv.at[0] + back[0] * TAILGATE, rv.at[1] + back[1] * TAILGATE],
+            rot: 0.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Footing && f.what.contains("tailgate")),
             "{}",
             r.text()
         );
