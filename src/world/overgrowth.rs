@@ -524,6 +524,31 @@ pub fn reclaim(geo: &Geo, occ: &Occluders, seed: u64, ruin: bool) -> Growth {
             );
         }
     }
+    // Weeds in the gutters: small clumps along the roofs' lowest edges.
+    for p in &geo.pieces {
+        let Shape::Box(s) = p.shape else { continue };
+        if !matches!(p.mat, Mat::Shingles | Mat::Corrugated) || p.at.rotation.is_near_identity() {
+            continue;
+        }
+        let (r, c, h) = (p.at.rotation, p.at.translation, s * 0.5);
+        // The slab's two long edges along local x's ends; the lower one.
+        let ends = [r * Vec3::new(h.x, h.y, 0.0), r * Vec3::new(-h.x, h.y, 0.0)];
+        let low = if ends[0].y < ends[1].y {
+            ends[0]
+        } else {
+            ends[1]
+        };
+        let along = r * Vec3::Z;
+        let n = (s.z / 1.6) as usize;
+        for k in 0..n {
+            if rng.f32() > 0.25 * v + 0.05 {
+                continue;
+            }
+            let t = (k as f32 + rng.f32()) / n.max(1) as f32 - 0.5;
+            let foot = c + low + along * (t * s.z * 0.9);
+            sapling(&mut out, foot, 0.2 + rng.f32() * 0.2, 3, &mut rng);
+        }
+    }
     // Bushes at the walls' feet outside.
     let bushes = (v * 4.0) as usize;
     for _ in 0..bushes * 4 {
