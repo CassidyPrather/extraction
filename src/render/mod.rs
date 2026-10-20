@@ -7,6 +7,7 @@ pub mod fog;
 pub mod grade;
 pub mod kit;
 pub mod kitchen;
+pub mod lod;
 pub mod logistics;
 pub mod materials;
 pub mod memorial;
@@ -46,6 +47,7 @@ impl Plugin for RenderPlugin {
             kit::KitVisualsPlugin,
             budget::BudgetPlugin,
         ))
+        .init_resource::<lod::StandInMaterial>()
         .add_systems(Update, attach_flat_camera);
     }
 }
