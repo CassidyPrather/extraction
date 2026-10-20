@@ -62,6 +62,15 @@ pub enum Task {
         kind: crate::robots::RobotKind,
         at: Vec3,
     },
+    /// Put an anomaly here holding a stone (`at` on the ground), and loose
+    /// kit to work it with (anomaly harvesting scenarios).
+    Stage {
+        kind: extraction_core::anomaly::AnomalyKind,
+        at: Vec3,
+        radius: f32,
+        artifact: String,
+        kit: Vec<(String, Vec3)>,
+    },
     /// Fight the nearest robot: aim at its core, shoot until it's wrecked
     /// or `shots` trigger pulls are spent.
     Engage {
@@ -166,6 +175,10 @@ pub enum Expect {
     Wrecked(usize),
     /// The bot is still standing.
     Alive,
+    /// The player would have heard at least this many robots' words (of
+    /// this mind, if given): `robot_voice::Heard`, in the listening
+    /// scenario.
+    Heard(Option<crate::robot_voice::Utterance>, usize),
 }
 
 #[derive(Component, Debug)]
@@ -368,6 +381,7 @@ struct TaskExtras<'w, 's> {
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
+    heard: Option<Res<'w, crate::robot_voice::Heard>>,
 }
 
 /// Advances each bot's current task.
@@ -637,6 +651,20 @@ fn run_tasks(
                     }
                 }
                 bot.note(format!("spawned a {kind:?}"));
+                bot.next();
+            }
+            Task::Stage {
+                kind,
+                at,
+                radius,
+                artifact,
+                kit,
+            } => {
+                let (artifact, kit) = (artifact.clone(), kit.clone());
+                commands.queue(move |world: &mut World| {
+                    crate::anomaly::harvest::stage(world, kind, at, radius, &artifact, &kit);
+                });
+                bot.note(format!("staged a {kind:?}"));
                 bot.next();
             }
             Task::Engage { shots } => {
@@ -922,6 +950,13 @@ fn run_tasks(
                     Expect::Wrecked(n) => {
                         let w = robots.iter().filter(|(_, r, _)| r.wrecked).count();
                         (w >= *n, format!("at least {n} robots wrecked (got {w})"))
+                    }
+                    Expect::Heard(said, n) => {
+                        let got = ext.heard.as_ref().map_or(0, |h| h.count(*said));
+                        (
+                            got >= *n,
+                            format!("heard at least {n} {said:?} words (got {got})"),
+                        )
                     }
                     Expect::Alive => {
                         let h = healths

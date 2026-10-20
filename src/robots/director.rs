@@ -10,6 +10,11 @@
 //! - **Logistics** and **Construction**: see `dirigible` and `pylon`.
 //!
 //! Attention from carried artifacts feeds the same queue (`anomaly`).
+//!
+//! - **Night visit**: someone sleeping behind a door with the Zone's
+//!   attention on them ([`NightVisit`], sent by whoever puts them to bed)
+//!   gets two walkers at that door, late: one batters it down if it's
+//!   wedged (`doors`). It replaces any response already queued near there.
 
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
@@ -37,6 +42,9 @@ pub struct Director {
     /// Where responses were queued this tick: the robots talk about it, and
     /// a radio can hear them.
     pub chatter: Vec<Vec3>,
+    /// Pending night visits: (seconds until dispatch, the door, where the
+    /// sleeper lies).
+    pub visits: Vec<(f32, Entity, Vec3)>,
 }
 
 impl Director {
@@ -47,14 +55,32 @@ impl Director {
     }
 }
 
+/// Send a night visit: two walkers to `door` (a door of the building
+/// someone sleeps in; `at` is where they lie) in `delay` seconds.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct NightVisit {
+    pub door: Entity,
+    pub at: Vec3,
+    pub delay: f32,
+}
+
+/// A night visit replaces the responses queued within this of it (m).
+pub const VISIT_CLEARS: f32 = 150.0;
+/// The visitors look for the sleeper this long before they give up (s).
+pub const VISIT_TIME: f32 = 600.0;
+
 pub struct DirectorPlugin;
 
 impl Plugin for DirectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, init_director).add_systems(
-            FixedUpdate,
-            (hear_reports, run_director).chain().after(super::perceive),
-        );
+        app.add_message::<NightVisit>()
+            .add_systems(Startup, init_director)
+            .add_systems(
+                FixedUpdate,
+                (hear_reports, night_visits, run_director)
+                    .chain()
+                    .after(super::perceive),
+            );
     }
 }
 
@@ -68,6 +94,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         max_active: 6,
         next_logistics: 150.0,
         chatter: Vec::new(),
+        visits: Vec::new(),
     });
 }
 
@@ -83,6 +110,68 @@ fn hear_reports(
             let delay = director.rng.range(35.0, 70.0);
             director.queue_response(delay, n.at);
             director.response_cooldown = 45.0;
+        }
+    }
+}
+
+/// Night visits: queued as they're sent (clearing responses near them),
+/// dispatched when due: two walkers from the Gate, looking for whoever is
+/// inside the building behind that door.
+fn night_visits(
+    mut commands: Commands,
+    mut visits: MessageReader<NightVisit>,
+    mut director: ResMut<Director>,
+    zone: Res<Zone>,
+    entrances: Res<super::doors::Entrances>,
+    time: Res<Time>,
+) {
+    for v in visits.read() {
+        director
+            .responses
+            .retain(|r| r.1.distance(v.at) > VISIT_CLEARS);
+        director.visits.push((v.delay, v.door, v.at));
+        director.chatter.push(v.at);
+    }
+    if !director.enabled {
+        return;
+    }
+    let dt = time.delta_secs();
+    let mut due = Vec::new();
+    for v in &mut director.visits {
+        v.0 -= dt;
+        if v.0 <= 0.0 {
+            due.push((v.1, v.2));
+        }
+    }
+    director.visits.retain(|v| v.0 > 0.0);
+    let exit = gate(&zone);
+    for (door, at) in due {
+        // Inside, behind that door (if it's one we know; else where they
+        // lie): the walkers' way in is the door.
+        let inside = entrances
+            .doors
+            .iter()
+            .find(|e| e.door == door)
+            .map(|e| e.mid - e.out * 2.0)
+            .unwrap_or(at);
+        info!("director: night visit to {inside:.0}");
+        for k in 0..2 {
+            let side = Vec3::new(k as f32 * 2.0 - 1.0, 0.0, 0.0) * 2.0;
+            let w = spawn_walker(
+                &mut commands,
+                &zone,
+                exit + side,
+                Job {
+                    kind: JobKind::Response,
+                    site: inside,
+                    duration: 40.0,
+                    exit,
+                },
+            );
+            commands.entity(w).insert(super::Brain::Investigate {
+                at: inside,
+                left: VISIT_TIME,
+            });
         }
     }
 }

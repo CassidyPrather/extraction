@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # ranger tower's table is up in its cabin).
 SPOTS = {
     "house_plank": [(-1.6 + 0.3, -0.7)],
+    "house_plank_damaged": [(-1.6 + 0.3, -0.7)],
     "farmhouse": [(-2.0 + 0.3, -0.8)],
     "house_brick": [(-2.0 + 0.3, -0.8)],
     "cabin_log": [(0.3, 0.55)],
@@ -32,8 +33,12 @@ SPOTS = {
     "ranger_tower": [(0.3, 0.6)],
     "factory_hall": [(-12.6 + 0.4, 7.0)],
     "chapel": [(0.3, 14.0 * 0.5 - 1.6)],
+    # Sallow's (src/world/dam.rs): the tagging desk under the gantry, and
+    # the table in the draw-off tower's valve room at the bridge floor.
+    "sorting_gantry": [(-6.0, 0.0)],
+    "draw_off_tower": [(-1.0, 1.9)],
 }
-REACH = {"ranger_tower": 8.5}
+REACH = {"ranger_tower": 8.5, "draw_off_tower": 20.0}
 
 
 def world(at, rot, local):
@@ -207,6 +212,15 @@ ground lifts. Bring a light. Don't run.
 Lamp to Kettle tower, 2100: no answer from Emil three nights now.
 
 - M. Sedlak""", "Ranger's note"),
+        ("cabin_log", (-145.0, 190.0), "Note", """Crew tally, on the wall by the bed:
+
+Mon 14 logs   Tue 16   Wed 15
+Thu - buses
+
+There's a tin of pears under the bed for whoever's next. Wedge the door
+at night with the split log, the latch is no good.
+
+- Tomas, J.'s crew""", "Cabin tally"),
     ],
     "kettle_pass": [
         ("guard_booth", (127.8, 285.0), "Note", """SOUTH GATE, KETTLE - DUTY LOG
@@ -338,6 +352,14 @@ night, very slowly, as if counting the posts.
 If you hear the hum, you're carrying too many of the bright stones. Put some down.
 
 - Fiala""", "Lodge book"),
+        ("cabin_log", (119.0, -138.0), "Note", """The kiln wants four days' watching, so it's getting four days.
+
+They say the buses are the last. Fine. If it's cold when you come, it went
+out without me and I walked down after all.
+
+Bed's dry. My name's on the frame so you know whose it was.
+
+- Mirek Hajek, burner""", "Burner's note"),
     ],
     "cinder_works": [
         ("guard_booth", (-102.2, 285.0), "Note", """SOUTH GATE, CINDER - DUTY LOG
@@ -400,7 +422,7 @@ The chimney is the best landmark: walk toward it in the fog and you'll
 find the road.
 
 - V.""", "Foreman's house note"),
-        ("house_plank", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
+        ("house_plank_damaged", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
 you, I expect. He's all right. He won't come past the fence. I asked
 him why once. He said he tried, the first day, and they turned him back,
 and now he's used to it.
@@ -441,6 +463,100 @@ Repair requested: 1 APR.
 
 Requests held for uplink.""",
         ], "Mast terminal"),
+        ("cabin_log", (-75.0, -159.0), "Note", """Woodward's book, last page.
+
+The works' smoke came down the valley at noon and didn't lift. I've wet
+the roof and the woodpile and I'm stopping here.
+
+Matches in the tin on the stove. The door sticks, kick it at the
+bottom, then wedge it.
+
+- T. Vesely, woodward""", "Woodward's book"),
+    ],
+    # The fourth valley (claude/polish-fourth-valley): skipped until its
+    # map is in.
+    "sallow_reservoir": [
+        ("guard_booth", (32.8, 285.0), "Note", """SOUTH GATE, SALLOW - DUTY LOG
+
+15 Oct. New Sallow out on the Marrow buses, second run. The old ones
+slow to board. One says they were moved for the water once already and
+once was enough.
+
+16 Oct. The keeper won't leave the works. Water board says let him,
+someone has to mind the dam.
+
+2 Nov. Something built on the north-east shore overnight. Not ours. Not
+the water board's.""", "Sallow gate log"),
+        ("house_brick", (-58.0, 206.0), "Note", """Whoever has the cottage now -
+
+I was seven when the water board moved us up the hill. We watched the
+water come over the bridge a hand a day.
+
+The second winter the machines opened the scours. I could have told
+them which wheel. They didn't ask. The bed came up a hand a day, the
+same.
+
+On the twentieth day the church came out. The clock had stopped at ten
+to four. Our house is the third from the bridge. The door's where it
+was.
+
+Don't stand in the churchyard after rain. Things come up there that
+weren't buried.
+
+- A. Pech, keeper""", "Keeper's note"),
+        ("pump_station", (12.0, 172.0), "Terminal", [
+            "SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED",
+            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n 8 DEC   24.0\n15 DEC   16.2\n22 DEC    9.8\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
+        ], "Valve log"),
+        ("pump_station", (100.0, 210.0), "Terminal", [
+            "SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0",
+            "CINDER WORKS\nDEMAND RESUMED   3 NOV\nPURPOSE          FURNACE COOLING\nDEMAND CEASED   26 FEB\n\nNO OTHER DEMAND.",
+        ], "Supply terminal"),
+        ("pump_station", (245.0, -70.0), "Note", """CATCHWATER GAUGE - read Sundays
+
+Sun. 0.42. Sun. 0.40. Sun. 0.41.
+
+Sun. 0.12. They've cut it at the top. They want the bed dry and it's
+dry.
+
+Sun. 0. Legs bad. Not coming up the hill again. A.P.""", "Gauge book"),
+        ("cabin_log", (-160.0, 112.0), "Note", """SALLOW ANGLING CLUB
+
+Season closed until further notice, by order of the Quarantine
+Authority.
+
+(in pencil) Pike in the upper arm are the size of dogs now. Something's
+feeding them. Don't trail your hand.""", "Club notice"),
+        ("mast_hut", (-122.0, -112.0), "Note", """CAUSEWAY TOLL
+
+Foot - free. Cart - 2. Motor - 5.
+New Sallow residents free (show card).
+
+CLOSED 14 OCT.
+
+(chalk) Culverts under the road are silted shut. The bed goes down,
+the arm comes up. Lower street's gone.""", "Toll board"),
+        ("sorting_gantry", (100.0, -82.0), "Terminal", [
+            "OVERFLOW STORE - SALLOW\nUNDER    DEPOT MARROW\nSTATUS   PENDING REVIEW\n\nBUSES              14\nBICYCLES          212\nREFUSE BINS       380\nPRAMS              31\n\nREVIEW DATE   (NOT SET)",
+            "BUSES - DEPOT MARROW\n\nNO. 1         KEPT\nNO. 2         KEPT\nNO. 3         KEPT\nNO. 4         NOT RECOVERED\nNO. 5         KEPT\nNO. 6         KEPT\nNO. 7         KEPT\nNO. 8         KEPT\nNO. 9         KEPT",
+            "BUSES - OTHER DEPOTS\n\nKETTLE         3   KEPT\nCINDER         3   KEPT\n\nSEARCH CONTINUES:\nMARROW NO. 4",
+        ], "Stock terminal"),
+        ("draw_off_tower", (-20.0, 102.5), "Note", """TOWER BOOK
+
+14 Oct. Both draw-offs shut, by order. Nobody downstream to drink it.
+
+2 Dec. The scours are opening by themselves. The wheels won't turn
+back. I've cut the chain off the big one and left it here.
+
+Somebody may want it shut again one day. - A.P.""", "Tower book"),
+        ("shop", (-180.0, -222.0), "Note", """We were moved up here for the water, and now we're moved for this.
+Mrs Hlavac says she won't go twice. I've left her the shop key. Let her
+take what she needs.
+
+- J. Rybar, shop
+
+(another hand) She went in the end, in the spring, on her own feet.
+The shop's anyone's now. - A.P.""", "Shop note"),
     ],
 }
 
@@ -474,6 +590,9 @@ def block(map_name, placements):
 def main():
     for map_name in NOTES:
         path = ROOT / "assets" / "maps" / f"{map_name}.ron"
+        if not path.exists():
+            print(f"{map_name}: no map yet, skipped")
+            continue
         text = path.read_text()
         placements = [
             (m.group(1), (float(m.group(2)), float(m.group(3))), float(m.group(4)))
