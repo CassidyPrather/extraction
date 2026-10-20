@@ -349,7 +349,8 @@ pub fn jam_visuals(
         ));
         // Double feed: the case still in the chamber's mouth, the next
         // round tipped up into it from below.
-        let bore = Vec3::new(0.0, port.y, port.z);
+        // Set into the port's opening, so it shows past the cover or slide.
+        let bore = Vec3::new(port.x * 0.6, port.y + r, port.z);
         let pair = commands
             .spawn((
                 Name::new("Double feed"),
@@ -366,12 +367,12 @@ pub fn jam_visuals(
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, Vec3::NEG_Z)),
             ChildOf(pair),
         ));
-        let tip = Quat::from_rotation_x(0.3) * Vec3::NEG_Z;
+        let tip = Quat::from_rotation_x(0.6) * Vec3::NEG_Z;
         let round = commands
             .spawn((
                 Mesh3d(case),
                 MeshMaterial3d(brass.clone()),
-                Transform::from_xyz(0.0, -r * 2.2, len * 0.55)
+                Transform::from_xyz(0.0, -r * 0.5, len * 0.5)
                     .with_rotation(Quat::from_rotation_arc(Vec3::Y, tip)),
                 ChildOf(pair),
             ))
