@@ -76,6 +76,35 @@ pub fn kind_of(m: Mat) -> ImpactKind {
     }
 }
 
+/// What a built material is to a round going through it.
+pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
+    use extraction_core::firearm_terminal::Stuff;
+    match m {
+        Mat::Planks | Mat::WoodFloor | Mat::Timber | Mat::Shingles | Mat::GunWood => Stuff::Planks,
+        Mat::Polymer => Stuff::Planks,
+        Mat::LogWall | Mat::BarkSpruce | Mat::BarkBirch | Mat::BarkPine => Stuff::Logs,
+        Mat::Plaster => Stuff::Plaster,
+        Mat::Brick => Stuff::Brick,
+        Mat::Concrete => Stuff::Concrete,
+        Mat::Asphalt | Mat::Boulder => Stuff::Rock,
+        Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
+        Mat::DarkMetal | Mat::GunMetal | Mat::RobotShell => Stuff::Plate,
+        Mat::Glass | Mat::Canvas => Stuff::Glass,
+    }
+}
+
+/// The impact class of what a round went through (its exit mark).
+pub fn kind_of_stuff(s: extraction_core::firearm_terminal::Stuff) -> ImpactKind {
+    use extraction_core::firearm_terminal::Stuff;
+    match s {
+        Stuff::Planks | Stuff::Logs => ImpactKind::Wood,
+        Stuff::Plaster | Stuff::Brick | Stuff::Concrete | Stuff::Rock => ImpactKind::Masonry,
+        Stuff::Sheet | Stuff::Plate => ImpactKind::Metal,
+        Stuff::Glass => ImpactKind::Glass,
+        Stuff::Soil => ImpactKind::Soil,
+    }
+}
+
 /// A round struck something (or the water).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Impact {
@@ -616,14 +645,32 @@ pub(crate) fn spray_bits(
 fn spawn_fx(
     mut commands: Commands,
     mut impacts: MessageReader<Impact>,
+    mut glances: MessageReader<super::ballistics::Ricochet>,
     assets: Option<Res<FxAssets>>,
     mut pool: ResMut<FxPool>,
 ) {
     let Some(a) = assets else {
         impacts.clear();
+        glances.clear();
         return;
     };
     let pool = &mut *pool;
+    // A glance: a streak of sparks skating off along the round's new line.
+    for g in glances.read() {
+        let out = g.velocity.normalize_or(g.normal);
+        let streak = Spray {
+            n: 6,
+            mat: |a| a.spark.clone(),
+            size: Vec3::new(0.005, 0.005, 0.12),
+            out: 1.0,
+            scatter: 1.5,
+            carry: 8.0,
+            life: 0.18,
+            align: true,
+            ..SPRAY
+        };
+        spray_bits(&mut commands, pool, &a, &streak, g.point, g.normal, out);
+    }
     for imp in impacts.read() {
         let n = imp.normal.normalize_or(Vec3::Y);
         let dir = imp.velocity.normalize_or_zero();

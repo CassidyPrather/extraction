@@ -50,6 +50,12 @@ mean, p95 and max, and the classes (tree cards, impostors, terrain,
 ground cover, or what a mesh belongs to) that make up the mean. It's an
 upper bound (no early depth rejection), but it ranks the classes right.
 
+Rain and ash streaks are placed by their vertex shader in a box round
+the eye, so the gauge replays them at the worst weather wherever its own
+is (a downpour, or full ashfall in a burnt valley) and adds them to every
+view. They come to about 0.01 layers a pixel: 2500 streaks 6 mm wide are
+very little area, even counting the few right at the eye.
+
 Open views sit at 1-2.5 layers (terrain about 0.8, the sky 1); woods
 are where it piles up: the Marrow Creek spruce view was 16.3 (cards
 6.95, impostors 6.45), pines 9.3, Kettle Pass's quarry 7.0.
@@ -66,8 +72,8 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 11 | Held just above the worst measured (wood views) |
-| Overdraw, 95th percentile | 45 | |
+| Overdraw, mean layers a pixel | 10 | Held just above the worst measured (wood views) |
+| Overdraw, 95th percentile | 35 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
 
@@ -132,8 +138,9 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Near trunk chunks cast the sun's shadow only within 60 m (`ShadowReach`) | `world::trees` | Shadow triangles spruce 232k > 153k, pines 193k > 121k, edge 111k > 59k |
 | Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
 | Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
-| Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3 |
+| Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3. Costs triangles: an 8-gon is 6 where a quad was 2 (spruce view 581k > 781k), cheap against ~1.7 layers of shaded fragments a pixel |
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
+| Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):
@@ -145,6 +152,16 @@ Shared tools for the next ones (in `render::budget`):
 - Items get a range from their catalogue size by themselves.
 
 ## Where it stands
+
+Without the game's own textures (`scripts/fetch_assets.py` not run) the
+trees are an untextured fallback with no cards and no impostors. A
+playtest has run from a bare checkout, so it holds the budget too: it
+draws no near crowns (their material dissolves within 74 m, where cards
+would be, so they were over a million triangles unseen), switches to the
+far LOD at 75 m, and a pine's or birch's far crown is one coarse blob.
+Worst fallback view: 549k triangles. The gauges print which path they
+measured (`foliage fetched` / `FALLBACK`), and so does the session log
+(`forest: foliage ...`).
 
 The gauges at every lookbook view of the four valleys (GPU-less client,
 one eye), in clear weather (the furthest you see, so the most drawn;
@@ -171,3 +188,46 @@ outside within 25 m (furniture behind walls; measured small, no class
 in any view's top five); the truck's 47-94 shadow
 casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
 prepass, a second geometry pass per eye: not worth it at these counts).
+
+## Stereo: what the second eye costs, and multiview
+
+Each eye is its own Bevy camera (bevy_mod_openxr gives each a view of
+one layer of the 2-layer swapchain image), so everything a view does is
+done twice. Measured with `EYES=1` against both (`scripts/bench.sh`,
+Marrow Creek m01-m09, 128x128 so pixels don't drown the rest, software
+renderer):
+
+| | One eye | Both | The second eye |
+| - | - | - | - |
+| Render world, per-mesh work (`rw ms`) | 12-16 ms | 17-24 ms | +40-55%: about a third of it is per view (queue, sort, batch, the view's own passes); extraction and asset prep are shared |
+| Main schedule | 19-27 ms | 22-29 ms | Within noise: visibility per camera is cheap |
+| GPU (software) | 150-270 ms | 310-520 ms | x2: every pass, the sun's cascades included, runs per eye |
+
+(Under lavapipe the CPU columns share four cores with the renderer:
+read them as proportions.)
+
+**Single-pass stereo (multiview) isn't reachable without forking
+Bevy.** wgpu 29 has it (`Features::MULTIVIEW`, a render pass's
+`multiview_mask`, `@builtin(view_index)`), Vulkan (bevy_mod_openxr's
+default backend) has it in core, and the OpenXR swapchain is already a
+2-layer array image. But Bevy 0.19 builds every render pipeline with
+`multiview_mask: None` in its pipeline cache (with a "TODO: expose the
+rest" beside it), every pass node (opaque, transparent, prepass, shadow,
+tonemapping, upscaling, transmission) opens its pass with `None`, a
+camera's `ViewTarget` is one 2D texture (and its MSAA and HDR
+intermediates with it), and every PBR shader reads one `view` uniform
+(`mesh_view_bindings.wgsl`). Multiview would take patches to
+bevy_render, bevy_core_pipeline and bevy_pbr (view uniforms as a
+2-array indexed by `view_index`, array view targets, every node's
+mask), our ten custom shaders, and a one-camera mode in
+bevy_mod_openxr: a fork to carry through every Bevy upgrade.
+
+What it would buy, from the numbers above: the per-view third of the
+render world's CPU (on the laptop, a few ms a frame) and the second set
+of draw submissions. On the GPU, vertex work for both eyes in one pass
+only where the driver shares it (not guaranteed), pixels not at all,
+and the shadow cascades not at all (Bevy draws cascades per view, and
+multiview passes wouldn't change that). Recommendation: not now. If
+the headset's `cpu:` line shows the render world over budget, the
+cheaper levers are fewer entities a view (the draw budget) first; watch
+upstream Bevy for multiview, and take it when it lands rather than fork.

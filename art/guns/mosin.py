@@ -5,6 +5,11 @@ Gun space as in src/weapons/layout.rs (`mosin()`): origin at the palm on the
 wrist, -Z down the bore (bore axis y = 0.045), +Y up, metres. The bolt is
 coaxial with the bore; its object origin sits on the bore axis so the game
 turns it about that axis and slides it back.
+
+`bayonet` is the 91/30's socket bayonet, fixed as the rifle was carried:
+a socket round the barrel behind the front sight, a cranked neck, and a
+cruciform spike under the barrel, its point at the empty `pt_bayonet_tip`.
+It's its own node so the game can leave it off.
 """
 
 import math
@@ -207,13 +212,41 @@ trig = Part("trigger", origin=(0.0, -0.005, -0.04))
 trig.sweep(catmull([(-0.044, -0.020), (-0.0445, -0.030), (-0.042, -0.039), (-0.037, -0.044)], 3,
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 
+# --- Socket bayonet ----------------------------------------------------------------------
+SPIKE_Y = BORE - 0.021
+SPIKE_Z0, SPIKE_TIP = -0.99, -1.425
+bayonet = Part("bayonet", origin=(0.0, BORE, -0.92))
+bayonet.tube(0.0128, 0.0108, -0.948, -0.888, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.001)
+# The locking ring round the socket's back end.
+bayonet.tube(0.0138, 0.0127, -0.9, -0.89, "Blued", segs=20, xf=T(0, BORE, 0))
+# The neck: down from the socket's front and forward to the spike.
+bayonet.sweep([(-0.93, BORE - 0.011), (-0.948, BORE - 0.015), (-0.962, SPIKE_Y + 0.001),
+               (-0.98, SPIKE_Y), (SPIKE_Z0 + 0.002, SPIKE_Y)],
+              section_rect(0.0065, 0.006, 0.0015), "Blued")
+# The spike: four fluted fins, tapering to the point.
+rings = []
+n = 14
+for i in range(n + 1):
+    u = i / n
+    z = SPIKE_Z0 + (SPIKE_TIP - SPIKE_Z0) * u
+    w = 0.0046 * (1.0 - u) ** 0.85 + 0.0002
+    c = w * 0.32
+    rings.append([(x, SPIKE_Y + y, z) for x, y in
+                  ((w, 0.0), (c, c), (0.0, w), (-c, c), (-w, 0.0), (-c, -c), (0.0, -w),
+                   (c, -c))])
+bayonet.loft(rings, "Steel")
+
 join("static", stock, furn, barrel, recv, mag, worn={})
-for p in (bolt, trig):
+for p in (bolt, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.085, -0.02))
 empty("pt_load_port", (0.0, 0.07, -0.09))
+empty("pt_bayonet_tip", (0.0, SPIKE_Y, SPIKE_TIP))
 
+# Where a sling attaches: the slots through the forend and the butt (the 91/30's sling runs through them).
+empty("pt_sling_front", (0.0, -0.009, -0.64))
+empty("pt_sling_rear", (0.0, -0.045, 0.17))
 report()
 export("assets/models/guns/mosin.glb")

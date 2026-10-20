@@ -158,10 +158,6 @@
             name: "Hut path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(1.0, -129.0), (-18.0, -130.0), (-34.0, -129.0)],
         ),
-        (
-            name: "Cottage path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(98.0, 207.0), (90.0, 214.0), (82.0, 219.0)],
-        ),
         // Up from the pass to the ranger tower on the west summit.
         (
             name: "Tower path", kind: Path, width: 1.4, shoulder: 0.8, smoothing: 4.0,
@@ -323,6 +319,9 @@
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
         (kind: ArtifactField, at: (185.0, -55.0), name: "The quarry"),
         (kind: ArtifactField, at: (-150.0, -95.0), name: "The spoil heap"),
+        // Standing anomalies: they lie here every cycle (Anomalies).
+        (kind: Anomaly(kind: "Well", radius: 2.0), at: (-118.0, -85.0), name: "Spoil heap well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (194.0, -22.0), name: "Quarry mirror"),
         (kind: Offering, at: (-8.0, 140.0), name: "The chapel font"),
         (kind: Offering, at: (-120.0, -235.0), name: "The cairn"),
         (kind: WorkSite, at: (-110.0, 20.0), name: "Beck site"),

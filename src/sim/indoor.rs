@@ -396,7 +396,15 @@ fn plan_site(
                 })
             });
             if clear {
-                grid.cost[j * n + i] = 1;
+                // Wading is slow; deep enough to swim, slower.
+                let w = r.water_at(grid.centre(i, j));
+                grid.cost[j * n + i] = if w >= extraction_core::underground::DEEP {
+                    5
+                } else if w > 0.0 {
+                    3
+                } else {
+                    1
+                };
             }
         }
     }

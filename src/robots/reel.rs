@@ -13,7 +13,8 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
 
-//! `crawler` (a crawler across), `zap` (a crawler charging and
+//! `hound` (a hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
+//! and lights at `--hour dusk` or `night`), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -29,6 +30,11 @@ use crate::launch::LaunchOptions;
 use crate::world::Zone;
 
 pub struct ReelPlugin;
+
+/// For the `eyes` reel: how alert to hold this robot (0 calm, 1
+/// suspicious, 2 seeing you).
+#[derive(Component)]
+struct EyeLevel(u8);
 
 impl Plugin for ReelPlugin {
     fn build(&self, app: &mut App) {
@@ -63,6 +69,8 @@ fn reel(
     mut destroyed: MessageWriter<PartDestroyed>,
     mut charges: MessageWriter<super::indoor::CrawlerCharge>,
     mut zaps: MessageWriter<super::indoor::CrawlerZap>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -115,8 +123,35 @@ fn reel(
                 let start = eye + flat * 9.0 - right * 3.5;
                 spawn_walker(&mut commands, &zone, start, job(start))
             }
-            "wreck" => {
-                let at = eye + flat * 5.0;
+            "hound" => {
+                let start = eye + flat * 6.0 - right * 7.0;
+                super::hound::spawn_hound(&mut commands, &zone, start, job(start))
+            }
+            "eyes" => {
+                // Three walkers and a drone, calm, suspicious and seeing
+                // you (set below), to judge eyes and lights by.
+                let mut first = None;
+                for (k, x) in [-3.4f32, 0.0, 3.4].into_iter().enumerate() {
+                    let at = eye + flat * 8.0 + right * x;
+                    let w = spawn_walker(&mut commands, &zone, at, job(at));
+                    commands
+                        .entity(w)
+                        .remove::<Senses>()
+                        .remove::<Brain>()
+                        .insert(EyeLevel(k as u8));
+                    first.get_or_insert(w);
+                }
+                let d = eye + flat * 9.0 + Vec3::Y * 2.2 + right * 1.3;
+                let drone = spawn_drone(&mut commands, d, job(d));
+                commands
+                    .entity(drone)
+                    .remove::<Senses>()
+                    .remove::<Brain>()
+                    .insert(EyeLevel(2));
+                first.unwrap()
+            }
+            "wreck" | "shot" => {
+                let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
             "crawler" | "zap" => {
@@ -184,9 +219,21 @@ fn reel(
             d.goal = centre;
         }
     }
+    for (lvl, mut aware) in &mut levels {
+        let (sus, sees) = [(0.0, false), (0.6, false), (1.0, true)][lvl.0 as usize];
+        aware.suspicion = sus;
+        aware.can_see_target = sees;
+        aware.exposure = if sees { 1.0 } else { 0.0 };
+    }
+    if what == "eyes" && frame == 5 {
+        // Turned to face you.
+        for mut w in &mut walkers {
+            w.yaw = flat.x.atan2(flat.z);
+        }
+    }
     if frame == 5 {
         if let Ok(mut w) = walkers.get_mut(subject) {
-            if what == "zap" {
+            if what == "zap" || what == "shot" {
                 // Facing you.
                 w.yaw = flat.x.atan2(flat.z);
             }
@@ -196,7 +243,8 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" => vec![],
+                "wreck" | "zap" | "shot" => vec![],
+                "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
@@ -233,6 +281,41 @@ fn reel(
                 part: e,
                 role: PartRole::Core,
                 at: gt.translation(),
+            });
+        }
+    }
+    // Rounds into a walker from beside the camera, a few a second: the
+    // marks they leave, and an eye shot that stutters.
+    if what == "shot" && frame > 10 && frame % 4 == 0 {
+        let aim = parts
+            .iter()
+            .filter(|(_, p, _)| p.robot == subject)
+            .map(|(_, p, gt)| (p.role, gt.translation()))
+            .find(|(r, _)| {
+                if (frame / 4) % 5 == 0 {
+                    *r == PartRole::Sensor
+                } else {
+                    *r == PartRole::Core
+                }
+            })
+            .map(|(_, p)| p);
+        if let Some(aim) = aim {
+            let k = frame as f32 * 0.7;
+            let target = aim + Vec3::new(k.sin() * 0.2, k.cos() * 0.15, 0.0);
+            // (Clear of the player's own body, which stands at the camera.)
+            let origin = eye + flat * 0.9 - Vec3::Y * 0.3;
+            shots.write(crate::weapons::ballistics::Shot {
+                // (Not the walker: a round ignores its own gun's parts.)
+                gun: Entity::PLACEHOLDER,
+                shooter: None,
+                origin,
+                direction: (target - origin).normalize_or(Vec3::NEG_Z),
+                speed: 700.0,
+                damage: 7.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: frame as u64,
             });
         }
     }

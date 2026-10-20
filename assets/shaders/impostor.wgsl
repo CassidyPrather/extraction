@@ -1,4 +1,5 @@
-// A far tree's foliage: the captured picture on crossed quads, standard
+// A far tree's foliage: the captured picture on one quad that turns to
+// face the eye, standard
 // PBR, alpha-tested (or alpha to coverage: `trees::foliage_alpha`). Within the near cut of the tree's base (carried in
 // UV1; horizontal distance, as the cards are cut) the real cards are drawn
 // instead: the whole tree swaps at once.
@@ -30,6 +31,22 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         world_from_local,
         vec4<f32>(vertex.position, 1.0)
     );
+#ifdef VERTEX_UVS_A
+#ifdef VERTEX_UVS_B
+    // One quad a tree, turned about the tree's axis (its base, UV1) to
+    // face this eye (`impostors::face`); the normal tipped toward it.
+    let base = vertex.uv_b;
+    let half = length(out.world_position.xz - base);
+    var to_eye = view.world_position.xz - base;
+    to_eye = to_eye / max(length(to_eye), 1e-4);
+    let right = vec2<f32>(to_eye.y, -to_eye.x);
+    let p = base + right * (vertex.uv.x * 2.0 - 1.0) * half;
+    out.world_position = vec4<f32>(p.x, out.world_position.y, p.y, 1.0);
+#ifdef VERTEX_NORMALS
+    out.world_normal = normalize(vec3<f32>(to_eye.x * 0.35, 0.65, to_eye.y * 0.35));
+#endif
+#endif
+#endif
     out.position = position_world_to_clip(out.world_position.xyz);
 #endif
 #ifdef VERTEX_UVS_A

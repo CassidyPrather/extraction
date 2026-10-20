@@ -354,6 +354,7 @@ fn the_longest_job_and_career_page_still_read() {
         p.0.tier = 0;
         p.0.done_in_tier = 2;
         p.0.upgrades = Upgrade::ALL.iter().map(|u| u.id().to_owned()).collect();
+        p.0.laid_up = p.0.upgrades.clone();
         for m in ["marrow_creek", "kettle_pass", "cinder_works"] {
             p.0.count_raid(m);
         }
@@ -436,22 +437,28 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
 }
 
 #[test]
-fn the_second_and_third_tiers_leave_guns_in_the_stash() {
+fn the_second_and_third_tiers_hand_over_guns() {
     let mut app = crate::raid::requests::tests::app();
     let catalog = app.world().resource::<Catalog>().clone();
-    let stash = one::<With<Stash>>(&mut app);
+    // What Lev has passed back through the cab's hatch (`raid::lev`).
     let ids = |app: &mut App| -> Vec<String> {
-        let contents = app.world().get::<Backpack>(stash).unwrap().contents.clone();
-        contents
+        app.world()
+            .resource::<crate::raid::lev::Handovers>()
+            .handed
             .iter()
-            .filter_map(|e| app.world().get::<Item>(*e))
-            .map(|i| catalog.get(i.kind()).id.clone())
+            .map(|(id, _)| id.clone())
             .collect()
     };
     let before = ids(&mut app).len();
     for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
         app.world_mut().write_message(JobDone);
         app.update();
+    }
+    for _ in 0..2000 {
+        app.update();
+        if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
+            break;
+        }
     }
     let after = ids(&mut app);
     let known: Vec<&str> = gifts(Upgrade::BenchVice)
@@ -519,4 +526,213 @@ fn the_last_job_is_hanas_letter_from_the_table() {
         .map(|l| l.0.clone())
         .collect();
     assert!(log.iter().any(|l| l == lines::LETTER_HOME), "{log:?}");
+}
+
+#[test]
+fn a_recover_job_can_send_you_underground() {
+    let mut app = crate::raid::requests::tests::app();
+    let zone = app.world().resource::<Zone>().clone();
+    let (name, entrance, _) = extraction_core::progression::underground_sites(&zone.map)
+        .into_iter()
+        .next()
+        .expect("Marrow Creek has its shelter");
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Recover {
+        map: "marrow_creek".into(),
+        region: name.clone(),
+        at: None,
+        place: None,
+    });
+    for _ in 0..40 {
+        app.update();
+    }
+    let Some(Job::Recover { place, .. }) = progress(&app).job else {
+        panic!();
+    };
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(RECOVER_ITEM).unwrap();
+    let at = app
+        .world_mut()
+        .query::<(&Item, &GlobalTransform)>()
+        .iter(app.world())
+        .find(|(i, _)| i.kind() == kind)
+        .map(|(_, g)| g.translation())
+        .expect("the recorder is down there");
+    assert!(at.y < zone.ground(at.x, at.z) - 1.5, "below ground: {at:?}");
+    assert!(at.xz().distance(Vec2::from_array(entrance)) < 60.0);
+    let place = place.expect("said where");
+    assert!(
+        place.starts_with(&format!("down in the {}", name.to_lowercase())),
+        "{place}"
+    );
+}
+
+/// Past the ladder: a fitting due its upkeep takes it from the stash at
+/// the homecoming, or lies up (and the vice's recipes go with it).
+#[test]
+fn upkeep_comes_out_of_the_stash_or_the_fitting_lies_up() {
+    let mut app = crate::raid::requests::tests::app();
+    let catalog = app.world().resource::<Catalog>().clone();
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.credit(TIERS.iter().map(|t| t.jobs).sum());
+    }
+    let count = |app: &mut App, id: &str| {
+        let kind = catalog.kind(id).unwrap();
+        app.world_mut()
+            .query::<&Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == kind)
+            .count()
+    };
+    let homecoming = |app: &mut App, raids: u32| {
+        {
+            let mut raid = app.world_mut().resource_mut::<Raid>();
+            raid.phase = Phase::Out;
+            raid.raids = raids;
+        }
+        app.update();
+        home(app);
+        app.update();
+    };
+    // The first homecoming starts every fitting's clock.
+    homecoming(&mut app, 30);
+    assert!(progress(&app).upkeep_due.len() == Upgrade::ALL.len());
+    // Due at 36: scrap for both racks, no oil.
+    stash(&mut app, "scrap_metal", 4);
+    stash(&mut app, "electronics", 1);
+    stash(&mut app, "field_dressing", 1);
+    let scrap = count(&mut app, "scrap_metal");
+    homecoming(&mut app, 36);
+    assert_eq!(
+        count(&mut app, "scrap_metal"),
+        scrap - 4,
+        "two for each rack"
+    );
+    let p = progress(&app);
+    assert!(!p.works(Upgrade::BenchVice), "no oil: the vice is laid up");
+    assert!(p.works(Upgrade::Aerial) && p.works(Upgrade::StashRack));
+    let tier = app
+        .world_mut()
+        .query::<&crate::raid::bench::Bench>()
+        .iter(app.world())
+        .next()
+        .unwrap()
+        .tier;
+    assert_eq!(tier, 0, "and its recipes went with it");
+    let log: Vec<String> = app
+        .world()
+        .resource::<Raid>()
+        .log
+        .iter()
+        .map(|l| l.0.clone())
+        .collect();
+    assert!(log.iter().any(|l| l.contains("vice's laid up")), "{log:?}");
+    // Oil in the stash: back at the next homecoming.
+    stash(&mut app, "gun_oil", 1);
+    homecoming(&mut app, 37);
+    assert!(progress(&app).works(Upgrade::BenchVice));
+}
+
+/// Past the ladder the order card shows, cycles, and the caches follow it.
+#[test]
+fn the_order_card_turns_the_caches() {
+    let mut app = crate::raid::requests::tests::app();
+    let card = one::<With<OrderCard>>(&mut app);
+    let player = one::<With<LocalPlayer>>(&mut app);
+    let press = |app: &mut App| {
+        app.world_mut()
+            .write_message(crate::interact::InteractEvent::Pressed { item: card, player });
+        app.update();
+        app.update();
+    };
+    // Before the ladder's done: hidden, and the driver says not yet.
+    assert_eq!(
+        *app.world().get::<Visibility>(card).unwrap(),
+        Visibility::Hidden
+    );
+    press(&mut app);
+    assert_eq!(progress(&app).order, None);
+    app.world_mut()
+        .resource_mut::<Progression>()
+        .0
+        .credit(TIERS.iter().map(|t| t.jobs).sum());
+    app.update();
+    assert_eq!(
+        *app.world().get::<Visibility>(card).unwrap(),
+        Visibility::Inherited
+    );
+    press(&mut app);
+    assert_eq!(progress(&app).order_def().id, "rounds");
+    // A job done now leaves a cache of rounds: three piles of them.
+    let catalog = app.world().resource::<Catalog>().clone();
+    let ammo = |app: &mut App| {
+        app.world_mut()
+            .query::<&Item>()
+            .iter(app.world())
+            .filter(|i| {
+                catalog.get(i.kind()).category == extraction_core::items::Category::Ammo
+                    || catalog.get(i.kind()).id.ends_with("_mag")
+                    || catalog.get(i.kind()).id.ends_with("_clip")
+            })
+            .count()
+    };
+    let before = ammo(&mut app);
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Fetch {
+        item: "matches".into(),
+        n: 1,
+    });
+    stash(&mut app, "matches", 1);
+    press_card(&mut app);
+    assert!(progress(&app).done > TIERS.iter().map(|t| t.jobs).sum::<u32>());
+    let after = ammo(&mut app);
+    assert!(
+        after >= before + 12,
+        "a cache of rounds: {before} -> {after}"
+    );
+}
+
+/// The first deep job, once Underground's depot is on the map: the intake
+/// ledger, left in its bay, handed in from the stash.
+#[test]
+fn the_ledger_job_puts_the_ledger_in_its_bay_and_takes_it_home() {
+    use extraction_core::progression::{LEDGER_AT, LEDGER_ITEM};
+    let mut app = crate::raid::requests::tests::app();
+    app.world_mut()
+        .resource_mut::<Progression>()
+        .0
+        .credit(TIERS.iter().map(|t| t.jobs).sum());
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Ledger);
+    for _ in 0..3 {
+        app.update();
+    }
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(LEDGER_ITEM).unwrap();
+    let ledger = app
+        .world_mut()
+        .query::<(Entity, &Item, &Transform)>()
+        .iter(app.world())
+        .find(|(_, i, _)| i.kind() == kind)
+        .map(|(e, _, t)| (e, t.translation))
+        .expect("the ledger is in its bay");
+    assert!(
+        ledger
+            .1
+            .xz()
+            .distance(Vec2::new(LEDGER_AT[0], LEDGER_AT[2]))
+            < 0.5
+    );
+    press_card(&mut app);
+    assert_eq!(progress(&app).job, Some(Job::Ledger), "not without it");
+    app.world_mut().despawn(ledger.0);
+    stash(&mut app, LEDGER_ITEM, 1);
+    press_card(&mut app);
+    assert_ne!(progress(&app).job, Some(Job::Ledger), "handed in");
+    let log: Vec<String> = app
+        .world()
+        .resource::<Raid>()
+        .log
+        .iter()
+        .map(|l| l.0.clone())
+        .collect();
+    assert!(log.iter().any(|l| l == lines::LEDGER_HOME), "{log:?}");
 }

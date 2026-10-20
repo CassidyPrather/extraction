@@ -60,6 +60,9 @@
         (from: "stope", to: "refuge", via: [(-12.0, 40.0)], doors: To),
         (from: "main_drive", to: "refuge", via: [(0.0, 40.0)], doors: To),
         (from: "refuge", to: "raise_foot", via: [(-6.0, 48.0)], doors: To),
+        // The old drive, drowned: from the lamp room straight to the west
+        // crosscut, too deep to stand in.
+        (from: "lamp_room", to: "west_crosscut", via: [(-9.0, 10.0)]),
     ],
     anomalies: [
         (kind: "Lift", room: "stope", at: (0.0, 0.0), radius: 2.6),
@@ -69,7 +72,11 @@
     crawlers: 1,
     // The breaker board in the wet sump, by the pump: throw it and the
     // stope and the magazine light, and the magazine's door opens.
-    power: Some((kind: Breaker, room: "sump", at: (2.75, 0.6), rot: 270.0, doors: ["magazine"])),
+    power: [(kind: Breaker, room: "sump", at: (2.75, 0.6), rot: 270.0, doors: ["magazine"])],
+    floods: [
+        (link: Some(("lamp_room", "west_crosscut")), depth: 1.35),
+        (room: Some("sump"), depth: 0.4),
+    ],
     portals: [
         (),
         (at: (0.0, 58.0), rot: 180.0, y: 0.4),

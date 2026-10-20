@@ -263,6 +263,43 @@ def ammo_762x38r():
     return [p]
 
 
+def round_762x25():
+    p = Part("body")
+    # The Tokarev round: a short bottlenecked case, a round-nosed bullet.
+    cartridge(p, C762X25, T(0, 0, C762X25[2] / 2), segs=12)
+    return [p]
+
+
+def ammo_762x25():
+    p = Part("body")
+    # A grey card box of seventy, ten by seven on end, half its lid torn off;
+    # the calibre stamped on the sides.
+    sx, sy, sz = 0.1, 0.03, 0.07
+    y0 = -0.0245
+    wall = 0.0012
+    carton(p, sx, sy, sz, y0, "Pebble", wall=wall, sides=False, top=None)
+    # Half the lid still on, over the rounds you haven't taken.
+    p.box((sx / 2, wall, sz), (sx / 4, y0 + sy - wall / 2 + 0.0004, 0.0), "Pebble", bevel=0.0004,
+          segs=1)
+    for sx_ in (-1, 1):
+        panel(p, "x", -sz / 2, sz / 2, y0, y0 + sy, sx_ * (sx / 2 - wall), sx_ * sx / 2,
+              "Pebble", [(-sz / 2, sz / 2, y0 + 0.006, y0 + 0.011, "Red")])
+    ragged(p, sx / 2 - 0.003, -sz / 2 + wall, 0.004, y0 + sy - 0.0012, y0 + sy, "Pebble", seed=9,
+           xf=T(-sx / 4, 0, 0))
+    p.box((sx / 2 - 0.004, 0.003, sz - 0.004), (-sx / 4, y0 + sy - 0.006, 0.0), "Black")
+    for i in range(5):
+        for j in range(7):
+            x = -0.045 + i * 0.01
+            z = -0.03 + j * 0.01
+            base = y0 + sy - 0.006 - 0.022
+            nose(p, C762X25, -0.022, T(x, base, z) @ RX(math.pi / 2), segs=7)
+    for sz_ in (-1, 1):
+        rot = RY(math.pi) if sz_ < 0 else T()
+        text(p, "7.62x25", 0.0075, "Black", T(0.0, y0 + 0.017, sz_ * (sz / 2 + 0.0001)) @ rot,
+             depth=0.0004)
+    return [p]
+
+
 def ammo_762r():
     p = Part("body")
     # A white card carton of the big rimmed rounds lying in two layers,
@@ -379,6 +416,7 @@ if __name__ == "__main__":
                         ("round_762r", round_762r), ("shell_12ga", shell_12ga),
                         ("round_762x39", round_762x39), ("ammo_762x39", ammo_762x39),
                         ("round_762x38r", round_762x38r), ("ammo_762x38r", ammo_762x38r),
+                        ("round_762x25", round_762x25), ("ammo_762x25", ammo_762x25),
                         ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
                         ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
                         ("robot_ammo_belt", robot_ammo_belt)):

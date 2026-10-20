@@ -30,6 +30,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from _kit import UP, board, prop, rod  # noqa: E402
 from common import Part, RY, T, fillet  # noqa: E402
 
+import _kit  # noqa: E402
+
+# Big structures: their eaves and galleries shade further.
+_kit.AO_DISTANCE = 1.5
+
 
 def ring(p, r_in, r_out, y0, y1, mat, segs=32):
     """A flat annulus (a washer) from y0 to y1."""

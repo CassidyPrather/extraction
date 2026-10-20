@@ -312,6 +312,9 @@ pub enum MarkerKind {
     Terminal { pages: Vec<String> },
     /// Where this valley's depot key lies until someone takes it home.
     ValleyKey { item: String },
+    /// A standing anomaly that the Surge never moves: `kind` names an
+    /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
+    Anomaly { kind: String, radius: f32 },
 }
 
 impl MarkerKind {
@@ -395,6 +398,16 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A nave 10 x 14 with its steps at the west door, the bell tower
         // off the east end.
         "chapel" => [10.4, 19.0, 23.0],
+        // Hero landmarks: a valley's one unmistakable silhouette.
+        "mill_race" => [7.8, 28.5, 54.6],
+        // A mine's aerial ropeway: the upper station (its ropes run out
+        // 34 m along -z, not counted), the line's pylons, one fallen.
+        "ropeway_station" => [12.0, 25.5, 16.2],
+        "ropeway_pylon" => [7.2, 21.2, 4.9],
+        "ropeway_pylon_down" => [7.6, 4.6, 27.0],
+        // A blast furnace with its stoves, chimney, dust catcher, skip
+        // bridge and cast house.
+        "blast_furnace" => [45.6, 38.5, 59.2],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],

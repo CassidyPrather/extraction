@@ -38,6 +38,7 @@ impl Plugin for RobotVisualsPlugin {
                     scorch,
                     dress_debris,
                     alert_eyes,
+                    shell_by_light,
                 ),
             );
     }
@@ -161,7 +162,7 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             ..default()
         }),
         scorched: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.36, 0.34, 0.32),
+            base_color: Color::srgb(0.58, 0.56, 0.53),
             perceptual_roughness: 0.75,
             metallic: 0.2,
             ..default()
@@ -255,6 +256,7 @@ fn dress_parts(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Option<Res<RobotMats>>,
+    hounds: Query<(), With<super::hound::Hound>>,
 ) {
     if parts.is_empty() {
         return;
@@ -295,6 +297,21 @@ fn dress_parts(
             }
         };
         commands.entity(e).remove::<Undressed>();
+        // A dirigible's gondola plates: plain slabs, with a dark rim.
+        if robot.kind == RobotKind::Dirigible && matches!(part.role, PartRole::Armour(_)) {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.86, 0.05, 3.3))),
+                MeshMaterial3d(m.shell.clone()),
+                Skin { part: e, level: 0 },
+                ChildOf(e),
+            ));
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.92, 0.04, 3.4))),
+                MeshMaterial3d(m.dark.clone()),
+                ChildOf(e),
+            ));
+            continue;
+        }
         let Some(model) = model else {
             dress_blockout(
                 &mut commands,
@@ -312,12 +329,17 @@ fn dress_parts(
         let mut mat = |name: Option<&str>| {
             robot_material(name, &m, &mut model_mats, &mut lib, &server, &mut materials)
         };
+        let hound = hounds.contains(part.robot);
         let node_name = match (robot.kind, part.role) {
+            (_, PartRole::Core) if hound => "hound_body",
+            (_, PartRole::Sensor) if hound => "hound_head",
             (_, PartRole::Core) => "core",
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
+            (RobotKind::Walker, PartRole::Armour(_)) => "plate",
+            (RobotKind::Drone, PartRole::Armour(_)) => "panel",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
             (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {
@@ -375,6 +397,19 @@ fn dress_parts(
                     MeshMaterial3d(m.rotor.clone()),
                     ChildOf(disc),
                 ));
+            }
+            (_, PartRole::Armour(_)) => {
+                let Some(node) = ModelNode::find(model, node_name) else {
+                    continue;
+                };
+                attach(
+                    &mut commands,
+                    e,
+                    node,
+                    plate_turn(robot.kind, node),
+                    e,
+                    &mut mat,
+                );
             }
             (RobotKind::Walker, PartRole::Leg(i)) => {
                 // The collider entity stays invisible; segments are drawn separately.
@@ -1227,6 +1262,22 @@ fn dress_debris(
                     );
                 })
             }
+            Piece::Plate => {
+                let name = if d.kind == RobotKind::Walker {
+                    "plate"
+                } else {
+                    "panel"
+                };
+                node(name).map(|n| {
+                    attach(&mut commands, e, n, plate_turn(d.kind, n), e, &mut mat);
+                })
+            }
+            Piece::Sensor => node("sensor").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
+            Piece::Gun => node("gun").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
             Piece::Turret => node("turret").map(|n| {
                 attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
             }),
@@ -1296,6 +1347,13 @@ fn dress_debris(
                     ChildOf(e),
                 ));
             }
+            Piece::Sensor | Piece::Gun | Piece::Plate => {
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.08, 0.06, 0.2))),
+                    MeshMaterial3d(m.dark.clone()),
+                    ChildOf(e),
+                ));
+            }
             Piece::Turret => {
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.16, 0.1, 0.36))),
@@ -1311,6 +1369,18 @@ fn dress_debris(
                 ));
             }
         }
+    }
+}
+
+/// How a plate's model sits on its part, whose +Y faces out: a walker's
+/// plate is modelled facing out from the orb at its origin, a drone's
+/// (its top panel, worn under the belly) already faces +Y.
+fn plate_turn(kind: RobotKind, node: &ModelNode) -> Transform {
+    if kind == RobotKind::Walker {
+        let out = node.transform.translation.normalize_or(Vec3::Y);
+        Transform::from_rotation(Quat::from_rotation_arc(out, Vec3::Y))
+    } else {
+        Transform::IDENTITY
     }
 }
 
@@ -1354,7 +1424,7 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
 
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
-struct AlertEye(Handle<StandardMaterial>);
+struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
 
 /// Eyes say what the robot knows: a dull red at work, brighter as its
 /// suspicion rises, and hot (toward orange-white) while it can make you
@@ -1363,11 +1433,30 @@ fn alert_eyes(
     mut commands: Commands,
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
     parts: Query<&RobotPart>,
-    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>)>,
+    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mats: Option<Res<RobotMats>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Handle<StandardMaterial>>>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut flicker: Local<std::collections::HashMap<Entity, f32>>,
+    time: Res<Time>,
 ) {
+    // A shot into the eye makes it stutter for a moment.
+    for imp in impacts.read() {
+        if imp.part == Some(PartRole::Sensor) && imp.hurt {
+            if let Some(part) = imp.entity.and_then(|e| parts.get(e).ok()) {
+                flicker.insert(part.robot, 0.6);
+            }
+        }
+    }
+    let dt = time.delta_secs();
+    flicker.retain(|_, t| {
+        *t -= dt;
+        *t > 0.0
+    });
+    let now = time.elapsed_secs();
     let Some(m) = mats else {
         return;
     };
@@ -1383,20 +1472,56 @@ fn alert_eyes(
         if part.role != PartRole::Sensor || !robots.contains(part.robot) {
             continue;
         }
+        let kind = robots.get(part.robot).map(|r| r.3.kind).ok();
         let own = made
             .entry(part.robot)
             .or_insert_with(|| {
                 let base = materials.get(&m.eye).cloned().unwrap_or_default();
                 let h = materials.add(base);
-                commands.entity(part.robot).insert(AlertEye(h.clone()));
+                // A soft glow round the eye, so in the dusk and the dark
+                // you see its mood before you see it.
+                let glow = materials.add(StandardMaterial {
+                    base_color: Color::srgba(1.0, 0.25, 0.1, 0.0),
+                    alpha_mode: AlphaMode::Add,
+                    unlit: true,
+                    fog_enabled: false,
+                    ..default()
+                });
+                let r = if kind == Some(RobotKind::Drone) {
+                    0.08
+                } else {
+                    0.15
+                };
+                commands.spawn((
+                    Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
+                    MeshMaterial3d(glow.clone()),
+                    Transform::from_xyz(0.0, 0.0, -0.03),
+                    NotShadowCaster,
+                    ChildOf(eye.part),
+                ));
+                commands
+                    .entity(part.robot)
+                    .insert(AlertEye(h.clone(), glow));
                 h
             })
             .clone();
         commands.entity(e).insert(MeshMaterial3d(own));
     }
-    for (_, aware, own) in &robots {
+    let light = conditions.map_or(1.0, |c| c.light);
+    // The glow tells more the darker it is.
+    let dark = (1.2 - light).clamp(0.3, 1.0);
+    for (robot, aware, own, _) in &robots {
         let Some(own) = own else {
             continue;
+        };
+        let stutter = if flicker.contains_key(&robot) {
+            if (now * 37.0 + robot.index_u32() as f32).sin() > 0.1 {
+                0.15
+            } else {
+                1.6
+            }
+        } else {
+            1.0
         };
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
@@ -1405,11 +1530,51 @@ fn alert_eyes(
             0.0
         };
         let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level;
+        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;
             }
         }
+        let alpha = (0.03 + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0);
+        let tint = Color::srgba(1.0, 0.25 + 0.3 * x, 0.1 + 0.1 * x, alpha);
+        if let Some(mut g) = materials.get_mut(&own.1) {
+            if g.base_color != tint {
+                g.base_color = tint;
+            }
+        }
+    }
+}
+
+/// The shell's own faint glow (what keeps a robot pale against the forest
+/// by day, `robot_material`) dims with the light: at night a robot is a
+/// dark shape with its eyes and running lights, not a lit ghost.
+fn shell_by_light(
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    mats: Option<Res<RobotMats>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut done: Local<Option<f32>>,
+) {
+    let (Some(c), Some(m)) = (conditions, mats) else {
+        return;
+    };
+    if *done == Some(c.light) {
+        return;
+    }
+    *done = Some(c.light);
+    let shell = robot_material(
+        Some("Shell"),
+        &m,
+        &mut model_mats,
+        &mut lib,
+        &server,
+        &mut materials,
+    );
+    let k = 0.22 * c.light.sqrt().max(0.12);
+    if let Some(mut mat) = materials.get_mut(&shell) {
+        mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
     }
 }

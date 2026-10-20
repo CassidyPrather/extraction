@@ -7,7 +7,8 @@
 //! day or at dusk, from a stream of its own (so the weather a seed gives
 //! is the same as before there were hours). The light it brings is
 //! gameplay too: robots see less far as it fails (`Conditions::sight`).
-//! Night isn't rolled yet (it belongs late in the ladder); `--hour night`
+//! Night comes late in the ladder: once Progression opens it (its third
+//! tier), about one cycle in five is a night; before that, `--hour night`
 //! shows it.
 
 use bevy::prelude::*;
@@ -20,6 +21,10 @@ pub enum WeatherKind {
     Downpour,
     Clearing,
 }
+
+/// Indoors, a room's walls let in this share of the sky's light (the
+/// client dims the ambient to it; robots' senses can read it too).
+pub const INTERIOR_LIGHT: f32 = 0.3;
 
 /// When in the day the raid is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +86,11 @@ pub struct Conditions {
 
 impl Conditions {
     pub fn for_cycle(seed: u64, cycle: u32) -> Self {
+        Self::for_cycle_with(seed, cycle, false)
+    }
+
+    /// The cycle's conditions, with night raids open or not.
+    pub fn for_cycle_with(seed: u64, cycle: u32, nights: bool) -> Self {
         let mut rng = Rng::new(seed ^ 0x3EA7_4E12 ^ (cycle as u64).wrapping_mul(0x9E37_79B9));
         // The first cycle is always the reference look.
         let kind = if cycle == 0 {
@@ -94,14 +104,22 @@ impl Conditions {
                 WeatherKind::Clearing,
             ][rng.below(5)]
         };
-        Self::compose(kind, Self::hour_for_cycle(seed, cycle), cycle)
+        Self::compose(kind, Self::hour_for_cycle(seed, cycle, nights), cycle)
     }
 
     /// The cycle's hour, from a stream of its own: the first cycle is the
-    /// day, then half are days and the rest dawn or dusk.
-    pub fn hour_for_cycle(seed: u64, cycle: u32) -> Hour {
+    /// day, then half are days and the rest dawn or dusk; with nights
+    /// open, about one in five is a night instead (from a third stream, so
+    /// the other cycles keep their hours).
+    pub fn hour_for_cycle(seed: u64, cycle: u32, nights: bool) -> Hour {
         if cycle == 0 {
             return Hour::Day;
+        }
+        if nights {
+            let mut n = Rng::new(seed ^ 0x0A16_47E5 ^ (cycle as u64).wrapping_mul(0x27D4_EB2F));
+            if n.below(5) == 0 {
+                return Hour::Night;
+            }
         }
         let mut rng = Rng::new(seed ^ 0x40C1_0C4D ^ (cycle as u64).wrapping_mul(0xC2B2_AE3D));
         [Hour::Dawn, Hour::Day, Hour::Day, Hour::Dusk][rng.below(4)]
@@ -134,6 +152,12 @@ impl Conditions {
         }
     }
 
+    /// The sky's light at a place, against a day's outdoors (0..=1):
+    /// `light`, and a room's share of it indoors.
+    pub fn light_at(&self, indoors: bool) -> f32 {
+        self.light * if indoors { INTERIOR_LIGHT } else { 1.0 }
+    }
+
     /// How far a robot's eyes reach, given its own sight range: the
     /// weather caps it, and failing light shortens it (to 60% at dusk,
     /// 40% at night: they don't see in the dark much better than you).
@@ -158,22 +182,93 @@ impl Conditions {
     }
 }
 
+/// How wet the world's surfaces are, 0 (dry) to 1 (soaked): rain wets
+/// them over minutes and they dry over twenty, faster in
+/// sun; mist keeps them damp. The raid starts with the ground as the
+/// weather has left it; a new cycle's weather then works on it. Drives
+/// the surfaces' look (`render::fog`'s wet patch, the terrain, puddles).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Wetness {
+    pub level: f32,
+    settled: bool,
+}
+
+/// Minutes rain takes to bring the ground most of the way to soaked.
+pub const SOAK_MINUTES: f32 = 4.0;
+/// Minutes the ground takes to dry most of the way, in no sun.
+pub const DRY_MINUTES: f32 = 25.0;
+
+impl Wetness {
+    /// Where the weather leaves the ground, given time.
+    pub fn target(c: &Conditions) -> f32 {
+        if c.rain > 0.0 {
+            (0.35 + 0.65 * c.rain).min(1.0)
+        } else if c.kind == WeatherKind::PeaSouper {
+            // Mist: damp, never running wet.
+            0.3
+        } else {
+            0.0
+        }
+    }
+
+    /// `dt` seconds of the weather.
+    pub fn step(&mut self, c: &Conditions, dt: f32) {
+        let target = Self::target(c);
+        let minutes = if target > self.level {
+            // Heavier rain soaks faster.
+            SOAK_MINUTES / (0.4 + c.rain).min(1.4)
+        } else {
+            // Sun and wind dry it.
+            DRY_MINUTES / (1.0 + 0.5 * c.sun / 1600.0 + 0.3 * c.wind())
+        };
+        let k = 1.0 - (-dt / (minutes * 60.0 / 3.0)).exp();
+        self.level += (target - self.level) * k;
+    }
+}
+
+/// The ground as the weather keeps it.
+fn soak(conditions: Res<Conditions>, mut wet: ResMut<Wetness>, time: Res<Time>) {
+    if !wet.settled {
+        // A raid starts with the ground as this weather has left it.
+        wet.level = Wetness::target(&conditions);
+        wet.settled = true;
+        return;
+    }
+    wet.step(&conditions, time.delta_secs());
+}
+
 pub struct WeatherPlugin;
 
 impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Conditions::for_cycle(1, 0))
-            .add_systems(Update, follow_cycle);
+            .init_resource::<Wetness>()
+            .add_systems(Update, (follow_cycle, soak).chain());
     }
 }
 
 /// New Surge cycle (or a loaded save), new weather.
+/// Night raids are open once the career's third tier is done
+/// (`Progress::nights`).
+
 fn follow_cycle(
     raid: Res<crate::raid::Raid>,
     opts: Res<crate::launch::LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
     mut conditions: ResMut<Conditions>,
+    mut latched: Local<Option<(u32, bool)>>,
 ) {
-    let mut want = Conditions::for_cycle(opts.seed, raid.cycle);
+    // Whether nights are open is read when the cycle starts and kept: a
+    // tier finished at base mustn't turn the raid's day to night.
+    let open = progression.is_some_and(|p| p.0.nights());
+    let nights = match *latched {
+        Some((cycle, n)) if cycle == raid.cycle => n,
+        _ => {
+            *latched = Some((raid.cycle, open));
+            open
+        }
+    };
+    let mut want = Conditions::for_cycle_with(opts.seed, raid.cycle, nights);
     // Dev overrides: the asked-for weather and hour, the rest as rolled.
     let kind = match opts.weather.as_deref() {
         Some("fog") => WeatherKind::PeaSouper,
@@ -223,8 +318,23 @@ mod tests {
             for h in [Hour::Dawn, Hour::Day, Hour::Dusk] {
                 assert!(a.contains(&h), "seed {seed}: no {h:?} in 40 cycles");
             }
-            // Night is for later in the ladder: never rolled.
+            // Night is for later in the ladder: not until it's open...
             assert!(!a.contains(&Hour::Night));
+            // ...and then about one in five, the rest keeping their hours.
+            let n: Vec<Hour> = (0..200)
+                .map(|c| Conditions::for_cycle_with(seed, c, true).hour)
+                .collect();
+            let nights = n.iter().filter(|h| **h == Hour::Night).count();
+            assert!(
+                (25..=60).contains(&nights),
+                "seed {seed}: {nights} nights in 200"
+            );
+            assert_eq!(n[0], Hour::Day);
+            for c in 0..40 {
+                if n[c] != Hour::Night {
+                    assert_eq!(n[c], a[c]);
+                }
+            }
         }
         // Different seeds give different days.
         let one: Vec<Hour> = (0..40).map(|c| Conditions::for_cycle(1, c).hour).collect();
@@ -251,6 +361,42 @@ mod tests {
             };
             assert_eq!(kinds[c as usize], old);
         }
+    }
+
+    #[test]
+    fn rain_soaks_in_minutes_and_dries_in_twenty() {
+        let pour = Conditions::compose(WeatherKind::Downpour, Hour::Day, 1);
+        let clear = Conditions::compose(WeatherKind::Clearing, Hour::Day, 1);
+        let mist = Conditions::compose(WeatherKind::PeaSouper, Hour::Day, 1);
+        let run = |w: &mut Wetness, c: &Conditions, secs: u32| {
+            for _ in 0..secs {
+                w.step(c, 1.0);
+            }
+        };
+        // Dry ground in a downpour: wet within a minute or two, soaked
+        // within five, never past soaked.
+        let mut w = Wetness::default();
+        run(&mut w, &pour, 60);
+        assert!(w.level > 0.3 && w.level < 0.9, "{}", w.level);
+        run(&mut w, &pour, 240);
+        assert!(w.level > 0.9 && w.level <= 1.0, "{}", w.level);
+        // Then the sky clears: still wet after five minutes, mostly dry by
+        // twenty, and the clouded sun dries slower than a clear one.
+        let soaked = w;
+        run(&mut w, &clear, 300);
+        assert!(w.level > 0.25, "{}", w.level);
+        run(&mut w, &clear, 900);
+        assert!(w.level < 0.1, "{}", w.level);
+        let mut dim = soaked;
+        let dusk = Conditions::compose(WeatherKind::Clearing, Hour::Dusk, 1);
+        run(&mut dim, &dusk, 300);
+        let mut bright = soaked;
+        run(&mut bright, &clear, 300);
+        assert!(dim.level > bright.level);
+        // Mist keeps it damp, no more.
+        let mut m = Wetness::default();
+        run(&mut m, &mist, 3600);
+        assert!((m.level - 0.3).abs() < 0.02);
     }
 
     #[test]

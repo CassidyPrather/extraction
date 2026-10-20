@@ -46,6 +46,52 @@ const STEP_HEIGHT: f32 = 0.26;
 /// much lower on bent legs.
 pub const LOW: f32 = 0.35;
 
+/// The body a gait carries: the walker's orb on four splayed legs, or the
+/// hound's long low body, legs fore and aft, built to run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Shape {
+    #[default]
+    Orb,
+    Hound,
+}
+
+impl Shape {
+    /// Where leg `i`'s hip is on the body (robot space, at size 1).
+    pub fn hip(self, i: usize) -> Vec3 {
+        match self {
+            Shape::Orb => hip_offset(i),
+            Shape::Hound => quadrant(i) * Vec3::new(0.2, 1.0, 0.42) - Vec3::Y * 0.06,
+        }
+    }
+    /// Where foot `i` rests, standing (robot space, at size 1).
+    pub fn rest(self, i: usize) -> Vec3 {
+        match self {
+            Shape::Orb => rest_offset(i),
+            Shape::Hound => quadrant(i) * Vec3::new(0.42, 0.0, 0.62),
+        }
+    }
+    /// How high the body rides, at size 1.
+    pub fn height(self) -> f32 {
+        match self {
+            Shape::Orb => BODY_HEIGHT,
+            Shape::Hound => 0.95,
+        }
+    }
+    /// Top speed against a walker's, acceleration and turning likewise.
+    fn pace(self) -> (f32, f32, f32) {
+        match self {
+            Shape::Orb => (1.0, 1.0, 1.0),
+            Shape::Hound => (2.6, 3.2, 2.2),
+        }
+    }
+}
+
+/// Leg `i`'s quadrant: (±1, 0, ±1) in the walker's leg order.
+fn quadrant(i: usize) -> Vec3 {
+    let r = rest_offset(i);
+    Vec3::new(r.x.signum(), 0.0, r.z.signum())
+}
+
 /// The body's own state, beside the brain's [`Walker`].
 #[derive(Component, Debug, Clone)]
 pub struct Gait {
@@ -90,6 +136,8 @@ pub struct Gait {
     pub size: f32,
     /// How far into a crouch it is, 0..1 (smoothed `Intent::low`).
     pub crouch: f32,
+    /// The body it carries.
+    pub shape: Shape,
     /// Seconds alive, for idle motion.
     age: f32,
 }
@@ -118,6 +166,7 @@ impl Default for Gait {
             steady: 0.0,
             size: 1.0,
             crouch: 0.0,
+            shape: Shape::Orb,
             age: 0.0,
         }
     }
@@ -130,6 +179,20 @@ impl Gait {
             size,
             ..Default::default()
         }
+    }
+
+    /// A hound's body, `size` times a walker's.
+    pub fn hound(size: f32) -> Self {
+        Self {
+            size,
+            shape: Shape::Hound,
+            ..Default::default()
+        }
+    }
+
+    /// The fastest it walks (or runs), m/s, before `Intent::pace`.
+    pub fn top_speed(&self) -> f32 {
+        SPEED * self.size.sqrt() * self.shape.pace().0
     }
 
     /// A knock to the body (a hit): `impulse` in m/s at the point, roughly.
@@ -223,7 +286,7 @@ pub fn step_walker(
     let alive_legs = w.feet.iter().filter(|f| f.alive).count();
     let dead: Vec3 = (0..LEGS)
         .filter(|i| !w.feet[*i].alive)
-        .map(|i| Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z))
+        .map(|i| Vec3::new(g.shape.hip(i).x, 0.0, g.shape.hip(i).z))
         .sum();
     // Lameness: the worst living leg, and anything missing.
     let worst = (0..LEGS)
@@ -246,7 +309,8 @@ pub fn step_walker(
     };
 
     // Velocity: built up and bled off at a heavy machine's rate.
-    let dv = (desired - w.velocity).clamp_length_max(ACCEL * dt);
+    let (_, accel_k, turn_k) = g.shape.pace();
+    let dv = (desired - w.velocity).clamp_length_max(ACCEL * accel_k * dt);
     w.velocity += dv;
     let v = w.velocity;
     let accel = (v - g.last_v) / dt;
@@ -258,7 +322,7 @@ pub fn step_walker(
     let face = drive.face.unwrap_or(v);
     let want_rate = if !drive.down && Vec2::new(face.x, face.z).length() > 0.2 {
         let want = (-face.x).atan2(-face.z);
-        (wrap(want - w.yaw) * 2.5).clamp(-TURN_RATE, TURN_RATE)
+        (wrap(want - w.yaw) * 2.5).clamp(-TURN_RATE * turn_k, TURN_RATE * turn_k)
     } else {
         0.0
     };
@@ -271,15 +335,18 @@ pub fn step_walker(
 
     // Feet.
     let rot = Quat::from_rotation_y(w.yaw);
-    let fast = (speed / (SPEED * s)).clamp(0.0, 1.5);
-    let step_time = 0.36 - 0.1 * fast;
+    let top = SPEED * s * g.shape.pace().0;
+    let fast = (speed / top).clamp(0.0, 1.5);
+    // (A runner's feet are quicker.)
+    let step_time = (0.36 - 0.1 * fast) * if g.shape == Shape::Hound { 0.7 } else { 1.0 };
     let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
     let probe_y = next.y;
     // Crouched, it spreads its feet: lower and wider, like a spider.
     let spread = s * (1.0 + 0.18 * g.crouch);
-    let ideal_xz = |i: usize| next + rot_ahead * rest_offset(i) * spread + lookahead;
+    let shape = g.shape;
+    let ideal_xz = |i: usize| next + rot_ahead * shape.rest(i) * spread + lookahead;
     let mut kick = 0.0f32;
     for i in 0..LEGS {
         if !w.feet[i].alive || w.feet[i].t >= 1.0 {
@@ -345,9 +412,18 @@ pub fn step_walker(
         0.0
     };
     if !drive.down {
+        // A foot dragged out near the end of its reach goes now, whatever
+        // its neighbours are doing (turning hard at a run can leave one
+        // behind otherwise).
+        let reach = (UPPER + LOWER) * s;
+        let stretched = |i: usize, w: &Walker| {
+            let hip = t.transform_point(g.shape.hip(i));
+            w.feet[i].alive && w.feet[i].t >= 1.0 && hip.distance(w.feet[i].planted) > reach * 0.85
+        };
         for _ in 0..LEGS {
             let air = w.feet.iter().filter(|f| f.alive && f.t < 1.0).count();
-            if air >= max_air {
+            let urgent = (0..LEGS).any(|i| stretched(i, w));
+            if air >= max_air + usize::from(urgent) {
                 break;
             }
             // The neediest foot that may go.
@@ -357,7 +433,9 @@ pub fn step_walker(
                         .iter()
                         .all(|&j| !w.feet[j].alive || w.feet[j].t >= 1.0);
                     let ready = need[i] > 1.0 || (g.idle > 0.6 && need[i] * trigger > 0.12 * s);
-                    w.feet[i].alive && w.feet[i].t >= 1.0 && ready && neighbours_down
+                    w.feet[i].alive
+                        && w.feet[i].t >= 1.0
+                        && (ready && neighbours_down || stretched(i, w))
                 })
                 .max_by(|a, b| need[*a].total_cmp(&need[*b]));
             let Some(i) = pick else {
@@ -384,7 +462,7 @@ pub fn step_walker(
     let centroid = if n > 0.0 { sum / n } else { next };
     let under = ground(Vec3::new(next.x, probe_y, next.z));
     let target_sag = s * if drive.down && !drive.stunned {
-        BODY_HEIGHT - 0.4
+        g.shape.height() - 0.4
     } else if drive.stunned {
         0.55
     } else {
@@ -397,9 +475,9 @@ pub fn step_walker(
     };
     g.sag += (target_sag - g.sag) * (3.0 * dt).min(1.0);
     let rest_y = if drive.down && !drive.stunned {
-        under + BODY_HEIGHT * s
+        under + g.shape.height() * s
     } else {
-        centroid.y.max(under - 0.2 * s) + BODY_HEIGHT * s
+        centroid.y.max(under - 0.2 * s) + g.shape.height() * s
     } - g.sag;
     next.y += (rest_y - next.y) * (6.0 * dt).min(1.0);
 
@@ -467,7 +545,7 @@ pub fn step_walker(
     let prev_age = g.age;
     g.age += dt;
     let lame = if g.limp > 0.5 && !drive.down {
-        ((g.limp - 0.5) * 2.0).min(1.0) * (1.0 - (speed / (0.5 * SPEED * s)).min(1.0))
+        ((g.limp - 0.5) * 2.0).min(1.0) * (1.0 - (speed / (0.5 * top)).min(1.0))
     } else {
         0.0
     };
@@ -477,7 +555,7 @@ pub fn step_walker(
         (0..LEGS)
             .filter(|i| w.feet[*i].alive)
             .min_by(|a, b| g.leg_health[*a].total_cmp(&g.leg_health[*b]))
-            .map(|i| Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z))
+            .map(|i| Vec3::new(g.shape.hip(i).x, 0.0, g.shape.hip(i).z))
             .unwrap_or(Vec3::X)
     };
     let rock =
@@ -504,8 +582,9 @@ pub fn step_walker(
         if w.feet[i].alive {
             continue;
         }
-        let hip = t.transform_point(hip_offset(i));
-        let hang = hip + rot * (Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z) * 1.2 * s)
+        let h = g.shape.hip(i);
+        let hip = t.transform_point(h);
+        let hang = hip + rot * (Vec3::new(h.x, 0.0, h.z).normalize_or_zero() * 0.4 * s)
             - Vec3::Y * (UPPER + LOWER) * 0.85 * s;
         if g.dangle[i] == Vec3::ZERO || g.dangle[i].distance(hang) > 2.5 {
             g.dangle[i] = hang;
@@ -550,7 +629,7 @@ pub fn footing(
 /// Joints for each leg (hip, knee, foot), after [`step_walker`].
 pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
     std::array::from_fn(|i| {
-        let hip = t.transform_point(hip_offset(i));
+        let hip = t.transform_point(g.shape.hip(i));
         let foot = if w.feet[i].alive {
             w.feet[i].planted
         } else {
@@ -595,7 +674,7 @@ pub(crate) fn walk(
                 w.path.remove(0);
             } else {
                 // Smaller legs, shorter strides, slower.
-                desired = to.normalize() * SPEED * g.size.sqrt();
+                desired = to.normalize() * g.top_speed();
             }
         }
         for c in children.iter() {
@@ -1014,6 +1093,78 @@ mod tests {
             .fold((f32::MAX, 0.0f32), |(a, b), v| (a.min(*v), b.max(*v)));
         assert!(hi - lo > 0.04, "it rocks: tilt {lo:.3}..{hi:.3}");
         assert!(t.translation.is_finite());
+    }
+
+    /// A hound runs: up to speed (over 3 m/s), on a slope, its feet on the
+    /// ground and never sliding, never past its legs' reach, trotting
+    /// (diagonal pairs) rather than walking one foot at a time.
+    #[test]
+    fn a_hound_runs() {
+        let slope = |p: Vec3| 0.12 * p.x + 0.05 * p.z;
+        let size = 0.7;
+        let shape = Shape::Hound;
+        let start = Vec3::new(0.0, shape.height() * size, 0.0);
+        let (mut w, _, mut t) = walker_at(start, &slope);
+        for i in 0..LEGS {
+            let p = start + shape.rest(i) * size;
+            let f = Vec3::new(p.x, slope(p), p.z);
+            w.feet[i].planted = f;
+            w.feet[i].from = f;
+            w.feet[i].to = f;
+        }
+        // Facing away from where it's sent: it has to turn as it goes.
+        w.yaw = 0.0;
+        let mut g = Gait::hound(size);
+        t.scale = Vec3::splat(size);
+        let dt = 1.0 / 90.0;
+        let (mut err, mut slip, mut pairs, mut fastest) = (0.0f32, 0.0f32, 0, 0.0f32);
+        let mut landings = 0;
+        for _ in 0..(90 * 6) {
+            let before = w.feet;
+            let drive = Drive {
+                desired: Vec3::X * g.top_speed(),
+                face: None,
+                pace: 1.0,
+                down: false,
+                stunned: false,
+                low: false,
+            };
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive,
+                dt,
+                &mut |p| slope(p),
+                &mut |_| landings += 1,
+            );
+            fastest = fastest.max(w.velocity.length());
+            let up: Vec<usize> = (0..LEGS).filter(|i| w.feet[*i].t < 1.0).collect();
+            if up.len() == 2 && (up[1] - up[0]) == 2 {
+                pairs += 1;
+            }
+            for i in 0..LEGS {
+                let f = w.feet[i];
+                if f.t >= 1.0 {
+                    err = err.max((f.planted.y - slope(f.planted)).abs());
+                    if before[i].t >= 1.0 {
+                        slip = slip.max(f.planted.distance(before[i].planted));
+                    }
+                }
+            }
+            for [hip, _, foot] in leg_poses(&w, &g, &t) {
+                assert!(hip.is_finite() && foot.is_finite());
+                assert!(
+                    hip.distance(foot) <= (UPPER + LOWER) * size + 0.05,
+                    "a foot left behind: {:.2} m from its hip",
+                    hip.distance(foot)
+                );
+            }
+        }
+        assert!(fastest > 3.0, "ran at {fastest:.2} m/s");
+        assert!(err < 0.01 && slip < 1e-5, "err {err:.3} slip {slip:.5}");
+        assert!(pairs > 90, "trotted in diagonal pairs ({pairs} ticks)");
+        assert!(landings > 20);
     }
 
     /// A step up: feet find the top of it (the ground function stands in

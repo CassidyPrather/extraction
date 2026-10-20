@@ -198,6 +198,8 @@ def run(sets, out):
             r["flags"].append("outdoors but wet")
         flags += bool(r["flags"])
         results.append(r)
+    roof_flags, roof_lines = roof_rain(sets)
+    flags += roof_flags
     (out / "acoustics_measured.json").write_text(json.dumps(results, indent=1))
     lines = ["Acoustics by place (probed from a head, reverb rendered with the game's Freeverb):",
              f"    {'kind':12s} {'surface':8s} {'n':>3s} {'wet dB':>7s} {'RT60 want':>9s} "
@@ -207,11 +209,48 @@ def run(sets, out):
         lines.append(f"    {r['kind']:12s} {r['surface']:8s} {r['count']:3d} {f(r['wet_db'], 7)} "
                      f"{f(r['want_rt60'], 9, 2)} {f(r.get('rt60'), 5, 2)} {f(r.get('drr_shot'), 8)} "
                      f"{f(r.get('drr_step'), 8)} {f(r.get('tail_adds'), 7)}  " + "; ".join(r["flags"]))
+    lines += roof_lines
     try:
         draw(results)
-        lines.append(f"    (plots: {SHOTS.relative_to(ROOT)}/acoustics_decay.png, acoustics_spectra.png)")
+        draw_roofs(sets)
+        lines.append(f"    (plots: {SHOTS.relative_to(ROOT)}/acoustics_decay.png, acoustics_spectra.png, "
+                     "rain_roofs.png)")
     except ImportError:
         lines.append("    (no Pillow: plots skipped)")
+    return flags, lines
+
+
+ROOFS = ["tin", "wood", "canvas"]
+
+
+def roof_rain(sets):
+    """The roofs' rain loops (scripts/make_rain_roofs.py) against the
+    outdoor rain bed: each at its level (make_rain_roofs.LEVEL, light 6 LU
+    under heavy, within 1.5 LU), and tin the brightest."""
+    import make_rain_roofs as mr
+    rain = sets.get("ambience/rain_light")
+    if not rain or not all(f"ambience/rain_{r}" in sets for r in ROOFS):
+        return 0, ["Rain under roofs: loops not built (scripts/make_rain_roofs.py)"]
+    flags = 0
+    lines = ["Rain under roofs (loudness against the outdoor rain bed; spectral centroid):"]
+    centroid = {}
+    for r in ROOFS:
+        for light in (False, True):
+            name = f"ambience/rain_{r}" + ("_light" if light else "")
+            got = sets[name]["loudness"] - rain["loudness"]
+            want = mr.LEVEL[r] - (6.0 if light else 0.0)
+            b = np.array(sets[name]["bands"])
+            p = 10 ** (b / 10)
+            c = float((p * np.array(aa.THIRDS)).sum() / p.sum())
+            if not light:
+                centroid[r] = c
+            bad = abs(got - want) > 1.5
+            flags += bad
+            lines.append(f"    {name:26s} {got:+5.1f} LU (wants {want:+.1f})  centroid {c:5.0f} Hz"
+                         + ("  OFF" if bad else ""))
+    if not (centroid["tin"] > centroid["wood"] and centroid["tin"] > centroid["canvas"]):
+        flags += 1
+        lines.append(f"    tin should ring brightest: {centroid}")
     return flags, lines
 
 
@@ -261,6 +300,20 @@ def _chart(title, subtitle, xlabel, ylabel, xr, yr, series, xticks, yticks, xfmt
         d.text((W - R + 40, y), label, fill=INK, font=fl, anchor="lm")
     SHOTS.mkdir(parents=True, exist_ok=True)
     img.save(path)
+
+
+def draw_roofs(sets):
+    rain = np.array(sets["ambience/rain_light"]["bands"])
+    xs = [math.log10(f) for f in aa.THIRDS]
+    series = [("outdoor rain", CATEGORICAL[0], xs, (rain - rain.max()).tolist())]
+    for i, r in enumerate(ROOFS):
+        b = np.array(sets[f"ambience/rain_{r}"]["bands"])
+        series.append((f"under {r}", CATEGORICAL[i + 1], xs, (b - b.max()).tolist()))
+    _chart("Rain, outdoors and under roofs",
+           "1/3-octave level of each rain bed (heavy rain), normalised to its loudest band",
+           "Hz", "dB", (math.log10(50), math.log10(16000)), (-40, 0),
+           series, [math.log10(f) for f in (63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)],
+           [0, -10, -20, -30, -40], lambda x: f"{10 ** x:,.0f}", SHOTS / "rain_roofs.png")
 
 
 def draw(results):

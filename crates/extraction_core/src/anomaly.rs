@@ -19,10 +19,33 @@ pub enum AnomalyKind {
     Burner,
     /// A static snare: discharges into whatever touches it, then recharges.
     Snare,
+    /// A knot of weight in the air: drags everything loose toward it,
+    /// crushes what reaches its heart, and bends bullets that pass close.
+    Well,
+    /// A fold in space: whatever crosses it is blinked out the far side, a
+    /// few metres on, still moving.
+    Mirror,
 }
 
 impl AnomalyKind {
-    pub const ALL: [AnomalyKind; 3] = [AnomalyKind::Lift, AnomalyKind::Burner, AnomalyKind::Snare];
+    pub const ALL: [AnomalyKind; 5] = [
+        AnomalyKind::Lift,
+        AnomalyKind::Burner,
+        AnomalyKind::Snare,
+        AnomalyKind::Well,
+        AnomalyKind::Mirror,
+    ];
+
+    /// What the Surge scatters each cycle. Wells and mirrors don't move:
+    /// the maps place them (`MarkerKind::Anomaly`), and the director can
+    /// bloom one.
+    pub const SURGE: [AnomalyKind; 3] =
+        [AnomalyKind::Lift, AnomalyKind::Burner, AnomalyKind::Snare];
+
+    /// By its name in a map or site file ("Lift", "Well", ...).
+    pub fn from_name(name: &str) -> Option<AnomalyKind> {
+        Self::ALL.into_iter().find(|k| format!("{k:?}") == name)
+    }
 
     /// The artifact this kind grows, by item id.
     pub fn artifact(self) -> &'static str {
@@ -30,6 +53,8 @@ impl AnomalyKind {
             AnomalyKind::Lift => "art_featherstone",
             AnomalyKind::Burner => "art_hearth",
             AnomalyKind::Snare => "art_aegis",
+            AnomalyKind::Well => "art_lodestone",
+            AnomalyKind::Mirror => "art_shard",
         }
     }
 
@@ -39,8 +64,178 @@ impl AnomalyKind {
             AnomalyKind::Lift => (2.5, 4.0),
             AnomalyKind::Burner => (1.4, 2.4),
             AnomalyKind::Snare => (1.8, 3.0),
+            AnomalyKind::Well => (1.6, 2.4),
+            AnomalyKind::Mirror => (1.2, 1.8),
         }
     }
+
+    /// How far round its centre it reaches out and does something: a
+    /// well's pull goes well past its heart.
+    pub fn reach(self, radius: f32) -> f32 {
+        match self {
+            AnomalyKind::Well => radius * WELL_REACH,
+            _ => radius,
+        }
+    }
+
+    /// How wide a berth a careful walker gives it: inside this, it has you.
+    pub fn danger_radius(self, radius: f32) -> f32 {
+        match self {
+            AnomalyKind::Well => radius * 1.8,
+            AnomalyKind::Mirror => radius + MIRROR_THROW,
+            _ => radius,
+        }
+    }
+}
+
+// --- Wells -----------------------------------------------------------------
+
+/// A well's pull reaches this many radii out.
+pub const WELL_REACH: f32 = 3.0;
+/// Height of a well's heart above the ground, metres.
+pub const WELL_HEIGHT: f32 = 1.3;
+/// Pull on loose things at one radius out, m/s².
+pub const WELL_PULL: f32 = 16.0;
+/// Pull on a walker at one radius out, m/s²: you can still walk out from
+/// the edge, and not from the heart.
+pub const WELL_DRAG: f32 = 3.2;
+/// Health a second at the heart.
+pub const WELL_CRUSH: f32 = 30.0;
+/// The heart, as a share of the radius: what reaches it is crushed.
+pub const WELL_HEART: f32 = 0.45;
+/// The lens: `K` in `K / (d² + s²)`, m³/s². A rifle round (700 m/s) a
+/// metre off the heart turns a few degrees; a pistol round, at half the
+/// speed, four times as much.
+pub const WELL_LENS: f32 = 18_000.0;
+
+/// How much of a well's pull is felt at `d` from its heart: all of it
+/// out to 60% of its reach, fading smoothly to nothing at the reach, so
+/// nothing snaps as it crosses in.
+pub fn well_falloff(d: f32, radius: f32) -> f32 {
+    let reach = radius * WELL_REACH;
+    let t = ((1.0 - d / reach) / 0.4).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Acceleration (m/s²) toward the heart for a loose body at `rel` from
+/// it: rises toward the heart and then softens, so things fall in and
+/// circle instead of flying through.
+pub fn well_pull(rel: [f32; 3], radius: f32, strength: f32) -> [f32; 3] {
+    let d = (rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]).sqrt();
+    if d < 1e-4 {
+        return [0.0; 3];
+    }
+    let r2 = radius * radius;
+    let a = strength * r2 * 1.25 / (d * d + r2 * 0.25) * well_falloff(d, radius);
+    [-rel[0] / d * a, -rel[1] / d * a, -rel[2] / d * a]
+}
+
+/// Acceleration (m/s²) on a bullet at `rel` from the heart: the lens,
+/// independent of the round's mass, so a slow round bends more.
+pub fn well_bend(rel: [f32; 3], radius: f32) -> [f32; 3] {
+    let d = (rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]).sqrt();
+    if d < 1e-4 {
+        return [0.0; 3];
+    }
+    let soft = 0.3 * radius;
+    let a = WELL_LENS / (d * d + soft * soft) * well_falloff(d, radius);
+    [-rel[0] / d * a, -rel[1] / d * a, -rel[2] / d * a]
+}
+
+/// The change in velocity a well at `rel_from` (the round's position less
+/// the heart's) gives a round flying `velocity` for `dt`: the lens summed
+/// along the tick's whole segment in short steps, since a rifle round
+/// crosses a well's reach in a tick or two.
+pub fn well_impulse(rel_from: [f32; 3], velocity: [f32; 3], dt: f32, radius: f32) -> [f32; 3] {
+    let step = [velocity[0] * dt, velocity[1] * dt, velocity[2] * dt];
+    let len = (step[0] * step[0] + step[1] * step[1] + step[2] * step[2]).sqrt();
+    let n = ((len / (0.1 * radius)).ceil() as usize).clamp(1, 400);
+    let mut dv = [0.0f32; 3];
+    for i in 0..n {
+        let f = (i as f32 + 0.5) / n as f32;
+        let p = [
+            rel_from[0] + step[0] * f,
+            rel_from[1] + step[1] * f,
+            rel_from[2] + step[2] * f,
+        ];
+        let a = well_bend(p, radius);
+        for k in 0..3 {
+            dv[k] += a[k] * dt / n as f32;
+        }
+    }
+    dv
+}
+
+/// Whether a round flying `step` from `rel_from` passes within a well's
+/// reach this tick (the cheap test before [`well_impulse`]).
+pub fn well_in_reach(rel_from: [f32; 3], step: [f32; 3], radius: f32) -> bool {
+    let reach = radius * WELL_REACH;
+    let l2 = step[0] * step[0] + step[1] * step[1] + step[2] * step[2];
+    let t = if l2 < 1e-9 {
+        0.0
+    } else {
+        (-(rel_from[0] * step[0] + rel_from[1] * step[1] + rel_from[2] * step[2]) / l2)
+            .clamp(0.0, 1.0)
+    };
+    let c = [
+        rel_from[0] + step[0] * t,
+        rel_from[1] + step[1] * t,
+        rel_from[2] + step[2] * t,
+    ];
+    c[0] * c[0] + c[1] * c[1] + c[2] * c[2] < reach * reach
+}
+
+// --- Mirrors ---------------------------------------------------------------
+
+/// How far past its far edge a mirror sets down what it blinks, metres.
+pub const MIRROR_THROW: f32 = 3.0;
+/// Seconds a mirror takes to fold back up after a blink.
+pub const MIRROR_RECHARGE: f32 = 1.5;
+
+/// Where a mirror at `centre` sends something that came in at `entry`:
+/// out the far side, `MIRROR_THROW` past its edge. `ok` says whether a
+/// spot is somewhere it can land (dry, open ground); if the straight-
+/// through spot isn't, it swings round a sixth of a turn at a time.
+pub fn mirror_exit(
+    centre: [f32; 2],
+    entry: [f32; 2],
+    radius: f32,
+    ok: impl Fn([f32; 2]) -> bool,
+) -> Option<[f32; 2]> {
+    let mut dir = geom::sub(centre, entry);
+    let l = geom::len(dir);
+    dir = if l < 1e-3 {
+        [1.0, 0.0]
+    } else {
+        geom::scale(dir, 1.0 / l)
+    };
+    let out = radius + MIRROR_THROW;
+    for k in [0i32, 1, -1, 2, -2, 3] {
+        let a = k as f32 * std::f32::consts::FRAC_PI_3;
+        let (s, c) = a.sin_cos();
+        let d = [dir[0] * c - dir[1] * s, dir[0] * s + dir[1] * c];
+        let p = geom::add(centre, geom::scale(d, out));
+        if ok(p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+// --- The detector ----------------------------------------------------------
+
+/// The detector hears anomalies this far from their edge, metres.
+pub const DETECTOR_RANGE: f32 = 25.0;
+
+/// Seconds between the detector's clicks with the nearest anomaly's edge
+/// `edge` metres away (negative: inside it): a lazy tick at the limit of
+/// its range, a rattle at the edge. None when there is nothing in range.
+pub fn detector_interval(edge: f32) -> Option<f32> {
+    if edge >= DETECTOR_RANGE {
+        return None;
+    }
+    let t = (edge / DETECTOR_RANGE).clamp(0.0, 1.0);
+    Some(0.06 + 1.4 * t * t)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,12 +287,77 @@ pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
     })
 }
 
+// --- The Surge ---------------------------------------------------------------
+
+/// How agitated the anomalies are with `surge_in` seconds to the Surge
+/// (negative: it's raging), given the warning's length: nothing before
+/// the warning, rising to all of it as the Surge breaks, all of it while
+/// it rages, and calm again once it has passed.
+pub fn surge_agitation(surge_in: f32, warning: f32, length: f32) -> f32 {
+    if surge_in > warning || surge_in <= -length {
+        0.0
+    } else if surge_in > 0.0 {
+        let t = 1.0 - surge_in / warning;
+        t * t
+    } else {
+        1.0
+    }
+}
+
+/// How much an agitated anomaly swells: up to this share again.
+pub const SURGE_SWELL: f32 = 0.3;
+/// How much faster agitated anomalies charge and recharge, at full.
+pub const SURGE_HURRY: f32 = 2.0;
+/// Seconds before the Surge at which a new anomaly blooms near you.
+pub const SURGE_BLOOMS: [f32; 5] = [240.0, 170.0, 110.0, 60.0, 25.0];
+/// Seconds a Surge bloom spends forming (visible, harmless) first.
+pub const SURGE_FORMING: f32 = 4.0;
+
+/// How many Surge blooms fall due as the clock goes from `before` to
+/// `after` seconds to the Surge.
+pub fn surge_blooms_due(before: f32, after: f32) -> usize {
+    SURGE_BLOOMS
+        .iter()
+        .filter(|t| before > **t && after <= **t)
+        .count()
+}
+
+/// Where a Surge bloom opens round someone at `at` heading `heading`
+/// (x, z; zero if standing): 10 to 25 m off, and off to a side (50 to 130
+/// degrees from the heading), never across the way they're going; on
+/// ground `ok` allows. `roll` gives numbers in 0..1.
+pub fn surge_bloom_spot(
+    at: [f32; 2],
+    heading: [f32; 2],
+    mut roll: impl FnMut() -> f32,
+    ok: impl Fn([f32; 2]) -> bool,
+) -> Option<[f32; 2]> {
+    let h = if geom::len(heading) > 0.1 {
+        geom::scale(heading, 1.0 / geom::len(heading))
+    } else {
+        [0.0, -1.0]
+    };
+    let base = h[1].atan2(h[0]);
+    for _ in 0..24 {
+        let side = if roll() < 0.5 { -1.0 } else { 1.0 };
+        let off = (50.0 + 80.0 * roll()).to_radians() * side;
+        let d = 10.0 + 15.0 * roll();
+        let a = base + off;
+        let p = [at[0] + a.cos() * d, at[1] + a.sin() * d];
+        if ok(p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
 /// The anomalies of a Surge cycle.
 pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<AnomalySpec> {
     let mut rng = Rng::new(seed ^ 0xA70A ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
     let mut out: Vec<AnomalySpec> = Vec::new();
     let fits = |out: &[AnomalySpec], p: [f32; 2], r: f32| {
-        out.iter().all(|a| geom::dist(a.at, p) > a.radius + r + 2.5)
+        out.iter()
+            .all(|a| geom::dist(a.at, p) > a.kind.danger_radius(a.radius) + r + 2.5)
     };
     let place =
         |rng: &mut Rng, out: &mut Vec<AnomalySpec>, centre: [f32; 2], spread: f32, chance: f32| {
@@ -105,7 +365,7 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
                 let a = rng.range(0.0, std::f32::consts::TAU);
                 let d = spread * rng.f32().sqrt();
                 let p = [centre[0] + a.cos() * d, centre[1] + a.sin() * d];
-                let kind = AnomalyKind::ALL[rng.below(3)];
+                let kind = AnomalyKind::SURGE[rng.below(3)];
                 let (lo, hi) = kind.radius_range();
                 let radius = rng.range(lo, hi);
                 if !placeable(map, hm, p) || !clear_of_roads(hm, p, radius) || !fits(out, p, radius)
@@ -128,6 +388,25 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
                 return;
             }
         };
+    // The standing anomalies first, where the map puts them, so the Surge's
+    // keep clear of them. Their own stream: adding one to a map leaves the
+    // Surge's draws as they were.
+    let mut srng = Rng::new(seed ^ 0x57A4D ^ (cycle as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
+    for m in &map.markers {
+        let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+            continue;
+        };
+        let Some(kind) = AnomalyKind::from_name(kind) else {
+            continue;
+        };
+        let artifact = srng.chance(FIELD_ARTIFACT_CHANCE).then(|| kind.artifact());
+        out.push(AnomalySpec {
+            kind,
+            at: m.at,
+            radius: *radius,
+            artifact,
+        });
+    }
     for m in map.markers_of(&MarkerKind::ArtifactField) {
         let n = 5 + rng.below(4);
         for _ in 0..n {
@@ -182,6 +461,233 @@ mod tests {
                         "{a:?} overlaps {b:?}"
                     );
                 }
+            }
+        }
+    }
+
+    /// Flies a round straight past a well's heart at `miss` metres and
+    /// returns how far it turned, degrees.
+    fn deflection(speed: f32, miss: f32, radius: f32) -> f32 {
+        let dt = 1.0 / 2000.0;
+        let mut p = [-40.0f32, miss, 0.0];
+        let mut v = [speed, 0.0, 0.0];
+        while p[0] < 40.0 {
+            let a = well_bend(p, radius);
+            for i in 0..3 {
+                v[i] += a[i] * dt;
+                p[i] += v[i] * dt;
+            }
+        }
+        v[1].atan2(v[0]).abs().to_degrees()
+    }
+
+    #[test]
+    fn a_well_bends_close_shots_and_slow_ones_most() {
+        let r = 2.0;
+        let rifle_close = deflection(700.0, 1.0, r);
+        let rifle_edge = deflection(700.0, r, r);
+        let pistol_close = deflection(350.0, 1.0, r);
+        let rifle_far = deflection(700.0, r * WELL_REACH + 0.1, r);
+        assert!(
+            (2.0..12.0).contains(&rifle_close),
+            "a rifle round a metre off turns a few degrees ({rifle_close:.2})"
+        );
+        assert!(
+            rifle_edge < rifle_close && rifle_edge > 0.5,
+            "{rifle_edge:.2}"
+        );
+        assert!(
+            pistol_close > rifle_close * 3.0,
+            "half the speed, about four times the turn ({pistol_close:.2} vs {rifle_close:.2})"
+        );
+        assert!(rifle_far < 1e-3, "out of reach, untouched ({rifle_far})");
+    }
+
+    #[test]
+    fn a_tick_of_lens_matches_flying_it_finely() {
+        // The game's fixed tick: a rifle round crosses the well in about a
+        // tick, and the summed impulse turns it as the fine flight does.
+        let (r, speed, miss) = (2.0, 700.0, 1.0);
+        let dt = 1.0 / 64.0;
+        let mut p = [-40.0f32, miss, 0.0];
+        let mut v = [speed, 0.0, 0.0];
+        while p[0] < 40.0 {
+            let step = [v[0] * dt, v[1] * dt, v[2] * dt];
+            if well_in_reach(p, step, r) {
+                let dv = well_impulse(p, v, dt, r);
+                for i in 0..3 {
+                    v[i] += dv[i];
+                }
+            }
+            for i in 0..3 {
+                p[i] += v[i] * dt;
+            }
+        }
+        let coarse = v[1].atan2(v[0]).abs().to_degrees();
+        let fine = deflection(speed, miss, r);
+        assert!(
+            (coarse - fine).abs() < fine * 0.25,
+            "a tick at a time ({coarse:.2}°) as finely ({fine:.2}°)"
+        );
+        assert!(!well_in_reach([-40.0, 7.0, 0.0], [80.0, 0.0, 0.0], r));
+        assert!(well_in_reach([-40.0, 1.0, 0.0], [80.0, 0.0, 0.0], r));
+    }
+
+    #[test]
+    fn a_well_drags_things_in_and_lets_go_past_its_reach() {
+        let r = 2.0;
+        let at = |d: f32| well_pull([d, 0.0, 0.0], r, WELL_PULL)[0];
+        assert!(
+            at(r) < -WELL_PULL * 0.3,
+            "pulled in at the edge ({})",
+            at(r)
+        );
+        assert!(at(r * 0.5) < at(r), "harder nearer the heart");
+        assert!(at(r * 2.0) < 0.0 && at(r * 2.0) > at(r));
+        assert_eq!(at(r * WELL_REACH), 0.0);
+        // A walker at the edge can still walk out (about 1.5 m/s² of
+        // headroom against a walker's few m/s² of push), not at the heart.
+        let walker = |d: f32| -well_pull([d, 0.0, 0.0], r, WELL_DRAG)[0];
+        assert!(walker(r * 2.0) < 2.0, "{}", walker(r * 2.0));
+        assert!(walker(r * WELL_HEART) > 4.0, "{}", walker(r * WELL_HEART));
+    }
+
+    #[test]
+    fn a_mirror_blinks_you_out_the_far_side() {
+        let c = [10.0, 5.0];
+        let exit = mirror_exit(c, [8.0, 5.0], 1.5, |_| true).unwrap();
+        assert!(
+            (exit[0] - (10.0 + 1.5 + MIRROR_THROW)).abs() < 1e-4,
+            "{exit:?}"
+        );
+        assert!((exit[1] - 5.0).abs() < 1e-4);
+        // Water straight through: it swings round to open ground.
+        let dry = |p: [f32; 2]| p[1] > 5.5;
+        let e = mirror_exit(c, [8.0, 5.0], 1.5, dry).unwrap();
+        assert!(
+            e[1] > 5.5 && geom::dist(e, c) > 1.5 + MIRROR_THROW - 1e-3,
+            "{e:?}"
+        );
+        assert!(mirror_exit(c, [8.0, 5.0], 1.5, |_| false).is_none());
+    }
+
+    #[test]
+    fn the_surge_stirs_them_up_and_lets_them_go() {
+        let (w, l) = (300.0, 120.0);
+        assert_eq!(surge_agitation(400.0, w, l), 0.0);
+        assert_eq!(surge_agitation(w, w, l), 0.0);
+        let early = surge_agitation(200.0, w, l);
+        let late = surge_agitation(30.0, w, l);
+        assert!(early > 0.0 && late > early && late < 1.0, "{early} {late}");
+        assert_eq!(surge_agitation(-10.0, w, l), 1.0);
+        assert_eq!(surge_agitation(-l - 1.0, w, l), 0.0);
+        // Every bloom falls due once over the warning, ticking through it.
+        let mut n = 0;
+        let mut t = w + 5.0;
+        while t > -5.0 {
+            n += surge_blooms_due(t, t - 1.0 / 64.0);
+            t -= 1.0 / 64.0;
+        }
+        assert_eq!(n, SURGE_BLOOMS.len());
+    }
+
+    #[test]
+    fn surge_blooms_open_to_the_side_not_in_your_way() {
+        let mut rng = Rng::new(9);
+        for _ in 0..200 {
+            let p = surge_bloom_spot([0.0, 0.0], [0.0, -2.0], || rng.f32(), |_| true).unwrap();
+            let d = geom::len(p);
+            assert!((10.0..=25.0).contains(&d), "{d}");
+            // Heading -Z: the angle off it is 50..130 degrees.
+            let off = (-p[1] / d).acos().to_degrees();
+            assert!(
+                (49.0..=131.0).contains(&off),
+                "{p:?} is {off:.0} degrees off"
+            );
+        }
+        assert!(surge_bloom_spot([0.0, 0.0], [0.0, 0.0], || 0.5, |_| false).is_none());
+    }
+
+    #[test]
+    fn the_detector_clicks_faster_as_you_close() {
+        assert_eq!(detector_interval(DETECTOR_RANGE + 1.0), None);
+        let far = detector_interval(20.0).unwrap();
+        let mid = detector_interval(8.0).unwrap();
+        let edge = detector_interval(0.0).unwrap();
+        let inside = detector_interval(-2.0).unwrap();
+        assert!(far > mid && mid > edge, "{far} {mid} {edge}");
+        assert!(
+            far > 0.8 && edge < 0.1,
+            "a lazy tick far off, a rattle at the edge"
+        );
+        assert_eq!(edge, inside);
+    }
+
+    #[test]
+    fn standing_anomalies_lie_where_the_map_puts_them_every_cycle() {
+        let (mut map, hm) = marrow();
+        map.markers
+            .retain(|m| !matches!(m.kind, MarkerKind::Anomaly { .. }));
+        let before = layout(&map, &hm, 4, 0);
+        map.markers.push(crate::map::Marker {
+            kind: MarkerKind::Anomaly {
+                kind: "Well".into(),
+                radius: 2.0,
+            },
+            at: [1000.0, 1000.0],
+            rot: 0.0,
+            name: "test well".into(),
+            y: 0.0,
+        });
+        for cycle in 0..4 {
+            let all = layout(&map, &hm, 4, cycle);
+            let wells: Vec<_> = all.iter().filter(|a| a.kind == AnomalyKind::Well).collect();
+            assert_eq!(wells.len(), 1);
+            assert_eq!(wells[0].at, [1000.0, 1000.0]);
+        }
+        // Out of everyone's way, it leaves the Surge's own layout alone.
+        let after = layout(&map, &hm, 4, 0);
+        assert_eq!(&after[1..], &before[..]);
+        assert!(AnomalyKind::from_name("Mirror").is_some());
+        assert!(AnomalyKind::from_name("Teapot").is_none());
+    }
+
+    #[test]
+    fn every_valley_has_a_well_and_a_mirror_somewhere_sensible() {
+        use crate::map::{CINDER_WORKS, KETTLE_PASS};
+        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = Heightmap::build(&map);
+            let mut kinds = Vec::new();
+            for m in &map.markers {
+                let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+                    continue;
+                };
+                let kind = AnomalyKind::from_name(kind)
+                    .unwrap_or_else(|| panic!("{}: no anomaly kind {kind:?}", map.name));
+                let (lo, hi) = kind.radius_range();
+                assert!(
+                    (lo..=hi).contains(radius),
+                    "{}: {} r{radius}",
+                    map.name,
+                    m.name
+                );
+                assert!(
+                    placeable(&map, &hm, m.at),
+                    "{}: {} is in the way",
+                    map.name,
+                    m.name
+                );
+                assert!(
+                    clear_of_roads(&hm, m.at, kind.danger_radius(*radius)),
+                    "{}: {} reaches a road",
+                    map.name,
+                    m.name
+                );
+                kinds.push(kind);
+            }
+            for k in [AnomalyKind::Well, AnomalyKind::Mirror] {
+                assert!(kinds.contains(&k), "{} has no {k:?}", map.name);
             }
         }
     }

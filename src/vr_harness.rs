@@ -154,6 +154,17 @@ impl Vr {
         input.hand_mut(side).grip = v;
     }
 
+    /// Tracked fingers, as the XR driver reads them from hand-tracking
+    /// joints (`None`: a controller without finger sensing).
+    pub fn fingers(&mut self, side: Side, f: Option<crate::rig::fingers::Fingers>) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).fingers = f;
+    }
+
     pub fn trigger(&mut self, side: Side, v: f32) {
         let mut input = self
             .app
@@ -277,6 +288,88 @@ mod tests {
         vr.grip(Side::Right, 0.0);
         vr.step(3);
         assert_eq!(vr.hand_state(Side::Right).holding, None);
+    }
+
+    /// With Index controllers a relaxed hand reads no squeeze but its
+    /// fingers still wrap the gun: it stays in hand until the fingers open
+    /// too. (Fingers from synthetic hand-tracking joints, as the XR driver
+    /// gets them.)
+    #[test]
+    fn relaxed_tracked_fingers_keep_hold_of_a_gun() {
+        use crate::rig::fingers::{fingers_from_joints, tests::synthetic_hand};
+        let hand_of = |curl: f32| {
+            fingers_from_joints(&synthetic_hand([curl; 5], [0.0; 4], Transform::IDENTITY))
+        };
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let at = feet + Vec3::new(0.15, 1.1, -0.35);
+        let gun = vr.spawn("pm_pistol", Transform::from_translation(at));
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 1.0, 0.0);
+        vr.fingers(Side::Right, hand_of(0.8));
+        vr.step(4);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(gun),
+            "pistol in hand"
+        );
+        // The squeeze relaxes; the fingers stay round the grip.
+        vr.grip(Side::Right, 0.0);
+        vr.step(6);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(gun),
+            "a relaxed hand dropped the gun"
+        );
+        // The fingers open: now it goes.
+        vr.fingers(Side::Right, hand_of(0.1));
+        vr.step(6);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            None,
+            "open fingers kept it"
+        );
+    }
+
+    /// Grabbing by closing the fingers is a comfort setting, off by
+    /// default: off, tracked fingers closing on a magazine leave it; on,
+    /// they take it (no squeeze either way).
+    #[test]
+    fn closing_tracked_fingers_grabs_only_when_asked() {
+        use crate::rig::comfort::Comfort;
+        use crate::rig::fingers::{fingers_from_joints, tests::synthetic_hand};
+        let hand_of = |curl: f32| {
+            fingers_from_joints(&synthetic_hand([curl; 5], [0.0; 4], Transform::IDENTITY))
+        };
+        for on in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app.world_mut().insert_resource(Comfort {
+                finger_grab: on,
+                ..Comfort::default()
+            });
+            let feet = on_ground(&vr, OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            let at = feet + Vec3::new(0.2, 1.0, -0.4);
+            let item = vr.spawn("pm_mag", Transform::from_translation(at));
+            vr.app
+                .world_mut()
+                .entity_mut(item)
+                .insert(RigidBody::Static);
+            vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.fingers(Side::Right, hand_of(0.1));
+            vr.step(3);
+            vr.fingers(Side::Right, hand_of(0.85));
+            vr.step(4);
+            let held = vr.hand_state(Side::Right).holding;
+            assert_eq!(held.is_some(), on, "finger grab {on}: holding {held:?}");
+            if on {
+                // Opening the fingers lets it go again.
+                vr.fingers(Side::Right, hand_of(0.1));
+                vr.step(4);
+                assert_eq!(vr.hand_state(Side::Right).holding, None);
+            }
+        }
     }
 
     /// Pistol in the right hand; the left hand's trigger takes the slide

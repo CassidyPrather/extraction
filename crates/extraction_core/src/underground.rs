@@ -81,8 +81,8 @@ pub enum Lamp {
     Flicker,
     /// A fitting, dead.
     Dead,
-    /// On the site's power: dark until the breaker's thrown or the
-    /// generator's started ([`PowerDef`]), then steady.
+    /// On the site's power: dark until its stage's breaker is thrown or
+    /// generator started ([`PowerDef`], the room's `stage`), then steady.
     Powered,
 }
 
@@ -137,6 +137,12 @@ pub struct Room {
     pub lamp: Lamp,
     #[serde(default)]
     pub props: Vec<Prop>,
+    /// Its own floor, site y (a deeper level); the layout's otherwise.
+    #[serde(default)]
+    pub floor: Option<f32>,
+    /// The power stage its `Lamp::Powered` lamp is on.
+    #[serde(default)]
+    pub stage: usize,
 }
 
 fn room_height() -> f32 {
@@ -187,6 +193,9 @@ pub struct Portal {
     /// A door across the stair's foot.
     #[serde(default = "yes")]
     pub door: bool,
+    /// The floor its stair goes down to, site y; the layout's otherwise.
+    #[serde(default)]
+    pub floor: Option<f32>,
 }
 
 fn yes() -> bool {
@@ -214,13 +223,46 @@ pub struct Layout {
     pub patrol: Vec<String>,
     #[serde(default)]
     pub crawlers: u32,
+    /// More rounds, each with its own crawlers (a level each, say).
     #[serde(default)]
-    pub power: Option<PowerDef>,
+    pub rounds: Vec<Round>,
+    /// The site's power, in stages: each one's switch does nothing until
+    /// the one before is on.
+    #[serde(default)]
+    pub power: Vec<PowerDef>,
+    /// Flooded rooms and corridors.
+    #[serde(default)]
+    pub floods: Vec<Flood>,
 }
 
-/// The site's power: a breaker board or a generator somewhere awkward.
-/// Switching it on lights the `Lamp::Powered` rooms, lets the powered
-/// doors open, and makes a noise the crawlers hear.
+/// A round of rooms the crawlers on it walk, in order (one room: round
+/// its quarters).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Round {
+    pub rooms: Vec<String>,
+    pub crawlers: u32,
+}
+
+/// Standing water over a room's or a corridor's floor: slow to wade, loud,
+/// and over [`DEEP`] the crawlers won't go in.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Flood {
+    /// A room by id...
+    #[serde(default)]
+    pub room: Option<String>,
+    /// ... or a corridor by its ends (as its link names them).
+    #[serde(default)]
+    pub link: Option<(String, String)>,
+    /// Water over the floor, metres.
+    pub depth: f32,
+}
+
+/// Water deeper than this is a wall to the walkers (as on the surface).
+pub const DEEP: f32 = 0.9;
+
+/// A stage of the site's power: a breaker board or a generator somewhere
+/// awkward. Switching it on lights its stage's `Lamp::Powered` rooms, lets
+/// its doors open, and makes a noise the crawlers hear.
 #[derive(Clone, Debug, Deserialize)]
 pub struct PowerDef {
     pub kind: PowerKind,
@@ -231,9 +273,27 @@ pub struct PowerDef {
     #[serde(default)]
     pub rot: f32,
     /// The rooms whose doors stay shut until it's on (the door of the
-    /// corridor into each).
+    /// corridor into each), or `portal<N>`: that stair's doors, kiosk and
+    /// foot.
     #[serde(default)]
     pub doors: Vec<String>,
+}
+
+impl PowerDef {
+    /// The portals whose doors it holds.
+    pub fn portals(&self) -> impl Iterator<Item = usize> + '_ {
+        self.doors
+            .iter()
+            .filter_map(|id| id.strip_prefix("portal")?.parse().ok())
+    }
+
+    /// Whether it holds this door (of the raster's).
+    pub fn holds(&self, l: &Layout, d: &DoorSpot) -> bool {
+        d.room
+            .is_some_and(|k| self.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+            || d.portal
+                .is_some_and(|k| self.portals().any(|p| p == k as usize))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -263,12 +323,32 @@ impl Hazard {
     }
 }
 
+impl Layout {
+    /// A room's floor, site y.
+    /// Every round and its crawlers: `patrol` first, then `rounds`.
+    pub fn residents(&self) -> Vec<(&[String], u32)> {
+        std::iter::once((self.patrol.as_slice(), self.crawlers))
+            .chain(self.rounds.iter().map(|r| (r.rooms.as_slice(), r.crawlers)))
+            .filter(|(rooms, n)| *n > 0 && !rooms.is_empty())
+            .collect()
+    }
+
+    pub fn floor_of(&self, room: &Room) -> f32 {
+        room.floor.unwrap_or(self.floor)
+    }
+}
+
+/// The steepest a corridor between levels may step: a riser at most this
+/// over a tread of at least [`STEP_CELLS`] cells.
+pub const STEP_RISE: f32 = 0.19;
+pub const STEP_CELLS: usize = 2;
+
 fn corridor_height() -> f32 {
     2.3
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 3] = [
+pub const SITES: [(&str, &str); 4] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -280,6 +360,10 @@ pub const SITES: [(&str, &str); 3] = [
     (
         "tunnel_cinder",
         include_str!("../../../assets/underground/tunnel_cinder.ron"),
+    ),
+    (
+        "depot_marrow",
+        include_str!("../../../assets/underground/depot_marrow.ron"),
     ),
 ];
 
@@ -447,6 +531,8 @@ pub struct DoorSpot {
     pub y: f32,
     /// The room it opens into (a corridor's door), if any.
     pub room: Option<u16>,
+    /// The portal whose stair's foot it's across, if it is.
+    pub portal: Option<u16>,
 }
 
 /// The layout on a grid.
@@ -459,6 +545,11 @@ pub struct Raster {
     pub cells: Vec<Cell>,
     /// Ceiling height over the floor, flat cells (stairs: 0).
     pub ceil: Vec<f32>,
+    /// The floor under each open cell, site y (rooms on their own levels;
+    /// a corridor between levels steps from one to the other).
+    pub floors: Vec<f32>,
+    /// Water over the floor, flat cells (0: dry).
+    pub water: Vec<f32>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -483,7 +574,11 @@ impl Raster {
             grow(sub(r.at, [r.size[0] * 0.5, r.size[1] * 0.5]));
             grow(add(r.at, [r.size[0] * 0.5, r.size[1] * 0.5]));
         }
-        let stairs: Vec<Stair> = l.portals.iter().map(|p| Stair::new(p, l.floor)).collect();
+        let stairs: Vec<Stair> = l
+            .portals
+            .iter()
+            .map(|p| Stair::new(p, p.floor.unwrap_or(l.floor)))
+            .collect();
         for (p, s) in l.portals.iter().zip(&stairs) {
             for q in [
                 [-KIOSK[0] - 1.0, -KIOSK[1] - 1.0],
@@ -506,6 +601,8 @@ impl Raster {
             nz,
             cells: vec![Cell::Rock; nx * nz],
             ceil: vec![0.0; nx * nz],
+            floors: vec![l.floor; nx * nz],
+            water: vec![0.0; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -542,17 +639,39 @@ impl Raster {
                 })
                 .collect();
             for (lo, hi) in &legs {
-                r.fill(*lo, *hi, Cell::Hall(k as u16), l.corridor_height);
+                r.fill(
+                    *lo,
+                    *hi,
+                    Cell::Hall(k as u16),
+                    l.corridor_height,
+                    l.floor_of(&l.rooms[a]),
+                );
             }
             r.legs.push(legs);
             let n = pts.len();
             let from_door = matches!(link.doors, Doors::From | Doors::Both);
             let to_door = matches!(link.doors, Doors::To | Doors::Both);
+            // Each end's leg that leaves its room (a via point can be
+            // inside the room).
+            let inside = |room: &Room, p: P2| {
+                (p[0] - room.at[0]).abs() < room.size[0] * 0.5
+                    && (p[1] - room.at[1]).abs() < room.size[1] * 0.5
+            };
+            let leaving = |room: &Room, path: Vec<P2>| -> (P2, P2) {
+                path.windows(2)
+                    .find(|w| !inside(room, w[1]))
+                    .map_or((path[1], path[0]), |w| (w[1], w[0]))
+            };
+            let rev: Vec<P2> = pts.iter().rev().copied().collect();
+            let (fo, fi) = leaving(&l.rooms[a], pts.clone());
+            let (to, ti) = leaving(&l.rooms[b], rev);
+            let _ = n;
             for (room, outer, inner, door) in [
-                (&l.rooms[a], pts[1], pts[0], from_door),
-                (&l.rooms[b], pts[n - 2], pts[n - 1], to_door),
+                (&l.rooms[a], fo, fi, from_door),
+                (&l.rooms[b], to, ti, to_door),
             ] {
                 if let Some(mut d) = r.mouth(room, outer, inner, link.width) {
+                    d.y = l.floor_of(room);
                     d.room = Some(if std::ptr::eq(room, &l.rooms[a]) {
                         a
                     } else {
@@ -572,7 +691,114 @@ impl Raster {
                 add(room.at, h),
                 Cell::Room(k as u16),
                 room.height,
+                l.floor_of(room),
             );
+        }
+        // Corridors between levels: stepped down their length (outside
+        // the rooms) from one room's floor to the other's.
+        for (k, link) in l.links.iter().enumerate() {
+            let (Some(a), Some(b)) = (
+                l.rooms.iter().find(|x| x.id == link.from),
+                l.rooms.iter().find(|x| x.id == link.to),
+            ) else {
+                continue;
+            };
+            let (fa, fb) = (l.floor_of(a), l.floor_of(b));
+            if (fa - fb).abs() < 1e-3 {
+                continue;
+            }
+            let mut pts = vec![a.at];
+            pts.extend(link.via.iter().copied());
+            pts.push(b.at);
+            // Arc length along the corridor of each of its cells.
+            let along = |p: P2| -> f32 {
+                let mut best = (f32::INFINITY, 0.0);
+                let mut s0 = 0.0;
+                for w in pts.windows(2) {
+                    let d = sub(w[1], w[0]);
+                    let len = (d[0] * d[0] + d[1] * d[1]).sqrt().max(1e-6);
+                    let o = sub(p, w[0]);
+                    let t = ((o[0] * d[0] + o[1] * d[1]) / len).clamp(0.0, len);
+                    let q = add(w[0], [d[0] / len * t, d[1] / len * t]);
+                    let e = sub(p, q);
+                    let dist = e[0] * e[0] + e[1] * e[1];
+                    if dist < best.0 {
+                        best = (dist, s0 + t);
+                    }
+                    s0 += len;
+                }
+                best.1
+            };
+            let mine: Vec<(usize, f32)> = (0..r.cells.len())
+                .filter(|c| r.cells[*c] == Cell::Hall(k as u16))
+                .map(|c| (c, along(r.centre(c % r.nx, c / r.nx))))
+                .collect();
+            let Some(s_lo) = mine.iter().map(|m| m.1).reduce(f32::min) else {
+                continue;
+            };
+            let n = ((fb - fa).abs() / STEP_RISE).ceil() as usize;
+            let mut tread: HashMap<usize, usize> = mine
+                .iter()
+                .map(|&(c, s)| {
+                    (
+                        c,
+                        (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n),
+                    )
+                })
+                .collect();
+            // Where it turns, cells either side of the corner's diagonal
+            // measure from different legs, a tread or two apart: lower
+            // each to one tread over its lowest neighbour, until none is
+            // more.
+            loop {
+                let mut changed = false;
+                for &(c, _) in &mine {
+                    let (i, j) = (c % r.nx, c / r.nx);
+                    let low = [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)]
+                        .iter()
+                        .filter_map(|(di, dj)| {
+                            let (a, b) = (i as i64 + di, j as i64 + dj);
+                            (a >= 0 && b >= 0 && (a as usize) < r.nx && (b as usize) < r.nz)
+                                .then(|| tread.get(&(b as usize * r.nx + a as usize)))
+                                .flatten()
+                                .copied()
+                        })
+                        .min();
+                    if let Some(low) = low {
+                        if tread[&c] > low + 1 {
+                            tread.insert(c, low + 1);
+                            changed = true;
+                        }
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+            for (c, k) in tread {
+                r.floors[c] = fa + (fb - fa) * k as f32 / n as f32;
+            }
+        }
+        for f in &l.floods {
+            let link = f.link.as_ref().and_then(|(a, b)| {
+                l.links
+                    .iter()
+                    .position(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a))
+            });
+            let room = f
+                .room
+                .as_ref()
+                .and_then(|id| l.rooms.iter().position(|r| &r.id == id));
+            for (c, cell) in r.cells.iter().enumerate() {
+                let wet = match *cell {
+                    Cell::Room(k) => room == Some(k as usize),
+                    Cell::Hall(k) => link == Some(k as usize),
+                    _ => false,
+                };
+                if wet {
+                    r.water[c] = f.depth;
+                }
+            }
         }
         // Stairs: from the kiosk down to the first flat cell ahead.
         for (k, p) in l.portals.iter().enumerate() {
@@ -606,8 +832,9 @@ impl Raster {
                     at: p.to_site([0.0, foot]),
                     along: turn([1.0, 0.0], p.rot),
                     width: 2.0 * STAIR_HALF,
-                    y: l.floor,
+                    y: p.floor.unwrap_or(l.floor),
                     room: None,
+                    portal: Some(k as u16),
                 });
             }
         }
@@ -632,6 +859,7 @@ impl Raster {
                 width,
                 y: self.floor,
                 room: None,
+                portal: None,
             })
         } else if d[1].abs() > 0.0 {
             let z = if d[1] > 0.0 {
@@ -645,13 +873,14 @@ impl Raster {
                 width,
                 y: self.floor,
                 room: None,
+                portal: None,
             })
         } else {
             None
         }
     }
 
-    fn fill(&mut self, lo: P2, hi: P2, cell: Cell, height: f32) {
+    fn fill(&mut self, lo: P2, hi: P2, cell: Cell, height: f32, floor: f32) {
         for j in 0..self.nz {
             for i in 0..self.nx {
                 let c = self.centre(i, j);
@@ -659,6 +888,7 @@ impl Raster {
                     let k = j * self.nx + i;
                     self.cells[k] = cell;
                     self.ceil[k] = height;
+                    self.floors[k] = floor;
                 }
             }
         }
@@ -687,11 +917,20 @@ impl Raster {
         self.cells[j * self.nx + i]
     }
 
+    /// Water over the floor at a site-space point (0: dry).
+    pub fn water_at(&self, p: P2) -> f32 {
+        self.cell_of(p)
+            .map_or(0.0, |(i, j)| self.water[j * self.nx + i])
+    }
+
     /// The floor under a site-space point, if it's an open cell.
     pub fn floor_at(&self, p: P2) -> Option<f32> {
         match self.at(p) {
             Cell::Rock => None,
-            Cell::Room(_) | Cell::Hall(_) => Some(self.floor),
+            Cell::Room(_) | Cell::Hall(_) => {
+                let (i, j) = self.cell_of(p)?;
+                Some(self.floors[j * self.nx + i])
+            }
             Cell::Stair(k) => {
                 let k = k as usize;
                 Some(self.stairs[k].floor_at(self.portals[k].to_portal(p)[1]))
@@ -704,7 +943,10 @@ impl Raster {
         let (i, j) = self.cell_of(p)?;
         match self.get(i, j) {
             Cell::Rock => None,
-            Cell::Room(_) | Cell::Hall(_) => Some(self.floor + self.ceil[j * self.nx + i] + SLAB),
+            Cell::Room(_) | Cell::Hall(_) => {
+                let c = j * self.nx + i;
+                Some(self.floors[c] + self.ceil[c] + SLAB)
+            }
             Cell::Stair(k) => {
                 let k = k as usize;
                 let z = self.portals[k].to_portal(p)[1];
@@ -724,6 +966,21 @@ impl Raster {
 
     /// Open cells reachable from the entrance's landing (4-connected).
     pub fn flood(&self) -> Vec<bool> {
+        self.flood_past(&[])
+    }
+
+    /// The same, with these doors shut (locked: the cells across their
+    /// opening count as rock).
+    pub fn flood_past(&self, shut: &[DoorSpot]) -> Vec<bool> {
+        let blocked = |i: usize, j: usize| {
+            let p = self.centre(i, j);
+            shut.iter().any(|d| {
+                let off = sub(p, d.at);
+                let along = off[0] * d.along[0] + off[1] * d.along[1];
+                let across = off[0] * d.along[1] - off[1] * d.along[0];
+                along.abs() < d.width * 0.5 && across.abs() < CELL
+            })
+        };
         let mut seen = vec![false; self.cells.len()];
         let Some(start) = self
             .portals
@@ -741,7 +998,7 @@ impl Raster {
                     continue;
                 }
                 let k = b as usize * self.nx + a as usize;
-                if !seen[k] && self.cells[k].open() {
+                if !seen[k] && self.cells[k].open() && !blocked(a as usize, b as usize) {
                     seen[k] = true;
                     stack.push((a as usize, b as usize));
                 }
@@ -844,7 +1101,7 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
-    if let Some(p) = &l.power {
+    for (stage, p) in l.power.iter().enumerate() {
         match l.rooms.iter().find(|r| r.id == p.room) {
             None => bad.push(format!("power in no room `{}`", p.room)),
             Some(room) => {
@@ -857,9 +1114,33 @@ pub fn check(l: &Layout) -> Vec<String> {
                 if !r.at(front).flat() {
                     bad.push(format!("{}: its power switch faces the wall", room.id));
                 }
+                // Reached with this stage's doors and every later one's
+                // still shut.
+                let shut: Vec<DoorSpot> = r
+                    .doors
+                    .iter()
+                    .filter(|d| l.power[stage..].iter().any(|q| q.holds(l, d)))
+                    .copied()
+                    .collect();
+                let seen = r.flood_past(&shut);
+                if !r.cell_of(front).is_some_and(|(i, j)| seen[j * r.nx + i]) {
+                    bad.push(format!(
+                        "{}: power stage {stage} is behind its own or a later stage's door",
+                        room.id
+                    ));
+                }
             }
         }
         for id in &p.doors {
+            if let Some(k) = id.strip_prefix("portal") {
+                if k.parse::<usize>()
+                    .ok()
+                    .is_none_or(|k| k == 0 || k >= l.portals.len())
+                {
+                    bad.push(format!("a powered door on no exit `{id}`"));
+                }
+                continue;
+            }
             let Some(k) = l.rooms.iter().position(|r| &r.id == id) else {
                 bad.push(format!("a powered door into no room `{id}`"));
                 continue;
@@ -867,9 +1148,42 @@ pub fn check(l: &Layout) -> Vec<String> {
             if !r.doors.iter().any(|d| d.room == Some(k as u16)) {
                 bad.push(format!("no door into `{id}` for the power to hold"));
             }
-            if p.room == *id {
-                bad.push(format!("the power's behind its own door in `{id}`"));
-            }
+        }
+    }
+    for room in l.rooms.iter().filter(|r| r.lamp == Lamp::Powered) {
+        if room.stage >= l.power.len() {
+            bad.push(format!(
+                "{}: its lamp's on power stage {} of none",
+                room.id, room.stage
+            ));
+        }
+    }
+    for id in l.rounds.iter().flat_map(|r| &r.rooms) {
+        if !l.rooms.iter().any(|r| &r.id == id) {
+            bad.push(format!("a round through no room `{id}`"));
+        }
+    }
+    for f in &l.floods {
+        let found = match (&f.room, &f.link) {
+            (Some(id), None) => l.rooms.iter().any(|r| &r.id == id),
+            (None, Some((a, b))) => l
+                .links
+                .iter()
+                .any(|k| (&k.from, &k.to) == (a, b) || (&k.from, &k.to) == (b, a)),
+            _ => false,
+        };
+        if !found {
+            bad.push(format!("a flood in no one room or corridor: {f:?}"));
+        }
+        if !(0.2..=1.6).contains(&f.depth) {
+            bad.push(format!("a flood {} m deep", f.depth));
+        }
+    }
+    // Room to breathe over the water (a head afloat stands 0.35 m out).
+    for (c, w) in r.water.iter().enumerate() {
+        if *w > 0.0 && r.ceil[c] - w < 0.8 {
+            bad.push(format!("water {w} m deep under a {} m ceiling", r.ceil[c]));
+            break;
         }
     }
     for id in &l.patrol {
@@ -879,6 +1193,26 @@ pub fn check(l: &Layout) -> Vec<String> {
     }
     if l.crawlers > 0 && l.patrol.len() < 2 {
         bad.push("crawlers with no round to walk".into());
+    }
+    // Nowhere a step higher than a stair's riser between neighbouring
+    // floor cells (a corridor between levels too short for its drop).
+    'steps: for j in 0..r.nz {
+        for i in 0..r.nx {
+            let c = j * r.nx + i;
+            if !r.cells[c].flat() {
+                continue;
+            }
+            for (a, b) in [(i + 1, j), (i, j + 1)] {
+                if a >= r.nx || b >= r.nz || !r.get(a, b).flat() {
+                    continue;
+                }
+                let d = (r.floors[c] - r.floors[b * r.nx + a]).abs();
+                if d > STEP_RISE + 0.01 {
+                    bad.push(format!("a step of {d:.2} m at {:?}", r.centre(i, j)));
+                    break 'steps;
+                }
+            }
+        }
     }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {
@@ -914,6 +1248,7 @@ pub fn check(l: &Layout) -> Vec<String> {
                 width: 2.0 * STAIR_HALF,
                 y: l.floor,
                 room: None,
+                portal: None,
             });
             for m in r.mouths.iter().copied().chain(feet) {
                 let off = sub(at, m.at);
@@ -1021,6 +1356,8 @@ pub fn plan_svg(id: &str) -> Option<String> {
         for i in 0..r.nx {
             let colour = match r.get(i, j) {
                 Cell::Rock => continue,
+                _ if r.water[j * r.nx + i] >= DEEP => "#2e6f8e",
+                _ if r.water[j * r.nx + i] > 0.0 => "#6fa3b8",
                 Cell::Room(_) => "#b9b3a6",
                 Cell::Hall(_) => "#8f8a80",
                 Cell::Stair(_) => "#6f8fa6",
@@ -1074,24 +1411,22 @@ pub fn plan_svg(id: &str) -> Option<String> {
             "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#c0392b' stroke-width='4'/>\n"
         );
     }
-    if let Some(p) = &l.power {
+    for (stage, p) in l.power.iter().enumerate() {
         if let Some(room) = l.rooms.iter().find(|r| r.id == p.room) {
             let (x, y) = px(add(room.at, p.at));
             out += &format!(
                 "<rect x='{:.1}' y='{:.1}' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>\n\
-                 <text x='{:.1}' y='{:.1}' fill='#f1c40f'>{:?}</text>\n",
+                 <text x='{:.1}' y='{:.1}' fill='#f1c40f'>{:?} {}</text>\n",
                 x - 5.0,
                 y - 5.0,
                 x + 8.0,
                 y + 4.0,
-                p.kind
+                p.kind,
+                stage + 1
             );
         }
         // The doors on the power, drawn over in yellow.
-        for d in r.doors.iter().filter(|d| {
-            d.room
-                .is_some_and(|k| p.doors.iter().any(|id| l.rooms[k as usize].id == *id))
-        }) {
+        for d in r.doors.iter().filter(|d| p.holds(l, d)) {
             let a = sub(
                 d.at,
                 [d.along[0] * d.width * 0.5, d.along[1] * d.width * 0.5],
@@ -1132,7 +1467,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,
@@ -1180,6 +1515,27 @@ mod tests {
             assert!((6..=14).contains(&rooms), "{id}: {rooms} rooms");
             assert!(r.cells.iter().filter(|c| c.open()).count() > 100);
         }
+    }
+
+    /// The check walks the power in its stages: a switch behind its own
+    /// stage's door (or a later one's) can never be thrown.
+    #[test]
+    fn power_stages_are_reached_in_order() {
+        let mut l = layout("mine_kettle").unwrap().clone();
+        assert!(check(&l).is_empty());
+        let mut later = l.power[0].clone();
+        later.room = "magazine".into();
+        later.doors = vec!["magazine".into()];
+        l.power.push(later);
+        let bad = check(&l);
+        assert!(
+            bad.iter().any(|b| b.contains("power stage 1 is behind")),
+            "{bad:?}"
+        );
+        // The same switch, its door on the stage before: fine.
+        l.power[1].doors.clear();
+        let bad = check(&l);
+        assert!(!bad.iter().any(|b| b.contains("power stage")), "{bad:?}");
     }
 
     /// A site's corridors make loops: more ways between rooms than a tree

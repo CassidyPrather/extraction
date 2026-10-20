@@ -3,11 +3,13 @@
 //! [`WorldPlugin`] is the logic half (map, heightmap, colliders) and runs
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
+pub mod ao;
 pub mod bridges;
 pub mod buildings;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
+pub mod puddles;
 pub mod rain;
 pub mod rocks;
 pub mod scenes;

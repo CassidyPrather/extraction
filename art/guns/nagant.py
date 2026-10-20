@@ -9,17 +9,21 @@ barrel is chamber 0 at the top.
 
 - `static_frame`      frame, barrel, grip, guard, the ejector rod's
                       housing, sights
-- `cylinder`          the cylinder; origin on its axis, turned about Z
-                      by 2*pi/7 a chamber (it advances as the hammer cocks)
+- `cylinder`          the cylinder; origin on its axis. Chamber k sits
+                      k sevenths of a turn anticlockwise from the top, seen
+                      from behind; the game turns it by -cylinder*2*pi/7
+                      about Z, which brings chamber `cylinder` under the
+                      hammer, and chamber (cylinder + GATE_OFFSET) % 7 to
+                      the gate
 - `cylinder_round_N`, `cylinder_case_N` (N 0..6)  a live round, or a
                       spent case, in chamber N; origins on the cylinder
                       axis so they turn with it; the game shows the one
                       the chamber holds
 - `hammer`            origin on the hammer pin; a positive turn about +X
                       cocks it (the spur goes back)
-- `gate`              the loading gate, origin on its hinge (along Z at
-                      its lower edge); open is a turn of -GATE_OPEN about
-                      Z, swinging out to the right and down
+- `gate`              the loading gate, origin on its hinge (upright, at
+                      its front edge); open is a turn of +GATE_OPEN about
+                      Y, swinging out to the right like a door
 - `ejector_rod`       origin at its rest under the barrel; pushed back
                       along +Z by EJECT_TRAVEL through the chamber at the
                       gate
@@ -50,13 +54,14 @@ MUZZLE = -0.178
 N = 7
 GATE_OPEN = 1.4                # radians
 EJECT_TRAVEL = 0.042
-# The chamber at the gate: 3/7 of a turn from the top, on the right.
-GATE_CH = 2
-GATE_A = math.pi / 2 - 2 * math.pi * GATE_CH / N
+# The gate is two chambers clockwise of the top, seen from behind, on the
+# right: with the cylinder at rest that's chamber 5.
+GATE_OFFSET = 5
+GATE_CH = GATE_OFFSET
 
 
 def chamber_xy(k, a0=math.pi / 2):
-    a = a0 - 2 * math.pi * k / N
+    a = a0 + 2 * math.pi * k / N
     return CYL_R * math.cos(a), CYL_Y + CYL_R * math.sin(a)
 
 
@@ -171,13 +176,13 @@ for k in range(N):
     x, y = chamber_xy(k)
     # The chambers, through; the bolt stop notches round its rear edge.
     cc.cyl(0.0045, CYL_Z0 - 0.002, CYL_Z1 + 0.002, "Blued", segs=14, xf=T(x, y, 0))
-    a = math.pi / 2 - 2 * math.pi * (k + 0.5) / N
+    a = math.pi / 2 + 2 * math.pi * (k + 0.5) / N
     nx, ny = (CYL_RAD + 0.0005) * math.cos(a), CYL_Y + (CYL_RAD + 0.0005) * math.sin(a)
     cc.box((0.0028, 0.0028, 0.006), (nx, ny, CYL_Z1 - 0.007), "Blued", xf=RZ(a, about=(nx, ny, 0)))
 cyl.cut(cc)
 # The ratchet on its back face, its teeth the hand pushes on.
 for k in range(N):
-    a = math.pi / 2 - 2 * math.pi * k / N
+    a = math.pi / 2 + 2 * math.pi * k / N
     cyl.box((0.003, 0.0045, 0.002), (0.0, 0.0, 0.0), "Steel",
             xf=T(0, CYL_Y, CYL_Z1 + 0.0008) @ RZ(a) @ T(0.0055, 0, 0))
 
@@ -209,7 +214,7 @@ for i in range(3):
            xf=RX(0.6, about=(0, y, 0.0205)))
 hammer.cut(hc)
 
-GATE_HINGE = (0.0112, gy - 0.008, -0.004)
+GATE_HINGE = (0.0112 + 0.0018, gy, -0.019)
 gate = Part("gate", origin=GATE_HINGE)
 gate.prism(fillet([(-0.019, gy - 0.008), (0.011, gy - 0.008), (0.011, gy + 0.0072),
                    (-0.019, gy + 0.0072)], 0.002, 2), 0.0062, 0.0112 + 0.0018, "Blued", axis="x",
