@@ -524,6 +524,37 @@ carry one, crackles with their chatter when the director sends them
 (`raid::chatter`), and their answer comes from where they start as they
 set out, so the radio tells you first and your ears confirm it.
 
+**One word at a time.** A robot whose mind turns several ways in a
+moment (noticed, then calling) says each word when the last has
+finished, in order; dying doesn't wait, and silences what was left.
+
+**Listening** (`--headless --scenario listening`, in `all`): the bot
+stands by the truck while a drone sets out 185 m away and a walker
+comes up the road. Every word is logged with its distance, the wall it
+came through (`acoustics::occlusion`) and whether you'd have heard it,
+judged by `robot_voice::heard_to` (each word's audible range in calm,
+measured by the audit, which flags drift over 25%; 6 dB of wall halves
+it). It passes if both answers to the dispatch are heard and at least
+four words in all. A run:
+
+```
+  0.5 s  drone     answering       185 m   +0.0 dB  HEARD
+  0.5 s  walker    answering        46 m   +0.0 dB  HEARD
+  2.0 s  walker    investigating    43 m   +0.0 dB  HEARD
+  2.5 s  walker    engaging         43 m   +0.0 dB  HEARD
+  2.6 s  walker    noticed          42 m   +0.0 dB  HEARD
+  2.6 s  walker    calling          43 m   +0.0 dB  HEARD
+  5.4 s  drone     noticed         148 m   +0.0 dB  -
+  5.4 s  drone     calling         148 m   +0.0 dB  HEARD
+  5.4 s  drone     investigating   148 m   +0.0 dB  -
+ 11.9 s  drone     engaging         57 m   +0.0 dB  HEARD
+```
+
+(The log shows when each word was decided; the walker's three words at
+2.5-2.6 s then play one after another. Its "engaging" comes before
+"noticed" because of the order the minds' messages arrive in today;
+the `MindShift` hook will settle that.)
+
 **The score steps aside** for them: a voice within 80 m ducks the score
 12 dB for as long as it speaks (`SCORE_DUCK_DB`). The words that fall,
 giving up and dying, land on the drones' register, and the voices are

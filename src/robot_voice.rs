@@ -583,6 +583,10 @@ impl Plugin for VoicePlugin {
             .init_resource::<Voices>()
             .add_systems(
                 FixedPostUpdate,
+                listen.after(speak).run_if(resource_exists::<Heard>),
+            )
+            .add_systems(
+                FixedPostUpdate,
                 (
                     (
                         from_messages,
@@ -607,6 +611,8 @@ pub struct Voices {
     dead: std::collections::HashSet<Entity>,
     mutter_at: HashMap<Entity, f32>,
     pending: Vec<(f32, Turned)>,
+    /// Until when each robot is still saying its last word.
+    busy: HashMap<Entity, f32>,
     brains: HashMap<Entity, u8>,
     rng: Option<Rng>,
 }
@@ -800,6 +806,109 @@ fn mutter(
     }
 }
 
+/// How far each word carries in calm over the wind, unoccluded, m: the
+/// audit's audible range for its cue (`scripts/audio_voices.py` measures
+/// it and flags these if they drift more than 25%).
+pub fn heard_to(u: Utterance) -> f32 {
+    match u {
+        Utterance::Idle => 46.0,
+        Utterance::Noticed => 115.0,
+        Utterance::Investigating => 57.0,
+        Utterance::Searching => 71.0,
+        Utterance::Engaging => 107.0,
+        Utterance::Lost => 93.0,
+        Utterance::Calling | Utterance::Answering => 248.0,
+        Utterance::Hurt => 38.0,
+        Utterance::Dying => 71.0,
+    }
+}
+
+/// Whether a word said `distance` m off, through `occlusion_db` of wall
+/// (`acoustics::occlusion`), is heard: its range, shortened as the level
+/// falls (6 dB lost, half as far).
+pub fn is_heard(u: Utterance, distance: f32, occlusion_db: f32) -> bool {
+    distance < heard_to(u) * 10f32.powf(occlusion_db.min(0.0) / 20.0)
+}
+
+/// The listening scenario's log: every word said, from where, and whether
+/// the player (its head) would have heard it.
+#[derive(Resource, Default, Debug)]
+pub struct Heard {
+    pub log: Vec<HeardWord>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct HeardWord {
+    pub at_secs: f32,
+    pub spoke: Spoke,
+    pub distance: f32,
+    pub occlusion_db: f32,
+    pub heard: bool,
+}
+
+impl Heard {
+    /// How many words were heard (of this mind, if given).
+    pub fn count(&self, said: Option<Utterance>) -> usize {
+        self.log
+            .iter()
+            .filter(|w| w.heard && said.is_none_or(|s| w.spoke.said == s))
+            .count()
+    }
+}
+
+/// The name of the listening scenario (`bot::scenarios`).
+pub const SCENARIO: &str = "listening";
+
+/// What the player would hear: each word judged from their head.
+fn listen(
+    mut spoke: MessageReader<Spoke>,
+    players: Query<&GlobalTransform, With<crate::rig::LocalPlayer>>,
+    spatial: avian3d::prelude::SpatialQuery,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    doors: Query<&crate::world::buildings::Door>,
+    time: Res<Time>,
+    mut heard: ResMut<Heard>,
+) {
+    let Some(ear) = players
+        .iter()
+        .next()
+        .map(|g| g.translation() + Vec3::Y * 1.6)
+    else {
+        spoke.clear();
+        return;
+    };
+    let openings: Vec<Vec3> = entrances
+        .map(|e| {
+            e.doors
+                .iter()
+                .filter(|d| crate::robots::doors::is_open(doors.get(d.door).ok()))
+                .map(|d| d.mid)
+                .collect()
+        })
+        .unwrap_or_default();
+    for s in spoke.read() {
+        let occlusion_db = crate::acoustics::occlusion(&spatial, &openings, s.at, ear).db;
+        let distance = s.at.distance(ear);
+        let word = HeardWord {
+            at_secs: time.elapsed_secs(),
+            spoke: *s,
+            distance,
+            occlusion_db,
+            heard: is_heard(s.said, distance, occlusion_db),
+        };
+        info!(
+            "listening: {:6.1} s  {:9} {:13} {:5.0} m  {:+5.1} dB  {}",
+            word.at_secs,
+            s.kind.name(),
+            s.said.name(),
+            distance,
+            occlusion_db,
+            if word.heard { "HEARD" } else { "-" }
+        );
+        heard.log.push(word);
+    }
+}
+
 /// Each turn of a mind, said once.
 pub fn speak(
     mut turned: MessageReader<Turned>,
@@ -831,6 +940,19 @@ pub fn speak(
         if voices.dead.contains(&t.robot) {
             continue;
         }
+        // One word at a time: the next waits for the last to finish (in
+        // the order they came), but dying doesn't wait.
+        let busy = voices.busy.get(&t.robot).copied().unwrap_or(0.0);
+        if now < busy && t.said != Utterance::Dying {
+            voices.pending.push((
+                busy,
+                Turned {
+                    delay: t.delay.max(1e-3),
+                    ..t
+                },
+            ));
+            continue;
+        }
         let gap = if t.said == Utterance::Hurt {
             HURT_GAP
         } else {
@@ -844,10 +966,11 @@ pub fn speak(
             continue;
         }
         voices.last.insert((t.robot, t.said), now);
+        voices.busy.insert(t.robot, now + duration(kind, t.said));
         if t.said == Utterance::Dying {
             voices.dead.insert(t.robot);
         }
-        // A delayed answer comes from where it is by then.
+        // A delayed word comes from where it is by then.
         let at = if t.delay > 0.0 {
             places.get(t.robot).map_or(t.at, |g| g.translation())
         } else {
@@ -1013,7 +1136,7 @@ mod tests {
         ];
         for (robot, u, act) in &turns {
             act(app.world_mut());
-            let s = said(&mut app, 0.2);
+            let s = said(&mut app, 2.0);
             assert_eq!(s.len(), 1, "{u:?}: {s:?}");
             assert_eq!((s[0].robot, s[0].said), (*robot, *u));
             let want = if *robot == w {
@@ -1025,7 +1148,7 @@ mod tests {
             // The same again at once: nothing.
             if *u != Utterance::Engaging {
                 act(app.world_mut());
-                assert!(said(&mut app, 0.2).is_empty(), "{u:?} repeated");
+                assert!(said(&mut app, 0.5).is_empty(), "{u:?} repeated");
             }
         }
         // Dying, once, and then silence.
@@ -1091,6 +1214,46 @@ mod tests {
         let s = said(&mut app, 1.0);
         assert_eq!(s.len(), 1);
         assert_eq!((s[0].robot, s[0].said), (team, Utterance::Answering));
+    }
+
+    /// A robot says one word at a time, in order: three turns at once come
+    /// out one after another, each when the last has finished.
+    #[test]
+    fn one_word_at_a_time() {
+        let mut app = world();
+        let w = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
+        let at = Vec3::ZERO;
+        app.world_mut().write_message(Noticed { robot: w, at });
+        app.world_mut().write_message(Investigating {
+            robot: w,
+            at,
+            toward: at,
+        });
+        app.world_mut().write_message(CalledOut {
+            robot: w,
+            at,
+            heard: 0,
+            about: None,
+        });
+        let mut when = Vec::new();
+        for i in 0..400 {
+            app.update();
+            for s in app.world_mut().resource_mut::<Messages<Spoke>>().drain() {
+                when.push((i as f32 / 90.0, s.said));
+            }
+        }
+        let order: Vec<_> = when.iter().map(|w| w.1).collect();
+        assert_eq!(
+            order,
+            [
+                Utterance::Noticed,
+                Utterance::Investigating,
+                Utterance::Calling
+            ]
+        );
+        let k = VoiceKind::Walker;
+        assert!(when[1].0 - when[0].0 >= duration(k, Utterance::Noticed) - 0.02);
+        assert!(when[2].0 - when[1].0 >= duration(k, Utterance::Investigating) - 0.02);
     }
 
     /// Pylons and sorters don't speak.

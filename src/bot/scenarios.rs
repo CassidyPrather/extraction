@@ -32,6 +32,7 @@ pub const NAMES: &[&str] = &[
     "drone_duel",
     "walker_hunt",
     crate::onboarding::bot::SCENARIO,
+    crate::robot_voice::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -316,6 +317,33 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::Wrecked(1)),
             ]
         }
+        crate::robot_voice::SCENARIO => {
+            // Standing by the truck while the machines come: a far drone
+            // answers as it sets out, a walker and a hound come up the
+            // road and find you. What would you hear?
+            use crate::robots::RobotKind;
+            let o = origin(zone);
+            let at = |dx: f32, dz: f32, up: f32| {
+                Vec3::new(o.x + dx, zone.ground(o.x + dx, o.y + dz) + up, o.y + dz)
+            };
+            vec![
+                Log(s("listening: by the truck, while the machines come")),
+                Spawn {
+                    kind: RobotKind::Drone,
+                    at: at(40.0, -180.0, 15.0),
+                },
+                Spawn {
+                    kind: RobotKind::Walker,
+                    at: at(-10.0, -45.0, 0.0),
+                },
+                Wait(25.0),
+                Expect(super::Expect::Heard(
+                    Some(crate::robot_voice::Utterance::Answering),
+                    2,
+                )),
+                Expect(super::Expect::Heard(None, 4)),
+            ]
+        }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         _ => return None,
@@ -385,7 +413,7 @@ fn attach_scenario(
         vec![name.as_str()]
     };
     let mut all = Vec::new();
-    for n in list {
+    for n in list.iter().copied() {
         match tasks(n, &zone) {
             Some(t) => all.extend(t),
             None => {
@@ -396,6 +424,9 @@ fn attach_scenario(
                 return;
             }
         }
+    }
+    if list.contains(&crate::robot_voice::SCENARIO) {
+        commands.init_resource::<crate::robot_voice::Heard>();
     }
     for p in &players {
         commands.entity(p).insert(Bot::new(all.clone()));

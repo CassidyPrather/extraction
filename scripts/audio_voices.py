@@ -16,6 +16,9 @@ name the walker's; the other kinds play at the cue's gain plus their
   kind's words close by (`NEAR` m, every word in turn), your own footstep
   over the wind and your rifle still clear the masking of everything else
   by the masking model.
+- **The listening log agrees.** `robot_voice::heard_to`, which the
+  headless listening scenario judges each word by, is within
+  `HEARD_DRIFT` of each word's audible range in calm measured here.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -35,6 +38,7 @@ MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
          "calling", "answering", "hurt", "dying"]
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
+HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
 
 
 def renders_dir(out):
@@ -87,6 +91,18 @@ def trims():
     return out
 
 
+def heard_to():
+    """`robot_voice::heard_to`, m by mind."""
+    text = (ROOT / "src" / "robot_voice.rs").read_text()
+    body = text[text.index("pub fn heard_to"):]
+    body = body[:body.index("\n}\n")]
+    out = {}
+    for names, m in re.findall(r"((?:Utterance::\w+\s*\|?\s*)+)=>\s*([\d.]+)", body):
+        for n in re.findall(r"Utterance::(\w+)", names):
+            out[n.lower()] = float(m)
+    return out
+
+
 def run(sets, out):
     if "voice/walker/calling" not in sets:
         return 0, ["Voices: no renders; skipped"]
@@ -110,6 +126,18 @@ def run(sets, out):
             flags += 1
         lines.append(f"    {m:14s}" + "".join(f"{v:10.1f}" for v in row)
                      + f"  {spread:6.1f}  {'; '.join(f)}")
+    # The listening scenario's ranges against the measured ones.
+    table = heard_to()
+    lines.append(f"  Heard to in calm (m): measured / robot_voice::heard_to "
+                 f"(within {HEARD_DRIFT:.0%}):")
+    row = []
+    for m in MINDS:
+        got = am.audible_range(f"voice.{m}", sets, mix, [("wind", 0.0)])
+        want = table.get(m, 0.0)
+        bad = not want or abs(got - want) > HEARD_DRIFT * want
+        flags += bad
+        row.append(f"{m} {got}/{want:g}" + (" (!)" if bad else ""))
+    lines.append("    " + ", ".join(row))
     # Masking: each kind's every word at NEAR m, against your footstep
     # (over the wind) and your shot.
     worst = {}
