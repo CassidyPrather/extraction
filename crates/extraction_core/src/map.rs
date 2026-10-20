@@ -405,6 +405,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "ropeway_station" => [12.0, 25.5, 16.2],
         "ropeway_pylon" => [7.2, 21.2, 4.9],
         "ropeway_pylon_down" => [7.6, 4.6, 27.0],
+        // A blast furnace with its stoves, chimney, dust catcher, skip
+        // bridge and cast house.
+        "blast_furnace" => [45.6, 38.5, 59.2],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
