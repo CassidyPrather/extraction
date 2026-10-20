@@ -835,7 +835,10 @@ fn hit_sounds(
         } else {
             // A slow round (a grenade's fragments, spent) hits softer: full
             // from a pistol's speed, down to -12 dB at a quarter of it.
-            trim + 20.0 * (i.velocity.length() / IMPACT_FULL_SPEED).clamp(0.25, 1.0).log10()
+            trim + 20.0
+                * (i.velocity.length() / IMPACT_FULL_SPEED)
+                    .clamp(0.25, 1.0)
+                    .log10()
         };
         play_at_speed(
             &mut commands,
