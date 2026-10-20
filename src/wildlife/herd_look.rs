@@ -417,7 +417,7 @@ pub(crate) fn pose_beasts(
     mut far_parts: ResMut<super::visuals::FarParts>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
 ) {
-    let eye = cams.iter().next().map(|g| g.translation());
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     let Some(zone) = zone else {
         return;
     };
@@ -532,7 +532,11 @@ pub(crate) fn pose_beasts(
         if let Ok(mut t) = parts.get_mut(far) {
             *t = Transform::from_translation(body_at).with_rotation(body_rot);
         }
-        let away = eye.map_or(0.0, |e| e.distance(body_at));
+        let away = if eyes.is_empty() {
+            0.0
+        } else {
+            super::visuals::nearest(&eyes, body_at)
+        };
         if away > FAR && away < HIDE {
             if let Some((_, p)) = art.parts.iter().find(|(k, _)| *k == herd.kind) {
                 far_parts.parts.push((

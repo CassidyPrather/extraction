@@ -75,7 +75,11 @@ pub struct FarParts {
     /// The last build's parts, to skip rebuilding a still scene.
     built: Vec<(AssetId<Mesh>, [f32; 4])>,
     entity: Option<(Entity, Handle<Mesh>)>,
+    since: u32,
 }
+
+/// The far mesh is rebuilt at most every this many frames.
+pub const FAR_REBUILD: u32 = 6;
 
 pub struct VisualsPlugin;
 
@@ -272,7 +276,7 @@ fn pose_birds(
         return;
     };
     let dt = time.delta_secs();
-    let eye = cams.iter().next().map(|g| g.translation());
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     for (mut v, mut tf, mut mesh, mut vis) in &mut birds {
         let Ok(flock) = flocks.get(v.flock) else {
             continue;
@@ -281,7 +285,7 @@ fn pose_birds(
             continue;
         };
         // The whole flock far off: drawn in the one far mesh (`far_flocks`).
-        let whole = eye.is_some_and(|e| e.distance(flock.mean()) > FLOCK_FAR);
+        let whole = !eyes.is_empty() && nearest(&eyes, flock.mean()) > FLOCK_FAR;
         vis.set_if_neq(if whole {
             Visibility::Hidden
         } else {
@@ -290,7 +294,7 @@ fn pose_birds(
         if whole {
             continue;
         }
-        let far = eye.is_some_and(|e| e.distance(b.pos) > FAR);
+        let far = !eyes.is_empty() && nearest(&eyes, b.pos) > FAR;
         tf.translation = b.pos;
         let want = match b.state {
             BirdState::Sitting(_) => {
@@ -333,6 +337,12 @@ fn pose_birds(
     }
 }
 
+/// How far `p` is from the nearest eye (both of a headset's, a tour's,
+/// a screenshot's: something is far only if it's far from every one).
+pub fn nearest(eyes: &[Vec3], p: Vec3) -> f32 {
+    eyes.iter().map(|e| e.distance(p)).fold(f32::MAX, f32::min)
+}
+
 /// A bird's far pose and turn (no banking: from far off nobody sees it).
 fn far_pose(b: &super::flock::Bird) -> (bool, Quat) {
     match b.state {
@@ -358,11 +368,12 @@ fn far_flocks(
     let Some(poses) = &art.poses else {
         return;
     };
-    let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
+    if eyes.is_empty() {
         return;
-    };
+    }
     for flock in &flocks {
-        let d = eye.distance(flock.mean());
+        let d = nearest(&eyes, flock.mean());
         if d <= FLOCK_FAR || d > HIDE {
             continue;
         }
@@ -389,7 +400,7 @@ pub(crate) fn build_far(
     mut far: ResMut<FarParts>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut vis: Query<&mut Visibility>,
+    mut vis: Query<(&mut Visibility, &mut Mesh3d)>,
 ) {
     let far = &mut *far;
     let sig: Vec<(AssetId<Mesh>, [f32; 4])> = far
@@ -424,24 +435,41 @@ pub(crate) fn build_far(
             .id();
         (e, mesh)
     });
-    if let Ok(mut v) = vis.get_mut(*e) {
+    let Ok((mut v, mut mesh3d)) = vis.get_mut(*e) else {
+        return;
+    };
+    {
         v.set_if_neq(if parts.is_empty() {
             Visibility::Hidden
         } else {
             Visibility::Inherited
         });
     }
-    if parts.is_empty() || sig == far.built {
+    // Every few frames at most: a new mesh takes a frame or two to reach
+    // the GPU, and one replaced every frame is never drawn. (At 90 Hz
+    // that's 15 times a second; from this far off nobody sees the steps.)
+    far.since += 1;
+    if parts.is_empty() || sig == far.built || far.since < FAR_REBUILD {
         return;
     }
+    far.since = 0;
     let mut built = StandIn::default();
     for (m, at, tint) in &parts {
         if let Some(mesh) = meshes.get(m) {
             built.add(&mesh.clone().transformed_by(*at), *tint);
         }
     }
-    if let (Some(m), Some(mut mesh)) = (built.build(), meshes.get_mut(&*handle)) {
-        *mesh = keep(m);
+    // A new mesh each time (rewriting one in place with another layout
+    // left it undrawn), the old one dropped.
+    if let Some(m) = built.build() {
+        let new = meshes.add(keep(m));
+        meshes.remove(&*handle);
+        *handle = new.clone();
+        mesh3d.0 = new;
+        // Its bounds are worked out again from the new mesh.
+        commands
+            .entity(*e)
+            .remove::<bevy::camera::primitives::Aabb>();
     }
     far.built = sig;
 }
