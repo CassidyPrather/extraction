@@ -235,6 +235,7 @@ fn press(
     doors: Query<&GlobalTransform, With<DoorLeaf>>,
     mut slept: MessageWriter<Slept>,
     mut progression: ResMut<super::Progression>,
+    mut budget: Option<ResMut<crate::anomaly::AttentionBudget>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, player } = ev else {
@@ -303,6 +304,10 @@ fn press(
                 // A night behind a wedged door: the Zone forgets you a little.
                 if let Ok(mut a) = attention.get_mut(*player) {
                     a.noise = 0.0;
+                }
+                // And what it had been saving up against you, unspent.
+                if let Some(b) = budget.as_mut() {
+                    b.budget = b.spent_on_responses;
                 }
             }
         }
