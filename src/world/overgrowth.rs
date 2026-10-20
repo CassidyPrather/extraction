@@ -128,6 +128,18 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 
 /// How much ivy a building has: 0 none, 1 smothered. From its seed, so
 /// some buildings are bare and a few are green to the eaves.
+/// How overgrown the building `prefab` standing at `at` (map xz) is, 0
+/// (bare) to 1 (smothered): the vigour its ivy and weeds grow with, the
+/// same on the server and every client. 0 everywhere with decay off.
+/// For Audio's rustle in the leaves.
+pub fn amount(at: Vec2, prefab: &str) -> f32 {
+    if enabled() {
+        vigour(seed(at, prefab))
+    } else {
+        0.0
+    }
+}
+
 fn vigour(seed: u64) -> f32 {
     let mut rng = fastrand::Rng::with_seed(seed ^ 0x51ed);
     let r = rng.f32();
