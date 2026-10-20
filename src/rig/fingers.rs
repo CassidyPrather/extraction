@@ -19,6 +19,13 @@ pub struct Fingers {
     /// Index to little: radians each finger turns out from its knuckle,
     /// positive toward the thumb.
     pub splay: [f32; 4],
+    /// Which way the thumb's first bone points, in the palm's frame (-Z
+    /// along the fingers, +Y out of the back of the hand, the thumb's side
+    /// -X on a right hand, +X on a left): out beside the index, down the
+    /// side of a grip, or across the palm to the little finger.
+    pub thumb_dir: Vec3,
+    /// How far its last joint bends, radians.
+    pub thumb_bend: f32,
 }
 
 pub const JOINTS: usize = 26;
@@ -83,6 +90,8 @@ pub fn fingers_from_joints(joints: &[Transform; JOINTS]) -> Option<Fingers> {
     }
     let total = bend(thumb[0], thumb[1], thumb[0]).abs() + bend(thumb[1], thumb[2], thumb[0]).abs();
     out.curl[4] = (total / THUMB_FULL).clamp(0.0, 1.0);
+    out.thumb_dir = (joints[PALM].rotation.inverse() * thumb[1]).normalize_or_zero();
+    out.thumb_bend = bend(thumb[1], thumb[2], thumb[0]).abs();
     Some(out)
 }
 
@@ -167,7 +176,23 @@ pub(crate) mod tests {
                 (got.curl[4] - curl[4]).abs() < 0.05,
                 "thumb: {got:?} vs {curl:?}"
             );
+            // The thumb's first bone, as laid out: turned out 0.6, bent once.
+            let dir = thumb_dir(curl[4]);
+            assert!(
+                got.thumb_dir.distance(dir) < 0.02,
+                "thumb dir {} vs {dir}",
+                got.thumb_dir
+            );
+            assert!(
+                (got.thumb_bend - 0.8 * curl[4]).abs() < 0.02,
+                "thumb bend {got:?}"
+            );
         }
+    }
+
+    /// The synthetic hand's thumb's first bone, in the palm's frame.
+    fn thumb_dir(curl: f32) -> Vec3 {
+        Quat::from_rotation_y(0.6) * Quat::from_rotation_x(-0.8 * curl) * Vec3::NEG_Z
     }
 
     /// A left hand (the right one mirrored) reads the same: curls toward
@@ -187,6 +212,13 @@ pub(crate) mod tests {
             assert!((got.curl[f] - curl[f]).abs() < 0.03, "curl {f}: {got:?}");
             assert!((got.splay[f] - splay[f]).abs() < 0.03, "splay {f}: {got:?}");
         }
+        // Its thumb points out on its own (+X) side.
+        let mirrored = thumb_dir(curl[4]) * Vec3::new(-1.0, 1.0, 1.0);
+        assert!(
+            got.thumb_dir.distance(mirrored) < 0.02,
+            "left thumb {}",
+            got.thumb_dir
+        );
     }
 
     /// An untracked hand (every joint at one place) gives nothing.
