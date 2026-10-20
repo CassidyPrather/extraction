@@ -150,7 +150,6 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     for k in 0..r.portals.len() {
         stair(&mut b, r, k, &m);
     }
-    doors(&mut b, l, r, &m);
     dressing(&mut b, l, r);
     for room in &l.rooms {
         for p in &room.props {
@@ -165,6 +164,8 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
             prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
+    // Last, so each door can swing clear of what's there.
+    doors(&mut b, l, r, &m);
     b.finish()
 }
 
@@ -600,16 +601,20 @@ fn append(b: &mut Builder, g: Geo, at: [f32; 2], y: f32, rot: f32) {
 /// with a door in it (or the opening, with a lintel over).
 fn doors(b: &mut Builder, l: &Layout, r: &Raster, m: &Mats) {
     for d in &r.doors {
-        let mut along = Vec2::from(d.along);
         let at = Vec2::from(d.at);
-        // A leaf opens toward the wall's right, (along.z, -along.x): into
-        // its room, not back into the corridor it closes.
-        if let Some(room) = d.room {
-            let into = Vec2::from(l.rooms[room as usize].at) - at;
-            if Vec2::new(along.y, -along.x).dot(into) < 0.0 {
-                along = -along;
-            }
-        }
+        // A leaf hinges at the wall's start and opens toward its right,
+        // (along.z, -along.x): the wall one way or the other. Its whole
+        // swing clear of the furniture and walls, and into its room
+        // rather than back into the corridor it closes, if it can.
+        let into = d.room.map(|k| Vec2::from(l.rooms[k as usize].at) - at);
+        let along = [Vec2::from(d.along), -Vec2::from(d.along)]
+            .into_iter()
+            .max_by_key(|dir| {
+                let clear = swing_clear(b, r, at, *dir, d.width, d.y);
+                let inward = into.is_some_and(|v| Vec2::new(dir.y, -dir.x).dot(v) > 0.0);
+                (clear, inward)
+            })
+            .unwrap();
         let a = at - along * d.width * 0.5;
         let c = at + along * d.width * 0.5;
         // Up to the higher roof either side.
@@ -631,6 +636,30 @@ fn doors(b: &mut Builder, l: &Layout, r: &Raster, m: &Mats) {
             &[door(d.width * 0.5)],
         );
     }
+}
+
+/// Whether a door in a wall from `at - dir * width / 2` along `dir` (as
+/// `Builder::wall` hangs it: hinged at the opening's start, opening to the
+/// wall's right) swings clear of every solid piece built so far and of
+/// the rock.
+fn swing_clear(b: &Builder, r: &Raster, at: Vec2, dir: Vec2, width: f32, y: f32) -> bool {
+    let (open, leaf) = (0.95, 0.91);
+    let start = at - dir * width * 0.5 + dir * ((width - open) * 0.5 + 0.02);
+    let hinge = Vec3::new(start.x, y + 1.0, start.y);
+    let yaw = -dir.y.atan2(dir.x);
+    [0.3f32, 0.6, 0.9, 1.2, 1.5, 1.75].iter().all(|a| {
+        [0.35f32, 0.65, 0.95].iter().all(|f| {
+            let p = hinge + Quat::from_rotation_y(yaw + a) * Vec3::X * leaf * f;
+            r.at([p.x, p.z]).flat()
+                && !b.geo.pieces.iter().any(|piece| {
+                    let Shape::Box(size) = piece.shape else {
+                        return false;
+                    };
+                    let l = piece.at.compute_affine().inverse().transform_point3(p);
+                    piece.collide && l.abs().cmplt(size * 0.5 - 0.02).all()
+                })
+        })
+    })
 }
 
 /// Junk and fittings that make it a place: timber sets in the mine,
@@ -2268,13 +2297,34 @@ mod tests {
                 let leaf = &g.doors[first + k];
                 let open = Quat::from_rotation_y(leaf.yaw + 1.75) * Vec3::X * leaf.width * 0.9;
                 let tip = leaf.hinge + open;
+                let name = &ug::layout(id).unwrap().rooms[room as usize].id;
                 assert_eq!(
                     r.at([tip.x, tip.z]),
                     Cell::Room(room),
-                    "{id}: the door into `{}` at {:?} swings to {tip:?}",
-                    ug::layout(id).unwrap().rooms[room as usize].id,
+                    "{id}: the door into `{name}` at {:?} swings to {tip:?}",
                     d.at
                 );
+                // Its whole swing clear of furniture and walls.
+                for a in [0.3f32, 0.6, 0.9, 1.2, 1.5, 1.75] {
+                    for f in [0.35f32, 0.65, 0.95] {
+                        let p = leaf.hinge
+                            + Quat::from_rotation_y(leaf.yaw + a) * Vec3::X * leaf.width * f
+                            + Vec3::Y * 1.0;
+                        let hit = g.pieces.iter().find(|piece| {
+                            let Shape::Box(size) = piece.shape else {
+                                return false;
+                            };
+                            let l = piece.at.compute_affine().inverse().transform_point3(p);
+                            piece.collide && l.abs().cmplt(size * 0.5 - 0.02).all()
+                        });
+                        assert!(
+                            hit.is_none(),
+                            "{id}: the door into `{name}` at {:?} swings into {:?} at {p:?}",
+                            d.at,
+                            hit.map(|h| (h.shape, h.at.translation))
+                        );
+                    }
+                }
             }
         }
     }
