@@ -8,6 +8,7 @@
 //! their current **job**, and arrive and leave diegetically through the
 //! Gate (see [`director`]).
 
+pub mod anim;
 pub mod collector;
 pub mod director;
 pub mod dirigible;
@@ -185,6 +186,7 @@ impl Plugin for RobotsPlugin {
                 grappler::GrapplerPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
+                anim::AnimPlugin,
             ))
             .add_systems(
                 FixedUpdate,
