@@ -2921,6 +2921,7 @@ fn ropeway_pylon_down(b: &mut Builder) {
 // BF_SHIFT from the furnace.
 const BF_SHIFT: Vec3 = Vec3::new(-5.7, 0.0, -10.6);
 const BF_DECK: f32 = 24.0;
+const BF_BAY: ((f32, f32), f32) = ((-6.0, -1.3), 7.4);
 const BF_STOVES: (f32, [f32; 3], f32, f32) = (3.0, [12.0, 18.5, 25.0], 4.0, 20.0);
 const BF_CHIMNEY: (f32, f32, (f32, f32), f32) = (1.4, 1.0, (18.5, 11.5), 38.0);
 const BF_CATCHER: (f32, (f32, f32), f32, f32) = (2.8, (-14.0, 5.0), 6.0, 14.0);
@@ -2988,11 +2989,22 @@ fn blast_furnace(b: &mut Builder) {
             Mat::PaintedMetal,
         );
     }
+    // A bay off the -X +Z corner, out past the foundation: the crate's
+    // there.
+    let ((bx0, bx1), bz1) = BF_BAY;
+    b.bx(
+        Vec3::new(bx1 - bx0, 0.3, bz1 - 6.0),
+        Vec3::new((bx0 + bx1) * 0.5, dk - 0.15, (6.0 + bz1) * 0.5),
+        Mat::PaintedMetal,
+    );
     let e = 5.95;
+    let bo = bz1 - 0.05;
     for (a, c) in [
         (Vec2::new(-e, -e), Vec2::new(e, -e)),
-        (Vec2::new(-e, -e + 0.04), Vec2::new(-e, e - 0.04)),
-        (Vec2::new(-e, e), Vec2::new(0.9, e)),
+        (Vec2::new(-e, -e + 0.04), Vec2::new(-e, bo - 0.04)),
+        (Vec2::new(-e, bo), Vec2::new(bx1, bo)),
+        (Vec2::new(bx1, bo - 0.04), Vec2::new(bx1, e + 0.04)),
+        (Vec2::new(bx1 + 0.04, e), Vec2::new(0.9, e)),
         (Vec2::new(e, -e + 0.04), Vec2::new(e, 3.4)),
     ] {
         let mid = (a + c) * 0.5;
@@ -3161,9 +3173,9 @@ fn blast_furnace(b: &mut Builder) {
         Transform::from_translation(BF_SHIFT),
         ["blast_furnace_lod1", "blast_furnace_lod2"],
     );
-    // A crate on the platform, one in the cast house.
+    // A crate in the platform's bay, one in the cast house.
     b.crate_box(
-        Vec3::new(-4.6, BF_DECK, -4.6) + BF_SHIFT,
+        Vec3::new(-3.6, BF_DECK, 6.75) + BF_SHIFT,
         0.7,
         Some("workshop"),
     );
