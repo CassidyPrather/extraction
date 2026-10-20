@@ -645,14 +645,32 @@ pub(crate) fn spray_bits(
 fn spawn_fx(
     mut commands: Commands,
     mut impacts: MessageReader<Impact>,
+    mut glances: MessageReader<super::ballistics::Ricochet>,
     assets: Option<Res<FxAssets>>,
     mut pool: ResMut<FxPool>,
 ) {
     let Some(a) = assets else {
         impacts.clear();
+        glances.clear();
         return;
     };
     let pool = &mut *pool;
+    // A glance: a streak of sparks skating off along the round's new line.
+    for g in glances.read() {
+        let out = g.velocity.normalize_or(g.normal);
+        let streak = Spray {
+            n: 6,
+            mat: |a| a.spark.clone(),
+            size: Vec3::new(0.005, 0.005, 0.12),
+            out: 1.0,
+            scatter: 1.5,
+            carry: 8.0,
+            life: 0.18,
+            align: true,
+            ..SPRAY
+        };
+        spray_bits(&mut commands, pool, &a, &streak, g.point, g.normal, out);
+    }
     for imp in impacts.read() {
         let n = imp.normal.normalize_or(Vec3::Y);
         let dir = imp.velocity.normalize_or_zero();
