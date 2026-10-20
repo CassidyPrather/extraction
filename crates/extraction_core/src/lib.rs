@@ -16,6 +16,7 @@ pub mod fit;
 pub mod forest;
 pub mod geom;
 pub mod grenade;
+pub mod heavy;
 pub mod inventory;
 pub mod items;
 pub mod loot;
