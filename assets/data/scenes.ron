@@ -328,4 +328,110 @@
             rot: 0.0,
         )),
     ),
+    // --- Hana's thread (world::story::BEATS, docs/LORE.md "The arc"):
+    // each opens with a rank of the driver's job ladder, the last with the
+    // recall.
+    (
+        map: "marrow_creek",
+        name: "Rusty's corner",
+        // Behind the house by the well: the dog's bed and his tin.
+        at: (-25.5, 96.0),
+        rot: 90.0,
+        after: Some(Tier(1)),
+        pieces: [
+            Pallet(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (1.1, 0.3), rot: 200.0),
+        ],
+        items: [
+            (id: "canned_stew", at: (0.3, 0.144, 0.15), condition: 0.2),
+        ],
+        note: Some((
+            name: "Rusty's note",
+            text: "Rusty went today. Walked up to the white one by the bins and sat, good as gold, and it picked him up like a parcel and carried him to the Gate.\nKept, the inspector says. Everything is kept, for the review.\nHis lead's on the hook. - H.",
+            at: (1.1, 0.45, 0.3),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Hana's basket",
+        // In the shelter's hall under the village (room "hall", site
+        // bunker_marrow): left on the floor for Mrs Holm.
+        at: (-7.5, 93.0),
+        rot: 0.0,
+        floor: Some(11.61),
+        after: Some(Tier(2)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.4),
+        ],
+        items: [
+            (id: "cook_bread", at: (-0.08, 0.4, 0.05)),
+        ],
+        note: Some((
+            name: "Basket note",
+            text: "E. - bread, and the paraffin. Leave the tin on the step when it's empty.\nThe machines don't look twice at an old woman with a basket. You'll see.\nIf Jan comes back I'll send him down. - H.",
+            at: (0.06, 0.4, -0.02),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "By the well",
+        // Her chair at the well, and her basket dropped.
+        at: (-27.0, 105.5),
+        rot: 330.0,
+        after: Some(Tier(3)),
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Crate(at: (0.9, -0.4), size: 0.4),
+        ],
+        items: [
+            (id: "wristwatch", at: (0.9, 0.4, -0.35), condition: 0.3),
+        ],
+        note: Some((
+            name: "Hana's last page",
+            text: "Feb. The cough again, and the machines are counting the houses.\nIf they come for me, they come. I've written to Lev and left it on the table where he'll look first.\nHe's not to come in after me. - H.",
+            at: (0.0, 0.45, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Valley office copy",
+        // The inspector's carbon, dropped from the post office's sack.
+        at: (-27.5, 61.0),
+        rot: 270.0,
+        after: Some(Tier(4)),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.6),
+        ],
+        note: Some((
+            name: "Valley office copy",
+            text: "VALLEY OFFICE - COPY\nTo Mrs H. Marek, by hand.\nNothing collected by the Custodian is destroyed. It is kept, animals included, pending review.\nThe sweep ends only with the three depot keys, together, at a depot lock.\nP. Rus, Inspector",
+            at: (0.0, 0.6, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Lev's chair",
+        // After the recall: a chair by the well, facing her house.
+        at: (-26.0, 112.0),
+        rot: 25.0,
+        after: Some(Recalled),
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Crate(at: (0.7, 0.1), size: 0.5),
+            Lantern(at: (0.75, 0.5, 0.2)),
+        ],
+        items: [
+            (id: "water_bottle", at: (0.6, 0.5, -0.05)),
+        ],
+        note: Some((
+            name: "Lev's note",
+            text: "Mum -\nThey've gone home through the Gates and shut them. I came in.\nRusty's lead is still on the hook. I've left it there.\n- Lev",
+            at: (0.0, 0.45, 0.0),
+            rot: 0.0,
+        )),
+    ),
 ]
