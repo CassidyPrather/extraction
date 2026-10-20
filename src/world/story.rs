@@ -247,6 +247,30 @@ pub const THREAD: &[Lead] = &[
             (K, "Crossing keeper's note"),
         ],
     },
+    // The last shift (THREADS): each names the one before.
+    Lead {
+        map: K,
+        note: "Raise note",
+        mentions: &[
+            (K, "Refuge board"),
+            (K, "Miners' Row"),
+            (K, "Quarry blast shelter"),
+        ],
+    },
+    Lead {
+        map: K,
+        note: "Hide note",
+        mentions: &[
+            (K, "Raise note"),
+            (K, "The quarry"),
+            (K, "Shot-firer's note"),
+        ],
+    },
+    Lead {
+        map: K,
+        note: "Shot-firer's last",
+        mentions: &[(K, "Hide note"), (K, "Quarry blast shelter")],
+    },
     Lead {
         map: K,
         note: "Lodge book",
@@ -337,6 +361,34 @@ pub const THREAD: &[Lead] = &[
         note: "Valve note",
         mentions: &[(C, "The ash pit"), (C, "Lookout log"), (C, "The works")],
     },
+    // Valve three (THREADS): each names the one before.
+    Lead {
+        map: C,
+        note: "Fitter's book",
+        mentions: &[
+            (C, "Valve note"),
+            (C, "Foreman's terminal"),
+            (M, "Stake readings"),
+        ],
+    },
+    Lead {
+        map: C,
+        note: "Letters note",
+        mentions: &[
+            (C, "Fitter's book"),
+            (C, "Inspector's letter"),
+            (M, "Valley office copy"),
+        ],
+    },
+    Lead {
+        map: C,
+        note: "Far stair note",
+        mentions: &[
+            (C, "Letters note"),
+            (C, "Valve note"),
+            (K, "Shot-firer's note"),
+        ],
+    },
     Lead {
         map: C,
         note: "Mast terminal",
@@ -395,6 +447,81 @@ pub const BEATS: &[Beat] = &[
     },
 ];
 
+/// A thread of beats: Hana's runs the career on the ladder; each other
+/// valley has a short one of its own, opened by coming back to it, tied
+/// to hers by one thing, never said.
+pub struct Thread {
+    pub name: &'static str,
+    /// The note (always there) its first beat leads on from.
+    pub from: &'static str,
+    /// The valley its beats open in by visits (`None`: the ladder's).
+    pub map: Option<&'static str>,
+    pub beats: &'static [Beat],
+}
+
+pub const THREADS: &[Thread] = &[
+    Thread {
+        name: "Hana",
+        from: "Village note",
+        map: None,
+        beats: BEATS,
+    },
+    // Kettle: Karel Dusek, the shot-firer, who stayed to watch the
+    // shelter. Her photograph is in his kit: he's her brother.
+    Thread {
+        name: "The last shift",
+        from: "Refuge board",
+        map: Some(K),
+        beats: &[
+            Beat {
+                gate: Gate::Visits(1),
+                scenes: &["Top of the raise"],
+                radio: &[],
+                gift: None,
+            },
+            Beat {
+                gate: Gate::Visits(3),
+                scenes: &["Dusek's hide"],
+                radio: &[],
+                gift: None,
+            },
+            Beat {
+                gate: Gate::Visits(5),
+                scenes: &["The shelter door"],
+                radio: &[],
+                gift: None,
+            },
+        ],
+    },
+    // Cinder: Tomas, the fitter who shut valve three; he'd been on Vey's
+    // survey, and carried the inspector's letter to her by hand.
+    Thread {
+        name: "Valve three",
+        from: "Valve note",
+        map: Some(C),
+        beats: &[
+            Beat {
+                gate: Gate::Visits(1),
+                scenes: &["Fitter's bench"],
+                radio: &[],
+                gift: None,
+            },
+            Beat {
+                gate: Gate::Visits(3),
+                scenes: &["Letters by hand"],
+                radio: &[],
+                gift: None,
+            },
+            Beat {
+                gate: Gate::Visits(5),
+                scenes: &["The far stair"],
+                radio: &[],
+                gift: None,
+            },
+        ],
+    },
+];
+
 /// Seconds between the driver's lines (the wrist shows each for 8).
 const BEAT_GAP: f32 = 7.0;
 /// Before the first: the job's own lines go first (at the letter's
@@ -425,7 +552,12 @@ pub fn tell_beats(
     if before != now {
         *seen = Some(now);
         for beat in BEATS {
-            if beat.gate.open(now.0, now.1) && !beat.gate.open(before.0, before.1) {
+            let at = |(tier, recalled): (u32, bool)| super::scenes::Standing {
+                tier,
+                recalled,
+                visits: 0,
+            };
+            if beat.gate.open(at(now)) && !beat.gate.open(at(before)) {
                 info!("story beat: {:?}", beat.gate);
                 queue.extend(beat.radio.iter().copied());
                 if let (Some(id), Some(stash)) = (beat.gift, stashes.iter().next()) {
@@ -651,10 +783,12 @@ mod tests {
         }
     }
 
-    /// The arc: every beat opens on the ladder, in order, each a scene
-    /// with a note that names the beat before, and the last at the recall.
+    /// The arcs: every beat opens in order (Hana's on the ladder, the
+    /// valleys' as you come back to them), each a scene with a note that
+    /// names the beat before, Hana's last at the recall.
     #[test]
     fn every_beat_is_reachable_from_the_ladder_in_order() {
+        use crate::world::scenes::Standing;
         use extraction_core::progression::{Progress, TIERS};
         // Climb the ladder as a career does, noting the ranks passed.
         let mut p = Progress::default();
@@ -666,77 +800,107 @@ mod tests {
             }
         }
         assert_eq!(ranks, (0..=TIERS.len() as u32).collect::<Vec<_>>());
-        let mut opened = Vec::new();
-        for &rank in &ranks {
-            for (i, b) in BEATS.iter().enumerate() {
-                if b.gate.open(rank, false) && !opened.contains(&i) {
-                    opened.push(i);
-                }
-            }
-        }
-        // Every rank's beat opens in order on the way up, the recall's not
-        // until the machines are recalled.
-        let ranked: Vec<usize> = (0..BEATS.len())
-            .filter(|i| BEATS[*i].gate != Gate::Recalled)
-            .collect();
-        assert_eq!(opened, ranked, "beats open in ladder order");
-        assert_eq!(BEATS.last().unwrap().gate, Gate::Recalled);
-        assert!(BEATS.last().unwrap().gate.open(TIERS.len() as u32, true));
-        for (rank, b) in ranks.iter().skip(1).zip(BEATS) {
-            assert_eq!(b.gate, Gate::Tier(*rank), "one beat a rank");
-        }
-        // The ladder's last job is the letter the third beat sets up; the
-        // beat after it is the letter read.
-        assert!(
-            BEATS
-                .iter()
-                .any(|b| b.gate == Gate::Tier(TIERS.len() as u32))
-        );
-
+        let at = |tier, recalled, visits| Standing {
+            tier,
+            recalled,
+            visits,
+        };
         let scenes = crate::world::scenes::all();
-        let mut previous: Vec<String> = vec!["Village note".into()];
-        for b in BEATS {
-            assert!(!b.radio.is_empty(), "{:?}: nothing said", b.gate);
-            let mut notes = Vec::new();
-            for name in b.scenes {
-                let s = scenes
+        let catalog =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        for thread in THREADS {
+            let beats = thread.beats;
+            assert!(
+                beats.len() >= 3,
+                "{}: a thread is three beats or more",
+                thread.name
+            );
+            // The career moving on: for Hana's thread up the ladder, then the
+            // recall; for a valley's, raid after raid there.
+            let steps: Vec<Standing> = match thread.map {
+                None => ranks
                     .iter()
-                    .find(|s| s.name == *name)
-                    .unwrap_or_else(|| panic!("no scene {name}"));
-                assert_eq!(s.after, Some(b.gate), "{name} opens with its beat");
-                if let Some(n) = &s.note {
-                    notes.push(n.name.clone());
+                    .map(|r| at(*r, false, 0))
+                    .chain([at(TIERS.len() as u32, true, 0)])
+                    .collect(),
+                Some(_) => (0..=12).map(|v| at(0, false, v)).collect(),
+            };
+            let mut opened = Vec::new();
+            for step in &steps {
+                for (i, b) in beats.iter().enumerate() {
+                    if b.gate.open(*step) && !opened.contains(&i) {
+                        opened.push(i);
+                    }
                 }
             }
-            assert!(!notes.is_empty(), "{:?}: no note in the world", b.gate);
-            // Pieced together, not told: each beat's note names the last.
-            for n in &notes {
-                let lead = THREAD.iter().find(|l| l.note == n).expect(n);
+            assert_eq!(
+                opened,
+                (0..beats.len()).collect::<Vec<_>>(),
+                "{}: every beat opens, in order",
+                thread.name
+            );
+            assert!(
+                !beats[0].gate.open(steps[0]),
+                "{}: nothing open before it starts",
+                thread.name
+            );
+            if thread.map.is_none() {
+                for (rank, b) in ranks.iter().skip(1).zip(beats) {
+                    assert_eq!(b.gate, Gate::Tier(*rank), "one beat a rank");
+                }
+                assert_eq!(beats.last().unwrap().gate, Gate::Recalled);
+                // The ladder's last job is the letter the third beat sets up.
                 assert!(
-                    lead.mentions
+                    beats
                         .iter()
-                        .any(|(_, m)| previous.iter().any(|p| p == m)),
-                    "{n} doesn't lead on from {previous:?}"
+                        .any(|b| b.gate == Gate::Tier(TIERS.len() as u32))
                 );
+                assert!(beats.iter().all(|b| !b.radio.is_empty()), "Lev tells each");
             }
-            previous = notes;
+            let mut previous: Vec<String> = vec![thread.from.into()];
+            for b in beats {
+                let mut notes = Vec::new();
+                for name in b.scenes {
+                    let s = scenes
+                        .iter()
+                        .find(|s| s.name == *name)
+                        .unwrap_or_else(|| panic!("no scene {name}"));
+                    assert_eq!(s.after, Some(b.gate), "{name} opens with its beat");
+                    if let Some(map) = thread.map {
+                        assert_eq!(s.map, map, "{name} is in its thread's valley");
+                    }
+                    if let Some(n) = &s.note {
+                        notes.push(n.name.clone());
+                    }
+                }
+                assert!(!notes.is_empty(), "{:?}: no note in the world", b.gate);
+                // Pieced together, not told: each beat's note names the last.
+                for n in &notes {
+                    let lead = THREAD.iter().find(|l| l.note == n).expect(n);
+                    assert!(
+                        lead.mentions
+                            .iter()
+                            .any(|(_, m)| previous.iter().any(|p| p == m)),
+                        "{n} doesn't lead on from {previous:?}"
+                    );
+                }
+                previous = notes;
+                if let Some(id) = b.gift {
+                    assert!(catalog.kind(id).is_some(), "gift {id}");
+                }
+            }
         }
-        // And every gated scene belongs to a beat.
+        // Every gated scene belongs to a beat.
         for s in scenes.iter().filter(|s| s.after.is_some()) {
             assert!(
-                BEATS.iter().any(|b| b.scenes.contains(&s.name.as_str())),
+                THREADS
+                    .iter()
+                    .flat_map(|t| t.beats)
+                    .any(|b| b.scenes.contains(&s.name.as_str())),
                 "{} is gated but on no beat",
                 s.name
             );
-        }
-        for b in BEATS {
-            if let Some(id) = b.gift {
-                let catalog = extraction_core::items::ItemCatalog::from_ron(
-                    extraction_core::items::BUILTIN_CATALOG,
-                )
-                .unwrap();
-                assert!(catalog.kind(id).is_some(), "gift {id}");
-            }
         }
     }
 

@@ -258,6 +258,30 @@ hold it to the ladder.
 The letter itself stays sealed: the player never reads it, only what Lev
 says of it.
 
+## The valleys' threads
+
+Kettle and Cinder each have a short thread of their own, three beats
+opened by coming back (`Gate::Visits(n)`: the 1st, 3rd and 5th raid set
+off in that valley), each tied to Hana's by one thing nobody explains.
+`world::story::THREADS` holds them; the same tests hold them.
+
+**The last shift (Kettle)**, from the refuge board (four walked out on 17
+October; Dusek had been up the raise to look):
+
+| Visit | Scene | What it adds |
+| - | - | - |
+| 1st | **Top of the raise**: a crate and a lamp where the mine's raise comes up; "Told the lads we walk out at two. I'm stopping. Somebody has to watch that shelter." | Karel Dusek, the shot-firer, stayed |
+| 3rd | **Dusek's hide** on the quarry's lip: bedroll, cold fire, binoculars, and a photograph of a family on a bench by a well; "They've put a roof over the shelter... My sister would tell me to come home. She never left hers either." | He watched the machines build round the shelter. The photograph is Hana's family: he is her brother, Lev's uncle (never said) |
+| 5th | **The shelter door**: his body by the quarry shelter; "The door's warm to the hand... I'm going in for my key." | He tried for KEY-K himself |
+
+**Valve three (Cinder)**, from the fitter's note in the valve chamber:
+
+| Visit | Scene | What it adds |
+| - | - | - |
+| 1st | **Fitter's bench** by the canal pumps: "FITTER'S BOOK - T.R."; furnace three hot all night, told Kral, told the inspector; "I was on the Hollow survey before this." | The fitter is T., who signed the stake readings at the Hollow |
+| 3rd | **Letters by hand** in the works yard: he carried the inspector's letters round the valleys the first winter; "The last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses." | He delivered the valley office letter to Hana (never named) |
+| 5th | **The far stair**, where the service tunnel comes up: valve three opened again, the canal took the pit, Kral didn't come up; "Going over the pass to Kettle. There's a shot-firer there who knows about shelters." | He went to Dusek: the threads meet |
+
 ## Staged scenes
 
 Small arrangements of existing props and items at the points of interest
