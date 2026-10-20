@@ -292,6 +292,7 @@ impl Plugin for InteractPlugin {
                         far::far_grab,
                         apply_hand_actions,
                         seat_on_contact,
+                        seat_from_body,
                     )
                         .chain()
                         .in_set(InteractSystems::Grab),
@@ -377,6 +378,63 @@ fn seat_on_contact(
         }
     }
 }
+
+/// Played one-handed (`Comfort::one_handed`), the gun's empty well brought
+/// down onto a magazine in a pouch or pocket takes it: there's no other
+/// hand to bring the magazine up.
+fn seat_from_body(
+    mut commands: Commands,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mags: Query<(Entity, &InSocket, &GlobalTransform, &crate::weapons::Mag)>,
+    mut sockets: Query<(Entity, &mut Socket, &GlobalTransform, &SocketOwner)>,
+    held: Query<&Held>,
+    mut events: MessageWriter<InteractEvent>,
+) {
+    if !comfort.is_some_and(|c| c.one_handed) {
+        return;
+    }
+    let mut moves = Vec::new();
+    for (mag_e, in_socket, gt, mag) in &mags {
+        let Ok((_, from, _, from_owner)) = sockets.get(in_socket.socket) else {
+            continue;
+        };
+        let SocketKind::Body(_) = from.kind else {
+            continue;
+        };
+        let top = gt.transform_point(Vec3::Y * mag.height * 0.5);
+        let well = sockets.iter().find(|(_, s, sgt, owner)| {
+            matches!(&s.kind, SocketKind::MagWell(f) if *f == mag.family)
+                && s.occupant.is_none()
+                && held.get(owner.0).is_ok_and(|g| g.player == from_owner.0)
+                && top.distance(sgt.translation()) < BODY_SEAT
+        });
+        if let Some((well_e, ..)) = well {
+            moves.push((mag_e, in_socket.socket, well_e));
+        }
+    }
+    for (mag_e, from_e, well_e) in moves {
+        if let Ok((_, mut from, ..)) = sockets.get_mut(from_e) {
+            from.occupant = None;
+        }
+        events.write(InteractEvent::Unsocketed {
+            item: mag_e,
+            socket: from_e,
+        });
+        if let Ok((_, mut well, ..)) = sockets.get_mut(well_e) {
+            if well.occupant.is_some() {
+                continue;
+            }
+            seat_in_socket(&mut commands, mag_e, well_e, &mut well);
+        }
+        events.write(InteractEvent::Socketed {
+            item: mag_e,
+            socket: well_e,
+        });
+    }
+}
+
+/// How near a pouched magazine's top the gun's well has to come, one-handed.
+pub const BODY_SEAT: f32 = 0.06;
 
 /// World pose of every rig hand, from the root and the rig input (not last
 /// frame's propagated transforms, which lag a tick).

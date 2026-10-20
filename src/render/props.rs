@@ -759,15 +759,19 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }
 
-/// Where the wrist display lies on the left glove, in the hand's frame:
-/// flat over the housing on the cuff's back (`art/hands/gloves.py`), its
-/// text running from the fingers to the elbow, so it reads level with the
-/// forearm held across the chest like a watch.
-pub(crate) fn wrist_mount() -> Transform {
-    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(
-        &Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
-    ));
-    glove_frame(Side::Left) * on_glove
+/// Where the wrist display lies on a glove, in the hand's frame: flat over
+/// the housing on the cuff's back (`art/hands/gloves.py`), its text
+/// running from the elbow to the fingers, so it reads level with the
+/// forearm held across the chest like a watch. The right glove's is the
+/// left's mirrored, its text turned round to read the same way (the
+/// forearm across the chest points the other way).
+pub(crate) fn wrist_mount(side: Side) -> Transform {
+    let axes = match side {
+        Side::Left => Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
+        Side::Right => Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y),
+    };
+    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes));
+    glove_frame(side) * on_glove
 }
 
 /// A joint's turn, its finger curled `c`.
@@ -1621,6 +1625,22 @@ fn dress_capstone(
 #[cfg(test)]
 mod glove_tests {
     use super::*;
+
+    /// The right wrist's display is the left's mirrored across the hand's
+    /// X (a left-handed player's watch), its text turned so it reads the
+    /// right way round, not as a mirror image.
+    #[test]
+    fn the_right_wrist_display_is_the_left_mirrored_and_reads() {
+        let m = |v: Vec3| Vec3::new(-v.x, v.y, v.z);
+        let (l, r) = (wrist_mount(Side::Left), wrist_mount(Side::Right));
+        let close = |a: Vec3, b: Vec3| a.distance(b) < 1e-4;
+        assert!(close(r.translation, m(l.translation)), "{r:?} vs {l:?}");
+        // Facing out of the back of the hand, the same way up...
+        assert!(close(r.rotation * Vec3::Z, m(l.rotation * Vec3::Z)));
+        assert!(close(r.rotation * Vec3::Y, m(l.rotation * Vec3::Y)));
+        // ...and reading left to right, not mirrored.
+        assert!(close(r.rotation * Vec3::X, -m(l.rotation * Vec3::X)));
+    }
 
     /// A node of a .glb: its name, local transform, children and, for a
     /// mesh, its POSITION bounds.

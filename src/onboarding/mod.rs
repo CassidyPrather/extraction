@@ -142,7 +142,7 @@ impl Goal {
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
-            (Goal::Wrist, false) => "Raise your left hand and\nlook at the back of it.",
+            (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "Hold it. Press A or X.",
             (Goal::Dressing, true) => "Hold it. Press U.",
@@ -1191,7 +1191,8 @@ fn watch_moves(
     }
 }
 
-/// Where the wrist's screen rides on the left hand (`render::comfort`).
+/// Where the wrist's screen rides on the left hand (`render::comfort`);
+/// on the right, mirrored.
 pub const WRIST_PANEL: Vec3 = Vec3::new(-0.03, 0.015, 0.07);
 
 /// Looking at your wrist (the head's gaze on the left hand's screen, close,
@@ -1205,10 +1206,16 @@ fn watch_wrist(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     time: Res<Time>,
     mut held: Local<f32>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     if ob.is_done(Goal::Wrist) {
         return;
     }
+    // The watch is on the hand that isn't the gun hand.
+    let watch = comfort
+        .as_ref()
+        .map_or(Side::Left, |c| c.gun_side().other());
+    let panel_at = WRIST_PANEL * Vec3::new(-watch.sign(), 1.0, 1.0);
     let mut looking = keys.is_some_and(|k| k.pressed(KeyCode::KeyH));
     for (head, owner) in &heads {
         if !locals.contains(owner.parent()) {
@@ -1216,9 +1223,9 @@ fn watch_wrist(
         }
         let hand = hands
             .iter()
-            .find(|(_, rh, p)| rh.side == Side::Left && p.parent() == owner.parent());
+            .find(|(_, rh, p)| rh.side == watch && p.parent() == owner.parent());
         let Some((hand, ..)) = hand else { continue };
-        let panel = hand.transform_point(WRIST_PANEL);
+        let panel = hand.transform_point(panel_at);
         let to = panel - head.translation();
         let forward = head.rotation() * Vec3::NEG_Z;
         if to.length() < 0.65 && forward.angle_between(to) < 20f32.to_radians() {

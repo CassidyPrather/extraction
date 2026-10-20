@@ -97,6 +97,16 @@ pub struct Hold {
     pub crouched: bool,
 }
 
+/// How many hands count as holding the gun: a second hand on it; or,
+/// played one-handed (`Comfort::one_handed`), a rest under it.
+pub fn hands_holding(support: bool, braced: bool, one_handed_play: bool) -> u8 {
+    if support || (one_handed_play && braced) {
+        2
+    } else {
+        1
+    }
+}
+
 impl Hold {
     /// The spring's natural frequency.
     pub fn recover(self) -> f32 {
@@ -317,9 +327,13 @@ fn handle_guns(
     statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
     terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut checks: ResMut<BraceChecks>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
+    // Played one-handed, a gun rested on something is held as well as two
+    // hands hold it: what the surface is for.
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
@@ -377,7 +391,7 @@ fn handle_guns(
             .get(held.player)
             .is_ok_and(|i| i.crouch || i.head.translation.y < CROUCH_HEAD);
         handling.hold = Hold {
-            hands: 1 + u8::from(support.is_some()),
+            hands: hands_holding(support.is_some(), braced, one_handed),
             shouldered,
             braced,
             crouched,
@@ -572,6 +586,38 @@ pub fn jam_visuals(
         if *vis != want {
             *vis = want;
         }
+    }
+}
+
+#[cfg(test)]
+mod one_hand_tests {
+    use super::*;
+
+    /// Played one-handed, a rifle rested on a surface is held as two hands
+    /// hold it rested: the same spring, mass, lag and steadiness, and no
+    /// one-handed droop or sway. Without the rest it's one hand.
+    #[test]
+    fn one_hand_on_a_rest_is_two() {
+        let hold = |hands: u8| Hold {
+            hands,
+            shouldered: false,
+            braced: true,
+            crouched: false,
+        };
+        let one = hold(hands_holding(false, true, true));
+        let two = hold(hands_holding(true, true, false));
+        assert_eq!(one, two);
+        assert_eq!(one.recover(), two.recover());
+        assert_eq!(one.mass(3.3), two.mass(3.3));
+        assert_eq!(one.lag(3.3), two.lag(3.3));
+        assert_eq!(one.steadiness(), two.steadiness());
+        assert!(one.hands >= 2, "no one-handed droop or sway");
+        assert_eq!(hands_holding(false, false, true), 1, "unrested: one hand");
+        assert_eq!(
+            hands_holding(false, true, false),
+            1,
+            "two-handed play: as before"
+        );
     }
 }
 

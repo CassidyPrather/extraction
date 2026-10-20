@@ -99,6 +99,7 @@ impl Plugin for BodyPlugin {
                     backpack_released,
                     sync_backpack_visibility,
                     slung_reach,
+                    handed_slots,
                 ),
             )
             .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems));
@@ -229,6 +230,37 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
         CollisionLayers::new(Layer::Item, [Layer::World]),
         ChildOf(torso),
     ));
+}
+
+/// The holster and the chest mount on the gun hand's side and the other:
+/// for a left-handed player (`Comfort::left_handed`) they swap sides.
+fn handed_slots(
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut slots: Query<(&BodySlot, &Socket, &SocketOwner, &mut Transform)>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    added: Query<(), Added<BodySlot>>,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    if !comfort.is_changed() && added.is_empty() {
+        return;
+    }
+    for (slot, socket, owner, mut t) in &mut slots {
+        let SocketKind::Body(kind @ (SlotKind::Holster | SlotKind::Mount)) = socket.kind else {
+            continue;
+        };
+        if !locals.contains(owner.0) {
+            continue;
+        }
+        let (mut pos, ..) = slot_layout(kind, slot.0);
+        if comfort.left_handed {
+            pos.x = -pos.x;
+        }
+        if t.translation != pos {
+            t.translation = pos;
+        }
+    }
 }
 
 /// Where each slot sits on the torso (origin mid-chest), how its occupant
