@@ -83,6 +83,10 @@ pub struct Geo {
     /// Outside doors and doorways: what must be kept clear in front of
     /// them (mirrored in `map::prefab_entrances` for the map lint).
     pub entrances: Vec<extraction_core::map::Entrance>,
+    /// Where the sky comes in through what's left of a roof (a ruin's
+    /// hole): each opening's centre at the eaves, building-local, and its
+    /// half extents along x and z. For the sun's shafts (`shafts`).
+    pub skylights: Vec<(Vec3, Vec2)>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -925,7 +929,13 @@ impl Builder {
         let y = eave_y + 0.02;
         match ruin {
             Ruin::Damaged => {
-                // The +X half's front open under the roof's hole.
+                // The +X half's front open under the roof's hole (`w` the
+                // roof's: the walls' insides 0.27 in).
+                let (x0, x1, z0, z1) = (0.0, w * 0.5 - 0.27, -d * 0.5 + 0.27, -d / 6.0);
+                self.geo.skylights.push((
+                    Vec3::new((x0 + x1) * 0.5, y, (z0 + z1) * 0.5),
+                    Vec2::new((x1 - x0) * 0.5, (z1 - z0) * 0.5),
+                ));
                 self.deco(
                     Vec3::new(w * 0.5, 0.04, d),
                     Vec3::new(-w * 0.25, y, 0.0),
@@ -941,6 +951,12 @@ impl Builder {
             // No ceiling to build.
             Ruin::Drowned => {}
             Ruin::Burnt => {
+                // Open from where the front's slopes stop to the back.
+                let (z0, z1) = (-(d + 1.0) / 6.0, d * 0.5 - 0.27);
+                self.geo.skylights.push((
+                    Vec3::new(0.0, y, (z0 + z1) * 0.5),
+                    Vec2::new(w * 0.5 - 0.27, (z1 - z0) * 0.5),
+                ));
                 let n = (d / 1.2).floor() as i32;
                 for k in 0..=n {
                     if k % 3 == 1 {
@@ -1846,6 +1862,11 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
             &[window(d * 0.5)],
         ],
     );
+    // Open to the sky wall to wall.
+    b.geo.skylights.push((
+        Vec3::new(0.0, f + h, 0.0),
+        Vec2::new(x - thick * 0.5, z - thick * 0.5),
+    ));
     // The silt: wall to wall, and through the doorway to the bank.
     let top = f + SILT;
     b.bx(
