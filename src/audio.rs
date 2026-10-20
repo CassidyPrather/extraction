@@ -52,19 +52,82 @@ struct RotorLoop;
 #[derive(Component)]
 struct RainLoop;
 
+/// A roof's own sound in the rain (`acoustics::rain_under`): tin
+/// drumming, a tent's patter.
+#[derive(Component)]
+struct RoofRain(&'static str);
+
+/// The rain bed follows the weather, and where you are: duller and quieter
+/// under a roof (a tin roof drumming over you if there's a recording for
+/// it), gone underground. Eased, so a doorway is a crossfade.
 fn rain_volume(
+    mut commands: Commands,
     conditions: Res<crate::world::weather::Conditions>,
+    listening: Res<Listening>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
     loops: Query<&SampleEffects, With<RainLoop>>,
+    roofs: Query<(&RoofRain, &SampleEffects)>,
     mut volumes: Query<&mut VolumeNode>,
+    mut lowpass: Query<&mut FastLowpassNode>,
+    mut now: Local<Option<(f32, f32)>>,
+    mut drums: Local<HashMap<&'static str, f32>>,
 ) {
+    let rain_db = if conditions.rain < 0.01 {
+        None
+    } else {
+        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt())
+    };
+    let (want_db, want_cut, drum) = crate::acoustics::rain_under(&listening.space);
+    let k = (time.delta_secs() * 2.0).min(1.0);
+    let (db, cut) = now.get_or_insert((want_db, want_cut));
+    *db += (want_db - *db) * k;
+    // Ease the cutoff in octaves.
+    *cut = (cut.log2() + (want_cut.log2() - cut.log2()) * k).exp2();
     for effects in &loops {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            let db = if conditions.rain < 0.01 {
-                -80.0
-            } else {
-                mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt()
+            v.volume = rain_db.map_or(Volume::SILENT, |r| Volume::Decibels(r + *db));
+        }
+        if let Ok(mut lp) = lowpass.get_effect_mut(effects) {
+            if (lp.cutoff_hz - *cut).abs() > 1.0 {
+                lp.cutoff_hz = *cut;
+            }
+        }
+    }
+    // The roof's drumming: started the first time you're under that roof
+    // in the rain, faded in and out after.
+    if let (Some(set), Some(_)) = (drum, rain_db) {
+        if !drums.contains_key(set) && bank.has(set) {
+            drums.insert(set, 0.0);
+            if let Some(sample) = bank.pick(set, &mut rng.0) {
+                commands.spawn((
+                    RoofRain(set),
+                    SamplePlayer::new(sample).looping(),
+                    PlaybackSettings::default(),
+                    sample_effects![VolumeNode {
+                        volume: Volume::SILENT,
+                        ..default()
+                    }],
+                ));
+            }
+        }
+    }
+    for (set, level) in drums.iter_mut() {
+        let target = if drum == Some(*set) && rain_db.is_some() {
+            1.0
+        } else {
+            0.0
+        };
+        *level += (target - *level) * k;
+    }
+    for (roof, effects) in &roofs {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            let level = drums.get(roof.0).copied().unwrap_or(0.0);
+            v.volume = match rain_db {
+                Some(r) if level > 0.01 => Volume::Decibels(r + 20.0 * level.log10()),
+                _ => Volume::SILENT,
             };
-            v.volume = Volume::Decibels(db);
         }
     }
 }
@@ -874,10 +937,16 @@ fn start_ambience(
             RainLoop,
             SamplePlayer::new(sample).looping(),
             PlaybackSettings::default(),
-            sample_effects![VolumeNode {
-                volume: Volume::SILENT,
-                ..default()
-            }],
+            sample_effects![
+                VolumeNode {
+                    volume: Volume::SILENT,
+                    ..default()
+                },
+                FastLowpassNode::<2> {
+                    cutoff_hz: 20_480.0,
+                    ..default()
+                }
+            ],
         ));
     }
     if let Some(sample) = bank.pick(wind, &mut rng.0) {
