@@ -79,7 +79,7 @@ tidying. They took the bins. They took the bicycles. They took Mr Holm.
 
 Keep still when the little flying one looks at you. It sees you move.
 
-Tell Lev I'm not angry.
+Tell Lev I'm not angry. I've written to him as well, for when he comes.
 
 - Mum""", "Village note"),
         ("house_brick", (-20.0, 65.0), "Note", """POST OFFICE - UNDELIVERED
