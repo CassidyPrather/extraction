@@ -794,7 +794,16 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
-            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
+            sneak(
+                me,
+                &mut bot,
+                r,
+                &scene,
+                &mut log,
+                eye,
+                body.swimming,
+                &mut input,
+            );
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1162,6 +1171,7 @@ const DISTRACT_RANGE: f32 = 45.0;
 ///   goes to look there instead.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
+#[allow(clippy::too_many_arguments)]
 fn sneak(
     me: Entity,
     bot: &mut Bot,
@@ -1169,6 +1179,7 @@ fn sneak(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
     let hurrying = bot.sprint
@@ -1227,9 +1238,12 @@ fn sneak(
             }
         }
     }
-    if wary != input.crouch {
-        input.crouch = wary;
-        if wary {
+    // Afloat it ducks too, as a player does: a flooded doorway's head is
+    // a hand over the water.
+    let low = wary || swimming;
+    if low != input.crouch {
+        input.crouch = low;
+        if low {
             r.crouched_since = Some(r.clock);
         } else if let Some(t) = r.crouched_since.take() {
             log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
