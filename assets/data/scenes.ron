@@ -687,7 +687,7 @@
         pieces: [],
         note: Some((
             name: "Pump log, below",
-            text: "PUMP LOG - O. Brabec, the station below\n14 Oct. Buses gone. Somebody has to run the pumps or the village floods with the first rain. Nobody said not to.\n2 Nov. Power off at the board. Not mine. Pumps stopping. Creek coming in at the inlet faster than I can crank.\nIf you're reading this you're wet or it's gone down. Let the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy things are by my locker in the sump. Take the boots, they're good ones. Have the flask.\n- O.B.",
+            text: "PUMP LOG - O. Brabec, below\n2 Nov. Power off at the board. Not mine. Pumps stopping, the creek coming in at the inlet.\nLet the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy boots are by my locker. Take them, and the flask.\n- O.B.",
             at: (0.0, 0.785, 0.0),
             rot: 0.0,
         )),

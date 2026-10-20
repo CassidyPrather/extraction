@@ -492,13 +492,9 @@ the water board's.""", "Sallow gate log"),
 I was seven when the water board moved us up the hill. We watched the
 water come over the bridge a hand a day.
 
-The second winter the machines opened the scours. I could have told
-them which wheel. They didn't ask. The bed came up a hand a day, the
-same.
-
-On the twentieth day the church came out. The clock had stopped at ten
-to four. Our house is the third from the bridge. The door's where it
-was.
+The second winter the machines opened the scours, and it went down a
+hand a day. On the twentieth day the church came out. Our house is the
+third from the bridge.
 
 Don't stand in the churchyard after rain. Things come up there that
 weren't buried.
