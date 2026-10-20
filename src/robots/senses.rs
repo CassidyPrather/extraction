@@ -64,10 +64,10 @@ pub const STILL: f32 = 0.55;
 pub struct MotionSight(pub f32);
 /// Running: more than walking.
 pub const RUNNING: f32 = 1.35;
-/// Daylight a robot's eyes are tuned to, lux (a drizzly day).
-pub const DAYLIGHT: f32 = 1600.0;
-/// Seen through a doorway or window from outside, indoors is dim.
-pub const INDOORS_DIM: f32 = 0.65;
+/// Light: the sky's (`Conditions::light_at`: a day outdoors 1, dusk 0.36,
+/// a room by day 0.3, night 0.04) counts as its square root, so dusk
+/// leaves 0.6 of the day's exposure, a room 0.55, a night 0.2.
+pub const NIGHT_LIGHT: f32 = 0.04;
 /// Within this, a robot sees you whatever: cone, fog, grass.
 pub const POINT_BLANK: f32 = 4.0;
 /// Exposure at which a robot has you: aims, fires, suspicion climbs.
@@ -179,16 +179,15 @@ pub struct SightCase {
     /// How far the robot's eyes reach today (`Conditions::sight`).
     pub reach: f32,
     pub ground_fog: f32,
-    /// Direct sun, lux.
-    pub sun: f32,
+    /// The sky's light where you are, against a day outdoors
+    /// (`Conditions::light_at`; your torch makes it 1).
+    pub light: f32,
     /// The body's height now (`Body::height`).
     pub height: f32,
     /// Horizontal speed, m/s.
     pub speed: f32,
     /// Standing in grass or undergrowth.
     pub cover: bool,
-    /// Indoors, seen from outside.
-    pub indoors: bool,
     /// Angle below the horizontal the robot looks down at you, radians.
     pub depression: f32,
     /// In the dark: how lit you are there (0..1: lamps, your torch). None
@@ -208,9 +207,7 @@ pub fn exposure(c: &SightCase) -> f32 {
     let fog = (-c.ground_fog * FOG_SIGHT * c.distance).exp();
     let light = match c.dark {
         Some(l) => l.clamp(DARK, 1.0),
-        None => {
-            (c.sun / DAYLIGHT).clamp(0.5, 1.3).sqrt() * if c.indoors { INDOORS_DIM } else { 1.0 }
-        }
+        None => c.light.clamp(NIGHT_LIGHT, 1.0).sqrt(),
     };
     let height = if c.height > 0.0 { c.height } else { STANDING };
     let posture = (height / STANDING).clamp(POSTURE_MIN, 1.0);
@@ -351,7 +348,14 @@ pub(crate) fn perceive(
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    lighting: Res<Lighting>,
+    (lighting, doors, cloaks, conditions, zone, entrances): (
+        Res<Lighting>,
+        Query<&crate::world::buildings::Door>,
+        Res<crate::gadgets::Cloaks>,
+        Res<crate::world::weather::Conditions>,
+        Res<Zone>,
+        Res<super::doors::Entrances>,
+    ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
     parts_of: Query<&Children>,
@@ -359,10 +363,6 @@ pub(crate) fn perceive(
     mut steps: MessageReader<Footstep>,
     spatial: SpatialQuery,
     time: Res<Time>,
-    cloaks: Res<crate::gadgets::Cloaks>,
-    conditions: Res<crate::world::weather::Conditions>,
-    zone: Res<Zone>,
-    entrances: Res<super::doors::Entrances>,
     mut noticed: MessageWriter<Noticed>,
 ) {
     let dt = time.delta_secs();
@@ -402,7 +402,8 @@ pub(crate) fn perceive(
         height: f32,
         speed: f32,
         cover: bool,
-        indoors: bool,
+        /// The sky's light on you (`SightCase::light`).
+        light: f32,
         /// In the dark: how lit (see `SightCase::dark`).
         dark: Option<f32>,
         /// A torch on: where, and which way its beam goes.
@@ -458,11 +459,23 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
-                indoors,
+                // Your torch lights you when the sky doesn't.
+                light: if torch.is_some() {
+                    conditions.light_at(indoors).max(TORCH)
+                } else {
+                    conditions.light_at(indoors)
+                },
                 dark,
                 torch,
             }
         })
+        .collect();
+    // Open doorways, for sound to come round.
+    let openings: Vec<Vec3> = entrances
+        .doors
+        .iter()
+        .filter(|e| super::doors::is_open(doors.get(e.door).ok()))
+        .map(|e| e.mid)
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
     for (robot_e, robot, senses, gt, mut aware, stunned, local, motion) in &mut robots {
@@ -499,7 +512,6 @@ pub(crate) fn perceive(
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
-        let robot_indoors = entrances.building_at(eye).is_some();
         if has_eyes {
             for t in &targets {
                 let to = t.head - eye;
@@ -521,17 +533,18 @@ pub(crate) fn perceive(
                     distance: dist,
                     reach,
                     ground_fog: conditions.ground_fog,
-                    sun: conditions.sun,
+                    light: t.light,
                     height: t.height,
                     speed: t.speed,
                     cover: t.cover,
-                    indoors: t.indoors && !robot_indoors,
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
                     dark: t.dark,
                     still: motion.map_or(STILL, |m| m.0),
                 });
-                // In the dark, a torch pointed this way is a light in its eyes.
-                if let (Some(_), Some((at, beam))) = (t.dark, t.torch) {
+                // In the dark (underground, or a dim sky), a torch pointed
+                // this way is a light in its eyes.
+                let dim = t.dark.is_some() || conditions.light_at(false) < 0.5;
+                if let (true, Some((at, beam))) = (dim, t.torch) {
                     let back = (eye - at).normalize_or_zero();
                     if beam.angle_between(back) < TORCH_CONE && dist < TORCH_REACH {
                         e = e.max(TORCH_GLARE * (1.0 - dist / TORCH_REACH).max(0.25));
@@ -593,26 +606,27 @@ pub(crate) fn perceive(
             if d >= reach * if site.is_some() { CORRIDOR } else { 1.0 } {
                 continue;
             }
-            // Through a wall or over a hill it carries less far.
-            let occluded = Dir3::new(ear - s.at - Vec3::Y * HEARD_OVER)
-                .ok()
-                .is_some_and(|dir| {
-                    spatial
-                        .cast_ray(s.at + Vec3::Y * HEARD_OVER, dir, d - 0.5, true, &world)
-                        .is_some()
-                });
+            // Through a wall or over a hill it carries less far; round an
+            // open doorway a little less far. The same rule the player's
+            // ears follow (`acoustics::occlusion`): a sound that's quieter
+            // by `db` carries `10^(db/20)` as far.
+            let occ = crate::acoustics::occlusion(&spatial, &openings, s.at, ear);
+            let occluded = occ.db < 0.0;
             let mut heard_over = d;
             if occluded {
-                let walk = site.filter(|_| corridor_budget > 0).and_then(|l| {
-                    corridor_budget -= 1;
-                    super::indoor::NavRef::Local(l).walk_length(s.at, ear)
-                });
+                let through_wall = occ.db <= crate::acoustics::wall_db() + 0.01;
+                let walk = site
+                    .filter(|_| through_wall && corridor_budget > 0)
+                    .and_then(|l| {
+                        corridor_budget -= 1;
+                        super::indoor::NavRef::Local(l).walk_length(s.at, ear)
+                    });
                 match walk {
                     Some(len) => {
                         reach *= CORRIDOR;
                         heard_over = len;
                     }
-                    None => reach *= OCCLUDED,
+                    None => reach *= 10f32.powf(occ.db / 20.0),
                 }
                 if heard_over >= reach {
                     continue;
@@ -651,11 +665,10 @@ mod tests {
             distance: 30.0,
             reach: 75.0,
             ground_fog: 0.011,
-            sun: 1600.0,
+            light: 1.0,
             height: STANDING,
             speed: 1.4,
             cover: true,
-            indoors: false,
             depression: 0.05,
             dark: None,
             still: STILL,

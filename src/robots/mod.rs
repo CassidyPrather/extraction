@@ -17,6 +17,7 @@ pub mod director;
 pub mod dirigible;
 pub mod doors;
 pub mod drone;
+pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
@@ -236,7 +237,7 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
-            .add_plugins(hound_mind::HoundMindPlugin)
+            .add_plugins((hound_mind::HoundMindPlugin, flee::FleePlugin))
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,
