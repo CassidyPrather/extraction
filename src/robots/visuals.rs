@@ -21,21 +21,24 @@ pub struct RobotVisualsPlugin;
 
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(super::reel::ReelPlugin).add_systems(
-            Update,
-            (
-                (request_models, dress_parts).chain(),
-                spin_rotors,
-                spin_propellers,
-                pose_leg_visuals,
-                dim_dead_eyes,
-                blink_beacons,
-                show_halos,
-                dress_pylon_masts,
-                pylon_work_lights,
-                lock_flares,
-            ),
-        );
+        app.add_plugins((super::reel::ReelPlugin, super::fx::RobotFxPlugin))
+            .add_systems(
+                Update,
+                (
+                    (request_models, dress_parts).chain(),
+                    spin_rotors,
+                    spin_propellers,
+                    pose_leg_visuals,
+                    dim_dead_eyes,
+                    blink_beacons,
+                    show_halos,
+                    dress_pylon_masts,
+                    pylon_work_lights,
+                    lock_flares,
+                    scorch,
+                    dress_debris,
+                ),
+            );
     }
 }
 
@@ -54,6 +57,17 @@ struct RobotMats {
     beacon: Handle<StandardMaterial>,
     /// The soft additive glow round a drone's beacon, flashing with it.
     halo: Handle<StandardMaterial>,
+    /// Shell that has been shot up, and shell that has burnt.
+    scorched: Handle<StandardMaterial>,
+    burnt: Handle<StandardMaterial>,
+}
+
+/// A shell mesh of `part` (a `RobotPart`, or a piece of `Debris`), which
+/// scorches as the part is shot up and burns when the robot is wrecked.
+#[derive(Component)]
+struct Skin {
+    part: Entity,
+    level: u8,
 }
 
 /// A beacon's halo shell, hidden when its part dies.
@@ -143,6 +157,18 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             unlit: true,
             // A lamp in fog: the glow is what's left when the drone is gone.
             fog_enabled: false,
+            ..default()
+        }),
+        scorched: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.36, 0.34, 0.32),
+            perceptual_roughness: 0.75,
+            metallic: 0.2,
+            ..default()
+        }),
+        burnt: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.07, 0.065, 0.06),
+            perceptual_roughness: 0.9,
+            metallic: 0.35,
             ..default()
         }),
     }
@@ -450,6 +476,10 @@ fn attach(
         // Eyes and glowing seams go dark with their part.
         if matches!(p.material.as_deref(), Some("Eye" | "Glow" | "Beacon")) {
             ec.insert(Eye { part });
+        }
+        // Shell scorches with its part.
+        if p.material.as_deref() == Some("Shell") {
+            ec.insert(Skin { part, level: 0 });
         }
     }
 }
@@ -785,6 +815,7 @@ fn dim_dead_eyes(
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
     parts: Query<&RobotPart>,
     robots: Query<&Robot>,
+    debris: Query<(), With<super::wreck::Debris>>,
     mats: Option<Res<RobotMats>>,
     mut commands: Commands,
 ) {
@@ -792,9 +823,10 @@ fn dim_dead_eyes(
         return;
     };
     for (e, eye, mat) in &eyes {
-        let dead = parts
-            .get(eye.part)
-            .is_ok_and(|part| !part.alive() || robots.get(part.robot).is_ok_and(|r| r.wrecked));
+        let dead = debris.contains(eye.part)
+            || parts
+                .get(eye.part)
+                .is_ok_and(|part| !part.alive() || robots.get(part.robot).is_ok_and(|r| r.wrecked));
         if dead && mat.0 != m.eye_dead {
             commands
                 .entity(e)
@@ -1059,4 +1091,219 @@ mod beacon_tests {
         let again = beacon_level(BEACON_PERIOD * 3.0 + BEACON_FLASH * 0.5);
         assert!((again - 1.0).abs() < 1e-3, "periodic: {again}");
     }
+}
+
+/// Shell goes grey and matt as its part is shot up, and black when it's
+/// destroyed or the robot is wrecked (the core burns; the rest scorches).
+fn scorch(
+    mut commands: Commands,
+    mut skins: Query<(Entity, &mut Skin)>,
+    parts: Query<&RobotPart>,
+    debris: Query<(), With<super::wreck::Debris>>,
+    robots: Query<&Robot>,
+    mats: Option<Res<RobotMats>>,
+) {
+    let Some(m) = mats else {
+        return;
+    };
+    for (e, mut skin) in &mut skins {
+        let level = if let Ok(part) = parts.get(skin.part) {
+            let wrecked = robots.get(part.robot).is_ok_and(|r| r.wrecked);
+            let hurt = part.hp / part.max_hp.max(1.0);
+            // A wrecked core is scorched all over and burnt black in
+            // patches (one panel in four, by the mesh), so it still reads
+            // as a robot's shell.
+            let patch = e.index_u32().wrapping_mul(2_654_435_761) >> 30 == 0;
+            if hurt <= 0.0 && part.role != PartRole::Core
+                || (wrecked && part.role == PartRole::Core && patch)
+            {
+                2
+            } else if hurt < 0.5 || wrecked {
+                1
+            } else {
+                0
+            }
+        } else if debris.contains(skin.part) {
+            1
+        } else {
+            continue;
+        };
+        if level <= skin.level {
+            continue;
+        }
+        skin.level = level;
+        let mat = if level == 2 {
+            m.burnt.clone()
+        } else {
+            m.scorched.clone()
+        };
+        commands.entity(e).insert(MeshMaterial3d(mat));
+    }
+}
+
+/// Dresses a loose piece of wreck from its robot's model (or a primitive).
+#[allow(clippy::too_many_arguments)]
+fn dress_debris(
+    mut commands: Commands,
+    pieces: Query<(Entity, &super::wreck::Debris), Added<super::wreck::Debris>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<Models>,
+    gltfs: Res<Assets<Gltf>>,
+    nodes: Res<Assets<GltfNode>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    existing: Option<Res<RobotMats>>,
+) {
+    use super::wreck::Piece;
+    if pieces.is_empty() {
+        return;
+    }
+    let m = match existing {
+        Some(m) => m.clone(),
+        None => {
+            let m = mats(&mut materials);
+            commands.insert_resource(m.clone());
+            m
+        }
+    };
+    for (e, d) in &pieces {
+        let model = models.request(model_path(d.kind), &server).and_then(|h| {
+            match Models::state(&h, &server, &gltfs) {
+                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+                _ => None,
+            }
+        });
+        let mut mat = |name: Option<&str>| {
+            robot_material(name, &m, &mut model_mats, &mut lib, &server, &mut materials)
+        };
+        let node = |name: &str| model.as_deref().and_then(|n| ModelNode::find(n, name));
+        let dressed = match d.piece {
+            Piece::LegUpper | Piece::LegLower => {
+                let (name, len) = if d.piece == Piece::LegUpper {
+                    ("leg_upper", super::walker::UPPER)
+                } else {
+                    ("leg_lower", super::walker::LOWER)
+                };
+                node(name).map(|n| {
+                    // The model runs +Y from its near joint; the piece is
+                    // centred on the segment.
+                    attach(
+                        &mut commands,
+                        e,
+                        n,
+                        Transform::from_translation(Vec3::NEG_Y * len * 0.5),
+                        e,
+                        &mut mat,
+                    );
+                })
+            }
+            Piece::Turret => node("turret").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
+            Piece::Rotor => node("rotor").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+                if let (Some(b), Some(r)) = (node("blades"), node("rotor")) {
+                    attach(
+                        &mut commands,
+                        e,
+                        b,
+                        Transform::from_translation(
+                            b.transform.translation - r.transform.translation,
+                        ),
+                        e,
+                        &mut mat,
+                    );
+                }
+            }),
+            Piece::Panel(_) => None,
+        };
+        if dressed.is_some() {
+            continue;
+        }
+        // Primitives: the panel always (a curved plate, shell outside and
+        // dark inside), the rest when there's no model.
+        match d.piece {
+            Piece::Panel(k) => {
+                let (w, l) = if k == 2 { (0.22, 0.18) } else { (0.3, 0.24) };
+                commands.spawn((
+                    Mesh3d(meshes.add(panel_mesh(w, l, 0.42))),
+                    MeshMaterial3d(m.scorched.clone()),
+                    ChildOf(e),
+                ));
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(w * 0.92, 0.012, l * 0.92))),
+                    MeshMaterial3d(m.dark.clone()),
+                    Transform::from_xyz(0.0, -0.012, 0.0),
+                    ChildOf(e),
+                ));
+            }
+            Piece::LegUpper | Piece::LegLower => {
+                let (r, len) = if d.piece == Piece::LegUpper {
+                    (0.06, super::walker::UPPER)
+                } else {
+                    (0.045, super::walker::LOWER)
+                };
+                commands.spawn((
+                    Mesh3d(meshes.add(Capsule3d::new(r, len - 2.0 * r))),
+                    MeshMaterial3d(m.scorched.clone()),
+                    ChildOf(e),
+                ));
+            }
+            Piece::Turret => {
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.16, 0.1, 0.36))),
+                    MeshMaterial3d(m.scorched.clone()),
+                    ChildOf(e),
+                ));
+            }
+            Piece::Rotor => {
+                commands.spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.15, 0.01))),
+                    MeshMaterial3d(m.dark.clone()),
+                    ChildOf(e),
+                ));
+            }
+        }
+    }
+}
+
+/// A curved shell plate `w` x `l`, bulging up (+Y) as a piece of a sphere
+/// of radius `r`, its middle at the origin.
+fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
+    const N: usize = 6;
+    let mut pos = Vec::new();
+    let mut nrm = Vec::new();
+    let mut uv = Vec::new();
+    for j in 0..=N {
+        for i in 0..=N {
+            let x = (i as f32 / N as f32 - 0.5) * w;
+            let z = (j as f32 / N as f32 - 0.5) * l;
+            let p = Vec3::new(x, r, z).normalize() * r - Vec3::Y * r;
+            let n = (p + Vec3::Y * r).normalize();
+            pos.push(p.to_array());
+            nrm.push(n.to_array());
+            uv.push([i as f32 / N as f32, j as f32 / N as f32]);
+        }
+    }
+    let mut idx = Vec::new();
+    for j in 0..N {
+        for i in 0..N {
+            let a = (j * (N + 1) + i) as u32;
+            let b = a + 1;
+            let c = a + (N + 1) as u32;
+            let d = c + 1;
+            idx.extend_from_slice(&[a, c, b, b, c, d]);
+        }
+    }
+    Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(bevy::mesh::Indices::U32(idx))
 }

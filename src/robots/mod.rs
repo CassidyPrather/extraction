@@ -15,11 +15,13 @@ pub mod dirigible;
 pub mod doors;
 pub mod drone;
 pub mod flight;
+pub mod fx;
 pub mod grappler;
 pub mod pylon;
 pub mod reel;
 pub mod visuals;
 pub mod walker;
+pub mod wreck;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -190,6 +192,7 @@ impl Plugin for RobotsPlugin {
                 pylon::PylonPlugin,
                 anim::AnimPlugin,
                 flight::FlightPlugin,
+                wreck::WreckPlugin,
             ))
             .add_systems(
                 FixedUpdate,
