@@ -131,7 +131,9 @@ fn debris_body(mass: f32, collider: Collider, inertia: Vec3) -> impl Bundle {
         Restitution::new(0.15),
         LinearDamping(0.15),
         AngularDamping(0.6),
-        CollisionLayers::new(Layer::Robot, [Layer::World, Layer::Robot, Layer::Item]),
+        // Item, not Robot: bullets and hands still meet it, but the
+        // player's move-and-slide (World and Robot) walks through it.
+        CollisionLayers::new(Layer::Item, [Layer::World, Layer::Robot, Layer::Item]),
         Settling::default(),
         Visibility::default(),
     )
@@ -740,6 +742,21 @@ mod tests {
                 app.world().get::<RigidBody>(e),
                 Some(&RigidBody::Static),
                 "at rest"
+            );
+        }
+        // The pieces don't stop the player: their move-and-slide casts
+        // against World and Robot, and debris is neither.
+        let walks = LayerMask::from([Layer::World, Layer::Robot]);
+        for e in &pieces {
+            let layers = app.world().get::<CollisionLayers>(*e).unwrap();
+            assert_eq!(
+                layers.memberships & walks,
+                LayerMask::NONE,
+                "debris in the way"
+            );
+            assert!(
+                layers.memberships.has_all(Layer::Item),
+                "bullets still meet it"
             );
         }
         // And the wreck is still a robot, still wrecked, to loot.
