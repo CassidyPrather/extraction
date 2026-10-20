@@ -35,6 +35,18 @@ water, a building or another anomaly's heart, it swings round a sixth of a
 turn at a time until it finds open ground. Its shard hangs in the fold
 unmoved: throw something in, then reach in while it's still closing.
 
+## The Surge
+
+Through the five minutes' warning every anomaly stirs: it swells (up to
+30% wider), charges and recharges up to three times as fast, burns
+hotter, and flares on its own beat, harder as the Surge nears. At 240,
+170, 110, 60 and 25 seconds out a new anomaly blooms round whoever is
+still out: 10 to 25 m off, to the side of the way they're heading (50 to
+130 degrees off it), never on or by a road, and clear of the others. Each
+spends its first four seconds forming, lit up and harmless, so you see it
+open before it can hurt you. Keep to the road and you get through.
+Rules: `extraction_core::anomaly::surge_*`; game side `src/anomaly/surge.rs`.
+
 ## Finding them
 
 - **Throw something in.** A bolt (junk, found in tool boxes and

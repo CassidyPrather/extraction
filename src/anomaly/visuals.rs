@@ -791,16 +791,24 @@ fn pulse(
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    agitation: Option<Res<super::surge::Agitation>>,
     time: Res<Time>,
 ) {
     let t = time.elapsed_secs();
     let dt = time.delta_secs();
     let eye = eye_position(&heads, &locals, &cams);
+    let stirred = agitation.map_or(0.0, |a| a.0);
     for (e, a, touched, mut look, gt, children) in &mut anomalies {
         look.flash = (look.flash - dt * 2.5).max(0.0);
         look.reveal = (touched.revealed / REVEAL_TIME).clamp(0.0, 1.0);
         let seed = (e.index_u32() % 97) as f32 * 0.37;
         look.flicker = flicker(a.kind, t, a.charge, seed);
+        // With the Surge coming they flare, each on its own beat, harder
+        // and more often as it nears.
+        if stirred > 0.0 {
+            let beat = (t * (1.5 + 2.0 * stirred) + seed * 3.0).sin();
+            look.flash = look.flash.max(stirred * 0.6 * beat.max(0.0).powi(3));
+        }
         // Only the near ones get their materials touched.
         if eye.is_some_and(|p| p.distance(gt.translation()) > 100.0) {
             continue;
@@ -826,6 +834,9 @@ fn pulse(
                 && let Some(mut mat) = particle_mats.get_mut(&m.0)
             {
                 mat.params.state.x = a.charge;
+                // The Surge swells them.
+                mat.params.mode.y = a.radius;
+                mat.params.mode.z = a.kind.reach(a.radius);
                 mat.params.state.y = look.reveal;
                 mat.params.state.z = look.flash;
                 let b = 0.45 + 0.55 * lift;
