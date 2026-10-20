@@ -266,6 +266,38 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                     m.wall
                 };
                 b.bx(size, centre, mat);
+                // Where it stopped short at a mouth, the wall across the
+                // mouth fills the corner, but only as high as its own
+                // band: fill on up to this wall's top (a lower corridor
+                // into a tall room left a slit of sky there).
+                for (beyond, from) in [
+                    (s0.checked_sub(1), s0 as f32 * cell),
+                    ((s < len).then_some(s), s as f32 * cell - WALL),
+                ] {
+                    let Some(q) = beyond else { continue };
+                    if !(vertical && edge(t, q) == Edge::Open) {
+                        continue;
+                    }
+                    let (p, o) = sides(t, q);
+                    let Some((pi, pj)) = (if side < 0 { o } else { p }) else {
+                        continue;
+                    };
+                    let Some((_, top)) = extent(r, pi, pj) else {
+                        continue;
+                    };
+                    if hi <= top + 0.01 {
+                        continue;
+                    }
+                    b.bx(
+                        Vec3::new(WALL, hi - top, WALL),
+                        Vec3::new(
+                            r.origin[0] + off,
+                            (top + hi) * 0.5,
+                            r.origin[1] + from + WALL * 0.5,
+                        ),
+                        mat,
+                    );
+                }
             }
             // Lintels: open both sides, ceilings at different heights.
             let mut s = 0;
@@ -601,7 +633,10 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                                 Vec2::new(hi.x - 0.08, lo.y + s),
                             )
                         };
-                        if !r.at(p.to_array()).flat() || !r.at(q.to_array()).flat() {
+                        // In the corridor itself, not where it runs on
+                        // through a room to the room's centre.
+                        let hall = |p: Vec2| matches!(r.at(p.to_array()), Cell::Hall(_));
+                        if !hall(p) || !hall(q) {
                             continue;
                         }
                         let h = r.ceil[r.cell_of(p.to_array()).map_or(0, |(i, j)| j * r.nx + i)];
@@ -771,7 +806,8 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
         }
         PropKind::Rubble => {
             // Slabs and lumps fallen from the ceiling: one low collider,
-            // the pieces drawn tumbled over it.
+            // the pieces drawn tumbled over it (the `rubble` model once in).
+            let from = b.geo.pieces.len();
             b.piece(
                 Shape::Box(Vec3::new(1.2, 0.45, 1.0)),
                 Transform::from_translation(at + Vec3::Y * 0.225).with_rotation(rot),
@@ -797,6 +833,10 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                     false,
                 );
             }
+            b.dress(
+                from,
+                vec![("rubble", Transform::from_translation(at).with_rotation(rot))],
+            );
         }
         PropKind::Cart => {
             let from = b.geo.pieces.len();
@@ -1280,11 +1320,17 @@ mod tests {
             for (site, xf) in sites {
                 let r = ug::raster(&site.id).unwrap();
                 let mut from = Vec::new();
-                for j in (0..r.nz).step_by(4) {
-                    for i in (0..r.nx).step_by(4) {
+                // Every half metre, at head height and just under the
+                // ceiling (where a slit between a lintel and a wall would
+                // be).
+                for j in (0..r.nz).step_by(2) {
+                    for i in (0..r.nx).step_by(2) {
                         if r.get(i, j).flat() {
                             let c = r.centre(i, j);
-                            from.push(xf.transform_point(Vec3::new(c[0], r.floor + 1.5, c[1])));
+                            let top = r.ceil[j * r.nx + i] - 0.15;
+                            for y in [1.5, top] {
+                                from.push(xf.transform_point(Vec3::new(c[0], r.floor + y, c[1])));
+                            }
                         }
                     }
                 }

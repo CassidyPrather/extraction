@@ -12,6 +12,9 @@ Each fills the collider box the Rust recipe uses:
                    0.7 x 1.4 from 0.25 to 0.95, four flanged wheels
 - `bulkhead_lamp`  the lamp fitting on a ceiling, origin at the ceiling,
                    hanging down 0.15 (the light is the game's)
+- `rubble`         fallen ceiling (`PropKind::Rubble`): broken slabs and
+                   lumps heaped over the 1.2 x 0.45 x 1.0 collider, a
+                   few bent rebars out of them, spill round its foot
 
 Materials: Painted, Iron, Rusty, Zinc, Cast, Glass, Yellow, Black, Concrete.
 """
@@ -120,7 +123,41 @@ def bulkhead_lamp():
     return [p]
 
 
+# --- Rubble ----------------------------------------------------------------------------------
+
+def rubble():
+    w = Wear(47)
+    p = Part("static")
+    # A mound of fines and dust under it all.
+    p.lathe([(0.0, 0.0), (0.6, 0.0), (0.45, 0.16), (0.22, 0.28), (0.0, 0.31)], "Concrete",
+            segs=14, xf=UP, smooth=True)
+    # Slabs leaning on the heap, lumps on and round it: each a box turned
+    # every way, no two at the same height or angle.
+    slabs = [
+        ((0.7, 0.09, 0.5), (-0.2, 0.32, -0.1), 0.25, 0.4, -0.3),
+        ((0.55, 0.08, 0.45), (0.3, 0.22, 0.2), -0.35, -0.2, 0.9),
+        ((0.5, 0.1, 0.35), (0.05, 0.45, 0.1), 0.15, -0.1, 0.2),
+    ]
+    for size, at, tilt, roll, yaw in slabs:
+        board(p, size, at, "Concrete", bevel=0.012, tilt=tilt, roll=roll, yaw=yaw)
+    for k in range(14):
+        a = k * 2.4 + w.j(0.3)
+        r = 0.15 + 0.5 * ((k * 7) % 10) / 10.0
+        s = 0.07 + 0.1 * ((k * 3) % 5) / 5.0
+        x, z = math.cos(a) * r * 0.9, math.sin(a) * r * 0.75
+        y = max(s * 0.5, 0.42 - r * 0.6) + w.j(0.02)
+        board(p, (s * 1.3, s, s * 1.1), (x, y, z), "Concrete", bevel=0.01,
+              tilt=w.j(0.6), roll=w.j(0.6), yaw=a)
+    # Rebar out of the broken edges.
+    for (a, b) in (((-0.3, 0.36, -0.2), (-0.45, 0.5, -0.28)),
+                   ((0.25, 0.3, 0.25), (0.38, 0.42, 0.34)),
+                   ((0.0, 0.48, 0.05), (0.04, 0.66, -0.04))):
+        rod(p, a, b, 0.007, "Rusty", segs=6)
+    return [p]
+
+
 prop("filter_unit", filter_unit)
 prop("switch_cabinet", switch_cabinet)
 prop("mine_tub", mine_tub)
 prop("bulkhead_lamp", bulkhead_lamp)
+prop("rubble", rubble)
