@@ -306,10 +306,19 @@ mod tangent_tests {
             _ => panic!("tangents"),
         };
         let w = 65;
+        // (A vertex in a hole over an underground stair is in no
+        // triangle: mikktspace leaves it alone.)
+        let mut used = vec![false; ours.len()];
+        for k in mesh.indices().expect("indexed").iter() {
+            used[k] = true;
+        }
         let (mut worst, mut sum, mut count) = (1.0f32, 0.0f32, 0.0f32);
         for j in 2..w - 2 {
             for i in 2..w - 2 {
                 let k = j * w + i;
+                if !used[k] {
+                    continue;
+                }
                 let (a, b) = (Vec4::from(ours[k]), Vec4::from(theirs[k]));
                 assert_eq!(a.w, b.w, "handedness at {i},{j}");
                 let cos = a.truncate().dot(b.truncate().normalize());
