@@ -39,7 +39,7 @@ impl Plugin for TrailerPlugin {
                 Update,
                 (direct, aim).chain().after(crate::sim::raider::think),
             )
-            .add_systems(Update, (show_body, dress_body));
+            .add_systems(Update, (show_body, dress_body, quiet_head));
     }
 }
 
@@ -84,6 +84,8 @@ struct Director {
     last_walk: f32,
     in_flight: usize,
     done: bool,
+    /// Seconds to the next position line in the log (`RUST_LOG=...=debug`).
+    log_in: f32,
 }
 
 impl Director {
@@ -183,6 +185,14 @@ fn direct(
             ))
             .id();
         d.drone = Some((cam, image));
+        // The chase camera, in the window. (No `--camera`: that would place
+        // the bot where it stands rather than in the truck.)
+        commands.spawn((
+            Name::new("Chase camera"),
+            FreeCamera,
+            crate::render::camera_bundle(&weather),
+            Transform::from_xyz(0.0, 100.0, 0.0),
+        ));
         d.budget = opts
             .capture
             .trailer
@@ -349,6 +359,16 @@ fn show_body(
     }
 }
 
+/// The flat driver gives the bot's head a camera; the chase camera has
+/// the window.
+fn quiet_head(mut heads: Query<&mut Camera, (With<RigHead>, Without<FreeCamera>)>) {
+    for mut c in &mut heads {
+        if c.is_active {
+            c.is_active = false;
+        }
+    }
+}
+
 /// And dressed: the proxy's plain white in a field jacket's drab.
 fn dress_body(
     mut commands: Commands,
@@ -381,8 +401,8 @@ fn dress_body(
 
 /// Points the cameras: the chase camera eases to a spot behind and above
 /// the bot's shoulder (pulled in where a wall or the ground is in the
-/// way), looking a little ahead of it; the drone circles 20 m up and
-/// 16 m out, looking down at it.
+/// way), looking a little ahead of it; the drone circles 30 m up and
+/// 18 m out (higher over a crown), looking down at it.
 #[allow(clippy::too_many_arguments)]
 fn aim(
     mut dir: ResMut<Director>,
@@ -399,6 +419,7 @@ fn aim(
         &mut Transform,
         (With<DroneCamera>, Without<FreeCamera>, Without<LocalPlayer>),
     >,
+    mut trees: Local<Option<super::cinematic::Trees>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -440,10 +461,23 @@ fn aim(
     if let Ok(mut c) = chase.single_mut() {
         *c = Transform::from_translation(at).looking_at(eye + flat * 5.0 - Vec3::Y * 0.4, Vec3::Y);
     }
-    // Drone: a slow circle, eased behind.
+    d.log_in -= dt;
+    if d.log_in <= 0.0 {
+        d.log_in = 5.0;
+        debug!(
+            "trailer: t {:.1} body {:.1} eye {:.1} chase {:.1}",
+            d.t, body.translation, eye, at
+        );
+    }
+    // Drone: a slow circle over the canopy, eased behind; it climbs over
+    // any crown in its way.
     d.drone_angle += dt * 7f32.to_radians();
     let a = d.drone_angle;
-    let want = eye + Vec3::new(a.sin(), 0.0, a.cos()) * 16.0 + Vec3::Y * 20.0;
+    let mut want = eye + Vec3::new(a.sin(), 0.0, a.cos()) * 18.0 + Vec3::Y * 30.0;
+    let trees = trees.get_or_insert_with(|| super::cinematic::Trees::new(&zone));
+    while trees.hits(want, super::cinematic::CROWN + 2.0) && want.y < eye.y + 60.0 {
+        want.y += 2.0;
+    }
     let k = 1.0 - (-dt / 1.2).exp();
     let at = d.drone_at.map_or(want, |p| p.lerp(want, k));
     let at = Vec3::new(at.x, at.y.max(zone.ground(at.x, at.z) + 8.0), at.z);
