@@ -487,8 +487,10 @@ impl Firearm {
             }
         }
         if self.locked_back && to < 1.0 {
-            // Tugging the slide back off the stop releases it.
+            // Tugging the slide back off the stop releases it, and it
+            // strips a round on the way home as if the stop had.
             self.locked_back = false;
+            self.stroke_cleared = true;
         }
         if to > from {
             if from < COCK_AT && to >= COCK_AT {
@@ -555,6 +557,15 @@ impl Firearm {
                 self.set_bolt_travel(0.0)
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// A hand tugs a locked-back slide or bolt rearward, off its stop: let
+    /// go, it runs home ([`Self::release_bolt`]) and strips a round.
+    pub fn take_off_stop(&mut self) {
+        if self.locked_back {
+            self.locked_back = false;
+            self.stroke_cleared = true;
         }
     }
 
@@ -1069,6 +1080,36 @@ mod tests {
         let ev = rack(&mut gun);
         assert!(ev.contains(&Event::Ejected(Round::Spent)), "{ev:?}");
         assert!(ev.contains(&Event::Ejected(Round::Live)), "{ev:?}");
+    }
+
+    /// A slide locked back on an empty magazine, a fresh one in, and the
+    /// slide tugged and ridden home by hand: it chambers, as the stop does.
+    #[test]
+    fn riding_a_locked_slide_home_chambers() {
+        let mut gun = Firearm::new(pistol(), 1.0);
+        gun.cycle_mode();
+        gun.insert_magazine(mag("pm", 1)).unwrap();
+        rack(&mut gun);
+        assert!(fired(&shoot(&mut gun)));
+        assert!(gun.locked_back);
+        gun.remove_magazine();
+        gun.insert_magazine(mag("pm", 8)).unwrap();
+        let mut ev = Vec::new();
+        for t in [0.95, 0.6, 0.3, 0.0] {
+            ev.extend(gun.set_bolt_travel(t));
+        }
+        assert!(ev.contains(&Event::Chambered), "{ev:?}");
+        // Or the slingshot: a tug off the stop and let go.
+        assert!(fired(&shoot(&mut gun)));
+        gun.remove_magazine();
+        gun.insert_magazine(mag("pm", 0)).unwrap();
+        while !gun.locked_back {
+            shoot(&mut gun);
+        }
+        gun.remove_magazine();
+        gun.insert_magazine(mag("pm", 8)).unwrap();
+        gun.take_off_stop();
+        assert!(gun.release_bolt().contains(&Event::Chambered));
     }
 
     #[test]

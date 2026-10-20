@@ -486,7 +486,10 @@ mod vr_tests {
             .entity_mut(gun)
             .insert(avian3d::prelude::RigidBody::Static);
         let grip = vr.point(gun, |r| *r == GripRole::Primary);
-        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        // Turn the hand by the grip's rake, as a wrist does, so the bore
+        // starts level.
+        let rake = vr.app.world().get::<Gun>(gun).unwrap().layout.grip.rotation;
+        vr.hand(Side::Right, grip, rake, 1.0, 0.0);
         vr.step(3);
         vr.app
             .world_mut()
@@ -827,6 +830,91 @@ mod vr_tests {
         r.vr.step(2);
         assert!(gun_mut(&mut r).firearm.is_closed());
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 2);
+    }
+
+    /// The SKS by hand: rack it empty and it holds open; a clip pushed down
+    /// the guide fills it; a tug on the handle runs it home on a round; ten
+    /// shots and it holds open again; a loose round thumbed in goes in.
+    #[test]
+    fn the_sks_by_hand_clip_shots_hold_open_and_a_loose_round() {
+        let mut r = hold("sks", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            let f = &mut g.firearm;
+            while f.fire_mode() != FireMode::Semi {
+                f.cycle_mode();
+            }
+            f.condition = 1.0;
+            f.fouling = 0.0;
+        }
+        rack(&mut r);
+        assert!(gun_mut(&mut r).firearm.locked_back, "held open, empty");
+        take(&mut r, "sks_clip", 10);
+        let (port, up) = load_port(&mut r);
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, port + up * 0.05, 15);
+        glide(&mut r, port + up * 0.05, port + up * 0.015, 8);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 10, "stripped");
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(2);
+        rack(&mut r);
+        assert_eq!(
+            gun_mut(&mut r).firearm.chambers[0],
+            Some(extraction_core::firearm::Round::Live),
+            "a tug off the stop runs it home on a round"
+        );
+        let n = fire(&mut r, 10, true).len();
+        assert_eq!(n, 10);
+        assert!(
+            gun_mut(&mut r).firearm.locked_back,
+            "holds open on the last"
+        );
+        take(&mut r, "round_762x39", 1);
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        let (port, _) = load_port(&mut r);
+        glide(&mut r, away, port, 15);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 1, "thumbed in");
+    }
+
+    /// The AK by hand: a magazine brought up into the well seats; rack;
+    /// it fires.
+    #[test]
+    fn an_ak_magazine_goes_in_by_hand() {
+        let mut r = hold("ak74", false, false);
+        let mag = take(&mut r, "ak_mag", 30);
+        let well = {
+            let g = gun_mut(&mut r);
+            let w = g.magwell.unwrap();
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(w)
+                .unwrap()
+                .translation()
+        };
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, well - Vec3::Y * 0.25, 15);
+        glide(&mut r, well - Vec3::Y * 0.25, well, 30);
+        r.vr.step(5);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        assert!(
+            r.vr.app
+                .world()
+                .get::<crate::interact::InSocket>(mag)
+                .is_some(),
+            "seated"
+        );
+        {
+            let mut g = gun_mut(&mut r);
+            let f = &mut g.firearm;
+            while f.fire_mode() != FireMode::Semi {
+                f.cycle_mode();
+            }
+        }
+        rack(&mut r);
+        assert_eq!(fire(&mut r, 1, true).len(), 1);
     }
 
     /// A double feed on the pistol: racking does nothing with the magazine
