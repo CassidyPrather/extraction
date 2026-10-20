@@ -13,17 +13,20 @@
         (id: "stair_foot", at: (0.0, 12.0), size: (6.0, 4.0), height: 3.0, props: [
             (kind: Barrel, at: (2.4, 1.3)),
             (kind: Cart, at: (-1.8, 0.9)),
+            (kind: SmallCrate, at: (1.8, -1.3), loot: Some("food_common")),
         ]),
         // The flue passage: too hot to cross till it's vented.
         (id: "flue_passage", at: (0.0, 24.0), size: (3.0, 16.0), height: 3.0),
         // The vent room: the flue's damper lever.
         (id: "vent_room", at: (9.0, 20.0), size: (4.0, 4.0), height: 2.6, props: [
             (kind: Machine, at: (-0.6, 1.2)),
+            (kind: Shelf, at: (0.6, 1.75), rot: 180.0, loot: Some("tools")),
         ]),
         // The burner gallery: hot, and the Burners breed here.
         (id: "burner_gallery", at: (-10.0, 24.0), size: (6.0, 8.0), height: 3.0, props: [
             (kind: Rubble, at: (-1.8, -2.6)),
             (kind: Crate, at: (-1.8, 2.8), loot: Some("tools")),
+            (kind: SmallCrate, at: (1.9, -2.8), loot: Some("ammo_common")),
         ]),
         // The coal store, behind the flue.
         (id: "coal_store", at: (10.0, 30.0), size: (4.0, 4.0), height: 2.6, props: [
@@ -33,6 +36,7 @@
         // The near ledge over the ash pit: the crane's home.
         (id: "near_ledge", at: (0.0, 38.0), size: (8.0, 4.0), height: 4.0, props: [
             (kind: Barrel, at: (-1.6, -1.5)),
+            (kind: Crate, at: (-2.6, -1.4), loot: Some("workshop")),
         ]),
         // The ash pit: six metres down, still hot enough to kill.
         (id: "ash_pit", at: (0.0, 46.0), size: (8.0, 12.0), floor: Some(-13.0), height: 10.0, pit: true),
@@ -78,6 +82,6 @@
     portals: [
         (),
         // The ash hoist's stair, up from the burner gallery to the yard.
-        (at: (-26.0, 24.0), rot: 270.0, y: 0.0),
+        (at: (-26.0, 24.0), rot: 270.0, y: 1.1),
     ],
 )

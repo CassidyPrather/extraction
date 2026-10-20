@@ -395,7 +395,20 @@ fn plan_site(
                         && !levels[c as usize * n + a as usize].is_nan()
                 })
             });
-            if clear {
+            // A pit's floor, or heat nothing crosses: not a way at all.
+            let p = grid.centre(i, j);
+            let barred = r.cell_of(p).is_some_and(|(a, c)| {
+                let k = c * r.nx + a;
+                r.pit[k]
+                    || r.heat[k].is_some_and(|z| {
+                        extraction_core::underground::layout(&b.prefab).is_some_and(|l| {
+                            l.heat[z as usize].level >= extraction_core::underground::SCORCHING
+                        })
+                    })
+            });
+            if barred {
+                grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
+            } else if clear {
                 // Wading is slow; deep enough to swim, slower.
                 let w = r.water_at(grid.centre(i, j));
                 grid.cost[j * n + i] = if w >= extraction_core::underground::DEEP {

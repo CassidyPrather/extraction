@@ -147,6 +147,7 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     let mut b = Builder::default();
     walls(&mut b, r, &m);
     slabs(&mut b, r, &m);
+    drops(&mut b, r, &m);
     for k in 0..r.portals.len() {
         stair(&mut b, r, k, &m);
     }
@@ -214,6 +215,69 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     // Last, so each door can swing clear of what's there.
     doors(&mut b, l, r, &m);
     b.finish()
+}
+
+/// Where neighbouring floors differ by more than a step (a pit's edge),
+/// the face between them, merged into runs.
+fn drops(b: &mut Builder, r: &Raster, m: &Mats) {
+    let cell = ug::CELL;
+    for vertical in [false, true] {
+        // Edge s on line t, between cells a (below/left) and c.
+        let (lines, len) = if vertical { (r.nx, r.nz) } else { (r.nz, r.nx) };
+        for t in 1..lines {
+            let mut run: Option<(usize, f32, f32)> = None;
+            for s in 0..=len {
+                let face = (s < len)
+                    .then(|| {
+                        let (a, c) = if vertical {
+                            ((t - 1, s), (t, s))
+                        } else {
+                            ((s, t - 1), (s, t))
+                        };
+                        let (ka, kc) = (a.1 * r.nx + a.0, c.1 * r.nx + c.0);
+                        (r.get(a.0, a.1).flat() && r.get(c.0, c.1).flat())
+                            .then(|| {
+                                (
+                                    r.floors[ka].min(r.floors[kc]),
+                                    r.floors[ka].max(r.floors[kc]),
+                                )
+                            })
+                            .filter(|(lo, hi)| hi - lo > 0.3)
+                    })
+                    .flatten();
+                match (run, face) {
+                    (Some((s0, lo, hi)), Some((l2, h2)))
+                        if (lo - l2).abs() < 1e-3 && (hi - h2).abs() < 1e-3 =>
+                    {
+                        let _ = s0;
+                    }
+                    _ => {
+                        if let Some((s0, lo, hi)) = run.take() {
+                            let along = (s - s0) as f32 * cell;
+                            let mid = s0 as f32 * cell + along * 0.5;
+                            let line = t as f32 * cell;
+                            let (x, z, size) = if vertical {
+                                (line, mid, Vec3::new(0.12, hi - lo, along))
+                            } else {
+                                (mid, line, Vec3::new(along, hi - lo, 0.12))
+                            };
+                            b.piece(
+                                Shape::Box(size),
+                                Transform::from_xyz(
+                                    r.origin[0] + x,
+                                    (lo + hi) * 0.5,
+                                    r.origin[1] + z,
+                                ),
+                                m.wall,
+                                true,
+                            );
+                        }
+                        run = face.map(|(lo, hi)| (s, lo, hi));
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Walls on the rock side of every edge between an open cell and rock,
@@ -1154,7 +1218,10 @@ impl Plugin for UndergroundPlugin {
                 work_drains.after(wire_drains),
             ),
         )
-        .add_plugins(super::workings::WorkingsPlugin)
+        .add_plugins((
+            super::workings::WorkingsPlugin,
+            super::furnace::FurnacePlugin,
+        ))
         .init_resource::<Levels>()
         .add_message::<BasinDrained>()
         .add_message::<DepotEntered>()
@@ -1486,11 +1553,16 @@ pub fn register_residents(
                 }
             }
         }
-        // Nor into deep water, as on the surface.
+        // Nor into deep water, as on the surface; nor a pit, nor heat
+        // nothing crosses.
         for j in 0..grid.n {
             for i in 0..grid.n {
                 let c = grid.centre(i, j);
-                if r.water_at(c) >= ug::DEEP {
+                let hot = r
+                    .heat_at(c)
+                    .is_some_and(|z| l.heat[z as usize].level >= ug::SCORCHING);
+                let pit = r.cell_of(c).is_some_and(|(a, b)| r.pit[b * r.nx + a]);
+                if r.water_at(c) >= ug::DEEP || hot || pit {
                     grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
                 }
             }
@@ -1545,21 +1617,24 @@ pub struct UndergroundVisualsPlugin;
 
 impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(super::workings::WorkingsVisualsPlugin)
-            .add_systems(
-                Update,
-                (
-                    light_lamps,
-                    flicker,
-                    torch,
-                    near_doors_only,
-                    show_below,
-                    water_surfaces,
-                    basin_levels,
-                    kept_crate_looks,
-                ),
-            )
-            .add_systems(PostUpdate, (go_dark, no_rain_below));
+        app.add_plugins((
+            super::workings::WorkingsVisualsPlugin,
+            super::furnace::FurnaceVisualsPlugin,
+        ))
+        .add_systems(
+            Update,
+            (
+                light_lamps,
+                flicker,
+                torch,
+                near_doors_only,
+                show_below,
+                water_surfaces,
+                basin_levels,
+                kept_crate_looks,
+            ),
+        )
+        .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
 }
 
@@ -3722,11 +3797,15 @@ mod tests {
                     .filter(|s| plan.contains(*s, 0.0))
                     .collect();
                 assert!(spots.len() >= 8, "{map}: {} spots in the site", spots.len());
-                let goal = spots
-                    .iter()
-                    .map(|s| plan.to_local(*s).xz())
-                    .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
-                    .unwrap();
+                // The furthest the bot can walk to (a ledge across a
+                // pit, only the crane reaches).
+                let pos0 = plan.to_world(entry);
+                let mut far: Vec<Vec2> = spots.iter().map(|s| plan.to_local(*s).xz()).collect();
+                far.sort_by(|a, b| b.distance(entry).total_cmp(&a.distance(entry)));
+                let goal = far
+                    .into_iter()
+                    .find(|g| crate::sim::raider::indoor_route(&plan, pos0, *g, 0.3).is_some())
+                    .expect("loot a bot can reach");
                 if std::env::var_os("SITE_DUMP").is_some() {
                     crate::sim::indoor::dump_plans(
                         std::slice::from_ref(&plan),
