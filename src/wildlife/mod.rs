@@ -18,6 +18,9 @@ pub mod flock;
 pub mod perches;
 pub mod visuals;
 
+#[cfg(test)]
+mod app_tests;
+
 /// Why a flock went up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FlushCause {

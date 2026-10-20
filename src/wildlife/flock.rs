@@ -56,8 +56,10 @@ pub const ROOSTING: f32 = 0.6;
 
 /// A flock a player flushes is heard this far by robots...
 pub const ALARM_REACH: f32 = 60.0;
-/// ...at most once a flock in this many seconds.
+/// ...at most once a flock in this many seconds, from this far above
+/// where it sat (they're up in a second or two).
 pub const ALARM_EVERY: f32 = 60.0;
+pub const ALARM_HEIGHT: f32 = 6.0;
 
 // --- Where they go -------------------------------------------------------
 
@@ -255,7 +257,7 @@ fn name_hash(s: &str) -> u64 {
     })
 }
 
-fn new_flock(species: Species, site: usize, at: &PerchSite, rng: &mut Rng) -> Flock {
+pub(crate) fn new_flock(species: Species, site: usize, at: &PerchSite, rng: &mut Rng) -> Flock {
     let (lo, hi) = species.flock_size();
     let n = (lo + rng.below(hi - lo + 1)).min(at.spots.len());
     let spots = shuffled(at.spots.len(), rng);
@@ -745,8 +747,10 @@ pub(crate) fn alarm_robots(
     mut noise: MessageWriter<crate::robots::Noise>,
 ) {
     for f in flushed.read().filter(|f| f.alarm) {
+        // From over the roof, where the birds are going up (not from its
+        // surface, which would muffle it): heard over walls and rises.
         noise.write(crate::robots::Noise {
-            at: f.at,
+            at: f.at + Vec3::Y * ALARM_HEIGHT,
             radius: ALARM_REACH,
             source: f.by,
         });
