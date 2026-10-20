@@ -362,11 +362,8 @@ pub const LINE_ANY: f32 = 20.0;
 /// the others about you. The words are Story's (`raid::lines`); the `n`th
 /// line of each pool, in turn.
 fn line(lost: bool, n: u32) -> &'static str {
-    // At merge: `crate::raid::lines::pick(LOST_YOU | CALLED_OUT, n)`.
-    const LOST_YOU: [&str; 1] = ["The whirr fades. It's stopped looking."];
-    const CALLED_OUT: [&str; 1] = ["Chirps answer each other close by."];
-    let pool: &[&str] = if lost { &LOST_YOU } else { &CALLED_OUT };
-    pool[n as usize % pool.len()]
+    use crate::raid::lines::{CALLED_OUT, LOST_YOU, pick};
+    pick(if lost { LOST_YOU } else { CALLED_OUT }, n)
 }
 
 /// Says, rarely, when a robot close by that was after you gives up, or
