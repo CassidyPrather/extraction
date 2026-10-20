@@ -16,6 +16,7 @@
 
 pub mod body;
 pub mod far;
+pub mod first_aid;
 pub mod flat;
 pub mod hand_climb;
 #[cfg(test)]
@@ -311,6 +312,7 @@ impl Plugin for InteractPlugin {
                 physics_hands::PhysicsHandsPlugin,
                 hand_climb::HandClimbPlugin,
                 tools::ToolsPlugin,
+                first_aid::FirstAidPlugin,
             ));
     }
 }

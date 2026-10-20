@@ -3040,3 +3040,154 @@ mod cutters {
         assert!(cut(true, true), "the padlock held");
     }
 }
+
+/// First aid and food, with the hands.
+mod first_aid {
+    use super::*;
+    use crate::health::Health;
+    use crate::interact::first_aid::NEEDLE;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let mut h = vr.app.world_mut().get_mut::<Health>(vr.player).unwrap();
+        h.hp = 50.0;
+        h.bleeding = 1.0;
+        (vr, feet)
+    }
+
+    /// Take `id` in the right hand from in front of you.
+    fn take(vr: &mut Vr, feet: Vec3, id: &str) -> Entity {
+        let at = feet + Vec3::new(0.2, 1.1, -0.35);
+        let item = vr.spawn(id, Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(item),
+            "{id} in hand"
+        );
+        item
+    }
+
+    fn gone(vr: &Vr, e: Entity) -> bool {
+        vr.app.world().get_entity(e).is_err()
+    }
+
+    /// Wind a dressing round the left forearm (or only hold it there).
+    fn dress(turns: f32) -> (bool, f32, f32) {
+        let (mut vr, feet) = setup();
+        let d = take(&mut vr, feet, "field_dressing");
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        let centre = wrist + Vec3::Z * 0.12;
+        let steps = (turns * 24.0) as usize;
+        for i in 0..=steps.max(30) {
+            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 24.0);
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+            );
+            vr.step(1);
+        }
+        vr.step(3);
+        let h = vr.app.world().get::<Health>(vr.player).unwrap();
+        (gone(&vr, d), h.bleeding, h.hp)
+    }
+
+    /// Circled round the forearm, the dressing goes on and the bleeding
+    /// stops.
+    #[test]
+    fn a_dressing_wound_round_the_forearm_stops_the_bleeding() {
+        let (used, bleeding, hp) = dress(2.0);
+        assert!(
+            used && bleeding == 0.0 && hp > 50.0,
+            "{used} {bleeding} {hp}"
+        );
+    }
+
+    /// Only held against it, it doesn't.
+    #[test]
+    fn a_dressing_only_held_to_the_arm_does_nothing() {
+        let (used, bleeding, _) = dress(0.0);
+        assert!(!used && bleeding > 0.0, "{used} {bleeding}");
+    }
+
+    /// An injector's tip to the thigh (or out in front), and the trigger.
+    fn jab(thigh: bool) -> bool {
+        let (mut vr, feet) = setup();
+        let inj = take(&mut vr, feet, "regen_injector");
+        let to = if thigh {
+            let torso = {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+                *q.iter(vr.app.world()).next().unwrap()
+            };
+            torso.transform_point(Vec3::new(0.11, -0.62, -0.04))
+        } else {
+            feet + Vec3::new(0.2, 1.2, -0.5)
+        };
+        // The item sits on the hand as it was taken, so the hand goes
+        // where the tip must be, less the tip's place on the item.
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(inj).unwrap();
+            gt.transform_point(NEEDLE) - vr.hand_state(Side::Right).world.translation
+        };
+        vr.move_hand(Side::Right, to - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        gone(&vr, inj)
+    }
+
+    #[test]
+    fn an_injector_goes_in_at_the_thigh() {
+        assert!(jab(true), "the thigh took no injection");
+    }
+
+    #[test]
+    fn an_injector_in_the_air_does_nothing() {
+        assert!(!jab(false), "injected into the air");
+    }
+
+    /// Held at the mouth a moment, food is eaten; a bottle only drunk once
+    /// it's tipped up.
+    #[test]
+    fn food_at_the_mouth_is_eaten_and_a_bottle_drunk_tipped_up() {
+        for (id, tip, eaten) in [
+            ("canned_stew", false, true),
+            ("water_bottle", false, false),
+            ("water_bottle", true, true),
+        ] {
+            let (mut vr, feet) = setup();
+            let food = take(&mut vr, feet, id);
+            let mouth = feet + Vec3::new(0.0, 1.65 - 0.08, -0.07);
+            let rot = if tip {
+                Quat::from_rotation_x(1.4)
+            } else {
+                Quat::IDENTITY
+            };
+            vr.hand(Side::Right, mouth, rot, 1.0, 0.0);
+            vr.step(140);
+            assert_eq!(gone(&vr, food), eaten, "{id} tipped {tip}");
+        }
+    }
+}
