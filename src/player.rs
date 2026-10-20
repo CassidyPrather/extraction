@@ -233,7 +233,9 @@ pub fn move_bodies(
         }
         // Water: wading drags at you; deep enough and you float.
         let feet = root.translation + under;
-        let water = zone.hm.water_level([feet.x, feet.z]);
+        // (Underground, a site's own floods; the ground's water is above.)
+        let water = crate::world::underground::site_water(&zone, feet)
+            .unwrap_or_else(|| zone.hm.water_level([feet.x, feet.z]));
         let depth = water.map_or(0.0, |w| (w - feet.y).max(0.0));
         body.wading = depth;
         let swimming = !climbing && depth > FLOAT_DEPTH - 0.05;

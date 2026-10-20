@@ -557,6 +557,17 @@ pub struct Scene<'w, 's> {
     anomalies: Query<'w, 's, (Entity, &'static Anomaly, &'static GlobalTransform)>,
     trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    /// Underground sites' power: doors held shut, and the switches.
+    power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    power_switches: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::underground::PowerSwitch,
+            &'static GlobalTransform,
+        ),
+    >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
@@ -1858,6 +1869,15 @@ fn raid_step(
                     Some(item) => {
                         r.act = Act::Take(s, item);
                         if let Some(t) = take_item(r, scene, s, item, pos) {
+                            let power = t.iter().any(|t| {
+                                matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
+                            });
+                            if power {
+                                log.event(
+                                    "power",
+                                    json!({"site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+                                );
+                            }
                             return t;
                         }
                         r.skip.insert(item);
@@ -2178,7 +2198,28 @@ fn take_item(
             if !plan.in_grid(pos) {
                 return None;
             }
-            tasks.extend(indoor(plan, pos, plan.to_local(at).xz(), 0.3)?);
+            let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
+            // Behind a door on an underground site's power: throw the
+            // switch first (it's loud: the crawlers come), unless careful.
+            let held = route
+                .iter()
+                .any(|t| matches!(t, Task::OpenDoor(d) if scene.power_locked.contains(*d)));
+            if held {
+                if r.traits.name == "cautious" {
+                    return None;
+                }
+                let (switch, _, gt) = scene
+                    .power_switches
+                    .iter()
+                    .find(|(_, sw, _)| sw.site == plan.entity)?;
+                let at_switch = gt.translation();
+                tasks.extend(indoor(plan, pos, plan.to_local(at_switch).xz(), 0.5)?);
+                tasks.push(Task::Press(switch));
+                tasks.push(Task::Wait(1.0));
+                tasks.extend(indoor(plan, at_switch, plan.to_local(at).xz(), 0.3)?);
+            } else {
+                tasks.extend(route);
+            }
         }
         _ => {
             // Artifacts sit in anomalies: test the snare, then dive.

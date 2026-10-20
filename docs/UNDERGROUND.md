@@ -91,10 +91,14 @@ that the whole stairwell is open.
   lift in Kettle's stope, a snare guarding the crate in Cinder's overflow
   chamber. `check` keeps each inside its room and clear of the doorways:
   you go round them, you're never made to walk through one.
-- **Robots**: none yet. The walkers path on the Zone grid, which has no
-  underground. Asked of Robot minds and bodies: an indoor robot that
-  patrols a site on its plan (`sim::indoor::plan_site` gives a walkable
-  grid with a floor per cell).
+- **Crawlers** (Robot minds' `robots::indoor`): each site's layout names
+  a patrol round (room ids in walking order) and how many crawlers walk
+  it (Marrow 2, Kettle 1, Cinder 2). `register_residents` hands Robot
+  minds the site's plan grid (the ground round the kiosks and deep water
+  taken out: they stay below and dry), its floors and the round
+  (`IndoorSites`), and tells every robot where it's dark and where the
+  lamps are (`senses::Lighting`): in the dark a crawler sees you only by
+  lamplight or your torch.
 - **Props**: the layout's vocabulary (`PropKind`) is built from the
   houses' furniture where it fits (shelves, lockers, crates, tables,
   workbenches, beds as bunks, barrels, pallets, counters, chairs), plus
@@ -102,6 +106,42 @@ that the whole stairwell is open.
   (Cabinet), `mine_tub` (Cart) and `bulkhead_lamp` (every lamp fitting).
   Rubble is boxes for now. `check` keeps props a metre clear of every
   corridor mouth and stair foot.
+
+## Power
+
+Each site has a breaker board or a generator somewhere awkward (layout
+`power`): Marrow's generator beside the live snare in the generator room,
+Kettle's breaker in the wet sump, Cinder's at the back of the dead-end
+cable vault. Until it's thrown, the doors it holds (the armoury, the
+explosives magazine, the overflow chamber: the best loot) won't open
+(`PowerLocked`), and the `Lamp::Powered` rooms are dark. Throwing it (a
+pressable, through the hands) unbolts them, lights those lamps (and adds
+them to the robots' `Lighting`), and makes a noise the crawlers come to;
+a generator keeps humming. `a_hand_on_the_switch_powers_the_site`
+tests it through the headset harness. Sim raiders whose way to an item
+runs through a held door throw the switch first (a `power` event in the
+telemetry); cautious ones leave it.
+
+## Water
+
+Floods are layout data too (a room or a corridor, and a depth): a drain
+from Marrow's gas lock to the filter plant (1.0 m), Kettle's drowned old
+drive from the lamp room to the west crosscut (1.35 m: you float) and
+its wet sump, Cinder's culvert from the stair hall to the pump room
+(1.1 m) and its flooded overflow chamber. The corridors are short cuts:
+slower (wading drags, the bots' grid costs it) and louder (splashing is a
+robot `Noise`), and the crawlers won't follow into water deeper than 0.9 m
+(`DEEP`). Underground the player reads the site's water
+(`site_water`), never the ground's water above.
+
+## What it costs to draw
+
+Nothing culls by the rock, so a site under a village would be drawn in
+every view of it. A site's geometry more than 1 m below its kiosks is
+merged apart (`Below`) and shown only while the eye is underground or
+within 18 m of a kiosk; door leaves below are drawn within 25 m (a
+kiosk's within 50 m), lamp lenses within 25 m. Marrow's budget views
+(`render::budget`) hold the 1200-draw line with the shelter in.
 
 ## Bots
 
