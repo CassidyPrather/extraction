@@ -593,7 +593,7 @@ pub struct Scene<'w, 's> {
         ),
     >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
-    crawlers: Query<'w, 's, (), With<crate::robots::indoor::Crawler>>,
+    breeds: Query<'w, 's, &'static crate::robots::Breed>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
@@ -1070,7 +1070,7 @@ fn react_to_robots(
             continue;
         }
         if threat.as_ref().is_none_or(|t| d < t.1) {
-            let name = crate::robots::robot_name(robot.kind, scene.crawlers.contains(e));
+            let name = crate::robots::robot_name(robot.kind, scene.breeds.get(e).ok());
             threat = Some((e, d, onto_me, name, at));
         }
     }
