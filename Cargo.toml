@@ -59,7 +59,8 @@ bevy = { version = "0.19", default-features = false, features = [
     "serialize",
 ] }
 avian3d = "0.7"
-bevy_seedling = { version = "0.8", features = ["effects"] }
+firewheel = { version = "0.12", default-features = false }
+bevy_seedling = { version = "0.8", features = ["effects", "hrtf"] }
 bevy_mod_openxr = { version = "0.6", optional = true }
 bevy_mod_xr = { version = "0.6", optional = true }
 openxr = { version = "0.21", optional = true }
@@ -95,4 +96,5 @@ codegen-units = 16
 
 [dev-dependencies]
 # The audio graph tests run on seedling's mock backend (no device).
-bevy_seedling = { version = "0.8", features = ["effects", "profiling"] }
+bevy_seedling = { version = "0.8", features = ["effects", "hrtf", "profiling"] }
+hrtf = "0.8"
