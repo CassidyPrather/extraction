@@ -86,6 +86,7 @@ MATERIALS = {
     "Plaster": ((0.62, 0.6, 0.55), 0.0, 0.9, None),
     "Concrete": ((0.45, 0.45, 0.43), 0.0, 0.85, None),
     "Zinc": ((0.5, 0.52, 0.53), 0.9, 0.45, None),
+    "GreyGreen": ((0.36, 0.4, 0.34), 0.0, 0.6, None),
     "Straw": ((0.58, 0.5, 0.3), 0.0, 0.95, None),
     "Brick": ((0.45, 0.25, 0.2), 0.0, 0.85, None),
     "Corrugated": ((0.4, 0.3, 0.25), 0.6, 0.6, None),
@@ -644,8 +645,12 @@ class Part:
                 verts += list(top.values()) + list(bot.values())
                 part._finish_piece(verts, faces, mat)
 
-    def cut(self, part):
-        """Subtract another Part (a cutter) when the object is made."""
+    def cut(self, part, paint=False):
+        """Subtract another Part (a cutter) when the object is made. With
+        `paint`, the faces the cut leaves take the cutter's materials:
+        engraved lettering whose floor is painted, which nothing raised
+        a few tenths of a millimetre could do without z-fighting."""
+        part.paint = paint
         self.cutters.append(part)
 
 
@@ -730,8 +735,11 @@ def _bm_to_object(part, name=None):
     return obj
 
 
-def _apply_boolean(obj, cutter_obj):
+def _apply_boolean(obj, cutter_obj, paint=False):
     mod = obj.modifiers.new("cut", "BOOLEAN")
+    if paint:
+        # The cut's walls and floor take the cutter's own materials.
+        mod.material_mode = "TRANSFER"
     mod.operation = "DIFFERENCE"
     mod.solver = "EXACT"
     mod.object = cutter_obj
@@ -816,7 +824,7 @@ def make(part, sharp_angle=40.0, worn=None):
         c.origin = part.origin.copy()
         cobj = _bm_to_object(c, part.name + "_cutter")
         cobj.location = obj.location
-        _apply_boolean(obj, cobj)
+        _apply_boolean(obj, cobj, getattr(c, "paint", False))
     me = obj.data
     box_uv(me, obj.location)
     me.shade_smooth()

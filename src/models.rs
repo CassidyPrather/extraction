@@ -200,6 +200,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wool",
     "Ticking",
     "Zinc",
+    "GreyGreen",
     "Straw",
     "Brick",
     "Corrugated",
@@ -290,6 +291,8 @@ impl ModelMaterials {
             }),
             "Wool" => flat(materials, Color::srgb(0.24, 0.23, 0.2), 0.0, 0.95),
             "Ticking" => flat(materials, Color::srgb(0.55, 0.53, 0.48), 0.0, 0.9),
+            // Instrument paint: the grey-green of survey and signals kit.
+            "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
             // The gloves: the canvas scan's weave, fine, under olive-drab
