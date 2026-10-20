@@ -364,6 +364,12 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   of moment about the wrist: an AK about 4°, a Mosin 7°) and sways
   slowly (`SWAY_*`, under 1°). Sprint fatigue adds up to `SWAY_TIRED`
   (0.35°) to any hold, shared by a second hand and a shoulder.
+- **Bracing**: a gun resting on something solid (its handguard, body
+  or magazine within 5 cm of a wall top, a sill, a rock) loses 85% of
+  its sway and its droop, takes recoil on a stiffer spring with 8 kg of
+  rest behind it, and follows with half the lag; a click in the hand
+  says it took. Crouching (or a head under 1.2 m) is worth 40% less sway
+  and a slightly quicker recovery, on top.
 - **Malfunctions** come from wear and dirt (one in a thousand on a
   clean gun in good order, about one in twenty-five at half condition)
   and each has its own cure. A *stovepipe* (a case standing in the
