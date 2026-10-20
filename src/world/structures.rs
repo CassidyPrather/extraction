@@ -184,7 +184,9 @@ pub fn fence_visuals(
         ..default()
     });
     let post = meshes.add(Cuboid::new(0.08, 2.8, 0.08));
-    let wire = meshes.add(Cuboid::new(1.0, 0.012, 0.012));
+    // The wire, merged a cell at a time: a strand per span was five
+    // entities every 3 m round the whole map (a thousand in some views).
+    let mut wires: std::collections::HashMap<(i32, i32), Mesh> = Default::default();
     let plate = meshes.add(Cuboid::new(0.5, 0.35, 0.02));
     let mut k = 0usize;
     for run in fence_runs(&zone) {
@@ -201,6 +203,7 @@ pub fn fence_visuals(
                     Transform::from_xyz(p.x, y, p.y).with_rotation(yaw),
                     Visibility::default(),
                     crate::render::world_props::SwapIn::one("fence_post"),
+                    POST_REACH,
                 ))
                 .with_child((
                     Mesh3d(post.clone()),
@@ -213,15 +216,25 @@ pub fn fence_visuals(
                 let yq = zone.ground(q.x, q.y);
                 let span = Vec3::new(q.x - p.x, yq - y, q.y - p.y);
                 let rot = Quat::from_rotation_arc(Vec3::X, span.normalize());
+                let cell = (
+                    (p.x / WIRE_CELL).floor() as i32,
+                    (p.y / WIRE_CELL).floor() as i32,
+                );
                 for h in [0.5, 1.1, 1.7, 2.3, 2.65] {
                     let mid = Vec3::new(p.x, y + h, p.y) + span * 0.5;
-                    commands.spawn((
-                        Mesh3d(wire.clone()),
-                        MeshMaterial3d(metal.clone()),
+                    let piece = Mesh::from(Cuboid::new(1.0, 0.012, 0.012)).transformed_by(
                         Transform::from_translation(mid)
                             .with_rotation(rot)
                             .with_scale(Vec3::new(span.length(), 1.0, 1.0)),
-                    ));
+                    );
+                    match wires.get_mut(&cell) {
+                        Some(m) => {
+                            let _ = m.merge(&piece);
+                        }
+                        None => {
+                            wires.insert(cell, piece);
+                        }
+                    }
                 }
                 k += 1;
                 if k % 9 == 0 {
@@ -230,9 +243,35 @@ pub fn fence_visuals(
                         Mesh3d(plate.clone()),
                         MeshMaterial3d(sign.clone()),
                         Transform::from_translation(mid).with_rotation(rot),
+                        POST_REACH,
                     ));
                 }
             }
         }
     }
+    // A 12 mm strand is under a pixel past about 15 m: fade it out by the
+    // time it would only shimmer (the posts carry the line further), and
+    // cast no shadow (in overcast light, none you'd see).
+    for (_, mesh) in wires {
+        commands.spawn((
+            Name::new("Fence wire"),
+            crate::render::centred(&mut meshes, mesh),
+            MeshMaterial3d(metal.clone()),
+            bevy::light::NotShadowCaster,
+            bevy::camera::visibility::VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: (WIRE_FADE - 10.0)..(WIRE_FADE + 10.0),
+                use_aabb: true,
+            },
+        ));
+    }
 }
+
+/// An 8 cm post is under a pixel wide past about 90 m (and crawls): it
+/// fades out there, with the plates on the wire.
+const POST_REACH: crate::render::budget::LodReach = crate::render::budget::LodReach(90.0);
+
+/// Fence wire is merged in cells this wide (m) ...
+const WIRE_CELL: f32 = 16.0;
+/// ... and fades out round this far from a cell's centre.
+const WIRE_FADE: f32 = 40.0;
