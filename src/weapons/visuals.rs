@@ -102,6 +102,9 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("trigger", Moves::Trigger),
         ("selector", Moves::Selector),
         ("hammer", Moves::Hammer),
+        ("cylinder", Moves::Cylinder),
+        ("gate", Moves::Gate),
+        ("ejector", Moves::Rod),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -240,6 +243,10 @@ fn finish_gun_models(
 
 /// How far back a cocked hammer tips, radians.
 const HAMMER_BACK: f32 = 0.5;
+/// How far a revolver's gate swings open, radians.
+const GATE_OPEN: f32 = 1.4;
+/// A revolver's ejector rod's stroke, metres.
+const ROD_STROKE: f32 = 0.04;
 
 fn animate_parts(
     guns: Query<(&Gun, &Children, Option<&Handling>)>,
@@ -267,6 +274,24 @@ fn animate_parts(
                 Moves::WithBolt => {
                     let mut r = part.rest;
                     r.translation.z += bolt * travel;
+                    r
+                }
+                Moves::Cylinder => {
+                    let n = f.chambers.len().max(1) as f32;
+                    let turn = f.cylinder as f32 * std::f32::consts::TAU / n;
+                    let mut r = part.rest;
+                    r.rotation = Quat::from_rotation_z(-turn) * r.rotation;
+                    r
+                }
+                Moves::Gate => {
+                    let mut r = part.rest;
+                    let open = if f.gate_open { GATE_OPEN } else { 0.0 };
+                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
+                    r
+                }
+                Moves::Rod => {
+                    let mut r = part.rest;
+                    r.translation.z += f.rod * ROD_STROKE;
                     r
                 }
                 Moves::Hammer => {
