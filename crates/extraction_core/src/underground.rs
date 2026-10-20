@@ -254,6 +254,20 @@ pub struct Layout {
     /// What lowers a basin: a valve wheel or a hand pump.
     #[serde(default)]
     pub drains: Vec<Drain>,
+    /// Firedamp: rooms and corridors full of gas, each a pocket that a
+    /// spark sets off.
+    #[serde(default)]
+    pub gas: Vec<Pocket>,
+    /// Rails, as polylines along the corridors (site space, legs along x
+    /// or z), and the carts on them.
+    #[serde(default)]
+    pub rails: Vec<Vec<P2>>,
+    #[serde(default)]
+    pub carts: Vec<Cart>,
+    /// Timber sets holding up a bad roof in a corridor: shoot one out and
+    /// the roof comes down there.
+    #[serde(default)]
+    pub shoring: Vec<Shoring>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -312,6 +326,69 @@ pub struct Basin {
     pub links: Vec<(String, String)>,
     /// The level at the start, site y.
     pub level: f32,
+}
+
+/// A gas pocket: a room's or a corridor's air.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Pocket {
+    #[serde(default)]
+    pub room: Option<String>,
+    #[serde(default)]
+    pub link: Option<(String, String)>,
+}
+
+/// A mine cart on rail `rail`, `at` metres along it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Cart {
+    pub rail: usize,
+    pub at: f32,
+}
+
+/// Shoring in a corridor (by its ends), `along` its length (0 to 1).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Shoring {
+    pub link: (String, String),
+    pub along: f32,
+}
+
+/// Where a corridor `(a, b)` runs: its points, room centre to room
+/// centre through its vias.
+pub fn link_points(l: &Layout, a: &str, b: &str) -> Option<Vec<P2>> {
+    let k = l
+        .links
+        .iter()
+        .find(|k| (k.from == a && k.to == b) || (k.from == b && k.to == a))?;
+    let from = l.rooms.iter().find(|r| r.id == k.from)?;
+    let to = l.rooms.iter().find(|r| r.id == k.to)?;
+    let mut pts = vec![from.at];
+    pts.extend(k.via.iter().copied());
+    pts.push(to.at);
+    Some(pts)
+}
+
+/// The point `s` metres along a polyline (clamped to its ends).
+pub fn along(pts: &[P2], s: f32) -> P2 {
+    let mut left = s.max(0.0);
+    for w in pts.windows(2) {
+        let d = sub(w[1], w[0]);
+        let len = (d[0] * d[0] + d[1] * d[1]).sqrt();
+        if left <= len || len == 0.0 {
+            let t = if len > 0.0 { left / len } else { 0.0 };
+            return [w[0][0] + d[0] * t, w[0][1] + d[1] * t];
+        }
+        left -= len;
+    }
+    *pts.last().unwrap_or(&[0.0, 0.0])
+}
+
+/// A polyline's length.
+pub fn length(pts: &[P2]) -> f32 {
+    pts.windows(2)
+        .map(|w| {
+            let d = sub(w[1], w[0]);
+            (d[0] * d[0] + d[1] * d[1]).sqrt()
+        })
+        .sum()
 }
 
 /// A way to lower a basin, standing in a room against a wall (as a power
@@ -441,7 +518,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 5] = [
+pub const SITES: [(&str, &str); 6] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -461,6 +538,10 @@ pub const SITES: [(&str, &str); 5] = [
     (
         "pump_marrow",
         include_str!("../../../assets/underground/pump_marrow.ron"),
+    ),
+    (
+        "deep_kettle",
+        include_str!("../../../assets/underground/deep_kettle.ron"),
     ),
 ];
 
@@ -649,6 +730,8 @@ pub struct Raster {
     pub water: Vec<f32>,
     /// The basin each cell's water belongs to, if it rises and falls.
     pub basin: Vec<Option<u16>>,
+    /// The gas pocket each cell's air belongs to, if it's bad.
+    pub gas: Vec<Option<u16>>,
     pub floor: f32,
     pub stairs: Vec<Stair>,
     pub portals: Vec<Portal>,
@@ -703,6 +786,7 @@ impl Raster {
             floors: vec![l.floor; nx * nz],
             water: vec![0.0; nx * nz],
             basin: vec![None; nx * nz],
+            gas: vec![None; nx * nz],
             floor: l.floor,
             stairs,
             portals: l.portals.clone(),
@@ -927,6 +1011,27 @@ impl Raster {
                 }
             }
         }
+        for (g, pocket) in l.gas.iter().enumerate() {
+            let room = pocket
+                .room
+                .as_ref()
+                .and_then(|id| l.rooms.iter().position(|r| &r.id == id));
+            let link = pocket.link.as_ref().and_then(|(a, z)| {
+                l.links
+                    .iter()
+                    .position(|k| (&k.from, &k.to) == (a, z) || (&k.from, &k.to) == (z, a))
+            });
+            for c in 0..r.cells.len() {
+                let mine = match r.cells[c] {
+                    Cell::Room(k) => room == Some(k as usize),
+                    Cell::Hall(k) => link == Some(k as usize),
+                    _ => false,
+                };
+                if mine {
+                    r.gas[c] = Some(g as u16);
+                }
+            }
+        }
         // Stairs: from the kiosk down to the first flat cell ahead.
         for (k, p) in l.portals.iter().enumerate() {
             let bottom = r.stairs[k].bottom;
@@ -1052,6 +1157,10 @@ impl Raster {
 
     /// The floor under a site-space point, if it's an open cell.
     /// The basin a site point's water belongs to, if any.
+    pub fn gas_at(&self, p: P2) -> Option<u16> {
+        self.cell_of(p).and_then(|(i, j)| self.gas[j * self.nx + i])
+    }
+
     pub fn basin_at(&self, p: P2) -> Option<u16> {
         self.cell_of(p)
             .and_then(|(i, j)| self.basin[j * self.nx + i])
@@ -1312,6 +1421,49 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    for (g, pocket) in l.gas.iter().enumerate() {
+        if !r.gas.contains(&Some(g as u16)) {
+            bad.push(format!(
+                "gas pocket {g} over no room or corridor: {pocket:?}"
+            ));
+        }
+    }
+    for (k, rail) in l.rails.iter().enumerate() {
+        for w in rail.windows(2) {
+            if w[0][0] != w[1][0] && w[0][1] != w[1][1] {
+                bad.push(format!(
+                    "rail {k}: a leg {:?} -> {:?} neither along x nor z",
+                    w[0], w[1]
+                ));
+            }
+        }
+        let len = length(rail);
+        let mut s = 0.0;
+        while s <= len {
+            if !r.at(along(rail, s)).flat() {
+                bad.push(format!(
+                    "rail {k} runs into the rock at {:?}",
+                    along(rail, s)
+                ));
+                break;
+            }
+            s += CELL;
+        }
+    }
+    for c in &l.carts {
+        match l.rails.get(c.rail) {
+            None => bad.push(format!("a cart on no rail {}", c.rail)),
+            Some(rail) if c.at < 0.0 || c.at > length(rail) => {
+                bad.push(format!("a cart off the end of rail {}", c.rail))
+            }
+            _ => {}
+        }
+    }
+    for sh in &l.shoring {
+        if link_points(l, &sh.link.0, &sh.link.1).is_none() || !(0.0..=1.0).contains(&sh.along) {
+            bad.push(format!("shoring in no corridor {:?}", sh.link));
+        }
+    }
     for d in &l.drains {
         let Some(basin) = l.basins.iter().find(|b| b.id == d.basin) else {
             bad.push(format!("a drain for no basin `{}`", d.basin));
@@ -1532,6 +1684,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
                 Cell::Rock => continue,
                 _ if r.water[j * r.nx + i] >= DEEP => "#2e6f8e",
                 _ if r.water[j * r.nx + i] > 0.0 => "#6fa3b8",
+                _ if r.gas[j * r.nx + i].is_some() => "#a8b44c",
                 Cell::Room(_) => "#b9b3a6",
                 Cell::Hall(_) => "#8f8a80",
                 Cell::Stair(_) => "#6f8fa6",
@@ -1615,6 +1768,41 @@ pub fn plan_svg(id: &str) -> Option<String> {
             );
         }
     }
+    // Rails (brown), carts on them (C), shoring (S).
+    for rail in &l.rails {
+        for w in rail.windows(2) {
+            let ((x1, y1), (x2, y2)) = (px(w[0]), px(w[1]));
+            out += &format!(
+                "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#7b4a2a' stroke-width='3' stroke-dasharray='6 3'/>\n"
+            );
+        }
+    }
+    for c in &l.carts {
+        if let Some(rail) = l.rails.get(c.rail) {
+            let (x, y) = px(along(rail, c.at));
+            out += &format!(
+                "<rect x='{:.1}' y='{:.1}' width='12' height='16' fill='#7b4a2a' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#e0c9a6'>C</text>\n",
+                x - 6.0,
+                y - 8.0,
+                x - 3.5,
+                y + 4.0
+            );
+        }
+    }
+    for sh in &l.shoring {
+        if let Some(pts) = link_points(l, &sh.link.0, &sh.link.1) {
+            let (x, y) = px(along(&pts, length(&pts) * sh.along));
+            out += &format!(
+                "<rect x='{:.1}' y='{:.1}' width='14' height='6' fill='#c8a26a' stroke='#1d1c1a'/>\n\
+                 <text x='{:.1}' y='{:.1}' fill='#c8a26a'>S</text>\n",
+                x - 7.0,
+                y - 3.0,
+                x + 9.0,
+                y + 4.0
+            );
+        }
+    }
     // Drains: a valve wheel (V) or the hand pump (P), and the basin each
     // lowers.
     for d in &l.drains {
@@ -1657,7 +1845,7 @@ pub fn plan_svg(id: &str) -> Option<String> {
     }
     out += &format!(
         "<text x='8' y='{:.0}' fill='#e8e2d0'>{} ({id}): floor {:.1} m; grid {:.1} m; \
-         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
+         gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp; lamp * on, ~ flickering, x dead, + on the power</text>\n</svg>\n",
         h + 24.0,
         l.name,
         l.floor,

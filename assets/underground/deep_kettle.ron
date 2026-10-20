@@ -1,0 +1,73 @@
+// Kettle Pass: the old deep workings below the pass (format:
+// crates/extraction_core/src/underground.rs; design: docs/UNDERGROUND.md,
+// "Signature sites"). No lamps at all: your torch, the canary, and the
+// shimmer of the firedamp. A spark in the gas and it goes up.
+(
+    name: "The deep workings",
+    style: Mine,
+    floor: -10.0,
+    corridor_height: 2.4,
+    rooms: [
+        // The cage landing at the shaft's foot: the canary's bench.
+        (id: "cage_landing", at: (0.0, 17.0), size: (6.0, 4.0), height: 2.8, props: [
+            (kind: Workbench, at: (-2.2, 0.6), rot: 90.0),
+            (kind: Barrel, at: (2.4, 1.3)),
+        ]),
+        // The main haulage, the rail down its length.
+        (id: "haulage", at: (0.0, 31.0), size: (3.0, 20.0), height: 2.6, props: [
+            (kind: Rubble, at: (1.0, 7.0)),
+        ]),
+        // The pit ponies' stables, long empty.
+        (id: "stables", at: (10.0, 27.0), size: (6.0, 6.0), height: 2.4, props: [
+            (kind: Shelf, at: (2.6, -1.0), rot: 270.0, loot: Some("medical")),
+            (kind: Pallet, at: (-1.0, 1.6)),
+            (kind: SmallCrate, at: (1.6, 1.8), loot: Some("food_common")),
+        ]),
+        // The old heading: the best of it, and the firedamp.
+        (id: "old_heading", at: (-12.0, 31.0), size: (6.0, 8.0), floor: Some(-12.0), height: 2.4, props: [
+            (kind: Crate, at: (-1.8, -2.6), loot: Some("weapons_rare")),
+            (kind: Cart, at: (1.6, 2.4)),
+            (kind: Rubble, at: (-1.6, 2.2)),
+        ]),
+        // The crosscut, across the foot of the haulage.
+        (id: "crosscut", at: (0.0, 46.0), size: (12.0, 3.0), floor: Some(-11.0), height: 2.6, props: [
+            (kind: Barrel, at: (-3.5, 1.0)),
+        ]),
+        // The refuge chamber: where Kettle hid.
+        (id: "refuge", at: (-12.0, 46.0), size: (5.0, 4.0), floor: Some(-11.0), height: 2.4, props: [
+            (kind: Bunk, at: (-1.95, 0.3)),
+            (kind: Shelf, at: (1.6, 1.65), rot: 180.0, loot: Some("food_common")),
+            (kind: SmallCrate, at: (0.0, 1.6), loot: Some("house")),
+        ]),
+        // The lower heading, down past the gassy dip.
+        (id: "lower_heading", at: (16.0, 46.0), size: (6.0, 6.0), floor: Some(-13.0), height: 2.4, props: [
+            (kind: Crate, at: (1.8, 1.8), loot: Some("ammo_common")),
+            (kind: Shelf, at: (2.6, -1.2), rot: 270.0, loot: Some("tools")),
+        ]),
+    ],
+    links: [
+        (from: "cage_landing", to: "haulage", width: 2.0),
+        (from: "haulage", to: "stables", via: [(0.0, 27.0)], doors: To),
+        (from: "haulage", to: "old_heading"),
+        (from: "haulage", to: "crosscut", width: 2.0),
+        (from: "crosscut", to: "refuge", doors: To),
+        (from: "old_heading", to: "refuge"),
+        (from: "crosscut", to: "lower_heading"),
+    ],
+    gas: [
+        (room: Some("old_heading")),
+        (link: Some(("crosscut", "lower_heading"))),
+    ],
+    // The haulage rail, from the landing's mouth to the crosscut's.
+    rails: [[(0.0, 20.0), (0.0, 42.0)]],
+    carts: [(rail: 0, at: 4.0)],
+    // A bad roof between the old heading and the refuge.
+    shoring: [(link: ("old_heading", "refuge"), along: 0.5)],
+    patrol: ["haulage", "crosscut", "refuge", "crosscut", "haulage", "stables"],
+    crawlers: 1,
+    portals: [
+        (),
+        // The old incline, up from the crosscut.
+        (at: (0.0, 65.0), rot: 180.0, y: 0.0, floor: Some(-11.0)),
+    ],
+)

@@ -17417,5 +17417,5 @@
 <circle cx='244.8' cy='991.8' r='4' fill='#d4a017'/>
 <circle cx='290.4' cy='1030.2' r='4' fill='#5a5650'/>
 <text x='276.0' y='1005.0' fill='#1d1c1a' text-anchor='middle'>pump_room +</text>
-<text x='8' y='1542' fill='#e8e2d0'>The Depot (depot_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>
+<text x='8' y='1542' fill='#e8e2d0'>The Depot (depot_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp; lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>
