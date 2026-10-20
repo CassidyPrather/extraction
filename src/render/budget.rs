@@ -1231,19 +1231,6 @@ mod tests {
         busy_moment_with(map, || {})
     }
 
-    /// A fixed piece of work, timed (ms): the yardstick the busy moment's
-    /// frames are measured against.
-    fn reference_ms() -> f64 {
-        let t = std::time::Instant::now();
-        let mut x = 1u64;
-        for i in 0..200_000u64 {
-            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(i);
-            x ^= x >> 13;
-        }
-        std::hint::black_box(x);
-        t.elapsed().as_secs_f64() * 1000.0
-    }
-
     thread_local! {
         /// The reference's ms, frame by frame, over the last busy moment.
         static REFERENCE: std::cell::RefCell<Vec<f64>> = const { std::cell::RefCell::new(Vec::new()) };
@@ -1251,7 +1238,6 @@ mod tests {
 
     /// `busy_moment`, calling `measuring` as the measured frames begin.
     fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
-        use crate::robots::{Brain, Job, JobKind};
         let mut app = client_threads(map, "downpour", Some(1));
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
@@ -1282,40 +1268,10 @@ mod tests {
         for _ in 0..30 {
             app.update();
         }
-        let mut queue = bevy::ecs::world::CommandQueue::default();
-        let mut robots = Vec::new();
-        {
-            let mut c = Commands::new(&mut queue, app.world());
-            for i in 0..10 {
-                let a = i as f32 * 0.63;
-                let spot = zone.on_ground(at.x + a.cos() * 35.0, at.z + a.sin() * 35.0);
-                let job = Job {
-                    kind: JobKind::Response,
-                    site: at,
-                    duration: 999.0,
-                    exit: spot,
-                };
-                robots.push(if i < 6 {
-                    crate::robots::drone::spawn_drone(&mut c, spot + Vec3::Y * 15.0, job)
-                } else {
-                    crate::robots::walker::spawn_walker(&mut c, &zone, spot, job)
-                });
-            }
-        }
-        queue.apply(app.world_mut());
-        app.update();
-        for r in &robots {
-            if let Some(mut b) = app.world_mut().get_mut::<Brain>(*r) {
-                *b = Brain::Investigate { at, left: 999.0 };
-            }
-        }
-        let keep_alive = |app: &mut App| {
-            let w = app.world_mut();
-            for mut h in w.query::<&mut crate::health::Health>().iter_mut(w) {
-                h.hp = h.max;
-                h.down = false;
-            }
-        };
+        // Two guns in hand, ten robots on the player (`perf::fight`).
+        crate::perf::fight::arm(&mut app);
+        crate::perf::fight::hunt(&mut app);
+        let keep_alive = crate::perf::fight::keep_alive;
         // Warm up (assets for the robots, first shots), then measure.
         for _ in 0..90 {
             keep_alive(&mut app);
@@ -1331,7 +1287,7 @@ mod tests {
         for _ in 0..450 {
             keep_alive(&mut app);
             app.update();
-            let ms = reference_ms();
+            let ms = crate::perf::fight::reference_ms();
             REFERENCE.with(|r| r.borrow_mut().push(ms));
         }
         if std::env::var_os("BUDGET_CENSUS").is_some() {
