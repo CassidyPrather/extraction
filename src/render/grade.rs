@@ -81,6 +81,14 @@ impl Look {
                 contrast: 1.1,
                 ..base
             },
+            // The drained reservoir: cold, wet and blue-grey, the silt
+            // draining the colour out.
+            "Sallow Reservoir" => Self {
+                temperature: -0.012,
+                saturation: 1.05,
+                contrast: 1.1,
+                ..base
+            },
             // The practice ground: a shade brighter and kinder, to read.
             "Training Yard" => Self {
                 exposure: 0.15,
