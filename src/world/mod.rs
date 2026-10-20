@@ -128,6 +128,9 @@ pub enum Layer {
     Hand,
     /// Inside the backpack: items here collide with nothing.
     Stowed,
+    /// Shards and splinters (`destruction::debris`): they fall on the
+    /// world and nothing else, and no query looks for them.
+    Debris,
 }
 
 pub struct WorldPlugin;

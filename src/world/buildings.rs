@@ -4253,29 +4253,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             ));
         }
         for d in &geo.doors {
-            commands
-                .spawn((
-                    Name::new("Door"),
-                    Door {
-                        open: false,
-                        angle: 0.0,
-                    },
-                    crate::raid::truck::Pressable::Door,
-                    crate::interact::Grabbable {
-                        points: vec![crate::interact::GrabPoint::free()],
-                    },
-                    DoorLeaf(*d),
-                    Transform::from_translation(d.hinge)
-                        .with_rotation(Quat::from_rotation_y(d.yaw)),
-                    Visibility::default(),
-                    RigidBody::Kinematic,
-                    ChildOf(root),
-                ))
-                .with_child((
-                    Collider::cuboid(d.width, d.height, 0.05),
-                    CollisionLayers::new(Layer::World, LayerMask::ALL),
-                    Transform::from_xyz(d.width * 0.5, d.height * 0.5 + 0.01, 0.0),
-                ));
+            spawn_door(&mut commands, root, *d);
         }
         for s in &geo.loot {
             loot.0.push(LootSpot {
@@ -4286,6 +4264,34 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     }
     info!("{} building loot spots", loot.0.len());
     commands.insert_resource(loot);
+}
+
+/// A hinged door in a building (also how the Surge rehangs one that was
+/// broken down: `destruction::wood`).
+pub fn spawn_door(commands: &mut Commands, root: Entity, d: DoorDef) -> Entity {
+    commands
+        .spawn((
+            Name::new("Door"),
+            Door {
+                open: false,
+                angle: 0.0,
+            },
+            crate::raid::truck::Pressable::Door,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            DoorLeaf(d),
+            Transform::from_translation(d.hinge).with_rotation(Quat::from_rotation_y(d.yaw)),
+            Visibility::default(),
+            RigidBody::Kinematic,
+            ChildOf(root),
+        ))
+        .with_child((
+            Collider::cuboid(d.width, d.height, 0.05),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_xyz(d.width * 0.5, d.height * 0.5 + 0.01, 0.0),
+        ))
+        .id()
 }
 
 /// The door's definition, kept for visuals.
@@ -4580,7 +4586,10 @@ pub fn dress_buildings(
                 };
                 (half, at)
             }));
-        let mut skip = vec![false; geo.pieces.len()];
+        // Window glass is the panes' (`destruction::glass`): they draw it,
+        // whole or broken.
+        let mut skip = crate::destruction::glass::window_glass(&geo);
+        let panes = skip.clone();
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
                 skip[i] = true;
@@ -4627,7 +4636,7 @@ pub fn dress_buildings(
             }
         };
         for (i, piece) in geo.pieces.iter().enumerate() {
-            if skip[i] && !far[i] {
+            if (skip[i] && !far[i]) || panes[i] {
                 continue;
             }
             let mat = props.lib.get(piece.mat, &props.server, &mut materials);
@@ -4700,6 +4709,9 @@ pub fn dress_buildings(
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
                 for (mat, mesh) in prims {
+                    if crate::destruction::glass::drawn_by_panes(name, &mat) {
+                        continue;
+                    }
                     let mat = props.material(&mat, &mut materials);
                     if !d.inside {
                         if let Some(m) = materials.get(&mat) {

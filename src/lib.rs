@@ -12,6 +12,7 @@ pub mod audio_score;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
+pub mod destruction;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -75,6 +76,7 @@ impl Plugin for GamePlugin {
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
                 foley::FoleyPlugin,
+                destruction::DestructionPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
@@ -104,6 +106,7 @@ impl Plugin for ClientPlugin {
             models::ModelsPlugin,
         ))
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
+        .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,

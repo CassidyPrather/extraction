@@ -69,6 +69,8 @@ pub enum Task {
     },
     Expect(Expect),
     Log(String),
+    /// Stand somewhere else at once (scenario setup: skip the walk).
+    Teleport(Vec3),
     /// Walk within reach of this item and grab it (for bots that choose
     /// what they want, rather than "the nearest of an id").
     Grab {
@@ -125,6 +127,8 @@ pub enum Expect {
     Near(Vec2, f32),
     /// At least this many robots are wrecks.
     Wrecked(usize),
+    /// At least this many of the bot's shots have struck a robot.
+    RobotHits(u32),
     /// The bot is still standing.
     Alive,
 }
@@ -145,6 +149,8 @@ pub struct Bot {
     /// The last aim point and when, for leading a moving target.
     track: Option<(Vec3, f32)>,
     pub hits: u32,
+    /// Of those, how many struck a robot.
+    pub robot_hits: u32,
     pub passed: u32,
     pub failed: u32,
     pub log: Vec<String>,
@@ -167,6 +173,7 @@ impl Bot {
             sprint: false,
             track: None,
             hits: 0,
+            robot_hits: 0,
             passed: 0,
             failed: 0,
             log: Vec::new(),
@@ -309,11 +316,18 @@ fn drive_bots(
     }
 }
 
-fn count_hits(mut hits: MessageReader<Hit>, mut bots: Query<(Entity, &mut Bot)>) {
+fn count_hits(
+    mut hits: MessageReader<Hit>,
+    mut bots: Query<(Entity, &mut Bot)>,
+    parts: Query<(), With<crate::robots::RobotPart>>,
+) {
     for hit in hits.read() {
         for (e, mut bot) in &mut bots {
             if hit.shooter == Some(e) {
                 bot.hits += 1;
+                if parts.contains(hit.entity) {
+                    bot.robot_hits += 1;
+                }
             }
         }
     }
@@ -404,6 +418,13 @@ fn run_tasks(
             }
             Task::Log(msg) => {
                 bot.note(msg);
+                bot.next();
+            }
+            Task::Teleport(to) => {
+                let mut t = *root;
+                t.translation = zone.on_ground(to.x, to.z);
+                commands.entity(player).insert(t);
+                bot.walk = None;
                 bot.next();
             }
             Task::LookAt(p) => {
@@ -876,6 +897,10 @@ fn run_tasks(
                         let w = robots.iter().filter(|(_, r, _)| r.wrecked).count();
                         (w >= *n, format!("at least {n} robots wrecked (got {w})"))
                     }
+                    Expect::RobotHits(n) => (
+                        bot.robot_hits >= *n,
+                        format!("at least {n} hits on robots (got {})", bot.robot_hits),
+                    ),
                     Expect::Alive => {
                         let h = healths
                             .get(player)

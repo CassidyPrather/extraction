@@ -153,7 +153,7 @@ impl Plugin for BallisticsPlugin {
     }
 }
 
-fn fire_shots(
+pub(crate) fn fire_shots(
     mut commands: Commands,
     mut shots: MessageReader<Shot>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,

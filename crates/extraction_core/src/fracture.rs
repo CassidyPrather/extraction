@@ -222,7 +222,7 @@ pub fn splinter(half: P2, seed: u64, pieces: usize) -> Vec<Shard> {
     // Lengthwise splits first (the grain), then across.
     let along = (pieces / 4).clamp(0, 2);
     let across = pieces.saturating_sub(1).max(1) / (along + 1);
-    let mut cut = |polys: Vec<Vec<P2>>, n: P2, d: f32| -> Vec<Vec<P2>> {
+    let cut = |polys: Vec<Vec<P2>>, n: P2, d: f32| -> Vec<Vec<P2>> {
         polys
             .into_iter()
             .flat_map(|p| {
