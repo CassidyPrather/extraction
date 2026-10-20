@@ -209,6 +209,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Glove",
     "Leather",
     "Padding",
+    // Bare hands (art/hands/lev_hand.py).
+    "Skin",
+    "Nail",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -298,6 +301,9 @@ impl ModelMaterials {
             // The gloves: the canvas scan's weave, fine, under olive-drab
             // nylon, a tan synthetic leather palm and charcoal padding. Dark
             // as worn gloves are, but never black (ART_DIRECTION: values).
+            // An old man's weathered skin; nails a little paler.
+            "Skin" => flat(materials, Color::srgb(0.6, 0.44, 0.35), 0.0, 0.62),
+            "Nail" => flat(materials, Color::srgb(0.72, 0.6, 0.53), 0.0, 0.35),
             "Glove" | "Leather" | "Padding" => {
                 let (c, rough) = match name {
                     "Glove" => (Color::srgb(0.30, 0.29, 0.23), 0.9),
