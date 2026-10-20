@@ -257,6 +257,7 @@ fn load_save(
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
     mut notes: ResMut<crate::raid::board::NotesRead>,
     mut epilogue: ResMut<crate::raid::epilogue::Epilogue>,
+    mut safehouse: ResMut<crate::progression::safehouse::Safehouse>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -301,6 +302,9 @@ fn load_save(
         cache: save.requests.cache.clone(),
         cache_at: save.requests.cache_at.clone(),
     };
+    if zone {
+        safehouse.state = save.zone.safehouse.clone().unwrap_or_default();
+    }
     progression.0 = save
         .progress
         .clone()
@@ -368,7 +372,7 @@ fn fresh_save(map: &str) -> SaveGame {
 
 /// Spawns one saved item (and what's seated in it) with physics on, at
 /// `at`. Returns `None` for ids the catalog no longer knows.
-fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
+pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
         warn!("save: unknown item {:?}, skipped", saved.id);
@@ -488,7 +492,7 @@ pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
     }
 }
 
-fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
+pub(crate) fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
     let stash = world.get::<Stash>(bag_e).is_some();
     let Some(mut bag) = world.get_mut::<Backpack>(bag_e) else {
         return;
@@ -646,7 +650,7 @@ pub fn spawn_remains(world: &mut World, at: Vec3) -> Entity {
 }
 
 /// One item, as saved, with whatever is seated in it.
-fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
+pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
     let catalog = world.resource::<Catalog>();
     let item = world.get::<Item>(e)?;
     let def = catalog.get(item.kind());
@@ -790,6 +794,13 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(b) = bag {
+            // The safehouse's crate is saved with its valley (below).
+            if world
+                .get::<crate::progression::safehouse::SafehouseCrate>(b)
+                .is_some()
+            {
+                continue;
+            }
             // A cargo pod's contents go with the dirigible, saved or not.
             if world.get::<crate::robots::dirigible::CargoPod>(b).is_some() {
                 continue;
@@ -860,6 +871,35 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         });
     }
     save.zone.remains = remains.into_values().collect();
+    // The valley's safehouse, and what's in its crate.
+    if let Some(house) = world
+        .get_resource::<crate::progression::safehouse::Safehouse>()
+        .cloned()
+    {
+        let mut state = house.state.clone();
+        if let Some(bag) = house.crate_bag {
+            let contents = world
+                .get::<Backpack>(bag)
+                .map(|b| b.contents.clone())
+                .unwrap_or_default();
+            let saved: Vec<SavedItem> = contents
+                .iter()
+                .filter_map(|e| {
+                    let local = world
+                        .get::<Transform>(*e)
+                        .map_or(Vec3::ZERO, |t| t.translation);
+                    snapshot_item(world, *e, local)
+                })
+                .collect();
+            // A crate not yet furnished keeps what was saved in it.
+            if !saved.is_empty() || state.stash.is_empty() {
+                state.stash = saved;
+            }
+        }
+        if state != extraction_core::safehouse::SafehouseSave::default() {
+            save.zone.safehouse = Some(state);
+        }
+    }
     save.loadout = loadout;
     save
 }
