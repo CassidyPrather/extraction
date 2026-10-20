@@ -65,7 +65,7 @@
         (kind: Poi, at: (28.0, 18.0), name: "Practice house"),
         (kind: Loot(table: "ammo_common"), at: (-9.0, 46.5), name: "Firing line ammo"),
         (kind: Loot(table: "medical"), at: (5.0, 2.0), name: "Dressing station"),
-        (kind: Loot(table: "food_common"), at: (25.0, -14.0), name: "Shed food"),
+        (kind: Loot(table: "food_common"), at: (20.0, -13.0), name: "Shed food"),
 
         (kind: Sign(text: "THE MACHINES\n\nNone in the yard. Out there, little flyers spot you and call the rest; walkers come to look.\n\nShoot the eye, or keep still in cover."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
     ],
