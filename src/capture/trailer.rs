@@ -90,6 +90,31 @@ impl Director {
         }
     }
 
+    /// Opens, extends or closes the current clip for `reason` at raid time
+    /// `t`. A clip runs at least `MIN_CLIP`, whatever happens; after that a
+    /// new reason cuts to a new clip and none ends it. True when a clip
+    /// closed.
+    fn advance(&mut self, t: f32, reason: Option<String>) -> bool {
+        let young = self.open.as_ref().is_some_and(|c| t - c.start < MIN_CLIP);
+        let same = matches!((&self.open, &reason), (Some(c), Some(r)) if c.reason == *r);
+        if young || same {
+            if let Some(c) = &mut self.open {
+                c.end = t;
+            }
+            return false;
+        }
+        let closed = self.open.take().map(|c| self.clips.push(c)).is_some();
+        let first = self.frame;
+        self.open = reason.map(|reason| Clip {
+            reason,
+            start: t,
+            end: t,
+            first,
+            last: first,
+        });
+        closed
+    }
+
     /// The reason the cameras roll now, if any: the most telling one held.
     fn reason(&self) -> Option<String> {
         const RANK: [&str; 8] = [
@@ -201,26 +226,8 @@ fn direct(
         d.want("walk", t + 6.0);
     }
     let reason = d.reason().filter(|_| d.used < d.budget);
-    // Open, extend or close the current clip.
-    let keep = matches!((&d.open, &reason),
-        (Some(c), Some(r)) if c.reason == *r || t - c.start < MIN_CLIP);
-    if keep {
-        if let Some(c) = &mut d.open {
-            c.end = t;
-        }
-    } else {
-        if let Some(c) = d.open.take() {
-            d.clips.push(c);
-            write_manifest(d, &opts, &out);
-        }
-        let first = d.frame;
-        d.open = reason.map(|reason| Clip {
-            reason,
-            start: t,
-            end: t,
-            first,
-            last: first,
-        });
+    if d.advance(t, reason) {
+        write_manifest(d, &opts, &out);
     }
     let rolling = d.open.is_some();
     if let Ok(mut c) = cams.single_mut() {
@@ -379,5 +386,48 @@ fn aim(
     d.drone_at = Some(at);
     if let Ok(mut c) = drone.single_mut() {
         *c = Transform::from_translation(at).looking_at(eye, Vec3::Y);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clips_run_their_minimum_and_cut_on_a_new_reason() {
+        let mut d = Director::default();
+        let r = |s: &str| Some(s.to_string());
+        assert!(!d.advance(0.0, r("robot")));
+        // The robot wanders off at once: the clip still runs its minimum.
+        assert!(!d.advance(1.0, None));
+        assert!(d.open.is_some());
+        // A fight starts: a cut to a new clip.
+        assert!(d.advance(MIN_CLIP + 0.1, r("fight")));
+        assert_eq!(d.clips[0].reason, "robot");
+        assert_eq!(d.open.as_ref().unwrap().reason, "fight");
+        // The fight goes on.
+        assert!(!d.advance(10.0, r("fight")));
+        assert_eq!(d.open.as_ref().unwrap().end, 10.0);
+        // And ends: the clip closes, nothing rolls.
+        assert!(d.advance(11.0, None));
+        assert!(d.open.is_none());
+        assert_eq!(d.clips.len(), 2);
+    }
+
+    #[test]
+    fn the_most_telling_reason_wins() {
+        let mut d = Director {
+            t: 5.0,
+            ..default()
+        };
+        d.want("walk", 10.0);
+        d.want("robot", 10.0);
+        assert_eq!(d.reason().as_deref(), Some("robot"));
+        d.want("fight", 6.0);
+        assert_eq!(d.reason().as_deref(), Some("fight"));
+        d.t = 7.0;
+        assert_eq!(d.reason().as_deref(), Some("robot"));
+        d.t = 11.0;
+        assert_eq!(d.reason(), None);
     }
 }
