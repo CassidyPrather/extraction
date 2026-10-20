@@ -30,6 +30,7 @@ pub mod search;
 pub mod senses;
 pub mod visuals;
 pub mod walker;
+pub mod weathering;
 pub mod wreck;
 
 use avian3d::prelude::*;
