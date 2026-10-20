@@ -26,6 +26,8 @@ pub struct RaidEntry {
     pub items: usize,
     /// Artifacts among them, by name.
     pub artifacts: Vec<String>,
+    /// Nights slept out, in the safehouse.
+    pub nights: u32,
 }
 
 #[derive(Resource, Default, Debug)]
@@ -129,6 +131,7 @@ fn write_entries(
     players: Query<Entity, With<LocalPlayer>>,
     carried: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
+    house: Option<Res<crate::progression::safehouse::Safehouse>>,
     mut was: Local<Option<std::mem::Discriminant<Phase>>>,
 ) {
     let now = std::mem::discriminant(&raid.phase);
@@ -169,6 +172,7 @@ fn write_entries(
         wrecked: std::mem::take(&mut book.wrecked),
         items,
         artifacts,
+        nights: house.map_or(0, |h| h.nights_out),
     };
     book.written = Some(entry_text(&entry));
     book.last = Some(entry);
@@ -200,6 +204,13 @@ fn entry_text(e: &RaidEntry) -> String {
         if e.home { "HOME" } else { "LOST" },
         e.minutes.max(1.0)
     )];
+    if e.nights > 0 {
+        lines.push(if e.nights == 1 {
+            "1 night out".to_owned()
+        } else {
+            format!("{} nights out", e.nights)
+        });
+    }
     lines.push(format!("Wrecked {}", wreck_list(&e.wrecked)));
     if e.home {
         lines.push(format!("Brought home {} things", e.items));

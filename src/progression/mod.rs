@@ -60,6 +60,7 @@ pub struct ProgressionPlugin;
 
 impl Plugin for ProgressionPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(safehouse::SafehousePlugin);
         app.init_resource::<Progression>()
             .init_resource::<Epilogue>()
             .add_message::<JobDone>()
@@ -909,6 +910,7 @@ pub fn career_page(
 }
 
 pub mod lines;
+pub mod safehouse;
 
 #[cfg(test)]
 mod tests;

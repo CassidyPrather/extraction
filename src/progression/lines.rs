@@ -178,6 +178,25 @@ pub fn why_after(item: &str) -> Option<&'static str> {
     })
 }
 
+// --- Safehouse ----------------------------------------------------------------
+// (Placeholders for Story.)
+
+pub const SAFE_CLEARED: &str = "Nothing in here but dust. Wedge the door, light the stove.";
+pub const SAFE_BARRED: &str = "The door's wedged. Nobody's coming in quietly.";
+pub const SAFE_LIT: &str = "The stove takes. The cabin smells of smoke and pine.";
+pub const SAFE_STOVE_LIT: &str = "The stove's ticking over.";
+pub const SAFE_NO_MATCHES: &str = "Nothing to light it with. Matches.";
+pub const SAFE_CLAIMED: &str = "A crate, a bed, a radio. Somewhere to stop.";
+pub const SAFE_NOT_YET: &str = "Not yours yet. Clear it, wedge the door, light the stove.";
+pub const SAFE_WEDGE_FIRST: &str = "Not with the door loose. Wedge it first.";
+pub const SAFE_SURGE_CLOSE: &str = "The air's wrong. The Surge is too close to sleep.";
+pub const SAFE_WOKE: &str = "Grey light under the door. Morning.";
+pub const SAFE_NIGHT_VISIT: &str =
+    "The radio, in the dark: machine talk, close. Something's at the door.";
+pub const SAFE_TRUCK_WAITS: &str = "Truck: \"I'll sit tight at the RV tonight. First light.\"";
+pub const SAFE_TRUCK_LEFT: &str = "Truck: \"Couldn't wait all night. Call me again.\"";
+pub const SAFE_FOUND: &str = "Truck: \"You were loud out there. They'll have found your cabin.\"";
+
 // --- Upkeep and orders (after the ladder) ---------------------------------
 
 /// "2 scrap metal", "1 electronics".
@@ -265,6 +284,20 @@ mod tests {
             back_in_order("cabinet"),
             ORDER_LATER.into(),
             ordered("Medicine"),
+            SAFE_CLEARED.into(),
+            SAFE_BARRED.into(),
+            SAFE_LIT.into(),
+            SAFE_STOVE_LIT.into(),
+            SAFE_NO_MATCHES.into(),
+            SAFE_CLAIMED.into(),
+            SAFE_NOT_YET.into(),
+            SAFE_WEDGE_FIRST.into(),
+            SAFE_SURGE_CLOSE.into(),
+            SAFE_WOKE.into(),
+            SAFE_NIGHT_VISIT.into(),
+            SAFE_TRUCK_WAITS.into(),
+            SAFE_TRUCK_LEFT.into(),
+            SAFE_FOUND.into(),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(
