@@ -736,15 +736,19 @@ impl World2<'_, '_> {
             Phase::TruckWaiting { .. } => {
                 // Round to the back and up its steps, as a person would
                 // (straight at it, the bot met the truck's side).
-                let Some(rear) = self
-                    .trucks
-                    .iter()
-                    .next()
-                    .map(|g| g.transform_point(Vec3::new(0.0, 0.0, 4.0)).xz())
-                else {
+                // Then up the middle of the bed, left of the bench, to just
+                // past its front: the cord is in reach there.
+                let Some(truck) = self.trucks.iter().next() else {
                     return vec![Task::Wait(1.0)];
                 };
-                let mut t = self.legs(here, rear);
+                let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
+                let mut t = self.legs(here, at(0.0, 4.0));
+                for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
+                    t.push(Task::WalkTo {
+                        to: at(x, z),
+                        within: 0.3,
+                    });
+                }
                 if let Some((bell, _)) = self
                     .pressables
                     .iter()
