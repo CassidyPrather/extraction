@@ -114,6 +114,7 @@ fn break_up(
             Option<&Walker>,
             Option<&LegPoses>,
             Option<&Drone>,
+            Option<&super::anim::Gait>,
             Has<super::collector::Collector>,
         ),
         Without<Broken>,
@@ -127,12 +128,15 @@ fn break_up(
     velocities: Query<(&LinearVelocity, &AngularVelocity)>,
     mut ledger: ResMut<DebrisLedger>,
 ) {
-    for (e, robot, t, children, walker, poses, drone, collector) in &robots {
+    for (e, robot, t, children, walker, poses, drone, gait, collector) in &robots {
         // (The collector drops its cargo first, the tick it's wrecked.)
         if !robot.wrecked || collector {
             continue;
         }
         let seed = e.index_u32();
+        // A smaller body (a crawler) breaks into smaller, lighter pieces.
+        let size = gait.map_or(1.0, |g| g.size);
+        let (m3, m5) = (size.powi(3), size.powi(5));
         let mut spawned: Vec<Entity> = Vec::new();
         let mut spawn =
             |commands: &mut Commands, b: (Debris, Transform, Vec3, Vec3, f32, Collider, Vec3)| {
@@ -176,6 +180,7 @@ fn break_up(
                         // Its own frame: Y down the segment.
                         let at = Transform::from_translation((a + b) * 0.5)
                             .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
+                        // (Lengths and masses at full size; scaled on spawn.)
                         let i_ax = mass * len * len / 12.0;
                         spawn(
                             &mut commands,
@@ -198,7 +203,7 @@ fn break_up(
                 for k in 0..2u32 {
                     let a = jitter(seed, 20 + k) * std::f32::consts::PI;
                     let dir = Vec3::new(a.cos(), 0.6, a.sin()).normalize();
-                    let at = Transform::from_translation(t.translation + dir * 0.42)
+                    let at = Transform::from_translation(t.translation + dir * 0.42 * size)
                         .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
                     spawn(
                         &mut commands,
@@ -246,9 +251,9 @@ fn break_up(
                 // The orb drops and rolls.
                 commands.entity(e).insert((
                     RigidBody::Dynamic,
-                    Mass(70.0),
+                    Mass(70.0 * m3),
                     NoAutoMass,
-                    AngularInertia::new(Vec3::splat(0.4 * 70.0 * 0.16)),
+                    AngularInertia::new(Vec3::splat(0.4 * 70.0 * 0.16 * m5)),
                     NoAutoAngularInertia,
                     LinearVelocity(v0 + Vec3::Y * 0.5),
                     AngularVelocity(Vec3::new(jitter(seed, 60), 0.0, jitter(seed, 61)) * 1.5),

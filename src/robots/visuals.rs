@@ -781,13 +781,15 @@ fn spin_propellers(
 fn pose_leg_visuals(
     mut commands: Commands,
     mut segments: Query<(Entity, &LegSegment, &mut Transform)>,
-    poses: Query<&LegPoses>,
+    poses: Query<(&LegPoses, Option<&super::anim::Gait>)>,
 ) {
     for (e, seg, mut t) in &mut segments {
-        let Ok(p) = poses.get(seg.robot) else {
+        let Ok((p, gait)) = poses.get(seg.robot) else {
             commands.entity(e).despawn();
             continue;
         };
+        // Thickness with the body's size; length from the joints.
+        let w = gait.map_or(1.0, |g| g.size);
         let [hip, knee, foot] = p.0[seg.leg];
         let (a, b) = if seg.lower { (knee, foot) } else { (hip, knee) };
         let len = a.distance(b).max(0.01);
@@ -795,7 +797,7 @@ fn pose_leg_visuals(
         let Some(nominal) = seg.model_length else {
             *t = Transform::from_translation((a + b) * 0.5)
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir))
-                .with_scale(Vec3::new(1.0, len / 1.1, 1.0));
+                .with_scale(Vec3::new(w, len / 1.1, w));
             continue;
         };
         // X along the knee's hinge axis (the leg plane's normal), Y down the
@@ -808,7 +810,7 @@ fn pose_leg_visuals(
         let z = x.cross(dir);
         *t = Transform::from_translation(a)
             .with_rotation(Quat::from_mat3(&Mat3::from_cols(x, dir, z)))
-            .with_scale(Vec3::new(1.0, len / nominal, 1.0));
+            .with_scale(Vec3::new(w, len / nominal, w));
     }
 }
 
