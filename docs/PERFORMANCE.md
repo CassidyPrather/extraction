@@ -99,3 +99,23 @@ exaggerates per-sample and per-pixel work against a GPU):
 
 `msaa=2` doesn't run under lavapipe (no 2x for the HDR target); try it
 in the headset.
+
+## Cuts
+
+Each landed as its own commit with the numbers; per eye, before > after.
+
+| Cut | Where | What it bought |
+| - | - | - |
+| Fence wire merged per 16 m cell, fades by 40-50 m, no shadow | `world::structures` | 1000-1500 fewer draws in Marrow Creek views (gate 3291 > 1831) |
+| Items fade at 300x their size (15-60 m; artifacts excepted) | `budget::range_items` | Draws -15..-30%, triangles -10..-30%, village shadow triangles 128k > 56k |
+| Forest cards cast the sun's shadow only within 30 m (`ShadowReach`) | `world::trees`, `budget::shadow_reach` | Wood shadow draws -30..-45%; software frame spruce -15%, pines -11% |
+| Fence posts and plates fade by 90 m (`LodReach`) | `world::structures`, `budget::range_items` | Kettle Pass draws -20..-30% (gate 1491 > 1146) |
+| Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
+
+Shared tools for the next ones (in `render::budget`):
+
+- `LodReach(m)` on an entity: every mesh under it, models that arrive
+  later included, fades out by `m`.
+- `ShadowReach(m)` on a mesh: it casts the sun's shadow only within `m`
+  (a `VisibilityRange` can't do this: the cascades use the camera's).
+- Items get a range from their catalogue size by themselves.

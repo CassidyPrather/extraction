@@ -329,6 +329,10 @@ fn spawn_forests(
     }
     let mut grid = ForestGrid::default();
     let mut chunk_count = 0;
+    let mut impostors: std::collections::HashMap<
+        ((i32, i32), (TreeSpecies, usize)),
+        super::impostors::Builder,
+    > = Default::default();
     for (key, members) in &chunks {
         for (e, tree, t) in members {
             grid.cells
@@ -399,37 +403,42 @@ fn spawn_forests(
                 }
             }
         }
-        // Far foliage: impostors, one mesh per variant in the chunk.
-        let mut by_variant: std::collections::HashMap<
-            (TreeSpecies, usize),
-            super::impostors::Builder,
-        > = Default::default();
+        // Far foliage: impostors, one mesh per variant per block of
+        // chunks (below).
+        let block = (
+            key.0.div_euclid(IMPOSTOR_BLOCK),
+            key.1.div_euclid(IMPOSTOR_BLOCK),
+        );
         for (_, tree, t) in members {
             let v = &assets.handles[&(tree.species, tree.variant)];
             if let Some((imp, _)) = &v.impostor {
                 super::impostors::quads(
                     imp,
                     t,
-                    by_variant.entry((tree.species, tree.variant)).or_default(),
+                    impostors
+                        .entry((block, (tree.species, tree.variant)))
+                        .or_default(),
                 );
             }
         }
-        for (key, b) in by_variant {
-            if b.is_empty() {
-                continue;
-            }
-            let (_, mat) = assets.handles[&key].impostor.as_ref().unwrap();
-            commands.spawn((
-                Name::new("Forest impostors"),
-                crate::render::centred(&mut meshes, b.build()),
-                MeshMaterial3d(mat.clone()),
-                bevy::light::NotShadowCaster,
-                impostor_range(FOG_CULL_DEFAULT),
-                ImpostorForest,
-                ChildOf(parent),
-            ));
-        }
         chunk_count += 1;
+    }
+    // Impostors are only ever far, and their near cut is the shader's, per
+    // tree: merged over 3x3 chunks they are a ninth of the draws (they
+    // were two thirds of the forest's).
+    for ((_, key), b) in impostors {
+        if b.is_empty() {
+            continue;
+        }
+        let (_, mat) = assets.handles[&key].impostor.as_ref().unwrap();
+        commands.spawn((
+            Name::new("Forest impostors"),
+            crate::render::centred(&mut meshes, b.build()),
+            MeshMaterial3d(mat.clone()),
+            bevy::light::NotShadowCaster,
+            impostor_range(FOG_CULL_DEFAULT),
+            ImpostorForest,
+        ));
     }
     info!(
         "forest: {} trees in {chunk_count} chunks",
@@ -441,6 +450,8 @@ fn spawn_forests(
 
 /// Chunk size for merged forest meshes, metres.
 pub const CHUNK: f32 = 48.0;
+/// Impostors merge over this many chunks a side.
+const IMPOSTOR_BLOCK: i32 = 3;
 /// A chunk (by its centre) switches to the coarse LOD this far away.
 const FAR_LOD: f32 = 130.0;
 /// Until the weather says otherwise, chunks vanish this far out.
@@ -539,6 +550,8 @@ fn cut_near_detail(
 pub struct ImpostorForest;
 
 fn impostor_range(fog: f32) -> bevy::camera::visibility::VisibilityRange {
+    // To a block's centre: the rest of a block's half-width further.
+    let fog = fog + (IMPOSTOR_BLOCK - 1) as f32 * CHUNK * 0.7;
     bevy::camera::visibility::VisibilityRange {
         start_margin: 0.0..0.0,
         end_margin: fog..(fog + 20.0),

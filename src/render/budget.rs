@@ -980,6 +980,17 @@ mod tests {
             .get(std::any::TypeId::of::<Mesh3d>())
             .to_vec();
         let mut kinds: HashMap<String, usize> = HashMap::new();
+        for &e in &seen {
+            let r = w.entity(e);
+            let k = if r.contains::<crate::world::trees::ImpostorForest>() {
+                "forest: impostors"
+            } else if r.contains::<crate::world::trees::FarForest>() {
+                "forest: far LOD"
+            } else {
+                continue;
+            };
+            *kinds.entry(k.to_string()).or_default() += 1;
+        }
         for e in seen {
             let mut root = e;
             let mut named = false;
