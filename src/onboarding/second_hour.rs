@@ -382,7 +382,7 @@ pub(super) fn direct(
                     .holding(Side::Right)
                     .is_some_and(|e| world.guns.get(e).is_ok());
                 if !armed {
-                    if let Some(gun) = world.any_gun() {
+                    if let Some(gun) = world.any_gun(here) {
                         tasks.push(Grab {
                             item: gun,
                             side: Side::Right,
@@ -442,8 +442,27 @@ pub(super) fn direct(
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
                 run.tries += 1;
+            } else if world.held_condition(player) < 0.5 && run.tries < 2 {
+                // Not a drone with a worn rifle: the worn one on the sling,
+                // a sound one in hand.
+                world.drop_kit(&mut commands, root.translation);
+                tasks.push(Stow(Side::Right));
+                tasks.push(Wait(0.5));
+                tasks.push(PickUp {
+                    id: "ak74".into(),
+                    side: Side::Right,
+                });
+                tasks.push(PickUp {
+                    id: "ak_mag".into(),
+                    side: Side::Left,
+                });
+                tasks.push(Stow(Side::Left));
+                tasks.push(Gun(MacroKind::Reload));
+                tasks.push(Gun(MacroKind::Mode));
+                run.tries += 1;
             } else if !firsts.met(First::DroneLock) && run.tries < 4 {
                 tasks.push(Gun(MacroKind::Reload));
+                tasks.push(Support);
                 tasks.push(Spawn {
                     kind: crate::robots::RobotKind::Drone,
                     at: Vec3::new(
@@ -471,7 +490,10 @@ pub(super) fn direct(
         }
         Step::Recover => {
             // Back out to where it fell, for what it carried.
-            match (run.remains, world.remains_item(player)) {
+            match (
+                world.remains_at(player).or(run.remains),
+                world.remains_item(player),
+            ) {
                 (Some(at), Some(item)) if run.tries < 3 => {
                     tasks.extend(world.legs(here, at.xz()));
                     tasks.push(Grab {
@@ -589,6 +611,7 @@ pub(super) struct World2<'w, 's> {
     health: Query<'w, 's, &'static crate::health::Health>,
     bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
 }
 
@@ -609,6 +632,13 @@ impl World2<'_, '_> {
 
     fn hand_empty(&self, side: Side) -> Option<bool> {
         Some(self.holding(side).is_none())
+    }
+
+    fn held_condition(&self, player: Entity) -> f32 {
+        self.guns
+            .iter()
+            .find(|(_, h)| h.player == player)
+            .map_or(1.0, |(g, _)| g.firearm.condition)
     }
 
     fn gun_clear(&self, player: Entity) -> Option<bool> {
@@ -764,6 +794,13 @@ impl World2<'_, '_> {
             .any(|(_, r, _)| !r.wrecked && r.kind == crate::robots::RobotKind::Drone)
     }
 
+    fn remains_at(&self, player: Entity) -> Option<Vec3> {
+        self.remains
+            .iter()
+            .find(|(_, r)| r.owner == player)
+            .map(|(gt, _)| gt.translation())
+    }
+
     fn robot_entities(&self) -> Vec<Entity> {
         self.robots.iter().map(|(e, ..)| e).collect()
     }
@@ -863,12 +900,15 @@ impl World2<'_, '_> {
     }
 
     /// A gun lying loose, or in the crate.
-    fn any_gun(&self) -> Option<Entity> {
+    /// A gun lying loose nearby (not one out in its remains).
+    fn any_gun(&self, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
-            .filter(|(e, _, _, held, sock, _)| {
+            .filter(|(e, _, gt, held, sock, bag)| {
                 held.is_none()
                     && sock.is_none()
+                    && bag.is_none()
+                    && gt.translation().xz().distance(near) < 30.0
                     && matches!(self.id(*e), Some("ak74" | "pm_pistol" | "sks" | "mosin"))
             })
             .map(|(e, ..)| e)
