@@ -54,6 +54,7 @@ impl Plugin for GunVisualsPlugin {
             super::impacts::ImpactFxPlugin,
             super::sling::SlingPlugin,
             super::tracers::TracerPlugin,
+            super::wear::WearPlugin,
         ));
     }
 }

@@ -1044,6 +1044,80 @@ mod vr_tests {
         }
     }
 
+    /// A fouled, worn AK throws its rounds wider. The cleaning kit, brought
+    /// to the receiver in the other hand, takes the fouling out and the
+    /// spread closes (the wear stays); three strokes of the rod down the
+    /// bore take some out too.
+    #[test]
+    fn cleaning_by_hand_closes_the_spread() {
+        let mut r = hold("ak74", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.fouling = 1.0;
+            g.firearm.condition = 0.5;
+        }
+        let dirty = gun_mut(&mut r).firearm.spread_radians();
+        // The rod: in at the muzzle and back out, three times.
+        let (muzzle, out) = {
+            let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            (gt.transform_point(g.layout.muzzle), gt.forward().as_vec3())
+        };
+        let at = muzzle + out * 0.5;
+        let rod = r.vr.spawn(
+            "cleaning_rod",
+            Transform::from_translation(at).looking_to(out, Vec3::Y),
+        );
+        r.vr.app
+            .world_mut()
+            .entity_mut(rod)
+            .insert(avian3d::prelude::RigidBody::Static);
+        let rot = Transform::IDENTITY.looking_to(out, Vec3::Y).rotation;
+        r.vr.hand(Side::Left, at, rot, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(Side::Left, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(rod)
+            .insert(avian3d::prelude::RigidBody::Dynamic);
+        let away = muzzle + out * 0.5;
+        let deep = muzzle + out * 0.15;
+        for _ in 0..3 {
+            glide_side(&mut r, Side::Left, away, deep, 20);
+            glide_side(&mut r, Side::Left, deep, away, 20);
+        }
+        let stroked = gun_mut(&mut r).firearm.fouling;
+        assert!(
+            (stroked - (1.0 - 3.0 * super::super::faults::ROD_STROKE)).abs() < 0.01,
+            "three strokes: {stroked}"
+        );
+        // Rod down, kit up, to the receiver.
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(3);
+        let receiver =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(r.gun)
+                .unwrap()
+                .translation();
+        let kit_at = receiver + Vec3::new(-0.35, -0.1, 0.1);
+        take_in(&mut r, Side::Left, "cleaning_kit", kit_at);
+        glide_side(
+            &mut r,
+            Side::Left,
+            kit_at,
+            receiver + Vec3::new(-0.08, 0.0, 0.0),
+            20,
+        );
+        r.vr.step(3);
+        let g = gun_mut(&mut r);
+        assert_eq!(g.firearm.fouling, 0.0, "cleaned");
+        assert_eq!(g.firearm.condition, 0.5, "the wear stays");
+        let clean = g.firearm.spread_radians();
+        assert!(clean < dirty * 0.8, "the spread closes: {dirty} -> {clean}");
+    }
+
     fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
         for i in 1..=steps {
             r.vr.move_hand(side, a.lerp(b, i as f32 / steps as f32));

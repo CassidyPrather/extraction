@@ -24,6 +24,7 @@ pub mod range;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
+pub mod wear;
 pub mod zero;
 
 use avian3d::prelude::*;

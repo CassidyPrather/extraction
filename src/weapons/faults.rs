@@ -11,6 +11,9 @@
 //! - A filthy Mosin's bolt sticks shut after the shot: lifting the handle
 //!   only grinds. Slap it up hard (a palm under the handle,
 //!   [`STICKY_SLAP`]) and it breaks free (in `work_handles`).
+//! - The rod also cleans: each stroke down the bore and back out scrubs
+//!   some fouling ([`ROD_STROKE`]); a cleaning kit or oil touched to the
+//!   gun's receiver does the rest (`flat::touch_to_combine`).
 //! - A worn, dirty SKS can slam-fire: the round goes off as the bolt closes
 //!   on it, trigger or no. Cleaning and repair are the cure.
 
@@ -32,6 +35,8 @@ pub const STICKY_SLAP: f32 = 1.2;
 /// squib's bullet out, and how near the bore's line it must be, metres.
 pub const ROD_DEPTH: f32 = 0.1;
 pub const ROD_RADIUS: f32 = 0.025;
+/// Fouling a stroke of the rod down the bore and back takes out.
+pub const ROD_STROKE: f32 = 0.08;
 /// What a bulging barrel does to the hand on it.
 pub const BULGE_HARM: f32 = 15.0;
 
@@ -121,16 +126,19 @@ fn grind_stuck_bolts(
 }
 
 /// The tip of a cleaning rod, pushed into a muzzle and down the bore,
-/// knocks a squib's bullet out.
+/// knocks a squib's bullet out; each stroke down and back out scrubs some
+/// fouling from the bore.
 fn rod_bores(
-    hands: Query<&Hand>,
+    hands: Query<(Entity, &Hand)>,
     rods: Query<(&Item, &GlobalTransform)>,
     mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item)>,
     catalog: Res<Catalog>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<super::Ejection>,
+    mut down: Local<HashMap<(Entity, Entity), bool>>,
 ) {
-    for hand in &hands {
+    let mut seen = Vec::new();
+    for (hand_e, hand) in &hands {
         let Some(rod) = hand.holding else {
             continue;
         };
@@ -148,22 +156,39 @@ fn rod_bores(
             rgt.transform_point(Vec3::Z * half),
         ];
         for (e, mut gun, gt, gun_item) in &mut guns {
-            if gun.firearm.squib.is_none() {
+            let muzzle = gt.transform_point(gun.layout.muzzle);
+            if muzzle.distance(rgt.translation()) > half + 0.3 {
                 continue;
             }
-            let muzzle = gt.transform_point(gun.layout.muzzle);
             let out_of_bore = gt.rotation() * Vec3::NEG_Z;
-            let rodded = tips.iter().any(|t| {
-                let rel = *t - muzzle;
-                let depth = -rel.dot(out_of_bore);
-                let off = (rel + out_of_bore * depth).length();
-                depth > ROD_DEPTH && off < ROD_RADIUS
-            });
-            if rodded {
-                let ev = gun.firearm.rod_through();
+            // How far down the bore the deeper tip is (negative: outside),
+            // if it's on the bore's line.
+            let depth = tips
+                .iter()
+                .filter_map(|t| {
+                    let rel = *t - muzzle;
+                    let depth = -rel.dot(out_of_bore);
+                    ((rel + out_of_bore * depth).length() < ROD_RADIUS).then_some(depth)
+                })
+                .fold(f32::NEG_INFINITY, f32::max);
+            seen.push((hand_e, e));
+            let was_down = down.get(&(hand_e, e)).copied().unwrap_or(false);
+            let ev = if depth > ROD_DEPTH {
+                down.insert((hand_e, e), true);
+                gun.firearm.rod_through()
+            } else {
+                if was_down && depth < 0.0 {
+                    // Back out: a stroke's worth of fouling with it.
+                    down.insert((hand_e, e), false);
+                    gun.firearm.clean(ROD_STROKE);
+                }
+                Vec::new()
+            };
+            if !ev.is_empty() {
                 let name = catalog.get(gun_item.kind()).id.clone();
                 super::emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
             }
         }
     }
+    down.retain(|k, _| seen.contains(k));
 }
