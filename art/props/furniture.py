@@ -398,3 +398,25 @@ def locker():
 
 prop("chair", chair)
 prop("locker", locker)
+
+def pew():
+    """A chapel bench 2.4 long (`Builder::pew`): seat at 0.45, 0.4 deep, a
+    back at +Z up to 0.95, solid ends with a scrolled top."""
+    w = Wear(49)
+    p = Part("static")
+    L = 2.4
+    for sx in (-1, 1):
+        prof = fillet([(-0.22, 0.0), (0.22, 0.0), (0.22, 0.98), (0.12, 0.98), (-0.05, 0.6),
+                       (-0.22, 0.6)], [0.0, 0.0, 0.04, 0.04, 0.06, 0.04], 3)
+        a, b = sorted((sx * (L / 2 - 0.04), sx * L / 2))
+        p.prism(prof, a, b, "Timber", axis="x")
+    for k in range(2):
+        board(p, (L - 0.08, 0.03, 0.19), (0.0, 0.435, -0.1 + k * 0.2), "Timber", w, bevel=0.003)
+    board(p, (L - 0.08, 0.08, 0.02), (0.0, 0.38, -0.19), "Timber", bevel=0.003)
+    for y in (0.62, 0.86):
+        board(p, (L - 0.08, 0.14, 0.025), (0.0, y, 0.19), "Timber", w, bevel=0.003)
+    board(p, (L - 0.08, 0.06, 0.06), (0.0, 0.06, 0.12), "Timber", bevel=0.003)
+    return [p]
+
+
+prop("pew", pew)
