@@ -375,6 +375,9 @@ pub const SURGE_SWELL: f32 = 0.3;
 pub const SURGE_HURRY: f32 = 2.0;
 /// Seconds before the Surge at which a new anomaly blooms near you.
 pub const SURGE_BLOOMS: [f32; 5] = [240.0, 170.0, 110.0, 60.0, 25.0];
+/// Chance a Surge bloom grows a stormglass at its heart (the only place
+/// one grows): about one a Surge.
+pub const STORMGLASS_CHANCE: f32 = 0.25;
 /// Seconds a Surge bloom spends forming (visible, harmless) first.
 pub const SURGE_FORMING: f32 = 4.0;
 

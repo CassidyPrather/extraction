@@ -1067,7 +1067,13 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 4] = ["bolt", "detector", "art_lodestone", "art_shard"];
+const OWN_LOOKS: [&str; 5] = [
+    "bolt",
+    "detector",
+    "art_lodestone",
+    "art_shard",
+    "art_stormglass",
+];
 
 /// Claims the look of an anomaly item as it's spawned, before the item
 /// placeholder system gives it a box.
@@ -1270,6 +1276,21 @@ fn dress_items(
                     ..default()
                 });
                 parts.push((meshes.add(shard_mesh()), glass, Transform::IDENTITY));
+            }
+            "art_stormglass" => {
+                // A clouded bead: milky glass with a cold light in it.
+                let glass = materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.82, 0.86, 0.92, 0.85),
+                    perceptual_roughness: 0.25,
+                    emissive: LinearRgba::rgb(0.05, 0.08, 0.14),
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                });
+                parts.push((
+                    meshes.add(Sphere::new(0.02).mesh().ico(3).unwrap()),
+                    glass,
+                    Transform::IDENTITY,
+                ));
             }
             _ => continue,
         }

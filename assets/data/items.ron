@@ -648,6 +648,11 @@
             category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1, lift_kg: -5.0,
         ),
         (
+            id: "art_stormglass", dims: Some((0.04, 0.04, 0.04)), name: "Stormglass",
+            description: "A clouded bead, cold as hail and never melting, grown only where the Surge itself broke the ground. Carry it and the Surge passes over you as if you were under a roof. The whole Zone knows where it is.",
+            category: Artifact, size: Tiny, mass: 0.1, bulk: 0.03, attention: 3.0,
+        ),
+        (
             id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
             description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
