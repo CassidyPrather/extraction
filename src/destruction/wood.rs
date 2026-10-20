@@ -61,9 +61,10 @@ impl Plugin for WoodPlugin {
         app.init_resource::<GoneDoors>()
             .add_observer(door_gone)
             .add_observer(crate_gone)
+            .add_observer(building_crate_gone)
             .add_systems(
                 FixedUpdate,
-                (fit_doors, fit_crates, take_hits)
+                (fit_doors, fit_crates, fit_building_crates, take_hits)
                     .chain()
                     .in_set(super::DestructionSystems),
             );
@@ -106,12 +107,15 @@ fn fit_doors(
             commands.entity(e).insert(Quiet).despawn();
             continue;
         }
-        commands.entity(e).insert(Timber {
-            hp: DOOR_HP,
-            max: DOOR_HP,
-            key: k,
-            push: Vec3::ZERO,
-        });
+        commands.entity(e).insert((
+            Timber {
+                hp: DOOR_HP,
+                max: DOOR_HP,
+                key: k,
+                push: Vec3::ZERO,
+            },
+            super::hooks::door_seam(d.width),
+        ));
     }
 }
 
@@ -135,7 +139,19 @@ fn fit_crates(
                 key: k,
                 push: Vec3::ZERO,
             },
+            super::hooks::lid_seam(SUPPLY_CRATE * 0.5),
         ));
+    }
+}
+
+/// Each building's crates, as it appears.
+fn fit_building_crates(
+    mut commands: Commands,
+    buildings: Query<(&Building, &Transform), Added<Building>>,
+    broken: Res<Broken>,
+) {
+    for (b, t) in &buildings {
+        spawn_building_crates(&mut commands, b, t, &broken);
     }
 }
 
@@ -272,7 +288,7 @@ fn door_gone(
     debris::throw(&mut commands, &mut pool, pieces);
 }
 
-/// A crate gone: its slats fly, and what was packed in it spills out.
+/// A supply crate gone: its slats fly, and what was packed in it spills.
 #[allow(clippy::too_many_arguments)]
 fn crate_gone(
     remove: On<Remove, SupplyCrate>,
@@ -294,13 +310,71 @@ fn crate_gone(
     if quiet {
         return;
     }
+    burst(
+        &mut commands,
+        &mut pool,
+        &mut broken,
+        gt,
+        timber,
+        SUPPLY_CRATE * 0.5,
+        table.zip(loot.as_deref()).map(|(t, l)| (t, l, &*catalog)),
+    );
+}
+
+/// A building's crate gone, the same way.
+#[allow(clippy::too_many_arguments)]
+fn building_crate_gone(
+    remove: On<Remove, BuildingCrate>,
+    crates: Query<(
+        &BuildingCrate,
+        &GlobalTransform,
+        Option<&Timber>,
+        Option<&CrateLoot>,
+        Has<Quiet>,
+    )>,
+    mut commands: Commands,
+    mut pool: ResMut<DebrisPool>,
+    mut broken: ResMut<Broken>,
+    loot: Option<Res<crate::items::loot::Loot>>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    let Ok((c, gt, timber, table, quiet)) = crates.get(remove.entity) else {
+        return;
+    };
+    if quiet {
+        return;
+    }
+    burst(
+        &mut commands,
+        &mut pool,
+        &mut broken,
+        gt,
+        timber,
+        Vec3::splat(c.size * 0.5),
+        table.zip(loot.as_deref()).map(|(t, l)| (t, l, &*catalog)),
+    );
+}
+
+/// A crate of half extents `s` bursts: its four sides and lid fly as
+/// splintered slats, and a roll of what it was packed with spills out.
+fn burst(
+    commands: &mut Commands,
+    pool: &mut DebrisPool,
+    broken: &mut Broken,
+    gt: &GlobalTransform,
+    timber: Option<&Timber>,
+    s: Vec3,
+    packed: Option<(
+        &CrateLoot,
+        &crate::items::loot::Loot,
+        &crate::items::Catalog,
+    )>,
+) {
     let k = timber.map_or(key(gt.translation()), |t| t.key);
     broken.0.insert(k);
     let (_, rot, c) = gt.to_scale_rotation_translation();
     let push = timber.map_or(Vec3::ZERO, |t| t.push);
     let mut rng = Rng::new(super::glass::seed_of(k) ^ 0xC8A7E);
-    let s = SUPPLY_CRATE * 0.5;
-    // Its four sides and lid, a slat or two each, splintered.
     let faces = [
         (
             Vec3::new(0.0, 0.0, s.z),
@@ -348,31 +422,163 @@ fn crate_gone(
             ));
         }
     }
-    debris::throw(&mut commands, &mut pool, pieces);
+    debris::throw(commands, pool, pieces);
     // What was packed inside.
-    let (Some(loot), Some(table)) = (loot, table) else {
+    let Some((table, loot, catalog)) = packed else {
         return;
     };
     for (i, drop) in loot
         .0
-        .roll(&table.0, &catalog, &mut rng)
+        .roll(&table.0, catalog, &mut rng)
         .into_iter()
         .enumerate()
     {
         let off = Vec3::new(
-            (i as f32 * 1.9).sin() * 0.25,
-            -0.2 + 0.08 * i as f32,
-            (i as f32 * 1.9).cos() * 0.15,
+            (i as f32 * 1.9).sin() * s.x * 0.5,
+            -s.y * 0.5 + 0.08 * i as f32,
+            (i as f32 * 1.9).cos() * s.z * 0.5,
         );
         crate::items::spawn_item(
-            &mut commands,
-            &catalog,
+            commands,
+            catalog,
             crate::items::SpawnItem {
                 kind: drop.kind,
                 transform: Transform::from_translation(c + rot * off),
                 condition: drop.condition,
             },
         );
+    }
+}
+
+/// The crate models (`art/props/crates.py`): unit cubes on the floor.
+pub const CRATE_MODELS: [&str; 2] = ["crate_slat", "crate_army"];
+
+/// A crate standing in a building (`Builder::crate_box`), taken out of the
+/// building's collider and mesh to be its own breakable thing: `size` its
+/// edge, `model` and `model_at` how it's drawn (in its own space).
+#[derive(Component, Clone, Debug)]
+pub struct BuildingCrate {
+    pub size: f32,
+    pub model: &'static str,
+    pub model_at: Transform,
+}
+
+/// A building's crates: (piece index, prop index) of each `crate_box`
+/// above ground (an underground site's are left as they are).
+pub fn crates_of(geo: &crate::world::buildings::Geo) -> Vec<(usize, usize)> {
+    use crate::world::buildings::Shape;
+    geo.props
+        .iter()
+        .enumerate()
+        .filter_map(|(k, d)| {
+            let [(name, _)] = d.models.as_slice() else {
+                return None;
+            };
+            if !CRATE_MODELS.contains(name) || d.pieces.len() != 1 {
+                return None;
+            }
+            let i = d.pieces.start;
+            let p = &geo.pieces[i];
+            let Shape::Box(s) = p.shape else {
+                return None;
+            };
+            (p.mat == Mat::Planks
+                && p.collide
+                && (s.x - s.y).abs() < 1e-3
+                && p.at.translation.y > crate::world::underground::BELOW_Y)
+                .then_some((i, k))
+        })
+        .collect()
+}
+
+/// Which pieces are crates of their own (`buildings::spawn_buildings`
+/// leaves them out of the building's collider, `dress_buildings` out of
+/// its mesh).
+pub fn crate_pieces(geo: &crate::world::buildings::Geo) -> Vec<bool> {
+    let mut out = vec![false; geo.pieces.len()];
+    for (i, _) in crates_of(geo) {
+        out[i] = true;
+    }
+    out
+}
+
+/// Which props are those crates' models.
+pub fn crate_props(geo: &crate::world::buildings::Geo) -> Vec<bool> {
+    let mut out = vec![false; geo.props.len()];
+    for (_, k) in crates_of(geo) {
+        out[k] = true;
+    }
+    out
+}
+
+/// A building's crates, as their own breakable entities (all of them, or
+/// on a restored Zone those not broken).
+pub fn spawn_building_crates(
+    commands: &mut Commands,
+    building: &crate::world::buildings::Building,
+    bxf: &Transform,
+    broken: &Broken,
+) {
+    let Some(geo) = crate::world::buildings::prefab(&building.prefab) else {
+        return;
+    };
+    for (i, k) in crates_of(&geo) {
+        let p = &geo.pieces[i];
+        let crate::world::buildings::Shape::Box(s) = p.shape else {
+            continue;
+        };
+        let size = s.x;
+        let world = *bxf * p.at;
+        let id = key(world.translation);
+        if broken.0.contains(&id) {
+            continue;
+        }
+        let (model, at) = geo.props[k].models[0];
+        // The model's pose in the crate's own space.
+        let inv = p.at.rotation.inverse();
+        let model_at = Transform {
+            translation: inv * (at.translation - p.at.translation),
+            rotation: inv * at.rotation,
+            scale: at.scale,
+        };
+        // Its loot spot is on its lid.
+        let top = p.at.translation + Vec3::Y * (size * 0.5 + 0.05);
+        let table = geo
+            .loot
+            .iter()
+            .find(|l| l.at.distance(top) < 0.05)
+            .map(|l| CrateLoot(l.table.to_string()));
+        let mut e = commands.spawn((
+            Name::new(format!("Crate {model}")),
+            BuildingCrate {
+                size,
+                model,
+                model_at,
+            },
+            world,
+            Visibility::default(),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(size, size, size),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+            Surfaces(vec![(
+                Vec3::splat(size * 0.5),
+                Transform::IDENTITY,
+                Mat::Planks,
+            )]),
+            Timber {
+                hp: CRATE_HP * (size / 0.8).clamp(0.6, 1.2),
+                max: CRATE_HP,
+                key: id,
+                push: Vec3::ZERO,
+            },
+            super::hooks::lid_seam(Vec3::splat(size * 0.5)),
+        ));
+        if let Some(t) = table {
+            e.insert(t);
+        }
     }
 }
 
@@ -408,12 +614,37 @@ pub fn mend_all(world: &mut World) {
         world.entity_mut(e).insert(Quiet);
         world.despawn(e);
     }
-    if let Some(zone) = world.get_resource::<crate::world::Zone>().cloned() {
-        let mut queue = bevy::ecs::world::CommandQueue::default();
-        {
-            let mut commands = Commands::new(&mut queue, world);
-            crate::items::loot::spawn_supply_crates(&mut commands, &zone);
-        }
-        queue.apply(world);
+    let crates: Vec<Entity> = world
+        .query_filtered::<Entity, With<BuildingCrate>>()
+        .iter(world)
+        .collect();
+    for e in crates {
+        world.entity_mut(e).insert(Quiet);
+        world.despawn(e);
     }
+    let buildings: Vec<(Building, Transform)> = world
+        .query::<(&Building, &Transform)>()
+        .iter(world)
+        .map(|(b, t)| {
+            (
+                Building {
+                    prefab: b.prefab.clone(),
+                },
+                *t,
+            )
+        })
+        .collect();
+    let zone = world.get_resource::<crate::world::Zone>().cloned();
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut commands = Commands::new(&mut queue, world);
+        if let Some(zone) = &zone {
+            crate::items::loot::spawn_supply_crates(&mut commands, zone);
+        }
+        let none = Broken::default();
+        for (b, t) in &buildings {
+            spawn_building_crates(&mut commands, b, t, &none);
+        }
+    }
+    queue.apply(world);
 }

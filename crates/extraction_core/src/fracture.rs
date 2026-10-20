@@ -186,7 +186,7 @@ pub fn shatter(half: P2, impact: P2, seed: u64, cells: usize) -> Shatter {
                 let (s, c) = swing.sin_cos();
                 let n = [inward[0] * c - inward[1] * s, inward[0] * s + inward[1] * c];
                 // Through a point a share of the way in from the border.
-                let depth = half[axis] * rng.range(0.08, 0.3);
+                let depth = half[axis] * rng.range(0.15, 0.5);
                 let mut at = [0.0f32; 2];
                 at[axis] = sign * (half[axis] - depth);
                 let other = 1 - axis;

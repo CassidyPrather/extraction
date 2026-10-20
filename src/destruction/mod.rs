@@ -21,6 +21,7 @@ use std::collections::HashSet;
 
 pub mod debris;
 pub mod glass;
+pub mod hooks;
 pub mod scenario;
 pub mod visuals;
 pub mod wood;
@@ -79,7 +80,12 @@ impl Plugin for DestructionPlugin {
                 DestructionSystems.after(crate::weapons::ballistics::BallisticsSystems),
             )
             .add_systems(FixedUpdate, make_noise.after(DestructionSystems))
-            .add_plugins((debris::DebrisPlugin, glass::GlassPlugin, wood::WoodPlugin));
+            .add_plugins((
+                debris::DebrisPlugin,
+                glass::GlassPlugin,
+                wood::WoodPlugin,
+                hooks::HooksPlugin,
+            ));
     }
 }
 

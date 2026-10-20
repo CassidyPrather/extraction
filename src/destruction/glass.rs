@@ -53,6 +53,10 @@ pub struct Pane {
 pub struct Break {
     pub seed: u64,
     pub impact: Vec2,
+    /// Broken by the years, not by anyone: the sash's own model
+    /// (`window_sash_broken`) has the shards, so the pane draws none, and
+    /// the Surge doesn't mend it.
+    pub weathered: bool,
 }
 
 impl Pane {
@@ -117,15 +121,18 @@ pub fn sash_panes() -> [(Vec2, Vec2); 4] {
     ]
 }
 
-/// Every pane of a building, in building space: (pose, half extents).
-/// The glass sits 1 cm behind the sash's centre plane, as modelled.
-pub fn panes_of(geo: &Geo) -> Vec<(Transform, Vec2)> {
+/// Every pane of a building, in building space: (pose, half extents,
+/// which sash it's in, counting the building's sashes in order). The
+/// glass sits 1 cm behind the sash's centre plane, as modelled.
+pub fn panes_of(geo: &Geo) -> Vec<(Transform, Vec2, usize)> {
     let mut out = Vec::new();
+    let mut sash = 0;
     for d in &geo.props {
         if d.models.is_empty() || d.models.iter().any(|(n, _)| *n != SASH) {
             continue;
         }
         for (_, xf) in &d.models {
+            sash += 1;
             for (c, size) in sash_panes() {
                 let s = xf.scale;
                 let local = Vec3::new(c.x * s.x, c.y * s.y, -0.01 * s.z);
@@ -133,6 +140,7 @@ pub fn panes_of(geo: &Geo) -> Vec<(Transform, Vec2)> {
                     Transform::from_translation(xf.translation + xf.rotation * local)
                         .with_rotation(xf.rotation),
                     Vec2::new(size.x * s.x, size.y * s.y) * 0.5,
+                    sash - 1,
                 ));
             }
         }
@@ -175,7 +183,7 @@ fn cell(p: Vec3) -> (i32, i32) {
 
 impl PaneGrid {
     /// Panes in the cells a segment's box touches.
-    fn near(&self, a: Vec3, b: Vec3, pad: f32) -> impl Iterator<Item = Entity> + '_ {
+    pub fn near(&self, a: Vec3, b: Vec3, pad: f32) -> impl Iterator<Item = Entity> + '_ {
         let (lo, hi) = (
             a.min(b) - Vec3::splat(pad + 1.5),
             a.max(b) + Vec3::splat(pad + 1.5),
@@ -231,9 +239,19 @@ fn glaze(
         let Some(geo) = crate::world::buildings::prefab(&building.prefab) else {
             continue;
         };
-        for (local, half) in panes_of(&geo) {
+        let years = weathered_sashes(&building.prefab, bxf);
+        for (local, half, sash) in panes_of(&geo) {
             let world = *bxf * local;
             let k = key(world.translation);
+            let broken = if years.get(sash).copied().unwrap_or(false) {
+                Some(Break {
+                    seed: seed_of(k),
+                    impact: Vec2::ZERO,
+                    weathered: true,
+                })
+            } else {
+                broken.0.contains(&k).then(|| restored(k))
+            };
             let e = commands
                 .spawn((
                     Name::new("Pane"),
@@ -242,7 +260,7 @@ fn glaze(
                         building: b,
                         world,
                         inv: world.compute_affine().inverse(),
-                        broken: broken.0.contains(&k).then(|| restored(k)),
+                        broken,
                     },
                     local,
                     ChildOf(b),
@@ -259,7 +277,20 @@ fn restored(k: [i32; 3]) -> Break {
     Break {
         seed: seed_of(k),
         impact: Vec2::ZERO,
+        weathered: false,
     }
+}
+
+/// Which of a building's sashes (in [`panes_of`]'s order) the years have
+/// already broken: World models' decay swaps those to `window_sash_broken`
+/// (`buildings::dress_buildings`), and their panes start broken here so
+/// they draw no glass over it and can't break again. Empty: none.
+///
+/// The decision is World models' (`world::decay`/`overgrowth`): this is
+/// the seam where it's read, so the client's look and the logic agree.
+pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
+    let _ = (prefab, at);
+    Vec::new()
 }
 
 pub fn seed_of(k: [i32; 3]) -> u64 {
@@ -292,7 +323,11 @@ pub fn shatter(
     let seed = seed_of(k)
         ^ ((impact * 100.0).round().as_ivec2().x as u64) << 20
         ^ (impact * 100.0).round().as_ivec2().y as u64;
-    let b = Break { seed, impact };
+    let b = Break {
+        seed,
+        impact,
+        weathered: false,
+    };
     pane.broken = Some(b);
     broken.0.insert(k);
     out.write(Broke {
@@ -555,7 +590,7 @@ fn blasts(
 pub fn mend_all(world: &mut World) {
     let mut q = world.query::<&mut Pane>();
     for mut p in q.iter_mut(world) {
-        if p.broken.is_some() {
+        if p.broken.is_some_and(|b| !b.weathered) {
             p.broken = None;
         }
     }

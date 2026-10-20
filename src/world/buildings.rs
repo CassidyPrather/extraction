@@ -4226,7 +4226,9 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             .id();
         let mut colliders = Vec::new();
         let mut surfaces = Vec::new();
-        for piece in &geo.pieces {
+        // Crates are their own things (`destruction::wood`): they break.
+        let crates = crate::destruction::wood::crate_pieces(&geo);
+        for (piece, _) in geo.pieces.iter().zip(&crates).filter(|(_, c)| !**c) {
             let half = match piece.shape {
                 Shape::Box(s) => s * 0.5,
                 Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
@@ -4588,8 +4590,16 @@ pub fn dress_buildings(
             }));
         // Window glass is the panes' (`destruction::glass`): they draw it,
         // whole or broken.
+        // and crates are their own (`destruction::wood`): they break.
         let mut skip = crate::destruction::glass::window_glass(&geo);
+        for (s, c) in skip
+            .iter_mut()
+            .zip(crate::destruction::wood::crate_pieces(&geo))
+        {
+            *s |= c;
+        }
         let panes = skip.clone();
+        let crate_props = crate::destruction::wood::crate_props(&geo);
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
                 skip[i] = true;
@@ -4686,7 +4696,13 @@ pub fn dress_buildings(
                 mesh,
             );
         }
-        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+        for ((d, _), _) in geo
+            .props
+            .iter()
+            .zip(&ready)
+            .zip(&crate_props)
+            .filter(|((_, r), c)| **r && !**c)
+        {
             if let Some([mid, far]) = d.lods {
                 let (near, at) = d.models[0];
                 for (name, group) in [(near, Some(HERO)), (mid, Some(HERO_MID)), (far, None)] {

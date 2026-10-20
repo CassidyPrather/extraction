@@ -398,7 +398,7 @@ fn whats_broken_stays_broken_until_the_surge() {
         .world_mut()
         .query::<&Pane>()
         .iter(b.world())
-        .filter(|p| p.broken.is_some())
+        .filter(|p| p.broken.is_some_and(|b| !b.weathered))
         .map(|p| p.centre())
         .collect();
     assert_eq!(
@@ -434,8 +434,8 @@ fn whats_broken_stays_broken_until_the_surge() {
         b.world_mut()
             .query::<&Pane>()
             .iter(b.world())
-            .all(|p| p.broken.is_none()),
-        "every pane whole"
+            .all(|p| p.broken.is_none_or(|b| b.weathered)),
+        "every pane whole (but the years' breakage)"
     );
     assert_eq!(doors_at(&mut b), 1, "the door hangs again");
     let crates_c = b
@@ -544,4 +544,155 @@ fn a_shop_front_shot_out_stays_in_budget() {
         pool.culled,
         per_tick * 1000.0
     );
+}
+
+/// Not a check: stages a save for the screenshots in
+/// `docs/shots/destruction/` (the door_shot house with its front windows
+/// and door broken). `SHOT_SAVE=/path cargo test --lib stage_broken_house
+/// -- --ignored`, then `--save /path` on the screenshot.
+#[test]
+#[ignore]
+fn stage_broken_house() {
+    let Ok(path) = std::env::var("SHOT_SAVE") else {
+        return;
+    };
+    let path = std::path::PathBuf::from(path);
+    let _ = std::fs::remove_file(&path);
+    let mut a = app(Some(path.clone()));
+    let zone = a.world().resource::<crate::world::Zone>().clone();
+    let (_, mid, out) = super::scenario::front_door(&zone).unwrap();
+    let panes: Vec<(Vec3, Vec3)> = a
+        .world_mut()
+        .query::<&Pane>()
+        .iter(a.world())
+        .filter(|p| p.centre().distance(mid) < 4.0 && (p.centre() - mid).dot(out) > -0.3)
+        .map(|p| (p.centre(), p.world.rotation * Vec3::Y))
+        .collect();
+    // Each struck off-centre, so the teeth differ.
+    for (i, (c, up)) in panes.iter().enumerate() {
+        let off = *up * if i % 2 == 0 { 0.08 } else { -0.1 };
+        shoot(&mut a, *c + out * 3.0 + off, *c + off, 700.0, 7.9, 40.0);
+        run(&mut a, 2);
+    }
+    let save = crate::persist::snapshot(a.world_mut());
+    let mut career = a
+        .world()
+        .resource::<crate::persist::CareerState>()
+        .0
+        .clone();
+    career.store(&save);
+    crate::persist::write_career(&path, &career);
+    println!("staged {} panes broken at {mid}", panes.len());
+}
+
+#[test]
+fn a_crate_in_a_house_breaks_open_and_comes_back_with_the_surge() {
+    use super::wood::BuildingCrate;
+    let mut app = app(None);
+    let crates: Vec<(Entity, Vec3, f32)> = app
+        .world_mut()
+        .query::<(Entity, &BuildingCrate, &Transform)>()
+        .iter(app.world())
+        .map(|(e, c, t)| (e, t.translation, c.size))
+        .collect();
+    assert!(
+        crates.len() > 5,
+        "the houses' crates stand on their own ({})",
+        crates.len()
+    );
+    let before = crates.len();
+    let (c, at, size) = crates[0];
+    // Blows, as a butt or a crowbar swung.
+    let mut blows = 0;
+    while app.world().get_entity(c).is_ok() && blows < 20 {
+        app.world_mut().write_message(Hit {
+            entity: c,
+            point: at + Vec3::Y * size * 0.5,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y * 5.0,
+            damage: 40.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+        });
+        run(&mut app, 2);
+        blows += 1;
+    }
+    assert!(app.world().get_entity(c).is_err(), "the crate broke");
+    assert!(live_debris(&mut app) > 4, "into slats");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+    crate::persist::reset_zone(app.world_mut());
+    run(&mut app, 3);
+    let after = app
+        .world_mut()
+        .query_filtered::<(), With<BuildingCrate>>()
+        .iter(app.world())
+        .count();
+    assert_eq!(after, before, "every crate back, none doubled");
+}
+
+#[test]
+fn a_smash_breaks_glass_and_wood_about_it() {
+    let mut app = app(None);
+    let (pane, at, _) = open_pane(&mut app);
+    app.world_mut().write_message(super::hooks::Smash {
+        at,
+        radius: 0.4,
+        damage: 50.0,
+        push: Vec3::X * 3.0,
+    });
+    run(&mut app, 2);
+    assert!(app.world().get::<Pane>(pane).unwrap().broken.is_some());
+    let (door, _, mid, _) = plank_door(&mut app);
+    for _ in 0..6 {
+        app.world_mut().write_message(super::hooks::Smash {
+            at: mid,
+            radius: 0.5,
+            damage: 50.0,
+            push: Vec3::Z * 3.0,
+        });
+        run(&mut app, 2);
+    }
+    assert!(
+        app.world().get::<Door>(door).is_none(),
+        "the door was torn down"
+    );
+}
+
+#[test]
+fn a_crowbar_wrenches_a_door_once_it_has_the_torque() {
+    use super::hooks::{DOOR_PRY, PRY_HOLD, Pried};
+    let mut app = app(None);
+    let (door, _, _, _) = plank_door(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    // Not hard enough: it holds, however long.
+    for _ in 0..90 {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: DOOR_PRY * 0.8,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get::<Door>(door).is_some(), "too weak a pull");
+    // Hard enough, but let go too soon: it holds.
+    for _ in 0..((PRY_HOLD * 90.0) as usize / 2) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: DOOR_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 2);
+    assert!(app.world().get::<Door>(door).is_some(), "too short a pull");
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: DOOR_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get::<Door>(door).is_none(), "wrenched off");
 }
