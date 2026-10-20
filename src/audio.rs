@@ -2708,62 +2708,65 @@ fn power_sounds(
     sites: Query<(Entity, &crate::world::underground::SitePower)>,
     switches: Query<(&GlobalTransform, Option<&Children>)>,
     loops: Query<Entity, With<GeneratorLoop>>,
-    mut was: Local<HashMap<Entity, bool>>,
+    mut was: Local<HashMap<(Entity, usize), bool>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     use extraction_core::underground::PowerKind;
+    // Each stage of a site's power has its own switch, and its own sound.
     for (site, power) in &sites {
-        let before = was.insert(site, power.on).unwrap_or(false);
-        let Ok((gt, children)) = switches.get(power.switch) else {
-            continue;
-        };
-        let at = gt.translation();
-        if power.on && !before {
-            match power.kind {
-                PowerKind::Breaker => play_at_speed(
-                    &mut commands,
-                    &bank,
-                    &mut rng.0,
-                    "machines/clank",
-                    Some(at),
-                    "power.breaker",
-                    0.0,
-                    0.8,
-                    0.05,
-                ),
-                PowerKind::Generator => play_at_speed(
-                    &mut commands,
-                    &bank,
-                    &mut rng.0,
-                    "physical/whoosh",
-                    Some(at),
-                    "power.pull",
-                    0.0,
-                    0.7,
-                    0.05,
-                ),
-            }
-        }
-        let running = power.on && power.kind == PowerKind::Generator;
-        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
-        match (running, existing) {
-            (true, None) => {
-                if let Some(sample) = bank.pick("machines/truck_idle", &mut rng.0) {
-                    commands.spawn((
-                        GeneratorLoop,
-                        SamplePlayer::new(sample)
-                            .looping()
-                            .with_volume(Volume::Decibels(mix::db("power.generator"))),
-                        PlaybackSettings::default().with_speed(1.25),
-                        Transform::default(),
-                        spatial_fx("power.generator"),
-                        ChildOf(power.switch),
-                    ));
+        for (i, stage) in power.stages.iter().enumerate() {
+            let before = was.insert((site, i), stage.on).unwrap_or(false);
+            let Ok((gt, children)) = switches.get(stage.switch) else {
+                continue;
+            };
+            let at = gt.translation();
+            if stage.on && !before {
+                match stage.kind {
+                    PowerKind::Breaker => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "machines/clank",
+                        Some(at),
+                        "power.breaker",
+                        0.0,
+                        0.8,
+                        0.05,
+                    ),
+                    PowerKind::Generator => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "physical/whoosh",
+                        Some(at),
+                        "power.pull",
+                        0.0,
+                        0.7,
+                        0.05,
+                    ),
                 }
             }
-            (false, Some(l)) => commands.entity(l).despawn(),
-            _ => {}
+            let running = stage.on && stage.kind == PowerKind::Generator;
+            let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+            match (running, existing) {
+                (true, None) => {
+                    if let Some(sample) = bank.pick("machines/truck_idle", &mut rng.0) {
+                        commands.spawn((
+                            GeneratorLoop,
+                            SamplePlayer::new(sample)
+                                .looping()
+                                .with_volume(Volume::Decibels(mix::db("power.generator"))),
+                            PlaybackSettings::default().with_speed(1.25),
+                            Transform::default(),
+                            spatial_fx("power.generator"),
+                            ChildOf(stage.switch),
+                        ));
+                    }
+                }
+                (false, Some(l)) => commands.entity(l).despawn(),
+                _ => {}
+            }
         }
     }
 }
