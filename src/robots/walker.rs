@@ -118,6 +118,7 @@ impl Plugin for WalkerPlugin {
                     walker_parts_destroyed,
                     walker_brain,
                     super::anim::walk,
+                    super::anim::aim_turrets,
                     walker_guns,
                 )
                     .chain()

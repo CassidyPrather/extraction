@@ -1038,11 +1038,13 @@ fn pylon_work_lights(
 #[derive(Component)]
 struct LockFlare {
     left: f32,
+    dur: f32,
 }
 
 fn lock_flares(
     mut commands: Commands,
     mut locks: MessageReader<super::drone::DroneLock>,
+    mut aims: MessageReader<super::walker::WalkerAim>,
     mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
     time: Res<Time>,
 ) {
@@ -1051,6 +1053,7 @@ fn lock_flares(
             c.with_child((
                 LockFlare {
                     left: super::drone::LOCK_TIME,
+                    dur: super::drone::LOCK_TIME,
                 },
                 PointLight {
                     color: Color::srgb(1.0, 0.12, 0.08),
@@ -1063,6 +1066,25 @@ fn lock_flares(
             ));
         }
     }
+    // A walker's turret settling: the same red flare, off its gun.
+    for a in aims.read() {
+        if let Ok(mut c) = commands.get_entity(a.walker) {
+            c.with_child((
+                LockFlare {
+                    left: super::walker::AIM_TIME,
+                    dur: super::walker::AIM_TIME,
+                },
+                PointLight {
+                    color: Color::srgb(1.0, 0.12, 0.08),
+                    intensity: 0.0,
+                    range: 9.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_xyz(0.0, 0.5, -0.45),
+            ));
+        }
+    }
     let dt = time.delta_secs();
     for (e, mut f, mut light) in &mut flares {
         f.left -= dt;
@@ -1071,7 +1093,7 @@ fn lock_flares(
             continue;
         }
         // Pulses in step with the chirps, the last held.
-        let k = 1.0 - f.left / super::drone::LOCK_TIME;
+        let k = 1.0 - f.left / f.dur;
         let on = k > 0.38 || (k % 0.19) < 0.09;
         light.intensity = if on { 25_000.0 } else { 0.0 };
     }

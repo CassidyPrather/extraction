@@ -25,7 +25,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use super::walker::{LOWER, LegPoses, UPPER, Walker, WalkerLeg, WalkerStep};
+use super::walker::{LOWER, LegPoses, UPPER, Walker, WalkerLeg, WalkerStep, WalkerTurret};
 use super::{Awareness, Robot, RobotPart};
 use crate::world::{Layer, Zone};
 
@@ -78,6 +78,13 @@ pub struct Gait {
     /// Toward whatever it's hauling on (a grappler's line), horizontal;
     /// zero when it isn't. It leans back from it and crouches.
     pub brace: Vec3,
+    /// Winding up a throw (a grappler's tell): seconds left, and toward
+    /// what. It rears back from it, then the throw snaps it forward.
+    pub rear: f32,
+    pub rear_dir: Vec3,
+    /// Settling its turret (a walker's tell): seconds left. It plants and
+    /// sinks a little, steadying.
+    pub steady: f32,
 }
 
 impl Default for Gait {
@@ -99,6 +106,9 @@ impl Default for Gait {
             last_v: Vec3::ZERO,
             accel: Vec3::ZERO,
             brace: Vec3::ZERO,
+            rear: 0.0,
+            rear_dir: Vec3::ZERO,
+            steady: 0.0,
         }
     }
 }
@@ -173,6 +183,14 @@ pub fn step_walker(
     if dt <= 0.0 {
         return;
     }
+    g.rear = (g.rear - dt).max(0.0);
+    g.steady = (g.steady - dt).max(0.0);
+    // Rearing back: up over the wind-up, held at the top.
+    let rear_k = if g.rear > 0.0 {
+        (1.0 - g.rear / 0.6).clamp(0.0, 1.0).sqrt()
+    } else {
+        0.0
+    };
     let alive_legs = w.feet.iter().filter(|f| f.alive).count();
     let dead: Vec3 = (0..LEGS)
         .filter(|i| !w.feet[*i].alive)
@@ -185,7 +203,13 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
-    let speed_scale = drive.pace.clamp(0.0, 1.6) * (1.0 - 0.6 * g.limp);
+    let speed_scale = drive.pace.clamp(0.0, 1.6)
+        * (1.0 - 0.6 * g.limp)
+        * if g.steady > 0.0 || g.rear > 0.0 {
+            0.3
+        } else {
+            1.0
+        };
     let desired = if drive.down {
         Vec3::ZERO
     } else {
@@ -336,6 +360,8 @@ pub fn step_walker(
             + g.limp * 0.05
             + g.brace.length() * 0.12
             + if drive.low { LOW } else { 0.0 }
+            + if g.steady > 0.0 { 0.07 } else { 0.0 }
+            - rear_k * 0.1
     };
     g.sag += (target_sag - g.sag) * (3.0 * dt).min(1.0);
     let rest_y = if drive.down && !drive.stunned {
@@ -403,7 +429,7 @@ pub fn step_walker(
     }
     let lean = Vec3::Y.cross(v * 0.035 + g.accel * 0.05);
     let list = Vec3::Y.cross(rot * dead).normalize_or_zero() * 0.14;
-    let haul = Vec3::Y.cross(-g.brace) * 0.18;
+    let haul = Vec3::Y.cross(-g.brace) * 0.18 + Vec3::Y.cross(-g.rear_dir) * 0.3 * rear_k;
     let tilt = if drive.down {
         Vec3::ZERO
     } else {
@@ -563,7 +589,10 @@ impl Plugin for AnimPlugin {
 
 /// A grappler hauling on a line leans back from it and crouches; firing
 /// the harpoon kicks it back.
+#[allow(clippy::too_many_arguments)]
 fn haul_lines(
+    mut windups: MessageReader<super::grappler::HarpoonWindup>,
+    mut aims: MessageReader<super::walker::WalkerAim>,
     mut fired: MessageReader<super::grappler::Harpoon>,
     tethered: Query<(&super::grappler::Tethered, &GlobalTransform)>,
     mut walkers: Query<(Entity, &mut Gait, &GlobalTransform)>,
@@ -578,12 +607,72 @@ fn haul_lines(
             .unwrap_or(Vec3::ZERO);
         g.brace = g.brace.lerp(pull, 0.08);
     }
+    for w in windups.read() {
+        let (Ok((_, mut g, gt)), Ok(to)) = (walkers.get_mut(w.from), targets.get(w.to)) else {
+            continue;
+        };
+        let d = to.translation() - gt.translation();
+        g.rear = super::grappler::WINDUP;
+        g.rear_dir = Vec3::new(d.x, 0.0, d.z).normalize_or_zero();
+    }
+    for a in aims.read() {
+        if let Ok((_, mut g, _)) = walkers.get_mut(a.walker) {
+            g.steady = super::walker::AIM_TIME;
+        }
+    }
     for h in fired.read() {
         let (Ok((_, mut g, gt)), Ok(to)) = (walkers.get_mut(h.from), targets.get(h.to)) else {
             continue;
         };
         let dir = (to.translation() - gt.translation()).normalize_or_zero();
-        g.knock(Vec3::Y * 0.3, -dir * 0.9);
+        g.rear = 0.0;
+        // The throw: snapped forward, then rocked back by the line.
+        g.knock(Vec3::Y * 0.3, dir * 1.2);
+    }
+}
+
+/// A walker's turret turns to whoever it's after (or where its brain is
+/// looking), at a turret's pace, and dips its barrel to them.
+#[allow(clippy::type_complexity)]
+pub(crate) fn aim_turrets(
+    mut walkers: Query<(
+        &mut Walker,
+        &Transform,
+        &Awareness,
+        Option<&super::Intent>,
+        &Children,
+        &Robot,
+    )>,
+    mut turrets: Query<&mut Transform, (With<WalkerTurret>, Without<Walker>)>,
+    targets: Query<&GlobalTransform>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (mut w, t, aware, intent, children, robot) in &mut walkers {
+        if robot.wrecked {
+            continue;
+        }
+        let at = aware
+            .target
+            .filter(|_| aware.can_see_target)
+            .and_then(|p| targets.get(p).ok())
+            .map(|g| g.translation() + Vec3::Y * 1.1)
+            .or(intent.and_then(|i| i.look));
+        let local = at.map(|p| t.rotation.inverse() * (p - t.translation));
+        let want = local
+            .filter(|l| Vec2::new(l.x, l.z).length() > 0.3)
+            .map_or(0.0, |l| (-l.x).atan2(-l.z));
+        let d = wrap(want - w.turret_yaw);
+        w.turret_yaw = wrap(w.turret_yaw + d.clamp(-2.2 * dt, 2.2 * dt));
+        let pitch = local
+            .map(|l| (l.y - 0.46).atan2(Vec2::new(l.x, l.z).length().max(0.5)))
+            .unwrap_or(0.0)
+            .clamp(-0.5, 0.35);
+        for c in children.iter() {
+            if let Ok(mut tt) = turrets.get_mut(c) {
+                tt.rotation = Quat::from_rotation_y(w.turret_yaw) * Quat::from_rotation_x(pitch);
+            }
+        }
     }
 }
 
