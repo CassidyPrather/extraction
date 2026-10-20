@@ -4,8 +4,9 @@
 //!
 //! [`Chorus`] is how loud it is round the local player, 0 (dead quiet) to
 //! 1, for sound to play (Audio's night and day beds). It's the product of:
-//! - **machines near** ([`HUSH_NEAR`] to [`HUSH_FAR`]): quiet within the
-//!   near distance, full beyond the far one;
+//! - **machines near**: silent within [`HUSH_NEAR`] of a walker, hound or
+//!   the airship and [`HUSH_NEAR_DRONE`] of a drone, back to full by
+//!   [`HUSH_RAMP`] times that;
 //! - **a fright** (a shot or a blast heard, a flock going up or a herd
 //!   bolting near you): it drops to [`STARTLED`] at once and comes back
 //!   over [`RECOVER`] seconds;
@@ -18,16 +19,21 @@ use bevy::prelude::*;
 
 use super::{Flushed, ThreatKind, Threats};
 
-/// Machines this near and the chorus is silent...
-pub const HUSH_NEAR: f32 = 25.0;
-/// ...beyond this they don't hush it at all.
-pub const HUSH_FAR: f32 = 70.0;
+/// A walker, hound or the airship this near and the chorus is silent...
+/// (Audio's masking audit, `scripts/audio_voices.py`: over the cricket
+/// bed a walker's step is heard to ~46 m against a 60 m warning target,
+/// so the hush must reach that far; it reads these.)
+pub const HUSH_NEAR: f32 = 60.0;
+/// ...a drone this near (its rotor heard to ~71 m, the target 120 m)...
+pub const HUSH_NEAR_DRONE: f32 = 120.0;
+/// ...and each hushes it less out to this many times as far.
+pub const HUSH_RAMP: f32 = 1.6;
 /// A fright drops it to this...
 pub const STARTLED: f32 = 0.05;
 /// ...and it takes this long to come back (s).
 pub const RECOVER: f32 = 60.0;
-/// A fright counts this near you (m).
-pub const FRIGHT_NEAR: f32 = 120.0;
+/// A fright (a shot, a flush, a bolt) counts this near you (m).
+pub const FRIGHT_NEAR: f32 = 150.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Singers {
@@ -57,9 +63,10 @@ impl Default for Chorus {
     }
 }
 
-/// How much machines at these distances leave of the chorus.
-pub fn hush(nearest_machine: f32) -> f32 {
-    ((nearest_machine - HUSH_NEAR) / (HUSH_FAR - HUSH_NEAR)).clamp(0.0, 1.0)
+/// How much of the chorus a machine this far off leaves (`near`: its
+/// silent radius, [`HUSH_NEAR`] or [`HUSH_NEAR_DRONE`]).
+pub fn hush(distance: f32, near: f32) -> f32 {
+    ((distance - near) / (near * (HUSH_RAMP - 1.0))).clamp(0.0, 1.0)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -92,12 +99,15 @@ pub(crate) fn chorus(
     } else {
         chorus.fright = (chorus.fright + dt / RECOVER).min(1.0);
     }
-    let machine = threats
+    let machines = threats
         .0
         .iter()
-        .filter(|t| !matches!(t.kind, ThreatKind::Player { .. }))
-        .map(|t| t.at.distance(at))
-        .fold(f32::MAX, f32::min);
+        .filter_map(|t| match t.kind {
+            ThreatKind::Player { .. } => None,
+            ThreatKind::Drone => Some(hush(t.at.distance(at), HUSH_NEAR_DRONE)),
+            _ => Some(hush(t.at.distance(at), HUSH_NEAR)),
+        })
+        .fold(1.0f32, f32::min);
     let (weather, kind) = conditions.as_ref().map_or((1.0, Singers::Day), |c| {
         use crate::world::weather::Hour;
         let kind = match c.hour {
@@ -106,7 +116,7 @@ pub(crate) fn chorus(
         };
         ((1.0 - c.rain).max(0.0) * (1.0 - 0.6 * c.wind()), kind)
     });
-    let target = hush(machine) * chorus.fright * weather;
+    let target = machines * chorus.fright * weather;
     // Falls fast, comes back slowly.
     let k = if target < chorus.level { 3.0 } else { 0.4 };
     chorus.level += (target - chorus.level) * (dt * k).min(1.0);
@@ -119,8 +129,11 @@ mod tests {
 
     #[test]
     fn machines_hush_it() {
-        assert_eq!(hush(10.0), 0.0);
-        assert_eq!(hush(f32::MAX), 1.0);
-        assert!(hush(50.0) > 0.0 && hush(50.0) < 1.0);
+        // Silent out to Audio's masking radii, a ramp beyond.
+        assert_eq!(hush(59.0, HUSH_NEAR), 0.0);
+        assert_eq!(hush(119.0, HUSH_NEAR_DRONE), 0.0);
+        assert!(hush(80.0, HUSH_NEAR) > 0.0 && hush(80.0, HUSH_NEAR) < 1.0);
+        assert_eq!(hush(HUSH_NEAR * HUSH_RAMP, HUSH_NEAR), 1.0);
+        assert!(HUSH_NEAR >= 60.0 && HUSH_NEAR_DRONE >= 120.0 && FRIGHT_NEAR >= 150.0);
     }
 }

@@ -384,9 +384,9 @@ pub fn survey(zone: &Zone) -> (Obstacles, Perches) {
     let mut obstacles = Obstacles::default();
     let mut perches = Perches::default();
     for p in &zone.map.placements {
-        // Underground sites are no place for birds (and the biggest
-        // prefabs of all).
-        if !crate::world::buildings::PREFABS.contains(&p.prefab.as_str()) {
+        // Every generated prefab (buildings, the dam, scenes'), except
+        // underground sites: no place for birds, and the biggest of all.
+        if crate::world::underground::ids().any(|id| id == p.prefab) {
             continue;
         }
         let solids = solids_of(zone, p);

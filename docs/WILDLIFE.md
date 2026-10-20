@@ -144,8 +144,10 @@ lamps, lanterns, the camp's (`wildlife::small_look`; visual only).
 
 `wildlife::insects::Chorus` is how loud the small life round you is, 0
 to 1, for sound to play: crickets at dusk and night, flies and small
-birds by day. Machines hush it (silent within 25 m, untouched beyond
-70 m); a shot or blast, a flock going up or a herd bolting within 120 m
+birds by day. Machines hush it (silent within 60 m of a walker, hound or
+the airship and 120 m of a drone, Audio's masking radii, then a ramp out
+to 1.6 times that); a shot or blast, a flock going up or a herd bolting
+within 150 m
 drops it to almost nothing, and it comes back over a minute; rain and
 wind thin it. When the insects stop, something is close.
 
