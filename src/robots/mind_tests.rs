@@ -603,3 +603,58 @@ fn a_crawler_hears_round_a_corner() {
         heard(walker, &app)
     );
 }
+
+/// A walker with a leg shot off doesn't give chase: told where you were,
+/// it stays put and looks; a sound one goes there.
+#[test]
+fn a_lame_walker_does_not_chase() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let sound = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+    let lame = walker_at(&mut app, &zone, zone.on_ground(130.0, 200.0));
+    let leg = app
+        .world_mut()
+        .query::<(Entity, &super::RobotPart)>()
+        .iter(app.world())
+        .find(|(_, p)| p.robot == lame && p.role == super::PartRole::Leg(0))
+        .map(|(e, _)| e)
+        .unwrap();
+    app.world_mut().get_mut::<super::RobotPart>(leg).unwrap().hp = 0.0;
+    app.world_mut().write_message(super::PartDestroyed {
+        robot: lame,
+        part: leg,
+        role: super::PartRole::Leg(0),
+        at: Vec3::ZERO,
+    });
+    for _ in 0..30 {
+        app.update();
+    }
+    assert!(
+        app.world().get::<super::anim::Gait>(lame).unwrap().limp > super::walker::LAME,
+        "three legs is lame"
+    );
+    let start = |e: Entity, app: &App| app.world().get::<Transform>(e).unwrap().translation;
+    let (s0, l0) = (start(sound, &app), start(lame, &app));
+    for _ in 0..90 * 3 {
+        for (e, at) in [(sound, s0), (lame, l0)] {
+            *app.world_mut().get_mut::<Brain>(e).unwrap() = Brain::Engage;
+            let mut a = app.world_mut().get_mut::<Awareness>(e).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(zone.on_ground(at.x, at.z - 25.0));
+            a.suspicion = 1.0;
+            a.unseen = 1.0;
+        }
+        app.update();
+    }
+    let moved = |e: Entity, from: Vec3, app: &App| flat(start(e, app) - from);
+    assert!(
+        moved(sound, s0, &app) > 2.0,
+        "the sound one chased: {}",
+        moved(sound, s0, &app)
+    );
+    assert!(
+        moved(lame, l0, &app) < 0.8,
+        "the lame one held: {}",
+        moved(lame, l0, &app)
+    );
+}
