@@ -206,10 +206,18 @@ mod tests {
         assert!(fits.len() > 20, "only {} furniture groups", fits.len());
         let mut bad = Vec::new();
         for f in &fits {
-            // Rubble lies how it fell: into the floor, over its boxes.
-            let rubble = ["rubble", "ash_heap", "beam_fallen", "beam_charred"]
-                .iter()
-                .any(|r| f.models.contains(r));
+            // Rubble lies how it fell: into the floor, over its boxes. Burnt
+            // furniture is half-ash wreckage, its boxes the heap you step
+            // over (Models: world).
+            let rubble = [
+                "rubble",
+                "ash_heap",
+                "beam_fallen",
+                "beam_charred",
+                "_burnt",
+            ]
+            .iter()
+            .any(|r| f.models.contains(r));
             println!(
                 "{:<22} {:<40} gap {:+.3} m  size x{:.2} y{:.2} z{:.2}",
                 f.prefab, f.models, f.gap, f.ratio.x, f.ratio.y, f.ratio.z
@@ -254,15 +262,6 @@ mod tests {
     const KNOWN: &[&str] = &[
         // The model's plinth stops 5.5 cm short of the blockout's.
         "signal_box signal_box: floats",
-        // Burnt furniture: the bed sinks 6.5 cm into the floor, and bed
-        // and table stand 2.5 times as tall as the low boxes they replace
-        // (and collide as).
-        "house_plank_burnt bed_burnt",
-        "house_plank_burnt table_burnt",
-        "farmhouse_burnt bed_burnt",
-        "farmhouse_burnt table_burnt",
-        "house_brick_burnt bed_burnt",
-        "house_brick_burnt table_burnt",
     ];
 
     /// How far a furniture model's bottom may sit from its boxes' (m).
