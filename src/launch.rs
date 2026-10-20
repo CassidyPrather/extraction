@@ -264,6 +264,11 @@ impl LaunchOptions {
         if o.mirror {
             o.flat = false;
         }
+        // The crossing is the fourth valley's unless it's told otherwise.
+        if o.scenario.as_deref() == Some(crate::bot::crossing::SCENARIO) && !o.map_explicit {
+            o.map = crate::bot::crossing::DEFAULT_MAP.into();
+            o.map_explicit = true;
+        }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
             o.map = crate::camp::TRAINING_YARD.into();

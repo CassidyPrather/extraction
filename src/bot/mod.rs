@@ -7,6 +7,7 @@
 //! run faster than real time with no window). Map simulations build on the
 //! same tasks.
 
+pub mod crossing;
 pub mod scenarios;
 
 use bevy::prelude::*;
@@ -216,7 +217,8 @@ pub struct BotPlugin;
 
 impl Plugin for BotPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreUpdate, drive_bots.in_set(RigDriverSystems))
+        app.add_plugins(crossing::CrossingPlugin)
+            .add_systems(PreUpdate, drive_bots.in_set(RigDriverSystems))
             .add_systems(Update, (run_tasks, count_hits));
     }
 }

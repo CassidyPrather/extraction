@@ -90,16 +90,23 @@ Story writes the words; this is the place they're about.
 
 - **Below the dam** (z 160-282), the valley floor at 31 m, the river (the
   compensation flow out of the valve house) running south to the fence.
-- **The dam**: a crest strip at 52 m from x -185 to 135 along z 140,
-  falling sheer to 31 downstream and 36 upstream; its faces are the
-  `dam_wall` prefab, absolute. The west end meets the west hillside, the
-  east end the spillway.
-- **The bed**: 36 m by the dam rising to 42 at the head, the old river
-  channel meandering down it (shallow water, wadeable), banks to the high
-  water mark at about 51 m: a grey band of bare ground under the
-  treeline all round.
-- **The upper arm** (north-west), behind the old causeway at z -130: water
-  standing at 45 m over New Sallow's lower street.
+- **The dam**: a crest strip at 52 m from x -200 to 140 along z 134-146,
+  falling sheer to 30 downstream and 31 upstream, keyed into abutment
+  shoulders at crest height either end. The crest is terrain, so walkers,
+  bots and the lint walk it; its faces are thin placements, `absolute`:
+  `dam_face` and `dam_face_end` downstream (the gap between them is the
+  face stair's landing), `dam_back_end` and `dam_back` upstream (the gap is
+  the slipway's). `src/world/dam.rs` builds them.
+- **Ramps** the land can't give (the face stair, the spillway's steps, the
+  catchwater's fall, the roads into New Sallow) are flights of terrace
+  plateaus under the road, so the road's own grading evens them into a
+  slope a body walks. Off the road they read as steps.
+- **The bed**: 31-34 m by the dam rising to 41 at the head, the old river
+  in a broad shallow channel down it (wadeable, its banks gentle enough to
+  cross anywhere), bare ground up to the hillsides.
+- **The upper arm** (north-west), behind the old causeway (48.6 m) at
+  z -130: a flat bed at 38.6 under water standing at 47.6, New Sallow's
+  lower street 0.7 m under it, its upper street dry at 49.4.
 - **Hillsides** west and east rise to 60-70 m, wooded above the high water
   mark.
 
@@ -122,17 +129,41 @@ are all over 18 m.
 | Water tower | `water_tower` | New Sallow | the upper arm, RV A |
 | The Gate | `robot_gate` | north-east shore | stay away |
 
-### Routes and the three ways out
+### Over the dam
 
-| RV | Where | The cheap (exposed) way | The other way |
+Three ways, west to east, each a different risk:
+
+- **The west road** leaves the river road by the keeper's cottages, runs
+  west along the valley and climbs the west abutment's long shoulder to
+  the crest's west end: the long, wooded, safe way. The west shore road
+  goes on north from there.
+- **The face stair** climbs the dam's downstream face from the valve house
+  at its toe, 105 m of steps on an embankment against the wall, to a gap
+  in the parapet a third of the way from the east end. You climb it in
+  full view of the valley below, and come out on the crest in full view
+  of the bed.
+- **The spillway**, cut into the east abutment: a stepped concrete chute
+  you climb from the filter house, walled in for most of its length, a
+  Well standing in it beside the steps. At its head the catchwater path
+  runs north along the east hillside above the shore road.
+
+From the crest into the bed: the **slipway** (through a gap in the upstream
+parapet, west of the middle), the **haul ramp** the machines cut down
+from the crest's east end, and the **draw-off tower**'s stair: its bridge
+leaves the crest's middle and its stair goes down inside it to a door on
+the bed. The tower is for players; nothing paths through it.
+
+### The three ways out
+
+| RV | Where | The main route (the lint's) | The other way |
 | - | - | - | - |
-| **A. Sallow Head** | (-200, -245), the road above New Sallow | West road over the abutment, then the west shore road above the water line: long, wooded | Down the slipway, across the bed's west side, over the causeway and through New Sallow's flooded street |
-| **B. Inflow bridge** | (40, -262), where the river comes in | Straight up the bed: the crest, the slipway, the old road past Old Sallow and the stock rows. Fastest, open, the Custodian at work beside you | The west shore road, then the causeway and the bed's head |
-| **C. Gauge house** | (245, -60), on the east hillside | The spillway chute and the east shore road | The crest east, the catchwater path along the hillside at crest height: a view over all of the bed, and seen from all of it |
+| **A. Sallow Head** | (-200, -258), the turning place above New Sallow | The west road, then the west shore road above the water line: long, wooded, safe | The face stair, the crest, down the slipway, across the bed's west side and over the causeway, round the arm's head by New Sallow's back lane |
+| **B. Inflow bridge** | (30, -262), where the river comes in | The west road to the crest, down the slipway and up the old road through Old Sallow: the bed's length, open | The face stair, the crest east, the haul ramp down past the drowned cottage and up the sorting ground's east side |
+| **C. Gauge house** | (236, -46), on the east hillside | The face stair, the crest east, the east shore road | The spillway's chute and the catchwater path along the hillside, above everything |
 
 Each is a different raid's end: A is wet and slow but hidden, B fast and
-naked, C high and watched. The truck coming takes two minutes; at B
-you wait for it in the open beside the Custodian's ground.
+naked, C high and watched. The truck takes two minutes; at B you wait
+for it in the open beside the Custodian's ground.
 
 ### Sightlines
 

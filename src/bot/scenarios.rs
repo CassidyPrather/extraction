@@ -36,7 +36,12 @@ pub const NAMES: &[&str] = &[
 
 /// Longer runs, not in `all`: run them by name.
 /// - `second_hour`: a short career past the yard (`onboarding::second_hour`).
-pub const OPT_IN: &[&str] = &[crate::onboarding::second_hour::SCENARIO];
+/// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
+///   default (`bot::crossing`).
+pub const OPT_IN: &[&str] = &[
+    crate::onboarding::second_hour::SCENARIO,
+    super::crossing::SCENARIO,
+];
 
 /// Targets sit north of the insertion point at these distances.
 const TARGET_DISTANCES: [f32; 3] = [10.0, 25.0, 50.0];
@@ -318,6 +323,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
         }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
+        super::crossing::SCENARIO => super::crossing::opening(),
         _ => return None,
     })
 }
