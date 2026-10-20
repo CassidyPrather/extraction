@@ -50,6 +50,12 @@ mean, p95 and max, and the classes (tree cards, impostors, terrain,
 ground cover, or what a mesh belongs to) that make up the mean. It's an
 upper bound (no early depth rejection), but it ranks the classes right.
 
+Rain and ash streaks are placed by their vertex shader in a box round
+the eye, so the gauge replays them at the worst weather wherever its own
+is (a downpour, or full ashfall in a burnt valley) and adds them to every
+view. They come to about 0.01 layers a pixel: 2500 streaks 6 mm wide are
+very little area, even counting the few right at the eye.
+
 Open views sit at 1-2.5 layers (terrain about 0.8, the sky 1); woods
 are where it piles up: the Marrow Creek spruce view was 16.3 (cards
 6.95, impostors 6.45), pines 9.3, Kettle Pass's quarry 7.0.
