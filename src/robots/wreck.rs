@@ -38,6 +38,10 @@ pub enum Piece {
     Panel(u8),
     Turret,
     Rotor,
+    /// A walker's visor or a drone's camera dome.
+    Sensor,
+    /// A drone's gun pod.
+    Gun,
 }
 
 /// A loose piece of a wrecked robot.
@@ -61,17 +65,45 @@ pub struct Settling {
 #[derive(Resource, Default)]
 struct DebrisLedger(VecDeque<Entity>);
 
+/// A wreck hit the ground hard (for dust and sparks).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct WreckImpact {
+    pub at: Vec3,
+    /// How big a thump: about the body's size.
+    pub size: f32,
+}
+
+/// A walker going down: its legs still hang off it on their joints, the
+/// weak ones come away as it lands.
+#[derive(Component, Debug)]
+pub struct Collapse {
+    t: f32,
+    /// Each leg's hip joint, its thigh, and whether it's to come off.
+    hips: [Option<(Entity, Entity, bool)>; 4],
+    seed: u32,
+}
+
+/// A drone going down: what lift its rotors still give spins it round as
+/// it falls, trailing smoke, until it hits the ground.
+#[derive(Component, Debug)]
+pub struct Spiral {
+    pub t: f32,
+    spin: f32,
+}
+
 pub struct WreckPlugin;
 
 impl Plugin for WreckPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<DebrisLedger>().add_systems(
-            FixedUpdate,
-            (break_up, settle)
-                .chain()
-                .after(super::perceive)
-                .before(PhysicsSystems::First),
-        );
+        app.init_resource::<DebrisLedger>()
+            .add_message::<WreckImpact>()
+            .add_systems(
+                FixedUpdate,
+                (break_up, collapse, spiral, settle)
+                    .chain()
+                    .after(super::perceive)
+                    .before(PhysicsSystems::First),
+            );
     }
 }
 
@@ -140,27 +172,22 @@ fn break_up(
         let mut spawned: Vec<Entity> = Vec::new();
         let mut spawn =
             |commands: &mut Commands, b: (Debris, Transform, Vec3, Vec3, f32, Collider, Vec3)| {
-                let (debris, at, v, w, mass, collider, inertia) = b;
-                let id = commands
-                    .spawn((
-                        Name::new("Robot debris"),
-                        debris,
-                        at,
-                        debris_body(mass, collider, inertia),
-                        LinearVelocity(v),
-                        AngularVelocity(w),
-                    ))
-                    .id();
+                let id = spawn_piece(commands, b, size);
                 spawned.push(id);
+                id
             };
         match (robot.kind, walker, poses, drone) {
             (RobotKind::Walker, Some(w), Some(poses), _) => {
                 commands.entity(e).insert(Broken).remove::<LegPoses>();
                 let v0 = w.velocity;
-                // Legs come off at the hips and knees.
+                // The legs stay on at their joints (a ball at the hip, a
+                // hinge at the knee) and fold under it as it drops; the
+                // weak ones come away as it lands (`collapse`).
+                let mut hips = [None; 4];
                 for (i, [hip, knee, foot]) in poses.0.iter().copied().enumerate() {
                     let out = Vec3::new(hip.x - t.translation.x, 0.0, hip.z - t.translation.z)
                         .normalize_or(Vec3::X);
+                    let mut ids = [Entity::PLACEHOLDER; 2];
                     for (k, (a, b, len, piece, mass)) in [
                         (hip, knee, UPPER, Piece::LegUpper, 7.0),
                         (knee, foot, LOWER, Piece::LegLower, 5.0),
@@ -170,8 +197,9 @@ fn break_up(
                     {
                         let dir = (b - a).normalize_or(Vec3::NEG_Y);
                         let j = jitter(seed, (i * 2 + k) as u32);
-                        let v = v0 + out * (0.6 + 0.5 * j) + Vec3::Y * (0.8 + 0.6 * j.abs());
-                        let spin = out.cross(Vec3::Y) * (2.0 + 2.0 * j);
+                        // Buckling: the feet skid out from under it.
+                        let v = v0 + out * if k == 1 { 1.6 + 0.4 * j } else { 0.5 };
+                        let spin = out.cross(Vec3::Y) * (1.5 + j);
                         let r = if piece == Piece::LegUpper {
                             0.06
                         } else {
@@ -182,7 +210,7 @@ fn break_up(
                             .with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
                         // (Lengths and masses at full size; scaled on spawn.)
                         let i_ax = mass * len * len / 12.0;
-                        spawn(
+                        ids[k] = spawn(
                             &mut commands,
                             (
                                 Debris {
@@ -198,7 +226,42 @@ fn break_up(
                             ),
                         );
                     }
+                    let [upper, lower] = ids;
+                    // Feet that skid rather than prop it up.
+                    commands.entity(lower).insert(Friction::new(0.25));
+                    let hip_joint = commands
+                        .spawn((
+                            Name::new("Wreck hip"),
+                            SphericalJoint::new(e, upper)
+                                .with_anchor(hip)
+                                .with_swing_limits(0.0, 1.5),
+                            JointCollisionDisabled,
+                            ChildOf(upper),
+                        ))
+                        .id();
+                    // The knee hinges across the leg's plane.
+                    let hinge = (knee - hip)
+                        .cross(foot - knee)
+                        .normalize_or(out.cross(Vec3::Y));
+                    let upper_rot =
+                        Quat::from_rotation_arc(Vec3::Y, (knee - hip).normalize_or(Vec3::NEG_Y));
+                    commands.spawn((
+                        Name::new("Wreck knee"),
+                        RevoluteJoint::new(upper, lower)
+                            .with_anchor(knee)
+                            .with_hinge_axis(upper_rot.inverse() * hinge),
+                        JointCollisionDisabled,
+                        ChildOf(lower),
+                    ));
+                    let health = children
+                        .iter()
+                        .filter_map(|c| parts.get(c).ok())
+                        .find(|(p, ..)| p.role == PartRole::Leg(i as u8))
+                        .map_or(0.0, |(p, ..)| p.hp / p.max_hp.max(1.0));
+                    let weak = !w.feet[i].alive || health < 0.4;
+                    hips[i] = Some((hip_joint, upper, weak));
                 }
+                commands.entity(e).insert(Collapse { t: 0.0, hips, seed });
                 // A panel or two blown off the orb, and the turret.
                 for k in 0..2u32 {
                     let a = jitter(seed, 20 + k) * std::f32::consts::PI;
@@ -222,9 +285,32 @@ fn break_up(
                     );
                 }
                 for c in children.iter() {
-                    let Ok((_, gt, leg, turret)) = parts.get(c) else {
+                    let Ok((part, gt, leg, turret)) = parts.get(c) else {
                         continue;
                     };
+                    let sensor = part.role == PartRole::Sensor;
+                    if sensor {
+                        // The visor knocked off its mount.
+                        let fwd = t.rotation * Vec3::NEG_Z;
+                        spawn(
+                            &mut commands,
+                            (
+                                Debris {
+                                    kind: robot.kind,
+                                    piece: Piece::Sensor,
+                                },
+                                Transform::from_translation(gt.translation())
+                                    .with_rotation(gt.rotation()),
+                                v0 + fwd * 1.8 + Vec3::Y * 1.2,
+                                Vec3::new(jitter(seed, 80), jitter(seed, 81), 1.0) * 7.0,
+                                1.2,
+                                Collider::cuboid(0.3, 0.08, 0.06),
+                                Vec3::new(0.001, 0.009, 0.009),
+                            ),
+                        );
+                        commands.entity(c).despawn();
+                        continue;
+                    }
                     if turret {
                         let at = Transform::from_translation(gt.translation())
                             .with_rotation(gt.rotation());
@@ -255,7 +341,8 @@ fn break_up(
                     NoAutoMass,
                     AngularInertia::new(Vec3::splat(0.4 * 70.0 * 0.16 * m5)),
                     NoAutoAngularInertia,
-                    LinearVelocity(v0 + Vec3::Y * 0.5),
+                    // Its legs give: it drops.
+                    LinearVelocity(v0 - Vec3::Y * 1.5),
                     AngularVelocity(Vec3::new(jitter(seed, 60), 0.0, jitter(seed, 61)) * 1.5),
                     LinearDamping(0.3),
                     AngularDamping(1.2),
@@ -264,12 +351,15 @@ fn break_up(
                 ));
             }
             (RobotKind::Drone, _, _, Some(d)) => {
-                commands.entity(e).insert((Broken, Settling::default()));
+                // It goes down spinning (`spiral`); the panel and pod come
+                // off when it hits.
+                let spin = if seed % 2 == 0 { 1.0 } else { -1.0 };
+                commands.entity(e).insert((Broken, Spiral { t: 0.0, spin }));
                 let (v0, w0) = velocities
                     .get(e)
                     .map(|(v, w)| (v.0, w.0))
                     .unwrap_or_default();
-                // Two rotors that were still turning fly off, spinning.
+                // A rotor that was still turning flies off, spinning.
                 let mut shed = 0;
                 for c in children.iter() {
                     let Ok((part, gt, _, _)) = parts.get(c) else {
@@ -278,7 +368,7 @@ fn break_up(
                     let PartRole::Rotor(i) = part.role else {
                         continue;
                     };
-                    if !d.rotor_alive[i as usize] || shed >= 2 {
+                    if !d.rotor_alive[i as usize] || shed >= 1 {
                         continue;
                     }
                     shed += 1;
@@ -303,39 +393,171 @@ fn break_up(
                     );
                     commands.entity(c).despawn();
                 }
-                let up = t.rotation * Vec3::Y;
-                spawn(
-                    &mut commands,
-                    (
-                        Debris {
-                            kind: robot.kind,
-                            piece: Piece::Panel(2),
-                        },
-                        Transform::from_translation(t.translation + up * 0.12)
-                            .with_rotation(t.rotation),
-                        v0 + up * 3.0 + Vec3::new(jitter(seed, 70), 0.0, jitter(seed, 71)),
-                        Vec3::new(jitter(seed, 72), 0.3, jitter(seed, 73)) * 8.0,
-                        0.5,
-                        Collider::cuboid(0.22, 0.02, 0.18),
-                        Vec3::new(0.0015, 0.003, 0.002),
-                    ),
-                );
             }
             _ => {
                 // Dirigibles and pylons wreck in their own way.
                 commands.entity(e).insert(Broken);
             }
         }
-        for id in spawned {
-            ledger.0.push_back(id);
+        keep(&mut ledger, &mut commands, &spawned);
+    }
+}
+
+/// Spawns one loose piece (masses and lengths at full size, scaled to
+/// `size`).
+fn spawn_piece(
+    commands: &mut Commands,
+    b: (Debris, Transform, Vec3, Vec3, f32, Collider, Vec3),
+    size: f32,
+) -> Entity {
+    let (debris, at, v, w, mass, collider, inertia) = b;
+    commands
+        .spawn((
+            Name::new("Robot debris"),
+            debris,
+            at.with_scale(Vec3::splat(size)),
+            debris_body(mass * size.powi(3), collider, inertia * size.powi(5)),
+            LinearVelocity(v),
+            AngularVelocity(w),
+        ))
+        .id()
+}
+
+fn keep(ledger: &mut DebrisLedger, commands: &mut Commands, ids: &[Entity]) {
+    ledger.0.extend(ids.iter().copied());
+    while ledger.0.len() > MAX_DEBRIS {
+        if let Some(old) = ledger.0.pop_front() {
+            if let Ok(mut ec) = commands.get_entity(old) {
+                ec.despawn();
+            }
         }
-        while ledger.0.len() > MAX_DEBRIS {
-            if let Some(old) = ledger.0.pop_front() {
-                if let Ok(mut ec) = commands.get_entity(old) {
-                    ec.despawn();
+    }
+}
+
+/// As a walker lands, its weak legs (shot up, or already dead) tear off
+/// at the hip, and one more with them; the rest stay on, folded under it.
+fn collapse(
+    mut commands: Commands,
+    mut falling: Query<(
+        Entity,
+        &mut Collapse,
+        &Transform,
+        Option<&super::anim::Gait>,
+    )>,
+    mut impacts: MessageWriter<WreckImpact>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut c, t, gait) in &mut falling {
+        let before = c.t;
+        c.t += dt;
+        let crossed = |at: f32| before < at && c.t >= at;
+        if crossed(0.45) {
+            impacts.write(WreckImpact {
+                at: t.translation,
+                size: gait.map_or(1.0, |g| g.size),
+            });
+            for (joint, _, weak) in c.hips.iter().flatten() {
+                if *weak {
+                    commands.entity(*joint).insert(JointDisabled);
                 }
             }
         }
+        if crossed(0.8) {
+            // Two more tear away (the seed picks which), so no two wrecks
+            // lie the same.
+            for k in [c.seed % 4, (c.seed / 4 + 1 + c.seed % 4) % 4] {
+                if let Some((joint, _, _)) = c.hips[k as usize] {
+                    commands.entity(joint).insert(JointDisabled);
+                }
+            }
+        }
+        if c.t > 1.0 {
+            commands.entity(e).remove::<Collapse>();
+        }
+    }
+}
+
+/// A wrecked drone spins down on what lift it has left, tipped over, so it
+/// falls in a corkscrew; when it hits it sheds its panel and gun pod.
+#[allow(clippy::type_complexity)]
+fn spiral(
+    mut commands: Commands,
+    mut drones: Query<(Entity, &mut Spiral, &Transform, &Children, Forces), With<Drone>>,
+    parts: Query<(&RobotPart, &GlobalTransform)>,
+    zone: Res<crate::world::Zone>,
+    time: Res<Time>,
+    mut impacts: MessageWriter<WreckImpact>,
+    mut ledger: ResMut<DebrisLedger>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut s, t, children, mut forces) in &mut drones {
+        s.t += dt;
+        let pos = t.translation;
+        let above = pos.y - zone.ground(pos.x, pos.z);
+        let v = forces.linear_velocity();
+        if above < 0.5 || s.t > 10.0 {
+            commands
+                .entity(e)
+                .remove::<Spiral>()
+                .insert(Settling::default());
+            impacts.write(WreckImpact { at: pos, size: 0.5 });
+            let seed = e.index_u32();
+            let up = t.rotation * Vec3::Y;
+            let mut ids = vec![spawn_piece(
+                &mut commands,
+                (
+                    Debris {
+                        kind: RobotKind::Drone,
+                        piece: Piece::Panel(2),
+                    },
+                    Transform::from_translation(pos + up * 0.12).with_rotation(t.rotation),
+                    v * 0.3 + Vec3::Y * 2.5 + Vec3::new(jitter(seed, 70), 0.0, jitter(seed, 71)),
+                    Vec3::new(jitter(seed, 72), 0.3, jitter(seed, 73)) * 8.0,
+                    0.5,
+                    Collider::cuboid(0.22, 0.02, 0.18),
+                    Vec3::new(0.0015, 0.003, 0.002),
+                ),
+                1.0,
+            )];
+            for c in children.iter() {
+                let Ok((part, gt)) = parts.get(c) else {
+                    continue;
+                };
+                if part.role != PartRole::Weapon {
+                    continue;
+                }
+                ids.push(spawn_piece(
+                    &mut commands,
+                    (
+                        Debris {
+                            kind: RobotKind::Drone,
+                            piece: Piece::Gun,
+                        },
+                        Transform::from_translation(gt.translation()).with_rotation(gt.rotation()),
+                        v * 0.4 + Vec3::new(jitter(seed, 74), 1.5, jitter(seed, 75)),
+                        Vec3::new(jitter(seed, 76), 0.5, 1.0) * 5.0,
+                        1.4,
+                        Collider::cuboid(0.08, 0.08, 0.32),
+                        Vec3::new(0.012, 0.012, 0.0015),
+                    ),
+                    1.0,
+                ));
+                commands.entity(c).despawn();
+            }
+            keep(&mut ledger, &mut commands, &ids);
+            continue;
+        }
+        // What lift is left fades over a couple of seconds.
+        let up = t.rotation * Vec3::Y;
+        let lift = super::drone::MASS * 9.81 * 0.8 * (1.0 - s.t / 3.5).max(0.0);
+        forces.apply_force(up * lift);
+        // Spin about its own up, and hold it tipped about 25 degrees: the
+        // tipped lift, turning, swings it round in a corkscrew.
+        forces.apply_torque(up * 0.9 * s.spin);
+        let tilt = up.angle_between(Vec3::Y);
+        let axis = Vec3::Y.cross(up).normalize_or(t.rotation * Vec3::X);
+        forces.apply_torque(axis * (0.45 - tilt) * 2.5);
     }
 }
 
@@ -350,7 +572,7 @@ fn settle(
         s.age += dt;
         let still = v.0.length() < STILL_SPEED && w.0.length() < STILL_SPEED * 3.0;
         s.still = if still { s.still + dt } else { 0.0 };
-        if (s.age > 0.5 && s.still > STILL_FOR) || s.age > SETTLE_BY {
+        if (s.age > 2.0 && s.still > STILL_FOR) || s.age > SETTLE_BY {
             commands
                 .entity(e)
                 .remove::<Settling>()
@@ -434,5 +656,83 @@ mod tests {
         }
         // And the wreck is still a robot, still wrecked, to loot.
         assert!(app.world().get::<Robot>(walker).unwrap().wrecked);
+    }
+
+    /// A drone killed in the air doesn't drop like a stone: it corkscrews
+    /// down over a couple of seconds, drifting round, hits, sheds its
+    /// panel and pod, and its pieces settle.
+    #[test]
+    fn a_wrecked_drone_spirals_down() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let site = zone.on_ground(40.0, 200.0) + Vec3::Y * 14.0;
+        let drone = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::drone::spawn_drone(
+                &mut c,
+                site,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 999.0,
+                    exit: site,
+                },
+            );
+            // No brain: it holds where it was put, 14 m up.
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..90 {
+            app.update();
+        }
+        let start = app.world().get::<Transform>(drone).unwrap().translation;
+        let drop = start.y - zone.ground(start.x, start.z);
+        let free_fall = (2.0 * drop / 9.81).sqrt();
+        app.world_mut().get_mut::<Robot>(drone).unwrap().wrecked = true;
+        let mut track = Vec::new();
+        let mut landed = None;
+        for tick in 0..90 * 12 {
+            app.update();
+            let p = app.world().get::<Transform>(drone).unwrap().translation;
+            assert!(p.is_finite());
+            track.push(p);
+            if landed.is_none() && app.world().get::<Spiral>(drone).is_none() && tick > 2 {
+                landed = Some(tick as f32 / 90.0);
+            }
+        }
+        let secs = landed.expect("it hit the ground");
+        assert!(
+            secs > free_fall * 1.4,
+            "came down {drop:.1} m in {secs:.2} s: it fell like a stone ({free_fall:.2} s)"
+        );
+        // It swung round as it fell: the path is no straight drop.
+        let reach = track
+            .iter()
+            .map(|p| Vec2::new(p.x - start.x, p.z - start.z).length())
+            .fold(0.0f32, f32::max);
+        assert!(reach > 1.0, "drifted only {reach:.2} m");
+        let pieces = app
+            .world_mut()
+            .query_filtered::<&Debris, With<Debris>>()
+            .iter(app.world())
+            .filter(|d| matches!(d.piece, Piece::Panel(_) | Piece::Gun))
+            .count();
+        assert!(pieces >= 2, "shed its panel and pod on impact ({pieces})");
+        assert_eq!(
+            app.world().get::<RigidBody>(drone),
+            Some(&RigidBody::Static),
+            "at rest"
+        );
     }
 }

@@ -1227,6 +1227,12 @@ fn dress_debris(
                     );
                 })
             }
+            Piece::Sensor => node("sensor").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
+            Piece::Gun => node("gun").map(|n| {
+                attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
+            }),
             Piece::Turret => node("turret").map(|n| {
                 attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
             }),
@@ -1293,6 +1299,13 @@ fn dress_debris(
                 commands.spawn((
                     Mesh3d(meshes.add(Capsule3d::new(r, len - 2.0 * r))),
                     MeshMaterial3d(m.scorched.clone()),
+                    ChildOf(e),
+                ));
+            }
+            Piece::Sensor | Piece::Gun => {
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.08, 0.06, 0.2))),
+                    MeshMaterial3d(m.dark.clone()),
                     ChildOf(e),
                 ));
             }

@@ -12,8 +12,8 @@ software renderer is.
 | `crawler_walk.png` | A crawler (the walker body at 0.6, for low ceilings underground) crossing: the same gait at its own scale | 0.13 s |
 | `crawler_zap.png` | A crawler's spark gun: the blue charge glow and crackle for half a second, then the arc | 0.1 s |
 | `walker_limp.png` | A walker with a leg shot off: limping across on three, one foot up at a time, the dead leg dangling, the body sagging toward the gap | 0.2 s |
-| `drone_wreck.png` | A drone killed in the air: it drops, sheds rotors and a panel, and smoulders where it lands | 0.2 s |
-| `walker_wreck.png` | A walker killed in view: legs off at hip and knee, panels and turret thrown, the orb rolling to rest, scorched, smouldering | 0.17 s |
+| `drone_wreck.png` | A drone killed in the air: a rotor flies off, it corkscrews down on its fading lift trailing smoke, hits in a burst of sparks, sheds its panel and gun pod, and smoulders | 0.17 s |
+| `walker_wreck.png` | A walker killed in view: visor, turret and panels thrown, its legs (jointed at hip and knee) skid out and fold as it drops, two tear off at the hip as it lands, scorched and smouldering | 0.13 s |
 
 To make one again (about 2 s a frame under lavapipe):
 
