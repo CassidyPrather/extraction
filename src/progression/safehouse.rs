@@ -18,8 +18,8 @@ use crate::raid::truck::Pressable;
 use crate::raid::{Phase, Raid, TRUCK_WAIT};
 use crate::rig::LocalPlayer;
 use crate::robots::Robot;
+use crate::world::Layer;
 use crate::world::buildings::{Building, DoorLeaf};
-use crate::world::{Layer, Zone};
 
 /// This valley's safehouse: its state (saved with the Zone) and the things
 /// in the world that make it up.
@@ -91,7 +91,7 @@ impl Plugin for SafehousePlugin {
                 )
                     .chain(),
             )
-            .add_systems(Update, furnish);
+            .add_systems(Update, (furnish, scenario::direct));
     }
 }
 
@@ -468,6 +468,8 @@ fn homecoming(
     house.state.found(peak);
     raid.say(lines::SAFE_FOUND);
 }
+
+pub mod scenario;
 
 #[cfg(test)]
 mod tests;
