@@ -354,6 +354,12 @@ fn fresh_save(map: &str) -> SaveGame {
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),
         item("map_case", 0, [-0.3, 0.05, -0.3]),
         item("compass", 0, [0.3, 0.05, 0.0]),
+        // To find anomalies before they find you: the clicker, and bolts
+        // to throw where the air looks wrong.
+        item("detector", 0, [0.12, 0.05, 0.42]),
+        item("bolt", 0, [-0.1, 0.05, 0.1]),
+        item("bolt", 0, [-0.05, 0.05, 0.1]),
+        item("bolt", 0, [0.0, 0.05, 0.1]),
     ];
     s
 }
