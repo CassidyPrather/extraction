@@ -623,6 +623,7 @@ pub fn release_handle(gun: &mut Gun) -> Vec<FireEvent> {
 /// Face buttons and the selector, from the hand holding the gun.
 fn buttons(
     players: Query<&RigInput, With<Player>>,
+    mut macros: Query<&mut flat::GunMacro>,
     mut guns: Query<(Entity, &mut Gun, &Held, &GlobalTransform, &Item)>,
     mut hands: Query<&mut Hand>,
     mut last: Local<std::collections::HashMap<Entity, (bool, bool, bool)>>,
@@ -630,7 +631,11 @@ fn buttons(
     mut ejected: MessageWriter<Ejection>,
     mut drop_mag: MessageWriter<DropMagazine>,
     catalog: Res<Catalog>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut racks: Local<Vec<(Entity, Entity)>>,
 ) {
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
+    racks.clear();
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -667,6 +672,13 @@ fn buttons(
                 } else {
                     events.extend(gun.firearm.cock_hammer());
                 }
+            } else if one_handed
+                && !gun.firearm.locked_back
+                && gun.firearm.def.action != ActionKind::BreakAction
+            {
+                // One hand: the button racks it (there's no other hand for
+                // the slide); locked back, it lets the slide go as ever.
+                racks.push((held.player, e));
             } else {
                 events.extend(gun.firearm.release_slide_stop());
             }
@@ -682,6 +694,14 @@ fn buttons(
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
         // A hand that let go of the handle this tick: spring return.
         let _ = &mut hands;
+    }
+    for (player, gun) in racks.drain(..) {
+        let (Ok(g), Ok(mut mac)) = (guns.get(gun), macros.get_mut(player)) else {
+            continue;
+        };
+        if !mac.busy() {
+            mac.start(gun, flat::macro_steps(flat::MacroKind::Rack, &g.1));
+        }
     }
 }
 
