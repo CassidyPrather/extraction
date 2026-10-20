@@ -218,7 +218,7 @@ you're out of sight (it knows which way you went for a second, then it's
 guessing). Suspicious, it **investigates**: walks over (a walker
 carefully, a grappler creeping low) and looks round. Then it
 **searches**: the doorways (it opens a shut door and looks in) and the
-ground hard by walls and cover within its uncertainty, a pause and a look
+ground hard by walls and cover within its uncertainty (a drone comes down to a doorway and hangs outside it, looking in), a pause and a look
 round at each. Nothing, and it **gives up**: back to its job, cut short,
 or home if finding you was the job. Lose a robot mid-fight and it does
 the same from where it last saw you. A robot that notices you calls the

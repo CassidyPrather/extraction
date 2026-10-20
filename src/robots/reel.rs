@@ -12,8 +12,9 @@
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
-//! `crawler` (a 0.6-size walker across),
-//! `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
+
+//! `crawler` (a crawler across), `zap` (a crawler charging and
+//! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
 use std::time::Duration;
@@ -60,6 +61,8 @@ fn reel(
     mut parts: Query<(Entity, &mut RobotPart, &GlobalTransform)>,
     mut robots: Query<&mut super::Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
+    mut charges: MessageWriter<super::indoor::CrawlerCharge>,
+    mut zaps: MessageWriter<super::indoor::CrawlerZap>,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -116,16 +119,36 @@ fn reel(
                 let at = eye + flat * 5.0;
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
-            "crawler" => super::walker::spawn_walker_sized(
-                &mut commands,
-                &zone,
-                walk_start,
-                job(walk_start),
-                false,
-                60.0,
-                0.6,
-                None,
-            ),
+            "crawler" | "zap" => {
+                let at = if what == "zap" {
+                    eye + flat * 3.0 + right * 0.6
+                } else {
+                    walk_start
+                };
+                let e = super::walker::spawn_walker_sized(
+                    &mut commands,
+                    &zone,
+                    at,
+                    job(at),
+                    false,
+                    60.0,
+                    super::indoor::CRAWLER_SIZE,
+                    None,
+                );
+                commands.entity(e).with_children(|c| {
+                    c.spawn((
+                        super::indoor::CrawlerGun,
+                        super::part_bundle(
+                            e,
+                            PartRole::Weapon,
+                            30.0,
+                            avian3d::prelude::Collider::sphere(0.08),
+                            Transform::from_xyz(0.0, -0.1, -0.44),
+                        ),
+                    ));
+                });
+                e
+            }
             _ => spawn_walker(&mut commands, &zone, walk_start, job(walk_start)),
         };
         // Deaf and blind: it's here to be looked at, not to hunt.
@@ -163,13 +186,17 @@ fn reel(
     }
     if frame == 5 {
         if let Ok(mut w) = walkers.get_mut(subject) {
+            if what == "zap" {
+                // Facing you.
+                w.yaw = flat.x.atan2(flat.z);
+            }
             let p = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
             w.path = match what {
                 "turn" => vec![
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" => vec![],
+                "wreck" | "zap" => vec![],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
@@ -207,6 +234,29 @@ fn reel(
                 role: PartRole::Core,
                 at: gt.translation(),
             });
+        }
+    }
+    // A crawler zapping at a point beside the camera: charge, then the arc.
+    if what == "zap" {
+        let emitter = parts
+            .iter()
+            .find(|(_, p, _)| p.robot == subject && p.role == PartRole::Weapon)
+            .map(|(_, _, gt)| gt.translation());
+        if let Some(from) = emitter {
+            let k = frame.saturating_sub(WARMUP - 6) % 30;
+            if k == 0 {
+                charges.write(super::indoor::CrawlerCharge {
+                    crawler: subject,
+                    at: from,
+                });
+            }
+            if k == 15 {
+                zaps.write(super::indoor::CrawlerZap {
+                    crawler: subject,
+                    from,
+                    to: eye - Vec3::Y * 0.5 + right * 0.9,
+                });
+            }
         }
     }
     if frame < WARMUP || (frame - WARMUP) % state.every != 0 || state.taken >= state.shots {

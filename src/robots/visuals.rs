@@ -240,6 +240,7 @@ fn dress_parts(
             Has<DroneGun>,
             Has<WalkerTurret>,
             Has<WalkerLeg>,
+            Has<super::indoor::CrawlerGun>,
         ),
         With<Undressed>,
     >,
@@ -267,7 +268,7 @@ fn dress_parts(
         }
     };
     let mut cache: Vec<(RobotKind, Option<Vec<ModelNode>>)> = Vec::new();
-    for (e, part, gun, turret, leg) in &parts {
+    for (e, part, gun, turret, leg, emitter) in &parts {
         let Ok(robot) = robots.get(part.robot) else {
             continue;
         };
@@ -316,6 +317,7 @@ fn dress_parts(
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
+            (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
             (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {
@@ -1246,7 +1248,13 @@ fn dress_debris(
             // The model's loose panel, turned so its outside faces up (the
             // piece's +Y, as it was thrown).
             Piece::Panel(_) => node("panel").map(|n| {
-                let out = n.transform.translation.normalize_or(Vec3::Y);
+                // A walker's panel faces out from the orb's centre; a
+                // drone's (off the top of the lens) already faces up.
+                let out = if d.kind == RobotKind::Walker {
+                    n.transform.translation.normalize_or(Vec3::Y)
+                } else {
+                    Vec3::Y
+                };
                 attach(
                     &mut commands,
                     e,

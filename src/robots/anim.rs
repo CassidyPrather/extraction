@@ -88,6 +88,8 @@ pub struct Gait {
     /// The body's scale (1 for a walker; a crawler is smaller). The root's
     /// `Transform::scale` must match: hips come from it.
     pub size: f32,
+    /// How far into a crouch it is, 0..1 (smoothed `Intent::low`).
+    pub crouch: f32,
 }
 
 impl Default for Gait {
@@ -113,6 +115,7 @@ impl Default for Gait {
             rear_dir: Vec3::ZERO,
             steady: 0.0,
             size: 1.0,
+            crouch: 0.0,
         }
     }
 }
@@ -204,6 +207,8 @@ pub fn step_walker(
         return;
     }
     let s = g.size;
+    let want_crouch = if drive.low && !drive.down { 1.0 } else { 0.0 };
+    g.crouch += (want_crouch - g.crouch) * (2.5 * dt).min(1.0);
     g.rear = (g.rear - dt).max(0.0);
     g.steady = (g.steady - dt).max(0.0);
     // Rearing back: up over the wind-up, held at the top.
@@ -269,7 +274,9 @@ pub fn step_walker(
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
     let probe_y = next.y;
-    let ideal_xz = |i: usize| next + rot_ahead * rest_offset(i) * s + lookahead;
+    // Crouched, it spreads its feet: lower and wider, like a spider.
+    let spread = s * (1.0 + 0.18 * g.crouch);
+    let ideal_xz = |i: usize| next + rot_ahead * rest_offset(i) * spread + lookahead;
     let mut kick = 0.0f32;
     for i in 0..LEGS {
         if !w.feet[i].alive || w.feet[i].t >= 1.0 {
@@ -298,7 +305,8 @@ pub fn step_walker(
             let k = ((nt - 0.3) / 0.7).clamp(0.0, 1.0);
             k * k * (3.0 - 2.0 * k)
         };
-        let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) + dy.abs() * 0.4)
+        let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) * (1.0 - 0.4 * g.crouch)
+            + dy.abs() * 0.4)
             * (std::f32::consts::PI * nt).sin();
         let xz = f.from.lerp(f.to, s);
         f.planted = Vec3::new(xz.x, f.from.y + dy * sv + lift, xz.z);
@@ -380,7 +388,7 @@ pub fn step_walker(
         missing as f32 * 0.14
             + g.limp * 0.05
             + g.brace.length() * 0.12
-            + if drive.low { LOW } else { 0.0 }
+            + LOW * g.crouch
             + if g.steady > 0.0 { 0.07 } else { 0.0 }
             - rear_k * 0.1
     };
@@ -892,6 +900,54 @@ mod tests {
         assert_eq!(footing(q, terrain, 1.0, |_, _| None), terrain);
         // A ray that starts inside a wall isn't a footing.
         assert_eq!(footing(q, terrain, 1.0, |_, _| Some(0.0)), terrain);
+    }
+
+    /// Kept low, it crouches: the orb sinks toward `LOW` lower and its feet
+    /// spread, and it still walks on the ground.
+    #[test]
+    fn keeping_low_crouches_and_spreads() {
+        let flat = |_: Vec3| 0.0;
+        let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+        for _ in 0..(90 * 4) {
+            let drive = Drive {
+                desired: Vec3::X * SPEED,
+                face: None,
+                pace: 0.6,
+                down: false,
+                stunned: false,
+                low: true,
+            };
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive,
+                1.0 / 90.0,
+                &mut |_| 0.0,
+                &mut |_| {},
+            );
+        }
+        assert!(g.crouch > 0.95);
+        assert!(
+            t.translation.y < BODY_HEIGHT - LOW * 0.8,
+            "orb at {:.2}",
+            t.translation.y
+        );
+        let spread: f32 = w
+            .feet
+            .iter()
+            .map(|f| {
+                Vec2::new(f.planted.x - t.translation.x, f.planted.z - t.translation.z).length()
+            })
+            .sum::<f32>()
+            / LEGS as f32;
+        assert!(spread > FOOT_RADIUS * 1.05, "feet {spread:.2} m out");
+        assert!(
+            w.feet
+                .iter()
+                .filter(|f| f.t >= 1.0)
+                .all(|f| f.planted.y.abs() < 0.01)
+        );
     }
 
     /// A step up: feet find the top of it (the ground function stands in

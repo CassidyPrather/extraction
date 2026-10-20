@@ -280,7 +280,9 @@ pub fn spawn_crawler(
                     PartRole::Weapon,
                     30.0,
                     Collider::sphere(0.08),
-                    Transform::from_xyz(0.0, 0.1, -0.3),
+                    // Under the visor, proud of the orb (the model's
+                    // `emitter`, art/robots/walker.py).
+                    Transform::from_xyz(0.0, -0.1, -0.44),
                 ),
             ));
         });
