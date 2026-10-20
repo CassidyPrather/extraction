@@ -155,12 +155,17 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str, epilogue: bool) -> Stri
             map: m,
             region,
             place,
+            overnight,
             ..
         } => {
             let where_ = place
                 .clone()
                 .unwrap_or_else(|| format!("somewhere in the {region}."));
-            elsewhere(m) + &lines::ask_recover(&where_)
+            if *overnight {
+                elsewhere(m) + &lines::ask_expedition(&where_)
+            } else {
+                elsewhere(m) + &lines::ask_recover(&where_)
+            }
         }
         Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
         Job::Ledger => elsewhere(extraction_core::progression::LEDGER_MAP) + lines::ASK_LEDGER,
@@ -468,6 +473,7 @@ fn place_recorder(
         region,
         at,
         place,
+        ..
     }) = &mut progression.0.job
     else {
         return;

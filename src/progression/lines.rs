@@ -41,6 +41,14 @@ Somebody in town still pays for what's on them.\"\nStash it, press here."
     )
 }
 
+/// An expedition: a recover so deep in it takes a night out.
+pub fn ask_expedition(place: &str) -> String {
+    format!(
+        "\"Two days' walk, this one. A recorder, left {place} Sleep at the cabin \
+on the way.\"\nStash it, press here."
+    )
+}
+
 /// A scout of `place`.
 pub fn ask_scout(place: &str) -> String {
     format!(
@@ -82,6 +90,8 @@ pub const ONE_A_RAID: &str = "Driver: \"One thing at a time. After your next run
 pub const IN_THE_YARD: &str = "Driver: \"Not in the yard. Out there, for real.\"";
 pub const NO_RECORDER: &str = "Driver: \"No recorder in the stash. Still out there, is it?\"";
 pub const NO_LEDGER: &str = "Driver: \"Not in the stash. Bay K-14. Under the Gate.\"";
+pub const EXPEDITION_NO_NIGHT: &str =
+    "Driver: \"That's not been two days. Sleep out there, then bring it.\"";
 pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
@@ -298,6 +308,7 @@ mod tests {
             SAFE_TRUCK_WAITS.into(),
             SAFE_TRUCK_LEFT.into(),
             SAFE_FOUND.into(),
+            EXPEDITION_NO_NIGHT.into(),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(

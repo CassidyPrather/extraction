@@ -234,6 +234,7 @@ fn press(
     mut director: Option<ResMut<crate::robots::director::Director>>,
     doors: Query<&GlobalTransform, With<DoorLeaf>>,
     mut slept: MessageWriter<Slept>,
+    mut progression: ResMut<super::Progression>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, player } = ev else {
@@ -284,6 +285,7 @@ fn press(
                     .max(house.peak.min(2));
                 sleep(&mut raid, &mut house, &mut shift);
                 slept.write(Slept);
+                progression.0.slept_out = true;
                 if feeling >= 2 {
                     // They've followed you: something at the door before
                     // light.
