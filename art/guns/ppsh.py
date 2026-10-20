@@ -81,6 +81,11 @@ bp = fillet([(0.3145, 0.0055), (0.324, 0.0045), (0.324, -0.113), (0.3145, -0.113
             [0.0, 0.002, 0.002, 0.0], 2)
 furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
 furn.box((0.024, 0.05, 0.004), (0.0, -0.05, 0.3255), "Blued", bevel=0.0012)
+# The front sling swivel on the stock's left, ahead of the magazine well.
+swivel = [(-0.185 + 0.009 * math.cos(a), 0.015 + 0.009 * math.sin(a))
+          for a in [math.pi + math.pi * i / 8 for i in range(9)]]
+furn.sweep(swivel, section_rect(0.0025, 0.0025, 0.0007), "Blued", xf=T(-0.021, 0, 0))
+furn.box((0.004, 0.006, 0.022), (-0.0195, 0.017, -0.185), "Blued", bevel=0.001)
 
 # --- Receiver: the lower half, and the cover hinged at the front -------------------------
 recv = Part("receiver")
@@ -173,5 +178,8 @@ empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.08, 0.0))
 empty("magwell", (0.0, 0.03, WELL_Z))
 
+# Where a sling attaches: the swivel on the stock's left ahead of the well, and the slot through the butt.
+empty("pt_sling_front", (-0.021, 0.006, -0.185))
+empty("pt_sling_rear", (0.0, -0.063, 0.17))
 report()
 export("assets/models/guns/ppsh.glb")

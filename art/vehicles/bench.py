@@ -12,7 +12,7 @@ bed floor at y -0.4; -X faces the aisle. The tray's box (`TRAY_HALF`
 
 - `bench`  everything (static)
 
-Materials: Boards, Paint, Iron, Steel, Blue, Black, Rubber, Wood, Brass.
+Materials: Boards, Paint, Iron, GreyGreen, Steel, Blue, Black, Rubber, Wood, Brass.
 """
 
 import math
@@ -101,16 +101,16 @@ for k in range(5):
 # The lever's slot.
 b.box((0.004, 0.11, 0.022), (-HX + 0.021, 0.33, 0.6), "Black")
 
-# --- Tray: sheet steel with rolled lips and two handles -------------------
+# --- Tray: sheet steel painted grey-green with rolled lips and two handles -------------------
 TX, TZ = 0.27, 0.43
 TY = TOP + 0.005
-b.box((2 * TX, 0.006, 2 * TZ), (0.0, TY, 0.0), "Iron", bevel=0.002, segs=1)
+b.box((2 * TX, 0.006, 2 * TZ), (0.0, TY, 0.0), "GreyGreen", bevel=0.002, segs=1)
 for sx in (-1, 1):
-    b.box((0.006, 0.05, 2 * TZ), (sx * TX, TY + 0.025, 0.0), "Iron", bevel=0.002, segs=1)
-    b.cyl(0.006, -TZ, TZ, "Iron", segs=8, xf=T(sx * TX, TY + 0.05, 0.0))
+    b.box((0.006, 0.05, 2 * TZ), (sx * TX, TY + 0.025, 0.0), "GreyGreen", bevel=0.002, segs=1)
+    b.cyl(0.006, -TZ, TZ, "GreyGreen", segs=8, xf=T(sx * TX, TY + 0.05, 0.0))
 for sz in (-1, 1):
-    b.box((2 * TX - 0.012, 0.05, 0.006), (0.0, TY + 0.025, sz * TZ), "Iron", bevel=0.002, segs=1)
-    b.cyl(0.006, -TX, TX, "Iron", segs=8, xf=T(0.0, TY + 0.05, sz * TZ) @ ALONG_X)
+    b.box((2 * TX - 0.012, 0.05, 0.006), (0.0, TY + 0.025, sz * TZ), "GreyGreen", bevel=0.002, segs=1)
+    b.cyl(0.006, -TX, TX, "GreyGreen", segs=8, xf=T(0.0, TY + 0.05, sz * TZ) @ ALONG_X)
     # Wire handles.
     b.sweep([(sz * (TZ + 0.002), TY + 0.03), (sz * (TZ + 0.03), TY + 0.035),
              (sz * (TZ + 0.03), TY + 0.045), (sz * (TZ + 0.002), TY + 0.05)],
