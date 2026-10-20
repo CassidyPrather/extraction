@@ -336,18 +336,46 @@ pub(super) fn direct(
                 };
                 advance(&mut run, next);
             } else {
+                // Armed again, if what it had went down with it.
+                let armed = world
+                    .holding(Side::Right)
+                    .is_some_and(|e| world.guns.get(e).is_ok());
+                if !armed {
+                    if let Some(gun) = world.any_gun() {
+                        tasks.push(Grab {
+                            item: gun,
+                            side: Side::Right,
+                        });
+                    }
+                }
                 let ins = world.insertion();
                 tasks.extend(world.legs(here, ins + Vec2::new(0.0, -25.0)));
             }
         }
         Step::Heard => {
             if !firsts.met(First::Heard) && run.tries < 2 {
+                // A walker about its own business off to one side, and a
+                // shot it can't miss hearing.
                 let o = here;
-                tasks.push(Spawn {
-                    kind: crate::robots::RobotKind::Walker,
-                    at: Vec3::new(o.x, 0.0, o.y - 35.0),
+                let at = Vec3::new(o.x + 30.0, 0.0, o.y - 30.0);
+                let site = world.zone.on_ground(o.x + 60.0, o.y - 50.0);
+                crate::robots::walker::spawn_walker(
+                    &mut commands,
+                    &world.zone,
+                    at,
+                    crate::robots::Job {
+                        kind: crate::robots::JobKind::Survey,
+                        site,
+                        duration: 180.0,
+                        exit: site + Vec3::new(0.0, 0.0, -300.0),
+                    },
+                );
+                tasks.push(Wait(3.0));
+                tasks.push(Fire {
+                    at: Vec3::new(o.x, root.translation.y + 8.0, o.y - 20.0),
+                    shots: 1,
                 });
-                tasks.push(Wait(12.0));
+                tasks.push(Wait(15.0));
                 run.tries += 1;
             } else {
                 advance(&mut run, Step::Drone);
@@ -706,10 +734,17 @@ impl World2<'_, '_> {
             },
             Phase::TruckCalled { .. } => vec![Task::Wait(20.0)],
             Phase::TruckWaiting { .. } => {
-                let Some(truck) = self.trucks.iter().next().map(|g| g.translation().xz()) else {
+                // Round to the back and up its steps, as a person would
+                // (straight at it, the bot met the truck's side).
+                let Some(rear) = self
+                    .trucks
+                    .iter()
+                    .next()
+                    .map(|g| g.transform_point(Vec3::new(0.0, 0.0, 4.0)).xz())
+                else {
                     return vec![Task::Wait(1.0)];
                 };
-                let mut t = self.legs(here, truck);
+                let mut t = self.legs(here, rear);
                 if let Some((bell, _)) = self
                     .pressables
                     .iter()
@@ -722,6 +757,19 @@ impl World2<'_, '_> {
             }
             _ => vec![Task::Wait(3.0)],
         }
+    }
+
+    /// A gun lying loose, or in the crate.
+    fn any_gun(&self) -> Option<Entity> {
+        self.items
+            .iter()
+            .filter(|(e, _, _, held, sock, _)| {
+                held.is_none()
+                    && sock.is_none()
+                    && matches!(self.id(*e), Some("ak74" | "pm_pistol" | "sks" | "mosin"))
+            })
+            .map(|(e, ..)| e)
+            .next()
     }
 
     fn radio_in_hand(&self) -> bool {
