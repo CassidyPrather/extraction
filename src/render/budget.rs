@@ -107,6 +107,21 @@ impl Plugin for BudgetPlugin {
             .add_systems(FixedFirst, start_tick)
             .add_systems(FixedLast, end_tick)
             .add_systems(Update, log_cpu);
+        let span = RenderSpan::default();
+        if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
+            use bevy::render::{Render, RenderSystems};
+            render.insert_resource(span.clone()).add_systems(
+                Render,
+                (
+                    start_render.in_set(RenderSystems::ExtractCommands),
+                    end_render
+                        .after(RenderSystems::Prepare)
+                        .before(RenderSystems::Render),
+                ),
+            );
+            app.insert_resource(span)
+                .add_systems(Last, read_render.before(end_main));
+        }
         {
             use avian3d::prelude::PhysicsSystems;
             app.add_systems(
@@ -128,7 +143,7 @@ impl Plugin for BudgetPlugin {
         );
         app.add_systems(
             PostUpdate,
-            range_items.before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+            (range_items,).before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
         let knobs = Knobs::from_env();
         if knobs != Knobs::default() {
@@ -441,7 +456,36 @@ pub struct CpuSpans {
     /// The last whole frame's: main schedule and physics, ms.
     pub main_ms: f64,
     pub physics_ms: f64,
-    log: Vec<(f64, f64)>,
+    /// The render world's latest: its per-mesh work (`ExtractCommands`
+    /// through `Prepare`: specialise, queue, sort, batch), not encoding or
+    /// submitting the passes. It runs beside the main schedule and has to
+    /// fit in a frame on its own.
+    pub render_ms: f64,
+    log: Vec<(f64, f64, f64)>,
+}
+
+/// The render world's span, handed across to the main world.
+#[derive(Resource, Clone, Default)]
+struct RenderSpan(std::sync::Arc<std::sync::Mutex<(Option<std::time::Instant>, f64)>>);
+
+fn start_render(span: Res<RenderSpan>) {
+    if let Ok(mut s) = span.0.lock() {
+        s.0 = Some(std::time::Instant::now());
+    }
+}
+
+fn end_render(span: Res<RenderSpan>) {
+    if let Ok(mut s) = span.0.lock() {
+        if let Some(t) = s.0.take() {
+            s.1 = t.elapsed().as_secs_f64() * 1000.0;
+        }
+    }
+}
+
+fn read_render(span: Res<RenderSpan>, mut s: ResMut<CpuSpans>) {
+    if let Ok(r) = span.0.lock() {
+        s.render_ms = r.1;
+    }
 }
 
 fn start_main(mut s: ResMut<CpuSpans>) {
@@ -458,7 +502,7 @@ fn end_main(mut s: ResMut<CpuSpans>) {
     let physics = std::mem::take(&mut s.physics_now);
     s.main_ms = whole - fixed + fixed / ticks;
     s.physics_ms = physics / ticks;
-    let entry = (s.main_ms, s.physics_ms);
+    let entry = (s.main_ms, s.physics_ms, s.render_ms);
     s.log.push(entry);
 }
 
@@ -484,8 +528,9 @@ fn end_physics(mut s: ResMut<CpuSpans>) {
 }
 
 /// Every ten seconds, next to `frames:`: "cpu: main 4.1 ms a frame (1%
-/// 6.0), physics 1.2 (1% 2.3)". The main schedule has to fit in the
-/// headset's 11.1 ms on its own; the render world runs beside it.
+/// 6.0), physics 1.2 (1% 2.3), render world 3.0 (1% 4.2)". The main
+/// schedule and the render world each have to fit in the headset's
+/// 11.1 ms; they run side by side.
 fn log_cpu(time: Res<Time<Real>>, mut s: ResMut<CpuSpans>, mut since: Local<f32>) {
     *since += time.delta_secs();
     if *since < 10.0 || s.log.is_empty() {
@@ -500,7 +545,11 @@ fn log_cpu(time: Res<Time<Real>>, mut s: ResMut<CpuSpans>, mut since: Local<f32>
     };
     let (main, main99) = stat(log.iter().map(|l| l.0).collect());
     let (phys, phys99) = stat(log.iter().map(|l| l.1).collect());
-    info!("cpu: main {main:.1} ms a frame (1% {main99:.1}), physics {phys:.1} (1% {phys99:.1})");
+    let (render, render99) = stat(log.iter().map(|l| l.2).collect());
+    info!(
+        "cpu: main {main:.1} ms a frame (1% {main99:.1}), physics {phys:.1} (1% {phys99:.1}), \
+         render world {render:.1} (1% {render99:.1})"
+    );
 }
 
 /// The benchmark's state: where it writes, the view being measured.
@@ -509,7 +558,7 @@ struct Bench {
     out: std::path::PathBuf,
     view: Option<String>,
     load: ViewLoad,
-    cpu: Vec<(f64, f64, f64)>,
+    cpu: Vec<(f64, f64, f64, f64)>,
     gpu: HashMap<String, Vec<f64>>,
     gpu_seen: Option<std::time::Instant>,
     written: bool,
@@ -528,6 +577,8 @@ struct BenchLine<'a> {
     cpu_physics_ms: f64,
     /// Wall time a frame: under a software renderer, mostly rendering.
     frame_ms: f64,
+    /// The render world's per-mesh CPU work (see [`CpuSpans::render_ms`]).
+    cpu_render_ms: f64,
     /// GPU ms per pass and frame (both eyes), where timestamps exist.
     gpu_ms: HashMap<String, f64>,
 }
@@ -591,7 +642,7 @@ fn bench(
             let cpu = std::mem::take(&mut bench.cpu);
             // The first frames at a view stream detail in.
             let held: Vec<_> = cpu.iter().skip(cpu.len() / 2).collect();
-            let mean = |f: fn(&(f64, f64, f64)) -> f64| {
+            let mean = |f: fn(&(f64, f64, f64, f64)) -> f64| {
                 held.iter().map(|c| f(c)).sum::<f64>() / held.len().max(1) as f64
             };
             // Every camera's pass lands on the same path: the sum over the
@@ -612,6 +663,7 @@ fn bench(
                 cpu_main_ms: mean(|c| c.0),
                 cpu_physics_ms: mean(|c| c.1),
                 frame_ms: mean(|c| c.2),
+                cpu_render_ms: mean(|c| c.3),
                 gpu_ms: gpu,
             };
             info!("bench {view}: {}", bench.load.summary());
@@ -650,6 +702,7 @@ fn bench(
         spans.main_ms,
         spans.physics_ms,
         time.delta_secs_f64() * 1000.0,
+        spans.render_ms,
     ));
     if let Some(store) = store {
         let mut newest = bench.gpu_seen;

@@ -30,6 +30,7 @@ COLS = [
     ("sh tris k", lambda r: r["shadow_tris"] / 1000),
     ("cpu ms", lambda r: r["cpu_main_ms"]),
     ("phys ms", lambda r: r["cpu_physics_ms"]),
+    ("rw ms", lambda r: r.get("cpu_render_ms", 0)),
     ("gpu ms", gpu_total),
     ("frame ms", lambda r: r.get("frame_ms", 0)),
 ]
