@@ -1,5 +1,6 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod arms;
 pub mod bench;
 pub mod budget;
 pub mod cards;
@@ -53,6 +54,7 @@ impl Plugin for RenderPlugin {
             budget::BudgetPlugin,
         ))
         .init_resource::<lod::StandInMaterial>()
+        .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
