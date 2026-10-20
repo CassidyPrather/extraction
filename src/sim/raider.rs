@@ -2098,7 +2098,7 @@ fn raid_step(
                 r.act = Act::Idle;
             }
             Act::Travel(s) => {
-                if arrived(r, s, pos) {
+                if arrived(r, scene, s, pos) {
                     // What's lying there (all of it, and what it wants).
                     let site = &r.sites[s];
                     let (mut all, mut artifacts) = (0, 0);
@@ -2306,14 +2306,23 @@ fn rv_centroid(zone: &Zone) -> Vec2 {
 }
 
 /// Where to walk to visit a site.
-fn site_target(r: &Raider, s: usize, pos: Vec3) -> Vec2 {
+fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
     let site = &r.sites[s];
     match site.kind {
         SiteKind::Building(b) => {
             let plan = &r.plans[b];
             let local = plan.to_local(pos).xz();
+            // Not by a door held shut (an underground site's exit, on its
+            // power): the nearest one that opens.
+            let held = |e: &Vec2| {
+                plan.doors.iter().any(|d| {
+                    scene.power_locked.contains(d.entity)
+                        && d.outside.is_some_and(|o| o.distance(*e) < 0.01)
+                })
+            };
             plan.entries
                 .iter()
+                .filter(|e| !held(e))
                 .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
                 .map(|e| plan.world2(*e))
                 .unwrap_or(site.at)
@@ -2396,7 +2405,7 @@ pub(crate) fn way_out(
 }
 
 fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task>> {
-    let to = site_target(r, s, pos);
+    let to = site_target(r, scene, s, pos);
     let same = matches!(r.sites[s].kind, SiteKind::Building(b) if r.plans[b].in_grid(pos));
     if !same {
         if let Some(out) = leave_building(r, scene, pos) {
@@ -2411,11 +2420,11 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
     travel(&r.grid, pos.xz(), to, within)
 }
 
-fn arrived(r: &Raider, s: usize, pos: Vec3) -> bool {
+fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
     let site = &r.sites[s];
     match site.kind {
         SiteKind::Building(b) => {
-            r.plans[b].in_grid(pos) && site_target(r, s, pos).distance(pos.xz()) < 3.0
+            r.plans[b].in_grid(pos) && site_target(r, scene, s, pos).distance(pos.xz()) < 3.0
         }
         SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
         _ => site.at.distance(pos.xz()) < 6.0,
