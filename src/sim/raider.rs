@@ -1531,13 +1531,20 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
+    let mut in_door: Option<(f32, Vec2)> = None;
     let solid = has_no_floor(plan);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
         let d = c.distance(goal);
-        let reach = reaches_with(plan, solid, c, goal);
-        if best.is_none_or(|b| d < b.0) && reach {
-            best = Some((d, c));
+        // Not in a doorway if anywhere else will do: the door leaf swings
+        // through it, and a bot standing there to reach in is shut out by
+        // its own door.
+        if reaches_with(plan, solid, c, goal) {
+            let doorway = plan.doors.iter().any(|d| seg_dist(d.a, d.b, c) < DOOR_KEEP);
+            let slot = if doorway { &mut in_door } else { &mut best };
+            if slot.is_none_or(|b| d < b.0) {
+                *slot = Some((d, c));
+            }
         }
         for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
             let (ni, nj) = (i as i64 + di, j as i64 + dj);
@@ -1551,7 +1558,9 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
             }
         }
     }
-    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+    best.filter(|b| b.0 < 2.0)
+        .or(in_door.filter(|b| b.0 < 2.0))
+        .map(|b| b.1)
 }
 
 /// Whether a bot standing at `from` (building-local) can reach `goal`:
@@ -1589,6 +1598,9 @@ fn clear_reach(g: &extraction_core::nav::NavGrid, from: Vec2, goal: Vec2) -> boo
     let n = ((d - SHELF).max(0.0) / 0.1).ceil() as usize;
     (0..=n).all(|k| g.walkable(from.lerp(goal, (k as f32 * 0.1 / d).min(1.0)).to_array()))
 }
+
+/// How far from a doorway a bot stands to reach for something, metres.
+const DOOR_KEEP: f32 = 0.9;
 
 /// How deep a shelf, table or crate may be between a bot and what's on it.
 const SHELF: f32 = 1.1;
