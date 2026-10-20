@@ -78,6 +78,36 @@ woods, the woodward's cabin, the north sidings.
 - The **memorial plinth** in Ash Row (its bronze long gone to the
   furnace) and the **burnt chapel** in the woods take offerings.
 
+### Sallow Reservoir: the water
+
+Upstream of the three, over the hills: the Authority's water works. A
+masonry dam across a hill valley, the draw-off tower out on the bed with
+its bridge to the crest, the valve house at the dam's toe, the keeper's
+cottages and the filter house below, the catchwater and its gauge house
+on the east side. The reservoir filled the three valleys' taps.
+
+- **Old Sallow** was drowned when the water board built the dam, sixty-odd
+  years before the Lift. **New Sallow** was built up the upper arm for the
+  people moved out; it went on the Marrow buses with everyone else ("we
+  were moved for the water once already").
+- **The drain**: in December of the second winter the Custodian opened the
+  scour valves. Collect everything meant what was under the water too.
+  The level came down a hand a day for a month and the old village came
+  up: church tower, bridge, house walls. The upper arm, behind the
+  causeway, never drained; its culverts silted shut and it rose over New
+  Sallow's lower street.
+- **The stock ground**: with the depots full, the machines keep stock on
+  the bed in rows, tagged "pending review": buses (Marrow depot's, by
+  number; bus four isn't there), bicycles in racks, bins in ranks.
+- Its Gate on the north-east shore is an overflow store under the Marrow
+  depot. There is no fourth key; the recall reaches it.
+- The **drowned font** by the church tower and **the village pump** in New
+  Sallow take offerings.
+- **Alois Pech**, the keeper, was seven when they moved his family up the
+  hill. He stayed with the dam at the evacuation, watched his village come
+  back up, and kept reading the catchwater gauge on Sundays until his legs
+  gave out.
+
 ## Timeline
 
 Year 0 is the year of the Lift. The game is set in the twelfth autumn
@@ -96,6 +126,7 @@ the Lift ("the second winter").
 | Winter | The works burns what the machines haul in. |
 | February | The fire gets out. The north-west wood burns for a month. |
 | 1 April, year 1 | The review date. It is postponed, then not set. The soldiers stand down and leave the gates. Authority staff on site: none. |
+| December, year 1 | The second winter. The Custodian opens Sallow's scour valves; by January the reservoir bed is dry and Old Sallow stands in the mud. |
 | Years 1 to 11 | The few who stayed die, leave or are tidied away. The Surge comes every few weeks. Drivers start bringing people in. |
 | Now | The twelfth autumn. |
 
@@ -237,6 +268,11 @@ only his mother's letter names him.
 | **Vlasta Králová** | Cinder, the foreman's house | His wife; the ash |
 | **The lookout** | Cinder, fire lookout | The fire's spread, hour by hour |
 | **A scavenger** | Cinder, Ash Row | Someone who came in on Lev's truck before you |
+| **Tomas**, logging crew | Marrow, logging camp cabin | A tally that stops on bus day; pears under the bed |
+| **Mirek Hájek**, charcoal burner | Kettle, the charcoal hut | Stayed four days for his kiln |
+| **T. Veselý**, woodward | Cinder, the woodward's cabin | Wet the roof and stayed; where the matches are |
+| **Alois Pech**, keeper | Sallow, the keeper's cottage and the gauge house | Born in the drowned village; few words |
+| **J. Rybář**, shopkeeper | Sallow, New Sallow's shop | Moved twice; left the key for a neighbour |
 
 The **terminals** are the Custodian's and the Authority's: status,
 inventory, schedule, in a clipped machine voice that slowly gives away

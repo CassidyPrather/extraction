@@ -467,7 +467,79 @@ the roof and the woodpile and I'm stopping here.
 Matches in the tin on the stove. The door sticks, kick it at the
 bottom, then wedge it.
 
-- V. Kral, woodward""", "Woodward's book"),
+- T. Vesely, woodward""", "Woodward's book"),
+    ],
+    # The fourth valley (claude/polish-fourth-valley): skipped until its
+    # map is in.
+    "sallow_reservoir": [
+        ("guard_booth", (32.8, 285.0), "Note", """SOUTH GATE, SALLOW - DUTY LOG
+
+15 Oct. New Sallow out on the Marrow buses, second run. The old ones
+slow to board. One says they were moved for the water once already and
+once was enough.
+
+16 Oct. The keeper won't leave the works. Water board says let him,
+someone has to mind the dam.
+
+2 Nov. Something built on the north-east shore overnight. Not ours. Not
+the water board's.""", "Sallow gate log"),
+        ("house_brick", (-58.0, 206.0), "Note", """Whoever has the cottage now -
+
+I was seven when the water board moved us up the hill. We watched the
+water come over the bridge a hand a day.
+
+The second winter the machines opened the scours. I could have told
+them which wheel. They didn't ask. The bed came up a hand a day, the
+same.
+
+On the twentieth day the church came out. The clock had stopped at ten
+to four. Our house is the third from the bridge. The door's where it
+was.
+
+Don't stand in the churchyard after rain. Things come up there that
+weren't buried.
+
+- A. Pech, keeper""", "Keeper's note"),
+        ("pump_station", (12.0, 172.0), "Terminal", [
+            "SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED",
+            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n 8 DEC   24.0\n15 DEC   16.2\n22 DEC    9.8\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
+        ], "Valve log"),
+        ("pump_station", (100.0, 210.0), "Terminal", [
+            "SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0",
+            "CINDER WORKS\nDEMAND RESUMED   3 NOV\nPURPOSE          FURNACE COOLING\nDEMAND CEASED   26 FEB\n\nNO OTHER DEMAND.",
+        ], "Supply terminal"),
+        ("pump_station", (245.0, -70.0), "Note", """CATCHWATER GAUGE - read Sundays
+
+Sun. 0.42. Sun. 0.40. Sun. 0.41.
+
+Sun. 0.12. They've cut it at the top. They want the bed dry and it's
+dry.
+
+Sun. 0. Legs bad. Not coming up the hill again. A.P.""", "Gauge book"),
+        ("cabin_log", (-160.0, 112.0), "Note", """SALLOW ANGLING CLUB
+
+Season closed until further notice, by order of the Quarantine
+Authority.
+
+(in pencil) Pike in the upper arm are the size of dogs now. Something's
+feeding them. Don't trail your hand.""", "Club notice"),
+        ("mast_hut", (-122.0, -112.0), "Note", """CAUSEWAY TOLL
+
+Foot - free. Cart - 2. Motor - 5.
+New Sallow residents free (show card).
+
+CLOSED 14 OCT.
+
+(chalk) Culverts under the road are silted shut. The bed goes down,
+the arm comes up. Lower street's gone.""", "Toll board"),
+        ("shop", (-180.0, -222.0), "Note", """We were moved up here for the water, and now we're moved for this.
+Mrs Hlavac says she won't go twice. I've left her the shop key. Let her
+take what she needs.
+
+- J. Rybar, shop
+
+(another hand) She went in the end, in the spring, on her own feet.
+The shop's anyone's now. - A.P.""", "Shop note"),
     ],
 }
 
@@ -501,6 +573,9 @@ def block(map_name, placements):
 def main():
     for map_name in NOTES:
         path = ROOT / "assets" / "maps" / f"{map_name}.ron"
+        if not path.exists():
+            print(f"{map_name}: no map yet, skipped")
+            continue
         text = path.read_text()
         placements = [
             (m.group(1), (float(m.group(2)), float(m.group(3))), float(m.group(4)))
