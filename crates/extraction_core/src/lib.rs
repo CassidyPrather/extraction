@@ -10,6 +10,7 @@ pub mod cooking;
 pub mod cover;
 pub mod fabrication;
 pub mod firearm;
+pub mod firearm_terminal;
 pub mod fit;
 pub mod forest;
 pub mod geom;
