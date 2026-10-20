@@ -32,9 +32,12 @@
     fence_inset: 38.0,
     // Cold, wet air off the water.
     haze: Some((0.92, 0.98, 1.06)),
+    // Wind over the open bed and the crest; scree off the valley sides
+    // (Audio's choice: the scours' drip and the arm's lapping to come).
     sounds: (
-        wind: "ambience/wind_conifers",
+        wind: "ambience/wind_mountain",
         birds: ["ambience/crow", "ambience/raven"],
+        distant: ["ambience/rockfall"],
     ),
 
     features: [
