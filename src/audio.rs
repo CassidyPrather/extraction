@@ -174,6 +174,7 @@ impl Plugin for AudioPlugin {
             .register_node::<ScoreNode>()
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
+            .init_resource::<Hush>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -220,7 +221,7 @@ impl Plugin for AudioPlugin {
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
-                    (grenade_sounds, gear_sounds, armour_sounds),
+                    (grenade_sounds, gear_sounds, armour_sounds, epilogue_sounds),
                 ),
             )
             .add_systems(
@@ -1949,6 +1950,73 @@ fn door_sounds(
     }
 }
 
+/// The beds held down for a moment (the ending's `Found`): `left`
+/// seconds of [`HUSH_DB`], easing in and out over a second and a half.
+#[derive(Resource, Default)]
+pub struct Hush {
+    pub left: f32,
+}
+
+pub const HUSH_DB: f32 = 9.0;
+pub const HUSH_SECONDS: f32 = 10.0;
+
+impl Hush {
+    pub fn db(&self) -> f32 {
+        let edge = 1.5;
+        let into = ((HUSH_SECONDS - self.left) / edge).clamp(0.0, 1.0);
+        let out = (self.left / edge).clamp(0.0, 1.0);
+        HUSH_DB * into.min(out)
+    }
+}
+
+/// The ending's moments (`raid::epilogue::EpilogueBeat`). The crates
+/// opening: a long, low lid creak at hers, then the others round the
+/// stacks a beat apart, fainter. Him at her crate: nothing added, the
+/// wind and the room held down a while so it sits in quiet.
+fn epilogue_sounds(
+    mut commands: Commands,
+    mut beats: MessageReader<crate::raid::epilogue::EpilogueBeat>,
+    mut hush: ResMut<Hush>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, Vec3, f32)>>,
+) {
+    use crate::raid::epilogue::BeatKind;
+    let now = time.elapsed_secs();
+    for b in beats.read() {
+        match b.kind {
+            BeatKind::CratesOpen => {
+                pending.push((now, b.at, 0.0));
+                for i in 0..5 {
+                    let a = rng.0.f32() * std::f32::consts::TAU;
+                    let r = 6.0 + rng.0.f32() * 16.0;
+                    let at = b.at + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                    pending.push((now + 0.6 + i as f32 * 0.45 + rng.0.f32() * 0.3, at, -4.0));
+                }
+            }
+            BeatKind::Found => hush.left = HUSH_SECONDS,
+            BeatKind::Begins => {}
+        }
+    }
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, at, db) in due {
+        let speed = 0.5 + rng.0.f32() as f64 * 0.1;
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_creak",
+            Some(at + Vec3::Y),
+            "epilogue.creak",
+            db,
+            speed,
+            0.0,
+        );
+    }
+}
+
 /// The wind in the trees, and the hush of a room: which you hear depends
 /// on whether you're under a roof.
 #[derive(Component)]
@@ -1963,10 +2031,13 @@ fn indoor_ambience(
     room: Query<&SampleEffects, With<RoomLoop>>,
     mut volumes: Query<&mut VolumeNode>,
     listening: Res<Listening>,
+    mut hush: ResMut<Hush>,
     time: Res<Time>,
     mut inside: Local<f32>,
     mut below: Local<f32>,
 ) {
+    hush.left = (hush.left - time.delta_secs()).max(0.0);
+    let hushed = hush.db();
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
             .next()
@@ -1985,7 +2056,7 @@ fn indoor_ambience(
             v.volume = if *below > 0.99 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below)
+                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below - hushed)
             };
         }
     }
@@ -1994,7 +2065,7 @@ fn indoor_ambience(
             v.volume = if k < 0.01 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(mix::db("room") - 12.0 + 12.0 * k)
+                Volume::Decibels(mix::db("room") - 12.0 + 12.0 * k - hushed)
             };
         }
     }
@@ -2013,6 +2084,7 @@ fn score_drive(
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut score: Query<&mut ScoreNode>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
     mut level: Local<f32>,
@@ -2026,13 +2098,16 @@ fn score_drive(
         return;
     };
     let ear = listener.iter().next().map(|g| g.translation());
-    let at_truck = match raid.as_deref().map(|r| &r.phase) {
-        None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
-        Some(Phase::TruckWaiting { .. }) => {
-            ear.is_some_and(|e| trucks.iter().any(|t| t.translation().distance(e) < 12.0))
-        }
-        _ => false,
-    };
+    // The ending (`raid::epilogue`) is played without it.
+    let ending = epilogue.is_some_and(|e| e.active());
+    let at_truck = ending
+        || match raid.as_deref().map(|r| &r.phase) {
+            None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
+            Some(Phase::TruckWaiting { .. }) => {
+                ear.is_some_and(|e| trucks.iter().any(|t| t.translation().distance(e) < 12.0))
+            }
+            _ => false,
+        };
     let response_near = match (director, ear) {
         (Some(d), Some(e)) => d
             .responses
@@ -3231,6 +3306,16 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ending's hush eases in, holds, and lets go.
+    #[test]
+    fn the_hush_eases_in_and_out() {
+        let at = |left| Hush { left }.db();
+        assert_eq!(at(0.0), 0.0);
+        assert_eq!(at(HUSH_SECONDS), 0.0);
+        assert_eq!(at(HUSH_SECONDS / 2.0), HUSH_DB);
+        assert!(at(HUSH_SECONDS - 0.5) > 0.0 && at(HUSH_SECONDS - 0.5) < HUSH_DB);
+    }
 
     /// Using a thing sounds like what it is, and anything you'd eat or use
     /// up makes a sound (silence read as "nothing happened" in VR).

@@ -4543,6 +4543,7 @@ fn aligned_box(size: Vec3, at: Transform) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv);
     mesh
 }
+
 /// What shades a building's own surfaces (`ao`): its solid pieces
 /// (furniture's boxes too, so the floor darkens round their feet), not its
 /// glass.
@@ -4562,6 +4563,50 @@ pub fn occluders(geo: &Geo) -> super::ao::Occluders {
     }))
 }
 
+/// A prefab's pieces shaded by its own solid pieces, baked once in the
+/// background: a big site's thousand pieces take half a second, a house's
+/// a few dozen milliseconds, every house alike (`render::spikes`).
+pub enum Bake {
+    Baking(bevy::tasks::Task<std::sync::Arc<Vec<Option<Mesh>>>>),
+    Ready(std::sync::Arc<Vec<Option<Mesh>>>),
+}
+
+/// A piece's mesh in building space, unshaded.
+fn piece_mesh(piece: &Piece) -> Mesh {
+    let mut mesh = match piece.shape {
+        Shape::Box(s) => aligned_box(s, piece.at),
+        Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
+        Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
+    };
+    let _ = mesh.generate_tangents();
+    mesh.transformed_by(piece.at)
+}
+
+/// Each piece as `dress_buildings` draws it when it isn't furniture's
+/// stand-in: a box shaded face by face, anything else shaded at its
+/// vertices (not under the ground: a site's rooms go unshaded).
+fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
+    let occluders = occluders(geo);
+    geo.pieces
+        .iter()
+        .map(|piece| match piece.shape {
+            // Glass keeps its own alpha (the rest carries the sky).
+            Shape::Box(s) => Some(super::ao::shaded_box(
+                s,
+                piece.at,
+                &occluders,
+                piece.mat != Mat::Glass,
+            )),
+            _ if site && piece.at.translation.y < super::underground::BELOW_Y => None,
+            _ => {
+                let mut mesh = piece_mesh(piece);
+                occluders.bake(&mut mesh);
+                Some(mesh)
+            }
+        })
+        .collect()
+}
+
 /// Client: a building's meshes, one per material (a house is a handful of
 /// draws, not fifty), once its props' models have loaded or failed: each
 /// prop whose models are in is merged in place of its boxes.
@@ -4577,10 +4622,11 @@ pub fn dress_buildings(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
+    mut bakes: Local<std::collections::HashMap<String, Bake>>,
 ) {
     use crate::render::world_props::Resolved;
-    // Baking a building's occlusion takes a few milliseconds: a few
-    // buildings a frame, so a valley's arrival doesn't hitch.
+    // A few buildings a frame, each once its prefab's shading is baked
+    // (in the background, `Bake`), so a valley's arrival doesn't hitch.
     let mut built = 0;
     for (e, b, xf, mut wait) in &mut pending {
         if built >= 3 {
@@ -4632,6 +4678,24 @@ pub fn dress_buildings(
             }
         }
         wait.0 += 1;
+        let bake = bakes.entry(b.prefab.clone()).or_insert_with(|| {
+            let geo = geo.clone();
+            let site = super::underground::ids().any(|id| id == b.prefab);
+            Bake::Baking(
+                bevy::tasks::AsyncComputeTaskPool::get()
+                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site)) }),
+            )
+        });
+        if let Bake::Baking(task) = bake {
+            match bevy::tasks::futures::check_ready(task) {
+                Some(baked) => *bake = Bake::Ready(baked),
+                None => continue,
+            }
+        }
+        let Bake::Ready(baked) = bake else {
+            continue;
+        };
+        let baked = baked.clone();
         let mut loading = false;
         let ready: Vec<bool> = geo
             .props
@@ -4738,26 +4802,19 @@ pub fn dress_buildings(
                     }
                 }
                 let group = if is_below { BELOW } else { OUTER };
-                add(
-                    group,
-                    mat,
-                    // Glass keeps its own alpha (the rest carries the sky).
-                    super::ao::shaded_box(s, piece.at, &occluders, piece.mat != Mat::Glass),
-                );
+                if let Some(mesh) = &baked[i] {
+                    add(group, mat, mesh.clone());
+                }
                 continue;
             }
-            let mut mesh = match piece.shape {
-                Shape::Box(s) => aligned_box(s, piece.at),
-                Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
-                Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
-            };
-            let _ = mesh.generate_tangents();
-            let mut mesh = mesh.transformed_by(piece.at);
+            let mut mesh = piece_mesh(piece);
             if !far[i] && !is_below {
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
-                occluders.bake(&mut mesh);
+                if let Some(shaded) = &baked[i] {
+                    mesh = shaded.clone();
+                }
             } else {
                 super::ao::ensure_colours(&mut mesh);
             }

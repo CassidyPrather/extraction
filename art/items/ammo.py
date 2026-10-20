@@ -36,25 +36,59 @@ C762 = ([(0.0, 0.0), (0.0058, 0.0), (0.00625, -0.0004), (0.00625, -0.0016), (0.0
          (0.0012, -0.075), (0.0, -0.077)], 0.077)
 
 
-def cartridge(p, c, xf, segs=14, base=True):
+def split(prof, zc):
+    """Cut a lathe profile (axis to axis, base to point, z falling) at z
+    `zc` into the part behind and the part ahead."""
+    i = next(k for k, (r, z) in enumerate(prof) if z < zc)
+    (r0, z0), (r1, z1) = prof[i - 1], prof[i]
+    r = r0 + (r1 - r0) * (zc - z0) / (z1 - z0)
+    return prof[:i] + [(r, zc), (0.0, zc)], [(0.0, zc), (r, zc)] + prof[i:]
+
+
+# Tip paint by type: the point painted back this far, a band behind it.
+TIP, BAND = 0.0048, 0.0022
+TIPS = {
+    "ap": [(TIP, "Black")],                         # 7N22: black
+    "api": [(TIP + BAND, "Red"), (TIP, "Black")],    # BZ, B-32: black over red
+    "tracer": [(TIP, "Leaf")],                       # 7T3, T-45, T-46: green
+}
+
+
+def bullet(p, c, xf, segs, tip=None):
+    """The bullet, copper, its point painted for its `tip` type."""
+    prof = c[1]
+    if not tip:
+        p.lathe(prof, "Copper", segs=segs, xf=xf)
+        return
+    end = prof[-1][1]
+    mat = "Copper"
+    for back, m in TIPS[tip]:
+        behind, prof = split(prof, end + back)
+        p.lathe(behind, mat, segs=segs, xf=xf)
+        mat = m
+    p.lathe(prof, mat, segs=segs, xf=xf)
+
+
+def cartridge(p, c, xf, segs=14, base=True, tip=None):
     """A brass case and copper bullet, base at z 0 (then `xf`); with
-    `base`, the primer and its red lacquer seal."""
-    case, bullet, _ = c
+    `base`, the primer and its red lacquer seal; `tip` paints the point
+    (ap, api, tracer)."""
+    case, _, _ = c
     p.lathe(case, "Brass", segs=segs, xf=xf)
-    p.lathe(bullet, "Copper", segs=segs, xf=xf)
+    bullet(p, c, xf, segs, tip)
     if base:
         p.cyl(0.0017, -0.0004, 0.00003, "Copper", segs=10, xf=xf)
         p.tube(0.0023, 0.0017, -0.0004, 0.00002, "Red", segs=10, xf=xf)
 
 
-def nose(p, c, z_from, xf, segs=10):
+def nose(p, c, z_from, xf, segs=10, tip=None):
     """Only the front of a cartridge from `z_from` on (what shows out of a
     box), base at z 0 (then `xf`)."""
-    case, bullet, _ = c
+    case = c[0]
     front = [(r, z) for r, z in case if z <= z_from and r > 0]
     p.lathe([(0.0, z_from), (front[0][0], z_from)] + front + [(0.0, front[-1][1])], "Brass",
             segs=segs, xf=xf)
-    p.lathe(bullet, "Copper", segs=segs, xf=xf)
+    bullet(p, c, xf, segs, tip)
 
 
 def carton(p, sx, sy, sz, y0, mat, top=None, wall=0.0012, sides=True):
@@ -161,7 +195,7 @@ def ammo_9x18():
     return [p]
 
 
-def ammo_545():
+def ammo_545(label="5.45", tip_of=lambda k: None, stripe=None):
     p = Part("body")
     # A packet of rifle rounds wrapped in olive paper and tied with string,
     # one end torn open on the slim pointed noses.
@@ -183,7 +217,7 @@ def ammo_545():
         for j in range(3):
             x = -0.0158 + i * 0.0105
             y = -0.0105 + j * 0.0105
-            nose(p, C545, -0.028, T(x, y, -sz / 2 + C545[2]), segs=8)
+            nose(p, C545, -0.028, T(x, y, -sz / 2 + C545[2]), segs=8, tip=tip_of(i * 3 + j))
     # String round it, both ways.
     for z in (-0.005, 0.03):
         p.box((0.0505, 0.0015, 0.0015), (0.0, 0.0172, z), "Rope")
@@ -193,8 +227,11 @@ def ammo_545():
     p.box((0.0016, 0.0015, 0.0365), (0.0, 0.0174, 0.0125), "Rope")
     # A paper slip under the string with the calibre on it.
     p.box((0.03, 0.0004, 0.022), (-0.008, 0.0171, 0.0125), "Paper", xf=RY(0.04))
-    text(p, "5.45", 0.0075, "Black", T(-0.008, 0.0174, 0.0125) @ ON_TOP,
-         depth=0.0004)
+    text(p, label, 0.0075 if len(label) <= 4 else 0.006, "Black",
+         T(-0.008, 0.0174, 0.0125) @ ON_TOP, depth=0.0004)
+    if stripe:
+        # The type's stripe across the slip's foot.
+        p.box((0.03, 0.0004, 0.004), (-0.008, 0.0175, 0.003), stripe, xf=RY(0.04))
     return [p]
 
 
@@ -205,7 +242,7 @@ def round_762x39():
     return [p]
 
 
-def ammo_762x39():
+def ammo_762x39(label="7.62x39", tip=None, band="Olive"):
     p = Part("body")
     # A cream card box of twenty standing on end, two rows of ten, its lid
     # torn off over the bullets; a green band and the calibre on the sides.
@@ -215,7 +252,7 @@ def ammo_762x39():
     carton(p, sx, sy, sz, y0, "Cream", wall=wall, sides=False)
     for sx_ in (-1, 1):
         panel(p, "x", -sz / 2, sz / 2, y0, y0 + sy, sx_ * (sx / 2 - wall), sx_ * sx / 2,
-              "Cream", [(-sz / 2, sz / 2, y0 + 0.007, y0 + 0.013, "Olive")])
+              "Cream", [(-sz / 2, sz / 2, y0 + 0.007, y0 + 0.013, band)])
     ragged(p, sx - 0.003, -sz / 2 + wall, 0.004, y0 + sy - 0.0012, y0 + sy, "Cream", seed=7)
     # The dark between the rounds, under the tops of the cases.
     p.box((sx - 0.004, 0.003, sz - 0.004), (0.0, y0 + sy - 0.006, 0.0), "Black")
@@ -224,10 +261,10 @@ def ammo_762x39():
             x = -0.0255 + i * 0.00567
             z = -0.0058 + j * 0.0116
             base = y0 + sy - 0.006 - 0.034
-            nose(p, C762X39, -0.034, T(x, base, z) @ RX(math.pi / 2), segs=8)
+            nose(p, C762X39, -0.034, T(x, base, z) @ RX(math.pi / 2), segs=8, tip=tip)
     for sz_ in (-1, 1):
         rot = RY(math.pi) if sz_ < 0 else T()
-        text(p, "7.62x39", 0.0075, "Black", T(0.0, y0 + 0.012, sz_ * (sz / 2 + 0.0001)) @ rot,
+        text(p, label, 0.0075, "Black", T(0.0, y0 + 0.012, sz_ * (sz / 2 + 0.0001)) @ rot,
              depth=0.0004)
     return [p]
 
@@ -300,14 +337,14 @@ def ammo_762x25():
     return [p]
 
 
-def ammo_762r():
+def ammo_762r(label="54R", band="Red"):
     p = Part("body")
     # A white card carton of the big rimmed rounds lying in two layers,
     # its back end torn off on the brass rims; a red band and the calibre.
     sx, sy, sz = 0.045, 0.03, 0.09
     zt = 0.03
     ze = zt - 0.0035
-    for z0, z1, mat in ((-sz / 2, -0.018, "Paper"), (-0.018, -0.006, "Red"), (-0.006, ze, "Paper")):
+    for z0, z1, mat in ((-sz / 2, -0.018, "Paper"), (-0.018, -0.006, band), (-0.006, ze, "Paper")):
         p.box((sx - 0.001, sy - 0.0005, z1 - z0), (0.0, -0.00025, (z0 + z1) / 2), mat,
               bevel=0.0006, segs=1)
     for y0, y1 in ((sy / 2 - 0.0013, sy / 2 - 0.0005), (-sy / 2, -sy / 2 + 0.0008)):
@@ -329,12 +366,12 @@ def ammo_762r():
     text(p, "7.62", 0.008, "Black", T(0.0, sy / 2 - 0.0005, -0.033) @ ON_TOP,
          depth=0.0004)
     for sx_ in (-1, 1):
-        text(p, "54R", 0.007, "Black",
+        text(p, label, 0.007 if len(label) <= 3 else 0.0055, "Black",
              T(sx_ * (sx / 2 - 0.0005), 0.0, -0.032) @ RY(sx_ * math.pi / 2), depth=0.0004)
     return [p]
 
 
-def ammo_12ga():
+def ammo_12ga(hull="Red", label=None):
     p = Part("body")
     # A yellow carton of shells standing on end, the lid torn back off the
     # front rows: brass heads with their primers, red hulls between.
@@ -360,7 +397,7 @@ def ammo_12ga():
             xf = T(x, yt, z) @ UP
             p.lathe([(0.0, -0.009), (0.0092, -0.009), (0.0092, -0.0016), (0.0099, -0.0013),
                      (0.0099, 0.0), (0.0, 0.0)], "Brass", segs=16, xf=xf)
-            p.lathe([(0.0, -0.022), (0.009, -0.022), (0.009, -0.0088), (0.0, -0.0088)], "Red",
+            p.lathe([(0.0, -0.022), (0.009, -0.022), (0.009, -0.0088), (0.0, -0.0088)], hull,
                     segs=12, xf=xf)
             p.cyl(0.0028, -0.0004, 0.0003, "Steel", segs=10, xf=xf)
     # The gauge on the lid by a drawn shell, and on the sides.
@@ -368,7 +405,60 @@ def ammo_12ga():
     for sx_ in (-1, 1):
         text(p, "12", 0.022, "Black", T(sx_ * (sx / 2), 0.004, 0.0) @ RY(sx_ * math.pi / 2),
              depth=0.0005)
+        if label:
+            text(p, label, 0.009, "Black",
+                 T(sx_ * (sx / 2), -0.02, 0.0) @ RY(sx_ * math.pi / 2), depth=0.0005)
     return [p]
+
+
+# --- Typed rounds and boxes (Weapon feel's ammunition types) --------------------------------
+
+def typed_round(c, tip, segs):
+    def build():
+        p = Part("body")
+        cartridge(p, c, T(0, 0, c[2] / 2), segs=segs, tip=tip)
+        return [p]
+    return build
+
+
+def slug_12ga():
+    p = Part("body")
+    # A blue hull on a brass head, roll-crimped over a lead slug whose
+    # rifled nose shows at the mouth.
+    xf = T(0, 0, 0.035)
+    p.lathe([(0.0, 0.0), (0.0099, 0.0), (0.01, -0.0004), (0.01, -0.0013), (0.0093, -0.0016),
+             (0.0093, -0.012), (0.0091, -0.0125), (0.0, -0.0125)], "Brass", segs=20, xf=xf)
+    p.lathe([(0.0068, -0.011), (0.0091, -0.011), (0.0091, -0.0655), (0.0086, -0.0685),
+             (0.0072, -0.069), (0.0068, -0.0665)], "Blue", segs=20, xf=xf, closed=True)
+    p.lathe([(0.0, -0.045), (0.0072, -0.045), (0.0072, -0.064), (0.0062, -0.0675),
+             (0.0035, -0.0695), (0.0, -0.07)], "Zinc", segs=16, xf=xf)
+    for k in range(8):
+        p.box((0.0007, 0.0004, 0.004), (0.0, 0.0071, -0.066), "Dark",
+              xf=xf @ RZ(math.pi * k / 4))
+    p.cyl(0.0028, -0.0004, 0.00003, "Steel", segs=12, xf=xf)
+    p.tube(0.0068, 0.0062, -0.0002, 0.00002, "Copper", segs=16, xf=xf)
+    return [p]
+
+
+TYPED = {
+    "round_545_ap": typed_round(C545, "ap", 14),
+    "round_545_tracer": typed_round(C545, "tracer", 14),
+    "round_762x39_ap": typed_round(C762X39, "api", 14),
+    "round_762x39_tracer": typed_round(C762X39, "tracer", 14),
+    "round_762r_ap": typed_round(C762, "api", 16),
+    "round_762r_tracer": typed_round(C762, "tracer", 16),
+    "slug_12ga": slug_12ga,
+    # Boxes: the ball boxes with their type's tips, stripes and labels.
+    "ammo_545_ap": lambda: ammo_545("7N22", lambda k: "ap", "Black"),
+    "ammo_545_tracer": lambda: ammo_545("7T3", lambda k: "tracer", "Leaf"),
+    "ammo_545_t4": lambda: ammo_545("5.45 T", lambda k: "tracer" if k % 4 == 3 else None,
+                                    "Leaf"),
+    "ammo_762x39_ap": lambda: ammo_762x39("BZ", "api", "Black"),
+    "ammo_762x39_tracer": lambda: ammo_762x39("T-45", "tracer", "Leaf"),
+    "ammo_762r_ap": lambda: ammo_762r("B-32", "Black"),
+    "ammo_762r_tracer": lambda: ammo_762r("T-46", "Leaf"),
+    "ammo_12ga_slug": lambda: ammo_12ga("Blue", "ПУЛЯ"),
+}
 
 
 # --- Robot belt ------------------------------------------------------------------------------
@@ -419,6 +509,6 @@ if __name__ == "__main__":
                         ("round_762x25", round_762x25), ("ammo_762x25", ammo_762x25),
                         ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
                         ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
-                        ("robot_ammo_belt", robot_ammo_belt)):
+                        ("robot_ammo_belt", robot_ammo_belt)) + tuple(TYPED.items()):
         if wanted(item_id):
             item(item_id, fn)
