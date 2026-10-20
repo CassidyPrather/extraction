@@ -225,6 +225,7 @@ fn assets(
 /// slope can't bury half a flat disc and cut it off in a hard line.
 fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
     let n = 12;
+    let below = crate::world::underground::floor_under(zone, centre).is_some();
     let mut pos = Vec::new();
     let mut uv = Vec::new();
     let mut nrm = Vec::new();
@@ -233,7 +234,12 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
         for i in 0..=n {
             let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
             let (x, z) = ((u * 2.0 - 1.0) * half, (v * 2.0 - 1.0) * half);
-            let y = zone.ground(centre.x + x, centre.z + z) - centre.y + 0.04;
+            // Underground, on the site's floor.
+            let y = if below {
+                0.04
+            } else {
+                zone.ground(centre.x + x, centre.z + z) - centre.y + 0.04
+            };
             pos.push([x, y, z]);
             uv.push([u, v]);
             nrm.push([0.0, 1.0, 0.0]);

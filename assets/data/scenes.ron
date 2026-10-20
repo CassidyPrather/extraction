@@ -3,7 +3,9 @@
 // in its own frame: x right, -z ahead (where `rot` faces, as a marker's),
 // y up from where it rests. Tables' tops are at 0.785; a crate's top is its
 // size; a chair's seat is at 0.45. Things are laid out again each Surge
-// cycle, with the loot.
+// cycle, with the loot. A note at rot 0 reads upright from its +z side
+// (from a chair at +z facing the table). Scenes keep off roads, paths and
+// water, on level ground clear of trees (world::scenes tests).
 [
     (
         map: "marrow_creek",
@@ -207,5 +209,123 @@
             (id: "tea_tin", at: (0.4, 0.785, -0.05)),
             (id: "old_photo", at: (-0.35, 0.785, 0.1), condition: 0.3),
         ],
+    ),
+    (
+        map: "marrow_creek",
+        name: "Bus depot queue",
+        // Chairs set out for the queue on the 14th, and what was left on
+        // them when the buses went.
+        at: (30.0, -205.0),
+        rot: 180.0,
+        pieces: [
+            Chair(at: (-1.5, 0.0), rot: 0.0),
+            Chair(at: (-0.75, 0.0), rot: 0.0),
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (0.75, 0.0), rot: 0.0),
+            Table(at: (2.2, -0.4), rot: 90.0),
+        ],
+        items: [
+            (id: "chess_piece", at: (-0.75, 0.45, 0.0)),
+            (id: "wristwatch", at: (0.75, 0.45, -0.05), condition: 0.3),
+        ],
+        note: Some((
+            name: "Departure notice",
+            text: "QUARANTINE AUTHORITY - SPECIAL SERVICE\n14 OCT. Buses 1 to 9 depart 0600.\nOne bag each. No animals.\nReturn service: 17 OCT.",
+            at: (2.2, 0.785, -0.4),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Stone pickers",
+        // Someone who went into the ash pit for the stones and didn't come
+        // up: their mate's kit at the rim.
+        at: (-160.0, 45.0),
+        rot: 270.0,
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.7),
+            Bedroll(at: (-1.2, 0.4), rot: 0.0),
+            Lantern(at: (0.15, 0.7, 0.1)),
+        ],
+        items: [
+            (id: "lead_case", at: (-0.15, 0.7, -0.1)),
+            (id: "water_bottle", at: (-1.0, 0.0, -0.6)),
+        ],
+        note: Some((
+            name: "Pickers' note",
+            text: "Mirek - went down at first light for the bright ones. Back by noon.\nIf I'm not, don't come down after me. The ash moves.\n- D.",
+            at: (-0.12, 0.7, 0.18),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Shelter dorm",
+        // Under the village, in the civil-defence shelter's dorm (room
+        // "dorm", site bunker_marrow): she came down after they took Jan.
+        at: (-13.3, 100.4),
+        rot: 90.0,
+        floor: Some(11.61),
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Remains(at: (0.0, 0.0), rot: 0.0, seated: true),
+            Crate(at: (0.6, -0.35), size: 0.5),
+            Lantern(at: (0.62, 0.5, -0.25)),
+        ],
+        items: [
+            (id: "old_photo", at: (0.5, 0.5, -0.45), condition: 0.3),
+        ],
+        note: Some((
+            name: "Shelter note",
+            text: "Day 30 down here. They took Jan from the street on the 3rd. I came down with the lamp oil.\nThe filters still turn. The machines don't come down the stair. I think they can't count us if they can't see us.\n- E. Holm",
+            at: (0.6, 0.5, -0.35),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "Refuge board",
+        // The mine's refuge chamber (room "refuge", site mine_kettle): the
+        // last shift waited here for an all-clear, then walked out.
+        at: (-95.0, 30.0),
+        rot: 0.0,
+        floor: Some(15.44),
+        pieces: [
+            Table(at: (0.0, 0.0), rot: 90.0),
+            Chair(at: (0.65, 0.0), rot: 270.0),
+        ],
+        items: [
+            (id: "canned_beans", at: (0.1, 0.785, 0.3)),
+            (id: "flashlight", at: (-0.1, 0.785, -0.35), rot: 60.0, condition: 0.1),
+        ],
+        note: Some((
+            name: "Refuge board",
+            text: "REFUGE - 15 OCT\nIn: Dusek, Pavlik, Hora, Benes.\nHolding below for the Authority's all-clear. Air good. Lamp on.\n16 Oct: no all-clear.\n17 Oct: Dusek up the raise to look. Says the trains have gone.\nOut, all four, 1400.",
+            at: (0.0, 0.785, 0.0),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Valve three",
+        // Under the works, in the valve chamber off the pump room (room
+        // "valve_chamber", site tunnel_cinder): a fitter's last job.
+        at: (81.4, -37.8),
+        rot: 0.0,
+        floor: Some(15.88),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.6),
+            Chair(at: (0.0, 0.7), rot: 0.0),
+        ],
+        items: [
+            (id: "multitool", at: (-0.15, 0.6, 0.05), condition: 0.5),
+            (id: "spare_parts", at: (0.18, 0.6, -0.1)),
+        ],
+        note: Some((
+            name: "Valve note",
+            text: "VALVE 3 CLOSED 12 FEB 1620, BY ORDER.\nCanal to the pit cut off.\nIf the fire comes down the tunnel, open it again and get out the far stair. Don't wait for me to say.\n- fitter on shift",
+            at: (0.0, 0.6, 0.0),
+            rot: 0.0,
+        )),
     ),
 ]

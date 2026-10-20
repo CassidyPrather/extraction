@@ -1092,6 +1092,9 @@ pub const PREFABS: [&str; 28] = [
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
+    if let Some(g) = super::underground::geo(id) {
+        return Some(g);
+    }
     let mut b = Builder {
         drop: extraction_core::map::prefab_lift(id),
         ..Default::default()
@@ -3063,6 +3066,7 @@ pub fn dress_buildings(
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    stand_in_mat: Res<crate::render::lod::StandInMaterial>,
 ) {
     use crate::render::world_props::Resolved;
     for (e, b, mut wait) in &mut pending {
@@ -3106,6 +3110,8 @@ pub fn dress_buildings(
         const FAR: usize = 2;
         const WINDOWS: usize = 3;
         let mut far = vec![false; geo.pieces.len()];
+        // The shell, one vertex-coloured mesh, for past `lod::FAR_BUILDING`.
+        let mut stand_in = crate::render::lod::StandIn::default();
         for (d, _) in geo
             .props
             .iter()
@@ -3138,17 +3144,27 @@ pub fn dress_buildings(
             };
             let _ = mesh.generate_tangents();
             let mat = props.lib.get(piece.mat, &props.server, &mut materials);
-            add(
-                if far[i] { FAR } else { OUTER },
-                mat,
-                mesh.transformed_by(piece.at),
-            );
+            let mesh = mesh.transformed_by(piece.at);
+            if !far[i] {
+                if let Some(m) = materials.get(&mat) {
+                    stand_in.add(&mesh, crate::render::lod::far_colour(m));
+                }
+            }
+            add(if far[i] { FAR } else { OUTER }, mat, mesh);
         }
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
                 for (mat, mesh) in prims {
                     let mat = props.material(&mat, &mut materials);
+                    if !d.inside {
+                        if let Some(m) = materials.get(&mat) {
+                            stand_in.add(
+                                &mesh.clone().transformed_by(*at),
+                                crate::render::lod::far_colour(m),
+                            );
+                        }
+                    }
                     add(
                         if d.inside {
                             NEAR
@@ -3177,20 +3193,35 @@ pub fn dress_buildings(
             } else {
                 bevy::camera::visibility::VisibilityRange {
                     start_margin: switch,
-                    end_margin: 1.0e4..1.0e4,
+                    end_margin: crate::render::lod::near_range().end_margin,
                     use_aabb: true,
                 }
             }
         };
         let [outer, near, far, windows] = merged;
         for (mat, mesh) in outer {
-            commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat),
+                crate::render::lod::near_range(),
+                ChildOf(e),
+            ));
         }
         for (mat, mesh) in windows {
             commands.spawn((
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(mat),
                 bevy::light::NotShadowCaster,
+                crate::render::lod::near_range(),
+                ChildOf(e),
+            ));
+        }
+        if let Some(mesh) = stand_in.build() {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(stand_in_mat.0.clone()),
+                bevy::light::NotShadowCaster,
+                crate::render::lod::far_range(),
                 ChildOf(e),
             ));
         }
@@ -3218,7 +3249,7 @@ mod tests {
     #[test]
     fn every_prop_model_exists() {
         let root = crate::asset_root_path();
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             let geo = prefab(id).unwrap();
             for d in &geo.props {
                 assert!(
@@ -3262,7 +3293,7 @@ mod tests {
     /// pose (a negative box gave the colliders a NaN mass).
     #[test]
     fn every_piece_is_sound() {
-        for id in PREFABS {
+        for id in PREFABS.into_iter().chain(super::super::underground::ids()) {
             for (i, p) in prefab(id).unwrap().pieces.iter().enumerate() {
                 let ok = match p.shape {
                     Shape::Box(s) | Shape::Prism(s) => s.is_finite() && s.min_element() > 0.0,

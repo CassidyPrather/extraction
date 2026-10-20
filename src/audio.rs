@@ -126,6 +126,8 @@ impl Plugin for AudioPlugin {
                     convoy_sounds,
                     dirigible_loops,
                     drone_and_zip_sounds,
+                    kitchen_sounds,
+                    mind_sounds,
                 ),
             )
             .add_systems(
@@ -2193,6 +2195,112 @@ fn drone_and_zip_sounds(
             cue,
             0.0,
             0.06,
+        );
+    }
+}
+
+/// The kitchen: each stroke of work sounds like the work (a knife on the
+/// board, stones grinding, a spoon or hands in the bowl), a dish done is a
+/// tap on the pot, an abandoned one a rustle.
+fn kitchen_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::raid::kitchen::Cooking>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::cooking::{Event, Process};
+    for c in events.read() {
+        let (set, cue, speed) = match (c.what, c.process) {
+            (Event::Stroke { .. }, Process::Chop) => ("impacts/wood", "kitchen.chop", 1.6),
+            (Event::Stroke { .. }, Process::Grind) => ("footsteps/gravel", "kitchen.grind", 1.2),
+            (Event::Stroke { .. }, _) => ("physical/cloth", "kitchen.work", 1.0),
+            (Event::Done(_), _) => ("physical/handle_metal", "kitchen.done", 0.9),
+            (Event::Aborted, _) => ("physical/cloth", "kitchen.work", 0.8),
+            _ => continue,
+        };
+        let at = positions.get(c.station).ok().map(|g| g.translation());
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            at,
+            cue,
+            0.0,
+            speed,
+            0.08,
+        );
+    }
+}
+
+/// How robots think, out loud: a whirr as one goes to look, servo sweeps
+/// as it searches, a falling whine as it gives up, a squelch as it calls
+/// the others; and the attack tells, a walker's turret settling before
+/// its first shot and a grappler winding up its throw. A robot's search
+/// sounds are spaced so a long hunt doesn't chatter.
+#[allow(clippy::too_many_arguments)]
+fn mind_sounds(
+    mut commands: Commands,
+    mut investigating: MessageReader<crate::robots::search::Investigating>,
+    mut searching: MessageReader<crate::robots::search::Searching>,
+    mut lost: MessageReader<crate::robots::search::LostYou>,
+    mut called: MessageReader<crate::robots::search::CalledOut>,
+    mut aims: MessageReader<crate::robots::walker::WalkerAim>,
+    mut windups: MessageReader<crate::robots::grappler::HarpoonWindup>,
+    positions: Query<&GlobalTransform>,
+    time: Res<Time>,
+    mut last: Local<HashMap<(Entity, u8), f32>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    let now = time.elapsed_secs();
+    let mut due = |robot: Entity, kind: u8, every: f32| {
+        let ok = last.get(&(robot, kind)).is_none_or(|t| now - t >= every);
+        if ok {
+            last.insert((robot, kind), now);
+        }
+        ok
+    };
+    let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
+    for m in investigating.read() {
+        if due(m.robot, 0, 6.0) {
+            out.push(("machines/servo", "robot.investigate", m.at, 1.15));
+        }
+    }
+    for m in searching.read() {
+        if due(m.robot, 1, 6.0) {
+            out.push(("machines/servo", "robot.search", m.at, 0.95));
+        }
+    }
+    for m in lost.read() {
+        out.push(("machines/servo", "robot.lost", m.at, 0.7));
+    }
+    for m in called.read() {
+        if due(m.robot, 2, 10.0) {
+            out.push(("machines/radio_squelch", "robot.callout", m.at, 1.0));
+        }
+    }
+    for m in aims.read() {
+        out.push(("machines/clank", "walker.aim", m.at, 1.3));
+        out.push(("machines/servo", "walker.aim_lock", m.at, 1.5));
+    }
+    for m in windups.read() {
+        if let Ok(gt) = positions.get(m.from) {
+            out.push(("machines/servo", "harpoon.windup", gt.translation(), 0.8));
+        }
+    }
+    for (set, cue, at, speed) in out {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            speed,
+            0.04,
         );
     }
 }

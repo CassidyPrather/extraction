@@ -66,7 +66,7 @@ impl Upgrade {
     pub fn does(self) -> &'static str {
         match self {
             Upgrade::StashRack => "stash +100 L",
-            Upgrade::BenchVice => "five more recipes",
+            Upgrade::BenchVice => "six more recipes",
             Upgrade::Aerial => "Surge warning at 10 min",
             Upgrade::MedCabinet => "a dressing each raid",
             Upgrade::StashRack2 => "stash +100 L",
@@ -148,8 +148,15 @@ pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
 pub const STASH_RACK: f32 = 100.0;
 
+/// The last job of the ladder: what's on the table in the house by the
+/// well in Marrow Creek (Hana's letter, `docs/LORE.md`).
+pub const LETTER_ITEM: &str = "hana_letter";
+pub const LETTER_MAP: &str = "marrow_creek";
+/// The "Village note" on that table.
+pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
+
 /// Raids the driver waits on a fetch before asking for something else.
-pub const FETCH_PATIENCE: u32 = 4;
+pub const FETCH_PATIENCE: u32 = 3;
 
 /// What a Recover job sends you for.
 pub const RECOVER_ITEM: &str = "field_recorder";
@@ -182,7 +189,12 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
             "One of their cells. I want to see inside.",
         ),
         ("servo", 1, 2, "A servo or two. I'm making a thing."),
-        ("rotor_assembly", 1, 2, "Drone rotors. Don't ask what for."),
+        (
+            ANY_PARTS,
+            2,
+            3,
+            "Robot parts, any. Eyes, servos, cells. I'm not fussy.",
+        ),
     ],
     &[
         (
@@ -193,20 +205,38 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
         ),
         ("robot_cell", 2, 2, "Two of their cells. The cab heater."),
         (
-            "sensor_eye",
-            2,
-            2,
-            "Two eyes. A man in town is building one.",
+            ANY_PARTS,
+            4,
+            4,
+            "Four of their parts, any. A man in town is building one.",
         ),
         ("servo", 2, 2, "Two servos. The winch, properly this time."),
         (
             "regen_injector",
             1,
             1,
-            "One of those injectors. For a friend.",
+            "One of those injectors. For my sister.",
         ),
     ],
 ];
+
+/// A fetch of this "item" takes any of [`PARTS`]: robots don't drop the
+/// same thing in every valley.
+pub const ANY_PARTS: &str = "robot_parts";
+/// What counts as a robot part.
+pub const PARTS: &[&str] = &[
+    "sensor_eye",
+    "servo",
+    "robot_cell",
+    "rotor_assembly",
+    "robot_gunpod",
+    "robot_ammo_belt",
+];
+
+/// Whether an item of `id` counts toward a fetch of `want`.
+pub fn fetch_takes(want: &str, id: &str) -> bool {
+    want == id || (want == ANY_PARTS && PARTS.contains(&id))
+}
 
 /// Why the driver wants it (any tier's reason for that item).
 pub fn why(id: &str) -> &'static str {
@@ -232,6 +262,9 @@ pub enum Job {
         #[serde(default)]
         place: Option<String>,
     },
+    /// Bring home what's on the table in the house by the well
+    /// ([`LETTER_ITEM`]): the last job of the last tier.
+    Letter,
     /// Go and look at `place` in `map`, then get home.
     Scout {
         map: String,
@@ -247,6 +280,7 @@ impl Job {
     pub fn map(&self) -> Option<&str> {
         match self {
             Job::Fetch { .. } => None,
+            Job::Letter => Some(LETTER_MAP),
             Job::Recover { map, .. } | Job::Scout { map, .. } => Some(map),
         }
     }
@@ -255,6 +289,7 @@ impl Job {
     pub fn mark(&self) -> Option<(&str, [f32; 2])> {
         match self {
             Job::Fetch { .. } => None,
+            Job::Letter => Some((LETTER_MAP, LETTER_AT)),
             Job::Recover { map, at, .. } => at.map(|a| (map.as_str(), a)),
             Job::Scout { map, at, .. } => Some((map.as_str(), *at)),
         }
@@ -456,6 +491,9 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
         }
     }
     let tier = progress.tier_def();
+    if progress.tier as usize == TIERS.len() - 1 && progress.done_in_tier + 1 == tier.jobs {
+        return Job::Letter;
+    }
     let roll = number as u64 + 1000 * progress.swaps as u64;
     let mut rng = Rng::new(seed ^ 0x10B5_0F7E ^ roll.wrapping_mul(0x9E37_79B9));
     // Which valley: here, or for far jobs the one you've raided least.
@@ -600,6 +638,44 @@ mod tests {
                     let d = marrow.region_at(*at).unwrap().danger;
                     assert!((t.danger.0..=t.danger.1).contains(&d), "{job:?}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn the_ladder_ends_with_the_letter() {
+        let v = valleys();
+        let last = TIERS.len() - 1;
+        let p = Progress {
+            tier: last as u32,
+            done_in_tier: TIERS[last].jobs - 1,
+            done: 13,
+            ..Default::default()
+        };
+        assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Letter);
+        let marrow = &v[0].1;
+        let note = marrow
+            .markers
+            .iter()
+            .find(|m| m.name == "Village note")
+            .expect("the note on the table");
+        assert!(crate::geom::dist(note.at, LETTER_AT) < 0.5);
+    }
+
+    #[test]
+    fn any_parts_takes_any_robot_part() {
+        assert!(fetch_takes(ANY_PARTS, "servo"));
+        assert!(fetch_takes(ANY_PARTS, "sensor_eye"));
+        assert!(!fetch_takes(ANY_PARTS, "canned_stew"));
+        assert!(fetch_takes("servo", "servo"));
+        assert!(!fetch_takes("servo", "sensor_eye"));
+        let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
+        for id in PARTS {
+            assert!(cat.kind(id).is_some(), "{id}");
+        }
+        for tier in WANTS {
+            for w in tier.iter() {
+                assert!(w.0 == ANY_PARTS || cat.kind(w.0).is_some(), "{}", w.0);
             }
         }
     }

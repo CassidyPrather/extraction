@@ -73,16 +73,24 @@ def tiers():
         kinds = re.findall(r"JobKind::(\w+)", t.group(6))
         out.append(dict(name=t.group(1), jobs=int(t.group(2)), danger=(int(t.group(3)), int(t.group(4))),
                         far=t.group(5) == "true", kinds=kinds))
-    wants_src = src[src.index("pub const WANTS"):src.index("pub fn why")]
+    wants_src = src[src.index("pub const WANTS"):src.index("pub const ANY_PARTS")]
     wants = []
     for tier in wants_src.split("&[\n")[1:]:
-        wants.append([(m[0], int(m[1]), int(m[2]))
-                      for m in re.findall(r'"([a-z_]+)",\s*(\d+),\s*(\d+),', tier)])
+        wants.append([(m[0] or "robot_parts", int(m[1]), int(m[2]))
+                      for m in re.findall(r'(?:"([a-z_]+)"|ANY_PARTS),\s*(\d+),\s*(\d+),', tier)])
     return out, wants
 
 
 PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
     ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
+
+
+PARTS = re.findall(r'"([a-z_]+)"', re.search(r"pub const PARTS: &\[&str\] = &\[([^\]]*)\]", open(
+    os.path.join(ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
+
+
+def takes(want, item):
+    return want == item or (want == "robot_parts" and item in PARTS)
 
 
 def main():
@@ -111,7 +119,7 @@ def main():
             elif e["ev"] == "end":
                 end = e
         if end:
-            runs.append(dict(visited=visited, home=end["outcome"] == "extracted",
+            runs.append(dict(visited=visited, home=end["outcome"] == "extracted", job=end.get("job"),
                              loot=end.get("loot", []) if end["outcome"] == "extracted" else [],
                              minutes=end.get("raid_time", 0) / 60.0, personality=personality))
     if not runs:
@@ -123,7 +131,28 @@ def main():
         return sum(r["home"] and any(lo <= d <= hi for _, d in r["visited"]) for r in runs) / n
 
     def rate(item):
-        return sum(r["loot"].count(item) for r in runs) / n
+        return sum(sum(takes(item, i) for i in r["loot"]) for r in runs) / n
+
+    # Runs where the bot had the driver's scout job (the game hands sim bots
+    # one): how often it saw the place and got home, by the place's danger.
+    jobs = [r for r in runs if r["job"]]
+    job_rate = {}
+    if jobs:
+        print("| Scout job, danger | Bots given it | Seen and home |\n| - | - | - |")
+        for d in range(4):
+            js = [r for r in jobs if r["job"].get("danger") == d]
+            if js:
+                job_rate[d] = sum(r["home"] and r["job"]["seen"] for r in js) / len(js)
+                print(f"| {d} | {len(js)} | {job_rate[d]:.0%} |")
+        print()
+
+    def place_odds(lo, hi):
+        """A place job's chance per raid: what bots that had the job did, else
+        the share of raids that reached that danger and got home."""
+        known = [job_rate[d] for d in range(lo, hi + 1) if d in job_rate]
+        if known:
+            return sum(known) / len(known)
+        return reach(lo, hi)
 
     ts, wants = tiers()
     print(f"{map_name}: {n} sim raids, {home:.0%} home, "
@@ -169,10 +198,14 @@ def main():
                     if r["home"]:
                         for item in r["loot"]:
                             stock[item] = stock.get(item, 0) + 1
-                    if kind == "Fetch" and stock.get(want[0], 0) >= n:
-                        stock[want[0]] -= n
+                    have = sum(c for i, c in stock.items() if takes(want[0], i))
+                    if kind == "Fetch" and have >= n:
+                        for i in list(stock):
+                            while n and stock[i] and takes(want[0], i):
+                                stock[i] -= 1
+                                n -= 1
                         break
-                    if kind != "Fetch" and r["home"] and any(lo <= d <= hi for _, d in r["visited"]):
+                    if kind != "Fetch" and rng.random() < place_odds(lo, hi):
                         break
                     if raids > 400:
                         break

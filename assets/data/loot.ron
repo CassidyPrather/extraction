@@ -40,12 +40,15 @@
             Item(id: "pm_mag", weight: 1.0, condition: (0.4, 1.0)),
             Item(id: "ak_mag", weight: 0.6, condition: (0.4, 1.0)),
             Item(id: "mosin_clip", weight: 1.0),
+            Item(id: "ammo_762x39", weight: 1.0),
+            Item(id: "sks_clip", weight: 0.8),
         ]),
         "weapons_rare": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 3.0, condition: (0.3, 0.9)),
             Item(id: "toz_double", weight: 2.0, condition: (0.3, 0.9)),
             Item(id: "mosin", weight: 1.2, condition: (0.3, 0.85)),
             Item(id: "ak74", weight: 0.6, condition: (0.25, 0.8)),
+            Item(id: "sks", weight: 0.8, condition: (0.3, 0.85)),
         ]),
         "tools": (rolls: (1, 2), entries: [
             Item(id: "multitool", weight: 1.0),
@@ -153,6 +156,14 @@
         ]),
         "starter_cache": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 1.0, condition: (0.7, 0.8)),
+        ]),
+        // The Marrow shelter's armoury, near the gate: mostly ammunition,
+        // now and then a worn pistol (assets/underground/bunker_marrow.ron).
+        "shelter_armoury": (rolls: (1, 2), entries: [
+            Table(name: "ammo_common", weight: 6.0),
+            Item(id: "pm_mag", weight: 1.0, condition: (0.3, 0.9)),
+            Item(id: "pm_pistol", weight: 0.5, condition: (0.3, 0.7)),
+            Nothing(weight: 2.0),
         ]),
     },
 )

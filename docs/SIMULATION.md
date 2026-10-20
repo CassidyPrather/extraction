@@ -42,7 +42,8 @@ save with `--save`).
 
 Environment knobs for debugging: `SIM_DEBUG=1` logs every plan the raider
 makes as a `plan` event; `SIM_DUMP_PLANS=1` writes each building's indoor
-grid as text to `<out>/plans/`.
+grid as text to `<out>/plans/`; `SIM_NO_JOB=1` has the raider ignore
+the driver's scout job, to compare with runs from before bots took jobs.
 
 ## The raiding bot
 
@@ -144,12 +145,15 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
 | `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
+| `crouch` | `secs` | Stood up after crouching (creeping) near robots for `secs` (see `docs/MAP_DESIGN.md`, "How the bots move"). |
+| `freeze` | `secs`, `x`, `z` | Froze, crouched and still, while a robot searched close by. |
+| `distract` | `x`, `z`, `walker_dist` | Threw junk past a calm walker to send it looking the other way. |
 | `cover` | `why` (`hurt`), `dist`, `hp` | Hurt and still being hit: broke off the fight into cover `dist` m away (the fight ends `took_cover`). |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
 | `extract` | `x`, `z` | Pulled the bell with the truck waiting: out. |
 | `death` | `cause` (what did the most harm in the last 90 s, bleeding aside), `finisher` (what dealt the last point), `x`, `z`, `doing` | Went down. |
-| `end` | `outcome` (`extracted`, `died`, `timeout`), `raid_time`, `distance`, `loot` (ids), `loot_count`, `shots`, `hits`, `blocked`, `engagements`, `kills` (by kind), `damage` (by cause), `anomaly_entries`, `heals`, `extract_reason`, `death_cause`, `x`, `z` | Last line. |
+| `end` | `outcome` (`extracted`, `died`, `timeout`), `raid_time`, `distance`, `loot` (ids), `loot_count`, `shots`, `hits`, `blocked`, `engagements`, `kills` (by kind), `damage` (by cause), `anomaly_entries`, `heals`, `extract_reason`, `death_cause`, `x`, `z`, `job` (the driver's scout job the bot was handed: `place`, `danger`, `seen`; see `docs/PROGRESSION.md`) | Last line. |
 
 ## The report
 

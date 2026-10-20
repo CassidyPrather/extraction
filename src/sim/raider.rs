@@ -76,6 +76,12 @@ pub struct Traits {
     /// How likely it is to get out of sight when a drone chirps its
     /// lock-on (`robots::drone::DroneLock`).
     pub duck: f32,
+    /// Crouches (and so creeps) within this of a robot it can see that
+    /// isn't fighting it (0: never). See [`sneak`].
+    pub sneak_range: f32,
+    /// Throws junk past a walker at its post to send it looking the other
+    /// way.
+    pub distract: bool,
 }
 
 impl Traits {
@@ -98,6 +104,8 @@ impl Traits {
             max_kg: 26.0,
             heat: 1.6,
             duck: 0.75,
+            sneak_range: 35.0,
+            distract: true,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -126,6 +134,8 @@ impl Traits {
                 max_kg: 18.0,
                 heat: 1.0,
                 duck: 0.9,
+                sneak_range: 45.0,
+                distract: true,
                 ..base
             },
             "reckless" => Traits {
@@ -142,6 +152,8 @@ impl Traits {
                 max_kg: 34.0,
                 heat: f32::INFINITY,
                 duck: 0.3,
+                sneak_range: 0.0,
+                distract: false,
                 ..base
             },
             _ => base,
@@ -196,6 +208,8 @@ struct Site {
     spots: usize,
     visited: bool,
     tries: u8,
+    /// The driver's job on the card sends it here (`progression`).
+    job: bool,
 }
 
 /// What the raider is in the middle of.
@@ -283,6 +297,11 @@ pub struct Raider {
     kg: f32,
     /// Attention from the artifacts it carries.
     heat: f32,
+    /// Crouched since (raid seconds), when it is.
+    crouched_since: Option<f32>,
+    /// When it last froze for a searching robot, or threw a distraction.
+    froze_at: f32,
+    distracted_at: f32,
 }
 
 impl Raider {
@@ -352,6 +371,7 @@ pub fn attach_raider(
             spots: n,
             visited: false,
             tries: 0,
+            job: false,
         });
     }
     for m in &zone.map.markers {
@@ -377,6 +397,7 @@ pub fn attach_raider(
                     spots: 1,
                     visited: false,
                     tries: 0,
+                    job: false,
                 });
             }
             MarkerKind::ArtifactField => sites.push(Site {
@@ -386,6 +407,7 @@ pub fn attach_raider(
                 spots: 6,
                 visited: false,
                 tries: 0,
+                job: false,
             }),
             _ => {}
         }
@@ -440,6 +462,9 @@ pub fn attach_raider(
                 hp: 100.0,
                 kg: 0.0,
                 heat: 0.0,
+                crouched_since: None,
+                froze_at: -99.0,
+                distracted_at: -99.0,
             },
         ));
     }
@@ -534,6 +559,8 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     spatial: SpatialQuery<'w, 's>,
+    progression: Option<Res<'w, crate::progression::Progression>>,
+    opts: Res<'w, LaunchOptions>,
 }
 
 impl Scene<'_, '_> {
@@ -667,6 +694,7 @@ pub fn think(
             &Health,
             &crate::player::Body,
             &Children,
+            &mut crate::rig::RigInput,
         ),
         With<LocalPlayer>,
     >,
@@ -676,7 +704,7 @@ pub fn think(
 ) {
     let dt = scene.time.delta_secs();
     let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
-    for (me, mut bot, mut r, tf, health, body, children) in &mut bots {
+    for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
         if r.stage == Stage::Done || health.down {
             continue;
@@ -730,6 +758,7 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
+            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1076,6 +1105,122 @@ fn react_to_robots(
     bot.replace(tasks);
 }
 
+/// Moving like a careful player near robots (`robots::senses`: crouched
+/// is harder to see, crouched footsteps carry a third as far, and crouching
+/// slows the body to a creep):
+/// - **crouch** within `sneak_range` of a robot it can see that isn't
+///   fighting it, or near where a robot is looking for someone;
+/// - **freeze** a few seconds, crouched and still, when a robot that's
+///   onto something is investigating or searching close by;
+/// - **distract** (all but the reckless): throw junk past and to one side
+///   of a walker within 20 m that hasn't noticed it, so it walks off to look
+///   there.
+///
+/// Never in a fight, never with the truck waiting, never hurrying home hurt.
+fn sneak(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+    input: &mut crate::rig::RigInput,
+) {
+    let hurrying = bot.sprint
+        || r.combat.is_some()
+        || r.act == Act::Board
+        || matches!(scene.raid.phase, Phase::TruckWaiting { .. })
+        || (r.stage == Stage::Extract && r.hp < 50.0);
+    let mut wary = false;
+    let mut freeze = false;
+    let mut calm_walker: Option<Vec3> = None;
+    if r.traits.sneak_range > 0.0 && !hurrying {
+        for (_, robot, gt, aware, brain, job) in &scene.robots {
+            if robot.wrecked || job.kind == JobKind::Collect {
+                continue;
+            }
+            let at = gt.translation();
+            let d = at.distance(eye);
+            let hunting = match brain {
+                Brain::Investigate { at: look, .. } | Brain::Search { at: look, .. } => Some(*look),
+                _ => None,
+            };
+            let near_look = hunting.is_some_and(|l| l.xz().distance(eye.xz()) < 25.0);
+            if matches!(brain, Brain::Engage) && aware.target == Some(me) {
+                continue;
+            }
+            if d > r.traits.sneak_range && !near_look {
+                continue;
+            }
+            let seen = scene.visible(eye, at);
+            wary |= seen || near_look;
+            if seen && d < 30.0 && hunting.is_some() && aware.suspicion < 0.55 {
+                freeze = true;
+            }
+            if seen
+                && d < 20.0
+                && robot.kind == crate::robots::RobotKind::Walker
+                && matches!(brain, Brain::Working { .. } | Brain::Transit { .. })
+                && aware.suspicion < 0.3
+            {
+                calm_walker = Some(at);
+            }
+        }
+    }
+    if wary != input.crouch {
+        input.crouch = wary;
+        if wary {
+            r.crouched_since = Some(r.clock);
+        } else if let Some(t) = r.crouched_since.take() {
+            log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
+        }
+    }
+    if freeze && r.clock - r.froze_at > 10.0 {
+        r.froze_at = r.clock;
+        let secs = r.rng.range(2.0, 4.0);
+        log.event(
+            "freeze",
+            json!({"secs": round(secs, 1), "x": round(eye.x, 1), "z": round(eye.z, 1)}),
+        );
+        r.interrupted = true;
+        bot.replace([Task::Wait(secs)]);
+        return;
+    }
+    if let Some(w) = calm_walker.filter(|_| r.traits.distract && r.clock - r.distracted_at > 60.0) {
+        let Some(item) = junk(r, scene) else {
+            return;
+        };
+        // A thrown bolt carries 15 m or so: past it if it's close, else off
+        // to one side of it, whichever side there's ground to land on.
+        let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
+        let reach = (w.xz().distance(eye.xz()) + 6.0).min(15.0);
+        let Some(to) = [0.45f32, -0.45]
+            .into_iter()
+            .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * reach)
+            .find(|p| r.grid.walkable([p.x, p.y]))
+        else {
+            return;
+        };
+        r.distracted_at = r.clock;
+        log.event(
+            "distract",
+            json!({"x": round(to.x, 1), "z": round(to.y, 1), "walker_dist": round(w.distance(eye), 0)}),
+        );
+        r.interrupted = true;
+        bot.replace([
+            Task::Grab {
+                item,
+                side: Side::Left,
+            },
+            Task::Throw {
+                side: Side::Left,
+                at: scene.zone.on_ground(to.x, to.y),
+            },
+            Task::Wait(2.0),
+        ]);
+    }
+}
+
 /// A drone chirped its lock on this bot: get somewhere it can't see, if
 /// there's somewhere close (a player hears it and steps behind a tree).
 fn duck(
@@ -1201,6 +1346,7 @@ fn fight_on(
                         spots: 2,
                         visited: false,
                         tries: 0,
+                        job: false,
                     });
                 }
             }
@@ -1626,6 +1772,7 @@ fn raid_step(
     for _ in 0..8 {
         match r.act {
             Act::Idle => {
+                add_job_site(r, scene);
                 let Some(s) = choose_site(r, scene, here) else {
                     r.pack_full = true; // nothing left worth the walk
                     return vec![Task::Wait(0.2)];
@@ -1769,6 +1916,10 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             continue;
         }
         let pull = match s.kind {
+            // The driver's scout job: a player goes for it, as long as
+            // they're fit to.
+            _ if s.job && r.hp >= 50.0 => 12.0,
+            _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
@@ -1795,6 +1946,31 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         }
     }
     best.map(|b| b.1)
+}
+
+/// The scout job on the card, as a site to walk to (once).
+fn add_job_site(r: &mut Raider, scene: &Scene) {
+    // `SIM_NO_JOB=1`: play as before the bots took jobs (to compare runs).
+    if r.sites.iter().any(|s| s.job) || std::env::var_os("SIM_NO_JOB").is_some() {
+        return;
+    }
+    let Some(extraction_core::progression::Job::Scout { map, place, at, .. }) =
+        scene.progression.as_ref().and_then(|p| p.0.job.clone())
+    else {
+        return;
+    };
+    if map != scene.opts.map {
+        return;
+    }
+    r.sites.push(Site {
+        name: format!("job: {place}"),
+        kind: SiteKind::Spot,
+        at: Vec2::from_array(at),
+        spots: 0,
+        visited: false,
+        tries: 0,
+        job: true,
+    });
 }
 
 fn rv_centroid(zone: &Zone) -> Vec2 {

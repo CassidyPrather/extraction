@@ -202,6 +202,17 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 16.0,
     },
     Recipe {
+        id: "pack_762x39",
+        name: "Re-pack 7.62x39 (box of 20)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 2),
+            (Need::Item("scrap_metal"), 1),
+        ],
+        makes: Make::Items(&[("ammo_762x39", 1)]),
+        seconds: 10.0,
+    },
+    Recipe {
         id: "repair_gun_fine",
         name: "Strip and rebuild a worn gun",
         needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
@@ -368,6 +379,13 @@ mod tests {
         let ids =
             |tier| -> Vec<&str> { available_at(&t, &cat, tier).iter().map(|r| r.id).collect() };
         assert!(!ids(0).contains(&"make_side_rail"));
+        let carbine = tray(&cat, &["powder", "powder", "brass", "brass", "scrap_metal"]);
+        assert!(
+            available_at(&carbine, &cat, 1)
+                .iter()
+                .any(|r| r.id == "pack_762x39"),
+            "the vice packs the carbine's rounds"
+        );
         assert!(ids(1).contains(&"make_side_rail"));
         assert!(recipe("make_emp_trap").is_some());
         let mut seen: Vec<&str> = recipes(1).map(|r| r.id).collect();

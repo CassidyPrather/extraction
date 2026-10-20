@@ -159,6 +159,24 @@ a bot's detour in proportion to what it pays; a picked-over village near
 the gate is worth less. If a place you meant to matter is never visited
 in the sims, check its richness and its loot spots before its routes.
 
+### How the bots move
+
+Robots see a crouched body in grass and fog far less well, and hear a
+crouched creep a third as far (`robots/senses.rs`), so the raiders move
+like careful players near them (`raider.rs`, `sneak`). They **crouch**,
+and so creep, within `Traits::sneak_range` of a robot they can see that
+isn't fighting them (cautious 45 m, looter and hunter 35 m, reckless
+never), or near where a robot is searching. They **freeze** 2–4 s when a
+robot that's investigating or searching is in sight within 30 m. Any
+but the reckless, with junk in its pack, **throws it** past and to one
+side of a walker within 20 m that hasn't noticed it (as far as a bolt
+carries, about 15 m), so the walker goes off to look there. None of this
+happens in a fight, with the truck waiting, or when hurrying home hurt.
+Telemetry: `crouch` (seconds crouched), `freeze`, `distract`. Cover and
+grass along a route now matter to the sims as they do to a player: a
+route through open road beside a work site gets bots seen; one through
+long grass behind a wall doesn't.
+
 ## Indoor and outdoor rhythm
 
 Buildings are where the hands-on looting is, and a roof is cover from

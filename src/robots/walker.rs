@@ -11,23 +11,34 @@ use bevy::prelude::*;
 use extraction_core::nav::NavGrid;
 use std::sync::Arc;
 
+use super::indoor::NavRef;
+use super::search::{self, Step};
 use super::{
-    Awareness, Brain, Job, PartDestroyed, PartRole, Robot, RobotKind, RobotPart, Senses,
+    Awareness, Brain, Intent, Job, PartDestroyed, PartRole, Robot, RobotKind, RobotPart, Senses,
     part_bundle,
 };
 use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
 
-const LEGS: usize = 4;
-const BODY_HEIGHT: f32 = 1.15;
+pub use super::anim::solve_knee;
+use super::anim::{BODY_HEIGHT, LEGS, rest_offset};
+
 pub const UPPER: f32 = 0.8;
 pub const LOWER: f32 = 0.95;
-const HIP_RADIUS: f32 = 0.32;
-const FOOT_RADIUS: f32 = 1.05;
-const STEP_TRIGGER: f32 = 0.42;
-const STEP_TIME: f32 = 0.28;
-const STEP_HEIGHT: f32 = 0.28;
-const SPEED: f32 = 1.7;
+/// Suspicion at which a walker that sees you opens fire.
+pub const ENGAGE_AT: f32 = 0.55;
+/// Out of sight this long in a fight, it goes to where it last saw you.
+pub const PATIENCE: f32 = 8.0;
+/// The turret settles on you this long before its first shot (and again
+/// after you've been out of sight a while): the whine that says move.
+pub const AIM_TIME: f32 = 0.7;
+/// Lamer than this (`anim::Gait::limp`), a walker fights from where it
+/// stands and doesn't chase.
+pub const LAME: f32 = 0.5;
+/// It fights from cover at about this range from you (m)...
+pub const COVER_RANGE: (f32, f32) = (14.0, 34.0);
+/// ...and looks for better cover this often (s).
+pub const COVER_RETHINK: f32 = 4.0;
 
 /// The shared navigation grid for ground robots (and bots).
 #[derive(Resource, Clone)]
@@ -43,7 +54,10 @@ pub struct Foot {
     pub alive: bool,
 }
 
+/// The body (`anim`) moves it; see [`super::Intent`] for what
+/// the brain can ask of it besides a path.
 #[derive(Component, Debug)]
+#[require(super::anim::Gait)]
 pub struct Walker {
     pub feet: [Foot; LEGS],
     pub path: Vec<Vec3>,
@@ -56,6 +70,21 @@ pub struct Walker {
     pub phase: usize,
     pub collapsed: bool,
     pub goal: Option<Vec3>,
+    /// Seconds its turret has been settling on its target.
+    pub aim: f32,
+    /// The cover it's fighting from, if any, and when to think again.
+    pub cover: Option<Vec3>,
+    pub rethink: f32,
+    /// Seconds a grappler has lain in wait for you to come closer.
+    pub waited: f32,
+}
+
+/// A walker's turret began settling on someone (the tell: audio whines,
+/// the eye flares).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct WalkerAim {
+    pub walker: Entity,
+    pub at: Vec3,
 }
 
 /// A leg's collider and visual root, posed every tick from the IK.
@@ -82,27 +111,24 @@ pub struct WalkerPlugin;
 impl Plugin for WalkerPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<WalkerStep>()
+            .add_message::<WalkerAim>()
             .add_systems(
                 Startup,
                 build_nav.after(crate::world::trees::spawn_tree_colliders),
             )
             .add_systems(
                 FixedUpdate,
-                (walker_parts_destroyed, walker_brain, walk, walker_guns)
+                (
+                    walker_parts_destroyed,
+                    walker_brain,
+                    super::anim::walk,
+                    super::anim::aim_turrets,
+                    walker_guns,
+                )
                     .chain()
                     .before(PhysicsSystems::First),
             );
     }
-}
-
-fn hip_offset(i: usize) -> Vec3 {
-    let a = std::f32::consts::FRAC_PI_4 + i as f32 * std::f32::consts::FRAC_PI_2;
-    Vec3::new(a.cos() * HIP_RADIUS, -0.12, a.sin() * HIP_RADIUS)
-}
-
-fn rest_offset(i: usize) -> Vec3 {
-    let a = std::f32::consts::FRAC_PI_4 + i as f32 * std::f32::consts::FRAC_PI_2;
-    Vec3::new(a.cos() * FOOT_RADIUS, 0.0, a.sin() * FOOT_RADIUS)
 }
 
 /// Navigation for ground robots: terrain, structures and tree trunks
@@ -135,11 +161,30 @@ pub fn spawn_walker_with(
     armed: bool,
     core_hp: f32,
 ) -> Entity {
-    let ground = zone.ground(at.x, at.z);
-    let pos = Vec3::new(at.x, ground + BODY_HEIGHT, at.z);
+    spawn_walker_sized(commands, zone, at, job, armed, core_hp, 1.0, None)
+}
+
+/// [`spawn_walker_with`] at `size` times a walker's size (a crawler for
+/// low ceilings is about 0.6): the body, its legs, gait and wreck all
+/// scale with it. `floor` is the height it stands on underground (on an
+/// underground site's floor, below the terrain); None stands it on the
+/// terrain.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_walker_sized(
+    commands: &mut Commands,
+    zone: &Zone,
+    at: Vec3,
+    job: Job,
+    armed: bool,
+    core_hp: f32,
+    size: f32,
+    floor: Option<f32>,
+) -> Entity {
+    let floor = |x: f32, z: f32| floor.unwrap_or_else(|| zone.ground(x, z));
+    let pos = Vec3::new(at.x, floor(at.x, at.z) + BODY_HEIGHT * size, at.z);
     let feet = std::array::from_fn(|i| {
-        let p = pos + rest_offset(i);
-        let f = Vec3::new(p.x, zone.ground(p.x, p.z), p.z);
+        let p = pos + rest_offset(i) * size;
+        let f = Vec3::new(p.x, floor(p.x, p.z), p.z);
         Foot {
             planted: f,
             from: f,
@@ -166,7 +211,12 @@ pub fn spawn_walker_with(
                 phase: 0,
                 collapsed: false,
                 goal: None,
+                aim: 0.0,
+                cover: None,
+                rethink: 0.0,
+                waited: 0.0,
             },
+            Intent::default(),
             LegPoses::default(),
             Senses {
                 sight: 75.0,
@@ -177,7 +227,8 @@ pub fn spawn_walker_with(
             Awareness::default(),
             Brain::Transit { to: job.site },
             job,
-            Transform::from_translation(pos),
+            Transform::from_translation(pos).with_scale(Vec3::splat(size)),
+            super::anim::Gait::sized(size),
             Visibility::default(),
             RigidBody::Kinematic,
         ))
@@ -265,11 +316,19 @@ fn walker_brain(
         Entity,
         &mut Walker,
         &mut Brain,
-        &Job,
+        &mut Job,
         &Awareness,
         &Transform,
         &Robot,
+        &mut Intent,
         Option<&mut super::doors::Battering>,
+        Has<super::grappler::Grappler>,
+        (
+            Option<&super::indoor::LocalNav>,
+            Option<&mut super::indoor::Patrol>,
+            Has<super::indoor::Crawler>,
+            Option<&super::anim::Gait>,
+        ),
     )>,
     targets: Query<&GlobalTransform>,
     nav: Res<Nav>,
@@ -283,33 +342,50 @@ fn walker_brain(
     mut noise: MessageWriter<super::Noise>,
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
+    spatial: SpatialQuery,
 ) {
     let dt = time.delta_secs();
-    for (e, mut w, mut brain, job, aware, t, robot, mut battering) in &mut walkers {
+    let sweep = time.elapsed_secs() * 1.1;
+    for (
+        e,
+        mut w,
+        mut brain,
+        mut job,
+        aware,
+        t,
+        robot,
+        mut intent,
+        mut battering,
+        grappler,
+        (local, mut patrol, crawler, gait),
+    ) in &mut walkers
+    {
+        // A site's own grid, or the Zone's.
+        let navr = local.map_or(NavRef::Zone(&nav.0), NavRef::Local);
         if robot.wrecked {
             *brain = Brain::Down;
             w.goal = None;
             continue;
         }
         let pos = t.translation;
+        *intent = Intent::default();
+        let lame = gait.is_some_and(|g| g.limp > LAME);
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
-        if !single_minded
-            && aware.can_see_target
-            && aware.suspicion > 0.55
-            && !matches!(*brain, Brain::Engage | Brain::Down)
-        {
-            *brain = Brain::Engage;
-        } else if !single_minded
-            && aware.suspicion > 0.35
-            && matches!(*brain, Brain::Transit { .. } | Brain::Working { .. })
-        {
-            if let Some(at) = aware.last_known {
-                *brain = Brain::Investigate { at, left: 30.0 };
-            }
+        if !single_minded {
+            search::react(&mut brain, aware, ENGAGE_AT);
+            // A lame walker doesn't give chase, and gives up sooner.
+            let patience = if lame { PATIENCE * 0.5 } else { PATIENCE };
+            search::lost_sight(&mut brain, aware, patience, pos);
+        }
+        if !matches!(*brain, Brain::Engage) {
+            w.cover = None;
+            w.waited = 0.0;
         }
         // Where the one it's after is hiding, if that's indoors.
         let mut indoors: Option<Vec3> = None;
+        // Arrived at a doorway it was looking for someone through.
+        let mut at_door = false;
         let goal = match &mut *brain {
             Brain::Transit { to } => {
                 let to = *to;
@@ -329,39 +405,128 @@ fn walker_brain(
                     }
                     *brain = Brain::Leave { to: job.exit };
                 }
-                None
+                // On its rounds.
+                patrol.as_deref_mut().and_then(|p| {
+                    let (go, look) = p.step(pos, dt, sweep);
+                    intent.pace = super::indoor::PATROL_PACE;
+                    intent.look = look;
+                    go
+                })
             }
             Brain::Investigate { at, left } => {
                 *left -= dt;
                 let at = *at;
-                if *left <= 0.0 {
-                    *brain = Brain::Leave { to: job.exit };
-                }
+                // Careful, not hurried; a grappler creeps, low.
+                intent.pace = if grappler { 0.6 } else { 0.8 };
+                intent.low = grappler;
+                intent.look = Some(at);
                 indoors = Some(at);
-                (Vec2::new(pos.x - at.x, pos.z - at.z).length() > 4.0).then_some(at)
+                // (Indoors, "there" is through the door: see below.)
+                let there = Vec2::new(pos.x - at.x, pos.z - at.z).length() < 3.0
+                    && entrances.building_at(at).is_none();
+                if there || *left <= 0.0 {
+                    *brain = search::begin_search(at, aware, pos, navr, &entrances);
+                    None
+                } else {
+                    Some(at)
+                }
+            }
+            Brain::Search { .. } => {
+                intent.pace = 0.7;
+                intent.low = grappler;
+                match search::search_step(&mut brain, pos, 2.0, dt, sweep) {
+                    Step::Go(p) => Some(p),
+                    Step::Look(l) => {
+                        intent.look = Some(l);
+                        // At a doorway: open it and look in.
+                        if let Some(ent) = entrances.doors.iter().find(|d| {
+                            let s = d.mid + d.out * 1.8;
+                            Vec2::new(pos.x - s.x, pos.z - s.z).length() < 2.6
+                        }) {
+                            intent.look = Some(ent.mid - ent.out * 3.0);
+                            if let Ok((mut d, wedged)) = doors.get_mut(ent.door) {
+                                if !wedged && !d.open {
+                                    d.open = true;
+                                }
+                            }
+                        }
+                        None
+                    }
+                    Step::Done => {
+                        search::give_up(&mut brain, &mut job);
+                        None
+                    }
+                }
             }
             Brain::Engage => {
-                let target = aware
+                let seen = aware
                     .target
+                    .filter(|_| aware.can_see_target)
                     .and_then(|p| targets.get(p).ok())
                     .map(|g| g.translation());
-                match target {
-                    Some(tp) if aware.unseen < 10.0 => {
-                        if !aware.can_see_target {
-                            indoors = Some(tp);
-                        }
-                        // Close to firing range and hold; advance if sight is lost.
-                        let d = tp.distance(pos);
-                        if !aware.can_see_target || d > 35.0 {
+                match (seen, aware.last_known) {
+                    (Some(tp), _) if grappler && !lame => {
+                        // Lie in wait for you to come within reach; spring
+                        // when you do, or once it's waited long enough.
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        let reach = super::grappler::TETHER_RANGE;
+                        if d < reach * 0.75 {
+                            None
+                        } else if d < reach * 1.3 || w.waited > 10.0 {
+                            intent.pace = 1.4;
                             Some(tp)
                         } else {
+                            w.waited += dt;
+                            intent.low = true;
                             None
                         }
                     }
-                    _ => {
+                    (Some(_), _) if lame => None,
+                    (None, Some(lk)) if lame => {
+                        intent.look = Some(lk);
+                        None
+                    }
+                    (Some(tp), _) if crawler => {
+                        // Close in to spark range, then hold.
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        (d > super::indoor::CRAWLER_HOLD).then_some(tp)
+                    }
+                    (Some(tp), _) => {
+                        // Fight from cover: move between pieces of it, in range.
+                        w.rethink -= dt;
+                        if w.rethink <= 0.0 {
+                            w.rethink = COVER_RETHINK;
+                            w.cover = pick_cover(pos, tp, navr, &spatial);
+                        }
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        match w.cover {
+                            Some(c) if Vec2::new(c.x - pos.x, c.z - pos.z).length() > 1.2 => {
+                                intent.pace = 1.25;
+                                Some(c)
+                            }
+                            Some(_) => None,
+                            None if d > COVER_RANGE.1 => Some(tp),
+                            None => None,
+                        }
+                    }
+                    (None, Some(lk)) => {
+                        // Out of sight: push to where it last saw you
+                        // (through the door, if that's indoors), and
+                        // search from there.
+                        indoors = Some(lk);
+                        intent.low = grappler;
+                        intent.look = Some(lk);
+                        if Vec2::new(pos.x - lk.x, pos.z - lk.z).length() < 3.0 {
+                            *brain = search::begin_search(lk, aware, pos, navr, &entrances);
+                            None
+                        } else {
+                            Some(lk)
+                        }
+                    }
+                    (None, None) => {
                         *brain = Brain::Investigate {
-                            at: aware.last_known.unwrap_or(pos),
-                            left: 25.0,
+                            at: pos,
+                            left: search::INVESTIGATE_TIME,
                         };
                         None
                     }
@@ -399,6 +564,7 @@ fn walker_brain(
             Some((ent, open)) => {
                 let stand = ent.mid + ent.out * 1.8;
                 let close = Vec2::new(pos.x - stand.x, pos.z - stand.z).length() < 2.2;
+                at_door = close && open;
                 if close && !open {
                     if let Ok((mut d, wedged)) = doors.get_mut(ent.door) {
                         if !wedged {
@@ -418,7 +584,7 @@ fn walker_brain(
                                 noise.write(super::Noise {
                                     at: ent.mid,
                                     radius: 30.0,
-                                    source: None,
+                                    source: Some(e),
                                 });
                                 blows.write(super::doors::DoorBlow {
                                     at: ent.mid,
@@ -437,210 +603,73 @@ fn walker_brain(
                         }
                     }
                 }
-                if close { None } else { Some(stand) }
+                if close {
+                    intent.look = Some(ent.mid - ent.out * 3.0);
+                    None
+                } else {
+                    Some(stand)
+                }
             }
             None => goal,
         };
+        // Through the open door and nobody in view: search from here.
+        if at_door {
+            if let Brain::Investigate { at, .. } = *brain {
+                *brain = search::begin_search(at, aware, pos, navr, &entrances);
+            }
+        }
         w.repath -= dt;
         if goal != w.goal || (goal.is_some() && w.repath <= 0.0 && w.path.is_empty()) {
             w.goal = goal;
             w.repath = 3.0;
-            w.path = goal
-                .and_then(|g| nav.0.path([pos.x, pos.z], [g.x, g.z]))
-                .map(|p| {
-                    p.into_iter()
-                        .skip(1)
-                        .map(|q| Vec3::new(q[0], 0.0, q[1]))
-                        .collect()
-                })
-                .unwrap_or_default();
+            w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
         }
     }
 }
 
-/// Body motion along the path, then feet, then IK.
-fn walk(
-    mut walkers: Query<(
-        &mut Walker,
-        &mut Transform,
-        &mut LegPoses,
-        &Awareness,
-        &Children,
-        &Robot,
-        Has<super::Stunned>,
-    )>,
-    mut legs: Query<(&WalkerLeg, &mut Transform), Without<Walker>>,
-    targets: Query<&GlobalTransform>,
-    zone: Res<Zone>,
-    time: Res<Time>,
-    mut steps: MessageWriter<WalkerStep>,
-) {
-    let dt = time.delta_secs();
-    for (mut w, mut t, mut poses, aware, children, robot, stunned) in &mut walkers {
-        let pos = t.translation;
-        // Steering.
-        let mut desired = Vec3::ZERO;
-        if let Some(next) = w.path.first().copied() {
-            let to = Vec3::new(next.x - pos.x, 0.0, next.z - pos.z);
-            if to.length() < 0.8 {
-                w.path.remove(0);
-            } else {
-                desired = to.normalize() * SPEED;
-            }
+/// Somewhere to fight `target` from: walkable ground hard by an obstacle
+/// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
+/// line to it, not far from `pos`. Where it stands, if that will do.
+fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> Option<Vec3> {
+    let blocked = |p: Vec3| !nav.walkable(p);
+    let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let head = target + Vec3::Y * 1.4;
+    let ground_y = pos.y - BODY_HEIGHT;
+    let score = |p: Vec3| -> Option<f32> {
+        let d = Vec2::new(p.x - target.x, p.z - target.z).length();
+        if blocked(p) || d < COVER_RANGE.0 || d > COVER_RANGE.1 {
+            return None;
         }
-        let alive_legs = w.feet.iter().filter(|f| f.alive).count();
-        let down = w.collapsed || robot.wrecked || stunned;
-        if down {
-            desired = Vec3::ZERO;
-        } else if alive_legs < LEGS {
-            desired *= 0.45; // limping
+        let cover = (0..8).any(|j| {
+            let b = j as f32 * std::f32::consts::FRAC_PI_4;
+            blocked(p + Vec3::new(b.cos(), 0.0, b.sin()) * 1.4)
+        });
+        if !cover {
+            return None;
         }
-        let v = w.velocity.lerp(desired, (3.0 * dt).min(1.0));
-        w.velocity = v;
-        // Face travel, or the target when fighting.
-        let face = aware
-            .target
-            .filter(|_| aware.can_see_target)
-            .and_then(|p| targets.get(p).ok())
-            .map(|g| g.translation() - pos)
-            .unwrap_or(v);
-        if Vec2::new(face.x, face.z).length() > 0.2 {
-            let want = (-face.x).atan2(-face.z);
-            let mut d = want - w.yaw;
-            while d > std::f32::consts::PI {
-                d -= std::f32::consts::TAU;
-            }
-            while d < -std::f32::consts::PI {
-                d += std::f32::consts::TAU;
-            }
-            w.yaw += d.clamp(-1.6 * dt, 1.6 * dt);
-        }
-        let mut next = pos + v * dt;
-        // Height: above the planted feet, with a little bob in mid-stride.
-        let feet_h: f32 = w
-            .feet
-            .iter()
-            .filter(|f| f.alive)
-            .map(|f| f.planted.y)
-            .sum::<f32>()
-            / alive_legs.max(1) as f32;
-        let ground = zone.ground(next.x, next.z);
-        let base = if down {
-            ground + 0.4
-        } else {
-            feet_h.max(ground - 0.2) + BODY_HEIGHT
-        };
-        let stepping = w.feet.iter().any(|f| f.t < 1.0);
-        let bob = if stepping { 0.04 } else { 0.0 };
-        next.y += (base + bob - next.y) * (6.0 * dt).min(1.0);
-        t.translation = next;
-        // Lean into motion, tip toward a missing leg.
-        let lean = Vec3::new(v.z, 0.0, -v.x) * 0.05;
-        t.rotation = Quat::from_rotation_y(w.yaw) * Quat::from_scaled_axis(lean);
-
-        // Feet.
-        let rot = Quat::from_rotation_y(w.yaw);
-        let lookahead = v * 0.35;
-        let pair_busy = |w: &Walker, pair: usize| {
-            (0..LEGS)
-                .filter(|i| i % 2 == pair)
-                .any(|i| w.feet[i].t < 1.0)
-        };
-        for i in 0..LEGS {
-            if !w.feet[i].alive {
-                continue;
-            }
-            let ideal_xz = next + rot * rest_offset(i) + lookahead;
-            let ideal = Vec3::new(ideal_xz.x, zone.ground(ideal_xz.x, ideal_xz.z), ideal_xz.z);
-            let f = w.feet[i];
-            if f.t < 1.0 {
-                let nt = (f.t + dt / STEP_TIME).min(1.0);
-                let foot = &mut w.feet[i];
-                foot.t = nt;
-                let s = nt * nt * (3.0 - 2.0 * nt);
-                foot.planted = foot.from.lerp(foot.to, s)
-                    + Vec3::Y * (STEP_HEIGHT * (std::f32::consts::PI * nt).sin());
-                if nt >= 1.0 {
-                    foot.planted = foot.to;
-                    steps.write(WalkerStep { at: foot.to });
+        let eye = Vec3::new(p.x, ground_y + BODY_HEIGHT, p.z);
+        let to = head - eye;
+        let clear = Dir3::new(to).ok().is_some_and(|dir| {
+            spatial
+                .cast_ray(eye, dir, to.length() - 0.5, true, &world)
+                .is_none()
+        });
+        clear.then(|| Vec2::new(p.x - pos.x, p.z - pos.z).length() + (d - 24.0).abs() * 0.5)
+    };
+    let here = score(pos).map(|s| (pos, s - 3.0));
+    let mut best = here;
+    for ring in [4.0, 8.0] {
+        for k in 0..12 {
+            let a = k as f32 * std::f32::consts::TAU / 12.0;
+            let p = pos + Vec3::new(a.cos(), 0.0, a.sin()) * ring;
+            if let Some(s) = score(p) {
+                if best.is_none_or(|(_, b)| s < b) {
+                    best = Some((p, s));
                 }
-            } else if f.planted.distance(ideal) > STEP_TRIGGER
-                && i % 2 == w.phase
-                && !pair_busy(&w, 1 - w.phase)
-            {
-                let foot = &mut w.feet[i];
-                foot.from = foot.planted;
-                foot.to = ideal;
-                foot.t = 0.0;
-            }
-        }
-        // Alternate pairs once the current pair has landed.
-        if !pair_busy(&w, w.phase)
-            && w.feet
-                .iter()
-                .enumerate()
-                .any(|(i, f)| i % 2 == w.phase && f.t >= 1.0)
-        {
-            let other = 1 - w.phase;
-            let other_needs = (0..LEGS).any(|i| {
-                i % 2 == other && w.feet[i].alive && {
-                    let ideal_xz = next + rot * rest_offset(i);
-                    w.feet[i].planted.distance(Vec3::new(
-                        ideal_xz.x,
-                        w.feet[i].planted.y,
-                        ideal_xz.z,
-                    )) > STEP_TRIGGER * 0.6
-                }
-            });
-            if other_needs {
-                w.phase = other;
-            }
-        }
-        // IK.
-        let tf = *t;
-        for i in 0..LEGS {
-            let hip = tf.transform_point(hip_offset(i));
-            let foot = if w.feet[i].alive {
-                w.feet[i].planted
-            } else {
-                // A dead leg dangles under its hip.
-                hip + rot * (hip_offset(i).normalize_or_zero() * 0.4)
-                    - Vec3::Y * (UPPER + LOWER) * 0.8
-            };
-            let knee = solve_knee(
-                hip,
-                foot,
-                (hip - tf.translation).normalize_or(Vec3::X) + Vec3::Y * 0.8,
-            );
-            poses.0[i] = [hip, knee, foot];
-        }
-        // Leg colliders follow the lower segments (local to the root).
-        // Built from parts rather than a matrix, so the scale stays exactly
-        // one: a capsule scaled by 0.9999999 is rebuilt as a convex hull,
-        // every tick, for every leg.
-        let inv = tf.compute_affine().inverse();
-        let inv_rot = tf.rotation.inverse();
-        for c in children.iter() {
-            if let Ok((leg, mut lt)) = legs.get_mut(c) {
-                let [_, knee, foot] = poses.0[leg.index];
-                let mid = (knee + foot) * 0.5;
-                let dir = (knee - foot).normalize_or(Vec3::Y);
-                *lt = Transform::from_translation(inv.transform_point3(mid))
-                    .with_rotation(inv_rot * Quat::from_rotation_arc(Vec3::Y, dir));
             }
         }
     }
-}
-
-/// Two-bone IK: the knee, bent toward `pole`.
-pub fn solve_knee(hip: Vec3, foot: Vec3, pole: Vec3) -> Vec3 {
-    let d = (foot - hip).length().clamp(0.05, UPPER + LOWER - 0.001);
-    let dir = (foot - hip).normalize_or(Vec3::NEG_Y);
-    // Distance along hip->foot to the knee's projection, and the knee's offset.
-    let a = (UPPER * UPPER - LOWER * LOWER + d * d) / (2.0 * d);
-    let h = (UPPER * UPPER - a * a).max(0.0).sqrt();
-    let bend = (pole - dir * pole.dot(dir)).normalize_or(Vec3::Y);
-    hip + dir * a + bend * h
+    best.map(|(p, _)| p)
 }
 
 fn walker_guns(
@@ -649,16 +678,21 @@ fn walker_guns(
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut shots: MessageWriter<Shot>,
+    mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
     for (e, mut w, brain, aware, robot, children) in &mut walkers {
         w.gun_cooldown -= dt;
-        if robot.wrecked
-            || !matches!(brain, Brain::Engage)
-            || !aware.can_see_target
-            || w.gun_cooldown > 0.0
-        {
+        if robot.wrecked || !matches!(brain, Brain::Engage) {
+            w.aim = 0.0;
+            continue;
+        }
+        if !aware.can_see_target {
+            // A moment behind cover doesn't shake it; a while does.
+            if aware.unseen > 1.5 {
+                w.aim = 0.0;
+            }
             continue;
         }
         let Some(target) = aware
@@ -676,6 +710,20 @@ fn walker_guns(
         }
         let muzzle = gt.translation() + Vec3::Y * 0.05;
         if muzzle.distance(target) > 70.0 {
+            continue;
+        }
+        // Tell first: the turret settles, then it fires.
+        if w.aim < AIM_TIME {
+            if w.aim == 0.0 {
+                aims.write(WalkerAim {
+                    walker: e,
+                    at: muzzle,
+                });
+            }
+            w.aim += dt;
+            continue;
+        }
+        if w.gun_cooldown > 0.0 {
             continue;
         }
         *seed = seed
@@ -700,16 +748,6 @@ fn walker_guns(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn knee_keeps_segment_lengths() {
-        let hip = Vec3::new(0.0, 1.0, 0.0);
-        let foot = Vec3::new(1.0, 0.0, 0.2);
-        let knee = solve_knee(hip, foot, Vec3::Y + Vec3::X);
-        assert!((knee.distance(hip) - UPPER).abs() < 1e-3);
-        assert!((knee.distance(foot) - LOWER).abs() < 1e-3);
-        assert!(knee.y > hip.y - 0.2, "knee bends upward, like a spider's");
-    }
 
     /// On every map, every rendezvous can be walked to from the insertion
     /// (the bots path on this grid too: a missing bridge is a valley

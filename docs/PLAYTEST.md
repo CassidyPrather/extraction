@@ -128,8 +128,13 @@ What changed, and worth a comment each:
   takes effect next launch), as does `--render-scale 0.6`. The log says
   the size each eye renders at (`eyes: ...`), and every ten seconds,
   next to the frame times, where the GPU's time went (`gpu: ... ms a
-  frame (main_opaque_pass_3d ..., shadows ...)`). Tell me how it looks
-  and how it feels.
+  frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
+  main ..., physics ..., render world ...`). Tell me how it looks
+  and how it feels. If there's time, play a minute each with
+  `EXTRACTION_PERF=msaa=2` and `EXTRACTION_PERF=msaa=1` set and note the
+  `gpu:` lines and how the edges look: 4x MSAA is the dearest thing the
+  software renderer can measure, and only the headset can say what it
+  costs there (`docs/PERFORMANCE.md`).
 
 ## Marks
 
@@ -158,6 +163,8 @@ what the view draws (meshes and triangles, by what they belong to) a
 moment after the game starts; `--camera` puts the view anywhere.
 
 ## Order of business
+
+Audio checklist: docs/AUDIO.md, Listening in the headset.
 
 ### 1. Does it work in the headset? (10 minutes)
 

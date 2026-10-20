@@ -108,9 +108,23 @@ fn hands_on(
         .then_some((h.side, s.map(|s| s.side)))
 }
 
+/// A shot's kick, by the gun's recoil (`FirearmDef::recoil`: a pistol
+/// 1, an AK 2.2, a Mosin 4.5) and how it's held: (grip hand, seconds,
+/// support hand). Always in the kick band; a shouldered gun puts some of
+/// it into the shoulder instead of the hands.
+pub fn shot_kick(recoil: f32, shouldered: bool) -> (f32, f32, f32) {
+    let a = 0.6 + 0.4 * (recoil / 5.0).clamp(0.0, 1.0);
+    let a = if shouldered { (a * 0.85).max(0.6) } else { a };
+    (a, (0.05 + 0.006 * recoil).clamp(0.05, 0.08), a * 0.6)
+}
+
 fn gun_haptics(
     mut events: MessageReader<GunEvent>,
     held: Query<(&Held, Option<&Supported>)>,
+    guns: Query<(
+        &crate::weapons::Gun,
+        Option<&crate::weapons::feel::Handling>,
+    )>,
     locals: Query<(), With<LocalPlayer>>,
     mut out: MessageWriter<Haptic>,
 ) {
@@ -119,7 +133,9 @@ fn gun_haptics(
             continue;
         };
         let (a, t, support_a) = match ev.event {
-            FireEvent::Fired { .. } => (1.0, 0.07, 0.6),
+            FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
+                shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
+            }),
             FireEvent::DryFire | FireEvent::Dud => (0.35, 0.02, 0.0),
             FireEvent::MagazineInserted => (0.55, 0.04, 0.3),
             FireEvent::MagazineRemoved => (0.3, 0.03, 0.0),
@@ -435,6 +451,12 @@ mod tests {
             assert!(t >= 0.01, "{t}");
         }
         assert!(hurt_amplitude(1.0) > CLICK.0);
+        // A shot: harder for more recoil, always a kick, never over 1.
+        let (pistol, rifle) = (shot_kick(1.0, false), shot_kick(4.5, false));
+        assert!(pistol.0 < rifle.0 && pistol.1 <= rifle.1);
+        for k in [pistol, rifle, shot_kick(9.0, false), shot_kick(4.5, true)] {
+            assert!((0.6..=1.0).contains(&k.0) && k.2 < k.0, "{k:?}");
+        }
     }
 
     fn felt_by(vr: &mut crate::vr_harness::Vr) -> Vec<Haptic> {

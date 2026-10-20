@@ -21,7 +21,9 @@ pub struct TourPlugin;
 
 impl Plugin for TourPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Tour>().add_systems(Update, tour);
+        app.init_resource::<Tour>()
+            .init_resource::<TourAt>()
+            .add_systems(Update, tour);
     }
 }
 
@@ -32,6 +34,13 @@ pub struct View {
     pub what: String,
     pub at: [f32; 3],
     pub look: [f32; 3],
+}
+
+/// The view the tour is holding the camera at, by file name (`None`
+/// between views and once done): the benchmark measures it.
+#[derive(Resource, Default)]
+pub struct TourAt {
+    pub view: Option<String>,
 }
 
 #[derive(Resource, Default)]
@@ -472,6 +481,7 @@ fn tour(
     mut cams: Query<&mut Transform, With<FreeCamera>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
+    mut at: ResMut<TourAt>,
 ) {
     let (Some(dir), Some(zone)) = (&opts.tour, zone) else {
         return;
@@ -501,6 +511,7 @@ fn tour(
         return;
     }
     let Some(view) = views.get(state.next).cloned() else {
+        at.view = None;
         exit.write(AppExit::Success);
         return;
     };
@@ -512,7 +523,11 @@ fn tour(
     if *cam != want {
         *cam = want;
         state.wait = 0;
+        at.view = None;
         return;
+    }
+    if at.view.as_ref() != Some(&view.file) {
+        at.view = Some(view.file.clone());
     }
     state.wait += 1;
     // Ground views wait for the grass round them to be built.
@@ -521,6 +536,8 @@ fn tour(
     } else {
         SETTLE
     };
+    // The benchmark holds each view longer, for steadier timings.
+    let settle = settle.max(crate::render::budget::hold());
     if state.wait < settle {
         return;
     }

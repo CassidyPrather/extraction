@@ -1,0 +1,78 @@
+// Cinder Works: the service tunnel and pump room under the works
+// (format: crates/extraction_core/src/underground.rs).
+(
+    name: "Service tunnel",
+    style: Service,
+    floor: -6.5,
+    rooms: [
+        (id: "stair_hall", at: (0.0, 10.0), size: (4.0, 3.0), height: 2.6, lamp: Dead),
+        (id: "tunnel_a", at: (0.0, 20.0), size: (3.0, 14.0), height: 2.8, lamp: Flicker, props: [
+            (kind: Rubble, at: (0.8, 4.5)),
+        ]),
+        (id: "pump_room", at: (-10.0, 22.0), size: (10.0, 10.0), height: 4.0, lamp: Steady, props: [
+            (kind: Machine, at: (-2.5, -2.5)),
+            (kind: Machine, at: (-2.5, 0.5)),
+            (kind: Machine, at: (-2.5, 3.5)),
+            (kind: Workbench, at: (4.2, -2.5), rot: 90.0, loot: Some("workshop")),
+            (kind: Shelf, at: (2.0, 4.6), rot: 180.0, loot: Some("tools")),
+            (kind: Barrel, at: (3.8, 3.8)),
+        ]),
+        (id: "valve_chamber", at: (-10.0, 34.0), size: (6.0, 5.0), height: 3.0, lamp: Flicker, props: [
+            (kind: Machine, at: (-1.2, 0.8)),
+            (kind: Cabinet, at: (-2.65, 1.5), rot: 270.0),
+        ]),
+        (id: "tunnel_b", at: (4.0, 34.0), size: (20.0, 3.0), height: 2.8),
+        (id: "switch_room", at: (10.0, 22.0), size: (6.0, 6.0), height: 2.6, lamp: Flicker, props: [
+            (kind: Cabinet, at: (0.2, 2.65), rot: 180.0),
+            (kind: Cabinet, at: (1.2, 2.65), rot: 180.0),
+            (kind: Cabinet, at: (2.2, 2.65), rot: 180.0),
+            (kind: Table, at: (-0.8, 1.6), loot: Some("gadgets")),
+            (kind: Chair, at: (-0.8, 0.85)),
+        ]),
+        (id: "store", at: (10.0, 42.0), size: (6.0, 5.0), height: 2.6, lamp: Dead, props: [
+            (kind: Shelf, at: (2.6, 0.5), rot: 90.0, loot: Some("workshop")),
+            (kind: Shelf, at: (-2.6, 0.5), rot: 270.0, loot: Some("tools")),
+            (kind: Crate, at: (-1.6, -1.6), loot: Some("ammo_common")),
+            (kind: Pallet, at: (1.4, -1.6)),
+        ]),
+        (id: "cable_vault", at: (-4.0, 44.0), size: (5.0, 6.0), height: 2.6, props: [
+            (kind: Barrel, at: (-1.6, -1.8)),
+            (kind: Barrel, at: (-1.6, -1.1)),
+            (kind: Rubble, at: (1.2, 1.6)),
+            (kind: SmallCrate, at: (-1.6, 2.2), loot: Some("gadgets")),
+        ]),
+        (id: "workshop", at: (18.0, 34.0), size: (6.0, 6.0), height: 2.6, lamp: Steady, props: [
+            (kind: Workbench, at: (2.2, 0.0), rot: 90.0, loot: Some("workshop")),
+            (kind: Locker, at: (-0.8, 2.65), rot: 180.0),
+            (kind: Shelf, at: (-1.8, -2.6), loot: Some("medical")),
+        ]),
+        // The overflow chamber: the deepest, wettest, most dangerous.
+        (id: "overflow", at: (18.0, 22.0), size: (6.0, 6.0), height: 3.2, props: [
+            (kind: Crate, at: (1.6, 1.6), loot: Some("weapons_rare")),
+            (kind: Rubble, at: (-1.4, -1.2)),
+        ]),
+    ],
+    links: [
+        (from: "stair_hall", to: "tunnel_a", doors: To),
+        (from: "tunnel_a", to: "pump_room", via: [(0.0, 22.0)], doors: To),
+        (from: "pump_room", to: "valve_chamber"),
+        (from: "valve_chamber", to: "tunnel_b", doors: To),
+        (from: "tunnel_a", to: "tunnel_b", via: [(0.0, 34.0)]),
+        (from: "tunnel_a", to: "switch_room", via: [(0.0, 22.0)], doors: To),
+        (from: "tunnel_b", to: "store", via: [(10.0, 34.0)], doors: To),
+        (from: "tunnel_b", to: "cable_vault", via: [(-4.0, 34.0)], doors: To),
+        (from: "tunnel_b", to: "workshop", doors: To),
+        (from: "switch_room", to: "overflow", doors: To),
+        (from: "overflow", to: "workshop"),
+    ],
+    anomalies: [
+        (kind: "Snare", room: "overflow", at: (0.3, 0.3), radius: 1.2),
+    ],
+    // Resident maintenance crawlers walk this round (robots::indoor).
+    patrol: ["tunnel_a", "pump_room", "valve_chamber", "tunnel_b", "workshop", "overflow", "switch_room"],
+    crawlers: 2,
+    portals: [
+        (),
+        (at: (10.0, 53.0), rot: 180.0, y: 0.0),
+    ],
+)

@@ -42,6 +42,10 @@ pub struct Scene {
     pub at: [f32; 2],
     #[serde(default)]
     pub rot: f32,
+    /// Underground: the site's floor height (world y, as
+    /// `underground::where_sites` prints it), not whatever is above.
+    #[serde(default)]
+    pub floor: Option<f32>,
     #[serde(default)]
     pub pieces: Vec<Piece>,
     #[serde(default)]
@@ -301,7 +305,9 @@ fn remains(b: &mut Builder, at: Vec3, yaw: f32, seated: bool) {
 /// Where a scene stands in the world: on whatever floor is under it, or
 /// the ground.
 pub fn pose(zone: &Zone, scene: &Scene) -> Transform {
-    let y = super::notes::rest_height(zone, scene.at[0], scene.at[1], 0.6);
+    let y = scene
+        .floor
+        .unwrap_or_else(|| super::notes::rest_height(zone, scene.at[0], scene.at[1], 0.6));
     Transform::from_xyz(scene.at[0], y, scene.at[1])
         .with_rotation(Quat::from_rotation_y(yaw(scene.rot)))
 }
@@ -466,6 +472,14 @@ mod tests {
             };
             for (id, s) in of(map) {
                 let t = pose(&zone, s);
+                if let Some(floor) = s.floor {
+                    // Underground: the site's own layout check keeps its
+                    // rooms clear; here, only that it's well below ground.
+                    if floor > zone.ground(s.at[0], s.at[1]) - 3.0 {
+                        problems.push(format!("{}: floor {floor} not underground", s.name));
+                    }
+                    continue;
+                }
                 let inside = under(Vec2::from(s.at));
                 let ground = zone.ground(s.at[0], s.at[1]);
                 if inside.is_empty() && (t.translation.y - ground).abs() > 0.01 {

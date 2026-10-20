@@ -395,6 +395,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A nave 10 x 14 with its steps at the west door, the bell tower
         // off the east end.
         "chapel" => [10.4, 19.0, 23.0],
+        // An underground site: its entrance kiosk and apron.
+        id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
     }
 }

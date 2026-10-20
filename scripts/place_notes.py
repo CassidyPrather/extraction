@@ -31,6 +31,7 @@ SPOTS = {
     "guard_booth": [(0.3, 0.6)],
     "ranger_tower": [(0.3, 0.6)],
     "factory_hall": [(-12.6 + 0.4, 7.0)],
+    "chapel": [(0.3, 14.0 * 0.5 - 1.6)],
 }
 REACH = {"ranger_tower": 8.5}
 
@@ -79,7 +80,7 @@ tidying. They took the bins. They took the bicycles. They took Mr Holm.
 
 Keep still when the little flying one looks at you. It sees you move.
 
-Tell Lev I'm not angry.
+Tell Lev I'm not angry. I've written to him as well, for when he comes.
 
 - Mum""", "Village note"),
         ("house_brick", (-20.0, 65.0), "Note", """POST OFFICE - UNDELIVERED
@@ -251,7 +252,7 @@ Every morning since, I close them at 1140.
 
 The machines wait for the gates now. They stand at the barrier, very
 patient, till I lift it.""", "Crossing keeper's note"),
-        ("house_brick", (-8.0, 150.0), "Note", """Sunday. Nobody came to the chapel
+        ("chapel", (-8.0, 150.0), "Note", """Sunday. Nobody came to the chapel
 but the machines. One of them stood at the back the whole service,
 very still, and then cleaned the windows.
 

@@ -25,4 +25,5 @@ pub mod progression;
 pub mod rocks;
 pub mod save;
 pub mod terrain;
+pub mod underground;
 pub mod unity;

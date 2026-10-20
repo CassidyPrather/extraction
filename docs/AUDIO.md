@@ -227,7 +227,7 @@ is what it did before.
 | Field dressing | `use.bandage` | — | silent |
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
-| Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less; the action clicks; a magazine seats with a knock | same |
+| Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
 | A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
@@ -236,6 +236,8 @@ is what it did before.
 | The truck leaving, with you or without | `truck.depart` | — | silent |
 | A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
 | A robot noticing you (its suspicion passing `robots::NOTICED`) | `robot.notice`: the whirr of its head snapping round, at most every 8 s per robot | — | silent |
+| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch); search sounds at most every 6 s per robot | — | silent |
+| A walker's turret settling before its first shot; a grappler winding up | `walker.aim` + `walker.aim_lock` at the muzzle, `harpoon.windup`: the 0.6-0.7 s warning, heard 43-71 m through a downpour | — | silent |
 | The convoy loading, setting off through the Gate | `convoy.loaded`, `convoy.delivered` | — | silent |
 | A dirigible overhead | `dirigible.engine`: a slow throb (the rotor loop at 0.4x), quickening as it moves, gone when wrecked | — | silent |
 | Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
@@ -246,6 +248,7 @@ is what it did before.
 | A cover deployed, folded | `cover.deploy`, `cover.fold` | — | silent |
 | The camera drone spun up, marking a robot, landing | `camera_drone.on` (switch), `camera_drone.spot` (a click in your ear), `camera_drone.land` | — | rotor loop only |
 | A zipline rigged, packed | `zip.rig` (the anchor biting), `zip.pack` | — | silent |
+| Kitchen work: chopping, grinding, kneading and stirring, a dish done | `kitchen.chop`, `kitchen.grind`, `kitchen.work` per stroke; `kitchen.done` (`raid::kitchen::Cooking`) | — | silent |
 | The bench finishing a job | `bench.done`, a small high bell | — | silent |
 | An onboarding step done | `step.done`, a light ding | a soft pulse in both hands | (new) |
 
@@ -255,8 +258,9 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** No sound yet for the kitchen's stations (beyond the
-generic click). The audit measures the dirigible's engine
+**Still open.** Nothing known. Robot sounds are recorded servos and
+clanks pitched; if they read too alike in the headset, the robots'
+synthesised voices (`docs/DESIGN.md` allows them) are the next step. The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its
