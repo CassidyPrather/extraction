@@ -4636,21 +4636,14 @@ pub fn dress_buildings(
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
-        // Years empty: some of the panes smashed (all of a ruin's), from
-        // the building's seed.
-        if super::overgrowth::enabled() {
-            let at = Vec2::new(xf.translation.x, xf.translation.z);
-            let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, &b.prefab) ^ 0x9a5e);
-            let share = if extraction_core::map::prefab_base(&b.prefab) != b.prefab {
-                1.0
-            } else {
-                0.15 + rng.f32() * 0.45
-            };
-            for d in &mut geo.props {
-                for (name, _) in &mut d.models {
-                    if *name == "window_sash" && rng.f32() < share {
-                        *name = "window_sash_broken";
-                    }
+        // Years empty: some of the panes smashed (all of a ruin's), the
+        // same as the logic's panes see them (`decay::weathered_sashes`).
+        let broken = super::decay::weathered(&geo, &b.prefab, xf);
+        let mut sash = broken.iter();
+        for d in &mut geo.props {
+            for (name, _) in &mut d.models {
+                if *name == "window_sash" && sash.next() == Some(&true) {
+                    *name = "window_sash_broken";
                 }
             }
         }

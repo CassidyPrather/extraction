@@ -468,6 +468,33 @@ pub fn setup_stains(
     commands.insert_resource(StainAssets(handles));
 }
 
+/// Which of the building `prefab` at `at`'s window sashes time has
+/// smashed: one bool per `window_sash` model, in `Geo::props` order and
+/// each prop's models in order. All of a ruin's, 15 to 60% of a house's,
+/// from the building's seed. Pure, and the same headless: Destruction's
+/// panes start broken where this says so, and `dress_buildings` swaps
+/// those sashes for `window_sash_broken`.
+pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
+    super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| weathered(&geo, prefab, at))
+}
+
+/// [`weathered_sashes`] for a prefab's geometry in hand.
+pub(super) fn weathered(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
+    let xz = Vec2::new(at.translation.x, at.translation.z);
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(xz, prefab) ^ 0x9a5e);
+    let share = if extraction_core::map::prefab_base(prefab) != prefab {
+        1.0
+    } else {
+        0.15 + rng.f32() * 0.45
+    };
+    geo.props
+        .iter()
+        .flat_map(|d| d.models.iter())
+        .filter(|(name, _)| *name == "window_sash")
+        .map(|_| rng.f32() < share)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,5 +514,19 @@ mod tests {
                 assert!(a.iter().any(|d| d.kind == Stain::Soot), "{id}: no soot");
             }
         }
+    }
+
+    /// Weathered sashes: one per sash, the same every time, all of a
+    /// ruin's and only some of a house's.
+    #[test]
+    fn weathered_sashes_are_steady() {
+        let at = Transform::from_xyz(-18.0, 0.0, 95.0);
+        let house = weathered_sashes("house_plank", &at);
+        assert!(!house.is_empty());
+        assert_eq!(house, weathered_sashes("house_plank", &at));
+        assert!(house.iter().any(|b| !b), "every pane of a house smashed");
+        let ruin = weathered_sashes("house_plank_damaged", &at);
+        assert!(!ruin.is_empty() && ruin.iter().all(|b| *b), "{ruin:?}");
+        assert!(weathered_sashes("no_such_prefab", &at).is_empty());
     }
 }
