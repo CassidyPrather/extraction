@@ -182,7 +182,17 @@ fn press_card(
         let mut rng = Rng::new(opts.seed ^ 0xCAC4E ^ requests.number as u64);
         let placed = match (&loot, &spots) {
             (Some(loot), Some(spots)) => {
-                place_cache(&mut commands, &zone, spots, loot, &catalog, &mut rng, tier)
+                let order = progression.0.order_def();
+                place_cache(
+                    &mut commands,
+                    &zone,
+                    spots,
+                    loot,
+                    &catalog,
+                    &mut rng,
+                    tier,
+                    order,
+                )
             }
             _ => None,
         };
@@ -207,6 +217,7 @@ fn press_card(
 
 /// Leaves the driver's cache at a building loot spot well away from the
 /// truck, and says where.
+#[allow(clippy::too_many_arguments)]
 fn place_cache(
     commands: &mut Commands,
     zone: &Zone,
@@ -215,6 +226,7 @@ fn place_cache(
     catalog: &Catalog,
     rng: &mut Rng,
     tier: u32,
+    order: &extraction_core::progression::Order,
 ) -> Option<(String, Vec3)> {
     let base = zone
         .marker(&MarkerKind::TruckStop)
@@ -230,10 +242,15 @@ fn place_cache(
         return None;
     }
     let at = far[rng.below(far.len())];
-    // From the third tier on the driver has more to give: a second pile.
-    let piles = if tier >= 2 { 2 } else { 1 };
-    let drops: Vec<_> = (0..piles)
-        .flat_map(|_| loot.0.roll("driver_cache", catalog, rng))
+    // From the third tier on the driver has more to give: a second pile;
+    // past the ladder, a third, of what you ordered.
+    let piles = match tier {
+        0 | 1 => 1,
+        2 | 3 => 2,
+        _ => 3,
+    };
+    let drops: Vec<_> = (0..piles * order.rolls)
+        .flat_map(|_| loot.0.roll(order.table, catalog, rng))
         .collect();
     for (i, drop) in drops.into_iter().enumerate() {
         let off = Vec3::new(
