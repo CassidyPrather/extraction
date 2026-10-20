@@ -90,6 +90,8 @@ pub struct Gait {
     pub size: f32,
     /// How far into a crouch it is, 0..1 (smoothed `Intent::low`).
     pub crouch: f32,
+    /// Seconds alive, for idle motion.
+    age: f32,
 }
 
 impl Default for Gait {
@@ -116,6 +118,7 @@ impl Default for Gait {
             steady: 0.0,
             size: 1.0,
             crouch: 0.0,
+            age: 0.0,
         }
     }
 }
@@ -459,10 +462,35 @@ pub fn step_walker(
     let lean = Vec3::Y.cross(v * 0.035 + g.accel * 0.05);
     let list = Vec3::Y.cross(rot * dead).normalize_or_zero() * 0.14;
     let haul = Vec3::Y.cross(-g.brace) * 0.18 + Vec3::Y.cross(-g.rear_dir) * 0.3 * rear_k;
+    // Lame and standing, it can't settle: it rocks onto its bad side and
+    // back, and now and then a shudder runs through it.
+    let prev_age = g.age;
+    g.age += dt;
+    let lame = if g.limp > 0.5 && !drive.down {
+        ((g.limp - 0.5) * 2.0).min(1.0) * (1.0 - (speed / (0.5 * SPEED * s)).min(1.0))
+    } else {
+        0.0
+    };
+    let bad = if dead != Vec3::ZERO {
+        dead
+    } else {
+        (0..LEGS)
+            .filter(|i| w.feet[*i].alive)
+            .min_by(|a, b| g.leg_health[*a].total_cmp(&g.leg_health[*b]))
+            .map(|i| Vec3::new(hip_offset(i).x, 0.0, hip_offset(i).z))
+            .unwrap_or(Vec3::X)
+    };
+    let rock =
+        Vec3::Y.cross(rot * bad).normalize_or_zero() * (0.05 * (g.age * 2.3).sin() + 0.02) * lame;
+    if lame > 0.2 && (prev_age * 0.31).floor() != (g.age * 0.31).floor() {
+        let k = (g.age * 12.9898).sin() * 43758.547;
+        let j = k - k.floor() - 0.5;
+        g.wobble_vel += Vec3::new(j, 0.0, 0.5 - j.abs()) * 1.6 * lame;
+    }
     let tilt = if drive.down {
         Vec3::ZERO
     } else {
-        slope + lean + list + haul
+        slope + lean + list + haul + rock
     };
     g.tilt = g.tilt.lerp(tilt.clamp_length_max(0.4), (4.0 * dt).min(1.0));
     // Wobble: a stiff, underdamped spring.
@@ -948,6 +976,44 @@ mod tests {
                 .filter(|f| f.t >= 1.0)
                 .all(|f| f.planted.y.abs() < 0.01)
         );
+    }
+
+    /// Lame and standing, it never quite settles: its tilt keeps moving.
+    #[test]
+    fn a_lame_walker_sways_where_it_stands() {
+        let flat = |_: Vec3| 0.0;
+        let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+        w.feet[3].alive = false;
+        g.leg_health[3] = 0.0;
+        g.leg_health[1] = 0.3;
+        let mut tilts = Vec::new();
+        for k in 0..(90 * 6) {
+            let drive = Drive {
+                desired: Vec3::ZERO,
+                face: None,
+                pace: 1.0,
+                down: false,
+                stunned: false,
+                low: false,
+            };
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive,
+                1.0 / 90.0,
+                &mut |_| 0.0,
+                &mut |_| {},
+            );
+            if k > 180 {
+                tilts.push((t.rotation * Vec3::Y).angle_between(Vec3::Y));
+            }
+        }
+        let (lo, hi) = tilts
+            .iter()
+            .fold((f32::MAX, 0.0f32), |(a, b), v| (a.min(*v), b.max(*v)));
+        assert!(hi - lo > 0.04, "it rocks: tilt {lo:.3}..{hi:.3}");
+        assert!(t.translation.is_finite());
     }
 
     /// A step up: feet find the top of it (the ground function stands in
