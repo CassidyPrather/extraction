@@ -305,6 +305,25 @@ the recall the machines sleep in their bays and the terminal says
 "Release procedure: NOT FOUND": nothing in them knows how to give
 anything back.
 
+## The ending
+
+The recall stops the machines; it doesn't end the story. At the recall
+Lev says he's coming next time, and leaves a note on a crate by the
+south gate where the soldiers turned bus four back. On the next raid in
+Marrow he steps down from the cab and walks behind you (`src/raid/
+epilogue.rs`), all the way to the Gate and down the intake ramp. Nothing
+moves down there now. At the tag office the intake terminal finds a
+release procedure at last ("Review: closed (recall). Kept material is
+released to next of kin on request. Request: MAREK, L."), the kept crates
+open, and when the stacks are lit he walks to bay K-14 and stands by her
+crate: "Mum." Rusty is in the small one; he takes the collar home. "Go
+on up. I'll sit with her a while." You leave when you like; the raid
+ends at the truck as any does, he's back in the cab, and on the drive
+he thanks you. After that his chair stands by the well, facing her
+house, with his note: her found, the collar on the hook with the lead.
+It's played once a career (`Stats::epilogue`); the score is silent for
+it.
+
 ## The board
 
 A cork board on the truck's right canopy wall, over the first-aid box, is
