@@ -108,6 +108,18 @@ pub enum PropKind {
     /// A wall cabinet (switchgear, first aid).
     Cabinet,
     Chair,
+    /// The Depot's: a wire bin (1.2 x 0.9 x 0.8), its loot inside.
+    Bin,
+    /// A sorting conveyor, 6 m along the turned X.
+    Conveyor,
+    /// A tagging station by the conveyor.
+    Tagger,
+    /// A "kept" crate, long (2.1 x 0.65 x 0.7), shut for good.
+    KeptCrate,
+    /// ...and a small one (0.8 x 0.5 x 0.6).
+    KeptCrateSmall,
+    /// A walker's charging cradle, its back (+Z) to the wall.
+    Cradle,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1311,14 +1323,17 @@ pub fn placed(map: &MapDef) -> Vec<Placed> {
         .collect()
 }
 
-/// Every kiosk on the surface past each site's entrance, as a footprint
-/// rectangle (world centre, yaw degrees, half extents): what the ground is
-/// levelled under and the walkers keep off, like a placement's.
-pub fn exit_footprints(map: &MapDef) -> Vec<(P2, f32, P2)> {
+/// Half extents of a kiosk's shell, walls and all: what the robots walk
+/// round (its apron they walk over).
+pub const SHELL_HALF: P2 = [KIOSK[0] + WALL * 0.5, KIOSK[1] + WALL * 0.5];
+
+/// Every kiosk of the map's sites, the entrances' too: (centre, rot).
+pub fn kiosks(map: &MapDef) -> Vec<(P2, f32)> {
     placed(map)
         .iter()
-        .flat_map(|s| s.exits())
-        .map(|(at, rot, _)| (at, rot, [FOOTPRINT[0] * 0.5, FOOTPRINT[2] * 0.5]))
+        .flat_map(|s| {
+            std::iter::once((s.at, s.rot)).chain(s.exits().into_iter().map(|e| (e.0, e.1)))
+        })
         .collect()
 }
 

@@ -99,7 +99,9 @@ fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
     zone: Res<Zone>,
-    robots: Query<&Robot>,
+    // Robots that live in a site (underground residents) aren't the
+    // director's to count: they'd use up the budget for the valley.
+    robots: Query<&Robot, Without<super::indoor::LocalNav>>,
     pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
 ) {
@@ -124,17 +126,24 @@ fn run_director(
         if active >= director.max_active {
             continue;
         }
+        let job = Job {
+            kind: JobKind::Response,
+            site: at,
+            duration: 40.0,
+            exit,
+        };
+        // Now and then a pair of hounds instead: they hunt by ear.
+        if director.rng.chance(super::hound_mind::HOUND_SHARE) && active + 2 <= director.max_active
+        {
+            info!("director: hounds to {at:.0}");
+            for k in 0..2 {
+                let side = Vec3::new(k as f32 * 2.0 - 1.0, 0.0, 0.0) * 1.5;
+                super::hound::spawn_hound(&mut commands, &zone, exit + side, job.clone());
+            }
+            continue;
+        }
         info!("director: response team to {at:.0}");
-        spawn_drone(
-            &mut commands,
-            exit + Vec3::Y * 15.0,
-            Job {
-                kind: JobKind::Response,
-                site: at,
-                duration: 40.0,
-                exit,
-            },
-        );
+        spawn_drone(&mut commands, exit + Vec3::Y * 15.0, job);
     }
     // Logistics: a dirigible brings a cargo pod to a work site and
     // grapplers walk out to guard it, one run at a time.

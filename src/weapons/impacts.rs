@@ -62,6 +62,7 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::BarkSpruce
         | Mat::BarkBirch
         | Mat::BarkPine
+        | Mat::Charred
         | Mat::Canvas => ImpactKind::Wood,
         Mat::RustyMetal
         | Mat::PaintedMetal
@@ -70,9 +71,14 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::RobotShell
         | Mat::GunMetal => ImpactKind::Metal,
         Mat::Glass => ImpactKind::Glass,
-        Mat::Brick | Mat::Plaster | Mat::Concrete | Mat::Asphalt | Mat::Boulder | Mat::Polymer => {
-            ImpactKind::Masonry
-        }
+        Mat::Brick
+        | Mat::SootBrick
+        | Mat::Plaster
+        | Mat::SootPlaster
+        | Mat::Concrete
+        | Mat::Asphalt
+        | Mat::Boulder
+        | Mat::Polymer => ImpactKind::Masonry,
     }
 }
 
@@ -82,9 +88,12 @@ pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
     match m {
         Mat::Planks | Mat::WoodFloor | Mat::Timber | Mat::Shingles | Mat::GunWood => Stuff::Planks,
         Mat::Polymer => Stuff::Planks,
-        Mat::LogWall | Mat::BarkSpruce | Mat::BarkBirch | Mat::BarkPine => Stuff::Logs,
-        Mat::Plaster => Stuff::Plaster,
-        Mat::Brick => Stuff::Brick,
+        // Charred timber is what's left of a log or a beam: still logs.
+        Mat::LogWall | Mat::BarkSpruce | Mat::BarkBirch | Mat::BarkPine | Mat::Charred => {
+            Stuff::Logs
+        }
+        Mat::Plaster | Mat::SootPlaster => Stuff::Plaster,
+        Mat::Brick | Mat::SootBrick => Stuff::Brick,
         Mat::Concrete => Stuff::Concrete,
         Mat::Asphalt | Mat::Boulder => Stuff::Rock,
         Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
@@ -99,7 +108,7 @@ pub fn kind_of_stuff(s: extraction_core::firearm_terminal::Stuff) -> ImpactKind 
     match s {
         Stuff::Planks | Stuff::Logs => ImpactKind::Wood,
         Stuff::Plaster | Stuff::Brick | Stuff::Concrete | Stuff::Rock => ImpactKind::Masonry,
-        Stuff::Sheet | Stuff::Plate => ImpactKind::Metal,
+        Stuff::Sheet | Stuff::Plate | Stuff::ArmourPlate | Stuff::Helmet => ImpactKind::Metal,
         Stuff::Glass => ImpactKind::Glass,
         Stuff::Soil => ImpactKind::Soil,
     }

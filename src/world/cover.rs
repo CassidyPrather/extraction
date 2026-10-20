@@ -69,6 +69,7 @@ fn blow(
     mut materials: ResMut<Assets<SwayMaterial>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut last: Local<Option<(f32, Vec3)>>,
 ) {
     let Some(assets) = assets else {
         return;
@@ -78,6 +79,14 @@ fn blow(
         .iter()
         .next()
         .map_or(Vec3::splat(1e6), |g| g.translation() - Vec3::Y * 1.6);
+    // Writing a material marks every mesh using it changed (re-extracted,
+    // re-specialised: ~500 meshes of cover), so only when the wind changes
+    // or the feet have moved a few centimetres. (The gusts themselves run
+    // on the shader's clock.)
+    if last.is_some_and(|(s, f)| s == strength && f.distance_squared(feet) < 0.05 * 0.05) {
+        return;
+    }
+    *last = Some((strength, feet));
     for h in [&assets.blades, &assets.fronds] {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.wind = Vec4::new(0.8, 0.6, strength, 0.8);
@@ -363,6 +372,11 @@ fn stream_cover(
                         Name::new("Ground cover"),
                         Mesh3d(meshes.add(mesh)),
                         aabb,
+                        // Its bounds are exact from the start; `blow`
+                        // rewrites the material every frame, which marks
+                        // these meshes changed and had Bevy recompute
+                        // their bounds (millions of vertices) each frame.
+                        bevy::camera::visibility::NoAutoAabb,
                         at,
                         MeshMaterial3d(if fronds {
                             assets.fronds.clone()

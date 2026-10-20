@@ -242,6 +242,12 @@
     ],
 
     placements: [
+        // Hero landmark, a collapsed ropeway from the mine yard south-east
+        // over the beck (Map design's sightline audit: fog-blind 64% -> 29%).
+        (prefab: "ropeway_station", at: (-168.0, -12.0), rot: 166.3),
+        (prefab: "ropeway_pylon", at: (-150.0, 62.0), rot: 346.3),
+        (prefab: "ropeway_pylon_down", at: (-118.0, 130.0), rot: 334.8),
+        (prefab: "ropeway_pylon", at: (-96.0, 198.0), rot: 342.1),
         // South gate.
         (prefab: "quarantine_gate", at: (120.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (127.8, 285.0), rot: 180.0),

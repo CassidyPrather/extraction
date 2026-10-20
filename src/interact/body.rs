@@ -98,9 +98,70 @@ impl Plugin for BodyPlugin {
                     toggle_backpacks,
                     backpack_released,
                     sync_backpack_visibility,
+                    slung_reach,
                 ),
             )
             .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems));
+    }
+}
+
+/// The shoulders in the torso's frame (as the arms have them; x is the
+/// right one, mirror it for the left).
+pub const SHOULDER: Vec3 = Vec3::new(0.17, 0.12, 0.03);
+/// A long gun let go this near a shoulder (front or back) goes onto that
+/// side's sling, metres.
+pub const SLING_REACH: f32 = 0.3;
+
+/// A sling slot's shoulder, from the slot's place on the torso, in the
+/// slot's frame.
+pub fn sling_shoulder(slot_at: Vec3) -> Vec3 {
+    let side = if slot_at.x < 0.0 { -1.0 } else { 1.0 };
+    SHOULDER * Vec3::new(side, 1.0, 1.0) - slot_at
+}
+
+/// A slung gun's reach zone, put there by [`slung_reach`].
+#[derive(Component)]
+pub struct SlingReach;
+
+/// A slung gun can be taken by reaching over its shoulder and gripping,
+/// as the backpack is.
+#[allow(clippy::type_complexity)]
+fn slung_reach(
+    mut commands: Commands,
+    items: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            Option<&super::InSocket>,
+            Has<SlingReach>,
+        ),
+        With<crate::items::Item>,
+    >,
+    sockets: Query<(&super::Socket, &Transform, &GlobalTransform)>,
+) {
+    for (e, gt, in_socket, has) in &items {
+        let slot = in_socket
+            .and_then(|s| sockets.get(s.socket).ok())
+            .filter(|(s, ..)| s.kind == SocketKind::Body(SlotKind::Sling));
+        match (slot, has) {
+            (Some((_, local, sgt)), _) => {
+                let shoulder = sgt.transform_point(sling_shoulder(local.translation));
+                let centre = gt.affine().inverse().transform_point3(shoulder);
+                commands.entity(e).insert((
+                    SlingReach,
+                    super::ReachZone {
+                        centre,
+                        half: Vec3::splat(0.13),
+                    },
+                ));
+            }
+            (None, true) => {
+                commands
+                    .entity(e)
+                    .remove::<(SlingReach, super::ReachZone)>();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -208,6 +269,15 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
             )
         }
         SlotKind::Mount => (Vec3::new(-0.13, 0.06, -0.12), Transform::IDENTITY, 0.08),
+        // Worn: the vest on the chest (let go mid-chest, it sits in the
+        // torso's own frame, as its worn model is drawn), the helmet on the
+        // head (from the torso's middle).
+        SlotKind::Vest => (
+            Vec3::new(0.0, -0.08, -0.02),
+            Transform::from_xyz(0.0, 0.08, 0.02),
+            0.25,
+        ),
+        SlotKind::Head => (Vec3::new(0.0, 0.43, -0.02), Transform::IDENTITY, 0.2),
     }
 }
 

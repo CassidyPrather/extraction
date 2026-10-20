@@ -32,6 +32,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from _kit import UP, ALONG_X, Wear, angle_iron, board, bolt, prop, rod  # noqa: E402
 from common import Part, RX, RY, T, fillet  # noqa: E402
 
+import _kit  # noqa: E402
+
+# Always under a building's roof: dry in the rain (seen through a doorway).
+_kit.AO_SKY = "indoors"
+
 
 def tapered_leg(p, x, z, h, bottom, top, mat):
     """A square leg tapering from `top` (side) under the table to `bottom`

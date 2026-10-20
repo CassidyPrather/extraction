@@ -45,7 +45,8 @@ impl Plugin for KitVisualsPlugin {
 /// draw nothing of their own).
 fn piece(kind: SlotKind) -> Option<&'static str> {
     match kind {
-        SlotKind::Sling => None,
+        // Worn things carry themselves.
+        SlotKind::Sling | SlotKind::Vest | SlotKind::Head => None,
         SlotKind::Holster => Some("holster"),
         SlotKind::Pouch => Some("pouch"),
         SlotKind::Pocket => Some("pocket"),
@@ -90,7 +91,7 @@ fn dress_slots(
             continue;
         };
         let size = match kind {
-            SlotKind::Sling => continue,
+            SlotKind::Sling | SlotKind::Vest | SlotKind::Head => continue,
             SlotKind::Holster => Vec3::new(0.05, 0.16, 0.06),
             SlotKind::Pouch => Vec3::new(0.07, 0.11, 0.035),
             SlotKind::Pocket | SlotKind::Mount => Vec3::new(0.06, 0.07, 0.03),

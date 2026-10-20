@@ -247,6 +247,9 @@ pub const CLEAR_SIGHT: f32 = 320.0;
 /// weather, and the longest blind stretch.
 pub const LANDMARK_SHARE: f32 = 0.7;
 pub const BLIND_GAP: f32 = 200.0;
+/// Landmarks that come in a line (a ropeway's pylons): many of one kind in
+/// sight read as one thing to follow, not as two you can't tell apart.
+pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
@@ -659,7 +662,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for (i, rc) in &rects {
         let p = &map.placements[*i];
-        if ENTERABLE.contains(&p.prefab.as_str()) {
+        if ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)) {
             targets.push((p.prefab.clone(), rc.at, geom::len(rc.half) + 3.0));
         }
     }
@@ -885,14 +888,14 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .chain(
             map.placements
                 .iter()
-                .filter(|p| ENTERABLE.contains(&p.prefab.as_str()))
+                .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
                 .map(|p| p.at),
         )
         .collect();
     let shelters: Vec<P2> = map
         .placements
         .iter()
-        .filter(|p| ENTERABLE.contains(&p.prefab.as_str()))
+        .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
         .map(|p| p.at)
         .collect();
     for route in &routes {
@@ -986,7 +989,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // which.
     for (i, (ka, pa, _)) in marks.iter().enumerate() {
         for (kb, pb, _) in marks.iter().skip(i + 1) {
-            if ka == kb && dist(*pa, *pb) < CLEAR_SIGHT {
+            if ka == kb && !SERIES.contains(&ka.as_str()) && dist(*pa, *pb) < CLEAR_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,

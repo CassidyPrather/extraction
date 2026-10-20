@@ -209,6 +209,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Glove",
     "Leather",
     "Padding",
+    // Bare hands (art/hands/lev_hand.py).
+    "Skin",
+    "Nail",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -298,6 +301,9 @@ impl ModelMaterials {
             // The gloves: the canvas scan's weave, fine, under olive-drab
             // nylon, a tan synthetic leather palm and charcoal padding. Dark
             // as worn gloves are, but never black (ART_DIRECTION: values).
+            // An old man's weathered skin; nails a little paler.
+            "Skin" => flat(materials, Color::srgb(0.6, 0.44, 0.35), 0.0, 0.62),
+            "Nail" => flat(materials, Color::srgb(0.72, 0.6, 0.53), 0.0, 0.35),
             "Glove" | "Leather" | "Padding" => {
                 let (c, rough) = match name {
                     "Glove" => (Color::srgb(0.30, 0.29, 0.23), 0.9),
@@ -431,16 +437,61 @@ pub fn spawn_primitives(
     commands: &mut Commands,
     parent: Entity,
     node: &ModelNode,
+    material: impl FnMut(Option<&str>) -> Handle<StandardMaterial>,
+) {
+    spawn_primitives_ranged(commands, parent, node, None, material);
+}
+
+/// [`spawn_primitives`], each mesh drawn only within `range` if given.
+pub fn spawn_primitives_ranged(
+    commands: &mut Commands,
+    parent: Entity,
+    node: &ModelNode,
+    range: Option<bevy::camera::visibility::VisibilityRange>,
     mut material: impl FnMut(Option<&str>) -> Handle<StandardMaterial>,
 ) {
     for p in &node.primitives {
-        commands.spawn((
+        let mut e = commands.spawn((
             Mesh3d(p.mesh.clone()),
             MeshMaterial3d(material(p.material.as_deref())),
             Transform::IDENTITY,
             ChildOf(parent),
         ));
+        if let Some(r) = range.clone() {
+            e.insert(r);
+        }
     }
+}
+
+/// Where an item model with a far stand-in swaps to it (metres from the
+/// camera), cross-fading over a metre.
+pub const ITEM_LOD: f32 = 6.0;
+
+/// The draw range of a node in an item model that has `<name>_lod1`
+/// stand-ins (`has_lods`): the stand-ins only past [`ITEM_LOD`], the rest
+/// only nearer. None (always drawn) in a model without them.
+pub fn item_lod_range(
+    name: &str,
+    has_lods: bool,
+) -> Option<bevy::camera::visibility::VisibilityRange> {
+    use bevy::camera::visibility::VisibilityRange;
+    if !has_lods {
+        return None;
+    }
+    let fade = (ITEM_LOD - 0.5)..(ITEM_LOD + 0.5);
+    Some(if name.ends_with("_lod1") {
+        VisibilityRange {
+            start_margin: fade,
+            end_margin: 1.0e4..1.0e4,
+            use_aabb: false,
+        }
+    } else {
+        VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: fade,
+            use_aabb: false,
+        }
+    })
 }
 
 pub struct ModelsPlugin;
@@ -455,6 +506,19 @@ impl Plugin for ModelsPlugin {
 #[cfg(test)]
 mod tests {
     use super::MATERIAL_NAMES;
+
+    /// A model's far stand-in takes over where its full mesh stops; a
+    /// model without stand-ins is drawn at any distance.
+    #[test]
+    fn item_lods_hand_over_at_one_distance() {
+        use super::{ITEM_LOD, item_lod_range};
+        assert!(item_lod_range("vest", false).is_none());
+        let near = item_lod_range("vest", true).unwrap();
+        let far = item_lod_range("vest_lod1", true).unwrap();
+        assert_eq!(near.end_margin, far.start_margin);
+        assert!(near.end_margin.contains(&ITEM_LOD));
+        assert_eq!(near.start_margin, 0.0..0.0);
+    }
     use std::path::Path;
 
     /// The material names in a .glb's JSON chunk.

@@ -20,7 +20,11 @@ pub const MAX_SLOPE: f32 = 32.0;
 /// the lint also builds a stricter one for comfortable walking).
 pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
     let mut g = NavGrid::from_heightmap(hm, CELL, max_slope);
-    for p in &map.placements {
+    for p in map
+        .placements
+        .iter()
+        .filter(|p| !crate::underground::is_site(&p.prefab))
+    {
         let f = prefab_footprint(&p.prefab);
         g.block(
             Obstacle::Rect {
@@ -31,12 +35,13 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
             0.6,
         );
     }
-    // Underground sites' exit kiosks stand on the surface like placements.
-    for (at, rot, half) in crate::underground::exit_footprints(map) {
+    // Underground sites' kiosks stand on the surface like placements (the
+    // shells: their aprons are open ground).
+    for (at, rot) in crate::underground::kiosks(map) {
         g.block(
             Obstacle::Rect {
                 at,
-                half,
+                half: crate::underground::SHELL_HALF,
                 yaw: rot.to_radians(),
             },
             0.6,

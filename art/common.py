@@ -95,6 +95,9 @@ MATERIALS = {
     "Glove": ((0.30, 0.29, 0.23), 0.0, 0.9, None),
     "Leather": ((0.33, 0.27, 0.2), 0.0, 0.7, None),
     "Padding": ((0.17, 0.17, 0.16), 0.0, 0.75, None),
+    # Bare hands (art/hands/lev_hand.py).
+    "Skin": ((0.62, 0.45, 0.36), 0.0, 0.6, None),
+    "Nail": ((0.75, 0.62, 0.55), 0.0, 0.35, None),
 }
 
 
@@ -904,7 +907,7 @@ def report():
     return total
 
 
-def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40):
+def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40, apart=(), sky=False):
     """Bake ambient occlusion into each mesh's `AO` colour attribute (per
     face corner), which `export(colors=True)` writes as COLOR_0 and the game's
     materials multiply in: corners, undersides and the gaps between boards
@@ -915,24 +918,45 @@ def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40):
     would come out black. So each corner is sampled a little in from the
     corner, and a ray that leaves from inside a piece (meeting the back of
     a face first) doesn't count. Stored as 1 - strength * occlusion, so
-    nothing goes black."""
+    nothing goes black.
+
+    `apart` names sets of objects (by name prefix) that share a place but
+    never show together, a revolver's rounds and its empty cases: each set
+    is baked without the others in the way. Objects in no set see the
+    first set.
+
+    With `sky`, alpha says whether rain falls on the corner: 1 in the open,
+    0 under anything of the model's own overhead (one ray straight up, as
+    `src/world/ao.rs` does for buildings); the game's wet-weather shading
+    reads it. `sky="indoors"` is 0 everywhere: furniture, always under a
+    building's roof. Otherwise alpha is 1."""
     import random as _random
 
     from mathutils.bvhtree import BVHTree
 
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    verts, polys = [], []
-    for o in objs:
-        m = o.matrix_world
-        base = len(verts)
-        verts += [m @ v.co for v in o.data.vertices]
-        polys += [[base + i for i in p.vertices] for p in o.data.polygons]
-    if ground:
-        g = len(verts)
-        verts += [Vector((-50, -50, -0.001)), Vector((50, -50, -0.001)),
-                  Vector((50, 50, -0.001)), Vector((-50, 50, -0.001))]
-        polys.append([g, g + 1, g + 2, g + 3])
-    tree = BVHTree.FromPolygons(verts, polys)
+
+    def group(o):
+        return next((k for k, pre in enumerate(apart) if o.name.startswith(pre)), None)
+
+    def build(seen):
+        """A BVH of the objects set `seen` sees (and the floor)."""
+        verts, polys = [], []
+        for o in objs:
+            g = group(o)
+            if g is not None and g != seen:
+                continue
+            m = o.matrix_world
+            base = len(verts)
+            verts += [m @ v.co for v in o.data.vertices]
+            polys += [[base + i for i in p.vertices] for p in o.data.polygons]
+        if ground:
+            g = len(verts)
+            verts += [Vector((-50, -50, -0.001)), Vector((50, -50, -0.001)),
+                      Vector((50, 50, -0.001)), Vector((-50, 50, -0.001))]
+            polys.append([g, g + 1, g + 2, g + 3])
+        return BVHTree.FromPolygons(verts, polys)
+    trees = {}
     rng = _random.Random(7)
     # Cosine-weighted directions about +Z, turned to each face's normal.
     dirs = []
@@ -941,6 +965,11 @@ def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40):
         r, a = math.sqrt(u), 2 * math.pi * v
         dirs.append(Vector((r * math.cos(a), r * math.sin(a), math.sqrt(max(0.0, 1 - u)))))
     for o in objs:
+        seen = group(o) if apart else None
+        seen = 0 if apart and seen is None else seen
+        if seen not in trees:
+            trees[seen] = build(seen)
+        tree = trees[seen]
         me = o.data
         m = o.matrix_world
         rot = m.to_3x3()
@@ -962,7 +991,15 @@ def bake_ao(ground=True, distance=0.6, strength=0.75, rays=40):
                         hit += 1.0 - dist / distance
                 occ = hit / rays
                 v = 1.0 - strength * min(1.0, occ * 2.0)
-                attr.data[li].color = (v, v, v, 1.0)
+                a = 1.0
+                if sky == "indoors":
+                    a = 0.0
+                elif sky:
+                    # Blender's up is +Z.
+                    loc, _, _, _ = tree.ray_cast(at + Vector((0, 0, 0.01)), Vector((0, 0, 1)),
+                                                 200.0)
+                    a = 0.0 if loc is not None else 1.0
+                attr.data[li].color = (v, v, v, a)
 
 
 def export(rel_path, colors=False):

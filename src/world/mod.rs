@@ -13,6 +13,7 @@ pub mod puddles;
 pub mod rain;
 pub mod rocks;
 pub mod scenes;
+pub mod shafts;
 pub mod sky;
 pub mod story;
 pub mod structures;
@@ -167,6 +168,10 @@ fn init_zone(mut commands: Commands, opts: Res<LaunchOptions>) {
     commands.insert_resource(zone);
 }
 
+/// The ground's collider (one heightfield for the whole map).
+#[derive(Component)]
+pub struct TerrainCollider;
+
 /// The ground: one heightfield collider for the whole map.
 fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     let hm = &zone.hm;
@@ -202,6 +207,7 @@ fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     }
     commands.spawn((
         Name::new("Terrain collider"),
+        TerrainCollider,
         RigidBody::Static,
         collider,
         CollisionLayers::new(Layer::World, LayerMask::ALL),
@@ -222,9 +228,11 @@ impl Plugin for WorldVisualsPlugin {
             water::WaterPlugin,
             trees::TreesPlugin,
             notes::NotesPlugin,
+            scenes::ScenesVisualsPlugin,
             rocks::RockVisualsPlugin,
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
+            shafts::ShaftsPlugin,
         ));
     }
 }

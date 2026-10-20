@@ -155,6 +155,45 @@ pub const THREAD: &[Lead] = &[
             (M, "The well"),
         ],
     },
+    // The Depot: what the convoys keep.
+    Lead {
+        map: M,
+        note: "Hauler's tag",
+        mentions: &[(M, "Depot office terminal"), (M, "Village")],
+    },
+    Lead {
+        map: M,
+        note: "Review docket",
+        mentions: &[
+            (M, "Depot office terminal"),
+            (C, "Inspector's letter"),
+            (M, "Valley office copy"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Marek tag",
+        mentions: &[
+            (M, "Hana's last page"),
+            (M, "Basket note"),
+            (M, "Valley office copy"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Dog's tag",
+        mentions: &[(M, "Rusty's note"), (M, "Marek tag")],
+    },
+    Lead {
+        map: M,
+        note: "Holm tag",
+        mentions: &[(M, "Shelter note"), (M, "Village note"), (M, "Marek tag")],
+    },
+    Lead {
+        map: M,
+        note: "Vey tag",
+        mentions: &[(M, "Survey log"), (M, "Stake readings"), (M, "The Hollow")],
+    },
     Lead {
         map: M,
         note: "Barricade note",
@@ -654,6 +693,20 @@ mod tests {
     /// them clear of the CRT's own wrap.
     #[test]
     fn terminal_pages_keep_their_shape() {
+        for s in crate::world::scenes::all() {
+            let Some(t) = &s.terminal else {
+                continue;
+            };
+            for page in t.pages.iter().chain(&t.recalled) {
+                let lines = page.lines().count();
+                let widest = page.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+                assert!(
+                    lines <= 12 && widest <= 32,
+                    "{}: {lines} lines, {widest} wide",
+                    s.name
+                );
+            }
+        }
         for name in VALLEYS {
             for m in &map(name).markers {
                 let MarkerKind::Terminal { pages } = &m.kind else {

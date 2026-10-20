@@ -48,6 +48,9 @@ enum Step {
     Out2,
     Heard,
     Drone,
+    Underground,
+    Upstairs,
+    Lamed,
     Home2,
     Out3,
     Down,
@@ -78,6 +81,13 @@ pub struct Run {
     /// Walks to a door, and drones sent, for the drone's moment.
     walks: u32,
     drones: u32,
+    /// The torch for below ground, and its cell (seated once).
+    torch: Option<(Entity, Entity)>,
+    seated: bool,
+    /// The walker to lame.
+    walker: Option<Entity>,
+    /// When it last put a dressing on.
+    dressed: f32,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -202,6 +212,55 @@ pub(super) fn direct(
                 None => ("fight it (no cover)", vec![Task::Engage { shots: 30 }]),
             },
             First::LostYou => ("stay low a while", vec![]),
+            // The torch on, and down at a walk (the bot doesn't run).
+            First::Underground => ("torch on, go slow", vec![Task::Use(Side::Left)]),
+            // Away from it: it can't follow. Out of its sight, behind the
+            // kiosk (in the open, it shot the bot walking off).
+            First::Lamed => {
+                let from = run
+                    .walker
+                    .and_then(|w| world.robot_at(w))
+                    .map_or(here + Vec2::Y, |w| w.xz());
+                match world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
+                    Some(k) => {
+                        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 5.0;
+                        let side = k.centre
+                            + (here - k.centre)
+                                .reject_from(k.centre - from)
+                                .normalize_or(Vec2::Y)
+                                * 4.0;
+                        (
+                            "walk away from it, out of its sight",
+                            vec![
+                                Task::WalkTo {
+                                    to: side,
+                                    within: 1.0,
+                                },
+                                Task::WalkTo {
+                                    to: behind,
+                                    within: 1.0,
+                                },
+                            ],
+                        )
+                    }
+                    None => (
+                        "walk away from it",
+                        vec![Task::WalkTo {
+                            to: here + (here - from).normalize_or(Vec2::Y) * 30.0,
+                            within: 2.0,
+                        }],
+                    ),
+                }
+            }
+            // A dressing from its kit, on (setup gives it one, as the
+            // crate would).
+            First::Bleeding => {
+                run.dressed = now;
+                (
+                    "dressing on it",
+                    world.dress(&mut commands, root.translation),
+                )
+            }
             First::Death => ("go back for it", vec![]),
             _ => ("", vec![]),
         };
@@ -219,11 +278,32 @@ pub(super) fn direct(
                 bot.tasks.push_front(t);
             }
             bot.elapsed = 0.0;
-            let wait = if *f == First::DroneLock { 60.0 } else { 45.0 };
+            let wait = match f {
+                First::DroneLock => 60.0,
+                First::Underground | First::Lamed => 25.0,
+                _ => 45.0,
+            };
             run.pending.push((row, now + wait));
         } else {
             run.pending.push((row, now + 3.0));
         }
+    }
+    // Told once, it dresses every wound after (as anyone would).
+    if firsts.met(First::Bleeding)
+        && world.alive(player)
+        && world.bleeding(player) > 0.3
+        && now - run.dressed > 8.0
+    {
+        run.dressed = now;
+        bot.log.push("  (bleeding again: dressing on it)".into());
+        for t in world
+            .dress(&mut commands, root.translation)
+            .into_iter()
+            .rev()
+        {
+            bot.tasks.push_front(t);
+        }
+        bot.elapsed = 0.0;
     }
     // Get low for the machine that heard you, and in cover.
     let low = run
@@ -253,10 +333,23 @@ pub(super) fn direct(
             First::DroneLock => {
                 world.alive(player) && (world.drones_down() || world.no_one_engaging())
             }
+            First::Underground => {
+                world.alive(player) && run.torch.is_some_and(|(t, _)| world.lit(t))
+            }
+            First::Bleeding => world.alive(player) && world.bleeding(player) == 0.0,
+            First::Lamed => {
+                world.alive(player)
+                    && run
+                        .walker
+                        .and_then(|w| world.robot_at(w))
+                        // It may limp a little way to look; it doesn't
+                        // come after you.
+                        .is_none_or(|w| w.xz().distance(here) > 8.0)
+            }
             _ => true,
         };
         let early = match r.first {
-            First::Heard => false,
+            First::Heard | First::Underground | First::Lamed => false,
             First::DroneLock => world.drones_down(),
             _ => true,
         };
@@ -270,7 +363,7 @@ pub(super) fn direct(
                     bot.log
                         .push("  (clock wound back for the walk home)".into());
                 }
-                First::Heard | First::DroneLock => {
+                First::Heard | First::DroneLock | First::Lamed => {
                     // The field cleared for what comes next.
                     for e in world.robot_entities() {
                         commands.entity(e).despawn();
@@ -472,7 +565,7 @@ pub(super) fn direct(
                 .is_some_and(|e| world.guns.get(e).is_ok());
             if !armed && run.tries < 2 {
                 // A rifle and a magazine, if what it had is gone.
-                world.drop_kit(&mut commands, root.translation);
+                let _ = world.drop_kit(&mut commands, root.translation);
                 tasks.push(Wait(0.5));
                 tasks.push(PickUp {
                     id: "ak74".into(),
@@ -487,15 +580,15 @@ pub(super) fn direct(
                 tasks.push(Gun(MacroKind::Mode));
                 run.tries += 1;
             } else if world.held_condition(player) < 0.5 && run.tries < 2 {
-                // Not a drone with a worn rifle: the worn one on the sling,
-                // a sound one in hand.
-                world.drop_kit(&mut commands, root.translation);
-                tasks.push(Stow(Side::Right));
+                // Not a drone with a worn rifle: the worn one set down, a
+                // sound one in hand.
+                let fresh = world.drop_kit(&mut commands, root.translation);
+                tasks.push(Release(Side::Right));
                 tasks.push(Wait(0.5));
-                tasks.push(PickUp {
-                    id: "ak74".into(),
+                tasks.extend(fresh.first().map(|&item| Grab {
+                    item,
                     side: Side::Right,
-                });
+                }));
                 tasks.push(PickUp {
                     id: "ak_mag".into(),
                     side: Side::Left,
@@ -511,10 +604,6 @@ pub(super) fn direct(
             {
                 // Met by a house, as most of the Zone is: walk up to a
                 // door first.
-                bot.log.push(format!(
-                    "  (to a door at {:.1}, inside {:.1}, corner {:.1})",
-                    s.outside, s.inside, s.corner
-                ));
                 let mut from = here;
                 for to in s.round.iter().chain([&s.outside]) {
                     tasks.extend(world.legs(from, to.xz()));
@@ -537,6 +626,125 @@ pub(super) fn direct(
                 tasks.push(Wait(10.0));
                 run.drones += 1;
             } else {
+                advance(&mut run, Step::Underground);
+            }
+        }
+        Step::Underground => {
+            let way = world.stair(here);
+            if firsts.met(First::Underground) || run.tries >= 4 || way.is_none() {
+                advance(&mut run, Step::Upstairs);
+            } else if run.torch.is_none() {
+                // A torch from the crate, its cell in.
+                run.torch = world.drop_torch(&mut commands, root.translation);
+                tasks.push(Wait(0.5));
+            } else if world.holding(Side::Left) != run.torch.map(|t| t.0) {
+                let (torch, cell) = run.torch.unwrap();
+                if !run.seated {
+                    run.seated = true;
+                    seat_cell(&mut commands, torch, cell);
+                }
+                tasks.extend([
+                    Stow(Side::Left),
+                    Grab {
+                        item: torch,
+                        side: Side::Left,
+                    },
+                ]);
+                run.tries += 1;
+            } else if let Some(w) = way {
+                // Round the kiosk to its door, in, and down the stair.
+                let mut from = here;
+                for to in w.round.iter().chain([&w.outside]) {
+                    tasks.extend(world.legs(from, *to));
+                    from = *to;
+                }
+                if let Some(d) = w.door.filter(|d| !world.door_open(*d)) {
+                    tasks.push(OpenDoor(d));
+                }
+                for to in [w.inside, w.top, w.down] {
+                    tasks.push(WalkTo { to, within: 0.6 });
+                }
+                run.tries += 1;
+            }
+        }
+        Step::Upstairs => {
+            // Back up and out, the way it came.
+            match world.stair(here) {
+                Some(w) if run.tries < 2 && w.outside.distance(here) > 2.0 => {
+                    for to in [w.top, w.inside, w.outside] {
+                        tasks.push(WalkTo { to, within: 0.8 });
+                    }
+                    run.tries += 1;
+                }
+                _ => advance(&mut run, Step::Lamed),
+            }
+        }
+        Step::Lamed => {
+            let leg = run.walker.and_then(|w| world.leg_of(w, root.translation));
+            if firsts.met(First::Lamed) || run.tries >= 25 {
+                // Not left about for the walk back for its kit.
+                if let Some(w) = run.walker {
+                    commands.entity(w).try_despawn();
+                }
+                // Out from behind the kiosk, round it (not through it).
+                if let Some(k) = world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
+                    let mut from = here;
+                    for to in k.round.iter().chain([&k.outside]) {
+                        tasks.extend(world.legs(from, *to));
+                        from = *to;
+                    }
+                }
+                advance(&mut run, Step::Home2);
+            } else if run.walker.is_none() {
+                // A walker at work in the open, 12 m off.
+                let at = here + Vec2::new(-12.0, 0.0);
+                let site = world.zone.on_ground(at.x, at.y);
+                run.walker = Some(crate::robots::walker::spawn_walker(
+                    &mut commands,
+                    &world.zone,
+                    site,
+                    crate::robots::Job {
+                        kind: crate::robots::JobKind::Survey,
+                        site,
+                        duration: 600.0,
+                        exit: site + Vec3::new(0.0, 0.0, -300.0),
+                    },
+                ));
+                // A full magazine in, for it (and a sound rifle if this
+                // one's worn: it jams).
+                if world.held_condition(player) < 0.5 {
+                    let fresh = world.drop_items(&mut commands, root.translation, &["ak74"]);
+                    tasks.extend([Release(Side::Right), Wait(0.5)]);
+                    tasks.extend(fresh.first().map(|&item| Grab {
+                        item,
+                        side: Side::Right,
+                    }));
+                }
+                let _ = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
+                tasks.extend([
+                    Wait(0.5),
+                    Stow(Side::Left),
+                    PickUp {
+                        id: "ak_mag".into(),
+                        side: Side::Left,
+                    },
+                    Stow(Side::Left),
+                    Gun(MacroKind::Reload),
+                    Wait(1.0),
+                ]);
+            } else if let Some(leg) = leg {
+                // Single aimed shots at a leg (a leg is thin).
+                if world.gun_clear(player) == Some(false) {
+                    tasks.push(Gun(MacroKind::Rack));
+                } else if world.mode(player) != Some(extraction_core::firearm::FireMode::Semi) {
+                    tasks.push(Gun(MacroKind::Mode));
+                } else {
+                    tasks.push(Fire { at: leg, shots: 1 });
+                }
+                run.tries += 1;
+            } else {
+                bot.log
+                    .push("  (the walker's gone: no leg to shoot at)".into());
                 advance(&mut run, Step::Home2);
             }
         }
@@ -619,6 +827,9 @@ fn report(bot: &mut Bot, rows: &[Row]) {
         First::PackFull,
         First::Surge,
         First::Heard,
+        First::DroneLock,
+        First::Underground,
+        First::Lamed,
         First::Death,
     ];
     let missing: Vec<_> = wanted
@@ -678,6 +889,47 @@ pub(super) struct World2<'w, 's> {
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+    door_at: Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
+    robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
+    parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
+    lit: Query<'w, 's, (), With<crate::gadgets::Powered>>,
+}
+
+/// Down a site's stair: outside its kiosk, in at the door, the top step
+/// and the foot (world xz), and the kiosk's door.
+struct StairWay {
+    /// The kiosk's middle.
+    centre: Vec2,
+    /// Round the kiosk to its door, from behind or beside it.
+    round: Vec<Vec2>,
+    outside: Vec2,
+    inside: Vec2,
+    top: Vec2,
+    down: Vec2,
+    door: Option<Entity>,
+}
+
+/// A cell into a torch's socket, as a hand would seat it.
+fn seat_cell(commands: &mut Commands, torch: Entity, cell: Entity) {
+    commands.queue(move |world: &mut World| {
+        let socket = world
+            .query::<(Entity, &crate::interact::SocketOwner)>()
+            .iter(world)
+            .find(|(_, o)| o.0 == torch)
+            .map(|(e, _)| e);
+        let Some(socket) = socket else {
+            return;
+        };
+        let mut q =
+            bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
+                world,
+            );
+        let (mut c, mut sockets) = q.get_mut(world).unwrap();
+        if let Ok(mut s) = sockets.get_mut(socket) {
+            crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+        }
+        q.apply(world);
+    });
 }
 
 /// A house to get into: outside its nearest door, just in, and a spot
@@ -711,17 +963,20 @@ impl World2<'_, '_> {
         Some(self.holding(side).is_none())
     }
 
+    /// The gun in the right hand (not one on the sling).
+    fn held_gun(&self, player: Entity) -> Option<(&crate::weapons::Gun, &Held)> {
+        self.holding(Side::Right)
+            .and_then(|e| self.guns.get(e).ok())
+            .filter(|(_, h)| h.player == player)
+    }
+
     fn held_condition(&self, player: Entity) -> f32 {
-        self.guns
-            .iter()
-            .find(|(_, h)| h.player == player)
+        self.held_gun(player)
             .map_or(1.0, |(g, _)| g.firearm.condition)
     }
 
     fn gun_clear(&self, player: Entity) -> Option<bool> {
-        self.guns
-            .iter()
-            .find(|(_, h)| h.player == player)
+        self.held_gun(player)
             .map(|(g, _)| g.firearm.malfunction.is_none())
     }
 
@@ -806,8 +1061,14 @@ impl World2<'_, '_> {
     }
 
     /// A rifle and a full magazine at the bot's feet.
-    fn drop_kit(&self, commands: &mut Commands, at: Vec3) {
-        for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
+    fn drop_kit(&self, commands: &mut Commands, at: Vec3) -> Vec<Entity> {
+        self.drop_items(commands, at, &["ak74", "ak_mag"])
+    }
+
+    /// Things from the crate set down by the bot (magazines full).
+    fn drop_items(&self, commands: &mut Commands, at: Vec3, ids: &[&str]) -> Vec<Entity> {
+        let mut out = Vec::new();
+        for (k, id) in ids.iter().copied().enumerate() {
             let Some(kind) = self.catalog.kind(id) else {
                 continue;
             };
@@ -829,7 +1090,9 @@ impl World2<'_, '_> {
                     }
                 });
             }
+            out.push(e);
         }
+        out
     }
 
     /// The nearest radio lying loose.
@@ -884,6 +1147,23 @@ impl World2<'_, '_> {
 
     fn robot_entities(&self) -> Vec<Entity> {
         self.robots.iter().map(|(e, ..)| e).collect()
+    }
+
+    /// A dressing from its kit (set down, as from the crate), in the left
+    /// hand, used.
+    fn dress(&self, commands: &mut Commands, at: Vec3) -> Vec<Task> {
+        let dressing = self.drop_items(commands, at, &["field_dressing"]);
+        let mut t = vec![Task::Stow(Side::Left), Task::Wait(0.5)];
+        t.extend(dressing.first().map(|&item| Task::Grab {
+            item,
+            side: Side::Left,
+        }));
+        t.push(Task::Use(Side::Left));
+        t
+    }
+
+    fn bleeding(&self, player: Entity) -> f32 {
+        self.health.get(player).map_or(0.0, |h| h.bleeding)
     }
 
     fn alive(&self, player: Entity) -> bool {
@@ -1073,6 +1353,95 @@ impl World2<'_, '_> {
             outside: ground(e.mid + e.out * 1.6),
             inside: ground(e.mid - e.out * 1.2),
             corner: ground(corner),
+        })
+    }
+
+    fn robot_at(&self, robot: Entity) -> Option<Vec3> {
+        self.robot_at.get(robot).ok().map(|g| g.translation())
+    }
+
+    /// Where a leg of this robot is, if it has one left.
+    /// The nearest leg to `from` (the far ones are behind the body), up
+    /// the shin toward the knee: its middle is low enough that a shot
+    /// skims the ground.
+    fn leg_of(&self, robot: Entity, from: Vec3) -> Option<Vec3> {
+        self.parts
+            .iter()
+            .filter(|(p, _)| {
+                p.robot == robot && p.alive() && matches!(p.role, crate::robots::PartRole::Leg(_))
+            })
+            .map(|(_, g)| g.transform_point(Vec3::Y * 0.3))
+            .min_by(|a, b| a.distance(from).total_cmp(&b.distance(from)))
+    }
+
+    fn mode(&self, player: Entity) -> Option<extraction_core::firearm::FireMode> {
+        self.held_gun(player).map(|(g, _)| g.firearm.fire_mode())
+    }
+
+    fn lit(&self, item: Entity) -> bool {
+        self.lit.get(item).is_ok()
+    }
+
+    fn drop_torch(&self, commands: &mut Commands, at: Vec3) -> Option<(Entity, Entity)> {
+        let mut spawn = |id: &str, dx: f32| {
+            let kind = self.catalog.kind(id)?;
+            Some(crate::items::spawn_item(
+                commands,
+                &self.catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at + Vec3::new(dx, 1.0, -0.4)),
+                    condition: 1.0,
+                },
+            ))
+        };
+        Some((spawn("flashlight", 0.4)?, spawn("power_cell", 0.6)?))
+    }
+
+    /// The nearest kiosk of the nearest underground site, within 250 m.
+    fn stair(&self, near: Vec2) -> Option<StairWay> {
+        use extraction_core::underground as ug;
+        let site = ug::placed(&self.zone.map)
+            .into_iter()
+            .map(|s| (Vec2::from(s.at).distance(near), s))
+            .filter(|(d, _)| *d < 250.0)
+            .min_by(|a, b| a.0.total_cmp(&b.0))?
+            .1;
+        let r = ug::raster(&site.id)?;
+        let w = |p: &ug::Portal, x: f32, z: f32| Vec2::from(site.to_world(p.to_site([x, z])));
+        let (k, portal) = r.portals.iter().enumerate().min_by(|a, b| {
+            w(a.1, 0.0, 0.0)
+                .distance(near)
+                .total_cmp(&w(b.1, 0.0, 0.0).distance(near))
+        })?;
+        let stair = r.stairs.get(k)?;
+        let door_at = w(portal, 0.0, -ug::KIOSK[1]);
+        let door = self
+            .door_at
+            .iter()
+            .map(|(e, g)| (e, g.translation().xz().distance(door_at)))
+            .filter(|(_, d)| *d < 2.5)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(e, _)| e);
+        // Portal space: the stair runs +z, the door at -z.
+        let q = portal.to_portal(site.to_site([near.x, near.y]));
+        let (hx, hz) = (ug::KIOSK[0] + 2.5, ug::KIOSK[1] + 2.5);
+        let side = if q[0] < 0.0 { -1.0 } else { 1.0 };
+        let mut round = Vec::new();
+        if q[1] > -hz + 2.5 {
+            if q[0].abs() < hx {
+                round.push(w(portal, side * hx, hz));
+            }
+            round.push(w(portal, side * hx, -hz));
+        }
+        Some(StairWay {
+            centre: w(portal, 0.0, 0.0),
+            round,
+            outside: w(portal, 0.0, -ug::KIOSK[1] - 2.0),
+            inside: w(portal, 0.0, -ug::KIOSK[1] + 0.8),
+            top: w(portal, 0.0, ug::STAIR_TOP + 0.4),
+            down: w(portal, 0.0, stair.bottom + 0.6),
+            door,
         })
     }
 

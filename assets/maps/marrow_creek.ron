@@ -222,6 +222,8 @@
     ],
 
     placements: [
+        // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
+        (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
         // South gate: the fence and the truck pull-in.
         (prefab: "quarantine_gate", at: (40.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (47.8, 285.0), rot: 180.0),

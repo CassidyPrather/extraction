@@ -17,11 +17,14 @@ fn listen(mut s: MessageReader<Searching>, mut heard: ResMut<Heard>) {
 }
 
 fn app(weather: Option<&str>) -> (App, Entity, Zone) {
-    let opts = crate::LaunchOptions {
+    app_with(crate::LaunchOptions {
         robots: false,
         weather: weather.map(Into::into),
         ..Default::default()
-    };
+    })
+}
+
+fn app_with(opts: crate::LaunchOptions) -> (App, Entity, Zone) {
     let mut app = crate::headless_app(opts, false);
     app.init_resource::<Heard>().add_systems(Last, listen);
     app.finish();
@@ -492,49 +495,7 @@ fn in_the_dark_a_torch_gives_you_away() {
         );
     }
     // A lit torch at the head, pointed at the crawler.
-    let catalog = app.world().resource::<crate::items::Catalog>().clone();
-    let mut queue = CommandQueue::default();
-    let (torch, cell) = {
-        let mut c = Commands::new(&mut queue, app.world());
-        let mut spawn = |id: &str| {
-            crate::items::spawn_item(
-                &mut c,
-                &catalog,
-                crate::items::SpawnItem {
-                    kind: catalog.kind(id).unwrap(),
-                    transform: Transform::from_translation(me + Vec3::Y * 1.5),
-                    condition: 1.0,
-                },
-            )
-        };
-        (spawn("flashlight"), spawn("power_cell"))
-    };
-    queue.apply(app.world_mut());
-    app.update();
-    let socket = app
-        .world_mut()
-        .query::<(Entity, &crate::interact::SocketOwner)>()
-        .iter(app.world())
-        .find(|(_, o)| o.0 == torch)
-        .map(|(e, _)| e)
-        .expect("the torch's cell socket");
-    {
-        let mut q =
-            bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
-                app.world_mut(),
-            );
-        let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
-        let mut s = sockets.get_mut(socket).unwrap();
-        crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
-        q.apply(app.world_mut());
-    }
-    app.world_mut()
-        .entity_mut(torch)
-        .insert(avian3d::prelude::RigidBody::Kinematic);
-    app.world_mut().write_message(crate::items::usage::UseItem {
-        player: Entity::PLACEHOLDER,
-        item: torch,
-    });
+    let torch = lit_torch(&mut app, me);
     let aim = Transform::from_translation(me + Vec3::Y * 1.5).looking_at(centre + Vec3::Y, Vec3::Y);
     let mut seen = false;
     for _ in 0..90 * 5 {
@@ -741,4 +702,376 @@ fn a_wrecked_crawler_does_not_block_the_way() {
         app.update();
     }
     assert!(!blocks(&mut app), "its wreck isn't");
+}
+
+fn hound_at(app: &mut App, zone: &Zone, at: Vec3, site: Vec3, kind: JobKind) -> Entity {
+    let mut queue = CommandQueue::default();
+    let h = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            zone,
+            at,
+            Job {
+                kind,
+                site,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..30 {
+        app.update();
+    }
+    h
+}
+
+#[derive(Resource, Default)]
+struct HoundLog {
+    crouch: Option<f32>,
+    bite: Option<f32>,
+}
+
+fn hound_log(
+    mut c: MessageReader<super::hound_mind::HoundCrouch>,
+    mut b: MessageReader<super::hound_mind::HoundBite>,
+    time: Res<Time>,
+    mut log: ResMut<HoundLog>,
+) {
+    let t = time.elapsed_secs();
+    if c.read().next().is_some() && log.crouch.is_none() {
+        log.crouch = Some(t);
+    }
+    if b.read().next().is_some() && log.bite.is_none() {
+        log.bite = Some(t);
+    }
+}
+
+/// A hound that sees you comes at you and bites, but crouches first: the
+/// tell comes a beat before the bite.
+#[test]
+fn a_hound_crouches_before_it_bites() {
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<HoundLog>().add_systems(Last, hound_log);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 215.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    for _ in 0..90 * 20 {
+        app.update();
+        if app.world().resource::<HoundLog>().bite.is_some() {
+            break;
+        }
+    }
+    let log = app.world().resource::<HoundLog>();
+    let crouch = log.crouch.expect("it crouched to lunge");
+    let bite = log.bite.expect("then bit");
+    assert!(
+        bite - crouch >= super::hound_mind::CROUCH_TIME - 0.05,
+        "a beat to react: crouched {crouch:.2}, bit {bite:.2}"
+    );
+}
+
+/// A hound hunts by ear: a shot 60 m off and it's there in a few seconds,
+/// at a run (a walker takes half a minute).
+#[test]
+fn a_hound_runs_to_a_shot() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    let shot = zone.on_ground(140.0, 245.0);
+    app.world_mut().write_message(super::Noise {
+        at: shot,
+        radius: 220.0,
+        source: None,
+    });
+    let mut secs = None;
+    for i in 0..90 * 30 {
+        app.update();
+        let p = app.world().get::<Transform>(hound).unwrap().translation;
+        if flat(p - shot) < super::hound_mind::STALK_WITHIN + 2.0 {
+            secs = Some(i as f32 / 90.0);
+            break;
+        }
+    }
+    let secs = secs.expect("it went to the shot");
+    assert!(secs < 25.0, "at a run: {secs:.1} s for ~45 m");
+}
+
+/// Keep still and a hound nosing round 8 m off doesn't make you out;
+/// move, and it does.
+#[test]
+fn keeping_still_beats_a_hound() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 208.0);
+    let hound = hound_at(&mut app, &zone, at, at, JobKind::Watch);
+    // Facing you, standing still.
+    *app.world_mut().get_mut::<Brain>(hound).unwrap() = Brain::Working { at, left: 999.0 };
+    {
+        let mut w = app
+            .world_mut()
+            .get_mut::<super::walker::Walker>(hound)
+            .unwrap();
+        w.yaw = 0.0;
+    }
+    app.world_mut()
+        .get_mut::<RigInput>(player)
+        .unwrap()
+        .head
+        .translation
+        .y = 0.85;
+    for _ in 0..90 * 6 {
+        app.update();
+        let a = app.world().get::<Awareness>(hound).unwrap();
+        assert!(
+            !a.can_see_target && a.exposure < super::senses::GLIMPSE,
+            "still: {a:?}"
+        );
+    }
+    // Now walk: (move the body each tick, as feet would).
+    let mut seen = false;
+    for i in 0..90 * 4 {
+        let step = Vec3::X * (i as f32 * 1.4 / 90.0).sin() * 0.02;
+        let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+        t.translation += step;
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::X * 1.4;
+        app.update();
+        seen |= app.world().get::<Awareness>(hound).unwrap().exposure >= super::senses::GLIMPSE;
+    }
+    assert!(seen, "moving, it makes you out");
+}
+
+/// A suppressed AK is heard a third as far: a robot 150 m off hears a bare
+/// one and not a suppressed one.
+#[test]
+fn a_suppressor_keeps_a_shot_from_carrying() {
+    #[derive(Resource, Default)]
+    struct Heard(Vec<f32>);
+    let (mut app, player, _) = app(None);
+    app.init_resource::<Heard>().add_systems(
+        Last,
+        |mut n: MessageReader<super::Noise>, mut h: ResMut<Heard>| {
+            h.0.extend(n.read().filter(|n| n.radius > 50.0).map(|n| n.radius))
+        },
+    );
+    let bare = app.world_mut().spawn_empty().id();
+    let quiet = app.world_mut().spawn(crate::gadgets::Suppressed).id();
+    for gun in [bare, quiet] {
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Shot {
+                gun,
+                shooter: Some(player),
+                origin: Vec3::new(0.0, 500.0, 0.0),
+                direction: Vec3::Y,
+                speed: 900.0,
+                damage: 48.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 1,
+            });
+        app.update();
+        app.update();
+    }
+    let heard = &app.world().resource::<Heard>().0;
+    assert_eq!(heard.len(), 2, "{heard:?}");
+    let reach = |r: f32| r * 1.2; // a walker's ears
+    assert!(reach(heard[0]) > 150.0, "bare: {}", heard[0]);
+    assert!(reach(heard[1]) < 150.0, "suppressed: {}", heard[1]);
+}
+
+/// A flashlight with a cell, switched on, at `me`'s head height (kinematic,
+/// for the test to aim).
+fn lit_torch(app: &mut App, me: Vec3) -> Entity {
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let (torch, cell) = {
+        let mut c = Commands::new(&mut queue, app.world());
+        let mut spawn = |id: &str| {
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind(id).unwrap(),
+                    transform: Transform::from_translation(me + Vec3::Y * 1.5),
+                    condition: 1.0,
+                },
+            )
+        };
+        (spawn("flashlight"), spawn("power_cell"))
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let socket = app
+        .world_mut()
+        .query::<(Entity, &crate::interact::SocketOwner)>()
+        .iter(app.world())
+        .find(|(_, o)| o.0 == torch)
+        .map(|(e, _)| e)
+        .expect("the torch's cell socket");
+    {
+        let mut q =
+            bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
+                app.world_mut(),
+            );
+        let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
+        let mut s = sockets.get_mut(socket).unwrap();
+        crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+        q.apply(app.world_mut());
+    }
+    app.world_mut()
+        .entity_mut(torch)
+        .insert(avian3d::prelude::RigidBody::Kinematic);
+    app.world_mut().write_message(crate::items::usage::UseItem {
+        player: Entity::PLACEHOLDER,
+        item: torch,
+    });
+    torch
+}
+
+/// At night, crouched 20 m in front of a walker, you're nothing even out
+/// on a road; a torch on, and it has you.
+#[test]
+fn at_night_you_are_unseen_until_you_light_a_torch() {
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        robots: false,
+        hour: Some("night".into()),
+        ..Default::default()
+    });
+    assert_eq!(
+        app.world()
+            .resource::<crate::world::weather::Conditions>()
+            .hour,
+        crate::world::weather::Hour::Night
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    app.world_mut()
+        .get_mut::<RigInput>(player)
+        .unwrap()
+        .head
+        .translation
+        .y = 0.85;
+    let walker = walker_at(&mut app, &zone, zone.on_ground(100.0, 220.0));
+    for _ in 0..90 * 6 {
+        app.update();
+        let a = app.world().get::<Awareness>(walker).unwrap();
+        assert!(!a.can_see_target && a.suspicion < 0.2, "in the dark: {a:?}");
+    }
+    let torch = lit_torch(&mut app, me);
+    let aim = Transform::from_translation(me + Vec3::Y * 1.0)
+        .looking_at(zone.on_ground(100.0, 220.0) + Vec3::Y, Vec3::Y);
+    let mut seen = false;
+    for _ in 0..90 * 5 {
+        *app.world_mut().get_mut::<Transform>(torch).unwrap() = aim;
+        app.update();
+        seen |= app.world().get::<Awareness>(walker).unwrap().can_see_target;
+    }
+    assert!(seen, "the torch gave you away");
+}
+
+/// A sound inside a house carries out of an open door a little dulled, and
+/// through a shut one as through a wall (the same rule the player hears by,
+/// `acoustics::occlusion`).
+#[test]
+fn an_open_door_lets_a_sound_out() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    // A village house's front door.
+    let ent = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .iter()
+        .find(|e| {
+            app.world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| b.prefab == "house_plank")
+        })
+        .expect("a house door");
+    let post = ent.mid + ent.out * 8.0;
+    let walker = walker_at(&mut app, &zone, zone.on_ground(post.x, post.z));
+    let inside = ent.mid - ent.out * 2.0;
+    let mut heard = |app: &mut App, open: bool| {
+        app.world_mut()
+            .get_mut::<crate::world::buildings::Door>(ent.door)
+            .unwrap()
+            .open = open;
+        for _ in 0..90 * 2 {
+            app.update();
+        }
+        app.world_mut()
+            .get_mut::<Awareness>(walker)
+            .unwrap()
+            .suspicion = 0.0;
+        app.world_mut().write_message(super::Noise {
+            at: inside,
+            radius: 15.0,
+            source: None,
+        });
+        app.update();
+        app.update();
+        app.world().get::<Awareness>(walker).unwrap().suspicion
+    };
+    let shut = heard(&mut app, false);
+    let open = heard(&mut app, true);
+    assert!(shut < 0.01, "through the shut door: {shut}");
+    assert!(open > 0.1, "out of the open one: {open}");
+}
+
+/// A live grenade lands 3 m from a walker at its post: it runs, and it's
+/// out past the blast when it goes off.
+#[test]
+fn a_walker_runs_from_a_live_grenade() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let walker = walker_at(&mut app, &zone, post);
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let at = zone.on_ground(post.x + 3.0, post.z) + Vec3::Y * 0.1;
+    let mut queue = CommandQueue::default();
+    let g = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("rgd5").unwrap(),
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let radius = {
+        let mut live = app
+            .world_mut()
+            .get_mut::<crate::weapons::grenades::Live>(g)
+            .expect("a grenade");
+        live.grenade.fuse = extraction_core::grenade::Fuse::Burning(3.5);
+        live.grenade.def.blast_radius
+    };
+    let mut fled = false;
+    let mut last = post;
+    while app.world().get_entity(g).is_ok() {
+        app.update();
+        fled |= app.world().get::<super::flee::Fleeing>(walker).is_some();
+        last = app.world().get::<Transform>(walker).unwrap().translation;
+    }
+    assert!(fled, "it saw the grenade");
+    assert!(
+        flat(last - at) > radius,
+        "out past the blast ({:.1} m, blast {radius})",
+        flat(last - at)
+    );
 }

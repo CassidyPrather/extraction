@@ -13,7 +13,8 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
 
-//! `hound` (a hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
+//! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
+//! hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
@@ -122,6 +123,37 @@ fn reel(
             "turn" => {
                 let start = eye + flat * 9.0 - right * 3.5;
                 spawn_walker(&mut commands, &zone, start, job(start))
+            }
+            "sorter" => {
+                // An open-air hall in front of you, its rails running
+                // across your view, a slab for its floor.
+                let c = eye + flat * 12.0;
+                let mut top = f32::MIN;
+                for i in -12..=12 {
+                    for j in -8..=8 {
+                        let p = c + right * i as f32 + flat * j as f32;
+                        top = top.max(zone.ground(p.x, p.z));
+                    }
+                }
+                let rot = Quat::from_mat3(&Mat3::from_cols(right, Vec3::Y, -flat));
+                let hall = Transform::from_xyz(c.x, top, c.z).with_rotation(rot);
+                commands.spawn((
+                    avian3d::prelude::RigidBody::Static,
+                    avian3d::prelude::Collider::cuboid(30.0, 0.2, 20.0),
+                    avian3d::prelude::CollisionLayers::new(
+                        crate::world::Layer::World,
+                        [crate::world::Layer::Item, crate::world::Layer::Robot],
+                    ),
+                    hall * Transform::from_xyz(0.0, -0.1, 0.0),
+                ));
+                super::sorter::spawn_sorter(
+                    &mut commands,
+                    hall,
+                    Vec2::new(12.0, 8.0),
+                    6.0,
+                    super::sorter::depot_spots(),
+                    6,
+                )
             }
             "hound" => {
                 let start = eye + flat * 6.0 - right * 7.0;

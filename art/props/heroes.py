@@ -42,6 +42,9 @@ import _kit  # noqa: E402
 
 # Big structures: their decks and galleries shade further.
 _kit.AO_DISTANCE = 2.0
+# Outdoors with roofs over floors (the cast house, the ropeway's shed): rain
+# reaches only what's open to the sky.
+_kit.AO_SKY = True
 
 
 def beam(p, a, b, w, mat, d=None, bevel=0.0, xf=None):
@@ -663,6 +666,7 @@ lods("ropeway_pylon_down", ropeway_pylon_down)
 
 BF_PROFILE = [(3.4, 1.2), (3.4, 6.0), (4.2, 9.0), (4.2, 9.6), (3.0, 24.0), (1.4, 26.0)]
 BF_DECK = 24.0              # the charging platform's top, 12 x 12 round the stack
+BF_BAY = ((-6.0, -1.3), 7.4)  # a bay off the platform past the foundation: x span, outer z
 BF_STOVES = (3.0, (12.0, 18.5, 25.0), 4.0, 20.0)  # radius, x's, z, height to the dome
 BF_CHIMNEY = (1.4, 1.0, (18.5, 11.5), 38.0)        # r at the foot, at the top, (x, z), height
 BF_CATCHER = (2.8, (-14.0, 5.0), 6.0, 14.0)        # radius, (x, z), y0, y1 of its drum
@@ -719,6 +723,11 @@ def blast_furnace(lv):
         cx = sx * (hole + (6.0 - hole) / 2)
         cz = sz * (hole + (6.0 - hole) / 2)
         p.box((w, 0.3, d), (cx, dk - 0.15, cz), "Painted" if lv < 2 else "Rusty")
+    # A bay off its -X +Z corner, out past the foundation (BF_BAY), where
+    # the crate is.
+    (bx0, bx1), bz1 = BF_BAY
+    p.box((bx1 - bx0, 0.3, bz1 - 6.0), ((bx0 + bx1) / 2, dk - 0.15, (6.0 + bz1) / 2),
+          "Painted" if lv < 2 else "Rusty")
     if lv < 2:
         for k in range(8):
             a = 2 * math.pi * (k + 0.5) / 8
@@ -726,13 +735,16 @@ def blast_furnace(lv):
                  (5.6 * math.cos(a), dk - 0.3, 5.6 * math.sin(a)), 0.25, "Rusty")
         e = 5.95
         posts = [(-e, -e), (e, -e), (e, e), (-e, e)]
-        # Open at the +Z +X corner where the walkway arrives.
-        rails = [((-e, -e), (e, -e)), ((-e, -e + 0.04), (-e, e - 0.04)), ((-e, e), (0.9, e)),
+        # Round the bay, and open at the +Z +X corner where the walkway
+        # arrives.
+        bo = bz1 - 0.05
+        rails = [((-e, -e), (e, -e)), ((-e, -e + 0.04), (-e, bo - 0.04)), ((-e, bo), (bx1, bo)),
+                 ((bx1, bo - 0.04), (bx1, e + 0.04)), ((bx1 + 0.04, e), (0.9, e)),
                  ((e, -e + 0.04), (e, 3.4))]
         for (ax, az), (bx, bz) in rails:
             for y in ((dk + 1.05,) if lv else (dk + 0.55, dk + 1.05)):
                 beam(p, (ax, y, az), (bx, y, bz), 0.06, "Painted")
-        for x, z in posts + [(0.9, e), (e, 3.4)]:
+        for x, z in posts[:3] + [(-e, bo), (bx1, bo), (bx1, e), (0.9, e), (e, 3.4)]:
             rod(p, (x, dk, z), (x, dk + 1.1, z), 0.05, "Painted", segs=5)
     # The top house over the bell, the uptakes from the top cone up and
     # over to the downcomer's head, the bleeders above.

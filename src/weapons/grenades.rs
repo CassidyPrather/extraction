@@ -279,6 +279,7 @@ fn burn_fuses(
                     velocity: (p - at).normalize_or(Vec3::Y) * 50.0,
                     damage: harm,
                     shooter: thrower,
+                    mass_g: 0.0,
                 });
             }
         }

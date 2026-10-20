@@ -70,6 +70,12 @@ pub const BRACED_LAG: f32 = 0.5;
 /// how long a rest outlasts losing touch (so it doesn't flicker), s.
 pub const BRACE_REACH: f32 = 0.05;
 pub const BRACE_HOLD: f32 = 0.15;
+/// Rests are looked for every this many fixed ticks (the hold above covers
+/// the gap), each gun on its own beat.
+pub const BRACE_EVERY: u32 = 3;
+/// How near a static collider's bounds must come before the gun's own
+/// shapes are tested against it, metres.
+pub const BRACE_BROAD: f32 = 0.1;
 /// Crouched (or kneeling): sway's share, and the spring's.
 pub const CROUCH_SWAY: f32 = 0.6;
 pub const CROUCH_RECOVER: f32 = 1.15;
@@ -133,6 +139,73 @@ impl Hold {
     }
 }
 
+/// How often the rest test reached its shape queries (a gauge: they're the
+/// costly part, so most held-gun ticks shouldn't).
+#[derive(Resource, Debug, Default)]
+pub struct BraceChecks {
+    /// Ticks the rest was looked for.
+    pub looked: u32,
+    /// Of those, ticks something static was near enough to test shapes.
+    pub shapes: u32,
+}
+
+/// Is anything solid (not the ground) at the handguard, against the gun
+/// itself, or under a seated magazine's foot (a rifle rests on its
+/// magazine too)? A broad bounds check first: only near something static
+/// are the gun's shapes tested. The bare ground doesn't count: resting on
+/// it is lying prone.
+#[allow(clippy::too_many_arguments)]
+fn touching(
+    spatial: &avian3d::prelude::SpatialQuery,
+    statics: &Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
+    terrain: Option<Entity>,
+    gt: &GlobalTransform,
+    layout: &super::GunLayout,
+    rest_at: Vec3,
+    mag_foot: Option<Vec3>,
+    checks: &mut BraceChecks,
+) -> bool {
+    use avian3d::prelude::{Collider, ColliderAabb, SpatialQueryFilter};
+    checks.looked += 1;
+    let (lo, hi) = layout.bounds();
+    // A hand-driven gun stops a little short of what it's pressed onto,
+    // so "resting" allows the same reach as the handguard.
+    let pad = Vec3::splat(BRACE_REACH);
+    let size = hi - lo + pad * 2.0;
+    let centre = gt.transform_point((lo + hi) * 0.5);
+    let half = gt.rotation() * (size * 0.5);
+    let reach = half.abs() + Vec3::splat(BRACE_BROAD);
+    let world = crate::world::Layer::World;
+    let mut near = false;
+    spatial.aabb_intersections_with_aabb_callback(
+        ColliderAabb::from_min_max(centre - reach, centre + reach),
+        |e| {
+            near = Some(e) != terrain
+                && statics
+                    .get(e)
+                    .is_ok_and(|l| l.is_none_or(|l| l.memberships.has_all(world)));
+            !near
+        },
+    );
+    if !near {
+        return false;
+    }
+    checks.shapes += 1;
+    let filter = SpatialQueryFilter::from_mask(world).with_excluded_entities(terrain);
+    let hits = |at: Vec3, shape: &Collider, rot: Quat| {
+        !spatial
+            .shape_intersections(shape, at, rot, &filter)
+            .is_empty()
+    };
+    hits(rest_at, &Collider::sphere(BRACE_REACH), Quat::IDENTITY)
+        || hits(
+            centre,
+            &Collider::cuboid(size.x, size.y, size.z),
+            gt.rotation(),
+        )
+        || mag_foot.is_some_and(|foot| hits(foot, &Collider::sphere(0.04), Quat::IDENTITY))
+}
+
 /// A gun's handling state: the recoil spring and the strain on the hold.
 #[derive(Component, Debug, Default)]
 pub struct Handling {
@@ -148,6 +221,9 @@ pub struct Handling {
     clock: f32,
     /// Seconds a rest outlasts losing touch.
     brace_left: f32,
+    /// Fixed ticks since the rest was last looked for, and what was found.
+    brace_tick: u32,
+    touching: bool,
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
@@ -181,12 +257,14 @@ pub struct FeelPlugin;
 
 impl Plugin for FeelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(add_handling).add_systems(
-            FixedUpdate,
-            handle_guns
-                .after(crate::interact::InteractSystems::Grab)
-                .before(crate::interact::InteractSystems::Follow),
-        );
+        app.init_resource::<BraceChecks>()
+            .add_observer(add_handling)
+            .add_systems(
+                FixedUpdate,
+                handle_guns
+                    .after(crate::interact::InteractSystems::Grab)
+                    .before(crate::interact::InteractSystems::Follow),
+            );
     }
 }
 
@@ -216,6 +294,7 @@ fn moment(gun: &Gun, mass: f32) -> f32 {
 #[allow(clippy::type_complexity)]
 fn handle_guns(
     mut guns: Query<(
+        Entity,
         &Gun,
         &Item,
         &GlobalTransform,
@@ -233,9 +312,13 @@ fn handle_guns(
     mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
     sockets: Query<&crate::interact::Socket>,
     mags: Query<(&GlobalTransform, &super::Mag)>,
+    statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
+    mut checks: ResMut<BraceChecks>,
 ) {
     let dt = time.delta_secs();
-    for (gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
+    let terrain = terrain.single().ok();
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -265,34 +348,21 @@ fn handle_guns(
                 .support
                 .unwrap_or((gun.layout.grip.translation + gun.layout.muzzle) * 0.5),
         );
-        let world = avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World);
-        let near = |at: Vec3, shape: &avian3d::prelude::Collider, rot: Quat| {
-            !spatial
-                .shape_intersections(shape, at, rot, &world)
-                .is_empty()
-        };
-        // Anything solid at the handguard, against the gun itself, or under
-        // a seated magazine's foot (a rifle rests on its magazine too).
-        let (lo, hi) = gun.layout.bounds();
-        // A hand-driven gun stops a little short of what it's pressed onto,
-        // so "resting" allows the same reach as the handguard.
-        let pad = Vec3::splat(BRACE_REACH);
-        let size = hi - lo + pad * 2.0;
-        let touching = near(
-            rest_at,
-            &avian3d::prelude::Collider::sphere(BRACE_REACH),
-            Quat::IDENTITY,
-        ) || near(
-            gt.transform_point((lo + hi) * 0.5),
-            &avian3d::prelude::Collider::cuboid(size.x, size.y, size.z),
-            gt.rotation(),
-        ) || mag_foot.is_some_and(|foot| {
-            near(
-                foot,
-                &avian3d::prelude::Collider::sphere(0.04),
-                Quat::IDENTITY,
-            )
-        });
+        // Looked for on this gun's beat only; the hold covers between.
+        handling.brace_tick += 1;
+        if (handling.brace_tick + gun_e.index_u32()) % BRACE_EVERY == 0 {
+            handling.touching = touching(
+                &spatial,
+                &statics,
+                terrain,
+                gt,
+                &gun.layout,
+                rest_at,
+                mag_foot,
+                &mut checks,
+            );
+        }
+        let touching = handling.touching;
         let was_braced = handling.hold.braced;
         handling.brace_left = if touching {
             BRACE_HOLD
@@ -1158,7 +1228,19 @@ mod vr_tests {
         struct Felt(Vec<crate::rig::haptics::Haptic>);
         let mut r = hold("ak74", false, false);
         r.vr.step(60);
+        *r.vr.app.world_mut().resource_mut::<BraceChecks>() = BraceChecks::default();
         let free = wander(&mut r);
+        // Held up in the open, over the ground: the rest is looked for on
+        // one tick in three, and nothing near enough to test shapes against
+        // (they're the costly part).
+        let checks = std::mem::take(&mut *r.vr.app.world_mut().resource_mut::<BraceChecks>());
+        let ticks = 270.0;
+        assert!(checks.looked > 0, "looked: {checks:?}");
+        assert!(
+            (checks.looked as f32) < ticks / BRACE_EVERY as f32 + 2.0,
+            "looked every {BRACE_EVERY} ticks: {checks:?}"
+        );
+        assert_eq!(checks.shapes, 0, "no shapes in the open: {checks:?}");
         r.vr.app.init_resource::<Felt>().add_systems(
             Update,
             |mut h: MessageReader<crate::rig::haptics::Haptic>, mut f: ResMut<Felt>| {
@@ -1194,6 +1276,10 @@ mod vr_tests {
         assert!(
             r.vr.app.world().get::<Handling>(r.gun).unwrap().hold.braced,
             "resting on the block"
+        );
+        assert!(
+            r.vr.app.world().resource::<BraceChecks>().shapes > 0,
+            "the block is tested"
         );
         // Let the droop ease off before measuring.
         r.vr.step(120);

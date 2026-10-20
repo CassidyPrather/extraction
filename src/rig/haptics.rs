@@ -70,6 +70,7 @@ impl Plugin for HapticsPlugin {
                     button_haptics,
                     hurt_haptics,
                     step_haptics,
+                    grenade_haptics,
                 ),
             );
     }
@@ -157,6 +158,35 @@ fn gun_haptics(
                 seconds: t,
             });
         }
+    }
+}
+
+/// A grenade in your hand: the pin coming out is a click in the hand on
+/// the ring (the one not holding it), the spoon flying a tick in the
+/// hand that held it down. The bang is felt as a hit, if it hurts you.
+pub fn grenade_pulse(event: extraction_core::grenade::Event) -> Option<(bool, (f32, f32))> {
+    use extraction_core::grenade::Event as E;
+    match event {
+        E::PinPulled => Some((true, CLICK)),
+        E::SpoonOff => Some((false, (0.15, 0.015))),
+        E::Exploded => None,
+    }
+}
+
+fn grenade_haptics(
+    mut events: MessageReader<crate::weapons::grenades::GrenadeEvent>,
+    held: Query<(&Held, Option<&Supported>)>,
+    locals: Query<(), With<LocalPlayer>>,
+    mut out: MessageWriter<Haptic>,
+) {
+    for ev in events.read() {
+        let Some((ring, p)) = grenade_pulse(ev.event) else {
+            continue;
+        };
+        let Some((grip, _)) = hands_on(ev.grenade, &held, &locals) else {
+            continue;
+        };
+        pulse(&mut out, if ring { grip.other() } else { grip }, p);
     }
 }
 
@@ -351,6 +381,17 @@ fn step_haptics(mut steps: MessageReader<StepDone>, mut out: MessageWriter<Hapti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A grenade's pin is a click on the ring hand, the spoon a tick on
+    /// the grip; the bang isn't a pulse of its own.
+    #[test]
+    fn a_grenade_is_felt_in_the_right_hand() {
+        use extraction_core::grenade::Event as E;
+        assert_eq!(grenade_pulse(E::PinPulled), Some((true, CLICK)));
+        let (ring, (a, _)) = grenade_pulse(E::SpoonOff).unwrap();
+        assert!(!ring && (0.1..=0.15).contains(&a));
+        assert_eq!(grenade_pulse(E::Exploded), None);
+    }
 
     #[derive(Resource, Default)]
     struct Felt(Vec<Haptic>);

@@ -224,6 +224,13 @@ a bot walks to each switch and throws it, takes the deepest loot (over
 the swim) and leaves by the hatch; daylight and crawler tests take every
 site on a map.
 
+**The deep job, end to end** (`the_ledger_comes_out_of_the_depot`):
+with Progression's Ledger job on the card the intake ledger lies in bay
+K-14; a bot goes down the ramp, throws the three stages in turn, takes
+the ledger into its pack, swims the cistern and climbs out by the hatch,
+and `CarriedOutOfDepot` names the ledger. (Handing it in at the card is
+Progression's own test.)
+
 **Budget.** Everything below is in the `Below` group, drawn only from
 inside or near the ramp and the hatch; five lamps (three on the power),
 range-hidden.

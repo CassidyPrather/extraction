@@ -43,7 +43,9 @@ pub const HATCH_AT: Vec3 = Vec3::new(0.23, FLOOR + 0.85, -1.79);
 pub const HATCH: Vec2 = Vec2::new(0.30, 0.26);
 /// The ledge under it: the centre of its top.
 pub const LEDGE_AT: Vec3 = Vec3::new(0.23, FLOOR + 0.70, -1.72);
-pub const LEDGE: Vec3 = Vec3::new(0.26, 0.03, 0.14);
+/// The ledge's collider (the model's timber is 0.34 wide; things go in
+/// its middle, clear of the cabinet).
+pub const LEDGE: Vec3 = Vec3::new(0.26, 0.025, 0.14);
 
 /// How long each move takes, seconds.
 const OPEN: f32 = 0.6;
@@ -107,12 +109,17 @@ pub fn slot(n: usize, long: bool) -> Vec3 {
     LEDGE_AT + Vec3::new(x, LEDGE.y * 0.5 + 0.04, 0.0)
 }
 
+/// Where the thing he holds sits, in his hand's frame (`lev_hand`'s
+/// grip, palm up, fingers leading into the bed).
+pub const HELD: Vec3 = Vec3::new(0.0, 0.043, 0.052);
+
 /// His hand's path, truck space, by how far along the reach (0 in the cab,
 /// 1 over the ledge).
 pub fn hand_at(s: f32, slot: Vec3) -> Vec3 {
     let start = HATCH_AT - Vec3::Z * 0.45;
-    let mid = HATCH_AT + Vec3::Z * 0.08;
-    let end = slot + Vec3::Y * 0.06;
+    let mid = HATCH_AT + Vec3::Z * 0.08 - HELD;
+    // The thing he holds ends just over its place.
+    let end = slot + Vec3::Y * 0.02 - HELD;
     if s < 0.5 {
         start.lerp(mid, s * 2.0)
     } else {
@@ -219,7 +226,7 @@ fn hand_over(
             if let Some(e) = s.item
                 && let Ok(mut t) = items.get_mut(e)
             {
-                t.translation = at - truck.rotation() * Vec3::Y * 0.03;
+                t.translation = at + truck.rotation() * HELD;
                 t.rotation = truck.rotation();
             }
             if s.t >= REACH {
@@ -329,8 +336,8 @@ fn homecoming(
     raid.say(line);
 }
 
-/// Client: the hatch's sliding panel, the ledge's timber, his hand and
-/// sleeve.
+/// Client: the hatch's sliding panel, his hand and sleeve (the opening
+/// and the ledge are in the truck model).
 pub struct LevVisualsPlugin;
 
 impl Plugin for LevVisualsPlugin {
@@ -339,6 +346,11 @@ impl Plugin for LevVisualsPlugin {
     }
 }
 
+use crate::render::world_props::{Blockout, SwapIn};
+
+/// The panel's depth, truck space, in the runners (`art/vehicles/truck.py`).
+const PANEL_Z: f32 = -1.8255;
+
 /// The panel slides sideways to open.
 #[derive(Component)]
 struct HatchPanel;
@@ -346,7 +358,6 @@ struct HatchPanel;
 fn dress_hatch(
     mut commands: Commands,
     hatches: Query<Entity, Added<CabHatch>>,
-    ledges: Query<Entity, Added<HatchLedge>>,
     hands: Query<Entity, Added<LevHand>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -359,63 +370,56 @@ fn dress_hatch(
         })
     };
     for e in &hatches {
-        // The dark of the cab behind, and the panel over it.
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(HATCH.x, HATCH.y, 0.01))),
-            MeshMaterial3d(mat(Color::srgb(0.07, 0.07, 0.07), 1.0)),
-            Transform::from_xyz(0.0, 0.0, -0.03),
-            ChildOf(e),
-        ));
-        commands.spawn((
-            HatchPanel,
-            Mesh3d(meshes.add(Cuboid::new(HATCH.x + 0.02, HATCH.y + 0.02, 0.015))),
-            MeshMaterial3d(mat(Color::srgb(0.27, 0.30, 0.22), 0.7)),
-            Transform::from_xyz(0.0, 0.0, 0.01),
-            ChildOf(e),
-        ));
-    }
-    for e in &ledges {
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(LEDGE.x, LEDGE.y, LEDGE.z))),
-            MeshMaterial3d(mat(Color::srgb(0.42, 0.32, 0.22), 0.85)),
-            Transform::IDENTITY,
-            ChildOf(e),
-        ));
+        // The panel over the opening (the hole, its boot and the cab
+        // behind are the truck model's).
+        // Shut, the panel sits in the truck model's runners, just behind
+        // the opening's face. Boxes until its model (`cab_hatch_panel`).
+        commands
+            .spawn((
+                HatchPanel,
+                SwapIn::one("cab_hatch_panel"),
+                Transform::from_xyz(0.0, 0.0, PANEL_Z - HATCH_AT.z),
+                Visibility::default(),
+                ChildOf(e),
+            ))
+            .with_child((
+                Mesh3d(meshes.add(Cuboid::new(HATCH.x + 0.02, HATCH.y + 0.02, 0.015))),
+                MeshMaterial3d(mat(Color::srgb(0.27, 0.30, 0.22), 0.7)),
+                Transform::IDENTITY,
+                Blockout,
+            ));
     }
     for e in &hands {
-        // A bare, weathered hand, palm up, fingers curled round what it
-        // carries (until the Hands workstream's posed one), on the end of
-        // a grey wool sleeve, reaching in (+z).
+        // His hand (`lev_hand`, the Hands workstream's): palm up, fingers
+        // leading into the bed, a grey wool sleeve behind; boxes until the
+        // model is in.
+        let turned = Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI));
+        commands
+            .entity(e)
+            .insert(SwapIn(vec![("lev_hand", turned)]));
         let skin = mat(Color::srgb(0.55, 0.42, 0.34), 0.75);
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(0.085, 0.025, 0.09))),
             MeshMaterial3d(skin.clone()),
-            Transform::from_xyz(0.0, -0.02, -0.02),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            Blockout,
             ChildOf(e),
         ));
-        for (i, x) in [-0.03f32, -0.01, 0.01, 0.03].into_iter().enumerate() {
+        for x in [-0.03f32, -0.01, 0.01, 0.03] {
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(
-                    0.018,
-                    0.018,
-                    0.06 - 0.006 * (i as f32 - 1.5).abs(),
-                ))),
+                Mesh3d(meshes.add(Cuboid::new(0.018, 0.018, 0.055))),
                 MeshMaterial3d(skin.clone()),
-                Transform::from_xyz(x, 0.0, 0.045).with_rotation(Quat::from_rotation_x(0.7)),
+                Transform::from_xyz(x, 0.02, 0.06).with_rotation(Quat::from_rotation_x(-0.7)),
+                Blockout,
                 ChildOf(e),
             ));
         }
         commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(0.02, 0.02, 0.05))),
-            MeshMaterial3d(skin),
-            Transform::from_xyz(-0.05, 0.0, 0.0).with_rotation(Quat::from_rotation_y(0.6)),
-            ChildOf(e),
-        ));
-        commands.spawn((
-            Mesh3d(meshes.add(Cylinder::new(0.045, 0.4))),
+            Mesh3d(meshes.add(Cylinder::new(0.045, 0.22))),
             MeshMaterial3d(mat(Color::srgb(0.36, 0.36, 0.34), 1.0)),
-            Transform::from_xyz(0.0, 0.0, -0.26)
+            Transform::from_xyz(0.0, 0.0, -0.19)
                 .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            Blockout,
             ChildOf(e),
         ));
     }

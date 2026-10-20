@@ -38,3 +38,8 @@ shadow floating on the grass.
 `11_tracked_thumbs_monado.jpg`: tracked fingers with the thumbs following
 the runtime's own thumb direction (here open, standing up beside the
 index).
+`12_physics_ghost_monado.jpg` (Monado, training yard, with
+`SIMULATED_REACH=1.1,0.1,-0.6,4,4`): the right hand is pushed into the
+truck's side wall. The glove and sleeve stop at the wall's face, and the
+ghost glove's faint rim shows the real hand inside the wall, over the
+workbench panel.
