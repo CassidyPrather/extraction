@@ -236,6 +236,11 @@ the gauge house and out: 262 s.
   once `claude/polish-story` and this branch are merged.
 - Anomalies' Hush: `(kind: Anomaly(kind: "Hush", radius: 3.0), at:
   (-120.0, -5.0), name: "Old Sallow hush")` once their sixth kind is in.
+- World models' drowned houses and dressed stone (claude/polish-world-models,
+  ae803ac and 2bd5791): Old Sallow's four `*_damaged` ruins and the
+  drowned cottage become `*_drowned`, and the dam's `Mat::Concrete`
+  faces and tower `Mat::DressedStone` (then `python3
+  scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
 - Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
