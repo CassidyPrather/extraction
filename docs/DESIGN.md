@@ -212,6 +212,21 @@ low you go, doors when you open them, and things that land; a wall or a
 hill between cuts a sound's reach by more than half. A heard sound tells
 a robot where the *sound* was.
 
+**Light and dark.** Robot eyes follow the same light the player sees
+(`Conditions::light_at`, Visual design's time of day): exposure scales by
+its square root, so dusk leaves about 0.6 of the day's, a room by day
+0.55, a night 0.2. A torch lights you up wherever the sky doesn't, and its
+beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
+carries a shot a third as far. Robots hear round open doorways and
+through walls by the same rule the player's ears do (`acoustics`).
+
+**Hounds hunt by ear** (`robots/hound_mind.rs`). Poor eyes tuned to
+movement, the best ears in the Zone: a sound sends a hound running, the
+last stretch it stalks low, then noses round. Seen, it comes round to
+your side, crouches (the tell) and lunges to bite. The way to beat one is
+the opposite of a drone: keep still and quiet. The director answers
+gunfire with a pair of hounds a third of the time.
+
 **Robots remember and search** (`robots/search.rs`). Each keeps a
 last-known position and an uncertainty that grows at walking pace while
 you're out of sight (it knows which way you went for a second, then it's
