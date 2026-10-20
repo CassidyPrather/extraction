@@ -153,6 +153,12 @@ impl PropModels<'_> {
 pub struct PropMeshes(HashMap<String, Vec<(String, Mesh)>>);
 
 impl PropMeshes {
+    /// Whether `name`'s meshes are in (merged, if empty: a model with
+    /// nothing mergeable is ready too).
+    pub fn has(&self, name: &str) -> bool {
+        self.0.contains_key(name)
+    }
+
     /// The model's primitives as mergeable meshes, in prop space; empty if
     /// it isn't loaded.
     pub fn get(
@@ -164,6 +170,12 @@ impl PropMeshes {
         if !self.0.contains_key(name) {
             let prims = props.primitives(name);
             if prims.is_empty() {
+                return &[];
+            }
+            // A model's glTF can be ready a frame or two before its
+            // meshes are: wait for them all (caching it half-loaded would
+            // drop the rest for good).
+            if prims.iter().any(|(h, _, _)| meshes.get(h).is_none()) {
                 return &[];
             }
             let mut out = Vec::new();
