@@ -46,6 +46,9 @@ impl Plugin for TrailerPlugin {
 const STEP: f32 = 1.0 / 30.0;
 /// How long a reason keeps the cameras rolling after it ends, seconds.
 const TAIL: f32 = 3.0;
+/// Seconds the cameras render before anything is kept: the valley streams
+/// its detail in round them (unfilmed frames draw nothing).
+const WARMUP: f32 = 8.0;
 /// Shortest clip worth keeping, seconds.
 const MIN_CLIP: f32 = 2.5;
 
@@ -197,7 +200,17 @@ fn direct(
     };
     let me = body.translation;
     // What's worth seeing.
-    if t < 14.0 {
+    if t < WARMUP {
+        // Rendering, so the detail streams in, but nothing kept.
+        if let Ok(mut c) = cams.single_mut() {
+            c.is_active = true;
+        }
+        if let Some(Ok(mut c)) = d.drone.as_ref().map(|(e, _)| drone_cams.get_mut(*e)) {
+            c.is_active = true;
+        }
+        return;
+    }
+    if t < WARMUP + 12.0 {
         d.want("leaving", t + 0.1);
     }
     if raider.is_some_and(|r| r.combat.is_some()) {
@@ -364,7 +377,8 @@ fn aim(
             Dir3::new(to).unwrap_or(Dir3::NEG_Z),
             to.length(),
             true,
-            &SpatialQueryFilter::default().with_excluded_entities([me]),
+            // The world only: the bot's own body and hands are colliders too.
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
         )
         .map_or(to.length(), |hit| (hit.distance - 0.3).max(0.4));
     let want = eye + to.normalize_or(Vec3::NEG_Z) * clear;
