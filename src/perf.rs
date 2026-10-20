@@ -67,6 +67,82 @@ mod tests {
         );
     }
 
+    /// The headless game's tick in a busy moment (`super::fight`: two
+    /// guns in hand, ten robots on the player), in units of the reference
+    /// workload timed beside it: tick ms per reference ms, the median.
+    fn headless_units(armed: bool) -> (f64, f64, f64) {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        if armed {
+            super::fight::arm(&mut app);
+        }
+        super::fight::hunt(&mut app);
+        for _ in 0..90 {
+            super::fight::keep_alive(&mut app);
+            app.update();
+        }
+        let (mut tick, mut reference) = (Vec::new(), Vec::new());
+        for _ in 0..450 {
+            super::fight::keep_alive(&mut app);
+            let t = std::time::Instant::now();
+            app.update();
+            tick.push(t.elapsed().as_secs_f64() * 1000.0);
+            reference.push(super::fight::reference_ms());
+        }
+        let median = |mut v: Vec<f64>| {
+            v.sort_by(f64::total_cmp);
+            v[v.len() / 2]
+        };
+        let (t, r) = (median(tick), median(reference));
+        (t / r, t, r)
+    }
+
+    /// The whole headless game holds a floor of ticks a second in a busy
+    /// moment (`super::fight`), in reference units: a slowdown anywhere in
+    /// the simulation fails here, where the client gauge's shares only
+    /// see one schedule outgrowing the others. The floor is about three
+    /// times today's tick: wall time beside the rest of the suite runs
+    /// more than double what it does alone.
+    #[test]
+    fn headless_ticks_hold_their_floor() {
+        let (units, tick, reference) = headless_units(true);
+        println!(
+            "headless busy tick: {tick:.2} ms (median), reference {reference:.3} ms: {units:.1} units, \
+             {:.0} ticks a second",
+            1000.0 / tick
+        );
+        assert!(
+            units < HEADLESS_TICK_UNITS,
+            "the headless game's busy tick is {units:.1} reference units > {HEADLESS_TICK_UNITS} \
+             ({tick:.1} ms, {:.0} ticks a second): something in the simulation got much dearer \
+             (`cargo test --lib system_profile --features \"bevy/trace bevy/debug\" -- --ignored \
+             --nocapture` names systems)",
+            1000.0 / tick
+        );
+    }
+
+    /// The ceiling for `headless_ticks_hold_their_floor`.
+    const HEADLESS_TICK_UNITS: f64 = 60.0;
+
+    #[test]
+    #[ignore = "calibration: cargo test --lib headless_calibration -- --ignored --nocapture"]
+    fn headless_calibration() {
+        for armed in [false, true] {
+            let (units, tick, reference) = headless_units(armed);
+            println!(
+                "armed {armed}: tick {tick:.2} ms, reference {reference:.3}: {units:.1} units"
+            );
+        }
+    }
+
     #[test]
     #[ignore = "timing: run in release with --nocapture"]
     fn tick_cost_in_a_firefight() {
@@ -239,5 +315,128 @@ mod tests {
             drifting.is_empty(),
             "scaled non-box colliders: {drifting:?}"
         );
+    }
+}
+
+/// A raid's busy moment, staged the same way for every CPU gauge: two
+/// guns in the player's hands (a rifle right, a pistol left, taken the
+/// way a hand takes them: held guns run their handling every tick) and
+/// ten robots (six drones, four walkers) hunting the player from 35 m.
+#[cfg(test)]
+pub(crate) mod fight {
+    use bevy::prelude::*;
+
+    use crate::robots::{Brain, Job, JobKind};
+
+    /// The local player's root and where it stands.
+    pub fn player(app: &mut App) -> (Entity, Vec3) {
+        let w = app.world_mut();
+        let (e, t) = w
+            .query_filtered::<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>()
+            .single(w)
+            .expect("the local player");
+        (e, t.translation())
+    }
+
+    pub fn arm(app: &mut App) {
+        let catalog = app.world().resource::<crate::items::Catalog>().0.clone();
+        let (player, at) = player(app);
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let guns: Vec<(Entity, crate::rig::Side)> = {
+            let mut c = Commands::new(&mut queue, app.world());
+            [
+                ("ak74", crate::rig::Side::Right),
+                ("pm_pistol", crate::rig::Side::Left),
+            ]
+            .into_iter()
+            .map(|(id, side)| {
+                let kind = catalog.kind(id).expect("a gun in the catalogue");
+                let e = crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: Transform::from_translation(at + Vec3::Y * 1.2),
+                        condition: 1.0,
+                    },
+                );
+                (e, side)
+            })
+            .collect()
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        for (item, side) in guns {
+            app.world_mut()
+                .write_message(crate::interact::HandAction::Grab {
+                    player,
+                    side,
+                    item,
+                    point: None,
+                });
+        }
+        for _ in 0..10 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let held = w
+            .query_filtered::<(), (With<crate::weapons::Gun>, With<crate::interact::Held>)>()
+            .iter(w)
+            .count();
+        assert_eq!(held, 2, "the busy moment's player should hold two guns");
+    }
+
+    pub fn hunt(app: &mut App) {
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let (_, at) = player(app);
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut robots = Vec::new();
+        {
+            let mut c = Commands::new(&mut queue, app.world());
+            for i in 0..10 {
+                let a = i as f32 * 0.63;
+                let spot = zone.on_ground(at.x + a.cos() * 35.0, at.z + a.sin() * 35.0);
+                let job = Job {
+                    kind: JobKind::Response,
+                    site: at,
+                    duration: 999.0,
+                    exit: spot,
+                };
+                robots.push(if i < 6 {
+                    crate::robots::drone::spawn_drone(&mut c, spot + Vec3::Y * 15.0, job)
+                } else {
+                    crate::robots::walker::spawn_walker(&mut c, &zone, spot, job)
+                });
+            }
+        }
+        queue.apply(app.world_mut());
+        app.update();
+        for r in &robots {
+            if let Some(mut b) = app.world_mut().get_mut::<Brain>(*r) {
+                *b = Brain::Investigate { at, left: 999.0 };
+            }
+        }
+    }
+
+    /// Keeps everyone standing (the moment is about cost, not who wins).
+    pub fn keep_alive(app: &mut App) {
+        let w = app.world_mut();
+        for mut h in w.query::<&mut crate::health::Health>().iter_mut(w) {
+            h.hp = h.max;
+            h.down = false;
+        }
+    }
+
+    /// A fixed piece of work, timed (ms): the yardstick ticks are
+    /// measured against, so a slower machine isn't a regression.
+    pub fn reference_ms() -> f64 {
+        let t = std::time::Instant::now();
+        let mut x = 1u64;
+        for i in 0..200_000u64 {
+            x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(i);
+            x ^= x >> 13;
+        }
+        std::hint::black_box(x);
+        t.elapsed().as_secs_f64() * 1000.0
     }
 }
