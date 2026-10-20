@@ -404,7 +404,15 @@ fn job_done(
 }
 
 /// There's always a job on the card.
-fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<Progression>) {
+fn offer_job(
+    opts: Res<LaunchOptions>,
+    raid: Res<Raid>,
+    epilogue: Res<Epilogue>,
+    mut progression: ResMut<Progression>,
+) {
+    if progression.0.quiet != epilogue.0 {
+        progression.0.quiet = epilogue.0;
+    }
     if progression.0.job.is_some() {
         return;
     }
