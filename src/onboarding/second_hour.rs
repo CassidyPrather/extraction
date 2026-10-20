@@ -97,6 +97,12 @@ pub(super) fn direct(
     };
     let now = time.elapsed_secs();
     let here = root.translation.xz();
+    // The run doesn't sit out the truck's whole drive.
+    if let Phase::TruckCalled { eta, .. } = &mut raid.phase {
+        if *eta > 10.0 {
+            *eta = 10.0;
+        }
+    }
     // Keep the idle task from running out while a check waits: an empty
     // list is the end of the run.
     let idle_only =
