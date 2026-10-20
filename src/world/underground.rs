@@ -961,16 +961,23 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                 b.loot(at + Vec3::Y * 0.3, t);
             }
         }
-        PropKind::Conveyor
-        | PropKind::Tagger
-        | PropKind::KeptCrate
-        | PropKind::KeptCrateSmall
-        | PropKind::Cradle => {
+        // A kept crate is its own entity (`KeptCrate`: it opens); here only
+        // its collider, for the walkers and the bots' plans.
+        PropKind::KeptCrate | PropKind::KeptCrateSmall => {
+            let size = kept_size(kind == PropKind::KeptCrate);
+            let from = b.geo.pieces.len();
+            b.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + Vec3::Y * size.y * 0.5).with_rotation(rot),
+                Mat::PaintedMetal,
+                true,
+            );
+            b.dress(from, vec![]);
+        }
+        PropKind::Conveyor | PropKind::Tagger | PropKind::Cradle => {
             let (model, size) = match kind {
                 PropKind::Conveyor => ("depot_conveyor", Vec3::new(6.0, 1.0, 0.9)),
                 PropKind::Tagger => ("depot_tagger", Vec3::new(0.7, 1.3, 0.6)),
-                PropKind::KeptCrate => ("depot_crate_long", Vec3::new(2.1, 0.65, 0.7)),
-                PropKind::KeptCrateSmall => ("depot_crate_small", Vec3::new(0.8, 0.5, 0.6)),
                 _ => ("depot_cradle", Vec3::new(2.2, 0.3, 2.0)),
             };
             let from = b.geo.pieces.len();
@@ -1066,6 +1073,7 @@ impl Plugin for UndergroundPlugin {
                 splashing,
                 depot_visits,
                 fill_lost_bins,
+                spawn_kept_crates,
             ),
         )
         .add_message::<DepotEntered>()
@@ -1463,6 +1471,7 @@ impl Plugin for UndergroundVisualsPlugin {
                 near_doors_only,
                 show_below,
                 water_surfaces,
+                kept_crate_looks,
             ),
         )
         .add_systems(PostUpdate, (go_dark, no_rain_below));
@@ -1961,6 +1970,117 @@ pub struct CarriedOutOfDepot {
     pub item: Entity,
 }
 
+/// A kept crate's size: long (a person's) or small.
+fn kept_size(long: bool) -> Vec3 {
+    if long {
+        Vec3::new(2.1, 0.65, 0.7)
+    } else {
+        Vec3::new(0.8, 0.5, 0.6)
+    }
+}
+
+/// A crate the machines keep things in "pending review": shut until the
+/// release (Story's epilogue sets `open`). Its tag says what's in it.
+#[derive(Component, Clone, Debug)]
+pub struct KeptCrate {
+    pub tag: String,
+    pub open: bool,
+    /// A long one (a person's), or small.
+    pub long: bool,
+}
+
+/// Where the small crate's collar disc hangs, in the crate's own space
+/// (`pt_disc` of `depot_crate_small`).
+pub const KEPT_DISC: Vec3 = Vec3::new(0.24, 0.174, -0.304);
+
+/// Logic, once a site's built: its kept crates, each its own entity in
+/// the site's space (the building draws only their colliders).
+fn spawn_kept_crates(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+) {
+    for (site, b) in &buildings {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        for room in &l.rooms {
+            for p in room
+                .props
+                .iter()
+                .filter(|p| matches!(p.kind, PropKind::KeptCrate | PropKind::KeptCrateSmall))
+            {
+                let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
+                commands.spawn((
+                    Name::new(format!("Kept crate {}", p.tag.as_deref().unwrap_or(""))),
+                    KeptCrate {
+                        tag: p.tag.clone().unwrap_or_default(),
+                        open: false,
+                        long: p.kind == PropKind::KeptCrate,
+                    },
+                    Transform::from_translation(at)
+                        .with_rotation(Quat::from_rotation_y(-p.rot.to_radians())),
+                    Visibility::default(),
+                    ChildOf(site),
+                ));
+            }
+        }
+    }
+}
+
+/// Client: a kept crate drawn shut or open (its model, Kit's `_open` one
+/// once there is one; till then, boxes with the lid leant off the back).
+fn kept_crate_looks(
+    mut commands: Commands,
+    crates: Query<(Entity, &KeptCrate, Option<&Children>), Changed<KeptCrate>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut mat: Local<Option<Handle<StandardMaterial>>>,
+) {
+    use crate::render::world_props::{Blockout, SwapIn};
+    for (e, c, children) in &crates {
+        for k in children.into_iter().flatten() {
+            commands.entity(*k).despawn();
+        }
+        let mat = mat
+            .get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.82, 0.83, 0.82),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                })
+            })
+            .clone();
+        let size = kept_size(c.long);
+        let lid = 0.08;
+        let body = Vec3::new(size.x, size.y - lid, size.z);
+        commands.spawn((
+            Blockout,
+            Mesh3d(meshes.add(Cuboid::from_size(body))),
+            MeshMaterial3d(mat.clone()),
+            Transform::from_xyz(0.0, body.y * 0.5, 0.0),
+            ChildOf(e),
+        ));
+        // The lid: on top, or hinged up off the back edge and leant back.
+        let hinge = Vec3::new(0.0, body.y, size.z * 0.5);
+        let turn = if c.open { 100f32.to_radians() } else { 0.0 };
+        commands.spawn((
+            Blockout,
+            Mesh3d(meshes.add(Cuboid::new(size.x, lid, size.z))),
+            MeshMaterial3d(mat),
+            Transform::from_translation(hinge).with_rotation(Quat::from_rotation_x(turn))
+                * Transform::from_xyz(0.0, lid * 0.5, -size.z * 0.5),
+            ChildOf(e),
+        ));
+        let model = match (c.long, c.open) {
+            (true, false) => "depot_crate_long",
+            (false, false) => "depot_crate_small",
+            (true, true) => "depot_crate_long_open",
+            (false, true) => "depot_crate_small_open",
+        };
+        commands.entity(e).insert(SwapIn::one(model));
+    }
+}
+
 /// Something the convoys carried off, lying in the Depot's sorting hall.
 #[derive(Component, Debug)]
 pub struct LostKit;
@@ -2026,6 +2146,20 @@ fn fill_lost_bins(
         );
         commands.entity(e).insert(LostKit);
     }
+}
+
+/// A site's own walking grid (its residents': the rooms, corridors and
+/// stairs below the kiosk doors, not deep water), found by the site's
+/// transform. For anyone else who walks it (Lev, in the epilogue).
+pub fn site_nav<'a>(
+    sites: &'a crate::robots::indoor::IndoorSites,
+    site: &Transform,
+) -> Option<&'a crate::robots::indoor::LocalNav> {
+    sites
+        .sites
+        .iter()
+        .map(|s| &s.nav)
+        .find(|n| n.xf.translation.distance(site.translation) < 0.01)
 }
 
 /// Logic: who's in the Depot, what they had on them going in, and what
@@ -2733,6 +2867,56 @@ mod tests {
             vec![found],
             "out with what was found there, not {mine:?}"
         );
+    }
+
+    /// The kept crates are their own entities, tagged (Story opens them
+    /// in the epilogue and finds K-14's by tag), standing on the floor.
+    #[test]
+    fn the_kept_crates_stand_tagged_in_the_depot() {
+        let mut app = app("marrow_creek");
+        let zone = app.world().resource::<Zone>().clone();
+        let crates: Vec<(KeptCrate, Vec3)> = app
+            .world_mut()
+            .query::<(&KeptCrate, &GlobalTransform)>()
+            .iter(app.world())
+            .map(|(c, g)| (c.clone(), g.translation()))
+            .collect();
+        assert_eq!(crates.len(), 6, "{crates:?}");
+        for tag in ["MAREK, H.", "MAREK dog", "HOLM, J."] {
+            let (c, at) = crates
+                .iter()
+                .find(|(c, _)| c.tag == tag)
+                .unwrap_or_else(|| panic!("no crate `{tag}`"));
+            assert!(!c.open);
+            assert_eq!(c.long, tag != "MAREK dog");
+            let (site, floor) = site_under(&zone, *at + Vec3::Y * 0.2).expect("down in a site");
+            assert_eq!(site, DEPOT);
+            assert!(
+                (at.y - floor).abs() < 0.05,
+                "{tag} at {at:?}, floor {floor}"
+            );
+        }
+        // Lev's way: the Depot's own grid, from inside the ramp's kiosk
+        // to the tag office and bay K-14.
+        let (_, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .unwrap();
+        let l = ug::layout(DEPOT).unwrap();
+        let sites = app.world().resource::<crate::robots::indoor::IndoorSites>();
+        let nav = site_nav(sites, &xf).expect("the Depot's grid");
+        let from = xf.transform_point(Vec3::new(0.0, 0.15, -1.0));
+        for id in ["tag_office", "bay_k14"] {
+            let room = l.rooms.iter().find(|r| r.id == id).unwrap();
+            let to = xf.transform_point(Vec3::new(room.at[0], l.floor_of(room), room.at[1]));
+            let path = nav
+                .path(from, to)
+                .unwrap_or_else(|| panic!("no way from the ramp to {id}"));
+            assert!(
+                path.last().unwrap().xz().distance(to.xz()) < 1.0,
+                "to {id}: {path:?}"
+            );
+        }
     }
 
     /// What the convoys took lies in the Depot's sorting hall, the latest
