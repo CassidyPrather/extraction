@@ -238,8 +238,9 @@ within reach, then rush.
 **Crawlers keep the dark** (`robots/indoor.rs`). Underground sites have
 residents: small walkers that walk a round of the rooms on the site's own
 grid (`LocalNav`), pausing to look round at each, and hunt with the same
-senses and brain as any walker, with a 15 m spark gun that crackles 0.5 s
-before each zap (`CrawlerCharge`). Below ground it's dark
+senses and brain as any walker, with an 18 m spark gun that crackles 0.5 s
+before each zap (`CrawlerCharge`). One that hears you close by keeps still
+and low in the dark for a few seconds and lets you come to it. Below ground it's dark
 (`senses::Lighting`): unlit, you're a tenth as visible, a shape at arm's
 length. A lamp lights you near it; a torch lights you up, and its beam
 pointed at a crawler is seen from as far as it carries. Sound follows the

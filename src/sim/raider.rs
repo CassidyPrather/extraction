@@ -82,6 +82,9 @@ pub struct Traits {
     /// Throws junk past a walker at its post to send it looking the other
     /// way.
     pub distract: bool,
+    /// Creeps up on an unaware walker from outside its sight, to throw a
+    /// distraction from close enough to be heard (see [`stalk`]).
+    pub stalk: bool,
 }
 
 impl Traits {
@@ -106,6 +109,7 @@ impl Traits {
             duck: 0.75,
             sneak_range: 35.0,
             distract: true,
+            stalk: false,
         };
         // (Everyone but the reckless fights only what comes for them.)
         match name {
@@ -136,6 +140,7 @@ impl Traits {
                 duck: 0.9,
                 sneak_range: 45.0,
                 distract: true,
+                stalk: true,
                 ..base
             },
             "reckless" => Traits {
@@ -302,6 +307,21 @@ pub struct Raider {
     /// When it last froze for a searching robot, or threw a distraction.
     froze_at: f32,
     distracted_at: f32,
+    /// Creeping up on a walker to throw a distraction past it.
+    stalking: Option<Stalk>,
+}
+
+/// A creep-and-throw in progress (see [`stalk`]).
+#[derive(Clone, Copy, Debug)]
+struct Stalk {
+    walker: Entity,
+    /// The junk it means to throw.
+    item: Entity,
+    /// Where the junk is meant to land.
+    landing: Vec2,
+    started: f32,
+    /// When the throw went (its tasks ran out), if it has.
+    thrown: Option<f32>,
 }
 
 impl Raider {
@@ -465,6 +485,7 @@ pub fn attach_raider(
                 crouched_since: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
+                stalking: None,
             },
         ));
     }
@@ -558,6 +579,7 @@ pub struct Scene<'w, 's> {
     trucks: Query<'w, 's, (&'static Truck, &'static GlobalTransform)>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
+    crawlers: Query<'w, 's, (), With<crate::robots::indoor::Crawler>>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
@@ -1034,12 +1056,17 @@ fn react_to_robots(
             continue;
         }
         if threat.as_ref().is_none_or(|t| d < t.1) {
-            threat = Some((e, d, onto_me, format!("{:?}", robot.kind), at));
+            let name = crate::robots::robot_name(robot.kind, scene.crawlers.contains(e));
+            threat = Some((e, d, onto_me, name, at));
         }
     }
     let Some((target, d, onto_me, kind, at)) = threat else {
         return;
     };
+    // Creeping up on it to throw a distraction: neither back off nor fight.
+    if r.stalking.is_some() && !onto_me {
+        return;
+    }
     if r.traits.evade && !onto_me {
         // Back off the way it came, out of sight.
         if r.clock > r.retreat_until {
@@ -1138,6 +1165,21 @@ fn sneak(
     let mut wary = false;
     let mut freeze = false;
     let mut calm_walker: Option<Vec3> = None;
+    if r.traits.stalk && !hurrying {
+        if stalk(me, bot, r, scene, log, eye) {
+            // Crouched all the way: creeping.
+            if !input.crouch {
+                input.crouch = true;
+                r.crouched_since = Some(r.clock);
+            }
+            return;
+        }
+    } else if let Some(st) = r.stalking.take() {
+        log.event(
+            "distract_result",
+            json!({"outcome": "broke_off", "why": "hurrying", "thrown": st.thrown.is_some()}),
+        );
+    }
     if r.traits.sneak_range > 0.0 && !hurrying {
         for (_, robot, gt, aware, brain, job) in &scene.robots {
             if robot.wrecked || job.kind == JobKind::Collect {
@@ -1230,6 +1272,189 @@ fn sneak(
             Task::Wait(2.0),
         ]);
     }
+}
+
+/// Unaware walkers this far off are worth creeping up on (m)...
+const STALK_FROM: f32 = 40.0;
+/// ...to this far from them, behind them...
+const STALK_TO: f32 = 10.0;
+/// ...outside their sight: more than this off their facing (radians; a
+/// walker sees 200 degrees round)...
+const STALK_BEHIND: f32 = 2.0;
+/// ...then throw it this far past them, the far side from the bot (m).
+const STALK_PAST: f32 = 5.0;
+
+/// The classic distraction, played properly (the stalking personality
+/// only): see a walker that hasn't noticed you, creep round behind it
+/// (crouched, from outside its sight cone) to within a throw, and lob junk
+/// past it so it walks off to look there. Telemetry: `stalk` when it sets
+/// off, `distract` at the throw, `distract_result` 8 s after (`drawn`: the
+/// walker went to look; `spotted`: it turned on the bot instead;
+/// `ignored`; or `broke_off`). True while it's at it.
+fn stalk(
+    me: Entity,
+    bot: &mut Bot,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    eye: Vec3,
+) -> bool {
+    if let Some(mut st) = r.stalking {
+        let Ok((_, robot, gt, aware, brain, _)) = scene.robots.get(st.walker) else {
+            r.stalking = None;
+            return false;
+        };
+        let onto_me =
+            aware.target == Some(me) && (matches!(brain, Brain::Engage) || aware.suspicion > 0.5);
+        if robot.wrecked || onto_me || r.combat.is_some() {
+            let outcome = if onto_me { "spotted" } else { "broke_off" };
+            log.event(
+                "distract_result",
+                json!({"outcome": outcome, "why": if onto_me { "seen" } else { "fight" },
+                       "thrown": st.thrown.is_some()}),
+            );
+            r.stalking = None;
+            return false;
+        }
+        // Thrown once it's left the hand (not held, not in the pack).
+        let gone = scene
+            .items
+            .get(st.item)
+            .map_or(true, |(_, _, _, held, _, bag)| {
+                held.is_none() && bag.is_none()
+            });
+        if st.thrown.is_none() && gone {
+            st.thrown = Some(r.clock);
+            log.event(
+                "distract",
+                json!({"x": round(st.landing.x, 1), "z": round(st.landing.y, 1),
+                       "walker_dist": round(gt.translation().distance(eye), 0)}),
+            );
+        }
+        if let Some(t) = st.thrown {
+            if r.clock - t > 8.0 {
+                let drawn = match brain {
+                    Brain::Investigate { at, .. } | Brain::Search { at, .. } => {
+                        at.xz().distance(st.landing) < 6.0
+                    }
+                    _ => false,
+                };
+                log.event(
+                    "distract_result",
+                    json!({"outcome": if drawn { "drawn" } else { "ignored" }, "thrown": true}),
+                );
+                r.stalking = None;
+                r.interrupted = true;
+                return false;
+            }
+            r.stalking = Some(st);
+            // Stay down and still while it goes to look.
+            if bot.done() {
+                bot.replace([Task::Wait(1.0)]);
+            }
+            return true;
+        }
+        // Its tasks ran out without a throw (a duck from a drone, a step
+        // round something it was stuck on): give it up, and try again soon.
+        let late = r.clock - st.started > 90.0;
+        if late || (st.thrown.is_none() && bot.done()) {
+            log.event(
+                "distract_result",
+                json!({"outcome": "broke_off", "why": if late { "too_long" } else { "interrupted" },
+                       "thrown": false}),
+            );
+            r.stalking = None;
+            r.interrupted = true;
+            if !late {
+                r.distracted_at = r.clock - 60.0;
+            }
+            return false;
+        }
+        r.stalking = Some(st);
+        return true;
+    }
+    if r.stage != Stage::Raid || r.clock - r.distracted_at < 90.0 {
+        return false;
+    }
+    let Some(item) = junk(r, scene) else {
+        return false;
+    };
+    // An unaware walker in sight.
+    let pick = scene
+        .robots
+        .iter()
+        .find(|(_, robot, gt, aware, brain, job)| {
+            !robot.wrecked
+            && robot.kind == crate::robots::RobotKind::Walker
+            && job.kind != JobKind::Collect
+            && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+            // Not onto it: not looking its way, at most wondering.
+            && aware.suspicion < 0.35
+            && !(aware.target == Some(me) && aware.can_see_target)
+            && gt.translation().distance(eye) < STALK_FROM
+            && gt.translation().distance(eye) > STALK_TO + 2.0
+            && scene.visible(eye, gt.translation())
+        });
+    let Some((walker, _, gt, ..)) = pick else {
+        return false;
+    };
+    let w = gt.translation().xz();
+    let facing = {
+        let f = gt.forward().as_vec3().xz();
+        f.normalize_or(Vec2::NEG_Y)
+    };
+    // Behind it, walkable, and the way there: nearest first.
+    let mut best: Option<(f32, Vec2, Vec<Task>)> = None;
+    for k in 0..16 {
+        let a = k as f32 * std::f32::consts::TAU / 16.0;
+        let dir = Vec2::from_angle(a);
+        if dir.angle_to(facing).abs() < STALK_BEHIND {
+            continue;
+        }
+        let spot = w + dir * STALK_TO;
+        if !r.grid.walkable([spot.x, spot.y]) {
+            continue;
+        }
+        let d = spot.distance(eye.xz());
+        if best.as_ref().is_some_and(|b| b.0 <= d) {
+            continue;
+        }
+        if let Some(t) = travel(&r.grid, eye.xz(), spot, 1.0) {
+            best = Some((d, spot, t));
+        }
+    }
+    let Some((d, spot, mut tasks)) = best else {
+        return false;
+    };
+    let landing = w + (w - spot).normalize_or(Vec2::X) * STALK_PAST;
+    if !r.grid.walkable([landing.x, landing.y]) {
+        return false;
+    }
+    r.distracted_at = r.clock;
+    log.event(
+        "stalk",
+        json!({"dist": round(d, 0), "x": round(eye.x, 1), "z": round(eye.z, 1)}),
+    );
+    tasks.extend([
+        Task::Grab {
+            item,
+            side: Side::Left,
+        },
+        Task::Throw {
+            side: Side::Left,
+            at: scene.zone.on_ground(landing.x, landing.y),
+        },
+    ]);
+    r.interrupted = true;
+    bot.replace(tasks);
+    r.stalking = Some(Stalk {
+        walker,
+        item,
+        landing,
+        started: r.clock,
+        thrown: None,
+    });
+    true
 }
 
 /// A drone chirped its lock on this bot: get somewhere it can't see, if
