@@ -4,6 +4,7 @@
 //! happens and runs headless; [`ClientPlugin`] is everything you see, hear
 //! and touch. See `docs/DESIGN.md`.
 
+pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
 pub mod audio_mix;
