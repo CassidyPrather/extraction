@@ -39,7 +39,10 @@
             (kind: Crate, at: (-2.6, -1.4), loot: Some("workshop")),
         ]),
         // The ash pit: six metres down, still hot enough to kill.
-        (id: "ash_pit", at: (0.0, 46.0), size: (8.0, 12.0), floor: Some(-13.0), height: 10.0, pit: true),
+        (id: "ash_pit", at: (0.0, 46.0), size: (8.0, 12.0), floor: Some(-13.0), height: 10.0, pit: true, props: [
+            // The piano's frame, down the pit (Story: the sorter's chit).
+            (kind: PianoFrame, at: (-2.5, -3.5), rot: 20.0),
+        ]),
         // The far ledge: where the furnace's charge was sorted.
         (id: "far_ledge", at: (0.0, 54.0), size: (8.0, 4.0), height: 4.0, props: [
             (kind: Crate, at: (-2.8, 0.6), loot: Some("weapons_rare")),

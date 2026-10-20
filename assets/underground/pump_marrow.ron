@@ -74,6 +74,8 @@
         // The sump has nowhere to drain: the hand pump, in the screen room.
         (kind: Pump, room: "screen_room", at: (0.0, -2.75), rot: 180.0, basin: "sump", to: -11.0, rate: 0.1),
     ],
+    // Brabec's good shoes, by his locker in the sump.
+    items: [(id: "work_boots", room: "sump", at: (-2.0, 0.7), y: 0.0)],
     patrol: ["upper_gallery", "control", "upper_gallery", "valve_gallery"],
     crawlers: 1,
     portals: [

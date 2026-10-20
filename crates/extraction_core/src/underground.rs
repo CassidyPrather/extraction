@@ -120,6 +120,8 @@ pub enum PropKind {
     KeptCrateSmall,
     /// A walker's charging cradle, its back (+Z) to the wall.
     Cradle,
+    /// A piano's iron frame, fallen on its back.
+    PianoFrame,
 }
 
 #[derive(Clone, Debug, Deserialize)]

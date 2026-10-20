@@ -1147,6 +1147,30 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
                 b.loot(at + Vec3::Y * (size.y + 0.15), t);
             }
         }
+        PropKind::PianoFrame => {
+            // The cast plate, its harp-shaped bracing, a few bent pins.
+            b.piece(
+                Shape::Box(Vec3::new(1.45, 0.06, 1.15)),
+                Transform::from_translation(at + Vec3::Y * 0.05)
+                    .with_rotation(rot * Quat::from_rotation_x(0.08)),
+                Mat::RustyMetal,
+                true,
+            );
+            for (x, len, turn) in [
+                (-0.45f32, 1.0f32, 0.25f32),
+                (0.05, 0.9, 0.1),
+                (0.5, 0.7, -0.15),
+            ] {
+                b.piece(
+                    Shape::Box(Vec3::new(0.08, 0.1, len)),
+                    Transform::from_translation(at + rot * Vec3::new(x, 0.13, 0.0))
+                        .with_rotation(rot * Quat::from_rotation_y(turn)),
+                    Mat::DarkMetal,
+                    false,
+                );
+            }
+            // (Drawn as its boxes till Kit models one.)
+        }
         PropKind::Cabinet => {
             let from = b.geo.pieces.len();
             b.piece(
