@@ -227,6 +227,7 @@ is what it did before.
 | Field dressing | `use.bandage` | — | silent |
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
+| Robot chatter overheard on your radio | `chatter.squelch`, `chatter.static`, `chatter.voice`: their talk | — | servo chirps |
 | Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
 | A round landing (`weapons::impacts::Impact`, classed once for the spray and the sound) | `hit.impact` by surface: concrete, wood, steel, earth; `hit.glass` (window glass, a robot's eye); `hit.water` (a slap, harder for faster rounds); `hit.body`; out through a thin wall, a second crack 6 dB quieter | — | re-classed from the Hit; water silent |
 | A spent case landing (`weapons::CasingLanded`), a beat after the shot | `gun.casing` by floor: brass rings on steel and concrete, knocks on boards, ticks in grass, plips in water; a shotgun hull thunks; bounces 8 dB quieter | — | a ping at the port |
@@ -239,11 +240,16 @@ is what it did before.
 | The truck leaving, with you or without | `truck.depart` | — | silent |
 | A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
 | A robot noticing you (its suspicion passing `robots::NOTICED`) | `robot.notice`: the whirr of its head snapping round, at most every 8 s per robot | — | silent |
-| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch); search sounds at most every 6 s per robot | — | silent |
+| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch) and `robot.voice` (its call); search sounds at most every 6 s per robot | — | silent |
 | A walker's turret settling before its first shot; a grappler winding up | `walker.aim` + `walker.aim_lock` at the muzzle, `harpoon.windup`: the 0.6-0.7 s warning, heard 43-71 m through a downpour | — | silent |
 | The convoy loading, setting off through the Gate | `convoy.loaded`, `convoy.delivered` | — | silent |
 | A dirigible overhead | `dirigible.engine`: a slow throb (the rotor loop at 0.4x), quickening as it moves, gone when wrecked | — | silent |
 | Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
+| A gravity well; a mirror fold (synthesised) | `anomaly.well`: sub tones beating, air drawn in in long breaths; `anomaly.mirror`: glassy partials drifting; `anomaly.blink`: air rushing in backwards, a glassy pop; `anomaly.reveal`: a falling ping as a thrown thing touches one; `anomaly.crush`: metal giving, slowed, under a whump | — | placeholders |
+| The anomaly detector (`anomaly::detector::DetectorClick`) | `detector.click`: a dry Geiger tick with a little case ring, at the hand when held, 8 dB down at the hip, brighter near an edge | — | silent |
+| A round glancing off (`ballistics::Ricochet`) | `hit.ricochet`, a little along the way it left; only real glances whine now | — | a random 12% of hits |
+| Underground power (`world::underground::SitePower`) | `power.breaker`: the lever clanking home; `power.pull` then `power.generator`, a diesel idling by the switch while it runs | — | silent |
+| A door that won't open: power-locked, wedged | `door.locked` (a bolt's clank), `door.wedged` (a thud) | click | silent |
 | Anomalies, the Surge, attention | hums, pops, cracks, the siren, the ringing | — | same |
 | Weather | rain bed with the rain; distant thunder | — | same |
 | Landing from a jump or a drop | `land`: both feet on whatever's underfoot, harder the faster you fell | — | silent |
@@ -261,9 +267,15 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** Nothing known. Robot sounds are recorded servos and
-clanks pitched; if they read too alike in the headset, the robots'
-synthesised voices (`docs/DESIGN.md` allows them) are the next step. The audit measures the dirigible's engine
+**Robot voices** (`machines/robot_voice`, synthesised in
+`scripts/synth_anomaly.py`, as `docs/DESIGN.md` allows). They're
+machine syllables: a buzz at 85-130 Hz through shifting vowel formants,
+clipped short, in bursts of three to seven. Then comes the radio's
+chain, baked into the asset: band-limited to 300-3400 Hz, crushed to
+6 bits held at 8 kHz, softened above 5 kHz by the speaker, and a
+squelch tail. They play as placed sounds, so a robot calling the
+others from behind a wall is occluded and reverberated like everything
+else. The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its

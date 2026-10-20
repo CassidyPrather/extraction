@@ -288,15 +288,64 @@ def reveal(seed, seconds=1.2):
     return np.stack([x, x])
 
 
-def detector_click(seed, seconds=0.03):
+def detector_click(seed, seconds=0.06):
     """The anomaly detector's tick: a dry Geiger-counter click, a
-    snap with a little body."""
+    snap with a little body (its case ringing, so it carries over rain
+    without a needle-sharp peak)."""
     rng = np.random.default_rng(seed)
     n = int(seconds * SR)
     t = np.arange(n) / SR
-    snap = rng.normal(size=n) * np.exp(-t / 0.0007)
-    body = np.sin(2 * np.pi * (1100 + 90 * seed) * t) * np.exp(-t / 0.004)
-    x = snap + 0.6 * body
+    snap = rng.normal(size=n) * np.exp(-t / 0.0012)
+    body = np.sin(2 * np.pi * (1100 + 90 * seed) * t) * np.exp(-t / 0.012)
+    x = 0.6 * snap + body
+    return np.stack([x, x])
+
+
+def robot_voice(seed, syllables=None):
+    """A robot talking to the others over its radio: machine syllables (a
+    buzz through shifting formants, clipped short), the way a cheap
+    speech chip would say them, then the radio's chain: band-limited to
+    300-3400 Hz, crushed to 6 bits at 8 kHz, a squelch tail."""
+    rng = np.random.default_rng(seed)
+    k = syllables or int(rng.integers(3, 8))
+    parts = []
+    vowels = [(300, 870, 2240), (530, 1840, 2480), (270, 2290, 3010), (730, 1090, 2440),
+              (570, 840, 2410), (440, 1020, 2240)]
+    f0 = rng.uniform(85, 130)
+    for _ in range(k):
+        dur = rng.uniform(0.05, 0.13)
+        n = int(dur * SR)
+        t = np.arange(n) / SR
+        f = f0 * (1 + 0.08 * rng.normal()) * (1 + 0.15 * t / dur * rng.choice([-1, 1]))
+        phase = np.cumsum(f) / SR
+        buzz = 2 * (phase % 1.0) - 1.0
+        v = vowels[int(rng.integers(len(vowels)))]
+        y = np.zeros(n)
+        for fc, bw in zip(v, (80, 120, 160)):
+            # A two-pole resonator per formant.
+            r = np.exp(-np.pi * bw / SR)
+            a1, a2 = -2 * r * np.cos(2 * np.pi * fc / SR), r * r
+            out = np.zeros(n)
+            y1 = y2 = 0.0
+            for i in range(n):
+                y0 = buzz[i] - a1 * y1 - a2 * y2
+                out[i] = y0
+                y2, y1 = y1, y0
+            y += out / np.max(np.abs(out) + 1e-9)
+        env = np.minimum(1, t / 0.006) * np.minimum(1, (dur - t) / 0.01)
+        parts.append(y * env)
+        parts.append(np.zeros(int(rng.uniform(0.01, 0.05) * SR)))
+    x = np.concatenate(parts)
+    # The radio: band-limited, then crushed (6 bits, held at 8 kHz).
+    x = lowpass(x, 3400) - lowpass(x, 300)
+    x = x / np.max(np.abs(x))
+    hold = SR // 8000
+    x = np.repeat(x[::hold], hold)[: len(x)]
+    x = np.round(x * 31) / 31
+    # The speaker after it takes the crush's harshest images off.
+    x = lowpass(x, 5000)
+    tail = rng.normal(size=int(0.12 * SR)) * np.exp(-np.arange(int(0.12 * SR)) / SR / 0.03) * 0.3
+    x = np.concatenate([x, lowpass(tail, 3000) - lowpass(tail, 500)])
     return np.stack([x, x])
 
 
@@ -322,6 +371,8 @@ def main():
     loopset(entries, "mirror_shimmer", mirror_shimmer())
     oneshots(entries, "anomaly/mirror_blink", OUT, mirror_blink, [41, 42, 43])
     oneshots(entries, "anomaly/reveal", OUT, reveal, [0, 1, 2])
+    oneshots(entries, "machines/robot_voice", ROOT / "assets" / "audio" / "machines",
+             robot_voice, [50, 51, 52, 53, 54, 55, 56, 57])
     oneshots(entries, "machines/detector_click", ROOT / "assets" / "audio" / "machines",
              detector_click, [0, 1, 2, 3])
     path, secs = write("surge_drone", surge_drone())

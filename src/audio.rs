@@ -214,6 +214,8 @@ impl Plugin for AudioPlugin {
                     kitchen_sounds,
                     mind_sounds,
                     casing_sounds,
+                    detector_sounds,
+                    power_sounds,
                 ),
             )
             .add_systems(
@@ -616,10 +618,12 @@ fn shot_sounds(
 /// Rounds landing, as `weapons::impacts` classes them (so the sound and
 /// the spray can't disagree): concrete, wood, steel, glass, earth, water,
 /// a robot's part (armour rings, an eye shatters), a body. A round
-/// leaving the far side of a thin wall is a second, quieter crack.
+/// leaving the far side of a thin wall is a second, quieter crack; one
+/// glancing off whines.
 fn hit_sounds(
     mut commands: Commands,
     mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut ricochets: MessageReader<crate::weapons::ballistics::Ricochet>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
@@ -662,20 +666,20 @@ fn hit_sounds(
             if exit { speed * 0.9 } else { speed },
             0.08,
         );
-        // Now and then a whine off something hard.
-        let hard = matches!(i.kind, K::Masonry | K::Metal | K::Robot);
-        if hard && !exit && rng.0.chance(0.12) {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "impacts/ricochet",
-                Some(i.point),
-                "hit.ricochet",
-                0.0,
-                0.1,
-            );
-        }
+    }
+    // A round glancing off at a graze (`ballistics::Ricochet`): the whine,
+    // a little along the way it left.
+    for r in ricochets.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/ricochet",
+            Some(r.point + r.velocity.normalize_or_zero() * 1.5),
+            "hit.ricochet",
+            0.0,
+            0.1,
+        );
     }
 }
 
@@ -830,6 +834,8 @@ fn press_sounds(
     mut events: MessageReader<InteractEvent>,
     pressables: Query<(&crate::raid::truck::Pressable, &GlobalTransform)>,
     buttons: Query<&crate::interact::poke::PokeButton>,
+    locked: Query<(), With<crate::world::underground::PowerLocked>>,
+    wedged: Query<(), With<crate::robots::doors::Wedged>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
@@ -843,6 +849,10 @@ fn press_sounds(
         };
         let (set, cue) = match kind {
             Pressable::BellPull => ("physical/bell", "truck.bell"),
+            // A door that won't open: a locked bolt rattling, a wedge
+            // thudding. (One that opens sounds in `door_sounds`.)
+            Pressable::Door if locked.contains(*item) => ("machines/clank", "door.locked"),
+            Pressable::Door if wedged.contains(*item) => ("impacts/wood", "door.wedged"),
             Pressable::Door => continue,
             Pressable::FoldCover => ("physical/cloth", "hand.grab"),
             Pressable::BenchRun => ("physical/switch", "press.lever"),
@@ -1309,12 +1319,11 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Snare => {
                         ("anomaly/snare_buzz", "anomaly.snare")
                     }
-                    // Placeholders until they get their own (Anomalies).
                     extraction_core::anomaly::AnomalyKind::Well => {
-                        ("anomaly/lift_hum", "anomaly.lift")
+                        ("anomaly/well_drone", "anomaly.well")
                     }
                     extraction_core::anomaly::AnomalyKind::Mirror => {
-                        ("anomaly/snare_buzz", "anomaly.snare")
+                        ("anomaly/mirror_shimmer", "anomaly.mirror")
                     }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
@@ -1410,9 +1419,23 @@ fn anomaly_sounds(
             AnomalyAct::Pop => ("anomaly/lift_pop", "anomaly.pop", 1.0),
             AnomalyAct::Bloom => ("anomaly/surge_crack", "anomaly.bloom", 0.6),
             AnomalyAct::Flare => continue,
-            // Placeholders until they get their own (Anomalies).
-            AnomalyAct::Blink => ("anomaly/lift_pop", "anomaly.pop", 1.8),
-            AnomalyAct::Reveal | AnomalyAct::Crush => continue,
+            AnomalyAct::Blink => ("anomaly/mirror_blink", "anomaly.blink", 1.0),
+            AnomalyAct::Reveal => ("anomaly/reveal", "anomaly.reveal", 1.0),
+            // A well crushing something: the thing's metal giving (recorded,
+            // slowed), under the knot's deep whump.
+            AnomalyAct::Crush => {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "anomaly/lift_pop",
+                    Some(ev.at),
+                    "anomaly.pop",
+                    -4.0,
+                    0.05,
+                );
+                ("machines/groan", "anomaly.crush", 0.6)
+            }
         };
         let Some(sample) = bank.pick(set, &mut rng.0) else {
             continue;
@@ -1737,8 +1760,10 @@ fn radio_sounds(
     }
 }
 
-/// Robot chatter on a carried radio: a squelch, a long hiss of static
-/// with servo-chirps through it — louder when it's about somewhere close.
+/// Robot chatter on a carried radio: a squelch, a hiss of static, and
+/// their talk (`machines/robot_voice`: synthesised machine syllables,
+/// band-limited and crushed like a cheap radio) — louder when it's about
+/// somewhere close.
 fn chatter_sounds(
     mut commands: Commands,
     mut heard: MessageReader<crate::raid::chatter::RobotChatter>,
@@ -1769,18 +1794,17 @@ fn chatter_sounds(
             gain,
             0.1,
         );
-        for _ in 0..2 {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "machines/servo",
-                at,
-                "chatter.chirp",
-                gain,
-                0.4,
-            );
-        }
+        // Their talk: machine syllables through the radio's chain.
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/robot_voice",
+            at,
+            "chatter.voice",
+            gain,
+            0.04,
+        );
     }
 }
 
@@ -2463,6 +2487,7 @@ fn mind_sounds(
     for m in called.read() {
         if due(m.robot, 2, 10.0) {
             out.push(("machines/radio_squelch", "robot.callout", m.at, 1.0));
+            out.push(("machines/robot_voice", "robot.voice", m.at, 1.0));
         }
     }
     for m in aims.read() {
@@ -2646,6 +2671,100 @@ fn casing_sounds(
             speed,
             0.08,
         );
+    }
+}
+
+/// The anomaly detector ticking: dry clicks, at the hand when it's held
+/// (close and louder), from the hip otherwise; brighter near an edge.
+fn detector_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::anomaly::detector::DetectorClick>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/detector_click",
+            Some(c.at),
+            "detector.click",
+            if c.held { 0.0 } else { -8.0 },
+            1.0 + 0.15 * c.near as f64,
+            0.03,
+        );
+    }
+}
+
+/// A site's power coming on: a breaker's lever clanks home; a generator
+/// is pulled (a whirr of cord) and runs, a diesel's idle by the switch,
+/// for as long as it's on.
+#[derive(Component)]
+struct GeneratorLoop;
+
+fn power_sounds(
+    mut commands: Commands,
+    sites: Query<(Entity, &crate::world::underground::SitePower)>,
+    switches: Query<(&GlobalTransform, Option<&Children>)>,
+    loops: Query<Entity, With<GeneratorLoop>>,
+    mut was: Local<HashMap<Entity, bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::underground::PowerKind;
+    for (site, power) in &sites {
+        let before = was.insert(site, power.on).unwrap_or(false);
+        let Ok((gt, children)) = switches.get(power.switch) else {
+            continue;
+        };
+        let at = gt.translation();
+        if power.on && !before {
+            match power.kind {
+                PowerKind::Breaker => play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "machines/clank",
+                    Some(at),
+                    "power.breaker",
+                    0.0,
+                    0.8,
+                    0.05,
+                ),
+                PowerKind::Generator => play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/whoosh",
+                    Some(at),
+                    "power.pull",
+                    0.0,
+                    0.7,
+                    0.05,
+                ),
+            }
+        }
+        let running = power.on && power.kind == PowerKind::Generator;
+        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match (running, existing) {
+            (true, None) => {
+                if let Some(sample) = bank.pick("machines/truck_idle", &mut rng.0) {
+                    commands.spawn((
+                        GeneratorLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("power.generator"))),
+                        PlaybackSettings::default().with_speed(1.25),
+                        Transform::default(),
+                        spatial_fx("power.generator"),
+                        ChildOf(power.switch),
+                    ));
+                }
+            }
+            (false, Some(l)) => commands.entity(l).despawn(),
+            _ => {}
+        }
     }
 }
 
