@@ -223,6 +223,9 @@ pub struct Layout {
     pub patrol: Vec<String>,
     #[serde(default)]
     pub crawlers: u32,
+    /// More rounds, each with its own crawlers (a level each, say).
+    #[serde(default)]
+    pub rounds: Vec<Round>,
     /// The site's power, in stages: each one's switch does nothing until
     /// the one before is on.
     #[serde(default)]
@@ -230,6 +233,14 @@ pub struct Layout {
     /// Flooded rooms and corridors.
     #[serde(default)]
     pub floods: Vec<Flood>,
+}
+
+/// A round of rooms the crawlers on it walk, in order (one room: round
+/// its quarters).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Round {
+    pub rooms: Vec<String>,
+    pub crawlers: u32,
 }
 
 /// Standing water over a room's or a corridor's floor: slow to wade, loud,
@@ -314,6 +325,14 @@ impl Hazard {
 
 impl Layout {
     /// A room's floor, site y.
+    /// Every round and its crawlers: `patrol` first, then `rounds`.
+    pub fn residents(&self) -> Vec<(&[String], u32)> {
+        std::iter::once((self.patrol.as_slice(), self.crawlers))
+            .chain(self.rounds.iter().map(|r| (r.rooms.as_slice(), r.crawlers)))
+            .filter(|(rooms, n)| *n > 0 && !rooms.is_empty())
+            .collect()
+    }
+
     pub fn floor_of(&self, room: &Room) -> f32 {
         room.floor.unwrap_or(self.floor)
     }
@@ -1137,6 +1156,11 @@ pub fn check(l: &Layout) -> Vec<String> {
                 "{}: its lamp's on power stage {} of none",
                 room.id, room.stage
             ));
+        }
+    }
+    for id in l.rounds.iter().flat_map(|r| &r.rooms) {
+        if !l.rooms.iter().any(|r| &r.id == id) {
+            bad.push(format!("a round through no room `{id}`"));
         }
     }
     for f in &l.floods {

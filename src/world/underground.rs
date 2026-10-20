@@ -991,6 +991,7 @@ impl Plugin for UndergroundPlugin {
                 generator_hum,
                 splashing,
                 depot_visits,
+                fill_lost_bins,
             ),
         )
         .add_message::<DepotEntered>()
@@ -1306,7 +1307,8 @@ pub fn register_residents(
                 .lamps
                 .push((xf.transform_point(at), room.size[0].max(room.size[1]) + 4.0));
         }
-        if l.crawlers == 0 {
+        let rounds = l.residents();
+        if rounds.is_empty() {
             continue;
         }
         // Their grid is the site's, without the ground round the kiosks:
@@ -1330,26 +1332,45 @@ pub fn register_residents(
                 }
             }
         }
-        let patrol: Vec<Vec3> = l
-            .patrol
-            .iter()
-            .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
-            .filter_map(|room| grid.nearest_walkable(room.at).map(|p| (room, p)))
-            .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
-            .collect();
-        let Some(&spawn) = patrol.first() else {
-            continue;
+        let nav = crate::robots::indoor::LocalNav {
+            grid: std::sync::Arc::new(grid),
+            xf,
+            floors: Some(std::sync::Arc::new(floors)),
         };
-        residents.sites.push(crate::robots::indoor::IndoorSite {
-            nav: crate::robots::indoor::LocalNav {
-                grid: std::sync::Arc::new(grid),
-                xf,
-                floors: Some(std::sync::Arc::new(floors)),
-            },
-            patrol,
-            spawn,
-            crawlers: l.crawlers,
-        });
+        for (rooms, crawlers) in rounds {
+            let points: Vec<(&ug::Room, [f32; 2])> = match rooms {
+                // One room: round its quarters.
+                [id] => l
+                    .rooms
+                    .iter()
+                    .filter(|room| &room.id == id)
+                    .flat_map(|room| {
+                        let q = [room.size[0] * 0.25, room.size[1] * 0.25];
+                        [[-q[0], -q[1]], [q[0], -q[1]], [q[0], q[1]], [-q[0], q[1]]]
+                            .map(|d| (room, [room.at[0] + d[0], room.at[1] + d[1]]))
+                    })
+                    .collect(),
+                _ => rooms
+                    .iter()
+                    .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
+                    .map(|room| (room, room.at))
+                    .collect(),
+            };
+            let patrol: Vec<Vec3> = points
+                .into_iter()
+                .filter_map(|(room, at)| nav.grid.nearest_walkable(at).map(|p| (room, p)))
+                .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
+                .collect();
+            let Some(&spawn) = patrol.first() else {
+                continue;
+            };
+            residents.sites.push(crate::robots::indoor::IndoorSite {
+                nav: nav.clone(),
+                patrol,
+                spawn,
+                crawlers,
+            });
+        }
     }
 }
 
@@ -1866,6 +1887,73 @@ pub struct CarriedOutOfDepot {
     pub item: Entity,
 }
 
+/// Something the convoys carried off, lying in the Depot's sorting hall.
+#[derive(Component, Debug)]
+pub struct LostKit;
+
+/// How many of the lost things lie in the hall (the latest).
+pub const LOST_SHOWN: usize = 16;
+
+/// Logic, once: what the memorial convoys took (`Memorial::lost`, the
+/// latest first) lies in the sorting hall's bins, on the crates and
+/// pallets, for the taking back.
+fn fill_lost_bins(
+    mut commands: Commands,
+    buildings: Query<(&super::buildings::Building, &Transform)>,
+    memorial: Option<Res<crate::persist::Memorial>>,
+    catalog: Res<crate::items::Catalog>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return;
+    }
+    let Some((_, xf)) = buildings.iter().find(|(b, _)| b.prefab == DEPOT) else {
+        return;
+    };
+    *done = true;
+    let (Some(memorial), Some(l)) = (memorial, ug::layout(DEPOT)) else {
+        return;
+    };
+    let Some(hall) = l.rooms.iter().find(|r| r.id == "sorting_hall") else {
+        return;
+    };
+    let bins: Vec<Vec2> = hall
+        .props
+        .iter()
+        .filter(|p| matches!(p.kind, PropKind::Crate | PropKind::Pallet))
+        .map(|p| Vec2::new(hall.at[0] + p.at[0], hall.at[1] + p.at[1]))
+        .collect();
+    if bins.is_empty() {
+        return;
+    }
+    let kinds = memorial.0.lost.iter().rev().filter_map(|name| {
+        catalog
+            .iter()
+            .find(|(_, d)| d.name == *name)
+            .map(|(k, _)| k)
+    });
+    for (n, kind) in kinds.take(LOST_SHOWN).enumerate() {
+        // Round the bins, a few to each, a little apart.
+        let bin = bins[n % bins.len()];
+        let k = (n / bins.len()) as f32;
+        let at = Vec3::new(
+            bin.x - 0.25 + 0.25 * (k % 3.0),
+            l.floor_of(hall) + 1.3 + 0.2 * k,
+            bin.y - 0.15 + 0.15 * (k % 2.0),
+        );
+        let e = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(xf.transform_point(at)),
+                condition: 0.8,
+            },
+        );
+        commands.entity(e).insert(LostKit);
+    }
+}
+
 /// Logic: who's in the Depot, what they had on them going in, and what
 /// they came out with that they hadn't.
 fn depot_visits(
@@ -2108,7 +2196,8 @@ mod tests {
             let sites = sites_on(&app);
             let crawlers: u32 = sites
                 .iter()
-                .map(|(s, _)| ug::layout(&s.id).unwrap().crawlers)
+                .flat_map(|(s, _)| ug::layout(&s.id).unwrap().residents())
+                .map(|r| r.1)
                 .sum();
             for (site, xf) in &sites {
                 let l = ug::layout(&site.id).unwrap();
@@ -2547,6 +2636,54 @@ mod tests {
             vec![found],
             "out with what was found there, not {mine:?}"
         );
+    }
+
+    /// What the convoys took lies in the Depot's sorting hall, the latest
+    /// first, and stays there (on the bins, not through the floor).
+    #[test]
+    fn the_lost_kit_lies_in_the_sorting_hall() {
+        // (Set before the first frame, as a save is loaded at startup.)
+        let mut app = crate::headless_app(
+            LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let names: Vec<String> = catalog
+            .iter()
+            .take(LOST_SHOWN + 4)
+            .map(|(_, d)| d.name.clone())
+            .collect();
+        app.world_mut()
+            .resource_mut::<crate::persist::Memorial>()
+            .0
+            .lost = names.clone();
+        for _ in 0..90 * 4 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let lost: Vec<(String, Vec3)> = app
+            .world_mut()
+            .query_filtered::<(&Name, &GlobalTransform), With<LostKit>>()
+            .iter(app.world())
+            .map(|(n, g)| (n.to_string(), g.translation()))
+            .collect();
+        assert_eq!(lost.len(), LOST_SHOWN, "{lost:?}");
+        // The latest, not the oldest.
+        assert!(lost.iter().any(|(n, _)| n == names.last().unwrap()));
+        for (name, at) in &lost {
+            let site = site_under(&zone, *at);
+            assert!(
+                site.as_ref()
+                    .is_some_and(|s| s.0 == DEPOT && at.y > s.1 - 0.05),
+                "{name} at {at:?}: {site:?}"
+            );
+        }
     }
 
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
