@@ -1860,21 +1860,57 @@ fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option
         let mut start = last;
         for (door, cross) in plan.doors_on(last, p) {
             let dir = (p - last).normalize_or_zero();
-            let before = cross - dir * 1.1;
-            let square = (before - start).dot(dir) > 0.0;
-            if square {
+            // Square to the doorway: its normal, toward the side it's
+            // coming from.
+            let normal = plan
+                .doors
+                .iter()
+                .find(|d| d.entity == door)
+                .map(|d| {
+                    let t = (d.b - d.a).normalize_or(Vec2::X);
+                    let n = Vec2::new(-t.y, t.x);
+                    if (start - cross).dot(n) < 0.0 { -n } else { n }
+                })
+                .unwrap_or(-dir);
+            let walkable = |q: Vec2| plan.grid.walkable(q.to_array());
+            // Square on where there's floor for it (a tower's landing may
+            // have none); along the path otherwise.
+            // Only when it starts at the door, inside the leaf's swing (the
+            // trap); from further off the old way in works.
+            let square_on = start.distance(cross) < 1.1 && walkable(cross + normal * 1.1);
+            let before = if square_on {
+                cross + normal * 1.1
+            } else {
+                cross - dir * 1.1
+            };
+            // Stand clear of the leaf's swing to open it: from further off,
+            // walk up to there; from closer in (starting at the door),
+            // step back out to there first, or the leaf swings into you and
+            // pins you in the doorway.
+            let back = square_on || (before - start).dot(dir) > 0.0;
+            if back {
                 walk(&mut tasks, start, before, 0.3);
             }
             tasks.push(Task::OpenDoor(door));
             // A door swinging out can shove you aside: square up to the
             // doorway again rather than go at the frame on a slant.
-            if square {
+            if back {
                 tasks.push(Task::WalkTo {
                     to: plan.world2(before),
                     within: 0.3,
                 });
             }
-            start = cross;
+            // Straight through, clear of the open leaf, before turning.
+            let through = cross - normal * 0.7;
+            if square_on && walkable(through) {
+                tasks.push(Task::WalkTo {
+                    to: plan.world2(through),
+                    within: 0.3,
+                });
+                start = through;
+            } else {
+                start = cross;
+            }
         }
         walk(&mut tasks, start, p, if i == n - 1 { within } else { 0.35 });
         last = p;
