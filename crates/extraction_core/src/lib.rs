@@ -21,6 +21,7 @@ pub mod map_lint;
 pub mod map_nav;
 pub mod nav;
 pub mod noise;
+pub mod progression;
 pub mod rocks;
 pub mod save;
 pub mod terrain;

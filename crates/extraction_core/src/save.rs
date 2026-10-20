@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::firearm::Round;
+use crate::progression::Progress;
 
 pub const SAVE_VERSION: u32 = 1;
 
@@ -25,6 +26,10 @@ pub struct SaveGame {
     pub logbook: Option<String>,
     #[serde(default)]
     pub requests: RequestsSave,
+    /// The driver's jobs and what's been fitted to the truck. Older saves
+    /// have none: they're credited from `requests` when loaded.
+    #[serde(default)]
+    pub progress: Option<Progress>,
 }
 
 /// The driver's requests: how many there have been, what's wanted now,
@@ -142,6 +147,8 @@ pub struct Career {
     pub logbook: Option<String>,
     #[serde(default)]
     pub requests: RequestsSave,
+    #[serde(default)]
+    pub progress: Option<Progress>,
 }
 
 impl Career {
@@ -166,6 +173,7 @@ impl Career {
         save.memorial = self.memorial.clone();
         save.logbook = self.logbook.clone();
         save.requests = self.requests.clone();
+        save.progress = self.progress.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -180,6 +188,7 @@ impl Career {
         self.memorial = save.memorial.clone();
         self.logbook = save.logbook.clone();
         self.requests = save.requests.clone();
+        self.progress = save.progress.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }
@@ -327,5 +336,35 @@ mod tests {
         let text = career.to_ron().unwrap();
         let again = Career::from_ron(&text).unwrap();
         assert_eq!(again.zones.len(), 2);
+    }
+
+    #[test]
+    fn a_career_from_before_jobs_still_loads() {
+        let mut c = Career::from_game(&SaveGame::new("marrow_creek"));
+        c.requests.number = 4;
+        let text = c.to_ron().unwrap();
+        let old: String = text
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("progress:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_ne!(old, text, "the field was there to take out");
+        let back = Career::from_ron(&old).unwrap();
+        assert!(back.progress.is_none());
+        assert_eq!(back.requests.number, 4);
+        // And the jobs, once there are some, come back.
+        let mut c = back;
+        c.progress = Some(Progress {
+            done: 2,
+            upgrades: vec!["stash_rack".into()],
+            ..Default::default()
+        });
+        let again = Career::from_ron(&c.to_ron().unwrap()).unwrap();
+        assert_eq!(again.progress, c.progress);
+        assert_eq!(
+            again.game("kettle_pass").progress,
+            c.progress,
+            "every valley"
+        );
     }
 }

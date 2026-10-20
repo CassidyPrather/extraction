@@ -253,6 +253,7 @@ fn load_save(
     mut memorial: ResMut<Memorial>,
     mut logbook: ResMut<crate::raid::logbook::Logbook>,
     mut requests: ResMut<crate::raid::requests::Requests>,
+    mut progression: ResMut<crate::progression::Progression>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -292,10 +293,13 @@ fn load_save(
     logbook.written = save.logbook.clone();
     *requests = crate::raid::requests::Requests {
         number: save.requests.number,
-        want: save.requests.want.clone(),
         cache: save.requests.cache.clone(),
         cache_at: save.requests.cache_at.clone(),
     };
+    progression.0 = save
+        .progress
+        .clone()
+        .unwrap_or_else(|| progress_from_requests(&save.requests));
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
         save.item_count(),
@@ -303,6 +307,20 @@ fn load_save(
         raid.surge_in()
     );
     commands.insert_resource(Restore { save, zone });
+}
+
+/// A career from before the driver's jobs had tiers: every request it met
+/// counts as a job done, and the one on the card stays on it.
+fn progress_from_requests(
+    r: &extraction_core::save::RequestsSave,
+) -> extraction_core::progression::Progress {
+    let mut p = extraction_core::progression::Progress::default();
+    p.credit(r.number.saturating_sub(r.want.is_some() as u32));
+    p.job = r
+        .want
+        .clone()
+        .map(|(item, n)| extraction_core::progression::Job::Fetch { item, n });
+    p
 }
 
 /// A new game: an empty Zone (rolled fresh) and a starter kit in the stash.
@@ -689,11 +707,14 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     if let Some(r) = world.get_resource::<crate::raid::requests::Requests>() {
         save.requests = extraction_core::save::RequestsSave {
             number: r.number,
-            want: r.want.clone(),
+            want: None,
             cache: r.cache.clone(),
             cache_at: r.cache_at.clone(),
         };
     }
+    save.progress = world
+        .get_resource::<crate::progression::Progression>()
+        .map(|p| p.0.clone());
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()

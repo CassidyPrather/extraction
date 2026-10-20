@@ -34,6 +34,7 @@ impl Plugin for GadgetVisualsPlugin {
                 drone_feeds,
                 dress_ropes,
                 mark_caches,
+                mark_job,
             ),
         );
     }
@@ -889,6 +890,65 @@ fn mark_caches(
                 if let Ok(mut t) = marks.get_mut(m) {
                     t.translation =
                         Vec3::new(p[0], 0.0, p[1]) / zone.map.size * SHEET + Vec3::Y * 0.0006;
+                }
+            }
+            (None, Some(m)) => commands.entity(m).despawn(),
+            (None, None) => {}
+        }
+    }
+}
+
+/// The driver's job, pencilled on a map sheet as a blue ring.
+#[derive(Component)]
+struct JobMark;
+
+fn mark_job(
+    mut commands: Commands,
+    progression: Res<crate::progression::Progression>,
+    opts: Res<crate::launch::LaunchOptions>,
+    zone: Res<crate::world::Zone>,
+    sheets: Query<(Entity, Option<&Children>), With<MapSheet>>,
+    mut marks: Query<&mut Transform, With<JobMark>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+) {
+    let at = progression
+        .0
+        .job
+        .as_ref()
+        .and_then(|j| j.mark())
+        .filter(|(map, _)| *map == opts.map)
+        .map(|(_, p)| p);
+    let local = |p: [f32; 2]| Vec3::new(p[0], 0.0, p[1]) / zone.map.size * SHEET + Vec3::Y * 0.0006;
+    for (sheet, children) in &sheets {
+        let mark = children.and_then(|c| c.iter().find(|c| marks.contains(*c)));
+        match (at, mark) {
+            (Some(p), None) => {
+                let (mesh, mat) = look
+                    .get_or_insert_with(|| {
+                        (
+                            meshes.add(Torus::new(0.0085, 0.0100)),
+                            materials.add(StandardMaterial {
+                                base_color: Color::srgb(0.12, 0.2, 0.55),
+                                perceptual_roughness: 0.95,
+                                ..default()
+                            }),
+                        )
+                    })
+                    .clone();
+                commands.entity(sheet).with_child((
+                    JobMark,
+                    Mesh3d(mesh),
+                    MeshMaterial3d(mat),
+                    // Flattened onto the paper.
+                    Transform::from_translation(local(p)).with_scale(Vec3::new(1.0, 0.05, 1.0)),
+                    Visibility::default(),
+                ));
+            }
+            (Some(p), Some(m)) => {
+                if let Ok(mut t) = marks.get_mut(m) {
+                    t.translation = local(p);
                 }
             }
             (None, Some(m)) => commands.entity(m).despawn(),

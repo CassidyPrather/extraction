@@ -457,5 +457,11 @@
         (id: "wristwatch", name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
         (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
         (id: "chess_piece", name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        // What the driver's Recover jobs send you for (`progression`).
+        (
+            id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
+            description: "A surveyor's data recorder, grey-green and rubber-cornered, stencilled QA-SURVEY 07. The driver wants what's on it.",
+            category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
+        ),
     ],
 )
