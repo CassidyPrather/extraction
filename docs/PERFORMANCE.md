@@ -359,3 +359,8 @@ thing; every pipeline the raid's firsts need is then built in the first
 surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
 `warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
 (it stocks, the decoys go, nothing's left after).
+
+Neither change shows: `docs/shots/performance/hitches_village.png` is the
+village at frame 600 (lavapipe, clear day) with the shelf stocked and the
+buildings dressed from the background bake, and the same frame with the
+old in-place bake and no shelf is identical to the pixel.
