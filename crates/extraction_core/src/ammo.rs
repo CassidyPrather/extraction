@@ -24,6 +24,9 @@ pub enum Load {
     Tracer,
     /// A 12 gauge slug: one heavy lead ball where buckshot is nine.
     Slug,
+    /// Ball re-packed at the bench: now and then too little powder (a
+    /// squib) or a tired primer (a dud).
+    Repacked,
 }
 
 /// AP's cost through hard plate (armour steel, sheet, a helmet), against

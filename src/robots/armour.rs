@@ -440,6 +440,7 @@ mod tests {
                 shooter: None,
                 mass_g: 3.4,
                 load: Default::default(),
+                blow: None,
             });
         for _ in 0..3 {
             app.update();

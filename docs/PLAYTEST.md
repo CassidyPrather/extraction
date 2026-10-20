@@ -287,6 +287,13 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   hand's speed): does it go where you meant? Cook one (B) and see if the
   timing feels fair. Thrust the knife into something, then slash: does
   "hard enough" match what your arm did? Fix the SKS's bayonet (A).
+  Drive an AK's butt back into a robot's eye: does a real stroke land,
+  and a bump not?
+- Faults. Load a box of re-packed rounds and shoot until one pops weak
+  (it may take a few boxes). Can you tell it from a dud by the feel
+  alone? Rod it out with the cleaning rod before the next shot. Shoot a
+  filthy Mosin until its bolt sticks, then slap it free. Clean a gun by
+  bringing the kit to it: does the bore come up bright?
 - Cover by material: shoot through a shed's plank wall with the AK, then
   try the pistol; skip rounds off concrete at a slant. Does it read?
 - Ammunition. Thumb a few AP rounds onto a magazine of ball and fire:

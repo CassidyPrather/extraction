@@ -12,6 +12,7 @@
 
 pub mod armour;
 pub mod ballistics;
+pub mod faults;
 pub mod feel;
 pub mod flat;
 pub mod grenades;
@@ -23,6 +24,7 @@ pub mod range;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
+pub mod wear;
 pub mod zero;
 
 use avian3d::prelude::*;
@@ -196,6 +198,7 @@ impl Plugin for WeaponsPlugin {
                 armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
                 zero::ZeroPlugin,
+                faults::FaultsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -445,6 +448,13 @@ fn work_handles(
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
+                // A stuck bolt: only a palm slapped up under the handle
+                // breaks it free.
+                if gun.firearm.bolt_stuck
+                    && hand.velocity.dot(gt.rotation() * Vec3::Y) > faults::STICKY_SLAP
+                {
+                    ev.extend(gun.firearm.free_bolt());
+                }
                 if gun.firearm.bolt_travel < 0.05 {
                     let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
