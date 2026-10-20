@@ -222,19 +222,20 @@ fn a_loud_raid_brings_them_to_the_door_and_into_the_cabin() {
     let player = one::<With<LocalPlayer>>(&mut app);
     app.world_mut().get_mut::<Attention>(player).unwrap().noise = 2.0;
     app.update();
-    let director_had = app
-        .world()
-        .get_resource::<crate::robots::director::Director>()
-        .map(|d| d.responses.len());
+    // The visit goes to Robot minds' director as a `NightVisit` at the door.
+    #[derive(Resource, Default)]
+    struct Visits(Vec<crate::robots::director::NightVisit>);
+    app.init_resource::<Visits>().add_systems(
+        Update,
+        |mut r: MessageReader<crate::robots::director::NightVisit>, mut v: ResMut<Visits>| {
+            v.0.extend(r.read().copied())
+        },
+    );
     press(&mut app, SafehouseThing::Bed);
-    if let Some(had) = director_had {
-        let now = app
-            .world()
-            .resource::<crate::robots::director::Director>()
-            .responses
-            .len();
-        assert!(now > had, "a team sent to the door");
-    }
+    app.update();
+    let visits = &app.world().resource::<Visits>().0;
+    assert_eq!(visits.len(), 1, "a team sent to the door");
+    assert_eq!(Some(visits[0].door), house(&app).door);
     let log: Vec<String> = app
         .world()
         .resource::<Raid>()

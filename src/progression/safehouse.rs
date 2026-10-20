@@ -18,6 +18,7 @@ use crate::raid::truck::Pressable;
 use crate::raid::{Phase, Raid, TRUCK_WAIT};
 use crate::rig::LocalPlayer;
 use crate::robots::Robot;
+use crate::robots::director::NightVisit;
 use crate::world::Layer;
 use crate::world::buildings::{Building, DoorLeaf};
 
@@ -86,6 +87,7 @@ pub struct SafehousePlugin;
 impl Plugin for SafehousePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Slept>()
+            .add_message::<NightVisit>()
             .init_resource::<Safehouse>()
             .init_resource::<HourShift>()
             .add_systems(
@@ -265,8 +267,8 @@ fn press(
     catalog: Res<Catalog>,
     wedged: Query<(), With<crate::robots::doors::Wedged>>,
     mut attention: Query<&mut Attention>,
-    mut director: Option<ResMut<crate::robots::director::Director>>,
-    doors: Query<&GlobalTransform, With<DoorLeaf>>,
+    sleepers: Query<&GlobalTransform>,
+    mut visits: MessageWriter<NightVisit>,
     mut slept: MessageWriter<Slept>,
     mut progression: ResMut<super::Progression>,
     mut budget: Option<ResMut<crate::anomaly::AttentionBudget>>,
@@ -325,12 +327,12 @@ fn press(
                     // They've followed you: something at the door before
                     // light.
                     raid.say(lines::SAFE_NIGHT_VISIT);
-                    let at = house
-                        .door
-                        .and_then(|d| doors.get(d).ok())
-                        .map(|g| g.translation());
-                    if let (Some(d), Some(at)) = (director.as_mut(), at) {
-                        d.queue_response(20.0, at);
+                    if let (Some(door), Ok(me)) = (house.door, sleepers.get(*player)) {
+                        visits.write(NightVisit {
+                            door,
+                            at: me.translation(),
+                            delay: 20.0,
+                        });
                     }
                 } else {
                     raid.say(lines::SAFE_WOKE);
