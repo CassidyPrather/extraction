@@ -47,7 +47,7 @@ pub enum First {
     Revealed,
     /// Through a fold (mirrors), somewhere else.
     Blinked,
-    /// In a well's pull (sent by the anomalies with `MeetFirst`).
+    /// In a well's pull.
     Well,
     Death,
     ConvoyTook,
@@ -123,13 +123,15 @@ impl First {
                 &["Truck: \"Dark down there, and not empty. Torch on, go slow.\""]
             }
             First::Surge => &["Truck: \"Sky's turning. That's the Surge coming. Come home.\""],
-            First::Lamed => &["Truck: \"You've lamed it. It can't chase you now.\""],
+            First::Lamed => &["Truck: \"You've lamed it. It can't follow. Get out of its sight.\""],
             First::PackFull => &["Truck: \"Pack's full. Leave the worst of it behind.\""],
             First::Worn => {
                 &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
             }
-            First::Bleeding => &["Truck: \"You're bleeding. Dressing on it now, or you'll drop.\""],
-            First::Detector => &["Truck: \"Hear it ticking? Faster means nearer. Sweep it slow.\""],
+            First::Bleeding => {
+                &["Truck: \"You're bleeding. Dressing on it now, before you drop.\""]
+            }
+            First::Detector => &["Truck: \"Hear it ticking? Faster's nearer. Sweep it slow.\""],
             First::Revealed => {
                 &["Truck: \"That's how you find them. Bolts are cheap. Legs aren't.\""]
             }
@@ -421,6 +423,7 @@ fn anomaly_kit(
     mut clicks: MessageReader<crate::anomaly::detector::DetectorClick>,
     mut acts: MessageReader<crate::anomaly::AnomalyEvent>,
     mut blinks: MessageReader<crate::anomaly::mirrors::Blinked>,
+    mut wells: MessageReader<crate::anomaly::wells::EnteredWell>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     mut m: Meet,
 ) {
@@ -440,6 +443,9 @@ fn anomaly_kit(
     }
     if blinks.read().any(|b| b.entity == me) {
         m.meet(First::Blinked);
+    }
+    if wells.read().any(|w| w.player == me) {
+        m.meet(First::Well);
     }
 }
 
@@ -747,13 +753,22 @@ mod tests {
                 from: at,
                 to: at + Vec3::X * 20.0,
             });
+            w.write_message(crate::anomaly::wells::EnteredWell {
+                player: me,
+                well: thing,
+            });
             app.update();
         }
         for _ in 0..90 * 20 {
             app.update();
         }
         let spoken = &app.world().resource::<Spoken>().0;
-        for f in [First::Detector, First::Revealed, First::Blinked] {
+        for f in [
+            First::Detector,
+            First::Revealed,
+            First::Blinked,
+            First::Well,
+        ] {
             assert!(app.world().resource::<Firsts>().met(f), "{f:?} not met");
             let n = spoken.iter().filter(|s| *s == f.lines()[0]).count();
             assert_eq!(n, 1, "{f:?} said {n} times");
