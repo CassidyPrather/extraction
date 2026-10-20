@@ -101,8 +101,9 @@ pub fn direct(
     };
     match steps.step {
         0 => {
-            // On the table inside: matches and a door wedge.
-            for (id, off) in [("matches", -0.3), ("door_wedge", 0.3)] {
+            // On the table inside (clear of the note): matches and a door
+            // wedge.
+            for (id, off) in [("matches", -0.45), ("door_wedge", -0.1)] {
                 let at = c.transform_point(Vec3::new(off, 1.25, 0.5));
                 if let Some(kind) = catalog.kind(id) {
                     spawn_item(

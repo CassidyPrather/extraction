@@ -12,7 +12,7 @@ use crate::anomaly::Attention;
 use crate::anomaly::artifacts::CarriedBy;
 use crate::interact::body::Backpack;
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
-use crate::items::{Catalog, Item};
+use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::truck::Pressable;
 use crate::raid::{Phase, Raid, TRUCK_WAIT};
@@ -66,7 +66,18 @@ const FLOOR: f32 = 0.4;
 const STOVE: Vec3 = Vec3::new(2.6, FLOOR + 0.9, 2.3);
 const BED: Vec3 = Vec3::new(-2.8, FLOOR + 0.55, 1.5);
 const CRATE: Vec3 = Vec3::new(-2.6, FLOOR + 0.3, -1.6);
-const RADIO: Vec3 = Vec3::new(0.0, FLOOR + 0.8, 0.5);
+// (Clear of the last people's note, at (0.3, 0.55).)
+const RADIO: Vec3 = Vec3::new(-0.45, FLOOR + 0.8, 0.5);
+/// Left behind by the cabin's last people, as its note says: the logging
+/// crew's tin under the bed, the woodward's matches by his stove.
+const LEFTOVERS: [(&str, &str, Vec3); 2] = [
+    (
+        "marrow_creek",
+        "canned_beans",
+        Vec3::new(-2.6, FLOOR + 0.1, 1.5),
+    ),
+    ("cinder_works", "matches", Vec3::new(1.95, FLOOR + 0.1, 2.3)),
+];
 /// Inside: this close to the cabin's middle.
 const INSIDE: f32 = 3.2;
 
@@ -103,6 +114,8 @@ fn find_cabin(
     mut house: ResMut<Safehouse>,
     cabins: Query<(Entity, &Building, &GlobalTransform)>,
     doors: Query<(Entity, &ChildOf), With<DoorLeaf>>,
+    raid: Res<Raid>,
+    catalog: Res<Catalog>,
 ) {
     if house.cabin.is_some() {
         return;
@@ -110,12 +123,33 @@ fn find_cabin(
     let Some(at) = safehouse(&opts.map) else {
         return;
     };
-    let Some((cabin, _, _)) = cabins.iter().find(|(_, b, gt)| {
+    let Some((cabin, _, cabin_at)) = cabins.iter().find(|(_, b, gt)| {
         b.prefab == "cabin_log" && gt.translation().xz().distance(Vec2::from_array(at)) < 1.0
     }) else {
         return;
     };
     house.cabin = Some(cabin);
+    // What the last people left, where their note on the table says (Story's
+    // leftovers): there again each Surge cycle until the cabin's cleared.
+    if !house.state.cleared || house.state.cycle != raid.cycle {
+        for (id, local) in LEFTOVERS
+            .iter()
+            .filter(|(m, ..)| *m == opts.map)
+            .map(|(_, id, at)| (id, at))
+        {
+            if let Some(kind) = catalog.kind(id) {
+                spawn_item(
+                    &mut commands,
+                    &catalog,
+                    SpawnItem {
+                        kind,
+                        transform: Transform::from_translation(cabin_at.transform_point(*local)),
+                        condition: 1.0,
+                    },
+                );
+            }
+        }
+    }
     house.door = doors
         .iter()
         .find(|(_, c)| c.parent() == cabin)

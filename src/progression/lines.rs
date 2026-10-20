@@ -44,7 +44,7 @@ Somebody in town still pays for what's on them.\"\nStash it, press here."
 /// An expedition: a recover so deep in it takes a night out.
 pub fn ask_expedition(place: &str) -> String {
     format!(
-        "\"Two days' walk, this one. A recorder, left {place} Sleep at the cabin \
+        "\"Two days' walk, this one. A recorder, left {place}. Sleep at a cabin \
 on the way.\"\nStash it, press here."
     )
 }
@@ -91,7 +91,7 @@ pub const IN_THE_YARD: &str = "Driver: \"Not in the yard. Out there, for real.\"
 pub const NO_RECORDER: &str = "Driver: \"No recorder in the stash. Still out there, is it?\"";
 pub const NO_LEDGER: &str = "Driver: \"Not in the stash. Bay K-14. Under the Gate.\"";
 pub const EXPEDITION_NO_NIGHT: &str =
-    "Driver: \"That's not been two days. Sleep out there, then bring it.\"";
+    "Driver: \"That's not two days. Sleep out there, then bring it.\"";
 pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
@@ -191,21 +191,20 @@ pub fn why_after(item: &str) -> Option<&'static str> {
 // --- Safehouse ----------------------------------------------------------------
 // (Placeholders for Story.)
 
-pub const SAFE_CLEARED: &str = "Nothing in here but dust. Wedge the door, light the stove.";
-pub const SAFE_BARRED: &str = "The door's wedged. Nobody's coming in quietly.";
-pub const SAFE_LIT: &str = "The stove takes. The cabin smells of smoke and pine.";
-pub const SAFE_STOVE_LIT: &str = "The stove's ticking over.";
-pub const SAFE_NO_MATCHES: &str = "Nothing to light it with. Matches.";
+pub const SAFE_CLEARED: &str = "Empty now. Wedge the door, then light the stove.";
+pub const SAFE_BARRED: &str = "Door's wedged. Nothing gets in without you hearing.";
+pub const SAFE_LIT: &str = "The stove catches. Smoke and pine, and warm hands.";
+pub const SAFE_STOVE_LIT: &str = "The stove ticks as it warms.";
+pub const SAFE_NO_MATCHES: &str = "Nothing to light it with. You'll want matches.";
 pub const SAFE_CLAIMED: &str = "A crate, a bed, a radio. Somewhere to stop.";
 pub const SAFE_NOT_YET: &str = "Not yours yet. Clear it, wedge the door, light the stove.";
 pub const SAFE_WEDGE_FIRST: &str = "Not with the door loose. Wedge it first.";
-pub const SAFE_SURGE_CLOSE: &str = "The air's wrong. The Surge is too close to sleep.";
-pub const SAFE_WOKE: &str = "Grey light under the door. Morning.";
-pub const SAFE_NIGHT_VISIT: &str =
-    "The radio, in the dark: machine talk, close. Something's at the door.";
-pub const SAFE_TRUCK_WAITS: &str = "Truck: \"I'll sit tight at the RV tonight. First light.\"";
-pub const SAFE_TRUCK_LEFT: &str = "Truck: \"Couldn't wait all night. Call me again.\"";
-pub const SAFE_FOUND: &str = "Truck: \"You were loud out there. They'll have found your cabin.\"";
+pub const SAFE_SURGE_CLOSE: &str = "The air's tight. Too near the Surge to sleep.";
+pub const SAFE_WOKE: &str = "Grey light under the door.";
+pub const SAFE_NIGHT_VISIT: &str = "The radio, low: machine talk, close. Something's at the door.";
+pub const SAFE_TRUCK_WAITS: &str = "Truck: \"I'll sleep in the cab at the RV. First light.\"";
+pub const SAFE_TRUCK_LEFT: &str = "Truck: \"Couldn't sit all night. Call me when you're up.\"";
+pub const SAFE_FOUND: &str = "Truck: \"You were loud out there. They'll have been at your cabin.\"";
 
 // --- Upkeep and orders (after the ladder) ---------------------------------
 
