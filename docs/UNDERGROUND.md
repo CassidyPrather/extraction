@@ -242,7 +242,7 @@ sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
 `d_bay`), the flooded cistern (`d_cistern`), the service stair up
 (`d_stair`) and the hatch (`d_hatch`).
 
-## Signature sites (design)
+## Signature sites
 
 One more site per valley, each built on a mechanic the others don't
 have. Layouts stay data (`assets/underground/*.ron`); each mechanic is
@@ -338,3 +338,19 @@ Under the furnace hall: flues, ash pits and the charging crane.
 
 Built in that order: the pump station first (it extends the floods
 already there), then the mine, then the cellars.
+
+### As built
+
+| Site | Placed | Mechanic | Systems | End-to-end test |
+| - | - | - | - | - |
+| `pump_marrow` | Marrow (-173, 3), outfall (-173, 58) | three basins: inlet (valve in a dry gallery), screens (valve under the inlet's water), sump (hand pump only) | `underground::Levels`, `DrainControl`, `BasinDrained`, `site_water` reads live levels, basin surfaces follow | `the_pump_station_drains` |
+| `deep_kettle` | Kettle (-54, 106), incline (-54, 173) | firedamp in the old heading (and its corridor) and a dip; the canary; a cart on the haulage rail; shoring between heading and refuge | `world::workings`: `Gas`, `InGas`, `GasIgnited`, `Canary`, `MineCart`, `Shoring`, `Fall`, `RoofFell` | `crossing_the_gas_with_the_canary`, `the_cart_rolls_and_the_roof_falls` |
+| `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
+
+Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
+`shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a
+layout's `lamp_colour`, a round's `heavy` and `dormant`; each checked by
+`check` and drawn on the plans (`docs/underground/*.svg`). Light: the
+pump station's lamps cold green-white; the mine has none (the canary's
+glow, the gas's flash); the cellars' only light is the heat's dull red,
+fading as they're vented.
