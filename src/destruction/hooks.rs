@@ -32,6 +32,16 @@ pub struct Smash {
     pub push: Vec3,
 }
 
+/// Tear a doorway-sized hole in the wall at `at` (within a few
+/// centimetres of the wall's middle), its boards flying along `out`: a
+/// heavy machine's arm opening a building up (`destruction::breach`).
+/// Concrete and brick don't tear.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Breach {
+    pub at: Vec3,
+    pub out: Vec3,
+}
+
 /// A seam a crowbar's tip seats in: torque (N·m) that, held for
 /// [`PRY_HOLD`] seconds, makes it give. `seam` is where the tip goes and
 /// `along` the way the seam runs, both in the thing's own space.
@@ -78,6 +88,7 @@ pub struct HooksPlugin;
 impl Plugin for HooksPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Smash>()
+            .add_message::<Breach>()
             .add_message::<Pried>()
             .add_message::<Cut>()
             .add_systems(

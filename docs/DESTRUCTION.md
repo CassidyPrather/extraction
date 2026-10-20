@@ -52,9 +52,30 @@ own entities (`wood::BuildingCrate`), drawn by their `crate_slat` /
   seam. `torque >= needs` held for `PRY_HOLD` (0.4 s) and it gives: a
   plank door (350 N·m, at its latch edge) is wrenched off, a crate's lid
   (120 N·m) pops and it spills. Letting go starts it over.
+- **`Breach { at, out }`**: a doorway-sized hole (1.1 m wide, floor to
+  2 m, clamped to the wall segment) torn in the wall at `at` (within
+  0.3 m of its middle), its boards or plaster flying along `out`. Planks,
+  logs, timber, plaster and sheet tear; concrete and brick don't. See
+  "Holes in walls" below.
 - **`Cuttable` / `Cut`**: bolt cutters; nothing carries `Cuttable` yet.
 - Despawning a plank door (a walker tearing it off) is breaking it: the
   splinters, the save and the Surge follow from the removal.
+
+## Holes in walls
+
+A building is one compound collider and a few merged meshes, so a hole
+is cut in its prefab: the wall box the breach lands in becomes the boxes
+round the hole (over it, and either side, added at the end so props'
+piece ranges hold; `breach::split`). The collider and surfaces are
+rebuilt at once (`buildings::body`); the client drops the building's
+merged meshes and builds them again (`buildings::redress`;
+`dress_buildings` cuts the holes too). Holes are kept by their centres in
+the world (`breach::Breaches`), saved as `ZoneSave::breaches`, cut again
+when a restored building appears, and mended by the Surge. Robots' nav
+grids don't know about holes yet.
+
+`EXTRACTION_BREACH=1` on a `--screenshot` run tears one where the view
+meets a wall, twenty frames before the capture (`breach.png`).
 
 ## Broken by the years
 
@@ -154,8 +175,9 @@ door's crash).
   door, a crate shot open spilling loot, a save round trip and the Surge,
   the debris storm (half despawned mid-flight, no panic, never past the
   cap), a whole valley's windows shot out at once, a building's crate
-  broken and rebuilt by the Surge, a `Smash`, and a crowbar's pull (too
-  weak, too short, then enough).
+  broken and rebuilt by the Surge, a `Smash`, a crowbar's pull (too
+  weak, too short, then enough), a step in broken glass, and a breach
+  torn, saved, reloaded and mended (plus `breach::tests` on the split).
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.
@@ -180,7 +202,8 @@ test --lib stage_broken_house -- --ignored`, then `--save /tmp/s/career.ron`.
 Shots in `docs/shots/destruction/`: `teeth.png` (a window shot out, the
 teeth left in its sashes), `door_down.png` (a plank door shot down, its
 splinters in the doorway), `litter.png` (glass glittering on the ground
-under a window broken from inside).
+under a window broken from inside), `breach.png` (a hole torn in a plank
+house's back wall, its boards on the ground).
 
 ## Next
 
@@ -190,3 +213,13 @@ under a window broken from inside).
   `Hit` says which (asked of Weapon feel).
 - Robots firing at a heard position through thin walls
   (`firearm_terminal` already says what a round gets through).
+
+## Merge notes
+
+- Weapon feel's `Hit::blow` (`Option<melee::Blow>`): add `blow: None` to
+  the `Hit`s built in `destruction::tests` (they're blows: `Some(Blunt)`)
+  and `hooks::smash` (`Some(Blunt)`), and weigh wood by it in
+  `wood::take_hits`: rounds on doors `ROUND_ON_DOOR`, `Point` 0.25,
+  `Edge` 0.5, `Blunt`/blasts 1.0.
+- World models' `world::decay::weathered_sashes(prefab, at)`: make
+  `glass::weathered_sashes` return it.

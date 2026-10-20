@@ -82,6 +82,9 @@ pub struct ZoneSave {
     /// the Surge: each by where it stood, centimetres.
     #[serde(default)]
     pub broken: Vec<[i32; 3]>,
+    /// Holes torn in walls, by their centres, centimetres.
+    #[serde(default)]
+    pub breaches: Vec<[i32; 3]>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -19,10 +19,13 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+pub mod breach;
 pub mod debris;
 pub mod glass;
 pub mod hooks;
 pub mod scenario;
+// Robot minds' walkers call it (after the merge); tests do already.
+#[allow(dead_code)]
 pub mod through;
 pub mod visuals;
 pub mod wood;
@@ -86,6 +89,7 @@ impl Plugin for DestructionPlugin {
                 glass::GlassPlugin,
                 wood::WoodPlugin,
                 hooks::HooksPlugin,
+                breach::BreachPlugin,
             ));
     }
 }
@@ -107,6 +111,7 @@ pub fn surge(world: &mut World) {
     world.resource_mut::<Broken>().0.clear();
     glass::mend_all(world);
     wood::mend_all(world);
+    breach::mend_all(world);
 }
 
 #[cfg(test)]

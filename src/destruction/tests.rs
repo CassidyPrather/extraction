@@ -802,3 +802,77 @@ fn a_step_in_broken_glass_crunches_and_is_heard() {
         0
     );
 }
+
+#[test]
+fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
+    use super::breach::Breaches;
+    use super::hooks::Breach;
+    let dir = std::env::temp_dir().join(format!("extraction-breach-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("career.ron");
+    let _ = std::fs::remove_file(&path);
+    let mut a = app(Some(path.clone()));
+    // The door_shot house: its back wall's middle, at waist height.
+    let zone = a.world().resource::<crate::world::Zone>().clone();
+    let (_, mid, out) = super::scenario::front_door(&zone).unwrap();
+    let houses: Vec<(crate::world::buildings::Building, Transform)> = a
+        .world_mut()
+        .query::<(&crate::world::buildings::Building, &Transform)>()
+        .iter(a.world())
+        .filter(|(b, t)| b.prefab == "house_plank" && t.translation.distance(mid) < 6.0)
+        .map(|(b, t)| {
+            (
+                crate::world::buildings::Building {
+                    prefab: b.prefab.clone(),
+                },
+                *t,
+            )
+        })
+        .collect();
+    let (_, bxf) = &houses[0];
+    let wall = bxf.transform_point(Vec3::new(0.9, 1.2, 3.5));
+    let back = bxf.rotation * Vec3::Z;
+    let _ = out;
+    // A ray along the wall's normal through where the hole will be.
+    let blocked = |app: &mut App| {
+        let world = app.world_mut();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+        let spatial = state.get(world).unwrap();
+        spatial
+            .cast_ray(
+                wall + back * 1.0,
+                Dir3::new(-back).unwrap(),
+                2.0,
+                true,
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+            )
+            .is_some_and(|h| h.distance < 1.1)
+    };
+    assert!(blocked(&mut a), "the wall stands");
+    a.world_mut().write_message(Breach {
+        at: wall,
+        out: back,
+    });
+    run(&mut a, 4);
+    assert!(!blocked(&mut a), "a hole through it");
+    assert_eq!(a.world().resource::<Breaches>().0.len(), 1);
+    assert!(live_debris(&mut a) > 6, "its boards fly");
+    // Saved, and back as it was.
+    let save = crate::persist::snapshot(a.world_mut());
+    assert_eq!(save.zone.breaches.len(), 1);
+    let mut career = a
+        .world()
+        .resource::<crate::persist::CareerState>()
+        .0
+        .clone();
+    career.store(&save);
+    crate::persist::write_career(&path, &career);
+    let mut b = app(Some(path.clone()));
+    run(&mut b, 3);
+    assert!(!blocked(&mut b), "the hole is still there after a reload");
+    crate::persist::reset_zone(b.world_mut());
+    run(&mut b, 3);
+    assert!(blocked(&mut b), "the Surge mends the wall");
+    assert!(b.world().resource::<Breaches>().0.is_empty());
+    let _ = std::fs::remove_file(&path);
+}

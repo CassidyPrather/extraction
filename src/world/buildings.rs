@@ -4224,34 +4224,12 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 Visibility::default(),
             ))
             .id();
-        let mut colliders = Vec::new();
-        let mut surfaces = Vec::new();
-        // Crates are their own things (`destruction::wood`): they break.
-        let crates = crate::destruction::wood::crate_pieces(&geo);
-        for (piece, _) in geo.pieces.iter().zip(&crates).filter(|(_, c)| !**c) {
-            let half = match piece.shape {
-                Shape::Box(s) => s * 0.5,
-                Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
-                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-            };
-            // Visual-only pieces count too: floorboards over a plinth.
-            surfaces.push((half, piece.at, piece.mat));
-            if !piece.collide {
-                continue;
-            }
-            let c = match piece.shape {
-                Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
-                Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
-                Shape::Cylinder(r, h) => Collider::cylinder(r, h),
-            };
-            colliders.push((piece.at.translation, piece.at.rotation, c));
-        }
-        if !colliders.is_empty() {
+        if let Some((collider, surfaces)) = body(&geo) {
             commands.entity(root).insert((
                 RigidBody::Static,
-                Collider::compound(colliders),
+                collider,
                 CollisionLayers::new(Layer::World, LayerMask::ALL),
-                super::surfaces::Surfaces(surfaces),
+                surfaces,
             ));
         }
         for d in &geo.doors {
@@ -4266,6 +4244,39 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     }
     info!("{} building loot spots", loot.0.len());
     commands.insert_resource(loot);
+}
+
+/// A building's compound collider and its pieces' materials (also how a
+/// breach rebuilds them: `destruction::breach`). None if nothing collides.
+pub fn body(geo: &Geo) -> Option<(Collider, super::surfaces::Surfaces)> {
+    let mut colliders = Vec::new();
+    let mut surfaces = Vec::new();
+    // Crates are their own things (`destruction::wood`): they break.
+    let crates = crate::destruction::wood::crate_pieces(geo);
+    for (piece, _) in geo.pieces.iter().zip(&crates).filter(|(_, c)| !**c) {
+        let half = match piece.shape {
+            Shape::Box(s) => s * 0.5,
+            Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+            Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+        };
+        // Visual-only pieces count too: floorboards over a plinth.
+        surfaces.push((half, piece.at, piece.mat));
+        if !piece.collide {
+            continue;
+        }
+        let c = match piece.shape {
+            Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
+            Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
+            Shape::Cylinder(r, h) => Collider::cylinder(r, h),
+        };
+        colliders.push((piece.at.translation, piece.at.rotation, c));
+    }
+    (!colliders.is_empty()).then(|| {
+        (
+            Collider::compound(colliders),
+            super::surfaces::Surfaces(surfaces),
+        )
+    })
 }
 
 /// A hinged door in a building (also how the Surge rehangs one that was
@@ -4337,6 +4348,12 @@ pub fn swing_doors(
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
 pub struct PropsPending(u32);
+
+/// Build a building's meshes again (its walls changed: a breach, or the
+/// Surge mending one). Its merged meshes go; `dress_buildings` makes new.
+pub fn redress(commands: &mut Commands, e: Entity) {
+    commands.entity(e).insert(PropsPending(0));
+}
 
 /// Client: lights for buildings, and door leaves (their boxes until the
 /// door model is in). The meshes come once the props' models have loaded
@@ -4495,6 +4512,7 @@ pub fn dress_buildings(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
+    breaches: Option<Res<crate::destruction::breach::Breaches>>,
 ) {
     use crate::render::world_props::Resolved;
     // Baking a building's occlusion takes a few milliseconds: a few
@@ -4508,6 +4526,10 @@ pub fn dress_buildings(
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
+        // Holes torn in its walls (`destruction::breach`).
+        if let Some(holes) = &breaches {
+            crate::destruction::breach::apply(&mut geo, xf, &holes.0);
+        }
         // What the people who lived here left (`clutter`), with the
         // furniture.
         if let Some(zone) = &zone {

@@ -12,6 +12,38 @@ use extraction_core::firearm_terminal::{Outcome, strike_load};
 use crate::weapons::ballistics::Struck;
 use crate::world::Layer;
 
+/// The line check as a system parameter: `Query`s and the spatial query
+/// together, for a robot's brain to ask with.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct RoundPath<'w, 's> {
+    spatial: SpatialQuery<'w, 's>,
+    struck: Struck<'w, 's>,
+}
+
+impl RoundPath<'_, '_> {
+    /// [`would_reach`], skipping the shooter (and anything parented to
+    /// it) and stopping at the target if the line meets it.
+    pub fn would_reach(
+        &self,
+        from: Vec3,
+        to: Vec3,
+        mass_g: f32,
+        speed: f32,
+        skip: &dyn Fn(Entity) -> bool,
+    ) -> bool {
+        would_reach(
+            &self.spatial,
+            &self.struck,
+            from,
+            to,
+            mass_g,
+            speed,
+            skip,
+            &|_| false,
+        )
+    }
+}
+
 /// How many things a round may go through on the way.
 const MAX_PASSES: u8 = 3;
 

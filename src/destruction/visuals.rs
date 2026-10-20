@@ -31,6 +31,7 @@ impl Plugin for DestructionVisualsPlugin {
                 fade_debris,
                 shoot_for_screenshot,
                 dress_crates,
+                redress_breached,
             ),
         );
     }
@@ -360,19 +361,45 @@ fn shoot_for_screenshot(
     opts: Res<crate::LaunchOptions>,
     zone: Option<Res<crate::world::Zone>>,
     player: Query<Entity, With<crate::rig::LocalPlayer>>,
+    spatial: avian3d::prelude::SpatialQuery,
+    mut breaches: MessageWriter<super::hooks::Breach>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
     else {
         return;
     };
+    *frame += 1;
+    // `EXTRACTION_BREACH=1`: twenty frames before the capture, a breach
+    // where the view meets a wall (time for the walls to be built again).
+    if std::env::var("EXTRACTION_BREACH").is_ok() && *frame + 20 == opts.frames {
+        let ground = zone.ground(cam.x, cam.z);
+        let eye = Vec3::new(
+            cam.x,
+            if cam.y == 0.0 { ground + 1.7 } else { cam.y },
+            cam.z,
+        );
+        let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+        let dir = rot * Vec3::NEG_Z;
+        if let Some(hit) = spatial.cast_ray(
+            eye,
+            Dir3::new(dir).unwrap_or(Dir3::NEG_Z),
+            30.0,
+            true,
+            &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        ) {
+            breaches.write(super::hooks::Breach {
+                at: eye + dir * (hit.distance + 0.05),
+                out: -dir,
+            });
+        }
+    }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
     else {
         return;
     };
-    *frame += 1;
     let last = opts.frames.saturating_sub(1);
     if *frame + n <= last || *frame > last {
         return;
@@ -466,3 +493,20 @@ pub struct CrateBox;
 
 #[derive(Component)]
 pub struct CrateDressed;
+
+/// A building whose walls changed (`breach`): its merged meshes go and are
+/// built again round the holes. The glass and doors are their own.
+fn redress_breached(
+    mut commands: Commands,
+    changed: Query<(Entity, &Children), Changed<super::breach::Breached>>,
+    meshes: Query<(), (With<Mesh3d>, Without<WindowGlass>)>,
+) {
+    for (e, children) in &changed {
+        for c in children {
+            if meshes.contains(*c) {
+                commands.entity(*c).despawn();
+            }
+        }
+        crate::world::buildings::redress(&mut commands, e);
+    }
+}
