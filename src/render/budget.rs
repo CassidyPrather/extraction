@@ -148,7 +148,8 @@ impl Plugin for BudgetPlugin {
         );
         app.add_systems(
             PostUpdate,
-            (range_items, shadow_reach)
+            (reach_doors, late_reach, range_items, shadow_reach)
+                .chain()
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
         let knobs = Knobs::from_env();
@@ -186,6 +187,48 @@ pub fn item_range(size: f32) -> f32 {
 /// because their meshes arrive with a model (fence posts).
 #[derive(Component, Clone, Copy)]
 pub struct LodReach(pub f32);
+
+/// Doors go once their building's stand-in has taken over: a door fades
+/// over 120-150 m, the stand-in (which has the doorway) in over 110-130,
+/// so the doorway is never empty.
+fn reach_doors(
+    mut commands: Commands,
+    doors: Query<Entity, Added<crate::world::buildings::DoorLeaf>>,
+) {
+    for e in &doors {
+        commands
+            .entity(e)
+            .try_insert(LodReach(super::lod::FAR_BUILDING + 30.0));
+    }
+}
+
+/// A `LodReach` put on after its meshes arrived: range them now.
+fn late_reach(
+    mut commands: Commands,
+    added: Query<(Entity, &LodReach), Added<LodReach>>,
+    children: Query<&Children>,
+    meshes: Query<
+        (),
+        (
+            With<Mesh3d>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+        ),
+    >,
+) {
+    for (root, reach) in &added {
+        for e in std::iter::once(root).chain(children.iter_descendants(root)) {
+            if meshes.contains(e) {
+                commands
+                    .entity(e)
+                    .try_insert(bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (reach.0 * 0.8)..reach.0,
+                        use_aabb: false,
+                    });
+            }
+        }
+    }
+}
 
 fn range_items(
     mut commands: Commands,
