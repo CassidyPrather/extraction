@@ -2009,7 +2009,13 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
         .plans
         .iter()
         .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
-    let local = plan.to_local(pos).xz();
+    let exit = way_out(plan, plan.to_local(pos).xz())?;
+    indoor_out(plan, pos, exit, 0.6)
+}
+
+/// Where to walk to be out of a building from a local point: the nearest
+/// door stand or point round the footprint by the walk.
+pub(crate) fn way_out(plan: &BuildingPlan, local: Vec2) -> Option<Vec2> {
     // All the way out of the footprint, the shortest way round: a hall
     // with open bays counts as "outside" for its doors, and leaving only
     // the office in its corner left a bot inside, walking at the wall.
@@ -2029,17 +2035,18 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
         v
     };
     // Each is a path search: the doors, and the nearest few of the ring.
+    // (Not round an underground site: a ring point there can land on the
+    // stair under the kiosk. Its kiosks' doors are the ways out.)
     let mut ring: Vec<Vec2> = ring
         .into_iter()
-        .filter(|p| plan.grid.walkable(p.to_array()))
+        .filter(|p| plan.levels.is_none() && plan.grid.walkable(p.to_array()))
         .collect();
     ring.sort_by(|a, b| a.distance(local).total_cmp(&b.distance(local)));
     ring.truncate(8);
     // A door stand inside the footprint (the office's, in an open hall)
     // isn't out.
     let out = |e: &Vec2| e.x.abs() > plan.half.x || e.y.abs() > plan.half.y;
-    let exit = plan
-        .entries
+    plan.entries
         .iter()
         .copied()
         .filter(out)
@@ -2050,9 +2057,8 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
             // A path that ends short of the exit didn't get there.
             (path.last()?.distance(e) < 0.8).then_some((len, e))
         })
-        .min_by(|a, b| a.0.total_cmp(&b.0))?
-        .1;
-    indoor_out(plan, pos, exit, 0.6)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|b| b.1)
 }
 
 fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {
