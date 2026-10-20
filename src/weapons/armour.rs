@@ -14,6 +14,8 @@
 //!   body.
 
 use bevy::ecs::system::SystemParam;
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 use extraction_core::firearm_terminal::{ArmourArea, Outcome, armour_strike};
 use extraction_core::inventory::SlotKind;
@@ -22,9 +24,10 @@ use extraction_core::noise::Rng;
 
 use super::ballistics::Hit;
 use crate::interact::body::Torso;
-use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+use crate::interact::{Socket, SocketKind, SocketOwner};
 use crate::items::{Catalog, Item};
-use crate::rig::{LocalPlayer, RigHead};
+use crate::player::Player;
+use crate::rig::RigHead;
 
 /// A vest's plate pocket, and which way it faces.
 #[derive(Component, Debug, Clone, Copy)]
@@ -44,6 +47,18 @@ pub const HELMET_BELOW_EYES: f32 = 0.06;
 /// A stopped round still bruises: its share of the damage.
 pub const BLUNT: f32 = 0.05;
 
+/// What a player is wearing, kept from the body slots and the vest's
+/// pockets each frame: the vest, the helmet, and the plates in the front
+/// and back pockets. The worn items stay items in their sockets, hidden;
+/// the renderer draws the worn models from this.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Worn {
+    pub vest: Option<Entity>,
+    pub helmet: Option<Entity>,
+    /// Front, back.
+    pub plates: [Option<Entity>; 2],
+}
+
 /// A round met armour (for the clang, and the plate's wear).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct ArmourStruck {
@@ -59,7 +74,10 @@ impl Plugin for ArmourPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<ArmourStruck>()
             .add_observer(vest_pockets)
-            .add_systems(Update, hide_own_helmet);
+            .add_observer(|add: On<Add, Player>, mut commands: Commands| {
+                commands.entity(add.entity).insert(Worn::default());
+            })
+            .add_systems(Update, (track_worn, hide_worn).chain());
     }
 }
 
@@ -86,7 +104,11 @@ fn vest_pockets(
                 kind: SocketKind::Mount(Mount::Plate),
                 occupant: None,
                 radius: 0.12,
-                seat: Transform::IDENTITY,
+                // The back plate faces out the back.
+                seat: match area {
+                    ArmourArea::Back => Transform::from_rotation(Quat::from_rotation_y(PI)),
+                    _ => Transform::IDENTITY,
+                },
             },
             PlatePocket(area),
             SocketOwner(add.entity),
@@ -97,23 +119,61 @@ fn vest_pockets(
     }
 }
 
-/// Your own helmet is on your head, not in front of your eyes.
-fn hide_own_helmet(
-    mut items: Query<(&InSocket, &mut Visibility), With<Item>>,
-    sockets: Query<(&Socket, &SocketOwner)>,
-    locals: Query<(), With<LocalPlayer>>,
+/// Keep each player's [`Worn`] up to date.
+fn track_worn(
+    mut players: Query<(Entity, &mut Worn)>,
+    sockets: Query<(&Socket, &SocketOwner, Option<&PlatePocket>)>,
 ) {
-    for (in_socket, mut vis) in &mut items {
-        let Ok((socket, owner)) = sockets.get(in_socket.socket) else {
-            continue;
-        };
-        if socket.kind == SocketKind::Body(SlotKind::Head)
-            && locals.contains(owner.0)
-            && *vis != Visibility::Hidden
-        {
-            *vis = Visibility::Hidden;
+    for (player, mut worn) in &mut players {
+        let mut now = Worn::default();
+        for (s, o, _) in &sockets {
+            if o.0 != player {
+                continue;
+            }
+            match s.kind {
+                SocketKind::Body(SlotKind::Vest) => now.vest = s.occupant,
+                SocketKind::Body(SlotKind::Head) => now.helmet = s.occupant,
+                _ => {}
+            }
+        }
+        if let Some(vest) = now.vest {
+            for (s, o, p) in &sockets {
+                match (o.0 == vest, p) {
+                    (true, Some(PlatePocket(ArmourArea::Front))) => now.plates[0] = s.occupant,
+                    (true, Some(PlatePocket(ArmourArea::Back))) => now.plates[1] = s.occupant,
+                    _ => {}
+                }
+            }
+        }
+        if *worn != now {
+            *worn = now;
         }
     }
+}
+
+/// A worn vest and helmet (and the plates in the vest) are drawn as worn
+/// kit, not as items: the items are hidden while worn, and shown again
+/// when taken off.
+fn hide_worn(
+    mut items: Query<(Entity, &mut Visibility), With<Item>>,
+    worn: Query<&Worn>,
+    mut was: Local<Vec<Entity>>,
+) {
+    let now: Vec<Entity> = worn
+        .iter()
+        .flat_map(|w| [w.vest, w.helmet])
+        .flatten()
+        .collect();
+    for (e, mut vis) in &mut items {
+        if now.contains(&e) {
+            if *vis != Visibility::Hidden {
+                *vis = Visibility::Hidden;
+            }
+        } else if was.contains(&e) {
+            *vis = Visibility::Inherited;
+        }
+    }
+    *was = now;
 }
 
 /// What the health system needs to weigh a hit against what's worn.
@@ -226,6 +286,7 @@ impl Armour<'_, '_> {
 mod tests {
     use super::*;
     use crate::health::Health;
+    use crate::interact::InSocket;
     use crate::rig::Side;
     use crate::vr_harness::Vr;
     use crate::weapons::Gun;
@@ -360,6 +421,13 @@ mod tests {
             worn_in(&vr, plate),
             Some(SocketKind::Mount(Mount::Plate)),
             "the plate is in its pocket"
+        );
+        let worn = *vr.app.world().get::<Worn>(vr.player).unwrap();
+        assert_eq!((worn.vest, worn.plates), (Some(vest), [Some(plate), None]));
+        assert_eq!(
+            vr.app.world().get::<Visibility>(vest),
+            Some(&Visibility::Hidden),
+            "a worn vest is drawn as kit, not as the item"
         );
         let stopped = shoot_chest(&mut vr, pm, 3);
         assert!(
