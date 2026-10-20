@@ -267,6 +267,13 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   no bang: slap the magazine up with your other palm, then rack. A case
   and a round in the port, the slide stuck: drop the magazine (A), rack,
   reload. Can you tell which is which by look and sound?
+- Grenades and the knife. Hold a grenade, pinch the ring with your other
+  hand's trigger and pull: is it findable? Throw it (a throw is your
+  hand's speed): does it go where you meant? Cook one (B) and see if the
+  timing feels fair. Thrust the knife into something, then slash: does
+  "hard enough" match what your arm did? Fix the SKS's bayonet (A).
+- Cover by material: shoot through a shed's plank wall with the AK, then
+  try the pistol; skip rounds off concrete at a slant. Does it read?
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.
