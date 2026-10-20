@@ -1559,6 +1559,7 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
 /// barn's open gaps join its floor to the outside, so "which side" isn't
 /// the test, the line is). Something with no floor of its own on the grid
 /// (a wagon, its bed at chest height) is reached into from beside it.
+#[cfg(test)]
 pub(crate) fn reaches(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> bool {
     reaches_with(plan, has_no_floor(plan), from, goal)
 }
