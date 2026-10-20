@@ -54,10 +54,8 @@ use std::collections::HashMap;
 use std::f32::consts::TAU;
 
 use crate::player::Player;
-use crate::robots::search::{CalledOut, Investigating, LostYou, Searching};
-use crate::robots::{
-    Brain, Job, JobKind, Noticed, PartDestroyed, PartRole, Robot, RobotKind, RobotPart,
-};
+use crate::robots::search::{Mind, MindShift};
+use crate::robots::{Brain, Job, JobKind, Robot, RobotKind};
 
 /// The kinds that speak.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -587,18 +585,7 @@ impl Plugin for VoicePlugin {
             )
             .add_systems(
                 FixedPostUpdate,
-                (
-                    (
-                        from_messages,
-                        from_brains,
-                        from_hits,
-                        answers,
-                        responders,
-                        mutter,
-                    ),
-                    speak,
-                )
-                    .chain(),
+                ((from_minds, responders, mutter), speak).chain(),
             );
     }
 }
@@ -613,7 +600,6 @@ pub struct Voices {
     pending: Vec<(f32, Turned)>,
     /// Until when each robot is still saying its last word.
     busy: HashMap<Entity, f32>,
-    brains: HashMap<Entity, u8>,
     rng: Option<Rng>,
 }
 
@@ -640,113 +626,57 @@ fn kind_of(robots: &Kinds, e: Entity) -> Option<VoiceKind> {
     voice_of(r.kind, h, c, g, w)
 }
 
-/// The minds' own messages.
-#[allow(clippy::too_many_arguments)]
-fn from_messages(
-    mut noticed: MessageReader<Noticed>,
-    mut investigating: MessageReader<Investigating>,
-    mut searching: MessageReader<Searching>,
-    mut lost: MessageReader<LostYou>,
-    mut called: MessageReader<CalledOut>,
-    mut destroyed: MessageReader<PartDestroyed>,
+/// What the minds say they're doing (`robots::search::MindShift`), one
+/// word each. Answers to one call come from the nearest [`ANSWERS`] of
+/// those who heard it, a beat apart, so a call isn't met by a chorus; a
+/// robot going back to its rounds says so only near someone.
+fn from_minds(
+    mut shifts: MessageReader<MindShift>,
+    places: Query<&GlobalTransform>,
+    players: Query<&GlobalTransform, With<Player>>,
     mut out: MessageWriter<Turned>,
 ) {
-    let now = |robot, said, at| Turned {
-        robot,
-        said,
-        at,
-        delay: 0.0,
-    };
-    for n in noticed.read() {
-        out.write(now(n.robot, Utterance::Noticed, n.at));
-    }
-    for i in investigating.read() {
-        out.write(now(i.robot, Utterance::Investigating, i.at));
-    }
-    for s in searching.read() {
-        out.write(now(s.robot, Utterance::Searching, s.at));
-    }
-    for l in lost.read() {
-        out.write(now(l.robot, Utterance::Lost, l.at));
-    }
-    for c in called.read() {
-        out.write(now(c.robot, Utterance::Calling, c.at));
-    }
-    for d in destroyed.read().filter(|d| d.role == PartRole::Core) {
-        out.write(now(d.robot, Utterance::Dying, d.at));
-    }
-}
-
-/// What the minds don't announce: turning to fight, and going down.
-fn from_brains(
-    brains: Query<(Entity, &Brain, &Robot, &GlobalTransform)>,
-    mut voices: ResMut<Voices>,
-    mut out: MessageWriter<Turned>,
-) {
-    for (e, brain, robot, gt) in &brains {
-        let state = match brain {
-            Brain::Engage => 1,
-            Brain::Down => 2,
-            _ => 0,
-        };
-        let before = voices.brains.insert(e, state);
-        if before.is_none_or(|b| b == state) {
-            continue;
-        }
-        let said = match state {
-            1 => Utterance::Engaging,
-            2 if robot.wrecked => Utterance::Dying,
-            _ => continue,
+    let mut answers: HashMap<Entity, Vec<(f32, Entity, Vec3)>> = HashMap::new();
+    for m in shifts.read() {
+        let said = match m.state {
+            Mind::Idle => {
+                let near = players
+                    .iter()
+                    .any(|p| p.translation().distance(m.at) < IDLE_NEAR);
+                if !near {
+                    continue;
+                }
+                Utterance::Idle
+            }
+            Mind::Noticed => Utterance::Noticed,
+            Mind::Investigating => Utterance::Investigating,
+            Mind::Searching => Utterance::Searching,
+            Mind::Engaging => Utterance::Engaging,
+            Mind::Lost => Utterance::Lost,
+            Mind::Calling => Utterance::Calling,
+            Mind::Answering { caller } => {
+                let from = places.get(caller).map_or(m.at, |g| g.translation());
+                answers
+                    .entry(caller)
+                    .or_default()
+                    .push((m.at.distance(from), m.robot, m.at));
+                continue;
+            }
+            Mind::Hurt => Utterance::Hurt,
+            Mind::Dying => Utterance::Dying,
         };
         out.write(Turned {
-            robot: e,
+            robot: m.robot,
             said,
-            at: gt.translation(),
+            at: m.at,
             delay: 0.0,
         });
     }
-}
-
-/// A part hit that it survives.
-fn from_hits(
-    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
-    parts: Query<&RobotPart>,
-    mut out: MessageWriter<Turned>,
-) {
-    for h in hits.read() {
-        let Ok(part) = parts.get(h.entity) else {
-            continue;
-        };
-        if part.role == PartRole::Core && part.hp <= 0.0 {
-            continue;
-        }
-        out.write(Turned {
-            robot: part.robot,
-            said: Utterance::Hurt,
-            at: h.point,
-            delay: 0.0,
-        });
-    }
-}
-
-/// The nearest that heard a call answer it, a beat apart.
-fn answers(
-    mut called: MessageReader<CalledOut>,
-    robots: Query<(Entity, &Robot, &GlobalTransform)>,
-    kinds: Kinds,
-    mut out: MessageWriter<Turned>,
-) {
-    for c in called.read().filter(|c| c.heard > 0) {
-        let mut near: Vec<(f32, Entity, Vec3)> = robots
-            .iter()
-            .filter(|(e, r, _)| *e != c.robot && !r.wrecked && kind_of(&kinds, *e).is_some())
-            .map(|(e, _, gt)| (gt.translation().distance(c.at), e, gt.translation()))
-            .filter(|(d, ..)| *d < crate::robots::search::CALL_RADIUS)
-            .collect();
+    for (_, mut near) in answers {
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (i, (_, e, at)) in near.into_iter().take(ANSWERS).enumerate() {
+        for (i, (_, robot, at)) in near.into_iter().take(ANSWERS).enumerate() {
             out.write(Turned {
-                robot: e,
+                robot,
                 said: Utterance::Answering,
                 at,
                 delay: 0.8 + 0.6 * i as f32,
@@ -1030,7 +960,7 @@ mod tests {
         SR / lags[i] as f32
     }
 
-    /// A minimal world: the robots' messages, the voices, a fixed tick of
+    /// A minimal world: the minds' messages, the voices, a fixed tick of
     /// 1/90 s.
     fn world() -> App {
         let mut app = App::new();
@@ -1038,13 +968,7 @@ mod tests {
             .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
                 std::time::Duration::from_secs_f64(1.0 / 90.0),
             ))
-            .add_message::<Noticed>()
-            .add_message::<Investigating>()
-            .add_message::<Searching>()
-            .add_message::<LostYou>()
-            .add_message::<CalledOut>()
-            .add_message::<PartDestroyed>()
-            .add_message::<crate::weapons::ballistics::Hit>()
+            .add_message::<MindShift>()
             .add_plugins(VoicePlugin);
         app.update();
         app
@@ -1061,6 +985,14 @@ mod tests {
                 GlobalTransform::from_translation(at),
             ))
             .id()
+    }
+
+    fn shift(app: &mut App, robot: Entity, state: Mind) {
+        app.world_mut().write_message(MindShift {
+            robot,
+            state,
+            at: Vec3::ZERO,
+        });
     }
 
     /// Run ~`secs` and gather what was said.
@@ -1080,111 +1012,80 @@ mod tests {
         let mut app = world();
         let w = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
         let d = robot(&mut app, RobotKind::Drone, Vec3::X * 200.0);
-        let at = Vec3::ZERO;
-        let turns: Vec<(Entity, Utterance, Box<dyn Fn(&mut World)>)> = vec![
-            (
-                w,
-                Utterance::Noticed,
-                Box::new(move |wd: &mut World| {
-                    wd.write_message(Noticed { robot: w, at });
-                }),
-            ),
-            (
-                w,
-                Utterance::Investigating,
-                Box::new(move |wd: &mut World| {
-                    wd.write_message(Investigating {
-                        robot: w,
-                        at,
-                        toward: at,
-                    });
-                }),
-            ),
-            (
-                w,
-                Utterance::Searching,
-                Box::new(move |wd: &mut World| {
-                    wd.write_message(Searching { robot: w, at });
-                }),
-            ),
-            (
-                w,
-                Utterance::Lost,
-                Box::new(move |wd: &mut World| {
-                    wd.write_message(LostYou { robot: w, at });
-                }),
-            ),
-            (
-                d,
-                Utterance::Calling,
-                Box::new(move |wd: &mut World| {
-                    wd.write_message(CalledOut {
-                        robot: d,
-                        at,
-                        heard: 0,
-                        about: None,
-                    });
-                }),
-            ),
-            (
-                w,
-                Utterance::Engaging,
-                Box::new(move |wd: &mut World| {
-                    *wd.get_mut::<Brain>(w).unwrap() = Brain::Engage;
-                }),
-            ),
+        app.world_mut().spawn((Player, GlobalTransform::default()));
+        let turns = [
+            (w, Mind::Idle, Utterance::Idle),
+            (w, Mind::Noticed, Utterance::Noticed),
+            (w, Mind::Investigating, Utterance::Investigating),
+            (w, Mind::Searching, Utterance::Searching),
+            (w, Mind::Lost, Utterance::Lost),
+            (d, Mind::Calling, Utterance::Calling),
+            (w, Mind::Engaging, Utterance::Engaging),
+            (w, Mind::Hurt, Utterance::Hurt),
         ];
-        for (robot, u, act) in &turns {
-            act(app.world_mut());
+        for (robot, mind, u) in turns {
+            shift(&mut app, robot, mind);
             let s = said(&mut app, 2.0);
             assert_eq!(s.len(), 1, "{u:?}: {s:?}");
-            assert_eq!((s[0].robot, s[0].said), (*robot, *u));
-            let want = if *robot == w {
+            assert_eq!((s[0].robot, s[0].said), (robot, u));
+            let want = if robot == w {
                 VoiceKind::Walker
             } else {
                 VoiceKind::Drone
             };
             assert_eq!(s[0].kind, want);
-            // The same again at once: nothing.
-            if *u != Utterance::Engaging {
-                act(app.world_mut());
-                assert!(said(&mut app, 0.5).is_empty(), "{u:?} repeated");
+            // The same again at once: nothing (hurt: not within a second).
+            if mind == Mind::Hurt {
+                continue;
             }
+            shift(&mut app, robot, mind);
+            assert!(said(&mut app, 0.5).is_empty(), "{u:?} repeated");
         }
-        // Dying, once, and then silence.
-        app.world_mut().get_mut::<Robot>(w).unwrap().wrecked = true;
-        app.world_mut().write_message(PartDestroyed {
-            robot: w,
-            part: w,
-            role: PartRole::Core,
-            at,
-        });
-        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Down;
+        // Hurt twice in a moment: one cry.
+        shift(&mut app, w, Mind::Hurt);
+        said(&mut app, 0.2);
+        shift(&mut app, w, Mind::Hurt);
         let s = said(&mut app, 0.2);
+        assert!(s.iter().all(|s| s.said != Utterance::Hurt), "{s:?}");
+        // Dying, once, and then silence.
+        shift(&mut app, w, Mind::Dying);
+        let s = said(&mut app, 0.5);
         assert_eq!(
             s.iter().map(|s| s.said).collect::<Vec<_>>(),
             [Utterance::Dying]
         );
-        app.world_mut().write_message(Noticed { robot: w, at });
-        assert!(said(&mut app, 0.2).is_empty());
+        shift(&mut app, w, Mind::Noticed);
+        assert!(said(&mut app, 0.5).is_empty());
     }
 
-    /// A call heard is answered by the nearest two, a beat later; a
-    /// response team answers as it sets out.
+    /// A robot going back to its rounds far from anyone doesn't say so.
+    #[test]
+    fn idle_only_near_someone() {
+        let mut app = world();
+        let w = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
+        app.world_mut()
+            .spawn((Player, GlobalTransform::from_translation(Vec3::X * 500.0)));
+        shift(&mut app, w, Mind::Idle);
+        assert!(said(&mut app, 1.0).is_empty());
+    }
+
+    /// A call heard by three is answered by the nearest two, a beat apart;
+    /// a response team answers as it sets out.
     #[test]
     fn calls_are_answered() {
         let mut app = world();
         let caller = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
         let near = robot(&mut app, RobotKind::Drone, Vec3::X * 10.0);
         let nearer = robot(&mut app, RobotKind::Walker, Vec3::X * 5.0);
-        let _far = robot(&mut app, RobotKind::Walker, Vec3::X * 300.0);
-        let _third = robot(&mut app, RobotKind::Walker, Vec3::X * 30.0);
-        app.world_mut().write_message(CalledOut {
-            robot: caller,
-            at: Vec3::ZERO,
-            heard: 3,
-            about: None,
-        });
+        let third = robot(&mut app, RobotKind::Walker, Vec3::X * 30.0);
+        shift(&mut app, caller, Mind::Calling);
+        for (r, at) in [(third, 30.0), (near, 10.0), (nearer, 5.0)] {
+            app.world_mut().write_message(MindShift {
+                robot: r,
+                state: Mind::Answering { caller },
+                at: Vec3::X * at,
+            });
+        }
         let s = said(&mut app, 3.0);
         let order: Vec<_> = s.iter().map(|s| (s.robot, s.said)).collect();
         assert_eq!(
@@ -1222,19 +1123,9 @@ mod tests {
     fn one_word_at_a_time() {
         let mut app = world();
         let w = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
-        let at = Vec3::ZERO;
-        app.world_mut().write_message(Noticed { robot: w, at });
-        app.world_mut().write_message(Investigating {
-            robot: w,
-            at,
-            toward: at,
-        });
-        app.world_mut().write_message(CalledOut {
-            robot: w,
-            at,
-            heard: 0,
-            about: None,
-        });
+        shift(&mut app, w, Mind::Noticed);
+        shift(&mut app, w, Mind::Investigating);
+        shift(&mut app, w, Mind::Calling);
         let mut when = Vec::new();
         for i in 0..400 {
             app.update();
