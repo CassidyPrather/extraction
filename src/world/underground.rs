@@ -1307,7 +1307,8 @@ pub fn register_residents(
                 .lamps
                 .push((xf.transform_point(at), room.size[0].max(room.size[1]) + 4.0));
         }
-        if l.crawlers == 0 {
+        let rounds = l.residents();
+        if rounds.is_empty() {
             continue;
         }
         // Their grid is the site's, without the ground round the kiosks:
@@ -1331,26 +1332,45 @@ pub fn register_residents(
                 }
             }
         }
-        let patrol: Vec<Vec3> = l
-            .patrol
-            .iter()
-            .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
-            .filter_map(|room| grid.nearest_walkable(room.at).map(|p| (room, p)))
-            .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
-            .collect();
-        let Some(&spawn) = patrol.first() else {
-            continue;
+        let nav = crate::robots::indoor::LocalNav {
+            grid: std::sync::Arc::new(grid),
+            xf,
+            floors: Some(std::sync::Arc::new(floors)),
         };
-        residents.sites.push(crate::robots::indoor::IndoorSite {
-            nav: crate::robots::indoor::LocalNav {
-                grid: std::sync::Arc::new(grid),
-                xf,
-                floors: Some(std::sync::Arc::new(floors)),
-            },
-            patrol,
-            spawn,
-            crawlers: l.crawlers,
-        });
+        for (rooms, crawlers) in rounds {
+            let points: Vec<(&ug::Room, [f32; 2])> = match rooms {
+                // One room: round its quarters.
+                [id] => l
+                    .rooms
+                    .iter()
+                    .filter(|room| &room.id == id)
+                    .flat_map(|room| {
+                        let q = [room.size[0] * 0.25, room.size[1] * 0.25];
+                        [[-q[0], -q[1]], [q[0], -q[1]], [q[0], q[1]], [-q[0], q[1]]]
+                            .map(|d| (room, [room.at[0] + d[0], room.at[1] + d[1]]))
+                    })
+                    .collect(),
+                _ => rooms
+                    .iter()
+                    .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
+                    .map(|room| (room, room.at))
+                    .collect(),
+            };
+            let patrol: Vec<Vec3> = points
+                .into_iter()
+                .filter_map(|(room, at)| nav.grid.nearest_walkable(at).map(|p| (room, p)))
+                .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
+                .collect();
+            let Some(&spawn) = patrol.first() else {
+                continue;
+            };
+            residents.sites.push(crate::robots::indoor::IndoorSite {
+                nav: nav.clone(),
+                patrol,
+                spawn,
+                crawlers,
+            });
+        }
     }
 }
 
@@ -2176,7 +2196,8 @@ mod tests {
             let sites = sites_on(&app);
             let crawlers: u32 = sites
                 .iter()
-                .map(|(s, _)| ug::layout(&s.id).unwrap().crawlers)
+                .flat_map(|(s, _)| ug::layout(&s.id).unwrap().residents())
+                .map(|r| r.1)
                 .sum();
             for (site, xf) in &sites {
                 let l = ug::layout(&site.id).unwrap();

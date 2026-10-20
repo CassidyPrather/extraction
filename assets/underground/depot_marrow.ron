@@ -83,8 +83,15 @@
         (from: "bay_k14", to: "pump_gallery", doors: From),
         (from: "pump_gallery", to: "pump_room", doors: To),
     ],
+    // A crawler on each dry level: the intake's round, two in the hall
+    // (shut in till the first breaker), one in the stacks (till the
+    // second). Nothing walks the cistern: it's too deep.
     patrol: ["intake_bay", "guard_post", "tag_office", "guard_post"],
     crawlers: 1,
+    rounds: [
+        (rooms: ["sorting_hall"], crawlers: 2),
+        (rooms: ["kept_stacks", "bay_k14"], crawlers: 1),
+    ],
     power: [
         (kind: Breaker, room: "guard_post", at: (1.75, 0.8), rot: 270.0, doors: ["sorting_hall"]),
         (kind: Breaker, room: "tag_office", at: (2.75, -1.5), rot: 270.0, doors: ["kept_stacks"]),
