@@ -147,7 +147,9 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
 | `crouch` | `secs` | Stood up after crouching (creeping) near robots for `secs` (see `docs/MAP_DESIGN.md`, "How the bots move"). |
 | `freeze` | `secs`, `x`, `z` | Froze, crouched and still, while a robot searched close by. |
-| `distract` | `x`, `z`, `walker_dist` | Threw junk past a calm walker to send it looking the other way. |
+| `distract` | `x`, `z`, `walker_dist` | Threw junk to send a walker looking somewhere else. |
+| `stalk` | `dist`, `x`, `z` | (Cautious.) Set off creeping up on an unaware walker `dist` m off, to throw a distraction past it. |
+| `distract_result` | `outcome` (`drawn`, `ignored`, `spotted`, `broke_off`), `why`, `thrown` | How a creep-and-throw ended, 8 s after the throw or when it was given up. |
 | `cover` | `why` (`hurt`), `dist`, `hp` | Hurt and still being hit: broke off the fight into cover `dist` m away (the fight ends `took_cover`). |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
