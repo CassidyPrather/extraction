@@ -98,7 +98,7 @@ impl First {
             First::Jam(JamKind::Double) => {
                 &["Truck: \"Two rounds jammed. Mag out, rack, mag back in.\""]
             }
-            First::Heard => &["Truck: \"Something heard you. Get low and keep still.\""],
+            First::Heard => &["Truck: \"Something heard you. Move off quiet, then go still.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
             First::DroneLock => &["Truck: \"That chirp is it taking aim. Get behind something.\""],
             First::Anomaly => &["Truck: \"Air's wrong ahead. Throw something in first.\""],
