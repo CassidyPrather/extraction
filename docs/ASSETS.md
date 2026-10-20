@@ -204,6 +204,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
+| `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
 | `art/kit/rig.py` | `models/kit/rig.glb` (harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
