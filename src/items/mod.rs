@@ -88,7 +88,7 @@ pub fn physical_bundle(def: &ItemDef) -> impl Bundle {
         Collider::cuboid(x.max(0.01), y.max(0.01), z.max(0.01)),
         Mass(def.mass),
         NoAutoMass,
-        CollisionLayers::new(Layer::Item, [Layer::World, Layer::Item, Layer::Robot]),
+        CollisionLayers::new(Layer::Item, crate::interact::LOOSE),
         Friction::new(0.7),
         Restitution::new(0.15),
         LinearDamping(0.05),
