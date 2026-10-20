@@ -17,6 +17,8 @@ use super::{PartRole, Robot, RobotPart};
 pub const MAX_SPARKS: usize = 96;
 pub const MAX_PUFFS: usize = 64;
 pub const MAX_EMBERS: usize = 4;
+/// Bullet marks on robot shells, all robots together.
+pub const MAX_MARKS: usize = 160;
 /// How long a wreck smoulders, seconds.
 const SMOULDER: f32 = 150.0;
 
@@ -30,6 +32,7 @@ impl Plugin for RobotFxPlugin {
                 wreck_trails,
                 wreck_impacts,
                 drag_sparks,
+                shell_marks,
                 sputter,
                 light_wrecks,
                 smoulder,
@@ -628,6 +631,78 @@ fn drag_sparks(
                 2.5,
             );
             n += 3;
+        }
+    }
+}
+
+/// Bullet marks on robot shells, oldest first (each mark is a pock and its
+/// hole).
+#[derive(Default)]
+struct Marks(std::collections::VecDeque<[Entity; 2]>);
+
+/// A round that strikes a robot's shell leaves a mark on it: a bright pock
+/// with a dark hole, Weapon feel's look (`weapons::impacts`), parented to
+/// the part so it moves with it (and goes with it when it's shot off).
+fn shell_marks(
+    mut commands: Commands,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    parts: Query<(&RobotPart, &GlobalTransform)>,
+    look: Option<Res<crate::weapons::impacts::FxAssets>>,
+    mut marks: Local<Marks>,
+) {
+    use crate::weapons::impacts::{DECAL_PROUD, ImpactKind};
+    let Some(look) = look else {
+        impacts.clear();
+        return;
+    };
+    for imp in impacts.read() {
+        if imp.kind != ImpactKind::Robot {
+            continue;
+        }
+        let Some((part_e, (part, gt))) = imp.entity.and_then(|e| parts.get(e).ok().map(|p| (e, p)))
+        else {
+            continue;
+        };
+        // Gas cells are fabric, not shell.
+        if matches!(part.role, PartRole::GasCell(_)) {
+            continue;
+        }
+        let n = imp.normal.normalize_or(Vec3::Y);
+        let inv = gt.affine().inverse();
+        let scale = gt.scale().max_element().max(1e-3);
+        let local_rot = gt.rotation().inverse() * Quat::from_rotation_arc(Vec3::Z, n);
+        let at = |proud: f32| inv.transform_point3(imp.point + n * proud);
+        let pock = commands
+            .spawn((
+                Mesh3d(look.disc.clone()),
+                MeshMaterial3d(look.bright_pock.clone()),
+                Transform::from_translation(at(DECAL_PROUD))
+                    .with_rotation(local_rot)
+                    .with_scale(Vec3::splat(0.035 / scale)),
+                NotShadowCaster,
+                ChildOf(part_e),
+            ))
+            .id();
+        let hole = commands
+            .spawn((
+                Mesh3d(look.disc.clone()),
+                MeshMaterial3d(look.hole.clone()),
+                Transform::from_translation(at(DECAL_PROUD + 0.004))
+                    .with_rotation(local_rot)
+                    .with_scale(Vec3::splat(0.014 / scale)),
+                NotShadowCaster,
+                ChildOf(part_e),
+            ))
+            .id();
+        marks.0.push_back([pock, hole]);
+        while marks.0.len() > MAX_MARKS {
+            if let Some(old) = marks.0.pop_front() {
+                for e in old {
+                    if let Ok(mut ec) = commands.get_entity(e) {
+                        ec.despawn();
+                    }
+                }
+            }
         }
     }
 }

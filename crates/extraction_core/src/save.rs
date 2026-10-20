@@ -56,6 +56,9 @@ pub struct Stats {
     /// The three keys were turned at a Gate: the machines went home.
     #[serde(default)]
     pub recalled: bool,
+    /// The notes read, "map/name", in order: the cork board's pins.
+    #[serde(default)]
+    pub notes_read: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

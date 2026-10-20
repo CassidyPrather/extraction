@@ -227,7 +227,11 @@ is what it did before.
 | Field dressing | `use.bandage` | — | silent |
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
+| Robot chatter overheard on your radio | `chatter.squelch`, `chatter.static`, `chatter.voice`: their talk | — | servo chirps |
 | Guns: shot, mechanisms, casings | `gun.*` | shot kicks the trigger hand hardest, the support hand less, by the gun's recoil (pistol 0.68, Mosin 0.96; less with a shouldered stock, `shot_kick`); the action clicks; a magazine seats with a knock | one kick for every gun |
+| A round landing (`weapons::impacts::Impact`, classed once for the spray and the sound) | `hit.impact` by surface: concrete, wood, steel, earth; `hit.glass` (window glass, a robot's eye); `hit.water` (a slap, harder for faster rounds); `hit.body`; out through a thin wall, a second crack 6 dB quieter | — | re-classed from the Hit; water silent |
+| A spent case landing (`weapons::CasingLanded`), a beat after the shot | `gun.casing` by floor: brass rings on steel and concrete, knocks on boards, ticks in grass, plips in water; a shotgun hull thunks; bounces 8 dB quieter | — | a ping at the port |
+| A suppressed shot (`gadgets::Suppressed`) | `gun.shot_suppressed`: the shot through a 2.2 kHz low-pass, 5 LU under a bare one (about 118 dB at the ear, against 140); far off, the distant shot 14 dB down | as a shot | a bare shot |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
 | A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
@@ -236,11 +240,16 @@ is what it did before.
 | The truck leaving, with you or without | `truck.depart` | — | silent |
 | A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
 | A robot noticing you (its suspicion passing `robots::NOTICED`) | `robot.notice`: the whirr of its head snapping round, at most every 8 s per robot | — | silent |
-| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch); search sounds at most every 6 s per robot | — | silent |
+| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch) and `robot.voice` (its call); search sounds at most every 6 s per robot | — | silent |
 | A walker's turret settling before its first shot; a grappler winding up | `walker.aim` + `walker.aim_lock` at the muzzle, `harpoon.windup`: the 0.6-0.7 s warning, heard 43-71 m through a downpour | — | silent |
 | The convoy loading, setting off through the Gate | `convoy.loaded`, `convoy.delivered` | — | silent |
 | A dirigible overhead | `dirigible.engine`: a slow throb (the rotor loop at 0.4x), quickening as it moves, gone when wrecked | — | silent |
 | Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
+| A gravity well; a mirror fold (synthesised) | `anomaly.well`: sub tones beating, air drawn in in long breaths; `anomaly.mirror`: glassy partials drifting; `anomaly.blink` at each thing blinked (`mirrors::Blinked`): air rushing out where it was (`anomaly.blink_air`), a glassy pop where it lands; `anomaly.arc`: a snare's arc cracking where it strikes (`ArcStrike`); `anomaly.reveal`: a falling ping as a thrown thing touches one; `anomaly.crush`: metal giving, slowed, under a whump | — | placeholders |
+| The anomaly detector (`anomaly::detector::DetectorClick`) | `detector.click`: a dry Geiger tick with a little case ring, at the hand when held, 8 dB down at the hip, brighter near an edge | — | silent |
+| A round glancing off (`ballistics::Ricochet`) | `hit.ricochet`, a little along the way it left; only real glances whine now | — | a random 12% of hits |
+| Underground power (`world::underground::SitePower`) | `power.breaker`: the lever clanking home; `power.pull` then `power.generator` running by the switch, per stage. The generator is synthesised until a recording can be had: firing at 27 Hz with its harmonics, the rate wandering a little, a rattle on each firing, the exhaust | — | silent |
+| A door that won't open: power-locked, wedged | `door.locked` (a bolt's clank), `door.wedged` (a thud) | click | silent |
 | Anomalies, the Surge, attention | hums, pops, cracks, the siren, the ringing | — | same |
 | Weather | rain bed with the rain; distant thunder | — | same |
 | Landing from a jump or a drop | `land`: both feet on whatever's underfoot, harder the faster you fell | — | silent |
@@ -258,9 +267,15 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** Nothing known. Robot sounds are recorded servos and
-clanks pitched; if they read too alike in the headset, the robots'
-synthesised voices (`docs/DESIGN.md` allows them) are the next step. The audit measures the dirigible's engine
+**Robot voices** (`machines/robot_voice`, synthesised in
+`scripts/synth_anomaly.py`, as `docs/DESIGN.md` allows). They're
+machine syllables: a buzz at 85-130 Hz through shifting vowel formants,
+clipped short, in bursts of three to seven. Then comes the radio's
+chain, baked into the asset: band-limited to 300-3400 Hz, crushed to
+6 bits held at 8 kHz, softened above 5 kHz by the speaker, and a
+squelch tail. They play as placed sounds, so a robot calling the
+others from behind a wall is occluded and reverberated like everything
+else. The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its
@@ -338,6 +353,9 @@ hear by (`robots::senses`):
 So a walker's footfall behind a wall is still heard, just duller, about
 where a robot would hear yours.
 
+**Underground**, the wind dies away over a few seconds as you go
+down the stairs, and the rain with it.
+
 **Rain under a roof.** Rain follows where you stand:
 - **In the open:** all of it.
 - **Under a roof:** quieter and duller. Tin and wood are 12-14 dB down
@@ -345,10 +363,28 @@ where a robot would hear yours.
 - **Under a porch:** a little duller.
 - **Underground:** none.
 
-A roof's own drumming (`ambience/rain_tin`, `rain_wood`,
-`rain_canvas`) fades in when its set is in the bank. Those recordings
-aren't fetched yet: Freesound refused this container's requests (403)
-when they were sought.
+A roof's own drumming plays over that, blended by the rain's strength
+from a light loop to a heavy one (more and bigger drops). The loops are
+`ambience/rain_tin`, `rain_wood` and `rain_canvas`, plus `_light`
+versions.
+
+They're synthesised (`scripts/make_rain_roofs.py`), an exception to
+the recorded-world rule. No CC0 recordings were reachable: Freesound
+refused this container, and OpenGameArt and Commons had none. Rain on
+a roof is a dense Poisson stream of drop impacts, each a short burst
+exciting the roof's modes, over 16 patches of roof so no one resonance
+sings:
+- **Tin:** bright modes at 1-4 kHz, ringing 80-150 ms, and a low boom
+  from the panel.
+- **Wood:** 300-900 Hz, about 20 ms.
+- **Canvas:** soft, low-passed thumps.
+
+Each loop is a circular convolution of the drop train with the roof's
+response, so it repeats seamlessly. It's levelled against the outdoor
+rain bed: tin +3 LU, canvas 0, wood -4, light loops 6 LU under. The
+audit checks those levels to within 1.5 LU, and that tin rings
+brightest ([spectra](shots/audio/rain_roofs.png)). Replace them with
+recordings when they can be had.
 
 **Measuring it.** `cargo test acoustics::tests::every_place_is_probed_for_the_audit`
 probes every building and underground room on the three maps and writes

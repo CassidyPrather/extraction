@@ -42,6 +42,8 @@ pub enum Piece {
     Sensor,
     /// A drone's gun pod.
     Gun,
+    /// An armour plate shot loose (`armour`).
+    Plate,
 }
 
 /// A loose piece of a wrecked robot.
@@ -99,7 +101,7 @@ impl Plugin for WreckPlugin {
             .add_message::<WreckImpact>()
             .add_systems(
                 FixedUpdate,
-                (break_up, collapse, spiral, settle)
+                (ledger_strays, break_up, collapse, spiral, settle)
                     .chain()
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
@@ -289,6 +291,11 @@ fn break_up(
                         continue;
                     };
                     let sensor = part.role == PartRole::Sensor;
+                    if sensor && !part.alive() {
+                        // (Already popped off when it was shot out.)
+                        commands.entity(c).despawn();
+                        continue;
+                    }
                     if sensor {
                         // The visor knocked off its mount.
                         let fwd = t.rotation * Vec3::NEG_Z;
@@ -421,6 +428,34 @@ fn spawn_piece(
             AngularVelocity(w),
         ))
         .id()
+}
+
+/// A loose piece from outside a wreck (a plate shot off): queued for
+/// `wreck` to count against [`MAX_DEBRIS`] like the rest.
+pub fn spawn_debris(
+    commands: &mut Commands,
+    b: (Debris, Transform, Vec3, Vec3, f32, Collider, Vec3),
+    size: f32,
+) -> Entity {
+    let id = spawn_piece(commands, b, size);
+    commands.entity(id).insert(Unledgered);
+    id
+}
+
+/// Debris spawned outside `wreck`, not yet in the ledger.
+#[derive(Component)]
+struct Unledgered;
+
+fn ledger_strays(
+    mut commands: Commands,
+    strays: Query<Entity, With<Unledgered>>,
+    mut ledger: ResMut<DebrisLedger>,
+) {
+    let ids: Vec<Entity> = strays.iter().collect();
+    for e in &ids {
+        commands.entity(*e).remove::<Unledgered>();
+    }
+    keep(&mut ledger, &mut commands, &ids);
 }
 
 fn keep(ledger: &mut DebrisLedger, commands: &mut Commands, ids: &[Entity]) {

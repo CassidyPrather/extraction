@@ -102,6 +102,11 @@ What changed, and worth a comment each:
   wrist readout sits on a housing on the left cuff. Mark anything that
   looks wrong in your hand, especially a hand that sits too far forward
   or back on its grip.
+- **Fingers.** The Index controllers' finger sensing reaches the gloves:
+  an empty glove's fingers and thumb follow yours, and sleeves run up to
+  your shoulders. A gun stays in a relaxed hand as long as your fingers
+  are still round it; open your fingers (not just the squeeze) to let go.
+  Say if that ever keeps hold of something you meant to drop.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
@@ -267,6 +272,13 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   no bang: slap the magazine up with your other palm, then rack. A case
   and a round in the port, the slide stuck: drop the magazine (A), rack,
   reload. Can you tell which is which by look and sound?
+- Grenades and the knife. Hold a grenade, pinch the ring with your other
+  hand's trigger and pull: is it findable? Throw it (a throw is your
+  hand's speed): does it go where you meant? Cook one (B) and see if the
+  timing feels fair. Thrust the knife into something, then slash: does
+  "hard enough" match what your arm did? Fix the SKS's bayonet (A).
+- Cover by material: shoot through a shed's plank wall with the AK, then
+  try the pistol; skip rounds off concrete at a slant. Does it read?
 - Reach over a shoulder for the backpack; let go of it in front of you to
   open it. Stow things, take them out.
 - The bench (right side): strip something, repack rounds.
@@ -318,6 +330,18 @@ unless you ask for it. Try both, in the same forest:
 Then note the session log's `gpu: ... ms a frame` lines from each run,
 and whether the shimmer bothered you in the first and was better in
 the second.
+
+### 4d. Long shadows at dusk (5 minutes)
+
+At dusk the sun is low, and in clear weather the trees' shadows run in
+long lines across the tracks (the "ruled lines" from the first
+session, now only at the ends of the day). Try it twice in Marrow Creek:
+
+1. `cargo run --release -- --map marrow_creek --hour dusk --weather clearing`
+2. The same with `--sun-elevation 28` (a higher sun, shorter shadows,
+   a little less golden).
+
+Which looked better in the headset, and did the shadow lines bother you?
 
 ### 5. Between raids
 
@@ -372,6 +396,8 @@ the second.
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
+| `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |

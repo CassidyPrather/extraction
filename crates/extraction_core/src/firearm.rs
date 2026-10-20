@@ -660,9 +660,11 @@ impl Firearm {
         }
         if self.locked_back && to < 1.0 {
             // Tugging the slide back off the stop releases it, and it
-            // strips a round on the way home as if the stop had.
+            // strips a round on the way home as if the stop had. An open
+            // bolt eased off its sear by hand just rides (racking a cocked
+            // PPSh mustn't throw a round away).
             self.locked_back = false;
-            self.stroke_cleared = true;
+            self.stroke_cleared = !self.def.open_bolt;
         }
         if to > from {
             if from < COCK_AT && to >= COCK_AT {
@@ -1440,6 +1442,16 @@ mod tests {
         assert!(fired(&ev) && ev.contains(&Event::Ejected(Round::Spent)));
         assert!(gun.locked_back, "back on the sear");
         assert_eq!(gun.rounds_in_feed(), 70);
+        // Racking it again while it sits on the sear loses no round.
+        let before = gun.live_rounds();
+        gun.set_bolt_travel(0.4);
+        gun.set_bolt_travel(1.0);
+        assert_eq!(gun.release_bolt(), vec![Event::BoltLocked]);
+        assert_eq!(
+            gun.live_rounds(),
+            before,
+            "a rack on the sear strips nothing"
+        );
         gun.cycle_mode();
         gun.cycle_mode(); // Auto
         let mut r = lucky();

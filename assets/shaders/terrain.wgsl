@@ -20,7 +20,11 @@
 #import bevy_pbr::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
+    mesh_view_bindings::{view, globals},
 }
+#endif
+#ifdef DISTANCE_FOG
+#import bevy_pbr::mesh_view_bindings::fog
 #endif
 
 struct TerrainParams {
@@ -28,6 +32,10 @@ struct TerrainParams {
     wetness: f32,
     tile: f32,
     burnt: f32,
+    // How full the puddles are (world::puddles::fill), and rain falling.
+    puddles: f32,
+    rain: f32,
+    _pad: vec2<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> terrain: TerrainParams;
@@ -229,6 +237,38 @@ fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
     return l;
 }
 
+// Puddles: the mask is `world::puddles::mask` (keep the two in step).
+fn puddle_mask(p: vec2<f32>, basin: f32, road: f32, up: f32, fill: f32) -> f32 {
+    if (fill <= 0.0) {
+        return 0.0;
+    }
+    let depth = max(basin, road * 0.5) * 0.9
+        + (vnoise(p * 0.45) - 0.5) * 0.5
+        + (vnoise(p * 1.7 + vec2<f32>(13.0, 7.0)) - 0.5) * 0.15;
+    let level = 1.05 - 0.55 * fill;
+    return smoothstep(level, level + 0.07, depth) * smoothstep(0.985, 0.997, up);
+}
+
+#ifndef PREPASS_PIPELINE
+// Rain on a puddle: a ring spreading from each drop, one drop a cell, two
+// sizes of cell. Returns the ripples' slope (x, z).
+fn ripples(p: vec2<f32>, t: f32) -> vec2<f32> {
+    var g = vec2<f32>(0.0);
+    for (var layer = 0; layer < 2; layer = layer + 1) {
+        let scale = select(3.0, 5.3, layer == 1);
+        let cell = floor(p * scale);
+        let h = hash22(cell + vec2<f32>(f32(layer) * 17.0, 3.0));
+        let centre = (cell + 0.2 + 0.6 * h) / scale;
+        let phase = fract(t * (1.1 + 0.4 * h.y) + h.x * 7.0);
+        let d = p - centre;
+        let r = length(d);
+        let ring = exp(-pow((r - phase * 0.14) * 60.0, 2.0)) * (1.0 - phase) * (1.0 - phase);
+        g = g + d / max(r, 1e-3) * ring;
+    }
+    return g;
+}
+#endif
+
 // Rock projected from three axes so cliffs don't stretch.
 fn sample_rock_triplanar(wp: vec3<f32>, n: vec3<f32>) -> Layer {
     var w = abs(n);
@@ -395,6 +435,18 @@ fn fragment(
     rough = mix(rough, 0.42, wet * (0.15 + 0.6 * w[5] + 0.4 * mud));
     rough = max(rough, mix(0.8, 0.42, clamp(road + mud * wet, 0.0, 1.0)));
 
+    // Standing water: dark over the mud, smooth, rain rings on it.
+    var puddle = 0.0;
+#ifndef PREPASS_PIPELINE
+    puddle = puddle_mask(wp.xz, splat.r, road, n_geo.y, terrain.puddles);
+    if (puddle > 0.01) {
+        albedo = mix(albedo, albedo * 0.3, puddle);
+        rough = mix(rough, 0.05, puddle);
+        let rg = ripples(wp.xz, globals.time) * terrain.rain;
+        tn = normalize(mix(tn, vec3<f32>(-rg.x * 0.18, -rg.y * 0.18, 1.0), puddle));
+    }
+#endif
+
     // Tangent frame for an XZ projection: T = +X, B = +Z.
     let t = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geo * n_geo.x);
     // OpenGL-convention normal maps: green points up the image (-V).
@@ -406,14 +458,32 @@ fn fragment(
     pbr_input.material.metallic = 0.0;
     pbr_input.diffuse_occlusion = vec3<f32>(ao);
     pbr_input.N = n;
+    // A puddle's specular is its own reflection, below.
+    pbr_input.material.reflectance = pbr_input.material.reflectance * (1.0 - puddle);
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+    // The terrain wets itself (above): no sky openness for the wet patch.
+    pbr_input.material.base_color.a = 0.0;
 
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);
 #else
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
+    if (puddle > 0.01) {
+        // The sky in the puddle (as the water's: the fog's colour at the
+        // horizon, darker overhead), by Schlick's fresnel.
+        let v = normalize(view.world_position - wp);
+        let r = reflect(-v, n);
+#ifdef DISTANCE_FOG
+        let horizon = fog.base_color.rgb;
+#else
+        let horizon = vec3<f32>(0.2);
+#endif
+        let refl = mix(horizon * 0.9, horizon * 0.7, smoothstep(0.1, 0.7, r.y));
+        let f = 0.02 + 0.98 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
+        out.color = vec4<f32>(mix(out.color.rgb, refl, f * puddle * 0.9), out.color.a);
+    }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 #endif
     return out;

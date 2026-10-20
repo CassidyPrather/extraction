@@ -8479,7 +8479,7 @@
 <line x1='195.0' y1='177.0' x2='213.0' y2='177.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='333.0' y1='609.0' x2='315.0' y2='609.0' stroke='#c0392b' stroke-width='4'/>
 <rect x='177.4' y='604.0' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
-<text x='190.4' y='613.0' fill='#f1c40f'>Breaker</text>
+<text x='190.4' y='613.0' fill='#f1c40f'>Breaker 1</text>
 <line x1='384.0' y1='330.0' x2='384.0' y2='348.0' stroke='#f1c40f' stroke-width='4'/>
 <text x='204.0' y='189.0' fill='#1d1c1a' text-anchor='middle'>stair_hall x</text>
 <circle cx='213.6' cy='369.0' r='4' fill='#5a5650'/>

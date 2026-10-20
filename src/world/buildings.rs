@@ -64,7 +64,13 @@ pub struct PropDef {
     /// Outside, whether it casts a shadow (a gate's blocks do; windows,
     /// in their wall's shadow already, don't).
     pub shadow: bool,
+    /// A hero landmark's lighter models: one drawn past [`LANDMARK_MID`]
+    /// in place of `models`, one in the building's far stand-in.
+    pub lods: Option<[&'static str; 2]>,
 }
+
+/// Where a hero landmark's full model gives way to its middle one.
+pub const LANDMARK_MID: f32 = 60.0;
 
 #[derive(Default, Clone, Debug)]
 pub struct Geo {
@@ -198,6 +204,7 @@ impl Builder {
             pieces: from..to,
             inside: true,
             shadow: false,
+            lods: None,
         });
         self
     }
@@ -228,6 +235,21 @@ impl Builder {
             d.shadow = true;
         }
         self
+    }
+
+    /// As `dress_structure`, for a hero landmark: `name`'s model near,
+    /// `name_lod1` in the middle distance, `name_lod2` far off.
+    pub fn dress_landmark(
+        &mut self,
+        from: usize,
+        name: &'static str,
+        at: Transform,
+        lods: [&'static str; 2],
+    ) {
+        self.dress_structure(from, vec![(name, at)]);
+        if let Some(d) = self.geo.props.last_mut() {
+            d.lods = Some(lods);
+        }
     }
 
     pub fn loot(&mut self, at: Vec3, table: &'static str) -> &mut Self {
@@ -1060,7 +1082,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 28] = [
+pub const PREFABS: [&str; 33] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1089,6 +1111,11 @@ pub const PREFABS: [&str; 28] = [
     "signal_box",
     "steeple",
     "chapel",
+    "mill_race",
+    "ropeway_station",
+    "ropeway_pylon",
+    "ropeway_pylon_down",
+    "blast_furnace",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1153,6 +1180,11 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "signal_box" => signal_box(&mut b),
         "steeple" => steeple(&mut b),
         "chapel" => chapel(&mut b),
+        "mill_race" => mill_race(&mut b),
+        "ropeway_station" => ropeway_station(&mut b),
+        "ropeway_pylon" => ropeway_pylon(&mut b),
+        "ropeway_pylon_down" => ropeway_pylon_down(&mut b),
+        "blast_furnace" => blast_furnace(&mut b),
         "target" => target(&mut b),
         id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
@@ -1976,6 +2008,767 @@ fn headframe(b: &mut Builder) {
         false,
     );
     b.dress_structure(from, vec![("headframe", Transform::IDENTITY)]);
+}
+
+/// A box from `a` to `c` (its centre line), `w` across in x (or, along x,
+/// in z) and `d` the other way.
+fn strut(b: &mut Builder, a: Vec3, c: Vec3, w: f32, d: f32, mat: Mat) {
+    let v = c - a;
+    b.piece(
+        Shape::Box(Vec3::new(w, v.length(), d)),
+        Transform::from_translation((a + c) * 0.5)
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, v.normalize())),
+        mat,
+        true,
+    );
+}
+
+/// A sloping walk in the YZ plane, its top surface's centre line from `a`
+/// to `c`.
+fn walk(b: &mut Builder, a: Vec3, c: Vec3, width: f32, thick: f32, mat: Mat) {
+    let along = c - a;
+    let normal = Vec3::new(0.0, along.z, -along.y).normalize();
+    b.piece(
+        Shape::Box(Vec3::new(width, thick, along.length())),
+        Transform::from_translation((a + c) * 0.5 - normal * thick * 0.5)
+            .with_rotation(Quat::from_rotation_x(-along.y.atan2(along.z))),
+        mat,
+        true,
+    );
+}
+
+// The mill race's measures, as `art/props/heroes.py` (MR_* there), in its
+// tower's space; the prefab's origin is its footprint's middle, MR_SHIFT
+// along z from the tower.
+const MR_SHIFT: f32 = -19.3;
+const MR_DECK: f32 = 19.0;
+const MR_GATE: f32 = MR_DECK + 5.0;
+const MR_ROOF: f32 = MR_DECK + 6.0;
+const MR_LEG: (f32, f32) = (2.6, 2.1);
+const MR_TANK: (f32, f32) = (4.4, 2.4);
+const MR_WALK: (f32, f32) = (0.75, 1.0);
+const MR_WALK_TOP: (f32, f32) = (3.2, 40.0);
+const MR_TROUGH: (f32, f32) = (-0.5, 1.2);
+const MR_LEVEL: f32 = 3.6;
+const MR_WHEEL: (f32, f32, f32) = (2.4, 1.0, 43.0);
+
+fn mr_walk_y(z: f32) -> f32 {
+    let (z0, z1) = MR_WALK_TOP;
+    let top = MR_DECK + 0.3;
+    top - (top - 0.3) * (z - z0) / (z1 - z0)
+}
+
+fn mr_trough_y(z: f32) -> f32 {
+    (mr_walk_y(z.max(MR_WALK_TOP.0)) + 0.6).max(MR_LEVEL)
+}
+
+/// Marrow Creek's hero landmark: a timber sluice tower with its header
+/// tank, the race running down a trestle beside a walkway to an overshot
+/// wheel. Walk up the walkway to the deck round the tank (a crate's up
+/// there). Drawn by `mill_race` (`art/props/heroes.py`).
+fn mill_race(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    let top = MR_DECK + 0.3;
+    let (lf, lt) = MR_LEG;
+    let leg = |sx: f32, sz: f32, y: f32| {
+        let r = lf + (lt - lf) * y / MR_DECK;
+        Vec3::new(sx * r, y, sz * r)
+    };
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.9, 0.5, 0.9),
+                Vec3::new(sx * lf, 0.0, sz * lf),
+                Mat::Concrete,
+            );
+            strut(
+                b,
+                leg(sx, sz, 0.25),
+                leg(sx, sz, MR_DECK),
+                0.36,
+                0.36,
+                Mat::Timber,
+            );
+        }
+    }
+    // The deck, its railing (open where the walkway arrives), the tank.
+    let half = 3.2;
+    b.bx(
+        Vec3::new(2.0 * half, 0.3, 2.0 * half),
+        Vec3::new(0.0, MR_DECK + 0.15, 0.0),
+        Mat::Planks,
+    );
+    let (wx, ww) = MR_WALK;
+    let e = half - 0.06;
+    let gap = (wx - ww * 0.5 - 0.05, wx + ww * 0.5 + 0.05);
+    let rail = |b: &mut Builder, a: Vec2, c: Vec2| {
+        let mid = (a + c) * 0.5;
+        let size = (c - a).abs() + Vec2::splat(0.07);
+        b.bx(
+            Vec3::new(size.x, 1.05, size.y),
+            Vec3::new(mid.x, top + 0.525, mid.y),
+            Mat::Timber,
+        );
+    };
+    rail(b, Vec2::new(-e, -e), Vec2::new(e, -e));
+    rail(b, Vec2::new(e, -e), Vec2::new(e, e));
+    rail(b, Vec2::new(-e, -e), Vec2::new(-e, e));
+    rail(b, Vec2::new(-e, e), Vec2::new(gap.0, e));
+    rail(b, Vec2::new(gap.1, e), Vec2::new(e, e));
+    let (side, th) = MR_TANK;
+    let hs = side * 0.5;
+    for k in 0..4 {
+        let rot = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2 * k as f32);
+        b.piece(
+            Shape::Box(Vec3::new(side, th, 0.1)),
+            Transform::from_translation(rot * Vec3::new(0.0, top + th * 0.5, -hs + 0.05))
+                .with_rotation(rot),
+            Mat::Planks,
+            true,
+        );
+    }
+    // The sluice gate's posts and head.
+    let (tx, tw) = MR_TROUGH;
+    for x in [tx - tw * 0.5 - 0.12, tx + tw * 0.5 + 0.12] {
+        b.bx(
+            Vec3::new(0.24, MR_GATE - top, 0.24),
+            Vec3::new(x, (top + MR_GATE) * 0.5, hs + 0.14),
+            Mat::Timber,
+        );
+    }
+    b.bx(
+        Vec3::new(tw + 0.6, 0.3, 0.34),
+        Vec3::new(tx, MR_GATE, hs + 0.14),
+        Mat::Timber,
+    );
+    // The roof's posts at the deck's corners (the roof's out of reach).
+    let rp = half - 0.2;
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.22, MR_ROOF - top, 0.22),
+                Vec3::new(sx * rp, (top + MR_ROOF) * 0.5, sz * rp),
+                Mat::Timber,
+            );
+        }
+    }
+    // The walkway, its handrail, and the trough beside it (which keeps
+    // you off the other side).
+    let (z0, z1) = MR_WALK_TOP;
+    walk(
+        b,
+        Vec3::new(wx, mr_walk_y(z0), z0),
+        Vec3::new(wx, mr_walk_y(z1), z1),
+        ww,
+        0.12,
+        Mat::Planks,
+    );
+    let rx = wx + ww * 0.5 + 0.05;
+    strut(
+        b,
+        Vec3::new(rx, mr_walk_y(z0) + 0.5, z0),
+        Vec3::new(rx, mr_walk_y(z1) + 0.5, z1),
+        0.06,
+        1.1,
+        Mat::Timber,
+    );
+    let wz1 = MR_WHEEL.2 - 1.2;
+    let zk = z0 + (top - (MR_LEVEL - 0.6)) * (z1 - z0) / (top - 0.3);
+    for (za, zb) in [(hs + 0.1, zk), (zk, wz1)] {
+        let (ya, yb) = (mr_trough_y(za), mr_trough_y(zb));
+        strut(
+            b,
+            Vec3::new(tx, ya + 0.32, za),
+            Vec3::new(tx, yb + 0.32, zb),
+            tw,
+            0.88,
+            Mat::Planks,
+        );
+    }
+    // The bents, every 4 m: two posts, and a stub up from them to the
+    // trough.
+    let mut z = 6.0;
+    while z < wz1 - 1.0 {
+        let cap = (mr_walk_y(z.min(z1)) - 0.27).min(mr_trough_y(z) - 0.18);
+        for x in [tx - tw * 0.5 - 0.1, wx + ww * 0.5 + 0.05] {
+            b.bx(
+                Vec3::new(0.22, cap + 0.95, 0.22),
+                Vec3::new(x, (cap - 1.05) * 0.5, z),
+                Mat::Timber,
+            );
+        }
+        let under = mr_trough_y(z) - 0.12;
+        if under > cap + 0.05 {
+            b.bx(
+                Vec3::new(0.2, under - cap + 0.1, 0.2),
+                Vec3::new(tx, (under + cap - 0.1) * 0.5, z),
+                Mat::Timber,
+            );
+        }
+        z += 4.0;
+    }
+    // The wheel in its pit.
+    let (wr, wy, wz) = MR_WHEEL;
+    let (px, pz) = (tw * 0.5 + 0.6, wr + 0.5);
+    for sx in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(0.4, 1.9, 2.0 * pz + 0.8),
+            Vec3::new(tx + sx * (px + 0.2), -0.65, wz),
+            Mat::Concrete,
+        );
+    }
+    for sz in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(2.0 * px, 1.9, 0.4),
+            Vec3::new(tx, -0.65, wz + sz * (pz + 0.2)),
+            Mat::Concrete,
+        );
+    }
+    b.piece(
+        Shape::Cylinder(wr, tw),
+        Transform::from_xyz(tx, wy, wz)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        Mat::Timber,
+        true,
+    );
+    for p in &mut b.geo.pieces[from..] {
+        p.at.translation.z += MR_SHIFT;
+    }
+    b.dress_landmark(
+        from,
+        "mill_race",
+        Transform::from_xyz(0.0, 0.0, MR_SHIFT),
+        ["mill_race_lod1", "mill_race_lod2"],
+    );
+    // Up on the deck, for whoever climbs.
+    b.crate_box(Vec3::new(-2.3, top, -2.4 + MR_SHIFT), 0.7, Some("tools"));
+}
+
+// The ropeway's measures, as `art/props/heroes.py` (RW_*, PY_* there).
+// The station's prefab origin is its footprint's middle, RW_SHIFT from
+// the station's own.
+const RW_SHIFT: Vec3 = Vec3::new(-1.3, 0.0, -0.7);
+const RW_PIER: (f32, f32) = (4.0, 3.5);
+const RW_DECK: f32 = 9.0;
+const RW_DECK_Z: (f32, f32) = (-6.5, 4.5);
+const RW_SHED: (f32, f32, f32) = (8.0, 4.0, 7.0);
+const RW_SHED_C: (f32, f32) = (-0.5, 1.0);
+const RW_TOWER: (f32, f32, f32) = (1.6, 24.0, 7.0);
+const RW_WHEEL: (f32, f32) = (2.6, -4.6);
+const RW_STAIR_X: f32 = 5.6;
+const PY_TOP: f32 = 20.0;
+const PY_BASE: f32 = 2.0;
+const PY_HEAD: f32 = 0.6;
+const PY_ARM: f32 = 3.4;
+
+/// Kettle Pass's hero landmark: the upper terminal of a mine's aerial
+/// ropeway, its ropes broken. Up the stair to the loading deck, the bull
+/// wheel and the shed (a crate in it); the tension tower behind. Drawn
+/// by `ropeway_station` (`art/props/heroes.py`); its line's pylons are
+/// `ropeway_pylon` and `ropeway_pylon_down`.
+fn ropeway_station(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    let top = RW_DECK + 0.3;
+    let (px, pz) = RW_PIER;
+    let (zf, zb) = RW_DECK_Z;
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.8, RW_DECK + 0.2, 0.8),
+                Vec3::new(sx * px, (RW_DECK - 0.8) * 0.5, sz * pz),
+                Mat::Concrete,
+            );
+        }
+        b.bx(
+            Vec3::new(2.0 * px + 0.9, 0.5, 0.4),
+            Vec3::new(0.0, RW_DECK - 0.25, sx * pz),
+            Mat::RustyMetal,
+        );
+    }
+    b.bx(
+        Vec3::new(2.0 * px + 1.0, 0.3, zb - zf),
+        Vec3::new(0.0, RW_DECK + 0.15, (zf + zb) * 0.5),
+        Mat::Planks,
+    );
+    // The shed: back and side walls (a door in the +X one), open at the
+    // front under a beam on a post; its roof.
+    let (sw, sh, sd) = RW_SHED;
+    let (sx0, sz0) = RW_SHED_C;
+    let (hw, hd) = (sw * 0.5, sd * 0.5);
+    let y = top + sh * 0.5;
+    b.bx(
+        Vec3::new(sw, sh, 0.15),
+        Vec3::new(sx0, y, sz0 + hd - 0.075),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh, sd - 0.15),
+        Vec3::new(sx0 - hw + 0.075, y, sz0 - 0.075),
+        Mat::Planks,
+    );
+    let (d0, d1) = (sz0 + 1.0, sz0 + 2.2);
+    let x = sx0 + hw - 0.075;
+    b.bx(
+        Vec3::new(0.15, sh, d0 - (sz0 - hd)),
+        Vec3::new(x, y, (sz0 - hd + d0) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh, sz0 + hd - 0.15 - d1),
+        Vec3::new(x, y, (d1 + sz0 + hd - 0.15) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh - 2.1, d1 - d0),
+        Vec3::new(x, top + 2.1 + (sh - 2.1) * 0.5, (d0 + d1) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(sw - 0.3, 0.35, 0.3),
+        Vec3::new(sx0, top + sh - 0.175, sz0 - hd + 0.15),
+        Mat::Timber,
+    );
+    b.bx(
+        Vec3::new(0.25, sh - 0.35, 0.25),
+        Vec3::new(sx0, top + (sh - 0.35) * 0.5, sz0 - hd + 0.15),
+        Mat::Timber,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(sw + 1.0, 2.2, sd + 1.6)),
+        Transform::from_xyz(sx0, top + sh, sz0 - 0.4),
+        Mat::Corrugated,
+        true,
+    );
+    // The bull wheel on its post.
+    let (wr, wz) = RW_WHEEL;
+    b.piece(
+        Shape::Cylinder(0.35, 1.9),
+        Transform::from_xyz(0.0, top + 0.95, wz),
+        Mat::DarkMetal,
+        true,
+    );
+    b.piece(
+        Shape::Cylinder(wr, 0.24),
+        Transform::from_xyz(0.0, top + 1.6, wz),
+        Mat::DarkMetal,
+        true,
+    );
+    // The tension tower behind the deck and its counterweight.
+    let (th, ty, tz) = RW_TOWER;
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.6, 0.5, 0.6),
+                Vec3::new(sx * th, 0.0, tz + sz * th),
+                Mat::Concrete,
+            );
+            strut(
+                b,
+                Vec3::new(sx * th, 0.25, tz + sz * th),
+                Vec3::new(sx * th * 0.75, ty - 0.3, tz + sz * th * 0.75),
+                0.24,
+                0.24,
+                Mat::RustyMetal,
+            );
+        }
+    }
+    b.bx(
+        Vec3::new(2.0 * th + 0.4, 0.3, 2.0 * th + 0.4),
+        Vec3::new(0.0, ty - 0.15, tz),
+        Mat::RustyMetal,
+    );
+    b.bx(
+        Vec3::new(1.6, 2.2, 1.6),
+        Vec3::new(0.0, 15.0, tz),
+        Mat::Concrete,
+    );
+    b.bx(
+        Vec3::new(0.08, ty - 16.25, 0.08),
+        Vec3::new(0.0, (ty + 15.95) * 0.5, tz),
+        Mat::DarkMetal,
+    );
+    // The stair: a flight up towards the front, the landing, a flight back
+    // up beside the deck; handrails on their outer sides.
+    let (xo, xi) = (RW_STAIR_X + 0.9, RW_STAIR_X - 0.4);
+    let zl = zf + 2.2;
+    for (a, c) in [
+        (
+            Vec3::new(xo, 0.0, zb + 0.5),
+            Vec3::new(xo, top * 0.5, zl + 0.8),
+        ),
+        (
+            Vec3::new(xi, top * 0.5, zl + 0.8),
+            Vec3::new(xi, top, zb - 1.0),
+        ),
+    ] {
+        walk(b, a, c, 1.1, 0.12, Mat::Planks);
+        // From a metre back down the slope, into the ground or the landing.
+        let r = Vec3::new(0.5, 0.5, 0.0);
+        let back = (c - a).normalize();
+        strut(b, a + r - back, c + r, 0.06, 1.0, Mat::Timber);
+    }
+    b.bx(
+        Vec3::new(2.7, 0.15, 1.6),
+        Vec3::new((xo + xi) * 0.5, top * 0.5 - 0.075, zl),
+        Mat::Planks,
+    );
+    for x in [xi - 0.5, xo + 0.5] {
+        b.bx(
+            Vec3::new(0.2, top * 0.5 + 0.85, 0.2),
+            Vec3::new(x, (top * 0.5 + 0.85) * 0.5 - 0.5, zl - 0.4),
+            Mat::Timber,
+        );
+    }
+    for p in &mut b.geo.pieces[from..] {
+        p.at.translation += RW_SHIFT;
+    }
+    b.dress_landmark(
+        from,
+        "ropeway_station",
+        Transform::from_translation(RW_SHIFT),
+        ["ropeway_station_lod1", "ropeway_station_lod2"],
+    );
+    b.crate_box(
+        Vec3::new(sx0 - hw + 0.7, top, sz0 + hd - 0.7) + RW_SHIFT,
+        0.7,
+        Some("tools"),
+    );
+}
+
+/// A pylon's colliders, standing at the origin, then `at`: its legs, the
+/// crossarm on its head. `lying`, two girts hold the upper legs up.
+fn pylon_body(b: &mut Builder, at: Transform, lying: bool) {
+    let h = |y: f32| PY_BASE + (PY_HEAD - PY_BASE) * (y - 0.25) / (PY_TOP - 0.25);
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            let a = at.transform_point(Vec3::new(sx * h(0.25), 0.25, sz * h(0.25)));
+            let c = at.transform_point(Vec3::new(sx * h(PY_TOP), PY_TOP, sz * h(PY_TOP)));
+            strut(b, a, c, 0.2, 0.2, Mat::RustyMetal);
+        }
+    }
+    b.piece(
+        Shape::Box(Vec3::new(1.4, 0.3, 1.4)),
+        at * Transform::from_xyz(0.0, PY_TOP - 0.15, 0.0),
+        Mat::RustyMetal,
+        true,
+    );
+    // Lying, the crossarm's pressed down into the grass.
+    let sunk = if lying { -0.3 } else { 0.0 };
+    b.piece(
+        Shape::Box(Vec3::new(2.0 * PY_ARM, 0.4, 0.3)),
+        at * Transform::from_xyz(0.0, PY_TOP + 0.2, sunk),
+        Mat::RustyMetal,
+        true,
+    );
+    if lying {
+        // Halfway along, from the lower legs (-z) to under the upper ones.
+        let y = (0.25 + PY_TOP) * 0.5;
+        for sx in [-1.0f32, 1.0] {
+            let a = at.transform_point(Vec3::new(sx * h(y), y, -h(y)));
+            let c = at.transform_point(Vec3::new(sx * h(y), y, h(y) - 0.1));
+            strut(b, a, c, 0.08, 0.08, Mat::RustyMetal);
+        }
+    }
+}
+
+fn pylon_footings(b: &mut Builder) {
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.9, 0.6, 0.9),
+                Vec3::new(sx * PY_BASE, 0.0, sz * PY_BASE),
+                Mat::Concrete,
+            );
+        }
+    }
+}
+
+/// One of the ropeway's lattice pylons, 21 m, its crossarm along x (the
+/// line runs along z), the ropes broken and hanging.
+fn ropeway_pylon(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    pylon_footings(b);
+    pylon_body(b, Transform::IDENTITY, false);
+    b.dress_landmark(
+        from,
+        "ropeway_pylon",
+        Transform::IDENTITY,
+        ["ropeway_pylon_lod1", "ropeway_pylon_lod2"],
+    );
+}
+
+/// A pylon fallen along -z off its sheared legs, as `ropeway_pylon_down`
+/// lies.
+fn ropeway_pylon_down(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    pylon_footings(b);
+    let taper = ((PY_BASE - PY_HEAD) / PY_TOP).atan();
+    let at = Transform::from_xyz(0.4, PY_BASE - 0.15, -PY_BASE - 2.5)
+        * Transform::from_rotation(Quat::from_rotation_z(0.08))
+        * Transform::from_rotation(Quat::from_rotation_x(
+            -(std::f32::consts::FRAC_PI_2 + taper),
+        ));
+    pylon_body(b, at, true);
+    b.dress_landmark(
+        from,
+        "ropeway_pylon_down",
+        Transform::IDENTITY,
+        ["ropeway_pylon_down_lod1", "ropeway_pylon_down_lod2"],
+    );
+}
+
+// The blast furnace's measures, as `art/props/heroes.py` (BF_* there), in
+// its furnace's space; the prefab's origin is its footprint's middle,
+// BF_SHIFT from the furnace.
+const BF_SHIFT: Vec3 = Vec3::new(-5.7, 0.0, -10.6);
+const BF_DECK: f32 = 24.0;
+const BF_STOVES: (f32, [f32; 3], f32, f32) = (3.0, [12.0, 18.5, 25.0], 4.0, 20.0);
+const BF_CHIMNEY: (f32, f32, (f32, f32), f32) = (1.4, 1.0, (18.5, 11.5), 38.0);
+const BF_CATCHER: (f32, (f32, f32), f32, f32) = (2.8, (-14.0, 5.0), 6.0, 14.0);
+const BF_SKIP: ((f32, f32), (f32, f32)) = ((0.0, 36.0), (0.0, 5.5));
+const BF_WALK_X: f32 = 1.7;
+const BF_CAST: (f32, (f32, f32), f32) = (16.0, (-4.0, -18.0), 9.0);
+
+/// A solid upright cylinder from y0 to y1 at (x, z).
+fn drum(b: &mut Builder, r: f32, x: f32, z: f32, y0: f32, y1: f32, mat: Mat) {
+    b.piece(
+        Shape::Cylinder(r, y1 - y0),
+        Transform::from_xyz(x, (y0 + y1) * 0.5, z),
+        mat,
+        true,
+    );
+}
+
+/// Cinder Works' hero landmark: a blast furnace, its stack to 26 m and
+/// its bleeders to 33, three hot-blast stoves and their chimney, the
+/// downcomer to the dust catcher. Walk into the cast house at its foot,
+/// or up the walkway beside the skip bridge to the charging platform
+/// (crates in both). Drawn by `blast_furnace` (`art/props/heroes.py`).
+fn blast_furnace(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(14.0, 1.4, 14.0),
+        Vec3::new(0.0, 0.5, 0.0),
+        Mat::Concrete,
+    );
+    // The furnace, inside its outline: hearth, bosh, the stack in three,
+    // the top cone, the top house.
+    let rm = Mat::RustyMetal;
+    drum(b, 3.4, 0.0, 0.0, 1.2, 6.0, rm);
+    drum(b, 3.4, 0.0, 0.0, 6.0, 9.6, rm);
+    for (r, y0, y1) in [(3.8, 9.6, 14.4), (3.4, 14.4, 19.2), (3.0, 19.2, 24.0)] {
+        drum(b, r, 0.0, 0.0, y0, y1, rm);
+    }
+    drum(b, 1.4, 0.0, 0.0, 24.0, 26.0, rm);
+    b.bx(
+        Vec3::new(3.4, 3.2, 3.4),
+        Vec3::new(0.0, 27.4, 0.0),
+        Mat::Corrugated,
+    );
+    for k in 0..8 {
+        let a = std::f32::consts::TAU * (k as f32 + 0.5) / 8.0;
+        b.bx(
+            Vec3::new(0.5, 7.9, 0.5),
+            Vec3::new(4.75 * a.cos(), 5.15, 4.75 * a.sin()),
+            rm,
+        );
+    }
+    // The charging platform: a square deck round the stack, its railing
+    // open at the +X +Z corner where the walkway arrives.
+    let (dk, hole) = (BF_DECK, 3.0);
+    let rim = 6.0 - hole;
+    for (sx, sz, w, d) in [
+        (0.0, -1.0, 12.0, rim),
+        (0.0, 1.0, 12.0, rim),
+        (-1.0, 0.0, rim, 2.0 * hole),
+        (1.0, 0.0, rim, 2.0 * hole),
+    ] {
+        b.bx(
+            Vec3::new(w, 0.3, d),
+            Vec3::new(sx * (hole + rim * 0.5), dk - 0.15, sz * (hole + rim * 0.5)),
+            Mat::PaintedMetal,
+        );
+    }
+    let e = 5.95;
+    for (a, c) in [
+        (Vec2::new(-e, -e), Vec2::new(e, -e)),
+        (Vec2::new(-e, -e + 0.04), Vec2::new(-e, e - 0.04)),
+        (Vec2::new(-e, e), Vec2::new(0.9, e)),
+        (Vec2::new(e, -e + 0.04), Vec2::new(e, 3.4)),
+    ] {
+        let mid = (a + c) * 0.5;
+        let size = (c - a).abs() + Vec2::splat(0.06);
+        b.bx(
+            Vec3::new(size.x, 1.1, size.y),
+            Vec3::new(mid.x, dk + 0.55, mid.y),
+            Mat::PaintedMetal,
+        );
+    }
+    // The uptakes, their crossing, the bleeders.
+    for (x, z) in [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0)] {
+        strut(
+            b,
+            Vec3::new(x * 0.9, 24.6, z * 0.9),
+            Vec3::new(x * 1.15, 31.0, z * 1.15),
+            0.8,
+            0.8,
+            rm,
+        );
+    }
+    for (a, c) in [
+        (Vec3::new(-2.3, 31.0, -2.3), Vec3::new(2.3, 31.0, 2.3)),
+        (Vec3::new(2.3, 31.05, -2.3), Vec3::new(-2.3, 31.05, 2.3)),
+    ] {
+        strut(b, a, c, 0.9, 0.9, rm);
+    }
+    // The downcomer and the dust catcher on its legs.
+    let (cr, (cx, cz), cy0, cy1) = BF_CATCHER;
+    strut(
+        b,
+        Vec3::new(-2.3, 31.0, -2.3),
+        Vec3::new(cx + 0.6, cy1 + 2.0, cz),
+        1.4,
+        1.4,
+        rm,
+    );
+    drum(b, cr, cx, cz, cy0, cy1, rm);
+    drum(b, 1.2, cx, cz, 2.2, cy0, rm);
+    drum(b, 1.0, cx, cz, cy1, cy1 + 2.0, rm);
+    for k in 0..4 {
+        let a = std::f32::consts::FRAC_PI_4 + std::f32::consts::FRAC_PI_2 * k as f32;
+        strut(
+            b,
+            Vec3::new(cx + (cr + 0.6) * a.cos(), 0.0, cz + (cr + 0.6) * a.sin()),
+            Vec3::new(
+                cx + (cr - 0.2) * a.cos(),
+                cy0 + 0.5,
+                cz + (cr - 0.2) * a.sin(),
+            ),
+            0.4,
+            0.4,
+            rm,
+        );
+    }
+    // The stoves, the hot-blast main, the chimney.
+    let (sr, xs, sz, sh) = BF_STOVES;
+    for x in xs {
+        drum(b, sr + 0.25, x, sz, 0.0, 0.8, rm);
+        drum(b, sr, x, sz, 0.8, sh, rm);
+        drum(b, sr * 0.8, x, sz, sh, sh + 1.5, rm);
+        strut(
+            b,
+            Vec3::new(x, 8.0, sz - sr + 0.2),
+            Vec3::new(x, 8.0, sz - sr - 1.1),
+            0.9,
+            0.9,
+            rm,
+        );
+    }
+    strut(
+        b,
+        Vec3::new(5.9, 8.0, 2.4),
+        Vec3::new(xs[2] + 1.2, 8.0, sz - sr - 1.2),
+        1.1,
+        1.1,
+        rm,
+    );
+    let (r0, _, (hx, hz), hh) = BF_CHIMNEY;
+    drum(b, r0 + 0.4, hx, hz, 0.0, 1.0, Mat::Brick);
+    drum(b, 1.3, hx, hz, 1.0, 19.0, Mat::Brick);
+    drum(b, 1.05, hx, hz, 19.0, hh, Mat::Brick);
+    // The skip bridge's chords, and the walkway beside it to the platform,
+    // its handrail.
+    let ((fx, fz), (tx, tz)) = BF_SKIP;
+    let (ft, hd) = (Vec3::new(fx, 0.3, fz), Vec3::new(tx, BF_DECK + 2.5, tz));
+    for sx in [-1.0f32, 1.0] {
+        for dy in [0.0, -1.8] {
+            let o = Vec3::new(sx * 1.0, dy, 0.0);
+            strut(b, ft + o, hd + o, 0.32, 0.32, rm);
+        }
+    }
+    let wx = BF_WALK_X;
+    let (w0, w1) = (Vec3::new(wx, 0.3, fz - 1.0), Vec3::new(wx, BF_DECK, 5.6));
+    walk(b, w0, w1, 1.0, 0.12, Mat::PaintedMetal);
+    let back = (w1 - w0).normalize();
+    let r = Vec3::new(0.47, 0.525, 0.0);
+    // From two metres back down the slope, into the ground.
+    strut(
+        b,
+        w0 + r - back * 2.0,
+        w1 + r,
+        0.05,
+        1.05,
+        Mat::PaintedMetal,
+    );
+    // The stockhouse pit and the hoist house.
+    b.bx(
+        Vec3::new(4.0, 0.6, 5.0),
+        Vec3::new(fx, 0.0, fz + 1.5),
+        Mat::Concrete,
+    );
+    let (hx_, hz_) = (7.0, 33.0);
+    b.bx(
+        Vec3::new(6.0, 4.5, 6.0),
+        Vec3::new(hx_, 2.25, hz_),
+        Mat::Brick,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(6.8, 1.9, 6.8)),
+        Transform::from_xyz(hx_, 4.5, hz_),
+        Mat::Corrugated,
+        true,
+    );
+    // The cast house: its floor, columns, sheeted upper sides, roof and
+    // back gable; the ladle car.
+    let (cw, (cz0, cz1), ce) = BF_CAST;
+    let hw = cw * 0.5;
+    b.bx(
+        Vec3::new(cw + 0.6, 0.2, cz0 - cz1),
+        Vec3::new(0.0, 0.1, (cz0 + cz1) * 0.5),
+        Mat::Concrete,
+    );
+    for k in 0..5 {
+        let z = cz0 + (cz1 - cz0) * k as f32 / 4.0;
+        for sx in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.4, ce, 0.4),
+                Vec3::new(sx * hw, 0.2 + ce * 0.5, z),
+                rm,
+            );
+        }
+    }
+    for sx in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(0.1, ce - 4.0, cz0 - cz1),
+            Vec3::new(sx * (hw + 0.25), 4.2 + (ce - 4.0) * 0.5, (cz0 + cz1) * 0.5),
+            Mat::Corrugated,
+        );
+    }
+    b.piece(
+        Shape::Prism(Vec3::new(cw + 1.2, 3.0, cz0 - cz1 + 1.0)),
+        Transform::from_xyz(0.0, ce + 0.2, (cz0 + cz1) * 0.5),
+        Mat::Corrugated,
+        true,
+    );
+    let lz = cz1 + 2.2;
+    b.bx(Vec3::new(2.4, 0.8, 3.2), Vec3::new(0.0, 0.9, lz), rm);
+    drum(b, 1.5, 0.0, lz, 1.3, 3.5, Mat::DarkMetal);
+    for p in &mut b.geo.pieces[from..] {
+        p.at.translation += BF_SHIFT;
+    }
+    b.dress_landmark(
+        from,
+        "blast_furnace",
+        Transform::from_translation(BF_SHIFT),
+        ["blast_furnace_lod1", "blast_furnace_lod2"],
+    );
+    // A crate on the platform, one in the cast house.
+    b.crate_box(
+        Vec3::new(-4.6, BF_DECK, -4.6) + BF_SHIFT,
+        0.7,
+        Some("workshop"),
+    );
+    b.crate_box(Vec3::new(5.5, 0.2, -12.0) + BF_SHIFT, 0.8, Some("tools"));
 }
 
 /// A railway signal box: an enterable brick ground floor (its lever frame,
@@ -3072,7 +3865,13 @@ pub fn dress_buildings(
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
 ) {
     use crate::render::world_props::Resolved;
+    // Baking a building's occlusion takes a few milliseconds: a few
+    // buildings a frame, so a valley's arrival doesn't hitch.
+    let mut built = 0;
     for (e, b, mut wait) in &mut pending {
+        if built >= 3 {
+            break;
+        }
         let Some(geo) = prefab(&b.prefab) else {
             commands.entity(e).remove::<PropsPending>();
             continue;
@@ -3082,22 +3881,45 @@ pub fn dress_buildings(
         let ready: Vec<bool> = geo
             .props
             .iter()
-            .map(
-                |d| match props.resolve_all(d.models.iter().map(|(n, _)| *n)) {
+            .map(|d| {
+                match props.resolve_all(
+                    d.models
+                        .iter()
+                        .map(|(n, _)| *n)
+                        .chain(d.lods.into_iter().flatten()),
+                ) {
                     Resolved::Loading => {
                         loading = true;
                         false
                     }
                     Resolved::Missing => false,
                     Resolved::Ready => true,
-                },
-            )
+                }
+            })
             .collect();
         // Models load in a few frames; past ten seconds, build without.
         if loading && wait.0 < 600 {
             continue;
         }
         commands.entity(e).remove::<PropsPending>();
+        built += 1;
+        // What shades the building's own surfaces: its solid pieces
+        // (furniture's boxes too, so the floor darkens round their feet),
+        // not its glass.
+        let occluders =
+            super::ao::Occluders::new(geo.pieces.iter().filter(|p| p.mat != Mat::Glass).map(|p| {
+                let half = match p.shape {
+                    Shape::Box(s) => s * 0.5,
+                    Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                let at = match p.shape {
+                    // A gable's box is its lower half.
+                    Shape::Prism(s) => p.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
+                    _ => p.at,
+                };
+                (half, at)
+            }));
         let mut skip = vec![false; geo.pieces.len()];
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
@@ -3112,6 +3934,9 @@ pub fn dress_buildings(
         const NEAR: usize = 1;
         const FAR: usize = 2;
         const WINDOWS: usize = 3;
+        // A hero landmark's full model and its middle one (see `PropDef::lods`).
+        const HERO: usize = 4;
+        const HERO_MID: usize = 5;
         let mut far = vec![false; geo.pieces.len()];
         // The shell, one vertex-coloured mesh, for past `lod::FAR_BUILDING`.
         let mut stand_in = crate::render::lod::StandIn::default();
@@ -3127,10 +3952,10 @@ pub fn dress_buildings(
         }
         // An underground site's rooms: their own group, drawn only when
         // the eye can see them (`underground::Below`).
-        const BELOW: usize = 4;
+        const BELOW: usize = 6;
         let site = super::underground::ids().any(|id| id == b.prefab);
         let below = |at: &Transform| site && at.translation.y < super::underground::BELOW_Y;
-        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 5] = Default::default();
+        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 7] = Default::default();
         let mut add = |group: usize, mat: Handle<StandardMaterial>, mesh: Mesh| {
             let into = &mut merged[group];
             let fits = match into.iter_mut().find(|(m, _)| *m == mat) {
@@ -3145,19 +3970,40 @@ pub fn dress_buildings(
             if skip[i] && !far[i] {
                 continue;
             }
+            let mat = props.lib.get(piece.mat, &props.server, &mut materials);
+            let is_below = below(&piece.at);
+            if let (false, Shape::Box(s)) = (far[i], piece.shape) {
+                // Shaded, and cut where the shading changes (the far
+                // stand-in has the plain box).
+                if !is_below {
+                    if let Some(m) = materials.get(&mat) {
+                        let plain = aligned_box(s, piece.at).transformed_by(piece.at);
+                        stand_in.add(&plain, crate::render::lod::far_colour(m));
+                    }
+                }
+                let group = if is_below { BELOW } else { OUTER };
+                add(
+                    group,
+                    mat,
+                    // Glass keeps its own alpha (the rest carries the sky).
+                    super::ao::shaded_box(s, piece.at, &occluders, piece.mat != Mat::Glass),
+                );
+                continue;
+            }
             let mut mesh = match piece.shape {
                 Shape::Box(s) => aligned_box(s, piece.at),
                 Shape::Prism(s) => crate::render::materials::gable_prism(s.x, s.y, s.z),
                 Shape::Cylinder(r, h) => Cylinder::new(r, h).mesh().resolution(16).build(),
             };
             let _ = mesh.generate_tangents();
-            let mat = props.lib.get(piece.mat, &props.server, &mut materials);
-            let mesh = mesh.transformed_by(piece.at);
-            let is_below = below(&piece.at);
+            let mut mesh = mesh.transformed_by(piece.at);
             if !far[i] && !is_below {
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
+                occluders.bake(&mut mesh);
+            } else {
+                super::ao::ensure_colours(&mut mesh);
             }
             add(
                 if is_below {
@@ -3172,6 +4018,25 @@ pub fn dress_buildings(
             );
         }
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+            if let Some([mid, far]) = d.lods {
+                let (near, at) = d.models[0];
+                for (name, group) in [(near, Some(HERO)), (mid, Some(HERO_MID)), (far, None)] {
+                    let prims = cache.get(name, &mut props, &meshes).to_vec();
+                    for (mat, mesh) in prims {
+                        let mat = props.material(&mat, &mut materials);
+                        let mesh = mesh.transformed_by(at);
+                        match group {
+                            Some(g) => add(g, mat, mesh),
+                            None => {
+                                if let Some(m) = materials.get(&mat) {
+                                    stand_in.add(&mesh, crate::render::lod::far_colour(m));
+                                }
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
                 for (mat, mesh) in prims {
@@ -3219,7 +4084,7 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [outer, near, far, windows, under] = merged;
+        let [outer, near, far, windows, hero, hero_mid, under] = merged;
         for (mat, mesh) in under {
             commands.spawn((
                 Mesh3d(meshes.add(mesh)),
@@ -3228,6 +4093,34 @@ pub fn dress_buildings(
                 super::underground::Below,
                 ChildOf(e),
             ));
+        }
+        let mid = LANDMARK_MID - 5.0..LANDMARK_MID + 5.0;
+        for (group, range) in [
+            (
+                hero,
+                bevy::camera::visibility::VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: mid.clone(),
+                    use_aabb: true,
+                },
+            ),
+            (
+                hero_mid,
+                bevy::camera::visibility::VisibilityRange {
+                    start_margin: mid.clone(),
+                    end_margin: crate::render::lod::near_range().end_margin,
+                    use_aabb: true,
+                },
+            ),
+        ] {
+            for (mat, mesh) in group {
+                commands.spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(mat),
+                    range.clone(),
+                    ChildOf(e),
+                ));
+            }
         }
         for (mat, mesh) in outer {
             commands.spawn((
@@ -3286,7 +4179,8 @@ mod tests {
                     d.pieces.end <= geo.pieces.len(),
                     "{id}: a prop claims pieces past the end"
                 );
-                for (name, _) in &d.models {
+                let lods = d.lods.into_iter().flatten();
+                for name in d.models.iter().map(|(n, _)| *n).chain(lods) {
                     let p = root.join(crate::render::world_props::path(name));
                     assert!(p.exists(), "{id}: no model {}", p.display());
                 }

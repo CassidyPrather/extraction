@@ -72,7 +72,7 @@
     crawlers: 1,
     // The breaker board in the wet sump, by the pump: throw it and the
     // stope and the magazine light, and the magazine's door opens.
-    power: Some((kind: Breaker, room: "sump", at: (2.75, 0.6), rot: 270.0, doors: ["magazine"])),
+    power: [(kind: Breaker, room: "sump", at: (2.75, 0.6), rot: 270.0, doors: ["magazine"])],
     floods: [
         (link: Some(("lamp_room", "west_crosscut")), depth: 1.35),
         (room: Some("sump"), depth: 0.4),

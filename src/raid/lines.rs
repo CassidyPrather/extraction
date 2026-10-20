@@ -140,6 +140,46 @@ pub fn coming_home(n: u32, recalled: bool) -> &'static str {
         .unwrap_or_else(|| pick(SMALL_TALK, n))
 }
 
+/// On the drive home, when he notices what you've brought (and has none
+/// of his own story to tell that night): `raid::lev`.
+pub const CARGO_ARTIFACT: &[&str] = &[
+    "Driver: \"Something in your kit's humming. Box it before I drive.\"",
+    "Driver: \"You've a stone on you. I can feel it in my teeth.\"",
+];
+pub const CARGO_EYE: &[&str] = &[
+    "Driver: \"One of their eyes? Don't point it at me.\"",
+    "Driver: \"That eye still looks at you. Bag it.\"",
+];
+pub const CARGO_CELL: &[&str] = &[
+    "Driver: \"One of their cells. Heavier than it looks, eh?\"",
+    "Driver: \"Their cell. Keep it off the floor. It ticks.\"",
+];
+pub const CARGO_FOOD: &[&str] = &[
+    "Driver: \"Tins! We'll eat tonight.\"",
+    "Driver: \"That's a week of suppers you've got there.\"",
+];
+/// This much food and he says so.
+pub const FOOD_PLENTY: usize = 5;
+
+/// The drive-home line: his story when it's that homecoming, then what
+/// you've brought (a stone, an eye, a cell, a lot of food), then the rest.
+pub fn coming_home_with(n: u32, recalled: bool, c: super::lev::Cargo) -> &'static str {
+    if !recalled && let Some((_, l)) = COMING_HOME.iter().find(|(at, _)| *at == n) {
+        return l;
+    }
+    if c.artifact {
+        pick(CARGO_ARTIFACT, n)
+    } else if c.eye {
+        pick(CARGO_EYE, n)
+    } else if c.cell {
+        pick(CARGO_CELL, n)
+    } else if c.food >= FOOD_PLENTY {
+        pick(CARGO_FOOD, n)
+    } else {
+        coming_home(n, recalled)
+    }
+}
+
 /// Machines talking about you, close by.
 pub const CHATTER_CLOSE: &[&str] = &[
     "Robot chatter on the radio. They're coming here.",
@@ -244,7 +284,11 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 19] = [
+        let pools: [&[&str]; 23] = [
+            CARGO_ARTIFACT,
+            CARGO_EYE,
+            CARGO_CELL,
+            CARGO_FOOD,
             BEAT_RUSTY,
             BEAT_HOLMS,
             BEAT_COLLECTOR,

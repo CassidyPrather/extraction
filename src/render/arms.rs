@@ -3,8 +3,11 @@
 //! look at a gun or the wrist display shows your sleeves, not gloves
 //! floating at the end of nothing.
 //!
-//! Only a look: nothing collides or casts a shadow (like the rest of the
-//! body, see `props::body_casts_no_shadow`). The shoulders ride the torso
+//! Only a look: nothing collides, and the sleeves cast no shadow (like the
+//! rest of the body, see `props::body_casts_no_shadow`). The body's shadow
+//! comes from a proxy instead: capsules for the head, torso, legs and these
+//! same arms on a render layer only the sun sees (`SHADOW_ONLY`), so the
+//! gloves' shadows hang off arms and a body, not off nothing. The shoulders ride the torso
 //! anchor (`interact::body::Torso`, where the rig's straps are), dropping
 //! with the head when you bend over; the elbow hangs down and out and is
 //! kept out of the body.
@@ -36,16 +39,27 @@ const SLEEVE_WRIST_R: f32 = 0.047;
 const SLEEVE_ELBOW_R: f32 = 0.052;
 const SLEEVE_SHOULDER_R: f32 = 0.058;
 
+/// The render layer only the sun has besides the default: the body's
+/// shadow proxy lives on it, drawn into the shadow map and by no camera.
+pub const SHADOW_ONLY: usize = 8;
+
+/// The layers the sun casts shadows from (`world::sky`).
+pub fn sun_layers() -> bevy::camera::visibility::RenderLayers {
+    bevy::camera::visibility::RenderLayers::from_layers(&[0, SHADOW_ONLY])
+}
+
 pub struct ArmsPlugin;
 
 impl Plugin for ArmsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, grow_arms).add_systems(
-            PostUpdate,
-            pose_arms
-                .after(GlovePose)
-                .before(TransformSystems::Propagate),
-        );
+        app.add_systems(Update, (grow_arms, grow_body_shadow))
+            .add_systems(
+                PostUpdate,
+                (pose_arms, pose_body_shadow)
+                    .chain()
+                    .after(GlovePose)
+                    .before(TransformSystems::Propagate),
+            );
     }
 }
 
@@ -58,6 +72,8 @@ struct Arm {
     forearm: Entity,
     elbow: Entity,
     shoulder: Entity,
+    /// The arm's two bones in the shadow proxy.
+    shadow: [Entity; 2],
 }
 
 /// Where the elbow goes, given the shoulder, the wrist, which way the elbow
@@ -171,6 +187,7 @@ fn grow_arms(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     server: Res<AssetServer>,
+    mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     for (glove, v) in &gloves {
         let jacket = model_mats.get("Canvas", &mut lib, &server, &mut materials);
@@ -202,6 +219,10 @@ fn grow_arms(
             &mut commands,
             Sphere::new(SLEEVE_SHOULDER_R).mesh().uv(16, 10),
         );
+        let shadow = [
+            shadow_part(&mut commands, &mut meshes, &mut materials, &mut look),
+            shadow_part(&mut commands, &mut meshes, &mut materials, &mut look),
+        ];
         commands.spawn((
             Name::new(format!("{:?} arm", v.side)),
             Arm {
@@ -211,6 +232,7 @@ fn grow_arms(
                 forearm,
                 elbow,
                 shoulder,
+                shadow,
             },
         ));
     }
@@ -221,11 +243,25 @@ fn grow_arms(
 #[allow(clippy::type_complexity)]
 fn pose_arms(
     arms: Query<&Arm>,
-    gloves: Query<(&HandVisual, &Transform, &Visibility), Without<ArmPart>>,
+    gloves: Query<(&HandVisual, &Transform, &Visibility), (Without<ArmPart>, Without<ShadowPart>)>,
     hands: Query<&ChildOf, With<crate::interact::Hand>>,
-    players: Query<(&Transform, &RigInput, &Children), (Without<HandVisual>, Without<ArmPart>)>,
-    torsos: Query<&Transform, (With<Torso>, Without<HandVisual>, Without<ArmPart>)>,
-    mut parts: Query<(&mut Transform, &mut Visibility), (With<ArmPart>, Without<HandVisual>)>,
+    players: Query<
+        (&Transform, &RigInput, &Children),
+        (Without<HandVisual>, Without<ArmPart>, Without<ShadowPart>),
+    >,
+    torsos: Query<
+        &Transform,
+        (
+            With<Torso>,
+            Without<HandVisual>,
+            Without<ArmPart>,
+            Without<ShadowPart>,
+        ),
+    >,
+    mut parts: Query<
+        (&mut Transform, &mut Visibility),
+        (Or<(With<ArmPart>, With<ShadowPart>)>, Without<HandVisual>),
+    >,
 ) {
     for arm in &arms {
         let Ok((v, glove, glove_vis)) = gloves.get(arm.glove) else {
@@ -262,6 +298,8 @@ fn pose_arms(
             t
         };
         for (e, t) in [
+            (arm.shadow[0], limb(shoulder, elbow, 0.055)),
+            (arm.shadow[1], limb(elbow, wrist, 0.045)),
             (arm.forearm, bone(wrist, elbow)),
             (arm.upper, bone(elbow, shoulder)),
             (arm.elbow, Transform::from_translation(elbow)),
@@ -270,6 +308,143 @@ fn pose_arms(
             if let Ok((mut pt, mut vis)) = parts.get_mut(e) {
                 *pt = t;
                 *vis = show;
+            }
+        }
+    }
+}
+
+/// A capsule of the body's shadow proxy, on the layer only the sun sees.
+#[derive(Component)]
+struct ShadowPart;
+
+/// One unit capsule and one material for every proxy piece, so the shadow
+/// pass draws them as one batch.
+fn shadow_part(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    look: &mut Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+) -> Entity {
+    let (mesh, mat) = look
+        .get_or_insert_with(|| {
+            (
+                meshes.add(
+                    Capsule3d::new(0.5, 1.0)
+                        .mesh()
+                        .rings(2)
+                        .latitudes(8)
+                        .longitudes(10),
+                ),
+                materials.add(StandardMaterial::default()),
+            )
+        })
+        .clone();
+    commands
+        .spawn((
+            ShadowPart,
+            Mesh3d(mesh),
+            MeshMaterial3d(mat),
+            Transform::default(),
+            Visibility::Hidden,
+            bevy::camera::visibility::RenderLayers::layer(SHADOW_ONLY),
+            bevy::light::NotShadowReceiver,
+            // Moved every frame: its bounds are never stale for the cascades.
+            bevy::camera::visibility::NoFrustumCulling,
+        ))
+        .id()
+}
+
+/// A capsule from `a` to `b`, `r` round (the unit capsule, radius 0.5 and
+/// 2 long, stretched onto it).
+fn limb(a: Vec3, b: Vec3, r: f32) -> Transform {
+    let d = b - a;
+    let len = d.length().max(0.01);
+    Transform::from_translation((a + b) / 2.0)
+        .with_rotation(Quat::from_rotation_arc(Vec3::Y, d / len))
+        .with_scale(Vec3::new(2.0 * r, len / 2.0, 2.0 * r))
+}
+
+/// The rest of the local player's shadow proxy: head, torso, legs.
+#[derive(Component)]
+struct BodyShadow {
+    player: Entity,
+    head: Entity,
+    torso: Entity,
+    legs: [Entity; 2],
+}
+
+fn grow_body_shadow(
+    mut commands: Commands,
+    players: Query<Entity, Added<crate::rig::LocalPlayer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+) {
+    for player in &players {
+        let mut part = || shadow_part(&mut commands, &mut meshes, &mut materials, &mut look);
+        let (head, torso, l, r) = (part(), part(), part(), part());
+        commands.spawn((
+            Name::new("Body shadow"),
+            BodyShadow {
+                player,
+                head,
+                torso,
+                legs: [l, r],
+            },
+        ));
+    }
+}
+
+/// Head on the eyes, a torso leaning from the neck (which follows the
+/// head) down to the hips (which stay with the torso anchor), legs to the
+/// feet.
+fn pose_body_shadow(
+    bodies: Query<&BodyShadow>,
+    players: Query<(&Transform, &RigInput, &Children), Without<ShadowPart>>,
+    torsos: Query<&Transform, (With<Torso>, Without<ShadowPart>)>,
+    mut parts: Query<(&mut Transform, &mut Visibility), With<ShadowPart>>,
+) {
+    for body in &bodies {
+        let Ok((root, input, children)) = players.get(body.player) else {
+            continue;
+        };
+        let Some(torso) = children.iter().find_map(|c| torsos.get(c).ok()) else {
+            continue;
+        };
+        let torso = root.mul_transform(*torso);
+        let head = root.mul_transform(input.head);
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(torso.rotation * Vec3::NEG_Z);
+        let neck = head.translation - Vec3::Y * 0.2 - flat * 0.06;
+        let hips = torso.translation - Vec3::Y * 0.45;
+        let side = torso.rotation * Vec3::X;
+        let feet = root.translation + Vec3::Y * 0.08;
+        let up = (neck - hips).normalize_or(Vec3::Y);
+        let torso_t = Transform::from_translation((neck + hips) / 2.0)
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, up) * torso.rotation)
+            .with_scale(Vec3::new(0.34, (neck.distance(hips) / 2.0).max(0.05), 0.22));
+        for (e, t) in [
+            (
+                body.head,
+                limb(
+                    head.translation - Vec3::Y * 0.04,
+                    head.translation + Vec3::Y * 0.06,
+                    0.1,
+                ),
+            ),
+            (body.torso, torso_t),
+            (
+                body.legs[0],
+                limb(hips - side * 0.1, feet - side * 0.12, 0.075),
+            ),
+            (
+                body.legs[1],
+                limb(hips + side * 0.1, feet + side * 0.12, 0.075),
+            ),
+        ] {
+            if let Ok((mut pt, mut vis)) = parts.get_mut(e) {
+                *pt = t;
+                *vis = Visibility::Inherited;
             }
         }
     }

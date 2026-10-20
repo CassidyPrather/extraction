@@ -28,6 +28,9 @@ use crate::world::Layer;
 /// A lodestone's own little well round its carrier: radius of the lens it
 /// works like, and how far from the carrier's chest it reaches.
 pub const LODESTONE_RADIUS: f32 = 0.6;
+/// A lodestone's lens, as a share of a well's: enough to turn a graze
+/// into a miss, not to wrap a round round you.
+pub const LODESTONE_STRENGTH: f32 = 0.15;
 
 /// Where a well's heart hangs, from its ground position.
 pub fn heart(at: Vec3) -> Vec3 {
@@ -38,7 +41,7 @@ pub fn heart(at: Vec3) -> Vec3 {
 /// heart.
 #[allow(clippy::type_complexity)]
 pub fn wells(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform)>,
+    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<super::surge::Forming>>,
     mut bodies: Query<
         (
             &GlobalTransform,
@@ -191,7 +194,7 @@ pub fn bend_rounds(
                     p.velocity.to_array(),
                     dt,
                     LODESTONE_RADIUS,
-                ));
+                )) * LODESTONE_STRENGTH;
             }
         }
         if dv != Vec3::ZERO {

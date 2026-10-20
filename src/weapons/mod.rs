@@ -13,8 +13,10 @@
 pub mod ballistics;
 pub mod feel;
 pub mod flat;
+pub mod grenades;
 pub mod impacts;
 pub mod layout;
+pub mod melee;
 pub mod muzzle;
 pub mod range;
 pub mod visuals;
@@ -186,6 +188,8 @@ impl Plugin for WeaponsPlugin {
                 ballistics::BallisticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
+                grenades::GrenadePlugin,
+                melee::MeleePlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -856,6 +860,8 @@ pub fn spawn_ejections(
                     "5.45x39" => "round_545",
                     "7.62x54R" => "round_762r",
                     "7.62x39" => "round_762x39",
+                    "7.62x38R" => "round_762x38r",
+                    "7.62x25" => "round_762x25",
                     "12ga" => "shell_12ga",
                     _ => continue,
                 };

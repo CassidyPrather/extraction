@@ -238,8 +238,9 @@ within reach, then rush.
 **Crawlers keep the dark** (`robots/indoor.rs`). Underground sites have
 residents: small walkers that walk a round of the rooms on the site's own
 grid (`LocalNav`), pausing to look round at each, and hunt with the same
-senses and brain as any walker, with a 15 m spark gun that crackles 0.5 s
-before each zap (`CrawlerCharge`). Below ground it's dark
+senses and brain as any walker, with an 18 m spark gun that crackles 0.5 s
+before each zap (`CrawlerCharge`). One that hears you close by keeps still
+and low in the dark for a few seconds and lets you come to it. Below ground it's dark
 (`senses::Lighting`): unlit, you're a tenth as visible, a shape at arm's
 length. A lamp lights you near it; a torch lights you up, and its beam
 pointed at a crawler is seen from as far as it carries. Sound follows the
@@ -363,6 +364,12 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   of moment about the wrist: an AK about 4°, a Mosin 7°) and sways
   slowly (`SWAY_*`, under 1°). Sprint fatigue adds up to `SWAY_TIRED`
   (0.35°) to any hold, shared by a second hand and a shoulder.
+- **Bracing**: a gun resting on something solid (its handguard, body
+  or magazine within 5 cm of a wall top, a sill, a rock) loses 85% of
+  its sway and its droop, takes recoil on a stiffer spring with 8 kg of
+  rest behind it, and follows with half the lag; a click in the hand
+  says it took. Crouching (or a head under 1.2 m) is worth 40% less sway
+  and a slightly quicker recovery, on top.
 - **Malfunctions** come from wear and dirt (one in a thousand on a
   clean gun in good order, about one in twenty-five at half condition)
   and each has its own cure. A *stovepipe* (a case standing in the
@@ -373,6 +380,28 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   drop it, rack, reload. The bench's repair and a cleaning kit make
   them rare again. Flat mode's rack key tap-racks, or strips, racks and
   reloads on a double feed.
+
+### What a round does, grenades, blades
+
+- **Through and off things** (`extraction_core::firearm_terminal`): a
+  round's energy (its bullet's mass by cartridge, its speed now) against
+  each material's cost per millimetre, thin things at their real
+  thickness, a longer path at a slant. Pistols and buckshot stop in a
+  plank wall; rifles go through planks, plaster and tin; only the Mosin
+  through a log wall; brick, concrete, rock, earth and robot plate stop
+  everything. Grazing a hard face (under about 20 degrees) mostly turns
+  the round, keeping 60% of its speed. The range test
+  (`weapons/range.rs`) fires every gun at every material to hold it.
+- **Grenades** (RGD-5, F-1): the other hand's trigger pulls the ring; the
+  gripping hand holds the spoon, safe while it holds; let go (or B to
+  cook) and the spoon flies, 3.6-3.8 s. A pinned grenade never goes off.
+  Fragments are real rounds (cover stops them, concrete turns them), the
+  blast hurts and shoves what it can see, falling off within 5 m; robots
+  hear it 160 m off.
+- **Blades**: a knife, the Mosin's fixed bayonet and the SKS's folding
+  one (A). Harm from the point's speed along the blade or across the
+  edge, nothing below about 1.5 m/s; eyes take double, joints half again,
+  a robot's core and plate a fraction.
 
 ### Gadgets and attachments
 
