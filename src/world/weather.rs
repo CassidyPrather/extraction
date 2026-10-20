@@ -21,6 +21,10 @@ pub enum WeatherKind {
     Clearing,
 }
 
+/// Indoors, a room's walls let in this share of the sky's light (the
+/// client dims the ambient to it; robots' senses can read it too).
+pub const INTERIOR_LIGHT: f32 = 0.3;
+
 /// When in the day the raid is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hour {
@@ -132,6 +136,12 @@ impl Conditions {
             sun: sun * hour.sun(),
             cycle,
         }
+    }
+
+    /// The sky's light at a place, against a day's outdoors (0..=1):
+    /// `light`, and a room's share of it indoors.
+    pub fn light_at(&self, indoors: bool) -> f32 {
+        self.light * if indoors { INTERIOR_LIGHT } else { 1.0 }
     }
 
     /// How far a robot's eyes reach, given its own sight range: the
