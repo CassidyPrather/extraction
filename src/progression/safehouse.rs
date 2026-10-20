@@ -37,6 +37,8 @@ pub struct Safehouse {
     pub peak: u8,
     /// Nights slept this raid (for the logbook).
     pub nights_out: u32,
+    /// Of those, the nights something came to the door (for the sims).
+    pub visits: u32,
 }
 
 /// Steps the hour on from the cycle's own, one per night slept
@@ -327,6 +329,7 @@ fn press(
                     // They've followed you: something at the door before
                     // light.
                     raid.say(lines::SAFE_NIGHT_VISIT);
+                    house.visits += 1;
                     if let (Some(door), Ok(me)) = (house.door, sleepers.get(*player)) {
                         visits.write(NightVisit {
                             door,
@@ -474,6 +477,7 @@ fn homecoming(
     }
     let peak = std::mem::take(&mut house.peak);
     house.nights_out = 0;
+    house.visits = 0;
     house.truck_waits = false;
     if !house.state.claimed() || peak < extraction_core::safehouse::FOUND_AT {
         return;
