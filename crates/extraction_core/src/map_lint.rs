@@ -1562,7 +1562,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, TRAINING_YARD};
+    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, SALLOW_RESERVOIR, TRAINING_YARD};
 
     fn run(name: &str, text: &str) -> Report {
         let map = MapDef::from_ron(text).unwrap();
@@ -1598,6 +1598,11 @@ mod tests {
     #[test]
     fn cinder_works_passes_the_map_lint() {
         assert_clean(&run("cinder_works", CINDER_WORKS));
+    }
+
+    #[test]
+    fn sallow_reservoir_passes_the_map_lint() {
+        assert_clean(&run("sallow_reservoir", SALLOW_RESERVOIR));
     }
 
     /// The Training Yard belongs to onboarding: its findings are printed
