@@ -80,6 +80,12 @@ game side `src/anomaly/costs.rs`, `harvest.rs`, `artifacts.rs`.
 Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
 `harvest_well`, `harvest_mirror` (in `--scenario all`).
 
+**Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
+`hunter` sim raids, at most 20% of deliberate dives into anomalies may
+end in death, and at least 30% must bring a stone out. Last measured (9
+hunter raids on Marrow Creek, 10 minutes each): 20 dives, 1 death in a
+snare (5%), 12 stones (60%).
+
 ## Looks, and what they cost
 
 - Particles are moved in the vertex shader: each system is one mesh of
