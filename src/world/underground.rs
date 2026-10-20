@@ -253,6 +253,8 @@ fn drops(b: &mut Builder, r: &Raster, m: &Mats) {
                     }
                     _ => {
                         if let Some((s0, lo, hi)) = run.take() {
+                            // A centimetre under the upper floor's face.
+                            let hi = hi - 0.01;
                             let along = (s - s0) as f32 * cell;
                             let mid = s0 as f32 * cell + along * 0.5;
                             let line = t as f32 * cell;
@@ -365,8 +367,20 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                 if c - a < 0.01 {
                     continue;
                 }
-                // A centimetre past the slabs, not flush with their faces.
-                let (lo, hi) = (band.0 as f32 / 100.0 - 0.01, band.1 as f32 / 100.0 + 0.01);
+                let (i, j) = {
+                    let (p, q) = sides(t, s0);
+                    if side < 0 { p.unwrap() } else { q.unwrap() }
+                };
+                // A centimetre past the slabs, not flush with their faces;
+                // but a stair's walls stop where the kiosk's stand.
+                let kiosk = match r.get(i, j) {
+                    Cell::Stair(k) => band.1 == (r.stairs[k as usize].top * 100.0).round() as i32,
+                    _ => false,
+                };
+                let (lo, hi) = (
+                    band.0 as f32 / 100.0 - 0.01,
+                    band.1 as f32 / 100.0 + if kiosk { 0.0 } else { 0.01 },
+                );
                 let line = t as f32 * cell;
                 // The wall's band: on the rock side of the line.
                 let off = line - side as f32 * WALL * 0.5;
@@ -381,10 +395,6 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                         Vec3::new(c - a, hi - lo, WALL),
                         Vec3::new(r.origin[0] + mid_along, (lo + hi) * 0.5, r.origin[1] + off),
                     )
-                };
-                let (i, j) = {
-                    let (p, q) = sides(t, s0);
-                    if side < 0 { p.unwrap() } else { q.unwrap() }
                 };
                 let mat = if matches!(r.get(i, j), Cell::Stair(_)) {
                     m.stair_wall()
@@ -408,9 +418,11 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                     let Some((pi, pj)) = (if side < 0 { o } else { p }) else {
                         continue;
                     };
+                    // From that wall's top, a centimetre over its band.
                     let Some((_, top)) = extent(r, pi, pj) else {
                         continue;
                     };
+                    let top = top + 0.01;
                     if hi <= top + 0.01 {
                         continue;
                     }
@@ -656,7 +668,8 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
     // The stepped soffit past the kiosk, a run of steps at a time; each
     // reaches up past the one before it, so the steps between are closed.
     let back = KIOSK[1] - WALL * 0.5;
-    let mut z = back;
+    // Starting just inside the kiosk's back wall, not on its face.
+    let mut z = back + 0.02;
     while z < s.foot - 1e-3 {
         let (c, next) = if z >= s.bottom - 1e-3 {
             (ceiling_at(s.bottom - 0.01), s.foot)
@@ -666,18 +679,20 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
             (ceiling_at(z + 0.01), run_end.min(s.foot))
         };
         let rise = s.rise * CEILING_RUN as f32 + SLAB + 0.05;
+        // A touch narrower than the walls outside it.
         kb.bx(
-            Vec3::new(2.0 * ox, rise, next - z),
+            Vec3::new(2.0 * ox - 0.02, rise, next - z),
             Vec3::new(0.0, c + rise * 0.5, (z + next) * 0.5),
             m.stair,
         );
         z = next;
     }
     // Under the kiosk's back wall, down to the tunnel's soffit (a touch
-    // thinner than the walls beside it, whose faces would fight its).
-    let soffit = ceiling_at(back + 0.01);
+    // smaller than the walls and the soffit round it, whose faces would
+    // fight its).
+    let soffit = ceiling_at(back + 0.01) + 0.01;
     kb.bx(
-        Vec3::new(2.0 * ox, top - soffit, WALL - 0.02),
+        Vec3::new(2.0 * ox - 0.04, top - soffit, WALL - 0.02),
         Vec3::new(0.0, (top + soffit) * 0.5, KIOSK[1]),
         m.kiosk,
     );
@@ -740,11 +755,12 @@ fn doors(b: &mut Builder, l: &Layout, r: &Raster, m: &Mats) {
                 r.cell_of(q.to_array()).and_then(|(i, j)| ceiling(r, i, j))
             })
             .fold(d.y + 2.3, f32::max);
+        // A centimetre inside the slab's top, not flush with it.
         b.wall(
             a,
             c,
             d.y,
-            roof - d.y + SLAB,
+            roof - d.y + SLAB - 0.01,
             WALL,
             m.wall,
             &[door(d.width * 0.5)],

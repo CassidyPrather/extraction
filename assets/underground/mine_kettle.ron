@@ -38,7 +38,7 @@
             (kind: Machine, at: (-1.5, 1.0)),
             (kind: Barrel, at: (2.3, -1.8)),
             (kind: Barrel, at: (2.3, -1.15)),
-            (kind: Workbench, at: (1.5, -2.05), rot: 180.0, loot: Some("workshop")),
+            (kind: Workbench, at: (1.1, -2.05), rot: 180.0, loot: Some("workshop")),
         ]),
         (id: "refuge", at: (-6.0, 40.0), size: (5.0, 4.0), height: 2.4, lamp: Steady, props: [
             (kind: Bunk, at: (-1.0, -1.45), rot: 90.0),
