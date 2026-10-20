@@ -341,3 +341,36 @@ fn a_search_takes_in_doorways_and_cover() {
         "the doorway: {spots:?}"
     );
 }
+
+/// A robot close by calling the others about you puts a line on the
+/// wrist, once: a second call straight after says nothing.
+#[test]
+fn a_call_about_you_close_by_is_said_once() {
+    let (mut app, player, _) = app(None);
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    let me = app
+        .world()
+        .get::<GlobalTransform>(player)
+        .unwrap()
+        .translation();
+    let lines = |app: &App| app.world().resource::<crate::raid::Raid>().log.len();
+    let before = lines(&app);
+    for robot in [
+        Entity::from_raw_u32(9001).unwrap(),
+        Entity::from_raw_u32(9002).unwrap(),
+    ] {
+        app.world_mut().write_message(super::search::CalledOut {
+            robot,
+            at: me + Vec3::X * 12.0,
+            heard: 2,
+            about: Some(player),
+        });
+        app.update();
+    }
+    assert_eq!(
+        lines(&app) - before,
+        1,
+        "{:?}",
+        app.world().resource::<crate::raid::Raid>().log
+    );
+}
