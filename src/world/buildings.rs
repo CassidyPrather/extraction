@@ -4571,6 +4571,7 @@ pub fn dress_buildings(
     zone: Option<Res<super::Zone>>,
     ivy: Option<Res<super::overgrowth::IvyAssets>>,
     stain_mats: Option<Res<super::decay::StainAssets>>,
+    epilogue: Option<Res<crate::progression::Epilogue>>,
     mut props: crate::render::world_props::PropModels,
     mut cache: ResMut<crate::render::world_props::PropMeshes>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -4617,7 +4618,8 @@ pub fn dress_buildings(
                 .iter()
                 .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
                 .map_or("", |p| p.tag.as_str());
-            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf);
+            let ending = epilogue.as_ref().is_some_and(|e| e.0);
+            let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf, ending);
             if !models.is_empty() {
                 let n = geo.pieces.len();
                 geo.props.push(PropDef {
