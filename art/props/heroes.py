@@ -551,13 +551,13 @@ def ropeway_station(lv):
         if lv == 1:
             beam(p, (a[0], a[1] - 0.04, a[2]), (a[0], b[1] - 0.04, b[2]), 1.1, "Planks", d=0.08)
         if lv < 2:
-            beam(p, (a[0] + 0.58, a[1] + 0.95, a[2]), (a[0] + 0.58, b[1] + 0.95, b[2]), 0.05,
+            beam(p, (a[0] + 0.5, a[1] + 0.95, a[2]), (a[0] + 0.5, b[1] + 0.95, b[2]), 0.05,
                  "Timber")
     # The landing between them, on two posts; the top flight steps off
     # onto the deck.
     p.box((2.7, 0.15, 1.6), ((xo + xi) / 2, top / 2 - 0.075, zl), "Planks")
     for x in (xi - 0.5, xo + 0.5):
-        p.box((0.2, top / 2 + 0.85, 0.2), (x, (top / 2 + 0.85) / 2 - 0.5, zl - 0.6), "Timber")
+        p.box((0.2, top / 2 + 0.85, 0.2), (x, (top / 2 + 0.85) / 2 - 0.5, zl - 0.4), "Timber")
     # The ropes: three leaving the wheel down the line, broken; one hangs
     # to the ground, two lie slack across it. A bucket still on one.
     if lv < 2:
@@ -569,3 +569,86 @@ def ropeway_station(lv):
 
 
 lods("ropeway_station", ropeway_station)
+
+
+PY_BASE = 2.0      # the pylon's half side at the foot
+PY_HEAD = 0.6      # and under its crossarm
+PY_ARM = 3.4       # the crossarm's half length (along x); saddles at +-2.6, +-1.2
+
+
+def pylon_body(p, lv, xf=None, skip=(), sunk=0.0):
+    """The pylon standing at the origin (then `xf`): footings, the lattice,
+    the crossarm and its saddles (moved `sunk` along z: a fallen one's,
+    pressed into the ground), a ladder up one leg."""
+    def bx(size, c, mat, **kw):
+        p.box(size, c, mat, xf=xf, **kw)
+    lattice(p, (PY_BASE, PY_HEAD), 0.25, PY_TOP, 2.5, "Rusty", lv, leg=0.2, brace=0.08, xf=xf,
+            skip=skip)
+    bx((2 * PY_ARM, 0.4, 0.3), (0.0, PY_TOP + 0.2, sunk), "Rusty")
+    bx((1.4, 0.3, 1.4), (0.0, PY_TOP - 0.15, 0.0), "Rusty")
+    for x in (-2.6, -1.2, 1.2, 2.6):
+        bx((0.3, 0.25, 1.6), (x, PY_TOP + 0.525, sunk), "Iron")
+    if lv < 2:
+        # Struts from the crossarm's ends down to the legs.
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                beam(p, (sx * PY_ARM * 0.9, PY_TOP + 0.05, sunk + sz * 0.1),
+                     (sx * PY_HEAD * 1.25, PY_TOP - 2.5, sz * PY_HEAD * 1.25), 0.08, "Rusty",
+                     xf=xf)
+    if lv == 0:
+        # A ladder up the -Z +X leg's face.
+        h = lambda y: PY_BASE + (PY_HEAD - PY_BASE) * y / PY_TOP  # noqa: E731
+        for k in range(int(PY_TOP / 0.4)):
+            y = 0.5 + k * 0.4
+            beam(p, (h(y) - 0.45, y, -h(y) - 0.12), (h(y) - 0.05, y, -h(y) - 0.12), 0.025,
+                 "Iron", xf=xf)
+        for o in (0.05, 0.45):
+            beam(p, (h(0.3) - o, 0.3, -h(0.3) - 0.12), (h(PY_TOP) - o, PY_TOP - 0.2,
+                                                        -h(PY_TOP) - 0.12), 0.035, "Iron", xf=xf)
+
+
+def ropeway_pylon(lv):
+    p = Part("static")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            p.box((0.9, 0.6, 0.9), (sx * PY_BASE, 0.0, sz * PY_BASE), "Concrete",
+                  bevel=0.03 if lv < 2 else 0.0, segs=1)
+    pylon_body(p, lv)
+    # The ropes, broken off either side: hanging from the saddles to the
+    # ground, one still taut a little way to a bucket caught on it.
+    if lv < 2:
+        for x, sz, reach, sag in ((-2.6, -1, 13.0, 1.2), (2.6, 1, 11.0, 0.8),
+                                  (-1.2, 1, 16.0, 1.6), (1.2, -1, 9.0, 0.6)):
+            rope(p, (x, PY_TOP + 0.65, sz * 0.7), (x * 1.1, 0.0, sz * reach), sag, 0.03, lv)
+        bucket(p, (2.74, 8.5, 6.4), tilt=0.5, lv=lv)
+    return [p]
+
+
+def ropeway_pylon_down(lv):
+    """A pylon broken off its footings and lying along -Z, twisted a
+    little, its crossarm in the grass; the sheared stumps of its legs
+    still on their footings."""
+    p = Part("static")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            p.box((0.9, 0.6, 0.9), (sx * PY_BASE, 0.0, sz * PY_BASE), "Concrete",
+                  bevel=0.03 if lv < 2 else 0.0, segs=1)
+            h = PY_BASE + (PY_HEAD - PY_BASE) * 1.6 / PY_TOP
+            tilt = 0.12 if sz > 0 else 0.05
+            beam(p, (sx * PY_BASE, 0.25, sz * PY_BASE),
+                 (sx * h, 1.6 + 0.3 * sx, sz * h - tilt * 1.6), 0.2, "Rusty")
+    # Lying: the tower's +Y along -Z, its foot 2.5 m out from the stumps,
+    # on its face (turned so that face is flat on the ground) and rolled
+    # a few degrees.
+    taper = math.atan((PY_BASE - PY_HEAD) / PY_TOP)
+    xf = T(0.4, PY_BASE - 0.15, -PY_BASE - 2.5) @ RZ(0.08) @ RX(-(math.pi / 2 + taper))
+    pylon_body(p, lv, xf=xf, skip=(3, 5, 6), sunk=-0.3)
+    if lv < 2:
+        for x, end, sag in ((-2.6, (-5.0, 0.0, -30.0), 0.0), (2.6, (6.0, 0.0, -28.0), 0.0)):
+            rope(p, (x + 0.4, 0.6, -PY_TOP - 2.6), end, sag, 0.03, lv, n=4)
+        bucket(p, (-3.2, 1.0, -12.0), tilt=1.4, lv=lv)
+    return [p]
+
+
+lods("ropeway_pylon", ropeway_pylon)
+lods("ropeway_pylon_down", ropeway_pylon_down)
