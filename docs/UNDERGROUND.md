@@ -82,6 +82,27 @@ that the whole stairwell is open.
 - `EXTRACTION_TORCH=1 scripts/shot.sh ...` gives the screenshot camera a
   torch like the flashlight gadget's.
 
+## Hazards and props
+
+- **Anomalies** live in the layouts (`anomalies: [(kind, room, at,
+  radius)]`) and are laid out again each cycle with the valley's
+  (`underground::spawn_anomalies`, called from
+  `anomaly::spawn_cycle_anomalies`): a live snare by Marrow's generator, a
+  lift in Kettle's stope, a snare guarding the crate in Cinder's overflow
+  chamber. `check` keeps each inside its room and clear of the doorways:
+  you go round them, you're never made to walk through one.
+- **Robots**: none yet. The walkers path on the Zone grid, which has no
+  underground. Asked of Robot minds and bodies: an indoor robot that
+  patrols a site on its plan (`sim::indoor::plan_site` gives a walkable
+  grid with a floor per cell).
+- **Props**: the layout's vocabulary (`PropKind`) is built from the
+  houses' furniture where it fits (shelves, lockers, crates, tables,
+  workbenches, beds as bunks, barrels, pallets, counters, chairs), plus
+  `art/props/bunker.py`: `filter_unit` (Machine), `switch_cabinet`
+  (Cabinet), `mine_tub` (Cart) and `bulkhead_lamp` (every lamp fitting).
+  Rubble is boxes for now. `check` keeps props a metre clear of every
+  corridor mouth and stair foot.
+
 ## Bots
 
 A site is a `Building`, so the sim's indoor planning sees it:
