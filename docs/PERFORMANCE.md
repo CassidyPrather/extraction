@@ -132,7 +132,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Near trunk chunks cast the sun's shadow only within 60 m (`ShadowReach`) | `world::trees` | Shadow triangles spruce 232k > 153k, pines 193k > 121k, edge 111k > 59k |
 | Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
 | Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
-| Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3 |
+| Foliage cards drawn as the 8-sided outline round their leaves, not the quad | `render::cards`, `world::trees` | Card layers -23..-27%; spruce view overdraw 16.3 > 14.2, pines 9.3 > 8.3. Costs triangles: an 8-gon is 6 where a quad was 2 (spruce view 581k > 781k), cheap against ~1.7 layers of shaded fragments a pixel |
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
@@ -145,6 +145,11 @@ Shared tools for the next ones (in `render::budget`):
 - Items get a range from their catalogue size by themselves.
 
 ## Where it stands
+
+The gauges need the game's own textures (`scripts/fetch_assets.py`):
+without them the trees are an untextured fallback with no cards and no
+impostors, a different and heavier game (1.1M triangles at the Kettle
+Pass gate), and the gauges say so and skip rather than count it.
 
 The gauges at every lookbook view of the four valleys (GPU-less client,
 one eye), in clear weather (the furthest you see, so the most drawn;
