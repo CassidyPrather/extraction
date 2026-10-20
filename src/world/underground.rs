@@ -150,7 +150,7 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     for k in 0..r.portals.len() {
         stair(&mut b, r, k, &m);
     }
-    doors(&mut b, r, &m);
+    doors(&mut b, l, r, &m);
     dressing(&mut b, l, r);
     for room in &l.rooms {
         for p in &room.props {
@@ -598,10 +598,18 @@ fn append(b: &mut Builder, g: Geo, at: [f32; 2], y: f32, rot: f32) {
 
 /// Doors across corridors' mouths and stairs' feet: a wall on the line
 /// with a door in it (or the opening, with a lintel over).
-fn doors(b: &mut Builder, r: &Raster, m: &Mats) {
+fn doors(b: &mut Builder, l: &Layout, r: &Raster, m: &Mats) {
     for d in &r.doors {
-        let along = Vec2::from(d.along);
+        let mut along = Vec2::from(d.along);
         let at = Vec2::from(d.at);
+        // A leaf opens toward the wall's right, (along.z, -along.x): into
+        // its room, not back into the corridor it closes.
+        if let Some(room) = d.room {
+            let into = Vec2::from(l.rooms[room as usize].at) - at;
+            if Vec2::new(along.y, -along.x).dot(into) < 0.0 {
+                along = -along;
+            }
+        }
         let a = at - along * d.width * 0.5;
         let c = at + along * d.width * 0.5;
         // Up to the higher roof either side.
@@ -2112,6 +2120,29 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// A corridor's door swings open into its room, not back into the
+    /// corridor (narrow: the leaf would pin whoever's coming through).
+    #[test]
+    fn doors_swing_into_their_rooms() {
+        for id in ids() {
+            let (r, g) = (ug::raster(id).unwrap(), geo(id).unwrap());
+            let first = r.portals.len();
+            for (k, d) in r.doors.iter().enumerate() {
+                let Some(room) = d.room else { continue };
+                let leaf = &g.doors[first + k];
+                let open = Quat::from_rotation_y(leaf.yaw + 1.75) * Vec3::X * leaf.width * 0.9;
+                let tip = leaf.hinge + open;
+                assert_eq!(
+                    r.at([tip.x, tip.z]),
+                    Cell::Room(room),
+                    "{id}: the door into `{}` at {:?} swings to {tip:?}",
+                    ug::layout(id).unwrap().rooms[room as usize].id,
+                    d.at
+                );
+            }
+        }
     }
 
     /// No daylight gets into the rooms: from every room and corridor, rays
