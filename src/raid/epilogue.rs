@@ -177,7 +177,10 @@ fn walk(
     mut raid: ResMut<Raid>,
     mut said_down: Local<bool>,
     depot: Res<DepotNav>,
-    doors: Query<(Entity, &crate::world::buildings::Door, &GlobalTransform)>,
+    doors: Query<
+        (Entity, &crate::world::buildings::Door, &GlobalTransform),
+        Without<crate::world::underground::PowerLocked>,
+    >,
     player_e: Query<Entity, With<LocalPlayer>>,
     mut press: MessageWriter<crate::interact::InteractEvent>,
 ) {
@@ -247,8 +250,8 @@ fn walk(
     }
     t.translation = to;
     w.idle = 0.0;
-    // He opens a shut door in his way, as you would (one that's locked
-    // stays shut: he waits).
+    // He opens a shut door in his way, as you would (one held by the
+    // Depot's power he leaves: he waits for you to light it).
     let ahead = to + t.rotation * Vec3::NEG_Z * 0.6;
     if let Some(player) = player {
         for (e, door, g) in &doors {
