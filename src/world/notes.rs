@@ -31,7 +31,7 @@ pub struct Terminal {
 }
 
 impl Terminal {
-    fn screen(&self) -> String {
+    pub(crate) fn screen(&self) -> String {
         let n = self.pages.len();
         let body = self.pages.get(self.page).cloned().unwrap_or_default();
         if n > 1 {
