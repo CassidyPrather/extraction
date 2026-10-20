@@ -165,7 +165,7 @@ fn fire_shots(
     }
 }
 
-fn fly_projectiles(
+pub(crate) fn fly_projectiles(
     mut commands: Commands,
     mut projectiles: Query<(Entity, &mut Projectile, &mut Transform)>,
     spatial: SpatialQuery,
@@ -224,6 +224,8 @@ fn fly_projectiles(
                 velocity: p.velocity,
                 entity: None,
                 decal: false,
+                part: None,
+                hurt: false,
             });
             commands.entity(e).despawn();
             continue;

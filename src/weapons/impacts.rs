@@ -89,15 +89,23 @@ pub struct Impact {
     pub entity: Option<Entity>,
     /// It's a static surface that can wear a mark.
     pub decal: bool,
+    /// On a robot: which part, and whether the round hurt it (a live
+    /// part takes damage; a dead one just rings).
+    pub part: Option<crate::robots::PartRole>,
+    pub hurt: bool,
 }
 
 pub struct ImpactPlugin;
 
 impl Plugin for ImpactPlugin {
     fn build(&self, app: &mut App) {
+        // Inside the ballistics set, so robot parts are read before the
+        // robots take the damage.
         app.add_message::<Impact>().add_systems(
             FixedUpdate,
-            classify_hits.after(super::ballistics::BallisticsSystems),
+            classify_hits
+                .in_set(super::ballistics::BallisticsSystems)
+                .after(super::ballistics::fly_projectiles),
         );
     }
 }
@@ -107,7 +115,7 @@ impl Plugin for ImpactPlugin {
 fn classify_hits(
     mut hits: MessageReader<Hit>,
     mut out: MessageWriter<Impact>,
-    parts: Query<(), With<crate::robots::RobotPart>>,
+    parts: Query<&crate::robots::RobotPart>,
     trees: Query<(), With<crate::world::trees::TreeTrunks>>,
     structures: Query<(), With<crate::world::structures::Structure>>,
     items: Query<(), With<crate::items::Item>>,
@@ -119,9 +127,10 @@ fn classify_hits(
             .get(h.entity)
             .ok()
             .and_then(|(gt, surf)| surf.at(gt, h.point));
+        let part = parts.get(h.entity).ok();
         let (kind, decal) = if bodies.contains(h.entity) {
             (ImpactKind::Body, false)
-        } else if parts.contains(h.entity) {
+        } else if part.is_some() {
             (ImpactKind::Robot, false)
         } else if items.contains(h.entity) {
             (ImpactKind::Metal, false)
@@ -141,6 +150,8 @@ fn classify_hits(
             velocity: h.velocity,
             entity: Some(h.entity),
             decal: decal && kind.marks(),
+            part: part.map(|p| p.role),
+            hurt: part.is_some_and(|p| p.alive()),
         });
     }
 }
@@ -226,6 +237,10 @@ struct FxAssets {
     pale_rim: Handle<StandardMaterial>,
     bright_pock: Handle<StandardMaterial>,
     soil_mark: Handle<StandardMaterial>,
+    flake: Handle<StandardMaterial>,
+    fizz: Handle<StandardMaterial>,
+    oil: Handle<StandardMaterial>,
+    gas: Handle<StandardMaterial>,
 }
 
 #[derive(Resource)]
@@ -286,6 +301,10 @@ fn fx_assets(
         pale_rim: m(0.8, 0.7, 0.52, 1.0, 0.0, 0.9, 0.0),
         bright_pock: m(0.78, 0.78, 0.76, 1.0, 0.0, 0.3, 1.0),
         soil_mark: m(0.16, 0.12, 0.09, 1.0, 0.0, 1.0, 0.0),
+        flake: m(0.3, 0.32, 0.3, 1.0, 0.0, 0.5, 0.8),
+        fizz: m(0.55, 0.85, 1.0, 1.0, 8.0, 1.0, 0.0),
+        oil: m(0.05, 0.04, 0.03, 1.0, 0.0, 0.08, 0.0),
+        gas: m(0.8, 0.82, 0.8, 0.3, 0.001, 1.0, 0.0),
     };
     commands.insert_resource(assets);
 }
@@ -324,6 +343,100 @@ const SPRAY: Spray = Spray {
     align: false,
     spin: 0.0,
 };
+
+/// A robot hit, by the part and whether it hurt: what it hurt shows
+/// (fragments off armour, a fizzing short off a sensor, oil from a joint,
+/// gas from a cell); a round off a dead part only glances.
+fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray> {
+    use crate::robots::PartRole;
+    let sparks = |n| Spray {
+        n,
+        mat: |a| a.spark.clone(),
+        size: Vec3::new(0.005, 0.005, 0.1),
+        out: 3.0,
+        scatter: 3.5,
+        carry: 4.0,
+        life: 0.22,
+        align: true,
+        ..SPRAY
+    };
+    if !hurt {
+        return vec![Spray {
+            carry: 6.0,
+            out: 1.0,
+            ..sparks(4)
+        }];
+    }
+    match part {
+        Some(PartRole::Sensor) => vec![
+            Spray {
+                n: 12,
+                mat: |a| a.fizz.clone(),
+                size: Vec3::new(0.004, 0.004, 0.06),
+                out: 1.0,
+                scatter: 1.6,
+                life: 0.55,
+                gravity: 2.0,
+                drag: 1.5,
+                align: true,
+                ..SPRAY
+            },
+            Spray {
+                n: 3,
+                mat: |a| a.shard.clone(),
+                size: Vec3::new(0.025, 0.003, 0.02),
+                out: 1.5,
+                scatter: 1.0,
+                life: 0.8,
+                spin: 18.0,
+                ..SPRAY
+            },
+        ],
+        Some(PartRole::Leg(_) | PartRole::Rotor(_)) => vec![
+            sparks(5),
+            Spray {
+                n: 8,
+                mesh: |a| a.ball.clone(),
+                mat: |a| a.oil.clone(),
+                size: Vec3::splat(0.022),
+                out: 2.0,
+                scatter: 1.2,
+                life: 0.9,
+                ..SPRAY
+            },
+        ],
+        Some(PartRole::GasCell(_)) => vec![
+            sparks(3),
+            Spray {
+                n: 3,
+                mesh: |a| a.ball.clone(),
+                mat: |a| a.gas.clone(),
+                size: Vec3::splat(0.1),
+                out: 1.5,
+                scatter: 0.5,
+                life: 1.4,
+                grow: 3.0,
+                gravity: -0.5,
+                drag: 1.5,
+                ..SPRAY
+            },
+        ],
+        // The core, a weapon, the shell: sparks and a shower of fragments.
+        _ => vec![
+            sparks(10),
+            Spray {
+                n: 6,
+                mat: |a| a.flake.clone(),
+                size: Vec3::new(0.022, 0.004, 0.02),
+                out: 2.5,
+                scatter: 2.0,
+                life: 0.9,
+                spin: 22.0,
+                ..SPRAY
+            },
+        ],
+    }
+}
 
 fn recipe(kind: ImpactKind) -> Vec<Spray> {
     let puff = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
@@ -430,7 +543,12 @@ fn spawn_fx(
         let dir = imp.velocity.normalize_or_zero();
         // Off the surface, the way a round glances.
         let glance = (dir - 2.0 * dir.dot(n) * n).normalize_or(n);
-        for s in recipe(imp.kind) {
+        let sprays = if imp.kind == ImpactKind::Robot {
+            robot_recipe(imp.part, imp.hurt)
+        } else {
+            recipe(imp.kind)
+        };
+        for s in sprays {
             for _ in 0..s.n {
                 let rand = Vec3::new(
                     pool.rng.range(-1.0, 1.0),
@@ -643,6 +761,35 @@ mod tests {
         ] {
             assert!(recipe(k).iter().map(|s| s.n).sum::<usize>() > 0, "{k:?}");
         }
+    }
+
+    /// A round that hurts a robot shows it, differently by part; one off a
+    /// dead part only glances (a few sparks, nothing torn off).
+    #[test]
+    fn robot_hits_read_by_part_and_harm() {
+        use crate::robots::PartRole;
+        let n = |v: Vec<Spray>| v.iter().map(|s| s.n).sum::<usize>();
+        let glance = n(robot_recipe(Some(PartRole::Core), false));
+        for p in [
+            PartRole::Core,
+            PartRole::Sensor,
+            PartRole::Weapon,
+            PartRole::Leg(0),
+            PartRole::Rotor(0),
+            PartRole::GasCell(0),
+        ] {
+            assert!(n(robot_recipe(Some(p), true)) > glance, "{p:?}");
+        }
+        // Each hurt part has something of its own beyond sparks.
+        let mats = |p| {
+            robot_recipe(Some(p), true)
+                .iter()
+                .map(|s| s.mat as usize)
+                .collect::<std::collections::HashSet<_>>()
+        };
+        assert_ne!(mats(PartRole::Sensor), mats(PartRole::Core));
+        assert_ne!(mats(PartRole::Leg(0)), mats(PartRole::Core));
+        assert_ne!(mats(PartRole::GasCell(0)), mats(PartRole::Leg(0)));
     }
 
     /// However long the firefight, the pools never hold more than their
