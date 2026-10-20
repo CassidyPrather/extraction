@@ -1129,7 +1129,8 @@ fn dress_items(
                 ));
             }
             "detector" => {
-                let olive = mat(Color::srgb(0.2, 0.23, 0.14), 0.1, 0.7, LinearRgba::BLACK);
+                let olive = mat(Color::srgb(0.36, 0.4, 0.24), 0.15, 0.6, LinearRgba::BLACK);
+                let face = mat(Color::srgb(0.85, 0.82, 0.7), 0.0, 0.4, LinearRgba::BLACK);
                 let black = mat(Color::srgb(0.04, 0.04, 0.04), 0.3, 0.5, LinearRgba::BLACK);
                 let glass = mat(
                     Color::srgb(0.15, 0.03, 0.02),
@@ -1142,11 +1143,22 @@ fn dress_items(
                     olive,
                     Transform::from_xyz(0.0, 0.0, 0.025),
                 ));
-                // A grille on top and a dial face on the back.
+                // A dial and a grille on top, a carrying handle along the
+                // side.
                 parts.push((
-                    meshes.add(Cuboid::new(0.05, 0.004, 0.05)),
+                    meshes.add(Cylinder::new(0.016, 0.003).mesh().resolution(20)),
+                    face,
+                    Transform::from_xyz(0.012, 0.021, 0.05),
+                ));
+                parts.push((
+                    meshes.add(Cuboid::new(0.03, 0.004, 0.03)),
                     black.clone(),
-                    Transform::from_xyz(0.0, 0.021, 0.04),
+                    Transform::from_xyz(-0.015, 0.021, 0.005),
+                ));
+                parts.push((
+                    meshes.add(Cuboid::new(0.012, 0.012, 0.09)),
+                    black.clone(),
+                    Transform::from_xyz(-0.041, 0.0, 0.025),
                 ));
                 parts.push((
                     meshes.add(Cylinder::new(0.004, 0.05).mesh().resolution(8)),
@@ -1168,10 +1180,10 @@ fn dress_items(
             }
             "art_lodestone" => {
                 let iron = mat(
-                    Color::srgb(0.1, 0.095, 0.11),
-                    0.85,
-                    0.42,
-                    LinearRgba::rgb(0.03, 0.0, 0.08),
+                    Color::srgb(0.16, 0.15, 0.17),
+                    0.9,
+                    0.5,
+                    LinearRgba::rgb(0.004, 0.0, 0.01),
                 );
                 let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
                 // Knobbled, like a lump of slag.
