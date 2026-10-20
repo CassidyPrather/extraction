@@ -1262,8 +1262,11 @@ pub struct UndergroundVisualsPlugin;
 
 impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_lamps, flicker, torch, near_doors_only))
-            .add_systems(PostUpdate, (go_dark, no_rain_below));
+        app.add_systems(
+            Update,
+            (light_lamps, flicker, torch, near_doors_only, show_below),
+        )
+        .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
 }
 
@@ -1341,6 +1344,11 @@ fn light_lamps(
                     Mesh3d(meshes.add(Cuboid::new(0.22, 0.03, 0.1))),
                     MeshMaterial3d(lens),
                     bevy::light::NotShadowCaster,
+                    bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (DOOR_REACH * 0.8)..DOOR_REACH,
+                        use_aabb: false,
+                    },
                     Transform::from_xyz(0.0, 0.03, 0.0),
                 ));
         }
@@ -1389,14 +1397,68 @@ fn flicker(
     }
 }
 
+/// A site's geometry deeper than this (building space y) is drawn apart
+/// from its kiosks ([`Below`]).
+pub const BELOW_Y: f32 = -1.0;
+/// From this near a kiosk you might see down its stair.
+const KIOSK_SIGHT: f32 = 18.0;
+
+/// A site's rooms and stairs' meshes (merged, below [`BELOW_Y`]): drawn
+/// only while the eye is underground or near one of its kiosks. Nothing
+/// culls by the rock over them, and a site under a village counted in
+/// every view of it.
+#[derive(Component)]
+pub struct Below;
+
+/// Below-ground meshes shown or hidden with where the eye is.
+fn show_below(
+    zone: Res<Zone>,
+    eyes: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    sites: Query<(Entity, &super::buildings::Building, &Transform, &Children)>,
+    mut below: Query<&mut Visibility, With<Below>>,
+) {
+    let Some(eye) = eyes
+        .iter()
+        .filter(|(_, c)| c.is_active)
+        .map(|(g, _)| g.translation())
+        .next()
+    else {
+        return;
+    };
+    let underground = floor_under(&zone, eye).is_some();
+    for (_, b, xf, children) in &sites {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let near = l.portals.iter().any(|p| {
+            let at = xf.transform_point(Vec3::new(p.at[0], p.y, p.at[1]));
+            at.distance(eye) < KIOSK_SIGHT
+        });
+        let want = if underground || near {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        for c in children.iter() {
+            if let Ok(mut v) = below.get_mut(c) {
+                if *v != want {
+                    *v = want;
+                }
+            }
+        }
+    }
+}
+
 /// How near the eye a door down in a site is drawn: from the surface
 /// nothing shows them (the rock's in the way, but nothing culls by it),
 /// and below, the rooms are small.
 const DOOR_REACH: f32 = 25.0;
+/// How near a kiosk's door leaf is drawn (the kiosk itself, always).
+const KIOSK_DOOR_REACH: f32 = 50.0;
 
-/// Doors below ground are drawn only near the eye: a site's dozen-odd
-/// leaves (each a handful of meshes) counted in every view of the village
-/// over the shelter.
+/// A site's doors are drawn only near the eye: below ground, its
+/// dozen-odd leaves (each a handful of meshes) counted in every view of
+/// the village over the shelter; a kiosk's, past 50 m, is a pixel or two.
 #[allow(clippy::type_complexity)]
 fn near_doors_only(
     mut commands: Commands,
@@ -1418,18 +1480,24 @@ fn near_doors_only(
             let Ok(p) = parents.get(at) else { break };
             at = p.parent();
             let Ok(leaf) = leaves.get(at) else { continue };
-            let below = leaf.0.hinge.y < -1.0
-                && parents
-                    .get(at)
-                    .ok()
-                    .and_then(|b| sites.get(b.parent()).ok())
-                    .is_some_and(|b| ug::is_site(&b.prefab));
-            if below {
+            let site = parents
+                .get(at)
+                .ok()
+                .and_then(|b| sites.get(b.parent()).ok())
+                .is_some_and(|b| ug::is_site(&b.prefab));
+            if site {
+                // Down below, near only; a kiosk's door, as far as a door
+                // that small shows.
+                let reach = if leaf.0.hinge.y < BELOW_Y {
+                    DOOR_REACH
+                } else {
+                    KIOSK_DOOR_REACH
+                };
                 commands
                     .entity(e)
                     .try_insert(bevy::camera::visibility::VisibilityRange {
                         start_margin: 0.0..0.0,
-                        end_margin: (DOOR_REACH * 0.8)..DOOR_REACH,
+                        end_margin: (reach * 0.8)..reach,
                         use_aabb: false,
                     });
             }

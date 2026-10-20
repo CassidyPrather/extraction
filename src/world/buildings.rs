@@ -3122,7 +3122,12 @@ pub fn dress_buildings(
                 far[i] = true;
             }
         }
-        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 4] = Default::default();
+        // An underground site's rooms: their own group, drawn only when
+        // the eye can see them (`underground::Below`).
+        const BELOW: usize = 4;
+        let site = super::underground::ids().any(|id| id == b.prefab);
+        let below = |at: &Transform| site && at.translation.y < super::underground::BELOW_Y;
+        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 5] = Default::default();
         let mut add = |group: usize, mat: Handle<StandardMaterial>, mesh: Mesh| {
             let into = &mut merged[group];
             let fits = match into.iter_mut().find(|(m, _)| *m == mat) {
@@ -3145,7 +3150,13 @@ pub fn dress_buildings(
             let _ = mesh.generate_tangents();
             let mat = props.lib.get(piece.mat, &props.server, &mut materials);
             add(
-                if far[i] { FAR } else { OUTER },
+                if below(&piece.at) {
+                    BELOW
+                } else if far[i] {
+                    FAR
+                } else {
+                    OUTER
+                },
                 mat,
                 mesh.transformed_by(piece.at),
             );
@@ -3156,7 +3167,9 @@ pub fn dress_buildings(
                 for (mat, mesh) in prims {
                     let mat = props.material(&mat, &mut materials);
                     add(
-                        if d.inside {
+                        if below(at) {
+                            BELOW
+                        } else if d.inside {
                             NEAR
                         } else if d.shadow {
                             OUTER
@@ -3188,7 +3201,16 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [outer, near, far, windows] = merged;
+        let [outer, near, far, windows, under] = merged;
+        for (mat, mesh) in under {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat),
+                bevy::light::NotShadowCaster,
+                super::underground::Below,
+                ChildOf(e),
+            ));
+        }
         for (mat, mesh) in outer {
             commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(mat), ChildOf(e)));
         }
