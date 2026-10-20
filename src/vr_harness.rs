@@ -145,6 +145,25 @@ impl Vr {
         self.hand(side, world, rot, grip, trigger);
     }
 
+    /// A hand at `local` in the playspace (so it moves with the body, as a
+    /// real hand does while you climb), level, with its grip.
+    pub fn hand_local(&mut self, side: Side, local: Vec3, grip: f32) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(local);
+        h.tracked = true;
+        h.grip = grip;
+    }
+
+    /// Where the playspace (and the feet under the head) stands.
+    pub fn feet(&self) -> Vec3 {
+        self.root().translation
+    }
+
     pub fn grip(&mut self, side: Side, v: f32) {
         let mut input = self
             .app
@@ -2598,5 +2617,191 @@ mod onboarding {
         vr.step(3);
         vr.grip(Side::Right, 0.0);
         vr.step(3);
+    }
+}
+
+/// Climbing with your hands: a ladder up the face of a 3 m block, with
+/// its top to step onto, and a 1.1 m wall to mantle.
+mod climbing {
+    use super::*;
+    use crate::interact::hand_climb::Ladder;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn on_ground(vr: &Vr, x: f32, z: f32) -> Vec3 {
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(x, z)
+    }
+
+    /// A block of the world's, `h` tall and `deep` deep, its near face
+    /// `near` m in front of `feet`, 3 m wide.
+    fn block(vr: &mut Vr, feet: Vec3, near: f32, h: f32, deep: f32) {
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(3.0, h, deep),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, h * 0.5, -near - deep * 0.5)),
+        ));
+        vr.step(2);
+    }
+
+    /// The 3 m block with a ladder up its face, 0.35 m in front of you.
+    fn ladder(vr: &mut Vr, feet: Vec3) -> Entity {
+        block(vr, feet, 0.4, 3.0, 2.0);
+        let face = feet + Vec3::new(0.0, 0.0, -0.4);
+        let l = vr
+            .app
+            .world_mut()
+            .spawn(
+                Ladder {
+                    bottom: face + Vec3::Z * 0.05,
+                    top: face + Vec3::new(0.0, 3.0, 0.05),
+                    width: 0.45,
+                    out: Vec3::Z,
+                    over: Some(feet + Vec3::new(0.0, 3.0, -0.9)),
+                }
+                .bundle(),
+            )
+            .id();
+        vr.step(2);
+        l
+    }
+
+    /// One pull: take hold with `side` at shoulder height, let the other
+    /// go, and draw the hand down to the waist.
+    fn pull(vr: &mut Vr, side: Side) {
+        let x = if side == Side::Right { 0.15 } else { -0.15 };
+        vr.hand_local(side, Vec3::new(x, 1.55, -0.3), 1.0);
+        vr.step(2);
+        vr.hand_local(side.other(), Vec3::new(-x, 1.2, -0.15), 0.0);
+        vr.step(1);
+        for i in 1..=12 {
+            vr.hand_local(side, Vec3::new(x, 1.55 - 0.055 * i as f32, -0.3), 1.0);
+            vr.step(1);
+        }
+    }
+
+    /// Hand over hand up a 3 m ladder, and onto the top.
+    #[test]
+    fn climb_a_ladder_hand_over_hand() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        let mut side = Side::Right;
+        for _ in 0..12 {
+            pull(&mut vr, side);
+            side = side.other();
+            if vr.feet().y > feet.y + 2.9 {
+                break;
+            }
+        }
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 3.0)).abs() < 0.15 && now.z < feet.z - 0.5,
+            "on top of the block: feet {now} from {feet}"
+        );
+    }
+
+    /// Halfway up, let go with both hands: down you go.
+    #[test]
+    fn let_go_of_the_ladder_and_fall() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        pull(&mut vr, Side::Right);
+        pull(&mut vr, Side::Left);
+        // (The body catches up with the last pull.)
+        vr.step(10);
+        let up = vr.feet().y - feet.y;
+        assert!(up > 0.8, "climbing: up {up}");
+        // Holding still, it holds you.
+        vr.step(30);
+        let held = vr.feet().y - feet.y;
+        assert!((held - up).abs() < 0.05, "held at {up}, now {held}");
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(90);
+        let down = vr.feet().y - feet.y;
+        assert!(down < 0.1, "fell: {down} up");
+    }
+
+    /// Both palms on a 1.1 m wall, push down, and you're up on it.
+    #[test]
+    fn mantle_a_wall_with_both_palms() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        block(&mut vr, feet, 0.35, 1.1, 1.0);
+        let at = |y: f32| [Vec3::new(-0.2, y, -0.5), Vec3::new(0.2, y, -0.5)];
+        for (s, p) in [Side::Left, Side::Right].into_iter().zip(at(1.14)) {
+            vr.hand_local(s, p, 0.0);
+        }
+        vr.step(3);
+        for i in 1..=20 {
+            for (s, p) in [Side::Left, Side::Right]
+                .into_iter()
+                .zip(at(1.14 - 0.035 * i as f32))
+            {
+                vr.hand_local(s, p, 0.0);
+            }
+            vr.step(1);
+        }
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 1.1)).abs() < 0.15 && now.z < feet.z - 0.4,
+            "up on the wall: feet {now} from {feet}"
+        );
+    }
+
+    /// One palm on the wall doesn't lift you; and the comfort setting
+    /// puts you straight at the top of a ladder you grip.
+    #[test]
+    fn one_palm_holds_nothing_and_teleport_climbs_at_once() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        block(&mut vr, feet, 0.35, 1.1, 1.0);
+        vr.hand_local(Side::Right, Vec3::new(0.2, 1.14, -0.5), 0.0);
+        vr.step(3);
+        for i in 1..=20 {
+            vr.hand_local(
+                Side::Right,
+                Vec3::new(0.2, 1.14 - 0.035 * i as f32, -0.5),
+                0.0,
+            );
+            vr.step(1);
+        }
+        assert!(vr.feet().y < feet.y + 0.05, "one palm lifted you");
+
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .world_mut()
+            .insert_resource(crate::rig::comfort::Comfort {
+                climb_teleport: true,
+                ..Default::default()
+            });
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        vr.hand_local(Side::Right, Vec3::new(0.15, 1.55, -0.3), 1.0);
+        vr.step(4);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 3.0)).abs() < 0.15,
+            "teleported to the top: feet {now} from {feet}"
+        );
     }
 }

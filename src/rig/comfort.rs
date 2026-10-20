@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--no-binaural`, `--no-score`, `--left-handed`,
+//! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--left-handed`,
 //! `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
@@ -34,6 +34,10 @@ pub struct Comfort {
     /// takes it, as the squeeze does. Off by default: an unmeant grab is
     /// worse than a missed one.
     pub finger_grab: bool,
+    /// Climbing (ladders, ledges): a grip on the ladder or both palms on
+    /// the ledge puts you at the top, for those that pulling yourself up
+    /// makes sick.
+    pub climb_teleport: bool,
     /// In the headset, placed sounds through a head-related filter, so
     /// above and behind can be told apart (`audio`); off, they're panned.
     pub binaural: bool,
@@ -63,6 +67,7 @@ impl Default for Comfort {
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
+            climb_teleport: false,
             binaural: true,
             score: true,
             left_handed: false,
@@ -212,6 +217,14 @@ impl Comfort {
         }
     }
 
+    pub fn climb_label(&self) -> String {
+        if self.climb_teleport {
+            "CLIMBING\nstraight to the top".into()
+        } else {
+            "CLIMBING\nhand over hand".into()
+        }
+    }
+
     pub fn sound_label(&self) -> String {
         if self.narrow_dynamics {
             "SOUND\nnarrow range".into()
@@ -265,6 +278,7 @@ impl Comfort {
                 "--snap-turn" => c.smooth_turn = false,
                 "--narrow-dynamics" => c.narrow_dynamics = true,
                 "--finger-grab" => c.finger_grab = true,
+                "--climb-teleport" => c.climb_teleport = true,
                 "--no-binaural" => c.binaural = false,
                 "--no-score" => c.score = false,
                 "--left-handed" => c.left_handed = true,
