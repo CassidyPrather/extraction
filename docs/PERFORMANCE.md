@@ -286,7 +286,9 @@ truck's homecoming; and every frame of a valley loading.
 `render::spikes::tests::hitches_hold_their_ceiling` holds each event's
 worst frame to 3x the moment's median frame and loading's frames after
 the second to 10x (ratios in the same run, so a loaded machine moves
-both). With `SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it
+both). Beside the rest of the suite one frame can be lost to another
+process, so whatever is over is measured again, and only what's over
+twice fails. With `SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it
 names the systems in each worst frame.
 
 Marrow Creek, one thread, the moment's median 18 ms:
