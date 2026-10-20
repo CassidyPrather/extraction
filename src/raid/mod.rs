@@ -12,6 +12,7 @@ pub mod bench;
 pub mod board;
 pub mod chatter;
 pub mod comfort_board;
+pub mod epilogue;
 pub mod kitchen;
 pub mod lev;
 pub mod lines;
@@ -156,6 +157,7 @@ impl Plugin for RaidPlugin {
             requests::RequestsPlugin,
             board::BoardPlugin,
             lev::LevPlugin,
+            epilogue::EpiloguePlugin,
         ))
         .add_systems(
             Update,

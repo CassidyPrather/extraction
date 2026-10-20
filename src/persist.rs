@@ -256,6 +256,7 @@ fn load_save(
     mut progression: ResMut<crate::progression::Progression>,
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
     mut notes: ResMut<crate::raid::board::NotesRead>,
+    mut epilogue: ResMut<crate::raid::epilogue::Epilogue>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -290,6 +291,7 @@ fn load_save(
     raid.deaths = save.stats.deaths;
     raid.recalled = save.stats.recalled;
     notes.0 = save.stats.notes_read.clone();
+    epilogue.done = save.stats.epilogue;
     raid.clock = save.zone.clock;
     raid.cycle = save.zone.cycle;
     memorial.0 = save.memorial.clone();
@@ -733,6 +735,9 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         .get_resource::<crate::raid::board::NotesRead>()
         .map(|n| n.0.clone())
         .unwrap_or_default();
+    save.stats.epilogue = world
+        .get_resource::<crate::raid::epilogue::Epilogue>()
+        .is_some_and(|e| e.done);
     save.version = SAVE_VERSION;
     let player = world
         .query_filtered::<Entity, With<LocalPlayer>>()
