@@ -252,7 +252,14 @@ fn quiet_valleys(
     mut commands: Commands,
     raid: Res<Raid>,
     director: Option<ResMut<crate::robots::director::Director>>,
-    robots: Query<Entity, With<crate::robots::Robot>>,
+    // Residents walk back to their bays and sleep there (robots::indoor).
+    robots: Query<
+        Entity,
+        (
+            With<crate::robots::Robot>,
+            Without<crate::robots::indoor::Resident>,
+        ),
+    >,
     time: Res<Time>,
     mut timer: Local<f32>,
 ) {

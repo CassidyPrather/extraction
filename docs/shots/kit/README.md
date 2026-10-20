@@ -14,3 +14,9 @@ and forward 0.25 m, looking down, as you bend to your belt; the torso
 keeps its standing height, so the rig stays and the head comes down over
 it. `8_pack_on_back.jpg` (`kit+behind`): the camera behind and above the
 player: the pack on its back, the sleeves reaching forward to the gloves.
+`9_armour_worn.jpg` (`kit+armour`): the vest worn, with a plate in each
+pocket and the helmet on. Looking down, the vest's neck and shoulders are
+where the harness's chest panel was, and the pouches ride on its front.
+`10_armour_behind_helmet_shown.jpg` (`kit+armour+behind`, clear weather):
+the helmet on the head over the pack. It was drawn for this record only.
+Your own helmet is otherwise only in the sun's shadow layer.

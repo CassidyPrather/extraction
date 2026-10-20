@@ -148,9 +148,19 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: M,
-        note: "Lev's note",
+        note: "Lev's fence note",
         mentions: &[
             (M, "Valley office copy"),
+            (M, "Gate log"),
+            (M, "South gate"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Lev's note",
+        mentions: &[
+            (M, "Lev's fence note"),
+            (M, "Marek tag"),
             (M, "Rusty's note"),
             (M, "The well"),
         ],
@@ -480,8 +490,15 @@ pub const BEATS: &[Beat] = &[
     },
     Beat {
         gate: Gate::Recalled,
-        scenes: &["Lev's chair"],
+        scenes: &["At the fence"],
         radio: lines::BEAT_RECALLED,
+        gift: None,
+    },
+    // The ending played (`raid::epilogue`): he's been down with you.
+    Beat {
+        gate: Gate::Ended,
+        scenes: &["Lev's chair"],
+        radio: lines::BEAT_ENDED,
         gift: None,
     },
 ];
@@ -574,25 +591,27 @@ const BEAT_FIRST: f32 = 12.0;
 pub fn tell_beats(
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
     progression: Option<Res<crate::progression::Progression>>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
     mut state: Local<(
-        Option<(u32, bool)>,
+        Option<(u32, bool, bool)>,
         std::collections::VecDeque<&'static str>,
         f32,
     )>,
 ) {
     let tier = progression.map_or(0, |p| p.0.tier);
-    let now = (tier, raid.recalled);
+    let now = (tier, raid.recalled, epilogue.is_some_and(|e| e.done));
     let (seen, queue, timer) = &mut *state;
     let before = *seen.get_or_insert(now);
     if before != now {
         *seen = Some(now);
         for beat in BEATS {
-            let at = |(tier, recalled): (u32, bool)| super::scenes::Standing {
+            let at = |(tier, recalled, ended): (u32, bool, bool)| super::scenes::Standing {
                 tier,
                 recalled,
                 visits: 0,
+                ended,
             };
             if beat.gate.open(at(now)) && !beat.gate.open(at(before)) {
                 info!("story beat: {:?}", beat.gate);
@@ -829,6 +848,7 @@ mod tests {
             tier,
             recalled,
             visits,
+            ended: false,
         };
         let scenes = crate::world::scenes::all();
         let catalog =
@@ -848,6 +868,10 @@ mod tests {
                     .iter()
                     .map(|r| at(*r, false, 0))
                     .chain([at(TIERS.len() as u32, true, 0)])
+                    .chain([Standing {
+                        ended: true,
+                        ..at(TIERS.len() as u32, true, 0)
+                    }])
                     .collect(),
                 Some(_) => (0..=12).map(|v| at(0, false, v)).collect(),
             };
@@ -871,10 +895,11 @@ mod tests {
                 thread.name
             );
             if thread.map.is_none() {
-                for (rank, b) in ranks.iter().skip(1).zip(beats) {
+                for (rank, b) in ranks.iter().skip(1).zip(beats.iter().take(TIERS.len())) {
                     assert_eq!(b.gate, Gate::Tier(*rank), "one beat a rank");
                 }
-                assert_eq!(beats.last().unwrap().gate, Gate::Recalled);
+                assert_eq!(beats[beats.len() - 2].gate, Gate::Recalled);
+                assert_eq!(beats.last().unwrap().gate, Gate::Ended, "the ending last");
                 // The ladder's last job is the letter the third beat sets up.
                 assert!(
                     beats

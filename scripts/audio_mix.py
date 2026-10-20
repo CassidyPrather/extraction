@@ -59,6 +59,7 @@ OFF_LINE = 5.0           # LU from the fitted line before a cue is flagged
 # off a little: there, 2 LU over.
 STARTLE_OVER_SHOT = 0.0
 STARTLE_OVER_SHOT_NARROW = 2.0
+GEAR_HEARD = (0.6, 1.6)  # a kit rattle's audible range over its robot reach
 MASK_OFFSET = 6.0        # dB below the masker's spread level that still hides
 REF_DISTANCE = 5.0       # Firewheel's default reference distance
 
@@ -100,9 +101,15 @@ def muffle_db(fc):
 
 
 # Filters the game puts on a cue's own chain (src/audio.rs), Hz: the
-# suppressed shot's low-pass. Judged by what they take out of the asset's
-# spectrum.
-CUE_LOWPASS = {"gun.shot_suppressed": 2200.0}
+# suppressed shot's low-pass, water muffled in a bottle. Judged by what
+# they take out of the asset's spectrum.
+CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0}
+
+
+def own_filter(cue_name):
+    """A cue's own low-pass, per 1/3-octave band, dB (0 for none)."""
+    fc = CUE_LOWPASS.get(cue_name)
+    return muffle_db(fc) if fc else 0.0
 
 
 def filter_loss(cue, sets):
@@ -391,7 +398,7 @@ def audible_margin(cue_name, sets, mix, bed, d):
     """How far over the bed's masking a cue is at `d` metres, dB."""
     c = next(c for c in mix if c["name"] == cue_name)
     x = samples(c["set"], sets)
-    base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"]
+    base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"] + own_filter(cue_name)
     bed_parts = []
     for b, extra in bed:
         g, s = gain_of(b, mix, extra)
@@ -409,7 +416,7 @@ def audible_range(cue_name, sets, mix, bed):
     metres, to 1 km."""
     c = next(c for c in mix if c["name"] == cue_name)
     x = samples(c["set"], sets)
-    base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"]
+    base = band_levels(x[: int(min(len(x), 1.0 * aa.SR))]) + c["db"] + own_filter(cue_name)
     reach, full = c["reach"], c["muffle_full"]
     bed_parts = []
     for b, extra in bed:
@@ -451,6 +458,18 @@ def run(sets, out):
         if want and (r["calm"] < want[0] or r["downpour"] < want[1]):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"heard to {r['calm']}/{r['downpour']} m, wants {want[0]}/{want[1]}")
+    # Your kit (src/foley.rs): at its cue's gain a part is one robots hear
+    # to GEAR_REACH_REF; your ears should hear it about as far.
+    gear_ref = float(re.search(r"GEAR_REACH_REF: f32 = ([\d.]+)",
+                               (ROOT / "src" / "audio.rs").read_text()).group(1))
+    gear = {}
+    for c in mix:
+        if not c["name"].startswith("gear."):
+            continue
+        heard = audible_range(c["name"], sets, mix, calm)
+        gear[c["name"]] = dict(heard=heard, robots=gear_ref)
+        if not GEAR_HEARD[0] <= heard / gear_ref <= GEAR_HEARD[1]:
+            c["flags"].append(f"heard to {heard} m, robots to {gear_ref:g} m")
     # Startle: the loudest each sudden sound gets, up close.
     def up_close(c, extra=0.0):
         loud = max(f["momentary_max"] for f in sets[c["set"]]["files"]) + filter_loss(c, sets)
@@ -478,7 +497,7 @@ def run(sets, out):
         if m > 0:
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"switches on at {keep:.0f} m, {m:+.1f} dB over the wind")
-    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges,
+    report = dict(summary=summary, cues=mix, scenes=scenes, ranges=ranges, edges=edges, gear=gear,
                   startle=startle,
                   session=dict(integrated=session, lra=lra, shares=SESSION),
                   narrow=dict(integrated=n_session, lra=n_lra,
@@ -510,6 +529,11 @@ def run(sets, out):
     for n, r in ranges.items():
         want = f"   (wants {r['want'][0]} / {r['want'][1]})" if r.get("want") else ""
         lines.append(f"    {n:20s} {r['calm']:4d} / {r['downpour']:4d}{want}")
+    lines.append("")
+    lines.append(f"Your kit, heard over the wind against robots' reach "
+                 f"(wants {GEAR_HEARD[0]}..{GEAR_HEARD[1]}x):")
+    for n, g in gear.items():
+        lines.append(f"    {n:20s} {g['heard']:4d} m, robots {g['robots']:g} m")
     lines.append("")
     lines.append("Loudest up close (momentary LUFS; over your rifle, normal / narrow):")
     for r in startle[:10]:

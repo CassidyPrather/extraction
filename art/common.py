@@ -95,9 +95,10 @@ MATERIALS = {
     "Glove": ((0.30, 0.29, 0.23), 0.0, 0.9, None),
     "Leather": ((0.33, 0.27, 0.2), 0.0, 0.7, None),
     "Padding": ((0.17, 0.17, 0.16), 0.0, 0.75, None),
-    # Bare hands (art/hands/lev_hand.py).
+    # People: bare hands (art/hands/lev_hand.py) and Lev's dark wool coat.
     "Skin": ((0.62, 0.45, 0.36), 0.0, 0.6, None),
     "Nail": ((0.75, 0.62, 0.55), 0.0, 0.35, None),
+    "DarkWool": ((0.14, 0.14, 0.15), 0.0, 0.95, None),
 }
 
 

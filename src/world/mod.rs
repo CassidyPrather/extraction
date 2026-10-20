@@ -6,6 +6,7 @@
 pub mod ao;
 pub mod bridges;
 pub mod buildings;
+pub mod clutter;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
@@ -95,7 +96,7 @@ impl Zone {
 
 /// Reads `assets/maps/<name>.ron`, falling back to the built-in copy of
 /// Marrow Creek so tests and odd working directories still get a map.
-fn load_map_def(name: &str) -> MapDef {
+pub(crate) fn load_map_def(name: &str) -> MapDef {
     let candidates = [
         crate::asset_root_path()
             .join("maps")

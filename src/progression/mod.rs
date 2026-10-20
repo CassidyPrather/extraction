@@ -29,6 +29,12 @@ use crate::world::{Layer, Zone};
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
 pub struct Progression(pub Progress);
 
+/// Lev has been into the depot with you (Story's epilogue, saved as
+/// `Stats::epilogue`): Story's systems set it; the job card's asks and the
+/// career page change with it.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq)]
+pub struct Epilogue(pub bool);
+
 /// A job was handed in at the card (`raid/requests.rs`).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct JobDone;
@@ -55,6 +61,7 @@ pub struct ProgressionPlugin;
 impl Plugin for ProgressionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Progression>()
+            .init_resource::<Epilogue>()
             .add_message::<JobDone>()
             .add_systems(
                 Update,
@@ -126,7 +133,7 @@ pub fn want_name(catalog: &Catalog, id: &str) -> String {
 }
 
 /// The job as the card says it.
-pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
+pub fn job_text(job: &Job, catalog: &Catalog, map: &str, epilogue: bool) -> String {
     let elsewhere = |m: &str| {
         if m == map {
             String::new()
@@ -137,7 +144,11 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
     match job {
         Job::Fetch { item, n } => {
             let name = want_name(catalog, item);
-            lines::ask_fetch(*n, &name, extraction_core::progression::why(item))
+            let why = epilogue
+                .then(|| lines::why_after(item))
+                .flatten()
+                .unwrap_or_else(|| extraction_core::progression::why(item));
+            lines::ask_fetch(*n, &name, why)
         }
         Job::Recover {
             map: m,
@@ -393,7 +404,15 @@ fn job_done(
 }
 
 /// There's always a job on the card.
-fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<Progression>) {
+fn offer_job(
+    opts: Res<LaunchOptions>,
+    raid: Res<Raid>,
+    epilogue: Res<Epilogue>,
+    mut progression: ResMut<Progression>,
+) {
+    if progression.0.quiet != epilogue.0 {
+        progression.0.quiet = epilogue.0;
+    }
     if progression.0.job.is_some() {
         return;
     }
@@ -820,6 +839,7 @@ pub fn career_page(
     raid: &Raid,
     memorial: &extraction_core::save::Memorial,
     keys_home: usize,
+    epilogue: bool,
 ) -> String {
     let mut lines = vec![
         "CAREER".to_owned(),
@@ -881,6 +901,9 @@ pub fn career_page(
             memorial.convoys,
             memorial.lost.len()
         ));
+    }
+    if epilogue {
+        lines.push(lines::CAREER_AFTER.to_owned());
     }
     lines.join("\n")
 }
