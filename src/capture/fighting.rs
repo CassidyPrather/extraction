@@ -44,6 +44,8 @@ pub struct Fight {
     pub area: f32,
     /// A point in the overlap.
     pub at: Vec3,
+    /// Which way the faces face.
+    pub normal: Vec3,
 }
 
 fn normal(p: &[Vec3; 3]) -> Option<Vec3> {
@@ -90,6 +92,16 @@ fn area(poly: &[Vec2]) -> f32 {
 /// A solid box, for hiding faces: (world from box, half size).
 pub type Solid = (bevy::prelude::Transform, Vec3);
 
+/// Whether there's somewhere to stand under `p`: a solid's top within
+/// `reach` below it. Underground, a face looking out into the earth (or
+/// the underside of the lowest floor) has none: nobody sees it.
+pub fn floor_under(solids: &[Solid], p: Vec3, reach: f32) -> bool {
+    solids.iter().any(|(at, half)| {
+        let l = at.compute_affine().inverse().transform_point3(p);
+        l.x.abs() < half.x && l.z.abs() < half.z && l.y >= half.y && l.y - half.y < reach
+    })
+}
+
 fn inside(solids: &[Solid], p: Vec3) -> bool {
     solids.iter().any(|(at, half)| {
         let l = at.compute_affine().inverse().transform_point3(p);
@@ -100,12 +112,13 @@ fn inside(solids: &[Solid], p: Vec3) -> bool {
 /// Every fight between faces of different sources (summed per pair of
 /// sources and materials). `names` names the sources. An overlap whose
 /// middle is buried in one of `solids` (just in front of the faces), or
-/// that `seen` says nobody sees, doesn't count.
+/// that `seen` (given its middle and its facing) says nobody sees, doesn't
+/// count.
 pub fn fights(
     faces: &[Face],
     names: &[String],
     solids: &[Solid],
-    seen: impl Fn(Vec3) -> bool,
+    seen: impl Fn(Vec3, Vec3) -> bool,
 ) -> Vec<Fight> {
     // Bucket by plane: the normal to 1/40, the offset to a millimetre.
     let mut buckets: HashMap<([i32; 3], i64), Vec<(usize, Vec3, f32)>> = HashMap::new();
@@ -122,7 +135,7 @@ pub fn fights(
         );
         buckets.entry(key).or_default().push((i, n, d));
     }
-    let mut total: HashMap<(usize, usize, String, String), (f32, Vec3)> = HashMap::new();
+    let mut total: HashMap<(usize, usize, String, String), (f32, Vec3, Vec3)> = HashMap::new();
     for ((nk, dk), list) in &buckets {
         // Planes a hair apart can land in neighbouring buckets.
         for dk2 in [*dk, dk + 1] {
@@ -160,7 +173,7 @@ pub fn fights(
                     }
                     let c = overlap.iter().copied().sum::<Vec2>() / overlap.len() as f32;
                     let at = u * c.x + v * c.y + *an * *ad;
-                    if !seen(at) || inside(solids, at + *an * 0.002) {
+                    if !seen(at, *an) || inside(solids, at + *an * 0.002) {
                         continue;
                     }
                     let (s1, s2, m1, m2) = if fa.source < fb.source {
@@ -169,9 +182,11 @@ pub fn fights(
                         (fb.source, fa.source, &fb.material, &fa.material)
                     };
                     // The point reported: the overlaps' middle, by area.
-                    let e = total
-                        .entry((s1, s2, m1.clone(), m2.clone()))
-                        .or_insert((0.0, Vec3::ZERO));
+                    let e = total.entry((s1, s2, m1.clone(), m2.clone())).or_insert((
+                        0.0,
+                        Vec3::ZERO,
+                        *an,
+                    ));
                     e.0 += a;
                     e.1 += at * a;
                 }
@@ -180,9 +195,10 @@ pub fn fights(
     }
     let mut out: Vec<Fight> = total
         .into_iter()
-        .filter(|(_, (a, _))| *a >= MIN_AREA)
-        .map(|((s1, s2, m1, m2), (area, at))| Fight {
+        .filter(|(_, (a, _, _))| *a >= MIN_AREA)
+        .map(|((s1, s2, m1, m2), (area, at, normal))| Fight {
             at: at / area,
+            normal,
             a: names.get(s1).cloned().unwrap_or_default(),
             b: names.get(s2).cloned().unwrap_or_default(),
             materials: (m1, m2),
@@ -322,7 +338,7 @@ pub fn model_fights(path: &std::path::Path) -> Vec<Fight> {
             }
         })
         .collect();
-    fights(&faces, &names, &[], |_| true)
+    fights(&faces, &names, &[], |_, _| true)
 }
 
 #[cfg(test)]
@@ -354,23 +370,23 @@ mod tests {
         faces.extend(quad(1, "Cloth", Vec2::splat(0.5), Vec2::splat(1.0), 0.0));
         // A lid 5 mm up: clear.
         faces.extend(quad(2, "Metal", Vec2::splat(1.2), Vec2::splat(1.8), 0.005));
-        let f = fights(&faces, &names, &[], |_| true);
+        let f = fights(&faces, &names, &[], |_, _| true);
         assert_eq!(f.len(), 1, "{f:?}");
         // Buried in a solid just above: unseen.
         let lid = (
             Transform::from_xyz(0.75, 0.05, 0.75),
             Vec3::new(0.5, 0.05, 0.5),
         );
-        assert!(fights(&faces, &names, &[lid], |_| true).is_empty());
+        assert!(fights(&faces, &names, &[lid], |_, _| true).is_empty());
         // Or below where anyone looks.
-        assert!(fights(&faces, &names, &[], |p| p.y > 0.1).is_empty());
+        assert!(fights(&faces, &names, &[], |p, _| p.y > 0.1).is_empty());
         assert!((f[0].area - 0.25).abs() < 1e-3, "{}", f[0].area);
         assert_eq!((f[0].a.as_str(), f[0].b.as_str()), ("floor", "rug"));
         // The same material doesn't show, and one source never fights itself.
         let mut same = quad(0, "Wood", Vec2::ZERO, Vec2::ONE, 0.0);
         same.extend(quad(1, "Wood", Vec2::ZERO, Vec2::ONE, 0.0));
         same.extend(quad(1, "Cloth", Vec2::ZERO, Vec2::ONE, 0.0));
-        assert_eq!(fights(&same, &names, &[], |_| true).len(), 1);
+        assert_eq!(fights(&same, &names, &[], |_, _| true).len(), 1);
     }
 
     #[test]
@@ -417,8 +433,8 @@ mod tests {
     /// Buildings as the game draws them close up: no model placed against
     /// a box, or another model, in its plane with another material.
     /// Underground sites are printed, not held: outside their boxes is
-    /// earth, which hides faces this can't tell are hidden (the undersides
-    /// of their lowest floors).
+    /// earth. A face counts there only with somewhere to stand in front of
+    /// it (`floor_under`), but that's rougher than a building's ground.
     #[test]
     fn assembled_buildings_dont_fight() {
         let mut bad = Vec::new();
@@ -438,7 +454,10 @@ mod tests {
             } else {
                 -extraction_core::map::prefab_lift(id) - 0.05
             };
-            let fights = fights(&faces, &names, &solids, |p| p.y > buried);
+            // Underground, a face is seen only from somewhere to stand.
+            let fights = fights(&faces, &names, &solids, |p, n| {
+                p.y > buried && (!site || floor_under(&solids, p + n * 0.05, 4.0))
+            });
             let sum: f32 = fights.iter().map(|f| f.area).sum();
             println!(
                 "{id:<22} {:>6} faces  {:>3} fights  {sum:.3} m²",
@@ -447,8 +466,18 @@ mod tests {
             );
             for f in fights {
                 let line = format!(
-                    "{id}: {} ({}) vs {} ({}), {:.4} m² at ({:.2}, {:.2}, {:.2})",
-                    f.a, f.materials.0, f.b, f.materials.1, f.area, f.at.x, f.at.y, f.at.z
+                    "{id}: {} ({}) vs {} ({}), {:.4} m² at ({:.2}, {:.2}, {:.2}) facing ({:.0}, {:.0}, {:.0})",
+                    f.a,
+                    f.materials.0,
+                    f.b,
+                    f.materials.1,
+                    f.area,
+                    f.at.x,
+                    f.at.y,
+                    f.at.z,
+                    f.normal.x,
+                    f.normal.y,
+                    f.normal.z
                 );
                 println!("    {line}");
                 if known(id, &f) {
