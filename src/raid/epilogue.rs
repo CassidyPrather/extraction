@@ -25,7 +25,8 @@ impl Plugin for EpiloguePlugin {
             .add_systems(
                 Update,
                 (begin, plan_depot, walk, release, at_the_bay, home).chain(),
-            );
+            )
+            .add_systems(Update, (tell_progression, crates_stay_open));
     }
 }
 
@@ -333,6 +334,7 @@ fn release(
     )>,
     mut beats: MessageWriter<EpilogueBeat>,
     mut told_shut: Local<bool>,
+    mut kept: Query<&mut crate::world::underground::KeptCrate>,
 ) {
     if epi.stage != Stage::Following {
         *told_shut = false;
@@ -353,6 +355,9 @@ fn release(
     }
     if !epi.crates_open {
         epi.crates_open = true;
+        for mut c in &mut kept {
+            c.open = true;
+        }
         term.pages = RELEASE_PAGES.iter().map(|p| p.to_string()).collect();
         term.page = 0;
         text.text = term.screen();
@@ -374,6 +379,32 @@ fn release(
     } else if !*told_shut {
         *told_shut = true;
         raid.say(STACKS_SHUT);
+    }
+}
+
+/// Progression's copy of it (the jobs and career page change once he's
+/// been in).
+fn tell_progression(epi: Res<Epilogue>, p: Option<ResMut<crate::progression::Epilogue>>) {
+    if let Some(mut p) = p
+        && p.0 != epi.done
+    {
+        p.0 = epi.done;
+    }
+}
+
+/// Once released, always: on later raids the Depot's crates stand open.
+fn crates_stay_open(
+    epi: Res<Epilogue>,
+    mut kept: Query<
+        &mut crate::world::underground::KeptCrate,
+        Added<crate::world::underground::KeptCrate>,
+    >,
+) {
+    if !epi.done {
+        return;
+    }
+    for mut c in &mut kept {
+        c.open = true;
     }
 }
 
@@ -625,6 +656,16 @@ mod tests {
         }
         let epi = app.world().resource::<Epilogue>().clone();
         assert!(epi.crates_open, "the release went through");
+        let kept: Vec<(String, bool)> = app
+            .world_mut()
+            .query::<&crate::world::underground::KeptCrate>()
+            .iter(app.world())
+            .map(|c| (c.tag.clone(), c.open))
+            .collect();
+        assert!(
+            kept.iter().any(|(t, _)| t == "MAREK, H.") && kept.iter().all(|(_, o)| *o),
+            "every kept crate opens: {kept:?}"
+        );
         assert_eq!(epi.stage, Stage::ToTheBay);
         let text = app
             .world_mut()
@@ -668,6 +709,10 @@ mod tests {
         assert!(lev(&mut app).is_none(), "he's back in the cab");
         assert!(!app.world().resource::<Epilogue>().active());
         assert!(app.world().resource::<Epilogue>().done);
+        assert!(
+            app.world().resource::<crate::progression::Epilogue>().0,
+            "Progression knows"
+        );
         assert_eq!(
             app.world()
                 .resource::<super::super::logbook::Logbook>()
