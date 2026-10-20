@@ -894,6 +894,156 @@ mod vr_tests {
         assert!(pellets > 4, "buckshot spreads: {shots:?}");
     }
 
+    /// A squib's bullet in the PM's bore: a cleaning rod pushed down it
+    /// from the muzzle knocks it out (and the next shot is clean). Left in,
+    /// the next shot bulges the barrel and hurts the hand.
+    #[test]
+    fn a_squib_rodded_out_or_fired_on() {
+        for rod in [true, false] {
+            let mut r = hold("pm_pistol", false, false);
+            load(&mut r, "pm", 8, FireMode::Semi);
+            gun_mut(&mut r).firearm.squib = Some(0);
+            if rod {
+                let (muzzle, out) = {
+                    let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+                    let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+                    (gt.transform_point(g.layout.muzzle), gt.forward().as_vec3())
+                };
+                // The rod along the bore, held at its middle, out in front.
+                let at = muzzle + out * 0.5;
+                let rod_e = r.vr.spawn(
+                    "cleaning_rod",
+                    Transform::from_translation(at).looking_to(out, Vec3::Y),
+                );
+                r.vr.app
+                    .world_mut()
+                    .entity_mut(rod_e)
+                    .insert(avian3d::prelude::RigidBody::Static);
+                let rot = Transform::IDENTITY.looking_to(out, Vec3::Y).rotation;
+                r.vr.hand(Side::Left, at, rot, 0.0, 0.0);
+                r.vr.step(2);
+                r.vr.grip(Side::Left, 1.0);
+                r.vr.step(3);
+                r.vr.app
+                    .world_mut()
+                    .entity_mut(rod_e)
+                    .insert(avian3d::prelude::RigidBody::Dynamic);
+                assert_eq!(r.vr.hand_state(Side::Left).holding, Some(rod_e));
+                // In at the muzzle, down the bore: the rod's near end goes
+                // 15 cm past the muzzle.
+                let from = r.vr.hand_state(Side::Left).world.translation;
+                glide_side(&mut r, Side::Left, from, muzzle + out * (0.3 - 0.15), 30);
+                r.vr.step(3);
+                assert_eq!(gun_mut(&mut r).firearm.squib, None, "rodded out");
+            }
+            let before =
+                r.vr.app
+                    .world()
+                    .get::<crate::health::Health>(r.vr.player)
+                    .unwrap()
+                    .hp;
+            fire(&mut r, 1, true);
+            r.vr.step(3);
+            let after =
+                r.vr.app
+                    .world()
+                    .get::<crate::health::Health>(r.vr.player)
+                    .unwrap()
+                    .hp;
+            let cond = gun_mut(&mut r).firearm.condition;
+            if rod {
+                assert!(cond > 0.9, "a clean shot: {cond}");
+                assert!(before - after < 1.0, "unhurt: {before} {after}");
+            } else {
+                assert!(cond < 0.35, "bulged: {cond}");
+                assert!(before - after > 10.0, "hurt: {before} {after}");
+            }
+        }
+    }
+
+    /// A filthy Mosin's bolt stuck shut: lifting the handle slowly only
+    /// grinds; slapped up hard, it breaks free and lifts.
+    #[test]
+    fn a_stuck_mosin_bolt_wants_a_slap() {
+        let mut r = hold("mosin", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.fouling = 1.0;
+            g.firearm.bolt_stuck = true;
+        }
+        let handle = r.vr.point(r.gun, |p| matches!(p, GripRole::Handle(0)));
+        // The hand comes to the handle and rests there before taking it
+        // (arriving fast from below would be the slap).
+        r.vr.hand(Side::Left, handle, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(30);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(2);
+        assert!(
+            r.vr.hand_state(Side::Left).handle.is_some(),
+            "on the handle"
+        );
+        let up =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(r.gun)
+                .unwrap()
+                .up()
+                .as_vec3();
+        // Slowly: 5 cm over a second and a half.
+        glide_side(&mut r, Side::Left, handle, handle + up * 0.05, 135);
+        assert!(gun_mut(&mut r).firearm.bolt_stuck, "still stuck");
+        assert!(
+            gun_mut(&mut r).firearm.handle_lift < 0.05,
+            "it doesn't lift"
+        );
+        // Back down, then a slap: 6 cm in two ticks.
+        glide_side(&mut r, Side::Left, handle + up * 0.05, handle, 20);
+        glide_side(&mut r, Side::Left, handle, handle + up * 0.06, 2);
+        r.vr.step(3);
+        assert!(!gun_mut(&mut r).firearm.bolt_stuck, "knocked free");
+        assert!(gun_mut(&mut r).firearm.handle_lift > 0.9, "and up");
+    }
+
+    /// A worn, filthy SKS: rack it and the round can go off as the bolt
+    /// slams home, trigger untouched. A sound one never does.
+    #[test]
+    fn a_worn_sks_slam_fires_as_the_bolt_closes() {
+        for worn in [true, false] {
+            let mut r = hold("sks", false, false);
+            {
+                let mut g = gun_mut(&mut r);
+                g.firearm.condition = if worn { 0.1 } else { 0.9 };
+                g.firearm.fouling = 1.0;
+                g.firearm.internal_rounds = 10;
+            }
+            let mut shots = 0;
+            for _ in 0..6 {
+                let before: HashSet<Entity> = {
+                    let mut q =
+                        r.vr.app
+                            .world_mut()
+                            .query_filtered::<Entity, With<Projectile>>();
+                    q.iter(r.vr.app.world()).collect()
+                };
+                rack(&mut r);
+                r.vr.step(4);
+                let mut q =
+                    r.vr.app
+                        .world_mut()
+                        .query_filtered::<Entity, With<Projectile>>();
+                shots += q
+                    .iter(r.vr.app.world())
+                    .filter(|e| !before.contains(e))
+                    .count();
+            }
+            if worn {
+                assert!(shots > 0, "a worn SKS slam-fired");
+            } else {
+                assert_eq!(shots, 0, "a sound one never does");
+            }
+        }
+    }
+
     fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
         for i in 1..=steps {
             r.vr.move_hand(side, a.lerp(b, i as f32 / steps as f32));
