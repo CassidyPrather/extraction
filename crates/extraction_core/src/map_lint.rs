@@ -311,6 +311,10 @@ pub const TRUCK_ROOM: f32 = 8.0;
 /// buildings, and this far from a rendezvous.
 pub const CRATE_ROOM: f32 = 1.5;
 pub const CRATE_FROM_RV: f32 = 10.0;
+/// Where you stand to climb into the truck, metres behind its middle.
+pub const TAILGATE: f32 = 3.6;
+/// Where you line up behind it to walk in, metres behind its middle.
+pub const TRUCK_APPROACH: f32 = 8.0;
 pub const RV_LEVEL: f32 = 12.0;
 
 // ---- Render load -------------------------------------------------------------
@@ -1458,6 +1462,28 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 *at,
             );
         }
+        // The truck parks with its bed toward the map's middle
+        // (`raid::truck::rv_pose`); you climb in from behind it.
+        let back = {
+            let l = (at[0] * at[0] + at[1] * at[1]).sqrt().max(1e-3);
+            [-at[0] / l, -at[1] / l]
+        };
+        // Both where you stand to climb in and where the bots line up for
+        // it (`sim::raider::extract_step`) must be walkable.
+        for (what, d) in [("tailgate", TAILGATE), ("approach", TRUCK_APPROACH)] {
+            let step = [at[0] + back[0] * d, at[1] + back[1] * d];
+            let open = walk
+                .cell_of(step)
+                .is_some_and(|(i, j)| walk_seen[j * walk.n + i]);
+            if !open {
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!("the truck's {what} at {name} can't be walked to"),
+                    step,
+                );
+            }
+        }
         if hm.slope_deg(*at) > RV_LEVEL {
             find(
                 &mut r,
@@ -1485,6 +1511,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for route in &routes {
         let end = *route.points.last().unwrap();
         let mut g = gentle.clone();
+        let mut corridor = Vec::new();
         for p in route.points.iter().step_by(2) {
             if dist(*p, ins) < CHOICE_ENDS || dist(*p, end) < CHOICE_ENDS {
                 continue;
@@ -1500,6 +1527,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                         let (i, j) = (i as usize, j as usize);
                         if dist(g.centre(i, j), *p) <= CHOICE_APART {
                             g.cost[j * g.n + i] = BLOCKED;
+                            corridor.push(j * g.n + i);
                         }
                     }
                 }
@@ -1515,11 +1543,67 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             ))
         ));
         if alt.is_none_or(|l| l > route.length * CHOICE_DETOUR) {
+            // Say what cuts the other way off: too long on gentle ground, or
+            // only there over steep ground (point at its steepest cell), or
+            // not there at all.
+            let mid = route.points[route.points.len() / 2];
+            let (why, at) = if let Some(l) = alt {
+                (
+                    format!("; the other way is {l:.0} m ({:.2}x)", l / route.length),
+                    mid,
+                )
+            } else {
+                let mut w = walk.clone();
+                for c in &corridor {
+                    w.cost[*c] = BLOCKED;
+                }
+                match w.path(ins, end) {
+                    Some(p) => {
+                        // The ground along that way only the gentle grid refuses
+                        // (too steep for it), sampled every metre.
+                        let mut cut: Vec<(usize, usize)> = p
+                            .windows(2)
+                            .flat_map(|ab| {
+                                let n = dist(ab[0], ab[1]).ceil().max(1.0) as usize;
+                                (0..n).map(move |k| {
+                                    let t = k as f32 / n as f32;
+                                    [
+                                        ab[0][0] + (ab[1][0] - ab[0][0]) * t,
+                                        ab[0][1] + (ab[1][1] - ab[0][1]) * t,
+                                    ]
+                                })
+                            })
+                            .filter_map(|q| gentle.cell_of(q))
+                            .filter(|(i, j)| {
+                                gentle.cost[j * gentle.n + i] == BLOCKED
+                                    && walk.cost[j * walk.n + i] != BLOCKED
+                            })
+                            .collect();
+                        cut.dedup();
+                        let cut: Vec<[f32; 2]> =
+                            cut.iter().map(|(i, j)| gentle.centre(*i, *j)).collect();
+                        let steep = cut
+                            .iter()
+                            .copied()
+                            .max_by(|a, b| hm.slope_deg(*a).total_cmp(&hm.slope_deg(*b)))
+                            .unwrap_or(mid);
+                        (
+                            format!(
+                                "; there is one only over ground steeper than {ROUTE_GRADE}° ({:.0} m of it, worst {:.0}° here)",
+                                cut.len() as f32 * gentle.cell,
+                                hm.slope_deg(steep)
+                            ),
+                            steep,
+                        )
+                    }
+                    None => ("; none on any walkable ground either".into(), mid),
+                }
+            };
             find(
                 &mut r,
                 Rule::Choice,
-                format!("no second way to {} within {CHOICE_DETOUR}x", route.to),
-                route.points[route.points.len() / 2],
+                format!("no second way to {} within {CHOICE_DETOUR}x{why}", route.to),
+                at,
             );
         }
     }
@@ -1644,6 +1728,36 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Reach && f.what.contains("house_plank")),
+            "{}",
+            r.text()
+        );
+    }
+
+    #[test]
+    fn a_blocked_tailgate_is_found() {
+        let mut map = MapDef::from_ron(CINDER_WORKS).unwrap();
+        // A barn across the way in, behind the truck at an RV.
+        let rv = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .next()
+            .unwrap()
+            .clone();
+        let l = (rv.at[0] * rv.at[0] + rv.at[1] * rv.at[1]).sqrt();
+        let back = [-rv.at[0] / l, -rv.at[1] / l];
+        map.placements.push(crate::map::Placement {
+            prefab: "barn".into(),
+            at: [rv.at[0] + back[0] * TAILGATE, rv.at[1] + back[1] * TAILGATE],
+            rot: 0.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Footing && f.what.contains("tailgate")),
             "{}",
             r.text()
         );
