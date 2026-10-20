@@ -443,7 +443,7 @@ for y in (EX[1] - 0.1, EX[1] + 0.1):
               segs=20, xf=T(EX[0], y, EX[2]) @ UP, closed=True)
     bed.box((0.03, 0.024, 0.07), (EX[0], y, EX[2] - 0.07), "Iron")
 # First-aid box: olive steel, a white disc with a red cross on its lid.
-FA = (1.04, FLOOR + 1.15, 1.35)
+FA = (1.04, FLOOR + 0.93, 1.35)   # under the cork board (Story)
 bed.box((0.09, 0.24, 0.32), FA, "Olive", bevel=0.006, segs=1)
 bed.box((0.012, 0.03, 0.12), (FA[0] - 0.05, FA[1] + 0.09, FA[2]), "Black", bevel=0.003, segs=1)
 bed.cyl(0.07, FA[0] - 0.051, FA[0] - 0.045, "Enamel", segs=24, xf=T(0, FA[1], FA[2]) @ ALONG_X)
