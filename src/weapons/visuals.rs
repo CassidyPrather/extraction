@@ -108,6 +108,7 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("cylinder", Moves::Cylinder),
         ("gate", Moves::Gate),
         ("ejector", Moves::Rod),
+        ("bayonet", Moves::Bayonet),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -252,10 +253,15 @@ const GATE_OPEN: f32 = 1.4;
 const ROD_STROKE: f32 = 0.042;
 
 fn animate_parts(
-    guns: Query<(&Gun, &Children, Option<&Handling>)>,
+    guns: Query<(
+        &Gun,
+        &Children,
+        Option<&Handling>,
+        Option<&super::melee::Bayonet>,
+    )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
 ) {
-    for (gun, children, handling) in &guns {
+    for (gun, children, handling, bayonet) in &guns {
         let f = &gun.firearm;
         let travel = gun.layout.handle.as_ref().map_or(0.0, |h| h.travel);
         // A self-loader's carrier or slide runs back and home after a shot
@@ -290,6 +296,15 @@ fn animate_parts(
                     let mut r = part.rest;
                     let open = if f.gate_open { GATE_OPEN } else { 0.0 };
                     r.rotation = Quat::from_rotation_y(open) * r.rotation;
+                    r
+                }
+                Moves::Bayonet => {
+                    // A self-loader's (the SKS's) folds; a bolt gun's is fixed.
+                    let mut r = part.rest;
+                    let folding = f.def.action == extraction_core::firearm::ActionKind::SemiAuto;
+                    if folding && bayonet.is_some_and(|b| b.fixed) {
+                        r.rotation = Quat::from_rotation_x(std::f32::consts::PI) * r.rotation;
+                    }
                     r
                 }
                 Moves::Rod => {
