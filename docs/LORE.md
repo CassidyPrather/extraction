@@ -234,6 +234,30 @@ player is likely to meet them:
 place), and its tests keep every mention pointing at a real place and
 every note on the thread.
 
+## The arc: Hana's thread
+
+One thread runs the length of a career and ends at the recall: what
+happened to Lev's mother. Each rank of the driver's job ladder
+(`docs/PROGRESSION.md`) opens one beat. A beat is physical: a scene with
+a note that appears somewhere new in Marrow (`after:` in
+`assets/data/scenes.ron`), a few lines from Lev on the radio between raids
+(`raid::lines::BEAT_*`), sometimes something he hands over. Nobody says
+what it adds up to; each note names the one before, so the player can
+piece it together. `world::story::BEATS` holds the list, and its tests
+hold it to the ladder.
+
+| Opens at | In the world | On the radio | What it adds |
+| - | - | - | - |
+| Start | Hana's letter to Anna (the house by the well); the Marrow gate log (bus four turned back) | | She stayed for the dog; Lev drove the bus |
+| Rank 1 (odd jobs done) | **Rusty's corner**, behind her house: the dog's bed, his tin, her note: the machine carried him to the Gate, "kept, for the review" | We had a dog. No dogs on the buses: that's why she stayed | The machines keep what they take |
+| Rank 2 (errands done) | **Hana's basket** in the shelter under the village: bread for Mrs Holm, "if Jan comes back I'll send him down" | The Holms were her oldest friends; Mrs Holm went down the shelter and never came up | Hana kept Mrs Holm alive (her own note is in the dorm next door) |
+| Rank 3 (runs done) | **By the well**: her chair, her basket dropped, her last page: the cough, the machines counting houses, a letter to Lev on the table, "he's not to come in after me" | He saw the collector come for someone in Marrow, February, from the fence. There's a letter on her table | She was taken. The ladder's last job (rank 3's last) is that letter |
+| Rank 4 (the letter handed in) | **Valley office copy** outside the post office: the inspector to Mrs Marek, "nothing is destroyed... kept, animals included... ends only with the three depot keys" | She says they keep everything, her too. Three keys stop them. Her photo's in the stash: he leaves it for you | The way to end it is the capstone |
+| The recall | **Lev's chair** by the well, facing her house, his note: "They've gone home through the Gates and shut them. I came in. Rusty's lead is still on the hook." | They're walking home. I'm going in, first time | He crosses the fence |
+
+The letter itself stays sealed: the player never reads it, only what Lev
+says of it.
+
 ## Staged scenes
 
 Small arrangements of existing props and items at the points of interest
