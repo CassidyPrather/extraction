@@ -1082,7 +1082,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 32] = [
+pub const PREFABS: [&str; 33] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1115,6 +1115,7 @@ pub const PREFABS: [&str; 32] = [
     "ropeway_station",
     "ropeway_pylon",
     "ropeway_pylon_down",
+    "blast_furnace",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1183,6 +1184,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "ropeway_station" => ropeway_station(&mut b),
         "ropeway_pylon" => ropeway_pylon(&mut b),
         "ropeway_pylon_down" => ropeway_pylon_down(&mut b),
+        "blast_furnace" => blast_furnace(&mut b),
         "target" => target(&mut b),
         id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
@@ -2513,6 +2515,260 @@ fn ropeway_pylon_down(b: &mut Builder) {
         Transform::IDENTITY,
         ["ropeway_pylon_down_lod1", "ropeway_pylon_down_lod2"],
     );
+}
+
+// The blast furnace's measures, as `art/props/heroes.py` (BF_* there), in
+// its furnace's space; the prefab's origin is its footprint's middle,
+// BF_SHIFT from the furnace.
+const BF_SHIFT: Vec3 = Vec3::new(-5.7, 0.0, -10.6);
+const BF_DECK: f32 = 24.0;
+const BF_STOVES: (f32, [f32; 3], f32, f32) = (3.0, [12.0, 18.5, 25.0], 4.0, 20.0);
+const BF_CHIMNEY: (f32, f32, (f32, f32), f32) = (1.4, 1.0, (18.5, 11.5), 38.0);
+const BF_CATCHER: (f32, (f32, f32), f32, f32) = (2.8, (-14.0, 5.0), 6.0, 14.0);
+const BF_SKIP: ((f32, f32), (f32, f32)) = ((0.0, 36.0), (0.0, 5.5));
+const BF_WALK_X: f32 = 1.7;
+const BF_CAST: (f32, (f32, f32), f32) = (16.0, (-4.0, -18.0), 9.0);
+
+/// A solid upright cylinder from y0 to y1 at (x, z).
+fn drum(b: &mut Builder, r: f32, x: f32, z: f32, y0: f32, y1: f32, mat: Mat) {
+    b.piece(
+        Shape::Cylinder(r, y1 - y0),
+        Transform::from_xyz(x, (y0 + y1) * 0.5, z),
+        mat,
+        true,
+    );
+}
+
+/// Cinder Works' hero landmark: a blast furnace, its stack to 26 m and
+/// its bleeders to 33, three hot-blast stoves and their chimney, the
+/// downcomer to the dust catcher. Walk into the cast house at its foot,
+/// or up the walkway beside the skip bridge to the charging platform
+/// (crates in both). Drawn by `blast_furnace` (`art/props/heroes.py`).
+fn blast_furnace(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(14.0, 1.4, 14.0),
+        Vec3::new(0.0, 0.5, 0.0),
+        Mat::Concrete,
+    );
+    // The furnace, inside its outline: hearth, bosh, the stack in three,
+    // the top cone, the top house.
+    let rm = Mat::RustyMetal;
+    drum(b, 3.4, 0.0, 0.0, 1.2, 6.0, rm);
+    drum(b, 3.4, 0.0, 0.0, 6.0, 9.6, rm);
+    for (r, y0, y1) in [(3.8, 9.6, 14.4), (3.4, 14.4, 19.2), (3.0, 19.2, 24.0)] {
+        drum(b, r, 0.0, 0.0, y0, y1, rm);
+    }
+    drum(b, 1.4, 0.0, 0.0, 24.0, 26.0, rm);
+    b.bx(
+        Vec3::new(3.4, 3.2, 3.4),
+        Vec3::new(0.0, 27.4, 0.0),
+        Mat::Corrugated,
+    );
+    for k in 0..8 {
+        let a = std::f32::consts::TAU * (k as f32 + 0.5) / 8.0;
+        b.bx(
+            Vec3::new(0.5, 7.9, 0.5),
+            Vec3::new(4.75 * a.cos(), 5.15, 4.75 * a.sin()),
+            rm,
+        );
+    }
+    // The charging platform: a square deck round the stack, its railing
+    // open at the +X +Z corner where the walkway arrives.
+    let (dk, hole) = (BF_DECK, 3.0);
+    let rim = 6.0 - hole;
+    for (sx, sz, w, d) in [
+        (0.0, -1.0, 12.0, rim),
+        (0.0, 1.0, 12.0, rim),
+        (-1.0, 0.0, rim, 2.0 * hole),
+        (1.0, 0.0, rim, 2.0 * hole),
+    ] {
+        b.bx(
+            Vec3::new(w, 0.3, d),
+            Vec3::new(sx * (hole + rim * 0.5), dk - 0.15, sz * (hole + rim * 0.5)),
+            Mat::PaintedMetal,
+        );
+    }
+    let e = 5.95;
+    for (a, c) in [
+        (Vec2::new(-e, -e), Vec2::new(e, -e)),
+        (Vec2::new(-e, -e + 0.04), Vec2::new(-e, e - 0.04)),
+        (Vec2::new(-e, e), Vec2::new(0.9, e)),
+        (Vec2::new(e, -e + 0.04), Vec2::new(e, 3.4)),
+    ] {
+        let mid = (a + c) * 0.5;
+        let size = (c - a).abs() + Vec2::splat(0.06);
+        b.bx(
+            Vec3::new(size.x, 1.1, size.y),
+            Vec3::new(mid.x, dk + 0.55, mid.y),
+            Mat::PaintedMetal,
+        );
+    }
+    // The uptakes, their crossing, the bleeders.
+    for (x, z) in [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0)] {
+        strut(
+            b,
+            Vec3::new(x * 0.9, 24.6, z * 0.9),
+            Vec3::new(x * 1.15, 31.0, z * 1.15),
+            0.8,
+            0.8,
+            rm,
+        );
+    }
+    for (a, c) in [
+        (Vec3::new(-2.3, 31.0, -2.3), Vec3::new(2.3, 31.0, 2.3)),
+        (Vec3::new(2.3, 31.05, -2.3), Vec3::new(-2.3, 31.05, 2.3)),
+    ] {
+        strut(b, a, c, 0.9, 0.9, rm);
+    }
+    // The downcomer and the dust catcher on its legs.
+    let (cr, (cx, cz), cy0, cy1) = BF_CATCHER;
+    strut(
+        b,
+        Vec3::new(-2.3, 31.0, -2.3),
+        Vec3::new(cx + 0.6, cy1 + 2.0, cz),
+        1.4,
+        1.4,
+        rm,
+    );
+    drum(b, cr, cx, cz, cy0, cy1, rm);
+    drum(b, 1.2, cx, cz, 2.2, cy0, rm);
+    drum(b, 1.0, cx, cz, cy1, cy1 + 2.0, rm);
+    for k in 0..4 {
+        let a = std::f32::consts::FRAC_PI_4 + std::f32::consts::FRAC_PI_2 * k as f32;
+        strut(
+            b,
+            Vec3::new(cx + (cr + 0.6) * a.cos(), 0.0, cz + (cr + 0.6) * a.sin()),
+            Vec3::new(
+                cx + (cr - 0.2) * a.cos(),
+                cy0 + 0.5,
+                cz + (cr - 0.2) * a.sin(),
+            ),
+            0.4,
+            0.4,
+            rm,
+        );
+    }
+    // The stoves, the hot-blast main, the chimney.
+    let (sr, xs, sz, sh) = BF_STOVES;
+    for x in xs {
+        drum(b, sr + 0.25, x, sz, 0.0, 0.8, rm);
+        drum(b, sr, x, sz, 0.8, sh, rm);
+        drum(b, sr * 0.8, x, sz, sh, sh + 1.5, rm);
+        strut(
+            b,
+            Vec3::new(x, 8.0, sz - sr + 0.2),
+            Vec3::new(x, 8.0, sz - sr - 1.1),
+            0.9,
+            0.9,
+            rm,
+        );
+    }
+    strut(
+        b,
+        Vec3::new(5.9, 8.0, 2.4),
+        Vec3::new(xs[2] + 1.2, 8.0, sz - sr - 1.2),
+        1.1,
+        1.1,
+        rm,
+    );
+    let (r0, _, (hx, hz), hh) = BF_CHIMNEY;
+    drum(b, r0 + 0.4, hx, hz, 0.0, 1.0, Mat::Brick);
+    drum(b, 1.3, hx, hz, 1.0, 19.0, Mat::Brick);
+    drum(b, 1.05, hx, hz, 19.0, hh, Mat::Brick);
+    // The skip bridge's chords, and the walkway beside it to the platform,
+    // its handrail.
+    let ((fx, fz), (tx, tz)) = BF_SKIP;
+    let (ft, hd) = (Vec3::new(fx, 0.3, fz), Vec3::new(tx, BF_DECK + 2.5, tz));
+    for sx in [-1.0f32, 1.0] {
+        for dy in [0.0, -1.8] {
+            let o = Vec3::new(sx * 1.0, dy, 0.0);
+            strut(b, ft + o, hd + o, 0.32, 0.32, rm);
+        }
+    }
+    let wx = BF_WALK_X;
+    let (w0, w1) = (Vec3::new(wx, 0.3, fz - 1.0), Vec3::new(wx, BF_DECK, 5.6));
+    walk(b, w0, w1, 1.0, 0.12, Mat::PaintedMetal);
+    let back = (w1 - w0).normalize();
+    let r = Vec3::new(0.47, 0.525, 0.0);
+    // From two metres back down the slope, into the ground.
+    strut(
+        b,
+        w0 + r - back * 2.0,
+        w1 + r,
+        0.05,
+        1.05,
+        Mat::PaintedMetal,
+    );
+    // The stockhouse pit and the hoist house.
+    b.bx(
+        Vec3::new(4.0, 0.6, 5.0),
+        Vec3::new(fx, 0.0, fz + 1.5),
+        Mat::Concrete,
+    );
+    let (hx_, hz_) = (7.0, 33.0);
+    b.bx(
+        Vec3::new(6.0, 4.5, 6.0),
+        Vec3::new(hx_, 2.25, hz_),
+        Mat::Brick,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(6.8, 1.9, 6.8)),
+        Transform::from_xyz(hx_, 4.5, hz_),
+        Mat::Corrugated,
+        true,
+    );
+    // The cast house: its floor, columns, sheeted upper sides, roof and
+    // back gable; the ladle car.
+    let (cw, (cz0, cz1), ce) = BF_CAST;
+    let hw = cw * 0.5;
+    b.bx(
+        Vec3::new(cw + 0.6, 0.2, cz0 - cz1),
+        Vec3::new(0.0, 0.1, (cz0 + cz1) * 0.5),
+        Mat::Concrete,
+    );
+    for k in 0..5 {
+        let z = cz0 + (cz1 - cz0) * k as f32 / 4.0;
+        for sx in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.4, ce, 0.4),
+                Vec3::new(sx * hw, 0.2 + ce * 0.5, z),
+                rm,
+            );
+        }
+    }
+    for sx in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(0.1, ce - 4.0, cz0 - cz1),
+            Vec3::new(sx * (hw + 0.25), 4.2 + (ce - 4.0) * 0.5, (cz0 + cz1) * 0.5),
+            Mat::Corrugated,
+        );
+    }
+    b.piece(
+        Shape::Prism(Vec3::new(cw + 1.2, 3.0, cz0 - cz1 + 1.0)),
+        Transform::from_xyz(0.0, ce + 0.2, (cz0 + cz1) * 0.5),
+        Mat::Corrugated,
+        true,
+    );
+    let lz = cz1 + 2.2;
+    b.bx(Vec3::new(2.4, 0.8, 3.2), Vec3::new(0.0, 0.9, lz), rm);
+    drum(b, 1.5, 0.0, lz, 1.3, 3.5, Mat::DarkMetal);
+    for p in &mut b.geo.pieces[from..] {
+        p.at.translation += BF_SHIFT;
+    }
+    b.dress_landmark(
+        from,
+        "blast_furnace",
+        Transform::from_translation(BF_SHIFT),
+        ["blast_furnace_lod1", "blast_furnace_lod2"],
+    );
+    // A crate on the platform, one in the cast house.
+    b.crate_box(
+        Vec3::new(-4.6, BF_DECK, -4.6) + BF_SHIFT,
+        0.7,
+        Some("workshop"),
+    );
+    b.crate_box(Vec3::new(5.5, 0.2, -12.0) + BF_SHIFT, 0.8, Some("tools"));
 }
 
 /// A railway signal box: an enterable brick ground floor (its lever frame,

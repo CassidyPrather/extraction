@@ -233,7 +233,7 @@ impl Plugin for IndoorPlugin {
             .add_message::<CrawlerZap>()
             .add_systems(
                 FixedUpdate,
-                (spawn_residents, crawler_guns).after(super::perceive),
+                (spawn_residents, crawler_guns, clear_wrecks).after(super::perceive),
             );
     }
 }
@@ -316,6 +316,31 @@ fn spawn_residents(
             let at = route.first().copied().unwrap_or(site.spawn);
             info!("director: a crawler on its round at {at:.0}");
             spawn_crawler(&mut commands, &zone, site, at, route);
+        }
+    }
+}
+
+/// A wrecked crawler stops blocking people: in a 1.4 m corridor its wreck
+/// is a wall nobody can step over (the sims found bots stuck behind one
+/// for the rest of the raid). Its parts still take rounds and keep their
+/// salvage.
+fn clear_wrecks(
+    mut commands: Commands,
+    crawlers: Query<(&Robot, &Children), (With<Crawler>, Changed<Robot>)>,
+    layers: Query<&CollisionLayers>,
+) {
+    for (robot, children) in &crawlers {
+        if !robot.wrecked {
+            continue;
+        }
+        for c in children.iter() {
+            if let Ok(l) = layers.get(c) {
+                let mut filters = l.filters;
+                filters.remove(crate::world::Layer::Player);
+                commands
+                    .entity(c)
+                    .insert(CollisionLayers::new(l.memberships, filters));
+            }
         }
     }
 }

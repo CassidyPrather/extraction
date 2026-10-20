@@ -101,6 +101,12 @@ pub struct ItemDef {
     /// Present if this item is a firearm.
     #[serde(default)]
     pub firearm: Option<crate::firearm::FirearmDef>,
+    /// Present if this item is a hand grenade.
+    #[serde(default)]
+    pub grenade: Option<crate::grenade::GrenadeDef>,
+    /// Present if this item is a blade.
+    #[serde(default)]
+    pub melee: Option<crate::melee::MeleeDef>,
     /// Charge capacity in watt-hours, for batteries and things that hold them.
     #[serde(default)]
     pub battery_wh: f32,

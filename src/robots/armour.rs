@@ -16,6 +16,8 @@ use super::{PartDestroyed, PartRole, Robot, RobotKind, part_bundle};
 pub const WALKER_PLATE_HP: f32 = 40.0;
 /// A drone's belly plate (its shell has 70).
 pub const DRONE_PLATE_HP: f32 = 20.0;
+/// A dirigible gondola's side plates (the gondola has 260).
+pub const GONDOLA_PLATE_HP: f32 = 80.0;
 /// How far out from the orb's centre a walker plate's middle sits.
 const PLATE_OUT: f32 = 0.405;
 
@@ -29,7 +31,7 @@ impl Plugin for ArmourPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            (fit_plates, shed_plates).after(super::perceive),
+            (fit_plates, shed_plates, pop_eyes).after(super::perceive),
         );
     }
 }
@@ -44,6 +46,13 @@ pub fn walker_plate_dir(i: usize) -> Vec3 {
 /// The plate's place on its robot (local to the root).
 fn plate_transform(kind: RobotKind, i: usize) -> Transform {
     match kind {
+        RobotKind::Dirigible => {
+            // Down each side of the gondola (its centre is 3.1 m under the
+            // envelope's), facing out.
+            let side = if i == 0 { 1.0 } else { -1.0 };
+            Transform::from_xyz(side * 0.73, -super::dirigible::RADIUS - 0.5, 0.0)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, Vec3::X * side))
+        }
         RobotKind::Drone => {
             // Under the belly, between it and the gun pod, facing down.
             Transform::from_xyz(0.0, -0.075, 0.03)
@@ -58,9 +67,17 @@ fn plate_transform(kind: RobotKind, i: usize) -> Transform {
 }
 
 /// Armour goes on as robots are made: three plates on walkers (grappler,
-/// collector and crawler too: they're walkers), one on drones.
-fn fit_plates(mut commands: Commands, robots: Query<(Entity, &Robot), Added<Robot>>) {
-    for (e, robot) in &robots {
+/// collector and crawler too: they're walkers), one on drones, two down
+/// the sides of a dirigible's gondola.
+fn fit_plates(
+    mut commands: Commands,
+    robots: Query<(Entity, &Robot, Has<super::hound::Hound>), Added<Robot>>,
+) {
+    for (e, robot, hound) in &robots {
+        // (A hound's body is all legs and speed.)
+        if hound {
+            continue;
+        }
         let (n, hp, collider) = match robot.kind {
             RobotKind::Walker => (
                 WALKER_PLATES.len(),
@@ -68,6 +85,8 @@ fn fit_plates(mut commands: Commands, robots: Query<(Entity, &Robot), Added<Robo
                 Collider::cuboid(0.3, 0.03, 0.28),
             ),
             RobotKind::Drone => (1, DRONE_PLATE_HP, Collider::cuboid(0.3, 0.02, 0.28)),
+            // (Local Y is out: thin along it.)
+            RobotKind::Dirigible => (2, GONDOLA_PLATE_HP, Collider::cuboid(0.86, 0.06, 3.3)),
             _ => continue,
         };
         let Ok(mut ec) = commands.get_entity(e) else {
@@ -119,6 +138,19 @@ fn shed_plates(
             .or(walker.map(|w| w.velocity))
             .unwrap_or_default();
         let seed = ev.part.index_u32() as f32;
+        let (collider, mass, inertia) = if robot.kind == RobotKind::Dirigible {
+            (
+                Collider::cuboid(0.86, 0.06, 3.3),
+                40.0,
+                Vec3::new(36.0, 39.0, 2.5),
+            )
+        } else {
+            (
+                Collider::cuboid(0.3, 0.03, 0.28),
+                2.0,
+                Vec3::new(0.013, 0.028, 0.015),
+            )
+        };
         spawn_debris(
             &mut commands,
             (
@@ -129,13 +161,73 @@ fn shed_plates(
                 Transform::from_translation(at).with_rotation(rot),
                 v0 + out * 1.6 + Vec3::Y * 0.6,
                 Vec3::new(seed.sin(), 0.4, seed.cos()) * 5.0,
-                2.0,
-                Collider::cuboid(0.3, 0.03, 0.28),
-                Vec3::new(0.013, 0.028, 0.015),
+                mass,
+                collider,
+                inertia,
             ),
             scale.x,
         );
         commands.entity(ev.part).despawn();
+    }
+}
+
+/// An eye shot out pops off its mount: a drone's camera dome or a
+/// walker's visor flies off as debris. The part itself stays (hidden, no
+/// collider), so the robot still knows it's blind.
+fn pop_eyes(
+    mut commands: Commands,
+    mut events: MessageReader<PartDestroyed>,
+    parts: Query<&GlobalTransform>,
+    robots: Query<(
+        &Robot,
+        Option<&LinearVelocity>,
+        Option<&super::walker::Walker>,
+    )>,
+) {
+    for ev in events.read() {
+        if ev.role != PartRole::Sensor {
+            continue;
+        }
+        let (Ok(gt), Ok((robot, lin, walker))) = (parts.get(ev.part), robots.get(ev.robot)) else {
+            continue;
+        };
+        if !matches!(robot.kind, RobotKind::Drone | RobotKind::Walker) {
+            continue;
+        }
+        let (scale, rot, at) = gt.to_scale_rotation_translation();
+        let v0 = lin
+            .map(|v| v.0)
+            .or(walker.map(|w| w.velocity))
+            .unwrap_or_default();
+        let fwd = rot * Vec3::NEG_Z;
+        let (collider, mass, inertia) = if robot.kind == RobotKind::Drone {
+            (Collider::sphere(0.07), 0.3, Vec3::splat(0.0006))
+        } else {
+            (
+                Collider::cuboid(0.3, 0.08, 0.06),
+                1.2,
+                Vec3::new(0.001, 0.009, 0.009),
+            )
+        };
+        spawn_debris(
+            &mut commands,
+            (
+                Debris {
+                    kind: robot.kind,
+                    piece: Piece::Sensor,
+                },
+                Transform::from_translation(at).with_rotation(rot),
+                v0 + fwd * 1.5 + Vec3::Y * 1.0,
+                Vec3::new(4.0, 2.0, -3.0),
+                mass,
+                collider,
+                inertia,
+            ),
+            scale.x,
+        );
+        commands
+            .entity(ev.part)
+            .insert((Visibility::Hidden, ColliderDisabled));
     }
 }
 
@@ -259,6 +351,78 @@ mod tests {
         assert!(
             hp(&mut app, PartRole::Core).unwrap() < core0,
             "now the core is open"
+        );
+    }
+
+    /// A drone's eye shot out pops off as a loose dome, and the drone stays
+    /// blind (its sensor part is kept, hidden).
+    #[test]
+    fn a_shot_out_eye_pops_off() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let site = zone.on_ground(40.0, 200.0) + Vec3::Y * 8.0;
+        let drone = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::drone::spawn_drone(
+                &mut c,
+                site,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 999.0,
+                    exit: site,
+                },
+            );
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..10 {
+            app.update();
+        }
+        let (eye, at) = app
+            .world_mut()
+            .query::<(Entity, &super::super::RobotPart, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|(_, p, _)| p.robot == drone && p.role == PartRole::Sensor)
+            .map(|(e, _, g)| (e, g.translation()))
+            .unwrap();
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Hit {
+                entity: eye,
+                point: at,
+                normal: Vec3::NEG_Z,
+                velocity: Vec3::Z * 500.0,
+                damage: 100.0,
+                shooter: None,
+            });
+        for _ in 0..3 {
+            app.update();
+        }
+        let domes = app
+            .world_mut()
+            .query::<&Debris>()
+            .iter(app.world())
+            .filter(|d| d.piece == Piece::Sensor)
+            .count();
+        assert_eq!(domes, 1, "the dome flew off");
+        assert_eq!(
+            app.world().get::<Visibility>(eye),
+            Some(&Visibility::Hidden)
+        );
+        assert!(
+            !app.world()
+                .get::<super::super::RobotPart>(eye)
+                .unwrap()
+                .alive(),
+            "and the drone knows it's blind"
         );
     }
 }

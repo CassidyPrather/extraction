@@ -256,6 +256,7 @@ fn dress_parts(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Option<Res<RobotMats>>,
+    hounds: Query<(), With<super::hound::Hound>>,
 ) {
     if parts.is_empty() {
         return;
@@ -296,6 +297,21 @@ fn dress_parts(
             }
         };
         commands.entity(e).remove::<Undressed>();
+        // A dirigible's gondola plates: plain slabs, with a dark rim.
+        if robot.kind == RobotKind::Dirigible && matches!(part.role, PartRole::Armour(_)) {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.86, 0.05, 3.3))),
+                MeshMaterial3d(m.shell.clone()),
+                Skin { part: e, level: 0 },
+                ChildOf(e),
+            ));
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.92, 0.04, 3.4))),
+                MeshMaterial3d(m.dark.clone()),
+                ChildOf(e),
+            ));
+            continue;
+        }
         let Some(model) = model else {
             dress_blockout(
                 &mut commands,
@@ -313,7 +329,10 @@ fn dress_parts(
         let mut mat = |name: Option<&str>| {
             robot_material(name, &m, &mut model_mats, &mut lib, &server, &mut materials)
         };
+        let hound = hounds.contains(part.robot);
         let node_name = match (robot.kind, part.role) {
+            (_, PartRole::Core) if hound => "hound_body",
+            (_, PartRole::Sensor) if hound => "hound_head",
             (_, PartRole::Core) => "core",
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",

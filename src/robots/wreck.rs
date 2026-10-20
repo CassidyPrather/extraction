@@ -291,6 +291,11 @@ fn break_up(
                         continue;
                     };
                     let sensor = part.role == PartRole::Sensor;
+                    if sensor && !part.alive() {
+                        // (Already popped off when it was shot out.)
+                        commands.entity(c).despawn();
+                        continue;
+                    }
                     if sensor {
                         // The visor knocked off its mount.
                         let fwd = t.rotation * Vec3::NEG_Z;

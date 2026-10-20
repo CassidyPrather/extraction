@@ -1,4 +1,4 @@
-//! The comfort board: four cards pinned on the bed's left wall, above the
+//! The comfort board: five cards pinned on the bed's left wall, above the
 //! stash, for the settings a headset player can't reach otherwise. Press
 //! one to step through its presets; the choice is kept in `settings.ron`.
 
@@ -18,6 +18,7 @@ pub enum ComfortCard {
     Vignette,
     Sound,
     Sharpness,
+    FingerGrab,
 }
 
 pub struct ComfortBoardPlugin;
@@ -39,6 +40,7 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Vignette, 1.44, -1.25),
             (ComfortCard::Sound, 1.80, -1.25),
             (ComfortCard::Sharpness, 1.62, -0.85),
+            (ComfortCard::FingerGrab, 1.44, -0.85),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -83,6 +85,7 @@ fn press_cards(
                 ComfortCard::Vignette => comfort.next_vignette(),
                 ComfortCard::Sound => comfort.narrow_dynamics = !comfort.narrow_dynamics,
                 ComfortCard::Sharpness => comfort.next_render_scale(),
+                ComfortCard::FingerGrab => comfort.finger_grab = !comfort.finger_grab,
             }
             // Tests and sims don't touch the player's settings.
             if !opts.headless {
@@ -109,6 +112,7 @@ fn card_text(
             ComfortCard::Vignette => comfort.vignette_label(),
             ComfortCard::Sound => comfort.sound_label(),
             ComfortCard::Sharpness => comfort.render_scale_label(),
+            ComfortCard::FingerGrab => comfort.finger_grab_label(),
         };
         if text.text != t {
             text.text = t;

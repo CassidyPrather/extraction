@@ -2132,6 +2132,12 @@ mod tests {
             .get_mut::<Transform>(player)
             .unwrap()
             .translation = me + Vec3::Y * 0.05;
+        // The head at eye height, as a headset or the desk rig keeps it
+        // (headless, nothing drives it off the floor).
+        app.world_mut()
+            .get_mut::<crate::rig::RigInput>(player)
+            .unwrap()
+            .head = Transform::from_xyz(0.0, 1.6, 0.0);
         let mut queue = CommandQueue::default();
         let crawler = {
             let mut c = Commands::new(&mut queue, app.world());
@@ -2190,10 +2196,8 @@ mod tests {
         });
         let aim =
             Transform::from_translation(me + Vec3::Y * 1.5).looking_at(them + Vec3::Y, Vec3::Y);
-        // (Having heard you land, it may lie in wait a while first:
-        // `indoor::AMBUSH`.)
         let mut seen = false;
-        for _ in 0..90 * (5 + crate::robots::indoor::AMBUSH as usize) {
+        for _ in 0..90 * 5 {
             *app.world_mut().get_mut::<Transform>(torch).unwrap() = aim;
             app.update();
             seen |= app

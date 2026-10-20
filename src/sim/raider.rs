@@ -1287,12 +1287,14 @@ fn sneak(
 }
 
 /// Unaware walkers this far off are worth creeping up on (m)...
-const STALK_FROM: f32 = 40.0;
+const STALK_FROM: f32 = 70.0;
 /// ...to this far from them, behind them...
 const STALK_TO: f32 = 10.0;
 /// ...outside their sight: more than this off their facing (radians; a
 /// walker sees 200 degrees round)...
 const STALK_BEHIND: f32 = 2.0;
+/// ...by way of a point this far out behind them...
+const STALK_WIDE: f32 = 25.0;
 /// ...then throw it this far past them, the far side from the bot (m).
 const STALK_PAST: f32 = 5.0;
 
@@ -1388,8 +1390,24 @@ fn stalk(
     if r.stage != Stage::Raid || r.clock - r.distracted_at < 90.0 {
         return false;
     }
-    let Some(item) = junk(r, scene) else {
+    let skip = |r: &mut Raider, log: &mut SimLog, why: &str| {
+        if r.debug {
+            log.event("stalk_skip", json!({"why": why}));
+        }
+        false
+    };
+    // Any walker in sight close enough to be worth it?
+    let walker_near = scene.robots.iter().any(|(_, robot, gt, ..)| {
+        !robot.wrecked
+            && robot.kind == crate::robots::RobotKind::Walker
+            && gt.translation().distance(eye) < STALK_FROM
+            && scene.visible(eye, gt.translation())
+    });
+    if !walker_near {
         return false;
+    }
+    let Some(item) = junk(r, scene) else {
+        return skip(r, log, "no junk");
     };
     // An unaware walker in sight.
     let pick = scene
@@ -1408,7 +1426,7 @@ fn stalk(
             && scene.visible(eye, gt.translation())
         });
     let Some((walker, _, gt, ..)) = pick else {
-        return false;
+        return skip(r, log, "aware");
     };
     let w = gt.translation().xz();
     let facing = {
@@ -1431,16 +1449,26 @@ fn stalk(
         if best.as_ref().is_some_and(|b| b.0 <= d) {
             continue;
         }
-        if let Some(t) = travel(&r.grid, eye.xz(), spot, 1.0) {
+        // Round the back at a distance first (out of its sight), then in.
+        let wide = w + dir * STALK_WIDE;
+        let around = if r.grid.walkable([wide.x, wide.y]) {
+            travel(&r.grid, eye.xz(), wide, 2.0).and_then(|mut t| {
+                t.extend(travel(&r.grid, wide, spot, 1.0)?);
+                Some(t)
+            })
+        } else {
+            travel(&r.grid, eye.xz(), spot, 1.0)
+        };
+        if let Some(t) = around {
             best = Some((d, spot, t));
         }
     }
     let Some((d, spot, mut tasks)) = best else {
-        return false;
+        return skip(r, log, "no way round");
     };
     let landing = w + (w - spot).normalize_or(Vec2::X) * STALK_PAST;
     if !r.grid.walkable([landing.x, landing.y]) {
-        return false;
+        return skip(r, log, "no landing");
     }
     r.distracted_at = r.clock;
     log.event(

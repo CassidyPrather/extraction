@@ -293,7 +293,7 @@ runs pin to pin. Nothing unread shows: no gaps, no blank cards, so the
 board never says what's missing. Press a card to take the note down and
 read it whole; press again to pin it back. The read notes are kept with
 the career (`Stats::notes_read`). The first note read, Lev says he keeps
-copies (`raid::lines::FIRST_PIN`).
+copies (`onboarding::firsts::First::NotePinned`, said once a career).
 
 ## Staged scenes
 

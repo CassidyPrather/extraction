@@ -188,3 +188,46 @@ outside within 25 m (furniture behind walls; measured small, no class
 in any view's top five); the truck's 47-94 shadow
 casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
 prepass, a second geometry pass per eye: not worth it at these counts).
+
+## Stereo: what the second eye costs, and multiview
+
+Each eye is its own Bevy camera (bevy_mod_openxr gives each a view of
+one layer of the 2-layer swapchain image), so everything a view does is
+done twice. Measured with `EYES=1` against both (`scripts/bench.sh`,
+Marrow Creek m01-m09, 128x128 so pixels don't drown the rest, software
+renderer):
+
+| | One eye | Both | The second eye |
+| - | - | - | - |
+| Render world, per-mesh work (`rw ms`) | 12-16 ms | 17-24 ms | +40-55%: about a third of it is per view (queue, sort, batch, the view's own passes); extraction and asset prep are shared |
+| Main schedule | 19-27 ms | 22-29 ms | Within noise: visibility per camera is cheap |
+| GPU (software) | 150-270 ms | 310-520 ms | x2: every pass, the sun's cascades included, runs per eye |
+
+(Under lavapipe the CPU columns share four cores with the renderer:
+read them as proportions.)
+
+**Single-pass stereo (multiview) isn't reachable without forking
+Bevy.** wgpu 29 has it (`Features::MULTIVIEW`, a render pass's
+`multiview_mask`, `@builtin(view_index)`), Vulkan (bevy_mod_openxr's
+default backend) has it in core, and the OpenXR swapchain is already a
+2-layer array image. But Bevy 0.19 builds every render pipeline with
+`multiview_mask: None` in its pipeline cache (with a "TODO: expose the
+rest" beside it), every pass node (opaque, transparent, prepass, shadow,
+tonemapping, upscaling, transmission) opens its pass with `None`, a
+camera's `ViewTarget` is one 2D texture (and its MSAA and HDR
+intermediates with it), and every PBR shader reads one `view` uniform
+(`mesh_view_bindings.wgsl`). Multiview would take patches to
+bevy_render, bevy_core_pipeline and bevy_pbr (view uniforms as a
+2-array indexed by `view_index`, array view targets, every node's
+mask), our ten custom shaders, and a one-camera mode in
+bevy_mod_openxr: a fork to carry through every Bevy upgrade.
+
+What it would buy, from the numbers above: the per-view third of the
+render world's CPU (on the laptop, a few ms a frame) and the second set
+of draw submissions. On the GPU, vertex work for both eyes in one pass
+only where the driver shares it (not guaranteed), pixels not at all,
+and the shadow cascades not at all (Bevy draws cascades per view, and
+multiview passes wouldn't change that). Recommendation: not now. If
+the headset's `cpu:` line shows the render world over budget, the
+cheaper levers are fewer entities a view (the draw budget) first; watch
+upstream Bevy for multiview, and take it when it lands rather than fork.

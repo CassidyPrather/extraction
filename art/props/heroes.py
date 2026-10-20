@@ -652,3 +652,241 @@ def ropeway_pylon_down(lv):
 
 lods("ropeway_pylon", ropeway_pylon)
 lods("ropeway_pylon_down", ropeway_pylon_down)
+
+
+# --- Blast furnace (Cinder Works) -----------------------------------------------------------
+#
+# The furnace's axis is the origin; the cast house is in front (-Z), the
+# skip bridge climbs from behind (+Z) to the charging platform, the stoves
+# stand in a row along +X, the dust catcher off -X. Mirrored in the recipe
+# (BF_* there).
+
+BF_PROFILE = [(3.4, 1.2), (3.4, 6.0), (4.2, 9.0), (4.2, 9.6), (3.0, 24.0), (1.4, 26.0)]
+BF_DECK = 24.0              # the charging platform's top, 12 x 12 round the stack
+BF_STOVES = (3.0, (12.0, 18.5, 25.0), 4.0, 20.0)  # radius, x's, z, height to the dome
+BF_CHIMNEY = (1.4, 1.0, (18.5, 11.5), 38.0)        # r at the foot, at the top, (x, z), height
+BF_CATCHER = (2.8, (-14.0, 5.0), 6.0, 14.0)        # radius, (x, z), y0, y1 of its drum
+BF_SKIP = ((0.0, 36.0), (0.0, 5.5))                # the bridge's foot and head (x, z)
+BF_WALK_X = 1.7                                     # the walkway beside the skip rails
+BF_CAST = (16.0, (-4.0, -18.0), 9.0)               # the cast house: width, z span, eaves
+
+
+def frustum(p, profile, mat, segs, xf=None):
+    """A solid of revolution about Y through (r, y) points, capped."""
+    prof = [(0.0, profile[0][1])] + list(profile) + [(0.0, profile[-1][1])]
+    p.lathe(prof, mat, segs=segs, xf=(xf or T()) @ UP)
+
+
+def pipe(p, a, b, r, mat, segs=12):
+    rod(p, a, b, r, mat, segs=segs)
+
+
+def blast_furnace(lv):
+    p = Part("static")
+    segs = 32 if lv == 0 else (14 if lv == 1 else 10)
+    # The foundation, the hearth, bosh and stack, the top cone.
+    p.box((14.0, 1.4, 14.0), (0.0, 0.5, 0.0), "Concrete", bevel=0.04 if lv < 2 else 0.0, segs=1)
+    frustum(p, BF_PROFILE, "Rusty", segs)
+    if lv < 2:
+        # Hoops round the hearth and stack, the mantle ring on its columns.
+        for y in (2.5, 3.8, 5.0) if lv == 0 else ():
+            p.lathe([(3.38, y - 0.08), (3.48, y - 0.08), (3.48, y + 0.08), (3.38, y + 0.08)],
+                    "Iron", segs=segs, closed=True, xf=UP)
+        p.lathe([(4.15, 9.1), (5.2, 9.1), (5.2, 9.7), (4.15, 9.7)], "Cast", segs=segs,
+                closed=True, xf=UP)
+        for k in range(8):
+            a = 2 * math.pi * (k + 0.5) / 8
+            p.box((0.5, 7.9, 0.5), (4.75 * math.cos(a), 5.15, 4.75 * math.sin(a)), "Rusty")
+        for y in (13.0, 17.0, 21.0) if lv == 0 else ():
+            r = 4.2 + (3.0 - 4.2) * (y - 9.6) / (24.0 - 9.6)
+            p.lathe([(r - 0.02, y - 0.1), (r + 0.1, y - 0.1), (r + 0.1, y + 0.1),
+                     (r - 0.02, y + 0.1)], "Iron", segs=segs, closed=True, xf=UP)
+    # The bustle pipe round the bosh and the tuyere stocks down to the
+    # hearth.
+    if lv < 2:
+        p.lathe([(5.9 + 0.55 * math.cos(2 * math.pi * k / 8), 8.0 + 0.55 * math.sin(
+            2 * math.pi * k / 8)) for k in range(8)], "Rusty", segs=segs, closed=True, xf=UP)
+        for k in range(10 if lv == 0 else 5):
+            a = 2 * math.pi * k / (10 if lv == 0 else 5)
+            c, s_ = math.cos(a), math.sin(a)
+            pipe(p, (5.9 * c, 7.5, 5.9 * s_), (5.2 * c, 5.0, 5.2 * s_), 0.18, "Rusty", segs=6)
+            pipe(p, (5.25 * c, 5.0, 5.25 * s_), (3.35 * c, 4.6, 3.35 * s_), 0.14, "Iron", segs=6)
+    # The charging platform round the top: a deck on brackets, a railing.
+    dk = BF_DECK
+    hole = 3.0
+    for (sx, sz, w, d) in ((0, -1, 12.0, 6.0 - hole), (0, 1, 12.0, 6.0 - hole),
+                           (-1, 0, 6.0 - hole, 2 * hole), (1, 0, 6.0 - hole, 2 * hole)):
+        cx = sx * (hole + (6.0 - hole) / 2)
+        cz = sz * (hole + (6.0 - hole) / 2)
+        p.box((w, 0.3, d), (cx, dk - 0.15, cz), "Painted" if lv < 2 else "Rusty")
+    if lv < 2:
+        for k in range(8):
+            a = 2 * math.pi * (k + 0.5) / 8
+            beam(p, (3.6 * math.cos(a), 18.5, 3.6 * math.sin(a)),
+                 (5.6 * math.cos(a), dk - 0.3, 5.6 * math.sin(a)), 0.25, "Rusty")
+        e = 5.95
+        posts = [(-e, -e), (e, -e), (e, e), (-e, e)]
+        # Open at the +Z +X corner where the walkway arrives.
+        rails = [((-e, -e), (e, -e)), ((-e, -e + 0.04), (-e, e - 0.04)), ((-e, e), (0.9, e)),
+                 ((e, -e + 0.04), (e, 3.4))]
+        for (ax, az), (bx, bz) in rails:
+            for y in ((dk + 1.05,) if lv else (dk + 0.55, dk + 1.05)):
+                beam(p, (ax, y, az), (bx, y, bz), 0.06, "Painted")
+        for x, z in posts + [(0.9, e), (e, 3.4)]:
+            rod(p, (x, dk, z), (x, dk + 1.1, z), 0.05, "Painted", segs=5)
+    # The top house over the bell, the uptakes from the top cone up and
+    # over to the downcomer's head, the bleeders above.
+    p.box((3.4, 3.2, 3.4), (0.0, 27.4, 0.0), "Corrugated")
+    p.box((3.8, 0.12, 3.8), (0.0, 29.06, 0.0), "Rusty")
+    ups = [(2.0, 0.0), (-2.0, 0.0), (0.0, 2.0), (0.0, -2.0)] if lv < 2 else [(2.0, 0.0),
+                                                                             (-2.0, 0.0)]
+    for x, z in ups:
+        pipe(p, (x * 0.9, 24.6, z * 0.9), (x * 1.15, 31.0, z * 1.15), 0.5, "Rusty",
+             segs=12 if lv < 2 else 6)
+    pipe(p, (-2.3, 31.0, -2.3), (2.3, 31.0, 2.3), 0.55, "Rusty", segs=12 if lv < 2 else 6)
+    # A little higher than the other, so their sides don't meet in a plane.
+    pipe(p, (2.3, 31.05, -2.3), (-2.3, 31.05, 2.3), 0.55, "Rusty", segs=12 if lv < 2 else 6)
+    for x, z in ((-2.3, -2.3), (2.3, 2.3), (2.3, -2.3), (-2.3, 2.3)):
+        pipe(p, (x, 31.0, z), (x, 33.2, z), 0.3, "Rusty", segs=10 if lv < 2 else 5)
+        if lv < 2:
+            p.cyl(0.45, 33.1, 33.5, "Iron", segs=10, xf=T(x, 0.0, z) @ UP)
+    # The downcomer: from the uptakes' crossing, down to the dust
+    # catcher's top.
+    cr, (cx, cz), cy0, cy1 = BF_CATCHER
+    pipe(p, (-2.3, 31.0, -2.3), (cx + 0.6, cy1 + 2.0, cz), 0.9, "Rusty",
+         segs=14 if lv < 2 else 8)
+    # The dust catcher: a drum on a cone on legs, a domed top.
+    frustum(p, [(0.4, 2.2), (cr, cy0), (cr, cy1), (1.0, cy1 + 2.2)], "Rusty", segs,
+            xf=T(cx, 0.0, cz))
+    for k in range(4):
+        a = math.pi / 4 + math.pi / 2 * k
+        beam(p, (cx + (cr + 0.6) * math.cos(a), 0.0, cz + (cr + 0.6) * math.sin(a)),
+             (cx + (cr - 0.2) * math.cos(a), cy0 + 0.5, cz + (cr - 0.2) * math.sin(a)), 0.4,
+             "Rusty")
+    # The stoves: tall domed drums in a row, the hot-blast main along their
+    # feet to the bustle pipe; their chimney behind.
+    sr, xs, sz, sh = BF_STOVES
+    for x in xs:
+        frustum(p, [(sr + 0.25, 0.0), (sr + 0.25, 0.8), (sr, 0.8), (sr, sh),
+                    (sr * 0.8, sh + 1.5), (sr * 0.45, sh + 2.6), (0.4, sh + 3.0)], "Rusty",
+                segs, xf=T(x, 0.0, sz))
+        if lv < 2:
+            for y in (5.0, 10.0, 15.0) if lv == 0 else ():
+                p.lathe([(sr - 0.02, y - 0.1), (sr + 0.08, y - 0.1), (sr + 0.08, y + 0.1),
+                         (sr - 0.02, y + 0.1)], "Iron", segs=segs, closed=True,
+                        xf=T(x, 0.0, sz) @ UP)
+            pipe(p, (x, 8.0, sz - sr + 0.2), (x, 8.0, sz - sr - 1.1), 0.5, "Rusty", segs=10)
+    pipe(p, (5.9, 8.0, 2.4), (xs[-1] + 1.2, 8.0, sz - sr - 1.2), 0.62, "Rusty",
+         segs=14 if lv < 2 else 8)
+    # The stoves' chimney, brick, banded.
+    r0, r1, (hx, hz), hh = BF_CHIMNEY
+    frustum(p, [(r0 + 0.4, 0.0), (r0 + 0.4, 1.0), (r0, 1.0), (r1, hh), (0.0, hh)], "Brick", segs,
+            xf=T(hx, 0.0, hz))
+    if lv < 2:
+        for y in (12.0, 24.0, hh - 0.6) if lv == 0 else (hh - 0.6,):
+            r = r0 + (r1 - r0) * (y - 1.0) / (hh - 1.0)
+            p.lathe([(r - 0.02, y - 0.15), (r + 0.1, y - 0.15), (r + 0.1, y + 0.15),
+                     (r - 0.02, y + 0.15)], "Iron", segs=segs, closed=True,
+                    xf=T(hx, 0.0, hz) @ UP)
+        pipe(p, (xs[1], 3.0, sz + sr - 0.2), (hx, 3.0, hz - r0 + 0.1), 0.7, "Brick", segs=10)
+    # The skip bridge: two lattice trusses from the stockhouse pit up to
+    # the top, the skip rails on them, the walkway alongside.
+    (fx, fz), (tx_, tz) = BF_SKIP
+    ft = (fx, 0.3, fz)
+    hd = (tx_, BF_DECK + 2.5, tz)
+    import mathutils
+    along = mathutils.Vector(hd) - mathutils.Vector(ft)
+    n = 10 if lv == 0 else 5
+    for sx in (-1, 1):
+        x = fx + sx * 1.0
+        lo = lambda t: (x, ft[1] + along.y * t - 1.8, ft[2] + along.z * t)  # noqa: E731
+        hi = lambda t: (x, ft[1] + along.y * t, ft[2] + along.z * t)  # noqa: E731
+        beam(p, lo(0.0), lo(1.0), 0.32, "Rusty")
+        beam(p, hi(0.0), hi(1.0), 0.32, "Rusty")
+        if lv < 2:
+            for k in range(n + 1):
+                t = k / n
+                a, b = lo(t), hi(t)
+                beam(p, (a[0], a[1] + 0.15, a[2]), (b[0], b[1] - 0.15, b[2]), 0.16, "Rusty")
+                if k < n:
+                    t2 = (k + 1) / n
+                    a2 = lo(t2)
+                    beam(p, (x - sx * 0.04, b[1] - 0.15, b[2]), (x - sx * 0.04, a2[1] + 0.15,
+                                                                 a2[2]), 0.12, "Rusty")
+    if lv < 2:
+        for k in range(n + 1):
+            t = k / n
+            y, z = ft[1] + along.y * t - 1.8, ft[2] + along.z * t
+            p.box((2.3, 0.14, 0.14), (fx, y - 0.02, z), "Rusty")
+        for x in (fx - 0.45, fx + 0.45):
+            beam(p, (x, ft[1] + 0.18, ft[2]), (x, hd[1] + 0.18, hd[2]), 0.1, "Iron")
+        # The skip itself, part way up.
+        t = 0.62
+        p.box((1.1, 1.0, 1.6), (fx, ft[1] + along.y * t + 0.75, ft[2] + along.z * t), "Rusty",
+              xf=None)
+    # The walkway: a sloping grating beside the bridge from the ground to
+    # the charging platform, a handrail.
+    wx = BF_WALK_X
+    w0 = (wx, 0.3, fz - 1.0)
+    w1 = (wx, BF_DECK, 5.6)
+    beam(p, (wx, w0[1] - 0.06, w0[2]), (wx, w1[1] - 0.06, w1[2]), 1.0, "Painted", d=0.12)
+    if lv < 2:
+        rx = wx + 0.47
+        k = 0
+        while k <= 12:
+            t = k / 12
+            y = w0[1] + (w1[1] - w0[1]) * t
+            z = w0[2] + (w1[2] - w0[2]) * t
+            rod(p, (rx, y, z), (rx, y + 1.05, z), 0.035, "Painted", segs=5)
+            k += 1
+        beam(p, (rx, w0[1] + 1.05, w0[2]), (rx, w1[1] + 1.05, w1[2]), 0.05, "Painted")
+    # The stockhouse pit at the bridge's foot, and the hoist house.
+    p.box((4.0, 0.6, 5.0), (fx, 0.0, fz + 1.5), "Concrete", bevel=0.03 if lv < 2 else 0.0,
+          segs=1)
+    hx_, hz_ = 7.0, 33.0
+    p.box((6.0, 4.5, 6.0), (hx_, 2.25, hz_), "Brick")
+    p.prism([(hx_ - 3.4, 4.5), (hx_ + 3.4, 4.5), (hx_, 6.4)], hz_ - 3.4, hz_ + 3.4, "Corrugated",
+            axis="z")
+    if lv < 2:
+        pipe(p, (hx_ - 3.0, 3.6, hz_), (fx + 0.2, ft[1] + 3.0, fz - 3.0), 0.03, "Iron", segs=4)
+    # The cast house in front: a steel frame, a gable roof, sheeting on the
+    # upper half of its sides (walk in under it), the iron runner and a
+    # ladle car at its far end.
+    cw, (cz0, cz1), ce = BF_CAST
+    hw = cw / 2
+    p.box((cw + 0.6, 0.2, cz0 - cz1), (0.0, 0.1, (cz0 + cz1) / 2), "Concrete")
+    nb = 5
+    for k in range(nb):
+        z = cz0 + (cz1 - cz0) * k / (nb - 1)
+        for sx in (-1, 1):
+            p.box((0.4, ce, 0.4), (sx * hw, 0.2 + ce / 2, z), "Rusty")
+        if lv < 2:
+            p.box((cw + 0.5, 0.45, 0.3), (0.0, ce - 0.0, z), "Rusty")
+    rise = 3.0
+    slope = math.atan2(rise, hw + 0.6)
+    length = math.hypot(hw + 0.6, rise)
+    for sx in (-1, 1):
+        c = (sx * (hw + 0.6) / 2, ce + 0.2 + rise / 2, (cz0 + cz1) / 2)
+        p.box((length + 0.05, 0.1, cz0 - cz1 + 1.0 - 0.01 * (1 - sx)), (0.0, 0.0, 0.0),
+              "Corrugated", xf=T(*c) @ RY(0 if sx > 0 else math.pi) @ RZ(-slope))
+    for sx in (-1, 1):
+        p.box((0.1, ce - 4.0, cz0 - cz1), (sx * (hw + 0.25), 4.2 + (ce - 4.0) / 2,
+                                           (cz0 + cz1) / 2), "Corrugated")
+    p.prism([(-hw, ce + 0.2), (hw, ce + 0.2), (0.0, ce + 0.2 + rise - 0.1)], cz1 - 0.08,
+            cz1 + 0.08, "Corrugated", axis="z")
+    if lv < 2:
+        p.box((0.9, 0.06, cz0 - cz1 - 2.0), (0.0, 0.23, (cz0 + cz1) / 2 - 0.5), "Char")
+        for x in (-0.6, 0.6):
+            p.box((0.15, 0.4, cz0 - cz1 - 2.0), (x, 0.4, (cz0 + cz1) / 2 - 0.5), "Concrete")
+        # The ladle car on its rails.
+        lz = cz1 + 2.2
+        for x in (-0.75, 0.75):
+            p.box((0.12, 0.1, 6.0), (x, 0.25, lz), "Steel")
+        p.box((2.4, 0.8, 3.2), (0.0, 0.9, lz), "Rusty")
+        p.lathe([(0.0, 1.3), (1.3, 1.3), (1.7, 3.4), (1.6, 3.5), (0.0, 3.5)], "Cast", segs=segs,
+                xf=T(0.0, 0.0, lz) @ UP)
+        p.box((0.8, 0.06, 0.8), (0.0, 3.52, lz), "Char")
+    return [p]
+
+
+lods("blast_furnace", blast_furnace)
