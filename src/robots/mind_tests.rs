@@ -1027,3 +1027,51 @@ fn an_open_door_lets_a_sound_out() {
     assert!(shut < 0.01, "through the shut door: {shut}");
     assert!(open > 0.1, "out of the open one: {open}");
 }
+
+/// A live grenade lands 3 m from a walker at its post: it runs, and it's
+/// out past the blast when it goes off.
+#[test]
+fn a_walker_runs_from_a_live_grenade() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let walker = walker_at(&mut app, &zone, post);
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let at = zone.on_ground(post.x + 3.0, post.z) + Vec3::Y * 0.1;
+    let mut queue = CommandQueue::default();
+    let g = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("rgd5").unwrap(),
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let radius = {
+        let mut live = app
+            .world_mut()
+            .get_mut::<crate::weapons::grenades::Live>(g)
+            .expect("a grenade");
+        live.grenade.fuse = extraction_core::grenade::Fuse::Burning(3.5);
+        live.grenade.def.blast_radius
+    };
+    let mut fled = false;
+    let mut last = post;
+    while app.world().get_entity(g).is_ok() {
+        app.update();
+        fled |= app.world().get::<super::flee::Fleeing>(walker).is_some();
+        last = app.world().get::<Transform>(walker).unwrap().translation;
+    }
+    assert!(fled, "it saw the grenade");
+    assert!(
+        flat(last - at) > radius,
+        "out past the blast ({:.1} m, blast {radius})",
+        flat(last - at)
+    );
+}
