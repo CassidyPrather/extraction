@@ -148,7 +148,7 @@ impl Look {
 }
 
 /// How far a room's walls cut the sky's light: inside a building there's
-/// this share of the outside's ambient (`render::fog`'s interior patch).
+/// this share of the outside's ambient (`dim_indoors`).
 pub const INTERIOR_LIGHT: f32 = 0.3;
 
 /// How much of a light deficit the eyes make up (in stops, as a share).
@@ -163,6 +163,8 @@ const ADAPT_TO_LIGHT: f32 = 2.5;
 #[derive(Resource, Default, Debug)]
 pub struct Adaptation {
     pub stops: f32,
+    /// How far indoors the eye is, eased (0 outside, 1 in a room).
+    pub indoors: f32,
     /// The grade it's added to (set with the weather).
     pub base: f32,
     settled: bool,
@@ -202,19 +204,57 @@ pub fn adapt_eyes(
         (Some(p), Some(e)) => e.building_at(p).is_some(),
         _ => false,
     };
-    let light = conditions.light * if indoors { INTERIOR_LIGHT } else { 1.0 };
+    // Through a doorway the room's dark comes on over a step or two.
+    let dt = time.delta_secs();
+    let want = if indoors { 1.0 } else { 0.0 };
+    adapt.indoors += (want - adapt.indoors) * (1.0 - (-dt / 0.4).exp());
+    let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT));
     let target = Adaptation::target(light);
     // A new raid starts with the eyes already used to its light.
     if !adapt.settled || conditions.is_changed() {
         adapt.stops = target;
         adapt.settled = true;
     } else {
-        adapt.step(target, time.delta_secs());
+        adapt.step(target, dt);
     }
     let want = adapt.base + adapt.stops;
     for mut g in &mut grades {
         if (g.global.exposure - want).abs() > 1e-4 {
             g.global.exposure = want;
+        }
+    }
+}
+
+/// The ambient before `dim_indoors` this frame, and what it wrote, so
+/// `undim` gives back exactly what was there (if nothing changed it since).
+#[derive(Resource, Default)]
+pub struct Dimmed(Option<(f32, f32)>);
+
+/// Indoors, the room's walls cut the sky's light: the ambient (the sky's
+/// share of every surface's light; lamps and torches aren't it) drops to
+/// `INTERIOR_LIGHT` while the eye is inside a building, so a room at dusk
+/// is dark until a light is on. Applied last thing before the frame is
+/// drawn and taken off again first thing in the next (`undim`), so the
+/// sky and the underground, which set the ambient from what they last
+/// wrote, never see it. The outdoors through a doorway dims with it; the
+/// sky and the fog, unlit, don't.
+pub fn dim_indoors(
+    adapt: Res<Adaptation>,
+    mut ambient: ResMut<GlobalAmbientLight>,
+    mut dimmed: ResMut<Dimmed>,
+) {
+    let k = 1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT);
+    dimmed.0 = (k < 0.999).then(|| {
+        let before = ambient.brightness;
+        ambient.brightness *= k;
+        (before, ambient.brightness)
+    });
+}
+
+pub fn undim(mut ambient: ResMut<GlobalAmbientLight>, mut dimmed: ResMut<Dimmed>) {
+    if let Some((before, wrote)) = dimmed.0.take() {
+        if ambient.brightness == wrote {
+            ambient.brightness = before;
         }
     }
 }

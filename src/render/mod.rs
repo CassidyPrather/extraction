@@ -51,6 +51,9 @@ impl Plugin for RenderPlugin {
         ))
         .init_resource::<lod::StandInMaterial>()
         .init_resource::<grade::Adaptation>()
+        .init_resource::<grade::Dimmed>()
+        .add_systems(First, grade::undim)
+        .add_systems(PostUpdate, grade::dim_indoors)
         .add_systems(Update, attach_flat_camera)
         .add_systems(
             Update,
