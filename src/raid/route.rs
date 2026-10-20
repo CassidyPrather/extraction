@@ -110,6 +110,7 @@ fn press_card(
     mut dest: ResMut<Destination>,
     mut raid: ResMut<super::Raid>,
     opts: Res<LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
 ) {
     for ev in events.read() {
         if let InteractEvent::Pressed { item, .. } = ev {
@@ -117,7 +118,15 @@ fn press_card(
                 && dest.maps.len() > 1
                 && opts.map != crate::camp::TRAINING_YARD
             {
-                dest.index = (dest.index + 1) % dest.maps.len();
+                // On to the next valley the career has opened (a later
+                // valley waits on the first three: `Progress::opens`).
+                for _ in 0..dest.maps.len() {
+                    dest.index = (dest.index + 1) % dest.maps.len();
+                    let id = dest.id();
+                    if id == opts.map || progression.as_ref().is_none_or(|p| p.0.opens(id)) {
+                        break;
+                    }
+                }
                 let line = if dest.id() == opts.map {
                     format!("Next drive: {}. Staying put.", dest.name())
                 } else {

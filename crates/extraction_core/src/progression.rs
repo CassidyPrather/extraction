@@ -229,6 +229,11 @@ pub const STANDING_QUIET: Tier = Tier {
     fits: &[],
 };
 
+/// The valleys a career starts with, and the ones the route card keeps back
+/// until each of those has been raided (`docs/FOURTH_VALLEY.md`).
+pub const FIRST_VALLEYS: [&str; 3] = ["marrow_creek", "kettle_pass", "cinder_works"];
+pub const LATE_VALLEYS: &[&str] = &["sallow_reservoir"];
+
 /// The stash crate's room before any rack, litres of bulk.
 pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
@@ -655,6 +660,12 @@ impl Progress {
             .find(|(m, _)| m == map)
             .map_or(0, |(_, n)| *n)
     }
+
+    /// The route card offers `map`: the later valleys only once the career
+    /// has raided each of the first three.
+    pub fn opens(&self, map: &str) -> bool {
+        !LATE_VALLEYS.contains(&map) || FIRST_VALLEYS.iter().all(|v| self.raids_in(v) > 0)
+    }
 }
 
 /// A valley the jobs can send you to.
@@ -970,6 +981,17 @@ mod tests {
         );
         assert!(stones(&quiet).is_empty(), "the quiet years ask for none");
         assert!(why("art_hearth").contains("hands"));
+    }
+
+    #[test]
+    fn the_fourth_valley_opens_after_the_other_three() {
+        let mut p = Progress::default();
+        assert!(p.opens("marrow_creek") && !p.opens("sallow_reservoir"));
+        p.count_raid("marrow_creek");
+        p.count_raid("kettle_pass");
+        assert!(!p.opens("sallow_reservoir"));
+        p.count_raid("cinder_works");
+        assert!(p.opens("sallow_reservoir"));
     }
 
     #[test]
