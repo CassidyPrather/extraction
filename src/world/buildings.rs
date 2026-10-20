@@ -1082,7 +1082,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 29] = [
+pub const PREFABS: [&str; 32] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1112,6 +1112,9 @@ pub const PREFABS: [&str; 29] = [
     "steeple",
     "chapel",
     "mill_race",
+    "ropeway_station",
+    "ropeway_pylon",
+    "ropeway_pylon_down",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1177,6 +1180,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "steeple" => steeple(&mut b),
         "chapel" => chapel(&mut b),
         "mill_race" => mill_race(&mut b),
+        "ropeway_station" => ropeway_station(&mut b),
+        "ropeway_pylon" => ropeway_pylon(&mut b),
+        "ropeway_pylon_down" => ropeway_pylon_down(&mut b),
         "target" => target(&mut b),
         id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
@@ -2234,6 +2240,279 @@ fn mill_race(b: &mut Builder) {
     );
     // Up on the deck, for whoever climbs.
     b.crate_box(Vec3::new(-2.3, top, -2.4 + MR_SHIFT), 0.7, Some("tools"));
+}
+
+// The ropeway's measures, as `art/props/heroes.py` (RW_*, PY_* there).
+// The station's prefab origin is its footprint's middle, RW_SHIFT from
+// the station's own.
+const RW_SHIFT: Vec3 = Vec3::new(-1.3, 0.0, -0.7);
+const RW_PIER: (f32, f32) = (4.0, 3.5);
+const RW_DECK: f32 = 9.0;
+const RW_DECK_Z: (f32, f32) = (-6.5, 4.5);
+const RW_SHED: (f32, f32, f32) = (8.0, 4.0, 7.0);
+const RW_SHED_C: (f32, f32) = (-0.5, 1.0);
+const RW_TOWER: (f32, f32, f32) = (1.6, 24.0, 7.0);
+const RW_WHEEL: (f32, f32) = (2.6, -4.6);
+const RW_STAIR_X: f32 = 5.6;
+const PY_TOP: f32 = 20.0;
+const PY_BASE: f32 = 2.0;
+const PY_HEAD: f32 = 0.6;
+const PY_ARM: f32 = 3.4;
+
+/// Kettle Pass's hero landmark: the upper terminal of a mine's aerial
+/// ropeway, its ropes broken. Up the stair to the loading deck, the bull
+/// wheel and the shed (a crate in it); the tension tower behind. Drawn
+/// by `ropeway_station` (`art/props/heroes.py`); its line's pylons are
+/// `ropeway_pylon` and `ropeway_pylon_down`.
+fn ropeway_station(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    let top = RW_DECK + 0.3;
+    let (px, pz) = RW_PIER;
+    let (zf, zb) = RW_DECK_Z;
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.8, RW_DECK + 0.2, 0.8),
+                Vec3::new(sx * px, (RW_DECK - 0.8) * 0.5, sz * pz),
+                Mat::Concrete,
+            );
+        }
+        b.bx(
+            Vec3::new(2.0 * px + 0.9, 0.5, 0.4),
+            Vec3::new(0.0, RW_DECK - 0.25, sx * pz),
+            Mat::RustyMetal,
+        );
+    }
+    b.bx(
+        Vec3::new(2.0 * px + 1.0, 0.3, zb - zf),
+        Vec3::new(0.0, RW_DECK + 0.15, (zf + zb) * 0.5),
+        Mat::Planks,
+    );
+    // The shed: back and side walls (a door in the +X one), open at the
+    // front under a beam on a post; its roof.
+    let (sw, sh, sd) = RW_SHED;
+    let (sx0, sz0) = RW_SHED_C;
+    let (hw, hd) = (sw * 0.5, sd * 0.5);
+    let y = top + sh * 0.5;
+    b.bx(
+        Vec3::new(sw, sh, 0.15),
+        Vec3::new(sx0, y, sz0 + hd - 0.075),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh, sd - 0.15),
+        Vec3::new(sx0 - hw + 0.075, y, sz0 - 0.075),
+        Mat::Planks,
+    );
+    let (d0, d1) = (sz0 + 1.0, sz0 + 2.2);
+    let x = sx0 + hw - 0.075;
+    b.bx(
+        Vec3::new(0.15, sh, d0 - (sz0 - hd)),
+        Vec3::new(x, y, (sz0 - hd + d0) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh, sz0 + hd - 0.15 - d1),
+        Vec3::new(x, y, (d1 + sz0 + hd - 0.15) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(0.15, sh - 2.1, d1 - d0),
+        Vec3::new(x, top + 2.1 + (sh - 2.1) * 0.5, (d0 + d1) * 0.5),
+        Mat::Planks,
+    );
+    b.bx(
+        Vec3::new(sw - 0.3, 0.35, 0.3),
+        Vec3::new(sx0, top + sh - 0.175, sz0 - hd + 0.15),
+        Mat::Timber,
+    );
+    b.bx(
+        Vec3::new(0.25, sh - 0.35, 0.25),
+        Vec3::new(sx0, top + (sh - 0.35) * 0.5, sz0 - hd + 0.15),
+        Mat::Timber,
+    );
+    b.piece(
+        Shape::Prism(Vec3::new(sw + 1.0, 2.2, sd + 1.6)),
+        Transform::from_xyz(sx0, top + sh, sz0 - 0.4),
+        Mat::Corrugated,
+        true,
+    );
+    // The bull wheel on its post.
+    let (wr, wz) = RW_WHEEL;
+    b.piece(
+        Shape::Cylinder(0.35, 1.9),
+        Transform::from_xyz(0.0, top + 0.95, wz),
+        Mat::DarkMetal,
+        true,
+    );
+    b.piece(
+        Shape::Cylinder(wr, 0.24),
+        Transform::from_xyz(0.0, top + 1.6, wz),
+        Mat::DarkMetal,
+        true,
+    );
+    // The tension tower behind the deck and its counterweight.
+    let (th, ty, tz) = RW_TOWER;
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.6, 0.5, 0.6),
+                Vec3::new(sx * th, 0.0, tz + sz * th),
+                Mat::Concrete,
+            );
+            strut(
+                b,
+                Vec3::new(sx * th, 0.25, tz + sz * th),
+                Vec3::new(sx * th * 0.75, ty - 0.3, tz + sz * th * 0.75),
+                0.24,
+                0.24,
+                Mat::RustyMetal,
+            );
+        }
+    }
+    b.bx(
+        Vec3::new(2.0 * th + 0.4, 0.3, 2.0 * th + 0.4),
+        Vec3::new(0.0, ty - 0.15, tz),
+        Mat::RustyMetal,
+    );
+    b.bx(
+        Vec3::new(1.6, 2.2, 1.6),
+        Vec3::new(0.0, 15.0, tz),
+        Mat::Concrete,
+    );
+    b.bx(
+        Vec3::new(0.08, ty - 16.25, 0.08),
+        Vec3::new(0.0, (ty + 15.95) * 0.5, tz),
+        Mat::DarkMetal,
+    );
+    // The stair: a flight up towards the front, the landing, a flight back
+    // up beside the deck; handrails on their outer sides.
+    let (xo, xi) = (RW_STAIR_X + 0.9, RW_STAIR_X - 0.4);
+    let zl = zf + 2.2;
+    for (a, c) in [
+        (
+            Vec3::new(xo, 0.0, zb + 0.5),
+            Vec3::new(xo, top * 0.5, zl + 0.8),
+        ),
+        (
+            Vec3::new(xi, top * 0.5, zl + 0.8),
+            Vec3::new(xi, top, zb - 1.0),
+        ),
+    ] {
+        walk(b, a, c, 1.1, 0.12, Mat::Planks);
+        // From a metre back down the slope, into the ground or the landing.
+        let r = Vec3::new(0.5, 0.5, 0.0);
+        let back = (c - a).normalize();
+        strut(b, a + r - back, c + r, 0.06, 1.0, Mat::Timber);
+    }
+    b.bx(
+        Vec3::new(2.7, 0.15, 1.6),
+        Vec3::new((xo + xi) * 0.5, top * 0.5 - 0.075, zl),
+        Mat::Planks,
+    );
+    for x in [xi - 0.5, xo + 0.5] {
+        b.bx(
+            Vec3::new(0.2, top * 0.5 + 0.85, 0.2),
+            Vec3::new(x, (top * 0.5 + 0.85) * 0.5 - 0.5, zl - 0.4),
+            Mat::Timber,
+        );
+    }
+    for p in &mut b.geo.pieces[from..] {
+        p.at.translation += RW_SHIFT;
+    }
+    b.dress_landmark(
+        from,
+        "ropeway_station",
+        Transform::from_translation(RW_SHIFT),
+        ["ropeway_station_lod1", "ropeway_station_lod2"],
+    );
+    b.crate_box(
+        Vec3::new(sx0 - hw + 0.7, top, sz0 + hd - 0.7) + RW_SHIFT,
+        0.7,
+        Some("tools"),
+    );
+}
+
+/// A pylon's colliders, standing at the origin, then `at`: its legs, the
+/// crossarm on its head. `lying`, two girts hold the upper legs up.
+fn pylon_body(b: &mut Builder, at: Transform, lying: bool) {
+    let h = |y: f32| PY_BASE + (PY_HEAD - PY_BASE) * (y - 0.25) / (PY_TOP - 0.25);
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            let a = at.transform_point(Vec3::new(sx * h(0.25), 0.25, sz * h(0.25)));
+            let c = at.transform_point(Vec3::new(sx * h(PY_TOP), PY_TOP, sz * h(PY_TOP)));
+            strut(b, a, c, 0.2, 0.2, Mat::RustyMetal);
+        }
+    }
+    b.piece(
+        Shape::Box(Vec3::new(1.4, 0.3, 1.4)),
+        at * Transform::from_xyz(0.0, PY_TOP - 0.15, 0.0),
+        Mat::RustyMetal,
+        true,
+    );
+    // Lying, the crossarm's pressed down into the grass.
+    let sunk = if lying { -0.3 } else { 0.0 };
+    b.piece(
+        Shape::Box(Vec3::new(2.0 * PY_ARM, 0.4, 0.3)),
+        at * Transform::from_xyz(0.0, PY_TOP + 0.2, sunk),
+        Mat::RustyMetal,
+        true,
+    );
+    if lying {
+        // Halfway along, from the lower legs (-z) to under the upper ones.
+        let y = (0.25 + PY_TOP) * 0.5;
+        for sx in [-1.0f32, 1.0] {
+            let a = at.transform_point(Vec3::new(sx * h(y), y, -h(y)));
+            let c = at.transform_point(Vec3::new(sx * h(y), y, h(y) - 0.1));
+            strut(b, a, c, 0.08, 0.08, Mat::RustyMetal);
+        }
+    }
+}
+
+fn pylon_footings(b: &mut Builder) {
+    for sx in [-1.0f32, 1.0] {
+        for sz in [-1.0f32, 1.0] {
+            b.bx(
+                Vec3::new(0.9, 0.6, 0.9),
+                Vec3::new(sx * PY_BASE, 0.0, sz * PY_BASE),
+                Mat::Concrete,
+            );
+        }
+    }
+}
+
+/// One of the ropeway's lattice pylons, 21 m, its crossarm along x (the
+/// line runs along z), the ropes broken and hanging.
+fn ropeway_pylon(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    pylon_footings(b);
+    pylon_body(b, Transform::IDENTITY, false);
+    b.dress_landmark(
+        from,
+        "ropeway_pylon",
+        Transform::IDENTITY,
+        ["ropeway_pylon_lod1", "ropeway_pylon_lod2"],
+    );
+}
+
+/// A pylon fallen along -z off its sheared legs, as `ropeway_pylon_down`
+/// lies.
+fn ropeway_pylon_down(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    pylon_footings(b);
+    let taper = ((PY_BASE - PY_HEAD) / PY_TOP).atan();
+    let at = Transform::from_xyz(0.4, PY_BASE - 0.15, -PY_BASE - 2.5)
+        * Transform::from_rotation(Quat::from_rotation_z(0.08))
+        * Transform::from_rotation(Quat::from_rotation_x(
+            -(std::f32::consts::FRAC_PI_2 + taper),
+        ));
+    pylon_body(b, at, true);
+    b.dress_landmark(
+        from,
+        "ropeway_pylon_down",
+        Transform::IDENTITY,
+        ["ropeway_pylon_down_lod1", "ropeway_pylon_down_lod2"],
+    );
 }
 
 /// A railway signal box: an enterable brick ground floor (its lever frame,

@@ -400,6 +400,11 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "chapel" => [10.4, 19.0, 23.0],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
+        // A mine's aerial ropeway: the upper station (its ropes run out
+        // 34 m along -z, not counted), the line's pylons, one fallen.
+        "ropeway_station" => [12.0, 25.5, 16.2],
+        "ropeway_pylon" => [7.2, 21.2, 4.9],
+        "ropeway_pylon_down" => [7.6, 4.6, 27.0],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
