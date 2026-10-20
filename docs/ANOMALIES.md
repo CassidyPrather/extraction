@@ -63,6 +63,9 @@ unmoved: throw something in, then reach in while it's still closing.
   bent through a noise-wobbled normal; Bevy's own blurred fetch turned
   depth-rejected taps into black specks at the cards' edges. The copy
   behind it happens only while a haze is in view (within 55 m).
+- Particles and snare arcs thicken with distance (glowing ones most, up
+  to 2.5×), so a spark or an ember keeps a pixel or two at 20 m in rain
+  instead of flickering out; glowing particles use a soft round dot.
 - One unshadowed light each. A kind's flicker (`visuals::flicker`)
   drives its light, its particles' brightness and its haze's glow
   together.

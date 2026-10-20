@@ -170,7 +170,11 @@ fn vertex(v: Vertex) -> VOut {
     var corner = vec2<f32>(v.position.x * c - v.position.y * sn, v.position.x * sn + v.position.y * c);
     // A leaf seen edge-on as it tumbles.
     corner.x *= mix(1.0, abs(cos(p.spin * 0.7)) + 0.15, p.tumble);
-    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size;
+    // Thickened with distance (more for glowing things), so a spark or an
+    // ember keeps a pixel or two at 20 m instead of flickering out.
+    let far = distance(centre + p.pos, view.world_position);
+    let grow = clamp(far / mix(15.0, 7.0, params.mode.w), 1.0, mix(2.0, 2.5, params.mode.w));
+    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size * grow;
     var out: VOut;
     out.clip = position_world_to_clip(world);
     out.uv = v.uv;
