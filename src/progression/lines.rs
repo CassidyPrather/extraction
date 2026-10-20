@@ -10,6 +10,24 @@
 
 use extraction_core::progression::Upgrade;
 
+/// "the quarry", "the gatekeeper's cottage": a place in a sentence (as
+/// `raid::lines::the` on the main branch, which this can call once merged).
+fn the(place: &str) -> String {
+    match place.strip_prefix("The ") {
+        Some(rest) => format!("the {rest}"),
+        None => format!("the {place}"),
+    }
+}
+
+/// "The quarry", at the start of a line.
+fn cap_the(place: &str) -> String {
+    let p = the(place);
+    let mut c = p.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 // --- On the card -----------------------------------------------------------
 
 /// A fetch: `n` x `name`, and why.
@@ -21,22 +39,28 @@ pub fn ask_fetch(n: u32, name: &str, why: &str) -> String {
 /// A recover, `place` as "in the barn by the Low farm." (or "somewhere in
 /// the Hollow." before it's put out).
 pub fn ask_recover(place: &str) -> String {
-    format!("\"A surveyor's recorder, left {place} Bring it home.\"\nStash it, press here.")
+    format!(
+        "\"One of the Authority's survey recorders, left {place} \
+Somebody in town still pays for what's on them.\"\nStash it, press here."
+    )
 }
 
 /// A scout of `place`.
 pub fn ask_scout(place: &str) -> String {
-    format!("\"Walk up to the {place} and have a look round. Come back and tell me.\"")
+    format!(
+        "\"Go up to {} and look round. Tell me what's changed.\"",
+        the(place)
+    )
 }
 
 /// A scout, seen, not yet home.
 pub fn scout_seen(place: &str) -> String {
-    format!("The {place}: seen.\nGet home, press here.")
+    format!("{}: seen.\nGet home, press here.", cap_the(place))
 }
 
 /// The last job of all: Hana's letter.
-pub const ASK_LETTER: &str = "\"There's a house by the well in the village. On the table. \
-Bring me what's there.\"\nStash it, press here.";
+pub const ASK_LETTER: &str = "\"Marrow. The house by the well. There's a letter on \
+the table, for me. Bring it. Don't open it.\"\nStash it, press here.";
 
 /// Before the job, when it's in another valley.
 pub fn elsewhere(valley: &str) -> String {
@@ -55,16 +79,19 @@ pub const NOTHING_YET: &str = "Nothing yet.";
 pub const NO_JOB: &str = "Driver: \"Nothing else for now. Go on.\"";
 pub const NOT_AT_BASE: &str = "Driver: \"Back at base. Tell me there.\"";
 pub const ONE_A_RAID: &str = "Driver: \"One thing at a time. After your next run.\"";
-pub const IN_THE_YARD: &str = "Driver: \"That's for when we're out there for real.\"";
+pub const IN_THE_YARD: &str = "Driver: \"Not in the yard. Out there, for real.\"";
 pub const NO_RECORDER: &str = "Driver: \"No recorder in the stash. Still out there, is it?\"";
-pub const NO_LETTER: &str = "Driver: \"Not in the stash. The table, by the well.\"";
+pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
     format!("Driver: \"That's {have} of {n} {name}. In the stash, mind.\"")
 }
 
 pub fn scout_not_seen(place: &str) -> String {
-    format!("Driver: \"You've not been to the {place} yet. Go and look.\"")
+    format!(
+        "Driver: \"You've not been up to {} yet. Go and look.\"",
+        the(place)
+    )
 }
 
 // --- Done ---------------------------------------------------------------------
@@ -72,7 +99,7 @@ pub fn scout_not_seen(place: &str) -> String {
 /// Thanks for a scout of `place`; `None` for the other kinds.
 pub fn thanks(scouted: Option<&str>) -> String {
     match scouted {
-        Some(place) => format!("The {place}, eh. Good to know."),
+        Some(place) => format!("{}, still standing. Good.", cap_the(place)),
         None => "Ta.".to_owned(),
     }
 }
@@ -88,33 +115,42 @@ pub fn paid_nothing(thanks: &str) -> String {
 }
 
 /// Handing over Hana's letter (said instead of the thanks).
-pub const LETTER_HOME: &str = "Driver: \"...That's her hand. Give me a minute.\"";
+pub const LETTER_HOME: &str =
+    "Driver: \"...That's her hand.\" He turns it over. \"Give me a minute.\"";
 
-/// A tier done: something fitted.
+/// A tier done: something fitted. Each one says a little about him.
 pub fn fitted(u: Upgrade) -> String {
-    format!("Driver: \"And I've put up {}. Have a look.\"", u.name())
+    match u {
+        Upgrade::StashRack => "Driver: \"Rack's up over the stash. Mind your head on it.\"",
+        Upgrade::BenchVice => "Driver: \"Put a vice on the bench. It was my father's.\"",
+        Upgrade::Aerial => "Driver: \"New aerial on the cab. I'll hear the Surge before you do.\"",
+        Upgrade::MedCabinet => "Driver: \"Medicine cabinet. My sister's spare. Keep it full.\"",
+        Upgrade::StashRack2 => "Driver: \"Another shelf. You've more in there than I own.\"",
+    }
+    .to_owned()
 }
 
 /// The end of the second tier: his carbine in the crate.
-pub const GIFT_CARBINE: &str = "Driver: \"And my old carbine's in the crate. I'm past it.\"";
+pub const GIFT_CARBINE: &str =
+    "Driver: \"My old carbine's in the crate. Never been past the fence. Take it.\"";
 
 /// A fetch he's given up waiting for.
 pub fn fetch_swapped(name: &str) -> String {
-    format!("Driver: \"Forget the {name}. New job on the card.\"")
+    format!("Driver: \"Forget the {name}. Something else on the card.\"")
 }
 
 // --- Out there ----------------------------------------------------------------
 
 pub fn scout_noticed(place: &str) -> String {
-    format!("The {place}: noted. Now get it home.")
+    format!("{}: noted. Now get it home.", cap_the(place))
 }
 
 pub fn scout_forgotten(place: &str) -> String {
-    format!("What you saw at the {place} goes with you.")
+    format!("What you saw at {} goes with you.", the(place))
 }
 
 /// Over a carried radio, with the aerial fitted.
-pub const AERIAL_SURGE: &str = "Truck: \"Aerial's picking up the Surge. Ten minutes, maybe less.\"";
+pub const AERIAL_SURGE: &str = "Truck: \"Aerial's hissing. Surge in ten minutes, maybe less.\"";
 
 #[cfg(test)]
 mod tests {
@@ -149,6 +185,10 @@ mod tests {
             AERIAL_SURGE.into(),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
+        assert_eq!(
+            scout_noticed("The quarry"),
+            "The quarry: noted. Now get it home."
+        );
         let long: Vec<&String> = lines.iter().filter(|l| !fits_wrist(l)).collect();
         assert!(long.is_empty(), "over three lines of 26: {long:#?}");
     }

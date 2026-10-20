@@ -434,13 +434,13 @@
         // The last of the driver's jobs (`progression`, `docs/LORE.md`).
         (
             id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",
-            description: "A folded page in a careful hand, addressed to Lev.",
+            description: "An envelope, sealed, in a careful hand: For Lev, when he comes back for me.",
             category: Curio, size: Tiny, mass: 0.01, bulk: 0.01, tags: ["paper"],
         ),
         // What the driver's Recover jobs send you for (`progression`).
         (
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
-            description: "A surveyor's data recorder, grey-green and rubber-cornered, stencilled QA-SURVEY 07. The driver wants what's on it.",
+            description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
         ),
     ],

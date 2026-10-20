@@ -215,7 +215,7 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
             "regen_injector",
             1,
             1,
-            "One of those injectors. For a friend.",
+            "One of those injectors. For my sister.",
         ),
     ],
 ];
