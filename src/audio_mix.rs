@@ -139,6 +139,11 @@ pub const MIX: &[Cue] = &[
     cue!("robot.part", "machines/clank", 1.0, 100.0, 15.0, Action, 10.0),
     cue!("robot.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
     cue!("robot.wreck", "machines/groan", -8.5, 95.0, 15.0, Action, 8.0),
+    cue!("camera_drone.on", "physical/switch", -2.5, 55.0, 0.5, Detail),
+    cue!("camera_drone.land", "physical/handle_plastic", -7.0, 60.0, 1.5, Detail),
+    cue!("camera_drone.spot", "physical/switch", -2.5, 55.0, 0.0, Detail),
+    cue!("zip.rig", "impacts/metal", -8.5, 80.0, 6.0, Detail),
+    cue!("zip.pack", "physical/cloth", -12.0, 50.0, 3.0, Detail),
     cue!("camera_drone", "machines/drone_rotor", -16.0, 60.0, 5.0, Detail),
     cue!("zipline", "machines/hum", -10.0, 65.0, 0.6, Detail),
     // The radio.

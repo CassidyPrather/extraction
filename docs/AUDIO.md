@@ -244,6 +244,8 @@ is what it did before.
 | Landing from a jump or a drop | `land`: both feet on whatever's underfoot, harder the faster you fell | — | silent |
 | The grapnel thrown, biting, coiled | `grapnel.throw`, `grapnel.hook`, `grapnel.coil` | — | silent |
 | A cover deployed, folded | `cover.deploy`, `cover.fold` | — | silent |
+| The camera drone spun up, marking a robot, landing | `camera_drone.on` (switch), `camera_drone.spot` (a click in your ear), `camera_drone.land` | — | rotor loop only |
+| A zipline rigged, packed | `zip.rig` (the anchor biting), `zip.pack` | — | silent |
 | The bench finishing a job | `bench.done`, a small high bell | — | silent |
 | An onboarding step done | `step.done`, a light ding | a soft pulse in both hands | (new) |
 
@@ -253,9 +255,8 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** No sound yet for: the zipline being rigged or packed;
-the camera drone's take-off and landing; the kitchen's stations
-(beyond the generic click). The audit measures the dirigible's engine
+**Still open.** No sound yet for the kitchen's stations (beyond the
+generic click). The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its
@@ -268,6 +269,43 @@ goes past 0.6. Index controllers barely register under about 0.1 or
 10 ms, so nothing is below either. Pulses on one controller in the same
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
+
+## Listening in the headset
+
+The numbers place each sound; only ears say whether it's the right one.
+Everything added in the 2026-10 polish was chosen from recordings'
+descriptions and envelope plots and levelled by measurement, never heard.
+At the next headset session, with the normal dynamics and then the
+narrow ones (comfort board), go through these and note what's wrong in
+words ("too bright", "sounds like plastic", "late"):
+
+1. **Taking things up.** A rifle, a pistol, a tin, a wooden crate slat,
+   a dressing, a radio. Does each sound like what it is, and does the
+   rifle sound heavier than the tin? Letting go: heard, but not fussy?
+   Does the haptic match: a tin a tick, a rifle a knock?
+2. **Push buttons** beside the cards. Does the click land when the
+   finger feels it bottom out, and is the release click heard?
+3. **Far grab.** Point, squeeze, flick: does the whoosh travel with the
+   thing, and does the catch read as a catch rather than a slap?
+4. **Crates and the stash.** Things put in sound set down, not zipped.
+5. **The bell cord** (truck and yard). Bell or gong? Too loud in the
+   truck's bed?
+6. **Onboarding.** The step ding and the station chime: pleasant, clear
+   over wind, distinct from each other and from the bell?
+7. **Eating, drinking, the field dressing, a flashlight's switch.**
+8. **The truck.** Call it: is the approach heard about when it appears,
+   does the idle sit right (not droning for five minutes), does it pull
+   away when you extract?
+9. **Being hit.** The thump of a round into you, and the shake in both
+   hands for a fall and a burner: felt, not painful.
+10. **Robots.** A drone's lock-on and a walker's steps from close by:
+    alarming but not painful (they were turned down up close). A robot
+    noticing you: is the whirr readable as "it saw me"?
+11. **A jam.** Does `gun.malfunction` read as "wrong", distinct from dry
+    fire?
+12. **Overall.** Anything that made you flinch, or that you didn't hear
+    at all. The audit's "Loudest up close" list in `target/audio_audit/
+    mix.txt` names the loudest suspects.
 
 ## Checking the mix
 
