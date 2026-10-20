@@ -131,7 +131,8 @@ pub const GIFT_CARBINE: &str =
     "Driver: \"My old carbine's in the crate. Never been past the fence. Take it.\"";
 
 /// The end of the third tier: the sub-machine gun.
-pub const GIFT_SMG: &str = "Driver: \"Man in town sent a gun with the aerial. Don't ask. Crate.\"";
+pub const GIFT_SMG: &str =
+    "Driver: \"Man in town owed me. There's a gun in the crate. Don't ask.\"";
 
 /// What he says when a fitting comes with something in the crate.
 pub fn gift(u: Upgrade) -> &'static str {
