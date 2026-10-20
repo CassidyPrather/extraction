@@ -273,6 +273,27 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
         app.update();
     }
     assert_eq!(dressings(&mut app), before + 1, "once a raid");
+    // And it stays on the shelf.
+    for _ in 0..60 {
+        app.update();
+    }
+    let truck = app
+        .world_mut()
+        .query::<(&crate::raid::truck::Truck, &GlobalTransform)>()
+        .iter(app.world())
+        .next()
+        .unwrap()
+        .1
+        .compute_transform();
+    let shelf = truck.transform_point(CABINET_AT);
+    let on = app
+        .world_mut()
+        .query::<(&Item, &GlobalTransform)>()
+        .iter(app.world())
+        .filter(|(i, _)| i.kind() == dressing)
+        .map(|(_, g)| g.translation().distance(shelf))
+        .fold(f32::MAX, f32::min);
+    assert!(on < 0.25, "the dressing is {on:.2} m from the shelf");
     // Out, with the radio, ten minutes before the Surge.
     let player = one::<With<LocalPlayer>>(&mut app);
     let kind = catalog.kind("radio").unwrap();
