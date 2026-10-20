@@ -63,9 +63,16 @@ impl Epilogue {
     }
 }
 
-/// Moments of the ending, for sound and anyone else who'd mark them.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EpilogueBeat {
+/// Moments of the ending, for sound and anyone else who'd mark them:
+/// what, and where (the crates for the opening; him otherwise).
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct EpilogueBeat {
+    pub kind: BeatKind,
+    pub at: Vec3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BeatKind {
     /// He steps down from the cab.
     Begins,
     /// The release goes through; the crates open.
@@ -102,6 +109,9 @@ pub const FOUND: &[&str] = &[
     "Driver: \"Rusty's in the small one. I'll take his collar home.\"",
     "Driver: \"Go on up. I'll sit with her a while.\"",
 ];
+
+/// The logbook's entry for that raid.
+pub const LOGBOOK: &str = "WENT IN WITH LEV\nThe Depot, bay K-14.\nHe found her.";
 
 /// What the intake terminal says once the release goes through.
 pub const RELEASE_PAGES: &[&str] = &[
@@ -148,7 +158,10 @@ fn begin(
     ));
     epi.stage = Stage::Following;
     raid.say(SETTING_OFF);
-    beats.write(EpilogueBeat::Begins);
+    beats.write(EpilogueBeat {
+        kind: BeatKind::Begins,
+        at,
+    });
     info!("epilogue: Lev comes with you");
 }
 
@@ -164,7 +177,11 @@ fn walk(
     mut raid: ResMut<Raid>,
     mut said_down: Local<bool>,
     depot: Res<DepotNav>,
+    doors: Query<(Entity, &crate::world::buildings::Door, &GlobalTransform)>,
+    player_e: Query<Entity, With<LocalPlayer>>,
+    mut press: MessageWriter<crate::interact::InteractEvent>,
 ) {
+    let player = player_e.iter().next();
     let Some(zone) = zone else {
         return;
     };
@@ -230,6 +247,16 @@ fn walk(
     }
     t.translation = to;
     w.idle = 0.0;
+    // He opens a shut door in his way, as you would (one that's locked
+    // stays shut: he waits).
+    let ahead = to + t.rotation * Vec3::NEG_Z * 0.6;
+    if let Some(player) = player {
+        for (e, door, g) in &doors {
+            if !door.open && g.translation().distance(ahead) < 1.3 {
+                press.write(crate::interact::InteractEvent::Pressed { item: e, player });
+            }
+        }
+    }
 }
 
 /// The Depot's walkable plan (its kiosk's ground included).
@@ -327,7 +354,10 @@ fn release(
         term.page = 0;
         text.text = term.screen();
         raid.say(RELEASED);
-        beats.write(EpilogueBeat::CratesOpen);
+        beats.write(EpilogueBeat {
+            kind: BeatKind::CratesOpen,
+            at: bay_point().unwrap_or(at),
+        });
         info!("epilogue: released");
     }
     // The stacks open on the tag office's own board (the Depot's second
@@ -365,7 +395,10 @@ fn at_the_bay(
         && Vec2::new(t.translation.x - bay.x, t.translation.z - bay.z).length() < AT_BAY
     {
         epi.stage = Stage::Found;
-        beats.write(EpilogueBeat::Found);
+        beats.write(EpilogueBeat {
+            kind: BeatKind::Found,
+            at: t.translation,
+        });
         info!("epilogue: Lev finds her");
         *said = (0, 3.0);
     }
@@ -387,6 +420,7 @@ fn home(
     mut epi: ResMut<Epilogue>,
     raid: Res<Raid>,
     lev: Query<Entity, With<LevWalker>>,
+    mut logbook: Option<ResMut<super::logbook::Logbook>>,
 ) {
     if raid.phase != Phase::AtBase || epi.stage == Stage::Off {
         return;
@@ -397,6 +431,11 @@ fn home(
     // Played, if he found her (home before that, he'll come again).
     if epi.stage == Stage::Found {
         epi.done = true;
+        // The logbook says it plainly (the raid's own entry is written by
+        // now: this one stands in its place).
+        if let Some(l) = logbook.as_mut() {
+            l.written = Some(LOGBOOK.into());
+        }
     }
     epi.stage = Stage::Off;
     epi.crates_open = false;
@@ -431,7 +470,16 @@ fn dress_lev(
             perceptual_roughness: 0.75,
             ..default()
         });
-        commands.entity(e).insert(SwapIn::one("lev_body"));
+        // His body (Kit models') and his right hand (Hands') at its wrist:
+        // the forearm hanging, fingers down, palm to his side.
+        let hand = Transform::from_xyz(0.25, 0.77, 0.0).with_rotation(
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
+                * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+        );
+        commands.entity(e).insert(SwapIn(vec![
+            ("lev_body", Transform::IDENTITY),
+            ("lev_hand", hand),
+        ]));
         for (size, at, m) in [
             (Vec3::new(0.46, 0.95, 0.3), Vec3::new(0.0, 0.95, 0.0), &coat),
             (Vec3::new(0.36, 0.5, 0.22), Vec3::new(0.0, 0.25, 0.0), &coat),
@@ -604,5 +652,13 @@ mod tests {
         assert!(lev(&mut app).is_none(), "he's back in the cab");
         assert!(!app.world().resource::<Epilogue>().active());
         assert!(app.world().resource::<Epilogue>().done);
+        assert_eq!(
+            app.world()
+                .resource::<super::super::logbook::Logbook>()
+                .written
+                .as_deref(),
+            Some(LOGBOOK),
+            "the logbook says so"
+        );
     }
 }
