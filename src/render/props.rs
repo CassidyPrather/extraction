@@ -1025,11 +1025,13 @@ pub(crate) fn hold_curl(role: Option<GripRole>, trigger: f32, thinnest: f32) -> 
 }
 
 /// How far each finger wants to curl, given what the hand is doing.
+#[allow(clippy::too_many_arguments)]
 fn curl_targets(
     hand: &Hand,
     side: Side,
     grip: f32,
     trigger: f32,
+    thumb_rest: bool,
     held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
     guns: &Query<&crate::weapons::Gun>,
@@ -1061,8 +1063,14 @@ fn curl_targets(
     if hand.handle.is_some() {
         return [0.72, 0.74, 0.76, 0.78, 0.7];
     }
-    // Empty: the grip closes the hand, the trigger the index finger.
-    [grip.max(trigger), grip, grip, grip, grip * 0.8]
+    // Empty: the grip closes the hand, the trigger the index finger; a
+    // thumb resting on the controller's buttons lies across over them.
+    let thumb = if thumb_rest {
+        (grip * 0.8).max(0.5)
+    } else {
+        grip * 0.8
+    };
+    [grip.max(trigger), grip, grip, grip, thumb]
 }
 
 /// Hands sit on what they hold (so the glove wraps the grip even when the
@@ -1103,7 +1111,10 @@ fn pose_hands(
             }
         }
         *t = pose;
-        let mut target = curl_targets(hand, v.side, grip, trigger, &held, &bounds, &guns);
+        let thumb_rest = input.is_ok_and(|i| i.thumb_rest);
+        let mut target = curl_targets(
+            hand, v.side, grip, trigger, thumb_rest, &held, &bounds, &guns,
+        );
         let mut spread = std::array::from_fn(rest_spread);
         let free = hand.holding.is_none() && hand.handle.is_none() && hand.supporting.is_none();
         let tracked = input.ok().and_then(|i| i.fingers);
