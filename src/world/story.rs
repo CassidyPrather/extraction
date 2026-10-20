@@ -100,6 +100,11 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: M,
+        note: "Departure notice",
+        mentions: &[(M, "Bus depot"), (M, "Gate log"), (M, "Village note")],
+    },
+    Lead {
+        map: M,
         note: "Barricade note",
         mentions: &[(M, "Old farm")],
     },
@@ -260,6 +265,11 @@ pub const THREAD: &[Lead] = &[
         map: C,
         note: "Sluice house note",
         mentions: &[(C, "The ash pit"), (C, "The canal"), (C, "The slag heaps")],
+    },
+    Lead {
+        map: C,
+        note: "Pickers' note",
+        mentions: &[(C, "The ash pit"), (C, "Sluice house note")],
     },
     Lead {
         map: C,

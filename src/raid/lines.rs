@@ -154,6 +154,21 @@ pub const CHATTER_FAR: &[&str] = &[
     "The radio clicks in their tones: something off to the {b}.",
 ];
 
+/// A machine close by has stopped looking for you
+/// (`robots::search::LostYou`).
+pub const LOST_YOU: &[&str] = &[
+    "The whirring fades. It's stopped looking.",
+    "Close by, a machine goes still, then walks off.",
+    "Its eye swings away. It's given up.",
+];
+
+/// A machine close by calls the others (`robots::search::CalledOut`).
+pub const CALLED_OUT: &[&str] = &[
+    "Chirps answer each other nearby. They're calling.",
+    "A machine close by calls out. Others answer.",
+    "Two-tone chirps, close. More of them coming.",
+];
+
 /// Fills a line's `{rv}`, `{s}` and `{b}`; a place leading a line gets a
 /// capital.
 pub fn fill(line: &str, rv: &str, s: f32, b: &str) -> String {
@@ -203,7 +218,9 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 12] = [
+        let pools: [&[&str]; 14] = [
+            LOST_YOU,
+            CALLED_OUT,
             CALLED,
             ON_THE_WAY,
             ARRIVED,

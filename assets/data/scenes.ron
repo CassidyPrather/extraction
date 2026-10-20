@@ -210,4 +210,52 @@
             (id: "old_photo", at: (-0.35, 0.785, 0.1), condition: 0.3),
         ],
     ),
+    (
+        map: "marrow_creek",
+        name: "Bus depot queue",
+        // Chairs set out for the queue on the 14th, and what was left on
+        // them when the buses went.
+        at: (30.0, -205.0),
+        rot: 180.0,
+        pieces: [
+            Chair(at: (-1.5, 0.0), rot: 0.0),
+            Chair(at: (-0.75, 0.0), rot: 0.0),
+            Chair(at: (0.0, 0.0), rot: 0.0),
+            Chair(at: (0.75, 0.0), rot: 0.0),
+            Table(at: (2.2, -0.4), rot: 90.0),
+        ],
+        items: [
+            (id: "chess_piece", at: (-0.75, 0.45, 0.0)),
+            (id: "wristwatch", at: (0.75, 0.45, -0.05), condition: 0.3),
+        ],
+        note: Some((
+            name: "Departure notice",
+            text: "QUARANTINE AUTHORITY - SPECIAL SERVICE\n14 OCT. Buses 1 to 9 depart 0600.\nOne bag each. No animals.\nReturn service: 17 OCT.",
+            at: (2.2, 0.785, -0.4),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Stone pickers",
+        // Someone who went into the ash pit for the stones and didn't come
+        // up: their mate's kit at the rim.
+        at: (-160.0, 45.0),
+        rot: 270.0,
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.7),
+            Bedroll(at: (-1.2, 0.4), rot: 0.0),
+            Lantern(at: (0.15, 0.7, 0.1)),
+        ],
+        items: [
+            (id: "lead_case", at: (-0.15, 0.7, -0.1)),
+            (id: "water_bottle", at: (-1.0, 0.0, -0.6)),
+        ],
+        note: Some((
+            name: "Pickers' note",
+            text: "Mirek - went down at first light for the bright ones. Back by noon.\nIf I'm not, don't come down after me. The ash moves.\n- D.",
+            at: (-0.12, 0.7, 0.18),
+            rot: 0.0,
+        )),
+    ),
 ]
