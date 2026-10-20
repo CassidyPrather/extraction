@@ -1184,6 +1184,16 @@ fn minds_shift_once_per_change() {
     assert!(sa.contains(&Mind::Noticed), "{sa:?}");
     assert!(sa.contains(&Mind::Engaging), "{sa:?}");
     assert!(sa.contains(&Mind::Calling), "{sa:?}");
+    let first = |m: Mind| sa.iter().position(|s| *s == m).unwrap();
+    assert!(
+        first(Mind::Noticed) < first(Mind::Engaging),
+        "noticed first: {sa:?}"
+    );
+    assert_eq!(
+        sa.iter().filter(|s| **s == Mind::Noticed).count(),
+        1,
+        "once: {sa:?}"
+    );
     for r in [a, b] {
         let s = of(r);
         for w in s.windows(2) {
