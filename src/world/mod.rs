@@ -9,9 +9,11 @@ pub mod buildings;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
+pub mod puddles;
 pub mod rain;
 pub mod rocks;
 pub mod scenes;
+pub mod shafts;
 pub mod sky;
 pub mod story;
 pub mod structures;
@@ -131,24 +133,25 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((weather::WeatherPlugin, scenes::ScenesPlugin))
-            .add_systems(PreStartup, init_zone)
-            .add_systems(
-                Update,
-                (buildings::swing_doors, underground::register_residents),
-            )
-            .add_systems(
-                Startup,
-                (
-                    spawn_terrain_collider,
-                    structures::spawn_structures,
-                    structures::spawn_boundary,
-                    buildings::spawn_buildings,
-                    bridges::spawn_bridges,
-                    trees::spawn_tree_colliders,
-                    rocks::spawn_rock_colliders,
-                ),
-            );
+        app.add_plugins((
+            weather::WeatherPlugin,
+            scenes::ScenesPlugin,
+            underground::UndergroundPlugin,
+        ))
+        .add_systems(PreStartup, init_zone)
+        .add_systems(Update, buildings::swing_doors)
+        .add_systems(
+            Startup,
+            (
+                spawn_terrain_collider,
+                structures::spawn_structures,
+                structures::spawn_boundary,
+                buildings::spawn_buildings,
+                bridges::spawn_bridges,
+                trees::spawn_tree_colliders,
+                rocks::spawn_rock_colliders,
+            ),
+        );
     }
 }
 
@@ -220,9 +223,11 @@ impl Plugin for WorldVisualsPlugin {
             water::WaterPlugin,
             trees::TreesPlugin,
             notes::NotesPlugin,
+            scenes::ScenesVisualsPlugin,
             rocks::RockVisualsPlugin,
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
+            shafts::ShaftsPlugin,
         ));
     }
 }

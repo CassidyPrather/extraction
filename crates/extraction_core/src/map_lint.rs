@@ -58,6 +58,8 @@ pub enum Rule {
     /// A supply crate (a loot marker in the open) in a wall or where the
     /// truck appears.
     Crate,
+    /// A point of interest no road or path leads to.
+    Funnel,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +203,11 @@ pub const SEALED: f32 = 0.6;
 /// from its nearest neighbour, metres.
 pub const POI_MIN: f32 = 60.0;
 pub const POI_MAX: f32 = 190.0;
+/// Every point of interest has a road or path within this distance,
+/// unless it's a hazard you approach across country (an artifact field
+/// within [`HAZARD_NEAR`] of it).
+pub const FUNNEL: f32 = 30.0;
+pub const HAZARD_NEAR: f32 = 40.0;
 /// A thing to find counts as on a route within this distance of it.
 pub const NEAR_ROUTE: f32 = 60.0;
 /// Longest stretch of a main route with nothing to find near it (about a
@@ -240,6 +247,9 @@ pub const CLEAR_SIGHT: f32 = 320.0;
 /// weather, and the longest blind stretch.
 pub const LANDMARK_SHARE: f32 = 0.7;
 pub const BLIND_GAP: f32 = 200.0;
+/// Landmarks that come in a line (a ropeway's pylons): many of one kind in
+/// sight read as one thing to follow, not as two you can't tell apart.
+pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
@@ -550,7 +560,7 @@ fn longest_gap(points: &[P2], ok: impl Fn(P2) -> bool) -> (f32, P2) {
 
 /// Whether the top of something `height` tall at `to` can be seen over
 /// the land from eye height at `from`.
-fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
+pub(crate) fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
     let d = dist(from, to);
     let eye = hm.height(from) + 1.7;
     let top = hm.height(to) + height;
@@ -576,7 +586,7 @@ fn walk_height(hm: &Heightmap, p: P2) -> f32 {
 
 /// Whether a point is inside the quarantine fence (the playable valley),
 /// by [`FENCE_MARGIN`]: a road's last metres climb the rim to the fence.
-fn inside_fence(map: &MapDef, p: P2) -> bool {
+pub(crate) fn inside_fence(map: &MapDef, p: P2) -> bool {
     let half = map.half() - map.fence_inset - FENCE_MARGIN;
     p[0].abs() <= half && p[1].abs() <= half
 }
@@ -842,6 +852,25 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         "points of interest: {}, nearest neighbours {nn_min:.0}-{nn_max:.0} m",
         pois.len()
     ));
+    // Paths of least resistance: a road or track leads to every place.
+    for (name, at) in &pois {
+        let hazard = map
+            .markers_of(&MarkerKind::ArtifactField)
+            .any(|f| dist(f.at, *at) <= HAZARD_NEAR);
+        let road = hm
+            .road_lines
+            .iter()
+            .map(|rl| polyline_closest(&rl.points, *at).0 - rl.width * 0.5)
+            .fold(f32::INFINITY, f32::min);
+        if !hazard && road > FUNNEL {
+            find(
+                &mut r,
+                Rule::Funnel,
+                format!("no road or path leads to {name} ({road:.0} m to the nearest)"),
+                *at,
+            );
+        }
+    }
     let interest: Vec<P2> = map
         .markers
         .iter()
@@ -960,7 +989,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // which.
     for (i, (ka, pa, _)) in marks.iter().enumerate() {
         for (kb, pb, _) in marks.iter().skip(i + 1) {
-            if ka == kb && dist(*pa, *pb) < CLEAR_SIGHT {
+            if ka == kb && !SERIES.contains(&ka.as_str()) && dist(*pa, *pb) < CLEAR_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,

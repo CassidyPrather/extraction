@@ -1,7 +1,9 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod arms;
 pub mod bench;
 pub mod budget;
+pub mod cards;
 pub mod comfort;
 pub mod fog;
 pub mod grade;
@@ -12,6 +14,8 @@ pub mod logistics;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
+#[cfg(test)]
+pub mod overdraw;
 pub mod props;
 pub mod screen;
 pub mod stats;
@@ -49,8 +53,19 @@ impl Plugin for RenderPlugin {
             upgrades::UpgradeVisualsPlugin,
             budget::BudgetPlugin,
         ))
+        .add_plugins(crate::raid::board::BoardVisualsPlugin)
+        .add_plugins(crate::raid::lev::LevVisualsPlugin)
         .init_resource::<lod::StandInMaterial>()
-        .add_systems(Update, attach_flat_camera);
+        .add_plugins(arms::ArmsPlugin)
+        .init_resource::<grade::Adaptation>()
+        .init_resource::<grade::Dimmed>()
+        .add_systems(First, grade::undim)
+        .add_systems(PostUpdate, grade::dim_indoors)
+        .add_systems(Update, attach_flat_camera)
+        .add_systems(
+            Update,
+            grade::adapt_eyes.after(crate::world::sky::WeatherLook),
+        );
     }
 }
 

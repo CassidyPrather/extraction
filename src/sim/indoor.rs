@@ -396,7 +396,15 @@ fn plan_site(
                 })
             });
             if clear {
-                grid.cost[j * n + i] = 1;
+                // Wading is slow; deep enough to swim, slower.
+                let w = r.water_at(grid.centre(i, j));
+                grid.cost[j * n + i] = if w >= extraction_core::underground::DEEP {
+                    5
+                } else if w > 0.0 {
+                    3
+                } else {
+                    1
+                };
             }
         }
     }
@@ -841,6 +849,15 @@ mod tests {
             for plan in &plans {
                 for d in &plan.doors {
                     let Some(entry) = d.outside else { continue };
+                    // Held shut by an underground site's power: nobody's
+                    // in that way till it's on (the site's own tests).
+                    if app
+                        .world()
+                        .get::<crate::world::underground::PowerLocked>(d.entity)
+                        .is_some()
+                    {
+                        continue;
+                    }
                     let mid = (d.a + d.b) * 0.5;
                     // A metre and a half past the doorway, inside (or as near
                     // as the furniture allows).

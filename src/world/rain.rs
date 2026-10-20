@@ -31,6 +31,9 @@ impl Plugin for RainPlugin {
 pub struct RainParams {
     pub params: Vec4,
     pub wind: Vec4,
+    /// x: how bright the streaks are against a day's (the hour's light,
+    /// as the adapted eye sees it: at dusk they don't glare).
+    pub light: Vec4,
 }
 
 /// Roofed volumes near the camera: the shader drops any streak inside
@@ -81,10 +84,10 @@ impl Material for RainMaterial {
     }
 }
 
-const STREAKS: usize = 2500;
-const BOX: f32 = 24.0;
+pub(crate) const STREAKS: usize = 2500;
+pub(crate) const BOX: f32 = 24.0;
 
-fn streak_mesh() -> Mesh {
+pub(crate) fn streak_mesh() -> Mesh {
     let mut rng = extraction_core::noise::Rng::new(0x4A1);
     let mut pos = Vec::with_capacity(STREAKS * 4);
     let mut uv = Vec::with_capacity(STREAKS * 4);
@@ -123,6 +126,7 @@ fn spawn_rain(
         rain: RainParams {
             params: Vec4::new(0.35, 9.0, 0.55, BOX),
             wind: Vec4::new(1.2, 0.0, 0.6, 0.0),
+            light: Vec4::ONE,
         },
         shelters: Shelters::default(),
     });
@@ -164,6 +168,7 @@ fn ash_fall(
                 params: Vec4::new(amount, 0.55, 0.035, BOX),
                 // y: flakes (pale, wobbling); w: flake width.
                 wind: Vec4::new(0.35, 1.0, 0.15, 0.03),
+                light: Vec4::ONE,
             },
             shelters: Shelters::default(),
         });
@@ -190,8 +195,16 @@ fn ash_fall(
         };
         if let Some(mut m) = materials.get_mut(&a.0) {
             m.rain.params.x = amount * (1.0 - conditions.rain).clamp(0.0, 1.0);
+            m.rain.light.x = streak_light(&conditions);
         }
     }
+}
+
+/// The streaks' brightness at the hour: the light, less what the eyes
+/// make up (`render::grade::Adaptation`).
+fn streak_light(c: &Conditions) -> f32 {
+    let stops = crate::render::grade::Adaptation::target(c.light);
+    (c.light * 2f32.powf(stops)).clamp(0.05, 1.0)
 }
 
 fn rain_intensity(
@@ -210,6 +223,7 @@ fn rain_intensity(
         };
         if let Some(mut m) = materials.get_mut(&r.0) {
             m.rain.params.x = conditions.rain;
+            m.rain.light.x = streak_light(&conditions);
             m.rain.wind = Vec4::new(1.2 + 2.0 * conditions.rain, 0.0, 0.6 + conditions.rain, 0.0);
         }
     }

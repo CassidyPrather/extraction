@@ -4088,22 +4088,25 @@ pub fn swing_doors(
         &mut Transform,
         &DoorLeaf,
         Has<crate::robots::doors::Wedged>,
+        Has<super::underground::PowerLocked>,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((mut d, _, _, wedged)) = doors.get_mut(*item) {
+            if let Ok((mut d, _, _, wedged, locked)) = doors.get_mut(*item) {
                 if wedged {
                     raid.say("It won't budge: there's a wedge under it.");
+                } else if locked {
+                    raid.say("Locked fast: an electric bolt, and no power to it.");
                 } else {
                     d.open = !d.open;
                 }
             }
         }
     }
-    for (mut d, mut t, leaf, _) in &mut doors {
+    for (mut d, mut t, leaf, _, _) in &mut doors {
         let target = if d.open { 1.0 } else { 0.0 };
         d.angle += (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
         t.rotation = Quat::from_rotation_y(leaf.0.yaw + d.angle * 1.75);
@@ -4358,7 +4361,12 @@ pub fn dress_buildings(
                 far[i] = true;
             }
         }
-        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 6] = Default::default();
+        // An underground site's rooms: their own group, drawn only when
+        // the eye can see them (`underground::Below`).
+        const BELOW: usize = 6;
+        let site = super::underground::ids().any(|id| id == b.prefab);
+        let below = |at: &Transform| site && at.translation.y < super::underground::BELOW_Y;
+        let mut merged: [Vec<(Handle<StandardMaterial>, Mesh)>; 7] = Default::default();
         let mut add = |group: usize, mat: Handle<StandardMaterial>, mesh: Mesh| {
             let into = &mut merged[group];
             let fits = match into.iter_mut().find(|(m, _)| *m == mat) {
@@ -4374,14 +4382,23 @@ pub fn dress_buildings(
                 continue;
             }
             let mat = props.lib.get(piece.mat, &props.server, &mut materials);
+            let is_below = below(&piece.at);
             if let (false, Shape::Box(s)) = (far[i], piece.shape) {
                 // Shaded, and cut where the shading changes (the far
                 // stand-in has the plain box).
-                if let Some(m) = materials.get(&mat) {
-                    let plain = aligned_box(s, piece.at).transformed_by(piece.at);
-                    stand_in.add(&plain, crate::render::lod::far_colour(m));
+                if !is_below {
+                    if let Some(m) = materials.get(&mat) {
+                        let plain = aligned_box(s, piece.at).transformed_by(piece.at);
+                        stand_in.add(&plain, crate::render::lod::far_colour(m));
+                    }
                 }
-                add(OUTER, mat, super::ao::shaded_box(s, piece.at, &occluders));
+                let group = if is_below { BELOW } else { OUTER };
+                add(
+                    group,
+                    mat,
+                    // Glass keeps its own alpha (the rest carries the sky).
+                    super::ao::shaded_box(s, piece.at, &occluders, piece.mat != Mat::Glass),
+                );
                 continue;
             }
             let mut mesh = match piece.shape {
@@ -4391,7 +4408,7 @@ pub fn dress_buildings(
             };
             let _ = mesh.generate_tangents();
             let mut mesh = mesh.transformed_by(piece.at);
-            if !far[i] {
+            if !far[i] && !is_below {
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
@@ -4399,7 +4416,17 @@ pub fn dress_buildings(
             } else {
                 super::ao::ensure_colours(&mut mesh);
             }
-            add(if far[i] { FAR } else { OUTER }, mat, mesh);
+            add(
+                if is_below {
+                    BELOW
+                } else if far[i] {
+                    FAR
+                } else {
+                    OUTER
+                },
+                mat,
+                mesh,
+            );
         }
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             if let Some([mid, far]) = d.lods {
@@ -4434,7 +4461,9 @@ pub fn dress_buildings(
                         }
                     }
                     add(
-                        if d.inside {
+                        if below(at) {
+                            BELOW
+                        } else if d.inside {
                             NEAR
                         } else if d.shadow {
                             OUTER
@@ -4466,7 +4495,16 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [outer, near, far, windows, hero, hero_mid] = merged;
+        let [outer, near, far, windows, hero, hero_mid, under] = merged;
+        for (mat, mesh) in under {
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(mat),
+                bevy::light::NotShadowCaster,
+                super::underground::Below,
+                ChildOf(e),
+            ));
+        }
         let mid = LANDMARK_MID - 5.0..LANDMARK_MID + 5.0;
         for (group, range) in [
             (

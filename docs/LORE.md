@@ -178,6 +178,14 @@ house by the well, in Marrow; it says she has written to Lev as well. The
 last of his jobs (`src/progression`) sends you for that second letter,
 sealed: "For Lev, when he comes back for me." He reads it alone.
 
+He's in the cab, never in the bed: he doesn't come where you've been.
+What he gives you he passes back through a hatch in the bed's front wall
+(`src/raid/lev.rs`): it slides open, his hand comes through with the
+thing (his old carbine, the gun from his man in town, his mother's
+photograph), sets it on the ledge, and goes back. And on the drive home
+he notices what you've brought: a stone humming in your kit, one of their
+eyes, a cell, a week of tins.
+
 The game reveals him slowly, a line at a time on the drive home
 (`src/raid/lines.rs`): first the job, then the bus, then the gate, then
 his mother. Notes in all three valleys mention him without his name;
@@ -233,6 +241,67 @@ player is likely to meet them:
 `src/world/story.rs` holds the thread as data (which note mentions which
 place), and its tests keep every mention pointing at a real place and
 every note on the thread.
+
+## The arc: Hana's thread
+
+One thread runs the length of a career and ends at the recall: what
+happened to Lev's mother. Each rank of the driver's job ladder
+(`docs/PROGRESSION.md`) opens one beat. A beat is physical: a scene with
+a note that appears somewhere new in Marrow (`after:` in
+`assets/data/scenes.ron`), a few lines from Lev on the radio between raids
+(`raid::lines::BEAT_*`), sometimes something he hands over. Nobody says
+what it adds up to; each note names the one before, so the player can
+piece it together. `world::story::BEATS` holds the list, and its tests
+hold it to the ladder.
+
+| Opens at | In the world | On the radio | What it adds |
+| - | - | - | - |
+| Start | Hana's letter to Anna (the house by the well); the Marrow gate log (bus four turned back) | | She stayed for the dog; Lev drove the bus |
+| Rank 1 (odd jobs done) | **Rusty's corner**, behind her house: the dog's bed, his tin, her note: the machine carried him to the Gate, "kept, for the review" | We had a dog. No dogs on the buses: that's why she stayed | The machines keep what they take |
+| Rank 2 (errands done) | **Hana's basket** in the shelter under the village: bread for Mrs Holm, "if Jan comes back I'll send him down" | The Holms were her oldest friends; Mrs Holm went down the shelter and never came up | Hana kept Mrs Holm alive (her own note is in the dorm next door) |
+| Rank 3 (runs done) | **By the well**: her chair, her basket dropped, her last page: the cough, the machines counting houses, a letter to Lev on the table, "he's not to come in after me" | He saw the collector come for someone in Marrow, February, from the fence. There's a letter on her table | She was taken. The ladder's last job (rank 3's last) is that letter |
+| Rank 4 (the letter handed in) | **Valley office copy** outside the post office: the inspector to Mrs Marek, "nothing is destroyed... kept, animals included... ends only with the three depot keys" | She says they keep everything, her too. Three keys stop them. Her photo's in the stash: he leaves it for you | The way to end it is the capstone |
+| The recall | **Lev's chair** by the well, facing her house, his note: "They've gone home through the Gates and shut them. I came in. Rusty's lead is still on the hook." | They're walking home. I'm going in, first time | He crosses the fence |
+
+The letter itself stays sealed: the player never reads it, only what Lev
+says of it.
+
+## The valleys' threads
+
+Kettle and Cinder each have a short thread of their own, three beats
+opened by coming back (`Gate::Visits(n)`: the 1st, 3rd and 5th raid set
+off in that valley), each tied to Hana's by one thing nobody explains.
+`world::story::THREADS` holds them; the same tests hold them.
+
+**The last shift (Kettle)**, from the refuge board (four walked out on 17
+October; Dusek had been up the raise to look):
+
+| Visit | Scene | What it adds |
+| - | - | - |
+| 1st | **Top of the raise**: a crate and a lamp where the mine's raise comes up; "Told the lads we walk out at two. I'm stopping. Somebody has to watch that shelter." | Karel Dusek, the shot-firer, stayed |
+| 3rd | **Dusek's hide** on the quarry's lip: bedroll, cold fire, binoculars, and a photograph of a family on a bench by a well; "They've put a roof over the shelter... My sister would tell me to come home. She never left hers either." | He watched the machines build round the shelter. The photograph is Hana's family: he is her brother, Lev's uncle (never said) |
+| 5th | **The shelter door**: his body by the quarry shelter; "The door's warm to the hand... I'm going in for my key." | He tried for KEY-K himself |
+
+**Valve three (Cinder)**, from the fitter's note in the valve chamber:
+
+| Visit | Scene | What it adds |
+| - | - | - |
+| 1st | **Fitter's bench** by the canal pumps: "FITTER'S BOOK - T.R."; furnace three hot all night, told Kral, told the inspector; "I was on the Hollow survey before this." | The fitter is T., who signed the stake readings at the Hollow |
+| 3rd | **Letters by hand** in the works yard: he carried the inspector's letters round the valleys the first winter; "The last went by hand to an old woman by a well in Marrow. She gave me bread for the road and asked after the buses." | He delivered the valley office letter to Hana (never named) |
+| 5th | **The far stair**, where the service tunnel comes up: valve three opened again, the canal took the pit, Kral didn't come up; "Going over the pass to Kettle. There's a shot-firer there who knows about shelters." | He went to Dusek: the threads meet |
+
+## The board
+
+A cork board on the truck's right canopy wall, over the first-aid box, is
+where the player pieces it together (`src/raid/board.rs`). Every note read
+(looked at from within arm's reach for a moment) gets a pinned copy with
+its name, in a column for its valley, in the order read; where two read
+notes name each other in the thread (`world::story::THREAD`), red string
+runs pin to pin. Nothing unread shows: no gaps, no blank cards, so the
+board never says what's missing. Press a card to take the note down and
+read it whole; press again to pin it back. The read notes are kept with
+the career (`Stats::notes_read`). The first note read, Lev says he keeps
+copies (`onboarding::firsts::First::NotePinned`, said once a career).
 
 ## Staged scenes
 

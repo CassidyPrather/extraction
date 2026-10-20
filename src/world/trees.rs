@@ -294,7 +294,14 @@ fn spawn_forests(
                         trunk_cpu: m.trunk,
                         crown_cpu: m.crown,
                         trunk_far: far.trunk,
-                        crown_far: far.crown,
+                        // Without an impostor (no foliage textures) the far
+                        // crown stands out to the fog: a pine's or birch's
+                        // is one coarse blob, not a dozen (a spruce's cone
+                        // is already cheap).
+                        crown_far: match far.crown {
+                            Some(c) if impostor.is_none() && triangles(&c) > 200 => blob_like(&c),
+                            c => c,
+                        },
                         bark: b.clone(),
                         cards,
                         live,
@@ -334,6 +341,16 @@ fn spawn_forests(
         ((i32, i32), (TreeSpecies, usize)),
         super::impostors::Builder,
     > = Default::default();
+    let fetched = assets.handles.values().any(|v| v.impostor.is_some());
+    let far_lod = if fetched { FAR_LOD } else { FALLBACK_FAR_LOD };
+    info!(
+        "forest: foliage {}",
+        if fetched {
+            "fetched (cards, impostors)"
+        } else {
+            "FALLBACK: no foliage textures, untextured crowns (run scripts/fetch_assets.py)"
+        }
+    );
     for (key, members) in &chunks {
         for (e, tree, t) in members {
             grid.cells
@@ -369,7 +386,12 @@ fn spawn_forests(
                     }
                     None => trunks.push((v.bark.clone(), trunk)),
                 }
-                if let Some(c) = crown.as_ref().filter(|_| v.impostor.is_none()) {
+                // (The near crowns' material dissolves within 74 m, where the
+                // cards would be: without cards they were drawn unseen.)
+                if let Some(c) = crown
+                    .as_ref()
+                    .filter(|_| v.impostor.is_none() && (far || fetched))
+                {
                     let c = c.clone().transformed_by(*t);
                     match &mut crowns {
                         Some(m) => {
@@ -379,7 +401,7 @@ fn spawn_forests(
                     }
                 }
             }
-            let range = lod_range(far, FOG_CULL_DEFAULT);
+            let range = lod_range(far, FOG_CULL_DEFAULT, far_lod);
             if far {
                 // Past `FAR_LOD` bark is a few pixels a metre: trunks and
                 // crowns go in one vertex-coloured mesh (see
@@ -475,6 +497,13 @@ pub const CHUNK: f32 = 48.0;
 const IMPOSTOR_BLOCK: i32 = 3;
 /// A chunk (by its centre) switches to the coarse LOD this far away.
 const FAR_LOD: f32 = 130.0;
+/// Without the foliage textures (`scripts/fetch_assets.py` not run) there
+/// are no cards and no impostors, and the near crowns (whose material
+/// dissolves within 74 m, where cards would be) were over a million
+/// triangles in a forested view, mostly unseen. That fallback draws no
+/// near crowns and switches to the far LOD (a coarse blob a crown) here,
+/// where the near crowns would have finished fading in.
+const FALLBACK_FAR_LOD: f32 = 75.0;
 /// Until the weather says otherwise, chunks vanish this far out.
 const FOG_CULL_DEFAULT: f32 = 560.0;
 
@@ -484,8 +513,8 @@ pub struct FarForest;
 
 /// Near or far LOD's distance band. Chunk meshes sit at the origin with
 /// world-space vertices, so distance is measured to their bounds' centre.
-fn lod_range(far: bool, fog: f32) -> bevy::camera::visibility::VisibilityRange {
-    let switch = (FAR_LOD - 10.0)..(FAR_LOD + 10.0);
+fn lod_range(far: bool, fog: f32, at: f32) -> bevy::camera::visibility::VisibilityRange {
+    let switch = (at - 10.0)..(at + 10.0);
     if far {
         bevy::camera::visibility::VisibilityRange {
             start_margin: switch,
@@ -520,13 +549,15 @@ fn fog_cull(
     }
     let fog = weather.visibility * 1.3 + CHUNK * 0.7;
     for (mut r, impostor) in &mut far {
+        // Only the far end moves with the weather (the near switch is the
+        // chunk's own: see `FALLBACK_FAR_LOD`).
         let want = if impostor {
             impostor_range(fog)
         } else {
-            lod_range(true, fog)
+            lod_range(true, fog, FAR_LOD)
         };
         if r.end_margin != want.end_margin {
-            *r = want;
+            r.end_margin = want.end_margin;
         }
     }
 }
@@ -600,6 +631,30 @@ fn tint_to_white(_tint: Color) -> Color {
 }
 
 /// Bounds of a mesh's positions (local).
+fn triangles(m: &Mesh) -> usize {
+    m.indices().map_or(0, |i| i.len() / 3)
+}
+
+/// One coarse blob filling a crown's bounds, in its mean vertex colour.
+fn blob_like(crown: &Mesh) -> Option<Mesh> {
+    let (lo, hi) = mesh_bounds(crown)?;
+    let colour = match crown.attribute(Mesh::ATTRIBUTE_COLOR) {
+        Some(bevy::mesh::VertexAttributeValues::Float32x4(c)) if !c.is_empty() => {
+            let sum = c.iter().fold([0.0f32; 4], |a, b| {
+                [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]]
+            });
+            sum.map(|x| x / c.len() as f32)
+        }
+        _ => [0.1, 0.12, 0.06, 1.0],
+    };
+    let mut b = MeshBuilder {
+        coarse: true,
+        ..default()
+    };
+    b.blob((lo + hi) * 0.5, (hi - lo) * 0.45, 7, |_, _| colour);
+    Some(b.build())
+}
+
 fn mesh_bounds(m: &Mesh) -> Option<(Vec3, Vec3)> {
     let pos = m.attribute(Mesh::ATTRIBUTE_POSITION)?.as_float3()?;
     let mut lo = Vec3::splat(f32::INFINITY);
@@ -844,6 +899,10 @@ const SPRIGS: [[f32; 4]; 4] = [
 ];
 /// The hanging birch branch, stem at the top.
 const BIRCH_LEAVES: [f32; 4] = [0.21, 0.0, 0.81, 1.0];
+/// Every atlas rect a card is cut from (each has an outline in
+/// `render::cards`).
+#[cfg(test)]
+pub const CARD_RECTS: [[f32; 4]; 5] = [SPRIGS[0], SPRIGS[1], SPRIGS[2], SPRIGS[3], BIRCH_LEAVES];
 
 impl MeshBuilder {
     fn vertex(&mut self, p: Vec3, n: Vec3, c: [f32; 4]) -> u32 {
@@ -873,16 +932,41 @@ impl MeshBuilder {
         hanging: bool,
     ) {
         let side = across.normalize_or(Vec3::X) * width * 0.5;
-        let tip = base + along;
         let [u0, v0, u1, v1] = rect;
         let (vb, vt) = if hanging { (v0, v1) } else { (v1, v0) };
         let n = |p: Vec3| ((p - centre).normalize_or(Vec3::Y) + Vec3::Y * 0.6).normalize();
         let c = [1.0, 1.0, 1.0, 1.0];
-        let i0 = self.vertex_uv(base - side, n(base - side), c, [u0, vb]);
-        let i1 = self.vertex_uv(base + side, n(base + side), c, [u1, vb]);
-        let i2 = self.vertex_uv(tip + side, n(tip + side), c, [u1, vt]);
-        let i3 = self.vertex_uv(tip - side, n(tip - side), c, [u0, vt]);
-        self.idx.extend_from_slice(&[i0, i1, i2, i0, i2, i3]);
+        // The polygon round the rect's leaves, not the whole quad: the
+        // empty corners were shaded for nothing (`render::cards`). Points
+        // as (across 0..1, base-to-tip 0..1).
+        let pts: Vec<(f32, f32, [f32; 2])> = crate::render::cards::outline(rect)
+            .iter()
+            .map(|&[s, t]| {
+                let v = v0 + t * (v1 - v0);
+                (s, (v - vb) / (vt - vb), [u0 + s * (u1 - u0), v])
+            })
+            .collect();
+        // Wound as the quad was (counter-clockwise in those terms).
+        let wound: f32 = (0..pts.len())
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum();
+        let ids: Vec<u32> = pts
+            .iter()
+            .map(|&(s, f, uv)| {
+                let p = base - side + side * 2.0 * s + along * f;
+                self.vertex_uv(p, n(p), c, uv)
+            })
+            .collect();
+        for i in 1..ids.len() - 1 {
+            if wound > 0.0 {
+                self.idx.extend_from_slice(&[ids[0], ids[i], ids[i + 1]]);
+            } else {
+                self.idx.extend_from_slice(&[ids[0], ids[i + 1], ids[i]]);
+            }
+        }
     }
 
     /// Two cards crossed along the same spine.

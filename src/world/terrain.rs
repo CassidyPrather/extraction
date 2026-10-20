@@ -69,31 +69,30 @@ fn fog_cull(
     }
 }
 
-/// The ground is as wet as the weather: soaked and dark in a downpour,
-/// drying in a clearing spell. (A uniform: no recompile.)
+/// The ground is as wet as the weather has made it (`weather::Wetness`):
+/// soaking over minutes in rain, drying slowly after. (A uniform: no
+/// recompile; written when it has moved a little.)
 fn wet_with_weather(
+    wet: Res<super::weather::Wetness>,
     conditions: Res<super::weather::Conditions>,
     chunks: Query<&MeshMaterial3d<TerrainMaterial>, With<TerrainChunk>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
-    mut done: Local<Option<super::weather::WeatherKind>>,
+    mut done: Local<Option<f32>>,
 ) {
-    use super::weather::WeatherKind;
-    if *done == Some(conditions.kind) {
+    // A little damp even dry: the Zone's ground never quite dries out.
+    let want = 0.12 + 0.75 * wet.level;
+    if done.is_some_and(|d| (d - want).abs() < 0.01) && !conditions.is_changed() {
         return;
     }
     let Some(handle) = chunks.iter().next() else {
         return;
     };
-    let wet = match conditions.kind {
-        WeatherKind::Downpour => 0.8,
-        WeatherKind::PeaSouper => 0.45,
-        WeatherKind::Clearing => 0.18,
-        WeatherKind::Drizzle => 0.35,
-    };
     if let Some(mut m) = materials.get_mut(&handle.0) {
-        m.extension.params.wetness = wet;
+        m.extension.params.wetness = want;
+        m.extension.params.puddles = super::puddles::fill(wet.level);
+        m.extension.params.rain = conditions.rain;
     }
-    *done = Some(conditions.kind);
+    *done = Some(want);
 }
 
 fn spawn_terrain_meshes(
@@ -193,7 +192,9 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
             let rock = smooth(28.0, 42.0, slope);
             let wet = hm.wet[hm.idx(i, j)];
             let forest = zone.forest_cover(p[0], p[1]);
-            colors.push([wet.max(0.15 * rock), rock, road_w, forest]);
+            // Hollows are muddy, and where puddles stand (`puddles`).
+            let hollow = super::puddles::hollow(hm, p);
+            colors.push([wet.max(0.15 * rock).max(hollow), rock, road_w, forest]);
         }
     }
     let mut indices = Vec::with_capacity((w - 1) * (h - 1) * 6);
@@ -306,10 +307,19 @@ mod tangent_tests {
             _ => panic!("tangents"),
         };
         let w = 65;
+        // (A vertex in a hole over an underground stair is in no
+        // triangle: mikktspace leaves it alone.)
+        let mut used = vec![false; ours.len()];
+        for k in mesh.indices().expect("indexed").iter() {
+            used[k] = true;
+        }
         let (mut worst, mut sum, mut count) = (1.0f32, 0.0f32, 0.0f32);
         for j in 2..w - 2 {
             for i in 2..w - 2 {
                 let k = j * w + i;
+                if !used[k] {
+                    continue;
+                }
                 let (a, b) = (Vec4::from(ours[k]), Vec4::from(theirs[k]));
                 assert_eq!(a.w, b.w, "handedness at {i},{j}");
                 let cos = a.truncate().dot(b.truncate().normalize());

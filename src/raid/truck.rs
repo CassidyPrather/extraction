@@ -66,6 +66,9 @@ pub enum Pressable {
     Camp,
     /// The logbook: turn to the other page (`raid/logbook.rs`).
     Logbook,
+    /// A note on the cork board: take it down, pin it back
+    /// (`raid/board.rs`).
+    Note,
 }
 
 /// The stash crate in the truck bed.
@@ -360,13 +363,11 @@ fn finish_raid(
     }
     raid.phase = Phase::AtBase;
     save.write(crate::persist::SaveNow);
-    // On the drive home the driver says a little more each time.
-    let home = super::lines::coming_home(raid.extractions, raid.recalled);
-    raid.say(if died {
-        "You wake in the back of the truck. Your kit is gone."
-    } else {
-        home
-    });
+    // Home whole, the driver has his say (`raid::lev`, it sees what you
+    // carry).
+    if died {
+        raid.say("You wake in the back of the truck. Your kit is gone.");
+    }
 }
 
 /// Everything a downed player carried is left where they fell (for the

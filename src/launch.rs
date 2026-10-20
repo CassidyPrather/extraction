@@ -89,6 +89,11 @@ pub struct LaunchOptions {
     pub map_explicit: bool,
     /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
     pub weather: Option<String>,
+    /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
+    pub hour: Option<String>,
+    /// The low sun's height at dawn and dusk, degrees (a playtest knob:
+    /// lower is warmer light but longer shadows).
+    pub sun_elevation: f32,
     /// Map simulation: play this many bot raids (each in a subprocess).
     pub sim: Option<u32>,
     /// Map simulation: this process plays one bot raid under this run name.
@@ -134,6 +139,8 @@ impl Default for LaunchOptions {
             surge_in: None,
             gallery: None,
             weather: None,
+            hour: None,
+            sun_elevation: 20.0,
             map_explicit: false,
             sim: None,
             sim_run: None,
@@ -184,6 +191,10 @@ impl LaunchOptions {
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--weather" => o.weather = Some(val()),
+                "--hour" => o.hour = Some(val()),
+                "--sun-elevation" => {
+                    o.sun_elevation = val().parse().unwrap_or(20.0f32).clamp(5.0, 60.0)
+                }
                 "--save" => o.save = Some(PathBuf::from(val())),
                 "--scenario" => {
                     o.scenario = Some(val());

@@ -11,7 +11,7 @@
 
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
-use extraction_core::firearm::FireMode;
+use extraction_core::firearm::{FireMode, Round};
 
 use super::feel::Handling;
 use super::layout::{Mat, Moves, Shape};
@@ -33,11 +33,22 @@ impl Plugin for GunVisualsPlugin {
                 animate_parts,
                 seat_mag_visuals,
                 show_mag_rounds,
+                show_chambers,
             )
                 .chain()
                 .before(TransformSystems::Propagate),
         )
-        .add_systems(Update, (super::casing_visuals, super::feel::jam_visuals));
+        .add_systems(
+            Update,
+            (
+                super::casing_visuals,
+                super::feel::jam_visuals,
+                super::muzzle::muzzle_fx,
+                super::grenades::show_grenade_parts,
+                super::grenades::explosion_fx,
+            ),
+        )
+        .add_plugins((super::impacts::ImpactFxPlugin, super::sling::SlingPlugin));
     }
 }
 
@@ -94,6 +105,10 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("trigger", Moves::Trigger),
         ("selector", Moves::Selector),
         ("hammer", Moves::Hammer),
+        ("cylinder", Moves::Cylinder),
+        ("gate", Moves::Gate),
+        ("ejector", Moves::Rod),
+        ("bayonet", Moves::Bayonet),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -232,12 +247,29 @@ fn finish_gun_models(
 
 /// How far back a cocked hammer tips, radians.
 const HAMMER_BACK: f32 = 0.5;
+/// How far a revolver's gate swings open, radians.
+const GATE_OPEN: f32 = 1.4;
+/// A revolver's ejector rod's stroke, metres.
+const ROD_STROKE: f32 = 0.042;
 
 fn animate_parts(
-    guns: Query<(&Gun, &Children, Option<&Handling>)>,
+    guns: Query<(
+        &Gun,
+        &Children,
+        Option<&Handling>,
+        Option<&super::melee::Bayonet>,
+        Option<&super::sling::SlingSwing>,
+        &Item,
+    )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
+    catalog: Res<Catalog>,
 ) {
-    for (gun, children, handling) in &guns {
+    for (gun, children, handling, bayonet, swing, item) in &guns {
+        // A slung gun's parts swing on its strap, about the rear swivel.
+        let swung = swing
+            .filter(|s| s.angle != Vec2::ZERO)
+            .zip(super::sling::swivels(&catalog.get(item.kind()).id, gun))
+            .map(|(s, (_, rear))| s.about(rear));
         let f = &gun.firearm;
         let travel = gun.layout.handle.as_ref().map_or(0.0, |h| h.travel);
         // A self-loader's carrier or slide runs back and home after a shot
@@ -259,6 +291,33 @@ fn animate_parts(
                 Moves::WithBolt => {
                     let mut r = part.rest;
                     r.translation.z += bolt * travel;
+                    r
+                }
+                Moves::Cylinder => {
+                    let n = f.chambers.len().max(1) as f32;
+                    let turn = f.cylinder as f32 * std::f32::consts::TAU / n;
+                    let mut r = part.rest;
+                    r.rotation = Quat::from_rotation_z(-turn) * r.rotation;
+                    r
+                }
+                Moves::Gate => {
+                    let mut r = part.rest;
+                    let open = if f.gate_open { GATE_OPEN } else { 0.0 };
+                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
+                    r
+                }
+                Moves::Bayonet => {
+                    // A self-loader's (the SKS's) folds; a bolt gun's is fixed.
+                    let mut r = part.rest;
+                    let folding = f.def.action == extraction_core::firearm::ActionKind::SemiAuto;
+                    if folding && bayonet.is_some_and(|b| b.fixed) {
+                        r.rotation = Quat::from_rotation_x(std::f32::consts::PI) * r.rotation;
+                    }
+                    r
+                }
+                Moves::Rod => {
+                    let mut r = part.rest;
+                    r.translation.z += f.rod * ROD_STROKE;
                     r
                 }
                 Moves::Hammer => {
@@ -309,6 +368,9 @@ fn animate_parts(
                     r
                 }
             };
+            if let Some(sw) = swung {
+                *t = sw * *t;
+            }
         }
     }
 }
@@ -342,6 +404,40 @@ fn seat_mag_visuals(
                 if *t != fix {
                     *t = fix;
                 }
+            }
+        }
+    }
+}
+
+/// A revolver model's `cylinder_round_N` / `cylinder_case_N` nodes: each
+/// chamber shows the live round or the spent case it holds, or nothing.
+fn show_chambers(guns: Query<(&Gun, &Children)>, mut nodes: Query<(&Name, &mut Visibility)>) {
+    for (gun, children) in &guns {
+        if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
+            continue;
+        }
+        for c in children.iter() {
+            let Ok((name, mut vis)) = nodes.get_mut(c) else {
+                continue;
+            };
+            let (want, n) = if let Some(n) = name.as_str().strip_prefix("cylinder_round_") {
+                (Round::Live, n)
+            } else if let Some(n) = name.as_str().strip_prefix("cylinder_case_") {
+                (Round::Spent, n)
+            } else {
+                continue;
+            };
+            let Ok(n) = n.parse::<usize>() else {
+                continue;
+            };
+            let shown = gun.firearm.chambers.get(n).copied().flatten() == Some(want);
+            let v = if shown {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != v {
+                *vis = v;
             }
         }
     }
@@ -384,6 +480,49 @@ fn show_mag_rounds(
 mod tests {
     use super::*;
     use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemState};
+
+    /// A Nagant with a live round in chamber 0 and a spent case in 3
+    /// shows exactly those.
+    #[test]
+    fn a_revolver_shows_what_its_chambers_hold() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let def = cat.get(cat.expect("nagant")).firearm.clone().unwrap();
+        let mut firearm = extraction_core::firearm::Firearm::new(def, 1.0);
+        firearm.chambers[0] = Some(Round::Live);
+        firearm.chambers[3] = Some(Round::Spent);
+        let mut app = App::new();
+        app.add_systems(Update, show_chambers);
+        let gun = app
+            .world_mut()
+            .spawn(Gun {
+                firearm,
+                layout: super::super::layout::layout("nagant").unwrap(),
+                magwell: None,
+                trigger: 0.0,
+            })
+            .id();
+        let node = |app: &mut App, name: String| {
+            app.world_mut()
+                .spawn((Name::new(name), Visibility::default(), ChildOf(gun)))
+                .id()
+        };
+        let live: Vec<Entity> = (0..7)
+            .map(|n| node(&mut app, format!("cylinder_round_{n}")))
+            .collect();
+        let spent: Vec<Entity> = (0..7)
+            .map(|n| node(&mut app, format!("cylinder_case_{n}")))
+            .collect();
+        app.update();
+        let shown = |app: &App, es: &[Entity]| -> Vec<usize> {
+            es.iter()
+                .enumerate()
+                .filter(|(_, e)| *app.world().get::<Visibility>(**e).unwrap() != Visibility::Hidden)
+                .map(|(i, _)| i)
+                .collect()
+        };
+        assert_eq!(shown(&app, &live), [0]);
+        assert_eq!(shown(&app, &spent), [3]);
+    }
 
     /// A clip with three rounds shows its first three, not the last two;
     /// emptied, it shows none.

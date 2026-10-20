@@ -8,6 +8,11 @@
 //!
 //! Each vertex casts a few short rays over its hemisphere against the
 //! building's pieces (as boxes); the nearer what they meet, the darker.
+//!
+//! The colour's alpha carries the sky above the vertex, for the rain: 1
+//! open, 0 under a roof or the eaves (one ray straight up). Opaque
+//! materials ignore alpha; the wet-surface patch (`render::fog`) reads it,
+//! so what's under a roof stays dry.
 //! A box's faces are cut where the shading changes, so the darkening has
 //! vertices to sit on; faces buried in other pieces aren't made at all.
 
@@ -91,6 +96,8 @@ pub struct Occluders {
     dims: [usize; 3],
     bins: Vec<Vec<u32>>,
     dirs: Vec<Vec3>,
+    /// The boxes over each column of the grid (x, z), for the sky.
+    columns: Vec<Vec<u32>>,
 }
 
 impl Occluders {
@@ -139,6 +146,17 @@ impl Occluders {
                 }
             }
         }
+        let mut columns = vec![Vec::new(); dims[0] * dims[2]];
+        for (i, b) in boxes.iter().enumerate() {
+            let (l, h) = b.bounds();
+            let a = ((l - lo) / cell).floor().max(Vec3::ZERO);
+            let z = ((h - lo) / cell).floor();
+            for x in a.x as usize..=(z.x as usize).min(dims[0] - 1) {
+                for zz in a.z as usize..=(z.z as usize).min(dims[2] - 1) {
+                    columns[zz * dims[0] + x].push(i as u32);
+                }
+            }
+        }
         // Cosine-weighted directions about +Y, the same for every vertex
         // (a fixed pattern, so a rebuild bakes the same).
         let dirs = (0..RAYS)
@@ -156,7 +174,26 @@ impl Occluders {
             dims,
             bins,
             dirs,
+            columns,
         }
+    }
+
+    /// The sky over a point on a surface facing `n`: 1 if rain falls on
+    /// it, 0 under something (one ray straight up).
+    pub fn sky(&self, p: Vec3, n: Vec3) -> f32 {
+        let c = ((p - self.lo) / self.cell).floor();
+        if c.x < 0.0 || c.z < 0.0 {
+            return 1.0;
+        }
+        let (x, z) = (c.x as usize, c.z as usize);
+        if x >= self.dims[0] || z >= self.dims[2] {
+            return 1.0;
+        }
+        let o = p + n * 0.02 + Vec3::Y * 0.01;
+        let covered = self.columns[z * self.dims[0] + x]
+            .iter()
+            .any(|&i| self.boxes[i as usize].hit(o, Vec3::Y, 100.0).is_some());
+        if covered { 0.0 } else { 1.0 }
     }
 
     /// Whether a point is inside one of the pieces.
@@ -223,8 +260,9 @@ impl Occluders {
             .iter()
             .zip(n)
             .map(|(p, n)| {
-                let v = self.light(Vec3::from(*p), Vec3::from(*n).normalize_or(Vec3::Y));
-                [v, v, v, 1.0]
+                let (p, n) = (Vec3::from(*p), Vec3::from(*n).normalize_or(Vec3::Y));
+                let v = self.light(p, n);
+                [v, v, v, self.sky(p, n)]
             })
             .collect();
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, col);
@@ -249,7 +287,11 @@ pub fn ensure_colours(mesh: &mut Mesh) {
 /// isn't made at all; one that's evenly lit is one quad; one that darkens
 /// is cut in bands a quarter and three quarters of a metre in from its
 /// edges, where the darkening is (a short face, into cells of [`CELL`]).
-pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders) -> Mesh {
+///
+/// `sky`: carry the sky over each vertex in the colours' alpha (see the
+/// module docs); false for a blended material (glass), whose alpha is its
+/// own.
+pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders, sky: bool) -> Mesh {
     let h = size * 0.5;
     let offset = at.rotation.inverse() * at.translation;
     // (normal, u axis, v axis) per face, as `metric_box`.
@@ -332,7 +374,17 @@ pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders) -> Mesh {
                 } else {
                     light(su, sv)
                 };
-                col.push([l, l, l, 1.0]);
+                let open = if sky && enabled() {
+                    let inset =
+                        |s: f32, half: f32| s * (half - 0.02).max(half * 0.5) / half.max(1e-4);
+                    occ.sky(
+                        world(centre + u * hu * inset(su, hu) + v * hv * inset(sv, hv)),
+                        wn,
+                    )
+                } else {
+                    1.0
+                };
+                col.push([l, l, l, open]);
             }
         }
         let row = us.len() as u32;
@@ -380,6 +432,79 @@ mod tests {
         assert!(wall_face > 0.98, "high on the wall: {wall_face}");
     }
 
+    /// Rain reaches the floor outside and the roof, not the floor under
+    /// the roof, nor the ground under the eaves: what's sheltered stays dry.
+    #[test]
+    fn under_a_roof_is_dry() {
+        let floor = (
+            Vec3::new(8.0, 0.05, 8.0),
+            Transform::from_xyz(0.0, -0.05, 0.0),
+        );
+        // A 4 x 4 m roof 3 m up, overhanging a 3 x 3 m room.
+        let roof = (Vec3::new(2.0, 0.1, 2.0), Transform::from_xyz(0.0, 3.0, 0.0));
+        let occ = Occluders::new([floor, roof]);
+        assert_eq!(
+            occ.sky(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+            0.0,
+            "under the roof"
+        );
+        assert_eq!(
+            occ.sky(Vec3::new(1.8, 0.0, 0.5), Vec3::Y),
+            0.0,
+            "under the eaves"
+        );
+        assert_eq!(
+            occ.sky(Vec3::new(3.0, 0.0, 0.0), Vec3::Y),
+            1.0,
+            "in the open"
+        );
+        assert_eq!(
+            occ.sky(Vec3::new(0.0, 3.1, 0.0), Vec3::Y),
+            1.0,
+            "on the roof"
+        );
+        // The building's boxes carry it in their colours' alpha (a box
+        // under the roof, all sheltered), glass keeps its own alpha, and
+        // other shapes' bake carries it too.
+        let alphas = |m: &Mesh| -> Vec<f32> {
+            let Some(VertexAttributeValues::Float32x4(c)) = m.attribute(Mesh::ATTRIBUTE_COLOR)
+            else {
+                panic!("no colours");
+            };
+            c.iter().map(|c| c[3]).collect()
+        };
+        let under = Transform::from_xyz(0.0, 0.1, 0.0);
+        let boxed = shaded_box(Vec3::new(1.0, 0.2, 1.0), under, &occ, true);
+        assert!(
+            alphas(&boxed).iter().all(|a| *a == 0.0),
+            "a box under the roof"
+        );
+        let glass = shaded_box(Vec3::new(1.0, 0.2, 1.0), under, &occ, false);
+        assert!(
+            alphas(&glass).iter().all(|a| *a == 1.0),
+            "glass keeps its alpha"
+        );
+        let outside = shaded_box(
+            Vec3::new(1.0, 0.2, 1.0),
+            Transform::from_xyz(3.0, 0.1, 0.0),
+            &occ,
+            true,
+        );
+        assert!(
+            alphas(&outside).iter().all(|a| *a == 1.0),
+            "a box in the open"
+        );
+        let mut m = Cuboid::new(1.0, 0.2, 1.0)
+            .mesh()
+            .build()
+            .transformed_by(under);
+        occ.bake(&mut m);
+        assert!(
+            alphas(&m).iter().all(|a| *a == 0.0),
+            "a baked shape under the roof"
+        );
+    }
+
     /// The cut box's faces face out (the same winding as `metric_box`).
     #[test]
     fn cut_boxes_face_out() {
@@ -388,6 +513,7 @@ mod tests {
             Vec3::new(2.0, 1.0, 3.0),
             Transform::from_xyz(0.0, 0.0, 9.0),
             &occ,
+            true,
         );
         let Some(VertexAttributeValues::Float32x3(p)) = m.attribute(Mesh::ATTRIBUTE_POSITION)
         else {

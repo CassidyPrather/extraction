@@ -13,11 +13,13 @@
 //! heightfield collider and the terrain mesh leave those cells out, and
 //! the kiosk's walls and apron cover the edge.
 
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::underground::{
     self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
     STAIR_TOP, Stair, Style, TREAD, WALL,
 };
+use std::collections::{HashMap, HashSet};
 
 use super::Zone;
 use super::buildings::{Builder, Geo, Shape, door};
@@ -88,7 +90,8 @@ fn extent(r: &Raster, i: usize, j: usize) -> Option<(f32, f32)> {
     match r.get(i, j) {
         Cell::Rock => None,
         Cell::Room(_) | Cell::Hall(_) => {
-            Some((r.floor - SLAB, r.floor + r.ceil[j * r.nx + i] + SLAB))
+            let c = j * r.nx + i;
+            Some((r.floors[c] - SLAB, r.floors[c] + r.ceil[c] + SLAB))
         }
         Cell::Stair(k) => {
             let k = k as usize;
@@ -125,7 +128,10 @@ fn stair_band(s: &Stair, z: f32) -> (f32, f32) {
 /// The underside of the ceiling over an open cell, for lintels.
 fn ceiling(r: &Raster, i: usize, j: usize) -> Option<f32> {
     match r.get(i, j) {
-        Cell::Room(_) | Cell::Hall(_) => Some(r.floor + r.ceil[j * r.nx + i]),
+        Cell::Room(_) | Cell::Hall(_) => {
+            let c = j * r.nx + i;
+            Some(r.floors[c] + r.ceil[c])
+        }
         Cell::Stair(k) => {
             let k = k as usize;
             let s = &r.stairs[k];
@@ -148,8 +154,15 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
     dressing(&mut b, l, r);
     for room in &l.rooms {
         for p in &room.props {
-            let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+            let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
             prop(&mut b, p.kind, at, -p.rot.to_radians(), p.loot.as_deref());
+        }
+    }
+    // Breaker boards on their walls (a generator is the room's machine).
+    for p in l.power.iter().filter(|p| p.kind == ug::PowerKind::Breaker) {
+        if let Some(room) = l.rooms.iter().find(|room| room.id == p.room) {
+            let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
+            prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
     b.finish()
@@ -367,26 +380,32 @@ impl Mats {
 /// Floor slabs under every level cell (rooms, corridors, stairs' feet),
 /// ceiling slabs over rooms and corridors, merged into rectangles.
 fn slabs(b: &mut Builder, r: &Raster, m: &Mats) {
+    // By the floor's height (cm): each level, each step of a stair
+    // corridor, each stair's landing.
     let level = |i: usize, j: usize| match r.get(i, j) {
-        Cell::Room(_) | Cell::Hall(_) => Some(0),
+        Cell::Room(_) | Cell::Hall(_) => Some((r.floors[j * r.nx + i] * 100.0).round() as i32),
         Cell::Stair(k) => {
             let k = k as usize;
+            let s = &r.stairs[k];
             let z = r.portals[k].to_portal(r.centre(i, j))[1];
-            (z >= r.stairs[k].bottom).then_some(0)
+            (z >= s.bottom).then(|| (s.floor_at(s.bottom) * 100.0).round() as i32)
         }
         Cell::Rock => None,
     };
-    for (lo, hi, _) in rects(r, level) {
-        let (size, centre) = rect_box(r, lo, hi, r.floor - SLAB, r.floor);
+    for (lo, hi, f) in rects(r, level) {
+        let y = f as f32 / 100.0;
+        let (size, centre) = rect_box(r, lo, hi, y - SLAB, y);
         b.bx(size, centre, m.floor);
     }
+    // By the ceiling's height over each cell.
     let roof = |i: usize, j: usize| {
+        let c = j * r.nx + i;
         r.get(i, j)
             .flat()
-            .then(|| (r.ceil[j * r.nx + i] * 100.0).round() as i32)
+            .then(|| ((r.floors[c] + r.ceil[c]) * 100.0).round() as i32)
     };
     for (lo, hi, h) in rects(r, roof) {
-        let y = r.floor + h as f32 / 100.0;
+        let y = h as f32 / 100.0;
         let (size, centre) = rect_box(r, lo, hi, y, y + SLAB);
         b.bx(size, centre, m.ceiling);
     }
@@ -639,11 +658,12 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         if !hall(p) || !hall(q) {
                             continue;
                         }
-                        let h = r.ceil[r.cell_of(p.to_array()).map_or(0, |(i, j)| j * r.nx + i)];
+                        let c = r.cell_of(p.to_array()).map_or(0, |(i, j)| j * r.nx + i);
+                        let (h, f) = (r.ceil[c], r.floors[c]);
                         for e in [p, q] {
                             b.piece(
                                 Shape::Box(Vec3::new(0.16, h, 0.16)),
-                                Transform::from_xyz(e.x, r.floor + h * 0.5, e.y),
+                                Transform::from_xyz(e.x, f + h * 0.5, e.y),
                                 Mat::Timber,
                                 false,
                             );
@@ -657,7 +677,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         };
                         b.piece(
                             Shape::Box(size),
-                            Transform::from_xyz(mid.x, r.floor + h - 0.09, mid.y),
+                            Transform::from_xyz(mid.x, f + h - 0.09, mid.y),
                             Mat::Timber,
                             false,
                         );
@@ -676,6 +696,14 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                     let len = size.x.max(size.y);
                     let h = 2.0;
                     let mid = (lo + hi) * 0.5;
+                    // Level legs only (a corridor between levels steps).
+                    let floor_at = |p: Vec2| r.floor_at(p.to_array());
+                    let ends = [lo + (hi - lo) * 0.05, mid, hi - (hi - lo) * 0.05];
+                    let fs: Vec<f32> = ends.iter().filter_map(|p| floor_at(*p)).collect();
+                    let Some(&f) = fs.first() else { continue };
+                    if fs.iter().any(|x| (x - f).abs() > 0.01) {
+                        continue;
+                    }
                     if l.style == Style::Service {
                         for (k, rad) in [(0.0f32, 0.09f32), (1.0, 0.06)] {
                             let off = 0.18 + k * 0.22;
@@ -691,7 +719,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                             };
                             b.piece(
                                 Shape::Cylinder(rad, len),
-                                Transform::from_xyz(x, r.floor + h + 0.05 - k * 0.15, z)
+                                Transform::from_xyz(x, f + h + 0.05 - k * 0.15, z)
                                     .with_rotation(rot),
                                 Mat::RustyMetal,
                                 false,
@@ -705,7 +733,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
                         };
                         b.piece(
                             Shape::Box(size),
-                            Transform::from_xyz(x, r.floor + h, z),
+                            Transform::from_xyz(x, f + h, z),
                             Mat::DarkMetal,
                             false,
                         );
@@ -719,7 +747,7 @@ fn dressing(b: &mut Builder, l: &Layout, r: &Raster) {
         if room.lamp == ug::Lamp::None {
             continue;
         }
-        let y = r.floor + room.height;
+        let y = l.floor_of(room) + room.height;
         let from = b.geo.pieces.len();
         b.piece(
             Shape::Box(Vec3::new(0.32, 0.12, 0.18)),
@@ -941,10 +969,290 @@ pub fn spawn_anomalies(world: &mut World) {
             };
             let at = xf.transform_point(Vec3::new(
                 room.at[0] + h.at[0],
-                l.floor,
+                l.floor_of(room),
                 room.at[1] + h.at[1],
             ));
             crate::anomaly::spawn_anomaly(world, kind, at, h.radius, None);
+        }
+    }
+}
+
+/// Logic: power, residents and the robots' map of the dark.
+pub struct UndergroundPlugin;
+
+impl Plugin for UndergroundPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                register_residents,
+                wire_power,
+                throw_switches.after(wire_power),
+                generator_hum,
+                splashing,
+                depot_visits,
+                fill_lost_bins,
+            ),
+        )
+        .add_message::<DepotEntered>()
+        .add_message::<CarriedOutOfDepot>();
+    }
+}
+
+/// A site's power ([`ug::PowerDef`]), stage by stage: each off until its
+/// switch is thrown, and a switch does nothing until the stage before is
+/// on.
+#[derive(Component, Debug)]
+pub struct SitePower {
+    pub stages: Vec<Stage>,
+}
+
+#[derive(Debug)]
+pub struct Stage {
+    pub on: bool,
+    pub kind: ug::PowerKind,
+    pub switch: Entity,
+}
+
+impl SitePower {
+    pub fn on(&self, stage: usize) -> bool {
+        self.stages.get(stage).is_some_and(|s| s.on)
+    }
+
+    /// The stage its next switch turns on, if any are still off.
+    pub fn next(&self) -> Option<usize> {
+        self.stages.iter().position(|s| !s.on)
+    }
+}
+
+/// The lever (a breaker's) or pull-start (a generator's) that turns a
+/// stage of a site's power on.
+#[derive(Component, Debug)]
+pub struct PowerSwitch {
+    pub site: Entity,
+    pub stage: usize,
+}
+
+/// A door held shut until its stage of its site's power is on.
+#[derive(Component, Debug)]
+pub struct PowerLocked {
+    pub site: Entity,
+    pub stage: usize,
+}
+
+/// Where a stage's power switch is, building space, and which way it
+/// faces.
+pub fn switch_pose(l: &Layout, stage: usize) -> Option<Transform> {
+    let p = l.power.get(stage)?;
+    let room = l.rooms.iter().find(|room| room.id == p.room)?;
+    let rot = Quat::from_rotation_y(-p.rot.to_radians());
+    let at = Vec3::new(room.at[0] + p.at[0], l.floor_of(room), room.at[1] + p.at[1]);
+    // A breaker's lever on its board's face; a generator's pull-start low
+    // on its end.
+    let (up, out) = match p.kind {
+        ug::PowerKind::Breaker => (1.2, 0.26),
+        ug::PowerKind::Generator => (0.9, 0.05),
+    };
+    Some(
+        Transform::from_translation(at + Vec3::Y * up + rot * Vec3::new(0.0, 0.0, -out))
+            .with_rotation(rot),
+    )
+}
+
+/// The door leaves (building space hinges) a stage of a site's power
+/// holds shut.
+pub fn powered_hinges(id: &str, stage: usize) -> Vec<Vec3> {
+    let (Some(l), Some(r), Some(g)) = (ug::layout(id), ug::raster(id), geo(id)) else {
+        return Vec::new();
+    };
+    let Some(p) = l.power.get(stage) else {
+        return Vec::new();
+    };
+    // The geometry's doors: each kiosk's, then the raster's in order.
+    let first = r.portals.len();
+    let kiosks = p.portals().filter_map(|k| g.doors.get(k).map(|d| d.hinge));
+    r.doors
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| p.holds(l, d))
+        .filter_map(|(k, _)| g.doors.get(first + k).map(|d| d.hinge))
+        .chain(kiosks)
+        .collect()
+}
+
+/// Logic, once: each powered site gets its switches, its state, and its
+/// held doors.
+fn wire_power(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building)>,
+    doors: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
+    mut done: Local<bool>,
+) {
+    if *done || buildings.is_empty() {
+        return;
+    }
+    *done = true;
+    for (site, b) in &buildings {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let mut stages = Vec::new();
+        for (stage, p) in l.power.iter().enumerate() {
+            let Some(pose) = switch_pose(l, stage) else {
+                continue;
+            };
+            let switch = commands
+                .spawn((
+                    Name::new(format!("Power switch {}", stage + 1)),
+                    PowerSwitch { site, stage },
+                    crate::raid::truck::Pressable::BenchRun,
+                    crate::interact::Grabbable {
+                        points: vec![crate::interact::GrabPoint::free()],
+                    },
+                    Collider::cuboid(0.3, 0.3, 0.15),
+                    CollisionLayers::new(super::Layer::Item, LayerMask::NONE),
+                    pose,
+                    Visibility::default(),
+                    ChildOf(site),
+                ))
+                .id();
+            stages.push(Stage {
+                on: false,
+                kind: p.kind,
+                switch,
+            });
+            for hinge in powered_hinges(&b.prefab, stage) {
+                for (d, leaf, parent) in &doors {
+                    if parent.parent() == site && leaf.0.hinge.distance(hinge) < 1e-3 {
+                        commands.entity(d).insert(PowerLocked { site, stage });
+                    }
+                }
+            }
+        }
+        if !stages.is_empty() {
+            commands.entity(site).insert(SitePower { stages });
+        }
+    }
+}
+
+/// Throwing a switch: its stage comes on (for good), the doors it held
+/// are free, its lamps light (and the robots know it), and it clanks or
+/// roars loud enough to bring the crawlers. Out of turn, it's dead.
+#[allow(clippy::too_many_arguments)]
+fn throw_switches(
+    mut commands: Commands,
+    mut events: MessageReader<crate::interact::InteractEvent>,
+    switches: Query<(&PowerSwitch, &GlobalTransform)>,
+    mut sites: Query<(&mut SitePower, &super::buildings::Building, &Transform)>,
+    locked: Query<(Entity, &PowerLocked)>,
+    lighting: Option<ResMut<crate::robots::senses::Lighting>>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut raid: ResMut<crate::raid::Raid>,
+) {
+    let mut lighting = lighting;
+    for ev in events.read() {
+        let crate::interact::InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        let Ok((sw, at)) = switches.get(*item) else {
+            continue;
+        };
+        let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
+            continue;
+        };
+        if power.on(sw.stage) {
+            continue;
+        }
+        if power.next() != Some(sw.stage) {
+            raid.say(match power.stages[sw.stage].kind {
+                ug::PowerKind::Generator => "The starter turns over on nothing. No feed.",
+                ug::PowerKind::Breaker => "The breaker drops home, dead. Nothing upstream.",
+            });
+            continue;
+        }
+        power.stages[sw.stage].on = true;
+        for (d, l) in &locked {
+            if l.site == sw.site && l.stage == sw.stage {
+                commands.entity(d).remove::<PowerLocked>();
+            }
+        }
+        let (radius, line) = match power.stages[sw.stage].kind {
+            ug::PowerKind::Generator => (45.0, "The generator coughs, catches and roars. Lights."),
+            ug::PowerKind::Breaker => (30.0, "The breaker slams home. Somewhere, relays clack."),
+        };
+        noise.write(crate::robots::Noise {
+            at: at.translation(),
+            radius,
+            source: None,
+        });
+        raid.say(line);
+        if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
+            for room in l
+                .rooms
+                .iter()
+                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage)
+            {
+                let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
+                lighting
+                    .lamps
+                    .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
+            }
+        }
+    }
+}
+
+/// Wading underground is loud: the water slops off the walls. (Footsteps
+/// are heard as ever; this is the splashing on top, every half second
+/// you move in it.)
+fn splashing(
+    zone: Res<Zone>,
+    bodies: Query<(Entity, &crate::player::Body, &GlobalTransform)>,
+    time: Res<Time>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut wait: Local<f32>,
+) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 0.5;
+    for (e, body, gt) in &bodies {
+        let moving = Vec2::new(body.velocity.x, body.velocity.z).length() > 0.4;
+        if body.wading < 0.2 || !moving || floor_under(&zone, gt.translation()).is_none() {
+            continue;
+        }
+        noise.write(crate::robots::Noise {
+            at: gt.translation(),
+            radius: if body.swimming { 20.0 } else { 16.0 },
+            source: Some(e),
+        });
+    }
+}
+
+/// A running generator is heard all round it, every few seconds.
+fn generator_hum(
+    sites: Query<&SitePower>,
+    switches: Query<&GlobalTransform, With<PowerSwitch>>,
+    time: Res<Time>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut wait: Local<f32>,
+) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 4.0;
+    for p in sites
+        .iter()
+        .flat_map(|p| &p.stages)
+        .filter(|p| p.on && p.kind == ug::PowerKind::Generator)
+    {
+        if let Ok(at) = switches.get(p.switch) {
+            noise.write(crate::robots::Noise {
+                at: at.translation(),
+                radius: 22.0,
+                source: None,
+            });
         }
     }
 }
@@ -977,7 +1285,12 @@ pub fn register_residents(
         // under the ground (the kiosks are lit like any building).
         let lo = Vec2::from(r.origin);
         let hi = lo + Vec2::new(r.nx as f32, r.nz as f32) * ug::CELL;
-        let (y0, y1) = (r.floor - 0.5, -0.3);
+        let deepest = l
+            .rooms
+            .iter()
+            .map(|room| l.floor_of(room))
+            .fold(r.floor, f32::min);
+        let (y0, y1) = (deepest - 0.5, -0.3);
         let centre = Vec3::new((lo.x + hi.x) * 0.5, (y0 + y1) * 0.5, (lo.y + hi.y) * 0.5);
         lighting.dark.push((
             xf * Transform::from_translation(centre),
@@ -989,12 +1302,13 @@ pub fn register_residents(
             .filter(|room| matches!(room.lamp, ug::Lamp::Steady | ug::Lamp::Flicker))
             .take(LAMP_BUDGET)
         {
-            let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+            let at = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
             lighting
                 .lamps
                 .push((xf.transform_point(at), room.size[0].max(room.size[1]) + 4.0));
         }
-        if l.crawlers == 0 {
+        let rounds = l.residents();
+        if rounds.is_empty() {
             continue;
         }
         // Their grid is the site's, without the ground round the kiosks:
@@ -1009,26 +1323,54 @@ pub fn register_residents(
                 }
             }
         }
-        let patrol: Vec<Vec3> = l
-            .patrol
-            .iter()
-            .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
-            .filter_map(|room| grid.nearest_walkable(room.at))
-            .map(|p| xf.transform_point(Vec3::new(p[0], r.floor, p[1])))
-            .collect();
-        let Some(&spawn) = patrol.first() else {
-            continue;
+        // Nor into deep water, as on the surface.
+        for j in 0..grid.n {
+            for i in 0..grid.n {
+                let c = grid.centre(i, j);
+                if r.water_at(c) >= ug::DEEP {
+                    grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
+                }
+            }
+        }
+        let nav = crate::robots::indoor::LocalNav {
+            grid: std::sync::Arc::new(grid),
+            xf,
+            floors: Some(std::sync::Arc::new(floors)),
         };
-        residents.sites.push(crate::robots::indoor::IndoorSite {
-            nav: crate::robots::indoor::LocalNav {
-                grid: std::sync::Arc::new(grid),
-                xf,
-                floors: Some(std::sync::Arc::new(floors)),
-            },
-            patrol,
-            spawn,
-            crawlers: l.crawlers,
-        });
+        for (rooms, crawlers) in rounds {
+            let points: Vec<(&ug::Room, [f32; 2])> = match rooms {
+                // One room: round its quarters.
+                [id] => l
+                    .rooms
+                    .iter()
+                    .filter(|room| &room.id == id)
+                    .flat_map(|room| {
+                        let q = [room.size[0] * 0.25, room.size[1] * 0.25];
+                        [[-q[0], -q[1]], [q[0], -q[1]], [q[0], q[1]], [-q[0], q[1]]]
+                            .map(|d| (room, [room.at[0] + d[0], room.at[1] + d[1]]))
+                    })
+                    .collect(),
+                _ => rooms
+                    .iter()
+                    .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
+                    .map(|room| (room, room.at))
+                    .collect(),
+            };
+            let patrol: Vec<Vec3> = points
+                .into_iter()
+                .filter_map(|(room, at)| nav.grid.nearest_walkable(at).map(|p| (room, p)))
+                .map(|(room, p)| xf.transform_point(Vec3::new(p[0], l.floor_of(room), p[1])))
+                .collect();
+            let Some(&spawn) = patrol.first() else {
+                continue;
+            };
+            residents.sites.push(crate::robots::indoor::IndoorSite {
+                nav: nav.clone(),
+                patrol,
+                spawn,
+                crawlers,
+            });
+        }
     }
 }
 
@@ -1038,8 +1380,18 @@ pub struct UndergroundVisualsPlugin;
 
 impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_lamps, flicker, torch))
-            .add_systems(PostUpdate, (go_dark, no_rain_below));
+        app.add_systems(
+            Update,
+            (
+                light_lamps,
+                flicker,
+                torch,
+                near_doors_only,
+                show_below,
+                water_surfaces,
+            ),
+        )
+        .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
 }
 
@@ -1053,6 +1405,8 @@ const LAMP_RANGE: f32 = 45.0;
 #[derive(Component)]
 pub struct EmergencyLamp {
     pub stutter: bool,
+    /// On a stage of its site's power (dark until it's on).
+    pub site: Option<(Entity, usize)>,
     seed: f32,
     base: f32,
     lens: Handle<StandardMaterial>,
@@ -1068,16 +1422,21 @@ fn light_lamps(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (e, b) in &buildings {
-        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+        let Some(l) = ug::layout(&b.prefab) else {
             continue;
         };
         let lit = l
             .rooms
             .iter()
-            .filter(|room| matches!(room.lamp, ug::Lamp::Steady | ug::Lamp::Flicker))
+            .filter(|room| {
+                matches!(
+                    room.lamp,
+                    ug::Lamp::Steady | ug::Lamp::Flicker | ug::Lamp::Powered
+                )
+            })
             .take(LAMP_BUDGET);
         for (k, room) in lit.enumerate() {
-            let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+            let at = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
             let lens = materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.85, 0.6),
                 emissive: GLOW,
@@ -1090,6 +1449,7 @@ fn light_lamps(
                     Name::new("Emergency lamp"),
                     EmergencyLamp {
                         stutter: room.lamp == ug::Lamp::Flicker,
+                        site: (room.lamp == ug::Lamp::Powered).then_some((e, room.stage)),
                         seed: k as f32 * 3.7 + room.at[0] * 0.13,
                         base,
                         lens: lens.clone(),
@@ -1109,8 +1469,57 @@ fn light_lamps(
                     Mesh3d(meshes.add(Cuboid::new(0.22, 0.03, 0.1))),
                     MeshMaterial3d(lens),
                     bevy::light::NotShadowCaster,
+                    bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (DOOR_REACH * 0.8)..DOOR_REACH,
+                        use_aabb: false,
+                    },
                     Transform::from_xyz(0.0, 0.03, 0.0),
                 ));
+        }
+    }
+}
+
+/// Client: the flooded rooms' and corridors' water, a dark still surface
+/// (it moves only when you do: the splashing is sound).
+fn water_surfaces(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, b) in &buildings {
+        let Some(r) = ug::raster(&b.prefab) else {
+            continue;
+        };
+        if r.water.iter().all(|w| *w <= 0.0) {
+            continue;
+        }
+        let water = materials.add(StandardMaterial {
+            base_color: Color::srgba(0.05, 0.075, 0.07, 0.9),
+            perceptual_roughness: 0.06,
+            reflectance: 0.7,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        });
+        // By the water's surface (cm): each level's floods apart.
+        let class = |i: usize, j: usize| {
+            let c = j * r.nx + i;
+            let w = r.water[c];
+            (w > 0.0).then(|| ((r.floors[c] + w) * 100.0).round() as i32)
+        };
+        for (lo, hi, level) in rects(r, class) {
+            let y = level as f32 / 100.0;
+            let (size, centre) = rect_box(r, lo, hi, y - 0.01, y);
+            commands.spawn((
+                Name::new("Flood"),
+                Mesh3d(meshes.add(Plane3d::default().mesh().size(size.x, size.z))),
+                MeshMaterial3d(water.clone()),
+                bevy::light::NotShadowCaster,
+                Below,
+                Transform::from_xyz(centre.x, y, centre.z),
+                ChildOf(e),
+            ));
         }
     }
 }
@@ -1126,6 +1535,7 @@ fn flicker(
         &mut PointLight,
         &mut Visibility,
     )>,
+    power: Query<&SitePower>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let t = time.elapsed_secs();
@@ -1135,7 +1545,10 @@ fn flicker(
         .map(|(g, _)| g.translation())
         .next();
     for (lamp, at, mut light, mut vis) in &mut lamps {
-        let near = eye.is_none_or(|e| e.distance(at.translation()) < LAMP_RANGE);
+        let powered = lamp
+            .site
+            .is_none_or(|(s, k)| power.get(s).is_ok_and(|p| p.on(k)));
+        let near = powered && eye.is_none_or(|e| e.distance(at.translation()) < LAMP_RANGE);
         let want = if near {
             Visibility::Inherited
         } else {
@@ -1151,6 +1564,115 @@ fn flicker(
         light.intensity = lamp.base * k;
         if let Some(mut m) = materials.get_mut(&lamp.lens) {
             m.emissive = GLOW * k;
+        }
+    }
+}
+
+/// A site's geometry deeper than this (building space y) is drawn apart
+/// from its kiosks ([`Below`]).
+pub const BELOW_Y: f32 = -1.0;
+/// From this near a kiosk you might see down its stair.
+const KIOSK_SIGHT: f32 = 18.0;
+
+/// A site's rooms and stairs' meshes (merged, below [`BELOW_Y`]): drawn
+/// only while the eye is underground or near one of its kiosks. Nothing
+/// culls by the rock over them, and a site under a village counted in
+/// every view of it.
+#[derive(Component)]
+pub struct Below;
+
+/// Below-ground meshes shown or hidden with where the eye is.
+fn show_below(
+    zone: Res<Zone>,
+    eyes: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    sites: Query<(Entity, &super::buildings::Building, &Transform, &Children)>,
+    mut below: Query<&mut Visibility, With<Below>>,
+) {
+    let Some(eye) = eyes
+        .iter()
+        .filter(|(_, c)| c.is_active)
+        .map(|(g, _)| g.translation())
+        .next()
+    else {
+        return;
+    };
+    let underground = floor_under(&zone, eye).is_some();
+    for (_, b, xf, children) in &sites {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let near = l.portals.iter().any(|p| {
+            let at = xf.transform_point(Vec3::new(p.at[0], p.y, p.at[1]));
+            at.distance(eye) < KIOSK_SIGHT
+        });
+        let want = if underground || near {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        for c in children.iter() {
+            if let Ok(mut v) = below.get_mut(c) {
+                if *v != want {
+                    *v = want;
+                }
+            }
+        }
+    }
+}
+
+/// How near the eye a door down in a site is drawn: from the surface
+/// nothing shows them (the rock's in the way, but nothing culls by it),
+/// and below, the rooms are small.
+const DOOR_REACH: f32 = 25.0;
+/// How near a kiosk's door leaf is drawn (the kiosk itself, always).
+const KIOSK_DOOR_REACH: f32 = 50.0;
+
+/// A site's doors are drawn only near the eye: below ground, its
+/// dozen-odd leaves (each a handful of meshes) counted in every view of
+/// the village over the shelter; a kiosk's, past 50 m, is a pixel or two.
+#[allow(clippy::type_complexity)]
+fn near_doors_only(
+    mut commands: Commands,
+    added: Query<
+        Entity,
+        (
+            Added<Mesh3d>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+        ),
+    >,
+    parents: Query<&ChildOf>,
+    leaves: Query<&super::buildings::DoorLeaf>,
+    sites: Query<&super::buildings::Building>,
+) {
+    for e in &added {
+        // The mesh, its door (a parent or two up), the door's building.
+        let mut at = e;
+        for _ in 0..3 {
+            let Ok(p) = parents.get(at) else { break };
+            at = p.parent();
+            let Ok(leaf) = leaves.get(at) else { continue };
+            let site = parents
+                .get(at)
+                .ok()
+                .and_then(|b| sites.get(b.parent()).ok())
+                .is_some_and(|b| ug::is_site(&b.prefab));
+            if site {
+                // Down below, near only; a kiosk's door, as far as a door
+                // that small shows.
+                let reach = if leaf.0.hinge.y < BELOW_Y {
+                    DOOR_REACH
+                } else {
+                    KIOSK_DOOR_REACH
+                };
+                commands
+                    .entity(e)
+                    .try_insert(bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (reach * 0.8)..reach,
+                        use_aabb: false,
+                    });
+            }
+            break;
         }
     }
 }
@@ -1305,9 +1827,35 @@ fn no_rain_below(
     }
 }
 
+/// Inside a site (below the ground, on its floor): `Some`, with the water
+/// over the floor there, if any (world y of its surface). Outside every
+/// site: `None`, and the ground's own water applies.
+pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
+    for site in ug::placed(&zone.map) {
+        let Some(r) = ug::raster(&site.id) else {
+            continue;
+        };
+        let local = site.to_site([feet.x, feet.z]);
+        let Some(f) = r.floor_at(local) else { continue };
+        let footing = zone.hm.footing(&site.id, site.at, site.rot);
+        let floor = footing + f;
+        if feet.y > floor - 0.5 && feet.y < floor + 4.5 && floor < zone.ground(feet.x, feet.z) - 0.5
+        {
+            let w = r.water_at(local);
+            return Some((w > 0.0).then_some(floor + w));
+        }
+    }
+    None
+}
+
 /// Where the floor is under a world point, if it's inside an underground
 /// site (on a stair or in a room, below the ground): the world y.
 pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
+    site_under(zone, p).map(|s| s.1)
+}
+
+/// The site a world point is down in, and its floor there.
+pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     for site in ug::placed(&zone.map) {
         let r = ug::raster(&site.id)?;
         let footing = zone.hm.footing(&site.id, site.at, site.rot);
@@ -1315,17 +1863,135 @@ pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
         let Some(f) = r.floor_at(local) else { continue };
         let floor = footing + f;
         if p.y > floor - 0.5 && p.y < floor + 4.5 && floor < zone.ground(p.x, p.z) - 0.5 {
-            return Some(floor);
+            return Some((site.id, floor));
         }
     }
     None
+}
+
+/// The Depot's site id.
+pub const DEPOT: &str = "depot_marrow";
+
+/// A player has gone down into the Depot (each time they do; the first
+/// of a raid is the reader's to pick out).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct DepotEntered {
+    pub player: Entity,
+}
+
+/// Something a player picked up in the Depot has left it with them (in
+/// a hand, on the body or in the pack), as they came out.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CarriedOutOfDepot {
+    pub player: Entity,
+    pub item: Entity,
+}
+
+/// Something the convoys carried off, lying in the Depot's sorting hall.
+#[derive(Component, Debug)]
+pub struct LostKit;
+
+/// How many of the lost things lie in the hall (the latest).
+pub const LOST_SHOWN: usize = 16;
+
+/// Logic, once: what the memorial convoys took (`Memorial::lost`, the
+/// latest first) lies in the sorting hall's bins, on the crates and
+/// pallets, for the taking back.
+fn fill_lost_bins(
+    mut commands: Commands,
+    buildings: Query<(&super::buildings::Building, &Transform)>,
+    memorial: Option<Res<crate::persist::Memorial>>,
+    catalog: Res<crate::items::Catalog>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return;
+    }
+    let Some((_, xf)) = buildings.iter().find(|(b, _)| b.prefab == DEPOT) else {
+        return;
+    };
+    *done = true;
+    let (Some(memorial), Some(l)) = (memorial, ug::layout(DEPOT)) else {
+        return;
+    };
+    let Some(hall) = l.rooms.iter().find(|r| r.id == "sorting_hall") else {
+        return;
+    };
+    let bins: Vec<Vec2> = hall
+        .props
+        .iter()
+        .filter(|p| matches!(p.kind, PropKind::Crate | PropKind::Pallet))
+        .map(|p| Vec2::new(hall.at[0] + p.at[0], hall.at[1] + p.at[1]))
+        .collect();
+    if bins.is_empty() {
+        return;
+    }
+    let kinds = memorial.0.lost.iter().rev().filter_map(|name| {
+        catalog
+            .iter()
+            .find(|(_, d)| d.name == *name)
+            .map(|(k, _)| k)
+    });
+    for (n, kind) in kinds.take(LOST_SHOWN).enumerate() {
+        // Round the bins, a few to each, a little apart.
+        let bin = bins[n % bins.len()];
+        let k = (n / bins.len()) as f32;
+        let at = Vec3::new(
+            bin.x - 0.25 + 0.25 * (k % 3.0),
+            l.floor_of(hall) + 1.3 + 0.2 * k,
+            bin.y - 0.15 + 0.15 * (k % 2.0),
+        );
+        let e = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(xf.transform_point(at)),
+                condition: 0.8,
+            },
+        );
+        commands.entity(e).insert(LostKit);
+    }
+}
+
+/// Logic: who's in the Depot, what they had on them going in, and what
+/// they came out with that they hadn't.
+fn depot_visits(
+    zone: Res<Zone>,
+    players: Query<(Entity, &GlobalTransform), With<crate::player::Player>>,
+    carried: Query<(Entity, &crate::anomaly::artifacts::CarriedBy)>,
+    mut inside: Local<HashMap<Entity, HashSet<Entity>>>,
+    mut entered: MessageWriter<DepotEntered>,
+    mut out: MessageWriter<CarriedOutOfDepot>,
+) {
+    for (player, gt) in &players {
+        let here = site_under(&zone, gt.translation()).is_some_and(|s| s.0 == DEPOT);
+        let on = |p: Entity| {
+            carried
+                .iter()
+                .filter(move |(_, c)| c.0 == p)
+                .map(|(e, _)| e)
+        };
+        match (here, inside.contains_key(&player)) {
+            (true, false) => {
+                inside.insert(player, on(player).collect());
+                entered.write(DepotEntered { player });
+            }
+            (false, true) => {
+                let had = inside.remove(&player).unwrap_or_default();
+                for item in on(player).filter(|e| !had.contains(e)) {
+                    out.write(CarriedOutOfDepot { player, item });
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::launch::LaunchOptions;
-    use avian3d::prelude::*;
     use bevy::ecs::system::RunSystemOnce;
 
     /// Every site's pieces are sound (positive sizes, finite poses) and it
@@ -1391,7 +2057,7 @@ mod tests {
         for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
             let mut app = app(map);
             let sites = sites_on(&app);
-            assert_eq!(sites.len(), 1, "{map}: one site");
+            assert!(!sites.is_empty(), "{map}: a site");
             let mut dirs = Vec::new();
             for a in 0..12 {
                 for e in [-0.3f32, 0.0, 0.4, 0.8, 1.2] {
@@ -1412,7 +2078,11 @@ mod tests {
                             let c = r.centre(i, j);
                             let top = r.ceil[j * r.nx + i] - 0.15;
                             for y in [1.5, top] {
-                                from.push(xf.transform_point(Vec3::new(c[0], r.floor + y, c[1])));
+                                from.push(xf.transform_point(Vec3::new(
+                                    c[0],
+                                    r.floors[j * r.nx + i] + y,
+                                    c[1],
+                                )));
                             }
                         }
                     }
@@ -1523,13 +2193,21 @@ mod tests {
                 app.update();
             }
             let zone = app.world().resource::<Zone>().clone();
-            let (site, xf) = sites_on(&app).remove(0);
-            let l = ug::layout(&site.id).unwrap();
-            let r = ug::raster(&site.id).unwrap();
-            {
+            let sites = sites_on(&app);
+            let crawlers: u32 = sites
+                .iter()
+                .flat_map(|(s, _)| ug::layout(&s.id).unwrap().residents())
+                .map(|r| r.1)
+                .sum();
+            for (site, xf) in &sites {
+                let l = ug::layout(&site.id).unwrap();
                 let lighting = app.world().resource::<Lighting>();
                 for room in &l.rooms {
-                    let at = xf.transform_point(Vec3::new(room.at[0], r.floor + 1.5, room.at[1]));
+                    let at = xf.transform_point(Vec3::new(
+                        room.at[0],
+                        l.floor_of(room) + 1.5,
+                        room.at[1],
+                    ));
                     assert!(lighting.in_dark(at), "{map} {}: not dark", room.id);
                     let lit = lighting.lamplight(at);
                     match room.lamp {
@@ -1550,7 +2228,7 @@ mod tests {
                     .collect()
             };
             let start = where_(&mut app);
-            assert_eq!(start.len(), l.crawlers as usize, "{map}: crawlers out");
+            assert_eq!(start.len(), crawlers as usize, "{map}: crawlers out");
             for _ in 0..90 * 40 {
                 app.update();
             }
@@ -1608,6 +2286,12 @@ mod tests {
             .get_mut::<Transform>(player)
             .unwrap()
             .translation = me + Vec3::Y * 0.05;
+        // The head at eye height, as a headset or the desk rig keeps it
+        // (headless, nothing drives it off the floor).
+        app.world_mut()
+            .get_mut::<crate::rig::RigInput>(player)
+            .unwrap()
+            .head = Transform::from_xyz(0.0, 1.6, 0.0);
         let mut queue = CommandQueue::default();
         let crawler = {
             let mut c = Commands::new(&mut queue, app.world());
@@ -1679,6 +2363,329 @@ mod tests {
         assert!(seen, "the torch gave you away");
     }
 
+    /// Power, through the headset: in every site the powered doors won't
+    /// open; a switch out of turn does nothing; a hand squeezed on each
+    /// stage's breaker or generator pull-start, in order, turns it on;
+    /// then the robots know its lamps, and its doors open.
+    #[test]
+    fn a_hand_on_the_switch_powers_the_site() {
+        use crate::interact::InteractEvent;
+        use crate::rig::Side;
+        use crate::world::buildings::Door;
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let mut vr = crate::vr_harness::Vr::new(map);
+            vr.step(3);
+            let player = vr.player;
+            let sites: Vec<Entity> = vr
+                .app
+                .world_mut()
+                .query_filtered::<Entity, With<SitePower>>()
+                .iter(vr.app.world())
+                .collect();
+            assert!(!sites.is_empty(), "{map}: a powered site");
+            for site in sites {
+                let id = vr
+                    .app
+                    .world()
+                    .get::<super::super::buildings::Building>(site)
+                    .unwrap()
+                    .prefab
+                    .clone();
+                let l = ug::layout(&id).unwrap();
+                let switches: Vec<(Entity, GlobalTransform)> = (0..l.power.len())
+                    .map(|k| {
+                        let mut q = vr
+                            .app
+                            .world_mut()
+                            .query::<(Entity, &PowerSwitch, &GlobalTransform)>();
+                        q.iter(vr.app.world())
+                            .find(|(_, sw, _)| sw.site == site && sw.stage == k)
+                            .map(|(e, _, g)| (e, *g))
+                            .unwrap_or_else(|| panic!("{id}: a switch for stage {k}"))
+                    })
+                    .collect();
+                // Out of turn: the last stage's switch, thrown first.
+                if switches.len() > 1 {
+                    let (last, _) = switches[switches.len() - 1];
+                    vr.app
+                        .world_mut()
+                        .write_message(InteractEvent::Pressed { item: last, player });
+                    vr.step(3);
+                    let power = vr.app.world().get::<SitePower>(site).unwrap();
+                    assert!(
+                        power.stages.iter().all(|s| !s.on),
+                        "{id}: a switch out of turn did something"
+                    );
+                }
+                for (stage, (switch, at)) in switches.into_iter().enumerate() {
+                    let held: Vec<Entity> = vr
+                        .app
+                        .world_mut()
+                        .query::<(Entity, &PowerLocked)>()
+                        .iter(vr.app.world())
+                        .filter(|(_, l)| l.site == site && l.stage == stage)
+                        .map(|(e, _)| e)
+                        .collect();
+                    assert!(!held.is_empty(), "{id}: a door on stage {stage}");
+                    for d in &held {
+                        vr.app
+                            .world_mut()
+                            .write_message(InteractEvent::Pressed { item: *d, player });
+                    }
+                    vr.step(60);
+                    for d in &held {
+                        assert!(
+                            !vr.app.world().get::<Door>(*d).unwrap().open,
+                            "{id}: held shut"
+                        );
+                    }
+                    let lamps = vr
+                        .app
+                        .world()
+                        .resource::<crate::robots::senses::Lighting>()
+                        .lamps
+                        .len();
+                    // Stand in front of it, a hand on it, squeeze.
+                    let handle = at.translation();
+                    let out = at.rotation() * Vec3::NEG_Z;
+                    let feet = handle + out * 0.6;
+                    let zone = vr.app.world().resource::<Zone>().clone();
+                    let floor = floor_under(&zone, feet).unwrap_or_else(|| {
+                        panic!(
+                            "{id}: the switch at {handle:?} (in front {feet:?}) isn't underground"
+                        )
+                    });
+                    vr.stand(Vec3::new(feet.x, floor + 0.05, feet.z), 0.0);
+                    vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
+                    vr.step(2);
+                    vr.grip(Side::Right, 1.0);
+                    vr.step(3);
+                    assert!(
+                        vr.pressed().contains(&switch),
+                        "{id}: switch {stage} answered the hand"
+                    );
+                    vr.grip(Side::Right, 0.0);
+                    vr.step(5);
+                    assert!(
+                        vr.app.world().get::<SitePower>(site).unwrap().on(stage),
+                        "{id}: stage {stage} on"
+                    );
+                    let now = vr
+                        .app
+                        .world()
+                        .resource::<crate::robots::senses::Lighting>()
+                        .lamps
+                        .len();
+                    let powered = l
+                        .rooms
+                        .iter()
+                        .filter(|r| r.lamp == ug::Lamp::Powered && r.stage == stage)
+                        .count();
+                    assert_eq!(now, lamps + powered, "{id}: the robots see the new lamps");
+                    for d in &held {
+                        assert!(
+                            vr.app.world().get::<PowerLocked>(*d).is_none(),
+                            "{id}: unbolted"
+                        );
+                        vr.app
+                            .world_mut()
+                            .write_message(InteractEvent::Pressed { item: *d, player });
+                    }
+                    vr.step(90);
+                    for d in &held {
+                        assert!(
+                            vr.app.world().get::<Door>(*d).unwrap().open,
+                            "{id}: the door opens"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Each valley's flooded corridor: standing in it you're wading (deep
+    /// in Kettle's drowned drive, afloat); and the crawlers' grid stops at
+    /// deep water while the bots' plan only costs it.
+    #[test]
+    fn floods_wade_swim_and_keep_crawlers_out() {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let mut app = app(map);
+            app.update();
+            let (site, xf) = sites_on(&app).remove(0);
+            let l = ug::layout(&site.id).unwrap();
+            let r = ug::raster(&site.id).unwrap();
+            let f = l
+                .floods
+                .iter()
+                .find(|f| f.link.is_some())
+                .expect("a flooded corridor");
+            // The middle of the corridor's wettest cells.
+            let cells: Vec<(usize, usize)> = (0..r.nz)
+                .flat_map(|j| (0..r.nx).map(move |i| (i, j)))
+                .filter(|&(i, j)| (r.water[j * r.nx + i] - f.depth).abs() < 1e-3)
+                .collect();
+            let (i, j) = cells[cells.len() / 2];
+            let c = r.centre(i, j);
+            let at = xf.transform_point(Vec3::new(c[0], r.floors[j * r.nx + i], c[1]));
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at + Vec3::Y * 0.05;
+            for _ in 0..90 {
+                app.update();
+            }
+            let body = app.world().get::<crate::player::Body>(player).unwrap();
+            assert!(
+                body.wading > 0.5,
+                "{map}: wading {:.2} in the flood",
+                body.wading
+            );
+            assert_eq!(
+                body.swimming,
+                f.depth > crate::player::FLOAT_DEPTH - 0.05,
+                "{map}: afloat in {} m",
+                f.depth
+            );
+            let zone = app.world().resource::<Zone>().clone();
+            let t = app.world().get::<Transform>(player).unwrap().translation;
+            assert!(
+                t.y < zone.ground(t.x, t.z) - 2.0,
+                "{map}: still down in the corridor"
+            );
+            let residents = app.world().resource::<crate::robots::indoor::IndoorSites>();
+            let nav = &residents.sites[0].nav;
+            assert_eq!(
+                nav.walkable(at + Vec3::Y * 0.1),
+                f.depth < ug::DEEP,
+                "{map}: crawlers and {} m of water",
+                f.depth
+            );
+        }
+    }
+
+    /// Progression's hooks: going down into the Depot says so, and coming
+    /// out with something picked up there says what (not what you took
+    /// in).
+    #[test]
+    fn the_depot_knows_who_came_and_what_they_took() {
+        let mut app = app("marrow_creek");
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let (site, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .expect("the Depot on Marrow Creek");
+        let l = ug::layout(&site.id).unwrap();
+        let hall = l.rooms.iter().find(|r| r.id == "sorting_hall").unwrap();
+        let down = xf.transform_point(Vec3::new(hall.at[0], l.floor_of(hall) + 0.1, hall.at[1]));
+        assert_eq!(
+            floor_under(&zone, down).map(|f| (f - down.y).abs() < 0.2),
+            Some(true)
+        );
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::player::Player>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let mine = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let count = |app: &mut App| {
+            app.update();
+            let e = app.world().resource::<Messages<DepotEntered>>();
+            let o = app.world().resource::<Messages<CarriedOutOfDepot>>();
+            (
+                e.iter_current_update_messages().count(),
+                o.iter_current_update_messages()
+                    .map(|m| m.item)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let place = |app: &mut App, at: Vec3| {
+            *app.world_mut().get_mut::<Transform>(player).unwrap() =
+                Transform::from_translation(at);
+        };
+        place(&mut app, down);
+        let mut entered = 0;
+        for _ in 0..3 {
+            entered += count(&mut app).0;
+        }
+        assert_eq!(entered, 1, "going down into the Depot");
+        let found = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let up = zone.on_ground(xf.translation.x, xf.translation.z - 8.0) + Vec3::Y * 0.1;
+        place(&mut app, up);
+        let mut taken = Vec::new();
+        for _ in 0..3 {
+            taken.extend(count(&mut app).1);
+        }
+        assert_eq!(
+            taken,
+            vec![found],
+            "out with what was found there, not {mine:?}"
+        );
+    }
+
+    /// What the convoys took lies in the Depot's sorting hall, the latest
+    /// first, and stays there (on the bins, not through the floor).
+    #[test]
+    fn the_lost_kit_lies_in_the_sorting_hall() {
+        // (Set before the first frame, as a save is loaded at startup.)
+        let mut app = crate::headless_app(
+            LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let names: Vec<String> = catalog
+            .iter()
+            .take(LOST_SHOWN + 4)
+            .map(|(_, d)| d.name.clone())
+            .collect();
+        app.world_mut()
+            .resource_mut::<crate::persist::Memorial>()
+            .0
+            .lost = names.clone();
+        for _ in 0..90 * 4 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let lost: Vec<(String, Vec3)> = app
+            .world_mut()
+            .query_filtered::<(&Name, &GlobalTransform), With<LostKit>>()
+            .iter(app.world())
+            .map(|(n, g)| (n.to_string(), g.translation()))
+            .collect();
+        assert_eq!(lost.len(), LOST_SHOWN, "{lost:?}");
+        // The latest, not the oldest.
+        assert!(lost.iter().any(|(n, _)| n == names.last().unwrap()));
+        for (name, at) in &lost {
+            let site = site_under(&zone, *at);
+            assert!(
+                site.as_ref()
+                    .is_some_and(|s| s.0 == DEPOT && at.y > s.1 - 0.05),
+                "{name} at {at:?}: {site:?}"
+            );
+        }
+    }
+
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
     /// in the site, and out by the other way (the exit kiosk).
     #[test]
@@ -1697,67 +2704,70 @@ mod tests {
                     },
                 )
                 .unwrap();
-            let plan = plans
+            let sites: Vec<BuildingPlan> = plans
                 .iter()
-                .find(|p| ug::is_site(&p.name))
-                .expect("a site plan")
-                .clone();
-            assert!(
-                plan.entries.len() >= 2,
-                "{map}: {} ways in",
-                plan.entries.len()
-            );
-            let player = app
-                .world_mut()
-                .query_filtered::<Entity, With<LocalPlayer>>()
-                .iter(app.world())
-                .next()
-                .unwrap();
-            // Stand outside the entrance (the nearest stand to the origin).
-            let entry = *plan
-                .entries
-                .iter()
-                .min_by(|a, b| a.length().total_cmp(&b.length()))
-                .unwrap();
-            let exit = *plan
-                .entries
-                .iter()
-                .max_by(|a, b| a.length().total_cmp(&b.length()))
-                .unwrap();
-            let start = plan.to_world(entry);
-            let ground = app.world().resource::<Zone>().ground(start.x, start.z);
-            app.world_mut()
-                .get_mut::<Transform>(player)
-                .unwrap()
-                .translation = Vec3::new(start.x, ground + 0.1, start.z);
-            app.update();
-            // The loot furthest from the entrance.
-            let spots: Vec<Vec3> = app
-                .world()
-                .resource::<super::super::buildings::BuildingLoot>()
-                .0
-                .iter()
-                .map(|s| s.at)
-                .filter(|s| plan.contains(*s, 0.0))
+                .filter(|p| ug::is_site(&p.name))
+                .cloned()
                 .collect();
-            assert!(spots.len() >= 8, "{map}: {} spots in the site", spots.len());
-            let goal = spots
-                .iter()
-                .map(|s| plan.to_local(*s).xz())
-                .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
-                .unwrap();
-            if std::env::var_os("SITE_DUMP").is_some() {
-                crate::sim::indoor::dump_plans(
-                    std::slice::from_ref(&plan),
-                    &spots,
-                    &crate::asset_root_path()
-                        .join("../target/site_plans")
-                        .join(map),
+            assert!(!sites.is_empty(), "{map}: a site plan");
+            for plan in sites {
+                let map = &plan.name;
+                assert!(
+                    plan.entries.len() >= 2,
+                    "{map}: {} ways in",
+                    plan.entries.len()
                 );
-            }
-            let walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
-                let pos = app.world().get::<Transform>(player).unwrap().translation;
-                let tasks = crate::sim::raider::indoor_route(&plan, pos, to, within)
+                let player = app
+                    .world_mut()
+                    .query_filtered::<Entity, With<LocalPlayer>>()
+                    .iter(app.world())
+                    .next()
+                    .unwrap();
+                // Stand outside the entrance (the nearest stand to the origin).
+                let entry = *plan
+                    .entries
+                    .iter()
+                    .min_by(|a, b| a.length().total_cmp(&b.length()))
+                    .unwrap();
+                let exit = *plan
+                    .entries
+                    .iter()
+                    .max_by(|a, b| a.length().total_cmp(&b.length()))
+                    .unwrap();
+                let start = plan.to_world(entry);
+                let ground = app.world().resource::<Zone>().ground(start.x, start.z);
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = Vec3::new(start.x, ground + 0.1, start.z);
+                app.update();
+                // The loot furthest from the entrance.
+                let spots: Vec<Vec3> = app
+                    .world()
+                    .resource::<super::super::buildings::BuildingLoot>()
+                    .0
+                    .iter()
+                    .map(|s| s.at)
+                    .filter(|s| plan.contains(*s, 0.0))
+                    .collect();
+                assert!(spots.len() >= 8, "{map}: {} spots in the site", spots.len());
+                let goal = spots
+                    .iter()
+                    .map(|s| plan.to_local(*s).xz())
+                    .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
+                    .unwrap();
+                if std::env::var_os("SITE_DUMP").is_some() {
+                    crate::sim::indoor::dump_plans(
+                        std::slice::from_ref(&plan),
+                        &spots,
+                        &crate::asset_root_path()
+                            .join("../target/site_plans")
+                            .join(map),
+                    );
+                }
+                let walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
+                    let pos = app.world().get::<Transform>(player).unwrap().translation;
+                    let tasks = crate::sim::raider::indoor_route(&plan, pos, to, within)
                     .unwrap_or_else(|| {
                         let a = plan.to_local(pos).xz();
                         panic!(
@@ -1766,58 +2776,82 @@ mod tests {
                             crate::sim::raider::reach_cell(&plan, a, to)
                         )
                     });
-                app.world_mut().entity_mut(player).insert(Bot::new(tasks));
-                for _ in 0..90 * 120 {
-                    app.update();
-                    if app.world().get::<Bot>(player).unwrap().done() {
-                        break;
+                    app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                    for _ in 0..90 * 120 {
+                        app.update();
+                        if app.world().get::<Bot>(player).unwrap().done() {
+                            break;
+                        }
                     }
-                }
-                app.world().get::<Transform>(player).unwrap().translation
-            };
-            let at = walk(&mut app, goal, 0.3, "to the loot");
-            let local = plan.to_local(at);
-            assert!(
-                local.xz().distance(goal) < crate::bot::REACH + 0.3,
-                "{map}: stopped at {local:?} short of the loot at {goal:?}"
-            );
-            assert!(
-                local.y < plan.floor + 1.0,
-                "{map}: not down at the floor: {local:?}"
-            );
-            // From anywhere in the site (the deepest room, the stairs under
-            // the kiosks), the way out is one of the kiosks' doors.
-            for c in (0..plan.grid.n * plan.grid.n).step_by(37) {
-                let (i, j) = (c % plan.grid.n, c / plan.grid.n);
-                if plan.grid.cost[c] == extraction_core::nav::BLOCKED || plan.outside[c] {
-                    continue;
-                }
-                let from = Vec2::from_array(plan.grid.centre(i, j));
-                if let Some(to) = crate::sim::raider::way_out(&plan, from) {
+                    app.world().get::<Transform>(player).unwrap().translation
+                };
+                // On the power in stages: walk to each switch in turn and
+                // throw it (the deepest loot, or the way out, is behind it).
+                let mut switches: Vec<(usize, Entity, Vec3)> = app
+                    .world_mut()
+                    .query::<(Entity, &PowerSwitch, &GlobalTransform)>()
+                    .iter(app.world())
+                    .filter(|(_, sw, _)| sw.site == plan.entity)
+                    .map(|(e, sw, g)| (sw.stage, e, g.translation()))
+                    .collect();
+                switches.sort_by_key(|s| s.0);
+                for (stage, switch, at) in switches {
+                    walk(&mut app, plan.to_local(at).xz(), 0.5, "to a switch");
+                    app.world_mut()
+                        .entity_mut(player)
+                        .insert(Bot::new(vec![crate::bot::Task::Press(switch)]));
+                    for _ in 0..90 * 3 {
+                        app.update();
+                    }
                     assert!(
-                        plan.entries.iter().any(|e| e.distance(to) < 0.1),
-                        "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
+                        app.world().get::<SitePower>(plan.entity).unwrap().on(stage),
+                        "{map}: stage {stage} on"
                     );
                 }
+                let at = walk(&mut app, goal, 0.3, "to the loot");
+                let local = plan.to_local(at);
+                assert!(
+                    local.xz().distance(goal) < crate::bot::REACH + 0.3,
+                    "{map}: stopped at {local:?} short of the loot at {goal:?}"
+                );
+                assert!(
+                    local.y < plan.floor + 1.0,
+                    "{map}: not down at the floor: {local:?}"
+                );
+                // From anywhere in the site (the deepest room, the stairs under
+                // the kiosks), the way out is one of the kiosks' doors.
+                for c in (0..plan.grid.n * plan.grid.n).step_by(37) {
+                    let (i, j) = (c % plan.grid.n, c / plan.grid.n);
+                    if plan.grid.cost[c] == extraction_core::nav::BLOCKED || plan.outside[c] {
+                        continue;
+                    }
+                    let from = Vec2::from_array(plan.grid.centre(i, j));
+                    if let Some(to) = crate::sim::raider::way_out(&plan, from, &|_| false) {
+                        assert!(
+                            plan.entries.iter().any(|e| e.distance(to) < 0.1),
+                            "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
+                        );
+                    }
+                }
+                let at = walk(&mut app, exit, 0.6, "out");
+                let local = plan.to_local(at);
+                assert!(
+                    local.xz().distance(exit) < 1.2,
+                    "{map}: stopped at {local:?}, not out at {exit:?}"
+                );
+                let ground = app.world().resource::<Zone>().ground(at.x, at.z);
+                assert!(at.y > ground - 0.3, "{map}: out but under the ground");
+                // Out on the ground, it's out: a raider there doesn't try to
+                // leave the site again.
+                assert!(
+                    !plan.contains(at, -0.1),
+                    "{map}: out, but still in the site"
+                );
+                assert!(
+                    plan.in_grid(at),
+                    "{map}: the ground by the kiosk is on the plan"
+                );
             }
-            let at = walk(&mut app, exit, 0.6, "out");
-            let local = plan.to_local(at);
-            assert!(
-                local.xz().distance(exit) < 1.2,
-                "{map}: stopped at {local:?}, not out at {exit:?}"
-            );
-            let ground = app.world().resource::<Zone>().ground(at.x, at.z);
-            assert!(at.y > ground - 0.3, "{map}: out but under the ground");
-            // Out on the ground, it's out: a raider there doesn't try to
-            // leave the site again.
-            assert!(
-                !plan.contains(at, -0.1),
-                "{map}: out, but still in the site"
-            );
-            assert!(
-                plan.in_grid(at),
-                "{map}: the ground by the kiosk is on the plan"
-            );
         }
     }
 }

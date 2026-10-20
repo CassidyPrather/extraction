@@ -107,6 +107,7 @@ pub const MIX: &[Cue] = &[
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
+    cue!("gun.shot_suppressed", "guns/rifle_shot", -5.0, 118.0, 0.5, Action),
     cue!("gun.distant", "guns/distant_shot", -6.0, 95.0, 100.0, Event),
     cue!("gun.malfunction", "guns/bolt_close", -9.0, 75.0, 0.5, Signal),
     cue!("gun.dry_fire", "guns/dry_fire", -5.0, 70.0, 0.5, Signal),
@@ -124,6 +125,8 @@ pub const MIX: &[Cue] = &[
     cue!("gun.casing", "guns/casing", -9.0, 60.0, 1.5, Detail),
     // Bullets landing.
     cue!("hit.impact", "impacts/metal", -2.0, 95.0, 15.0, Action, 8.0),
+    cue!("hit.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
+    cue!("hit.water", "footsteps/water", 3.0, 85.0, 15.0, Action, 8.0),
     cue!("hit.ricochet", "impacts/ricochet", -1.0, 90.0, 15.0, Action, 8.0),
     cue!("hit.glance", "impacts/ricochet", -2.5, 100.0, 1.0, Signal),
     cue!("hit.body", "physical/body_hit", -8.0, 90.0, 0.5, Signal),
@@ -139,6 +142,7 @@ pub const MIX: &[Cue] = &[
     cue!("robot.investigate", "machines/servo", -10.0, 65.0, 20.0, Signal),
     cue!("robot.search", "machines/servo", -9.5, 60.0, 15.0, Detail, 8.0),
     cue!("robot.lost", "machines/servo", -12.0, 60.0, 20.0, Signal),
+    cue!("robot.voice", "machines/robot_voice", -17.0, 70.0, 20.0, Signal, 11.0),
     cue!("robot.callout", "machines/radio_squelch", -8.0, 75.0, 20.0, Signal),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
@@ -162,7 +166,11 @@ pub const MIX: &[Cue] = &[
     cue!("radio.static", "machines/radio_static", -16.0, 65.0, 0.6, Detail),
     cue!("chatter.squelch", "machines/radio_squelch", -8.5, 72.0, 0.6, Signal),
     cue!("chatter.static", "machines/radio_static", -12.0, 65.0, 0.6, Signal),
-    cue!("chatter.chirp", "machines/servo", -20.0, 55.0, 0.6, Detail),
+    cue!("chatter.voice", "machines/robot_voice", -20.0, 60.0, 0.6, Signal),
+    // Underground power.
+    cue!("power.breaker", "machines/clank", -6.0, 90.0, 3.0, Action),
+    cue!("power.pull", "physical/whoosh", -10.0, 70.0, 2.0, Detail),
+    cue!("power.generator", "machines/generator", -24.0, 85.0, 8.0, Signal, 6.0),
     // The truck.
     cue!("truck.arrive", "machines/truck_arrive", -6.0, 85.0, 30.0, Signal, 15.0),
     cue!("truck.idle", "machines/truck_idle", -9.0, 75.0, 15.0, Signal, 10.0),
@@ -171,12 +179,22 @@ pub const MIX: &[Cue] = &[
     // Doors.
     cue!("door.open", "physical/door_open", -8.0, 65.0, 3.0, Detail),
     cue!("door.close", "physical/door_close", -9.0, 75.0, 3.0, Detail),
+    cue!("door.locked", "machines/clank", -10.0, 70.0, 1.0, Detail),
+    cue!("door.wedged", "impacts/wood", -10.0, 70.0, 1.0, Detail),
     cue!("door.blow", "impacts/wood", 1.0, 100.0, 20.0, Signal, 30.0),
     cue!("door.broken", "physical/door_close", -8.5, 100.0, 20.0, Signal, 14.0),
     // Anomalies and the Surge.
     cue!("anomaly.lift", "anomaly/lift_hum", -6.0, 65.0, 8.0, Signal),
     cue!("anomaly.burner", "anomaly/burner_roar", 0.0, 75.0, 8.0, Signal),
     cue!("anomaly.snare", "anomaly/snare_buzz", -2.0, 60.0, 8.0, Signal),
+    cue!("anomaly.well", "anomaly/well_drone", -6.0, 70.0, 8.0, Signal),
+    cue!("anomaly.mirror", "anomaly/mirror_shimmer", -6.0, 60.0, 8.0, Signal),
+    cue!("anomaly.blink", "anomaly/mirror_blink", -8.5, 95.0, 8.0, Action, 7.0),
+    cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
+    cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
+    cue!("anomaly.reveal", "anomaly/reveal", -24.0, 65.0, 8.0, Signal),
+    cue!("anomaly.crush", "machines/groan", -8.5, 95.0, 8.0, Action, 7.0),
+    cue!("detector.click", "machines/detector_click", -8.0, 60.0, 0.4, Signal),
     cue!("anomaly.discharge", "anomaly/surge_crack", 2.0, 110.0, 8.0, Action),
     cue!("anomaly.pop", "anomaly/lift_pop", -10.0, 100.0, 8.0, Action, 6.0),
     cue!("anomaly.bloom", "anomaly/surge_crack", -1.0, 95.0, 8.0, Action),
@@ -235,6 +253,11 @@ pub fn db(name: &str) -> f32 {
         };
         c.db + lift
     })
+}
+
+/// A cue's role, if it's in the mix.
+pub fn role(name: &str) -> Option<Role> {
+    MIX.iter().find(|c| c.name == name).map(|c| c.role)
 }
 
 fn find(name: &str) -> Option<&'static Cue> {

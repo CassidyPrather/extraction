@@ -8,6 +8,7 @@
 //! feet and carries the body's yaw.
 
 pub mod comfort;
+pub mod fingers;
 pub mod flat;
 pub mod haptics;
 pub mod runtime;
@@ -65,6 +66,12 @@ pub struct HandInput {
     pub stick_click: bool,
     /// Tracking is valid this frame.
     pub tracked: bool,
+    /// The thumb rests on a face button, the stick or the thumb rest
+    /// (controllers that sense touch); the glove's thumb lies over it.
+    pub thumb_rest: bool,
+    /// The fingers themselves, where the runtime tracks them (Index
+    /// controllers, bare hands); `None` leaves the glove to its poses.
+    pub fingers: Option<fingers::Fingers>,
 }
 
 /// What the rig wants this frame.

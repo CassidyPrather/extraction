@@ -1,0 +1,111 @@
+diff --git a/src/xrt/drivers/simulated/simulated_controller.c b/src/xrt/drivers/simulated/simulated_controller.c
+index 959f826..009feea 100644
+--- a/src/xrt/drivers/simulated/simulated_controller.c
++++ b/src/xrt/drivers/simulated/simulated_controller.c
+@@ -21,6 +21,7 @@
+ #include "util/u_device.h"
+ #include "util/u_logging.h"
+ #include "util/u_distortion_mesh.h"
++#include "util/u_hand_simulation.h"
+ 
+ #include "simulated_interface.h"
+ 
+@@ -167,6 +168,45 @@ simulated_device_get_tracked_pose(struct xrt_device *xdev,
+ }
+ 
+ 
++DEBUG_GET_ONCE_BOOL_OPTION(simulated_hands, "SIMULATED_HANDS", false)
++
++/*!
++ * Simulated finger tracking (SIMULATED_HANDS=1): Index-knuckles style
++ * joints from curls that cycle through open and closed, a finger at a time,
++ * so an app's hand-tracking path can be tested without hardware.
++ */
++static xrt_result_t
++simulated_device_get_hand_tracking(struct xrt_device *xdev,
++                                   enum xrt_input_name name,
++                                   int64_t at_timestamp_ns,
++                                   struct xrt_hand_joint_set *out_value,
++                                   int64_t *out_timestamp_ns)
++{
++	struct simulated_device *sd = simulated_device(xdev);
++	if (name != XRT_INPUT_HT_CONFORMING_LEFT && name != XRT_INPUT_HT_CONFORMING_RIGHT) {
++		return XRT_ERROR_INPUT_UNSUPPORTED;
++	}
++	double t = (double)at_timestamp_ns / 1e9;
++	struct u_hand_tracking_curl_values values = {
++	    .little = (float)(0.5 + 0.5 * sin(t * 1.1 + 2.0)),
++	    .ring = (float)(0.5 + 0.5 * sin(t * 1.1 + 1.5)),
++	    .middle = (float)(0.5 + 0.5 * sin(t * 1.1 + 1.0)),
++	    .index = (float)(0.5 + 0.5 * sin(t * 1.1 + 0.5)),
++	    .thumb = (float)(0.5 + 0.5 * sin(t * 1.1)),
++	};
++	struct xrt_space_relation rel = {0};
++	rel.pose = sd->center;
++	rel.relation_flags = (enum xrt_space_relation_flags)(
++	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT |
++	    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
++	enum xrt_hand hand = name == XRT_INPUT_HT_CONFORMING_LEFT ? XRT_HAND_LEFT : XRT_HAND_RIGHT;
++	u_hand_sim_simulate_for_valve_index_knuckles(&values, hand, &rel, out_value);
++	out_value->hand_pose = rel;
++	out_value->is_active = sd->active;
++	*out_timestamp_ns = at_timestamp_ns;
++	return XRT_SUCCESS;
++}
++
+ /*
+  *
+  * Various data driven arrays.
+@@ -345,14 +385,19 @@ simulated_create_controller(enum xrt_device_name name,
+ 	default: assert(false); return NULL;
+ 	}
+ 
+-	// Allocate.
+-	struct simulated_device *sd = U_DEVICE_ALLOCATE(struct simulated_device, flags, input_count, output_count);
++	// Allocate (one more input for simulated finger tracking).
++	bool hands = debug_get_bool_option_simulated_hands() && type != XRT_DEVICE_TYPE_ANY_HAND_CONTROLLER;
++	struct simulated_device *sd =
++	    U_DEVICE_ALLOCATE(struct simulated_device, flags, input_count + (hands ? 1 : 0), output_count);
+ 	u_device_populate_function_pointers(&sd->base, simulated_device_get_tracked_pose, simulated_device_destroy);
+ 	sd->base.update_inputs = simulated_device_update_inputs;
+ 	sd->base.tracking_origin = origin;
+ 	sd->base.supported.orientation_tracking = true;
+ 	sd->base.supported.position_tracking = true;
+-	sd->base.supported.hand_tracking = false;
++	sd->base.supported.hand_tracking = hands;
++	if (hands) {
++		sd->base.get_hand_tracking = simulated_device_get_hand_tracking;
++	}
+ 	sd->base.name = name;
+ 	sd->base.device_type = type;
+ 	sd->base.binding_profiles = binding_profiles;
+@@ -365,6 +410,12 @@ simulated_create_controller(enum xrt_device_name name,
+ 		sd->base.inputs[i].active = true;
+ 		sd->base.inputs[i].name = inputs[i];
+ 	}
++	if (hands) {
++		sd->base.inputs[input_count].active = true;
++		sd->base.inputs[input_count].name = type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER
++		                                        ? XRT_INPUT_HT_CONFORMING_LEFT
++		                                        : XRT_INPUT_HT_CONFORMING_RIGHT;
++	}
+ 
+ 	for (uint32_t i = 0; i < output_count; i++) {
+ 		sd->base.outputs[i].name = outputs[i];
+diff --git a/src/xrt/targets/common/target_builder_simulated.c b/src/xrt/targets/common/target_builder_simulated.c
+index a60e3dc..1af4e33 100644
+--- a/src/xrt/targets/common/target_builder_simulated.c
++++ b/src/xrt/targets/common/target_builder_simulated.c
+@@ -133,6 +133,12 @@ simulated_open_system_impl(struct xrt_builder *xb,
+ 	tbo->head = head;
+ 	tbo->left = left;
+ 	tbo->right = right;
++	if (left != NULL && left->supported.hand_tracking) {
++		tbo->hand_tracking.conforming.left = left;
++	}
++	if (right != NULL && right->supported.hand_tracking) {
++		tbo->hand_tracking.conforming.right = right;
++	}
+ 
+ 	return XRT_SUCCESS;
+ }

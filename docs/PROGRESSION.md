@@ -109,6 +109,70 @@ turn it): raids by valley, the tier and job count, what's fitted and
 what's next, the keys at home, the memorial's count. It's the one place
 the whole arc is written down, in pencil, in the truck.
 
+## After the ladder (raid 30 and on)
+
+By raid 30 the driver has fitted everything, the letter is home, and the
+keys are the last thing the story asks. What keeps raid 40 from being
+raid 30 again? Three things, all physical, none of them a number to spend:
+
+**Deep jobs.** Past the ladder the driver's standing jobs only send you to
+the worst places: danger 3, and the underground sites (the shelter, the
+mine gallery, the service tunnel). They're the same three kinds (fetch,
+recover, scout) but never easy, and the cache they pay is three piles
+instead of two. Raid 40 is a raid to the Hollow or the quarry because the
+card says so, not because the loot table does.
+
+**Your order.** With the ladder done the driver will take an order: a
+second card under the job, pressed to cycle, says what you want his caches
+to lean to: ROUNDS (ammunition), MEDICINE, GADGETS, or ANYTHING (as
+before). His caches are still found, carried and got home; you choose what
+kind of pile is waiting. It's the one choice the economy gives you over
+what enters the world, and you earn it by finishing his jobs.
+
+**Upkeep.** Fittings wear. Every six raids each one wants a little from
+the stash, taken when you get home and said on the wrist ("Driver: took
+two scrap for the rack"):
+
+| Fitting | Upkeep, every 6 raids |
+| - | - |
+| Stash rack, wall shelf | 2 scrap metal each |
+| Bench vice | 1 gun oil |
+| Whip aerial | 1 electronics |
+| Medicine cabinet | 1 field dressing |
+
+If the stash hasn't got it, that fitting is **laid up** until it has (the
+next time home with the parts): the rack's room shrinks back (what's on it
+stays, nothing more goes in), the vice's recipes go, the aerial goes
+quiet, the cabinet stops. The career page lists what's laid up and what it
+wants. It starts six raids after each fitting, so it's a sink across the
+middle of the career too, and it's the reason scrap and oil are worth a
+pocket at raid 50. It's deliberately small: about one item a raid against
+the bots' 3-4 of the kinds it asks for.
+
+**Measured** (the same 54 job-taking sim raids, careers walked on to raid
+60 by `scripts/progression_pacing.py`): past the ladder a deep job is done
+about **every 2.6 raids** (the ladder's last tier took about one every 2),
+so raid 40 is a run to a danger-3 place or underground most times, for
+three piles of what you ordered. Upkeep at the bots' loot rates:
+
+| Part | Home per raid | Upkeep per raid (all fitted) | Share of income |
+| - | - | - | - |
+| scrap metal | 1.56 | 0.67 | 43% |
+| gun oil | 1.00 | 0.17 | 17% |
+| electronics | 0.72 | 0.17 | 23% |
+| field dressing | 1.54 | 0.17 | 11% |
+
+It never lays a fitting up for a career that keeps what it finds (0% of
+raids, every fitting); what it does is take nearly half the scrap, which
+the bench also wants for rounds and spare parts. That's the intended
+size: a pull on what you carry home and what you strip at the bench, not
+a tax that shuts the truck down. A player who strips everything for rounds
+will see the rack lie up, and that's the decision it's there to make.
+
+Cut from this: a reputation number (the order card is what reputation
+would have bought); per-fitting repairs at the bench (upkeep is taken, not
+crafted, so it never becomes a menu); rotating "seasons".
+
 ## Where it lives
 
 - `extraction_core::progression`: tiers, upgrades, contracts and how
@@ -149,53 +213,62 @@ card, and the cache it pays shows up as a red cross on the map.
 How many raids each tier takes, at the sim bots' rates (see "Measuring it"
 below for how the numbers were made).
 
-Measured on 36 sim raids on the merged polish build (12 in each valley,
-seed 21, bots of every personality: 53% home, 9 minutes a raid). `python3
-scripts/progression_pacing.py all` walks 3000 careers through the tiers
-on those raids:
+Measured on 54 sim raids on the merged polish build (6 in each valley for
+each of seeds 50, 56 and 62; bots of every personality, each handed a
+scout job: 74% home, 10 minutes a raid). `python3
+scripts/progression_pacing.py all <dir>` walks 3000 careers through the
+tiers on those raids:
 
 | Tier | Jobs | Danger | Raids for the tier (median) | Career so far: median (1 in 10 take) |
 | - | - | - | - | - |
-| 1 Odd jobs | 3 | 1-1 | 7 | 7 (12) |
-| 2 Errands | 3 | 1-2 | 8 | 15 (22) |
-| 3 Runs | 4 | 2-3 | 11 | 26 (36) |
-| 4 Far jobs | 4 | 2-3 (another valley) | 7 | 33 (44) |
+| 1 Odd jobs | 3 | 1-1 | 6 | 6 (10) |
+| 2 Errands | 3 | 1-2 | 6 | 12 (19) |
+| 3 Runs | 4 | 2-3 | 10 | 22 (31) |
+| 4 Far jobs | 4 | 2-3 (another valley) | 9 | 31 (41) |
 
-By valley, the whole ladder takes a median of 34 raids in Marrow Creek, 39
-in Kettle Pass and 31 in Cinder Works. An earlier run, before the robots
-and guns of this polish round were merged, had bots home 79% of the time
-and the ladder at 23 raids (Cinder 36 then, from fetches the valley can't
-give: its bots bring home no food or robot parts; fetches of "robot parts,
-any" and a three-raid swap brought it to 32).
+**The range:** by seed, the whole ladder takes a median of 29, 36 and 30
+raids; by valley, 30 in Marrow Creek, 29 in Kettle Pass and 37 in Cinder
+Works (the slowest: an industrial valley with little food to fetch, so its
+fetches more often run out the driver's patience). Read the ladder as
+**about 30 raids, 25 to 40**. Single seeds of a dozen raids swing much
+more than that (an early run on one seed said 23, another 33), which is
+why the table pools three.
+
+The bots that took scout jobs saw the place and got home 56% of the time
+at danger 1, 52% at danger 2 and 2 times in 4 at danger 3, against 74% for
+raids in general: a job pulls you somewhere you'd not have gone, and that
+costs. Danger 3 has few samples; the script leans on how often raids
+reached danger 3 and got home (28%) until there are more.
 
 What it says:
 
-- **The first evening has a fitting in it.** Tier 1 is about seven raids:
+- **The first evening has a fitting in it.** Tier 1 is about six raids:
   the stash rack comes in the first or second session.
 - **Getting home is the pace.** Every job but a fetch from the stash needs
-  the raid to end at the truck; only half of the bots' raids do now, and a
-  quarter reach a danger-3 place and get home:
+  the raid to end at the truck, and a quarter of raids at best reach a
+  danger-3 place and get home:
 
 | Danger reached and home | Share of raids |
 | - | - |
-| 0 | 53% |
-| 1 | 53% |
-| 2 | 53% |
-| 3 | 25% |
+| 0 | 74% |
+| 1 | 74% |
+| 2 | 74% |
+| 3 | 28% |
 
 - **Robot parts are the bottleneck of fetches.** The bots bring home a
-  robot part (any kind) about once in twelve raids (they fight what comes
-  for them and rarely strip the wreck). A fetch for one used to be the way
-  a career could stall for good, so a fetch may take any robot part, and
-  the driver gives up on an unmet fetch after three raids
-  (`FETCH_PATIENCE`). A player who hunts robots meets them far sooner.
-- **The ladder ends around raid 33 (1 in 10: past 44)**: fifteen hours or
-  so at a player's pace. Then the standing jobs and the keys: by then tier
-  3 has walked you through the danger-3 places where the keys lie, and
-  the last job (Hana's letter) has closed the driver's story.
+  robot part (any kind) about once in five raids, a given part far less
+  (they fight what comes for them and rarely strip the wreck). A fetch for
+  one used to be the way a career could stall for good, so a fetch may take
+  any robot part, and the driver gives up on an unmet fetch after three
+  raids (`FETCH_PATIENCE`). A player who hunts robots meets them far sooner.
+- **The ladder ends around raid 30**: twelve to fifteen hours at a
+  player's pace. Then the standing jobs and the keys: by then tier 3 has
+  walked you through the danger-3 places where the keys lie, nights have
+  joined the Surge's table (`Progress::nights`), and the last job (Hana's
+  letter) has closed the driver's story.
 
-The bots don't take jobs, and their raids are short and timid next to a
-player's, so read the numbers as the shape of the arc, not its minutes.
+The bots' raids are short and timid next to a player's, so read the
+numbers as the shape of the arc, not its minutes.
 
 ## Measuring it
 

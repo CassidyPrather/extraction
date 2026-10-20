@@ -140,6 +140,46 @@ pub fn coming_home(n: u32, recalled: bool) -> &'static str {
         .unwrap_or_else(|| pick(SMALL_TALK, n))
 }
 
+/// On the drive home, when he notices what you've brought (and has none
+/// of his own story to tell that night): `raid::lev`.
+pub const CARGO_ARTIFACT: &[&str] = &[
+    "Driver: \"Something in your kit's humming. Box it before I drive.\"",
+    "Driver: \"You've a stone on you. I can feel it in my teeth.\"",
+];
+pub const CARGO_EYE: &[&str] = &[
+    "Driver: \"One of their eyes? Don't point it at me.\"",
+    "Driver: \"That eye still looks at you. Bag it.\"",
+];
+pub const CARGO_CELL: &[&str] = &[
+    "Driver: \"One of their cells. Heavier than it looks, eh?\"",
+    "Driver: \"Their cell. Keep it off the floor. It ticks.\"",
+];
+pub const CARGO_FOOD: &[&str] = &[
+    "Driver: \"Tins! We'll eat tonight.\"",
+    "Driver: \"That's a week of suppers you've got there.\"",
+];
+/// This much food and he says so.
+pub const FOOD_PLENTY: usize = 5;
+
+/// The drive-home line: his story when it's that homecoming, then what
+/// you've brought (a stone, an eye, a cell, a lot of food), then the rest.
+pub fn coming_home_with(n: u32, recalled: bool, c: super::lev::Cargo) -> &'static str {
+    if !recalled && let Some((_, l)) = COMING_HOME.iter().find(|(at, _)| *at == n) {
+        return l;
+    }
+    if c.artifact {
+        pick(CARGO_ARTIFACT, n)
+    } else if c.eye {
+        pick(CARGO_EYE, n)
+    } else if c.cell {
+        pick(CARGO_CELL, n)
+    } else if c.food >= FOOD_PLENTY {
+        pick(CARGO_FOOD, n)
+    } else {
+        coming_home(n, recalled)
+    }
+}
+
 /// Machines talking about you, close by.
 pub const CHATTER_CLOSE: &[&str] = &[
     "Robot chatter on the radio. They're coming here.",
@@ -152,6 +192,32 @@ pub const CHATTER_FAR: &[&str] = &[
     "Robot chatter on the radio: something's moving, off to the {b}.",
     "Machine talk on the radio, faint. A team heading {b}.",
     "The radio clicks in their tones: something off to the {b}.",
+];
+
+/// The thread (`world::story::BEATS`): what the driver says on the radio
+/// between raids when a rank opens the next beat. One line every few
+/// seconds, in order.
+pub const BEAT_RUSTY: &[&str] = &[
+    "Driver: \"We had a dog. Rusty. Mum's, really. Daft thing.\"",
+    "Driver: \"No dogs on the buses. That's why she stayed.\"",
+];
+pub const BEAT_HOLMS: &[&str] = &[
+    "Driver: \"The Holms ran the post counter. Mum's oldest friends.\"",
+    "Driver: \"Mrs Holm went down the shelter, they said. Never came up.\"",
+];
+pub const BEAT_COLLECTOR: &[&str] = &[
+    "Driver: \"I saw the collector come for someone in Marrow once.\"",
+    "Driver: \"February. From the fence. I watched it go to the Gate.\"",
+    "Driver: \"There's a letter on her table. I know there is.\"",
+];
+pub const BEAT_LETTER: &[&str] = &[
+    "Driver: \"She says they keep everything. For the review. Her too.\"",
+    "Driver: \"Three keys stop them, the inspector told her. All three.\"",
+    "Driver: \"Her photo's in the stash. Take it out there with you.\"",
+];
+pub const BEAT_RECALLED: &[&str] = &[
+    "Truck: \"They're walking home. All of them. I can see it from here.\"",
+    "Driver: \"I'm going in. First time. The house by the well.\"",
 ];
 
 /// A machine close by has stopped looking for you
@@ -218,7 +284,16 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 14] = [
+        let pools: [&[&str]; 23] = [
+            CARGO_ARTIFACT,
+            CARGO_EYE,
+            CARGO_CELL,
+            CARGO_FOOD,
+            BEAT_RUSTY,
+            BEAT_HOLMS,
+            BEAT_COLLECTOR,
+            BEAT_LETTER,
+            BEAT_RECALLED,
             LOST_YOU,
             CALLED_OUT,
             CALLED,

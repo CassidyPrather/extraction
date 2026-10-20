@@ -34,7 +34,26 @@ pub struct Projectile {
     pub gun: Entity,
     pub life: f32,
     pub mods: ShotMods,
+    /// The bullet's mass, grams (its energy is what gets it through
+    /// things: `extraction_core::firearm_terminal`).
+    pub mass_g: f32,
+    /// Its own randomness (ricochet rolls), and what it's been through or
+    /// off so far.
+    pub seed: u64,
+    pub passes: u8,
 }
+
+/// A round glanced off a hard face (for the whine and a spray of sparks).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Ricochet {
+    pub point: Vec3,
+    pub normal: Vec3,
+    /// Its velocity leaving.
+    pub velocity: Vec3,
+}
+
+/// How many walls and glances a round survives before it's spent.
+const MAX_PASSES: u8 = 3;
 
 /// What an artifact in the gun's adapter does to its shots.
 #[derive(Clone, Copy, Debug)]
@@ -47,6 +66,8 @@ pub struct ShotMods {
     pub stun: f32,
     /// Glass eye: the round bends toward robots ahead of it.
     pub seek: bool,
+    /// Air drag scale on its own (a grenade's fragments slow fast).
+    pub drag: f32,
 }
 
 impl Default for ShotMods {
@@ -56,6 +77,7 @@ impl Default for ShotMods {
             damage: 1.0,
             stun: 0.0,
             seek: false,
+            drag: 1.0,
         }
     }
 }
@@ -103,6 +125,7 @@ impl Plugin for BallisticsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Shot>()
             .add_message::<Hit>()
+            .add_message::<Ricochet>()
             .add_systems(
                 FixedUpdate,
                 (fire_shots, fly_projectiles, push_hit_bodies)
@@ -119,8 +142,13 @@ fn fire_shots(
     mut shots: MessageReader<Shot>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
     catalog: Res<crate::items::Catalog>,
+    guns: Query<&super::Gun>,
 ) {
     for shot in shots.read() {
+        // Robots' guns have no cartridge: a middling bullet.
+        let mass_g = guns.get(shot.gun).map_or(8.0, |g| {
+            extraction_core::firearm_terminal::bullet_mass_g(&g.firearm.def.cartridge)
+        });
         // An artifact in an adapter on this gun.
         let mods = mounted
             .iter()
@@ -146,6 +174,9 @@ fn fire_shots(
                     gun: shot.gun,
                     life: 3.0,
                     mods,
+                    mass_g,
+                    seed: rng.next_u64(),
+                    passes: 0,
                 },
                 Transform::from_translation(shot.origin),
             ));
@@ -165,7 +196,7 @@ fn fire_shots(
     }
 }
 
-fn fly_projectiles(
+pub(crate) fn fly_projectiles(
     mut commands: Commands,
     mut projectiles: Query<(Entity, &mut Projectile, &mut Transform)>,
     spatial: SpatialQuery,
@@ -173,7 +204,12 @@ fn fly_projectiles(
     mut hits: MessageWriter<Hit>,
     parents: Query<&ChildOf>,
     parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut splashes: MessageWriter<super::impacts::Impact>,
+    struck: Struck,
+    mut ricochets: MessageWriter<Ricochet>,
 ) {
+    use extraction_core::firearm_terminal::{Outcome, strike};
     let dt = time.delta_secs();
     let filter =
         SpatialQueryFilter::from_mask([Layer::World, Layer::Item, Layer::Robot, Layer::Player]);
@@ -206,16 +242,96 @@ fn fly_projectiles(
         let hit = Dir3::new(step).ok().and_then(|dir| {
             spatial.cast_ray_predicate(from, dir, len, true, &filter, &|h| !is_own(h))
         });
+        // Into a water surface before anything else: a splash, and the
+        // round is spent (it doesn't go on to the bed).
+        let end = from + step;
+        let water = zone
+            .as_ref()
+            .and_then(|z| z.hm.water_level([end.x, end.z]))
+            .filter(|w| from.y >= *w && end.y < *w)
+            .map(|w| len * (from.y - w) / (from.y - end.y).max(1e-6));
+        if let Some(d) = water.filter(|d| hit.as_ref().is_none_or(|h| h.distance > *d)) {
+            splashes.write(super::impacts::Impact {
+                kind: super::impacts::ImpactKind::Water,
+                point: from + step.normalize() * d,
+                normal: Vec3::Y,
+                velocity: p.velocity,
+                entity: None,
+                decal: false,
+                part: None,
+                hurt: false,
+            });
+            commands.entity(e).despawn();
+            continue;
+        }
         if let Some(hit) = hit {
             let point = from + step.normalize() * hit.distance;
+            let speed = p.velocity.length();
+            let dir = p.velocity / speed.max(1e-3);
+            let cos_in = (-dir).dot(hit.normal).clamp(0.0, 1.0);
+            let (stuff, mm, along) = struck.stuff(hit.entity, point, dir, cos_in);
+            // A round starting inside something (a double wall) is spent.
+            let outcome = if p.passes >= MAX_PASSES || hit.distance < 1e-4 {
+                Outcome::Stop
+            } else {
+                let roll =
+                    Rng::new(p.seed ^ (u64::from(p.passes) + 1).wrapping_mul(0x9E37_79B9)).f32();
+                strike(stuff, p.mass_g, speed, cos_in, mm, roll)
+            };
+            let glancing = matches!(outcome, Outcome::Ricochet { .. });
             hits.write(Hit {
                 entity: hit.entity,
                 point,
                 normal: hit.normal,
                 velocity: p.velocity,
-                damage: p.damage * p.mods.damage,
+                // A glancing blow only grazes.
+                damage: p.damage * p.mods.damage * if glancing { 0.3 } else { 1.0 },
                 shooter: p.shooter,
             });
+            match outcome {
+                Outcome::Through { speed: out } => {
+                    // Out the far side, slower and weaker, leaving an exit
+                    // mark.
+                    let exit = point + dir * (along + 0.01);
+                    splashes.write(super::impacts::Impact {
+                        kind: super::impacts::kind_of_stuff(stuff),
+                        point: point + dir * along,
+                        normal: dir,
+                        velocity: dir * out,
+                        entity: Some(hit.entity),
+                        decal: struck.marks(hit.entity),
+                        part: None,
+                        hurt: false,
+                    });
+                    let keep = (out / speed.max(1e-3)).powi(2);
+                    p.velocity = dir * out;
+                    p.damage *= keep;
+                    p.passes += 1;
+                    t.translation = exit;
+                    continue;
+                }
+                Outcome::Ricochet { speed: out } => {
+                    let n = hit.normal;
+                    let mut rng = Rng::new(p.seed ^ 0x51CE);
+                    let jitter = Vec3::new(
+                        rng.range(-0.08, 0.08),
+                        rng.range(0.0, 0.1),
+                        rng.range(-0.08, 0.08),
+                    );
+                    let off = (dir - 2.0 * dir.dot(n) * n + jitter).normalize_or(n);
+                    p.velocity = off * out;
+                    p.damage *= (out / speed.max(1e-3)).powi(2);
+                    p.passes += 1;
+                    t.translation = point + n * 0.01;
+                    ricochets.write(Ricochet {
+                        point,
+                        normal: n,
+                        velocity: p.velocity,
+                    });
+                    continue;
+                }
+                Outcome::Stop => {}
+            }
             if p.mods.stun > 0.0 {
                 if let Ok((part, _)) = parts.get(hit.entity) {
                     commands
@@ -229,7 +345,8 @@ fn fly_projectiles(
         t.translation += step;
         let fall = p.mods.fall;
         p.velocity += GRAVITY * dt * fall;
-        p.velocity *= 1.0 - DRAG * dt * fall;
+        let drag = (DRAG * p.mods.drag * dt * fall).min(0.9);
+        p.velocity *= 1.0 - drag;
         if p.mods.seek {
             // Bend toward the nearest robot part within a narrow cone.
             let dir = p.velocity.normalize_or_zero();
@@ -249,6 +366,76 @@ fn fly_projectiles(
         if p.life <= 0.0 {
             commands.entity(e).despawn();
         }
+    }
+}
+
+/// What a round has struck, as far as getting through it goes.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct Struck<'w, 's> {
+    built: Query<
+        'w,
+        's,
+        (
+            &'static GlobalTransform,
+            &'static crate::world::surfaces::Surfaces,
+        ),
+    >,
+    trees: Query<'w, 's, (), With<crate::world::trees::TreeTrunks>>,
+    structures: Query<'w, 's, (), With<crate::world::structures::Structure>>,
+    items: Query<'w, 's, (), With<crate::items::Item>>,
+    bodies: Query<'w, 's, (), With<crate::player::BodyCollider>>,
+    robot_parts: Query<'w, 's, (), With<crate::robots::RobotPart>>,
+}
+
+impl Struck<'_, '_> {
+    /// What it is, how thick square to its face (mm), and how far the
+    /// round's line runs through it (m).
+    fn stuff(
+        &self,
+        e: Entity,
+        point: Vec3,
+        dir: Vec3,
+        cos_in: f32,
+    ) -> (extraction_core::firearm_terminal::Stuff, f32, f32) {
+        use extraction_core::firearm_terminal::Stuff;
+        const SOLID: f32 = 10_000.0;
+        if self.bodies.contains(e) || self.items.contains(e) {
+            return (Stuff::Plate, SOLID, 0.0);
+        }
+        if self.robot_parts.contains(e) {
+            return (Stuff::Plate, 30.0, 0.03);
+        }
+        if self.trees.contains(e) {
+            return (Stuff::Logs, 300.0, 0.3 / cos_in.max(0.2));
+        }
+        if let Some((gt, surf)) = self.built.get(e).ok() {
+            if let Some((half, t, m)) = surf.piece_at(gt, point) {
+                let inv = gt.affine().inverse();
+                let q = t.rotation.inverse() * (inv.transform_point3(point) - t.translation);
+                let d = t.rotation.inverse() * inv.transform_vector3(dir).normalize_or_zero();
+                // Where the line leaves the piece's box.
+                let mut exit = f32::INFINITY;
+                for i in 0..3 {
+                    if d[i].abs() > 1e-6 {
+                        let a = (half[i] - q[i]) / d[i];
+                        let b = (-half[i] - q[i]) / d[i];
+                        exit = exit.min(a.max(b));
+                    }
+                }
+                let along = exit.clamp(0.0, 5.0);
+                let stuff = super::impacts::stuff_of(m);
+                return (stuff, along * 1000.0 * cos_in.max(0.2), along);
+            }
+        }
+        if self.structures.contains(e) {
+            return (Stuff::Concrete, SOLID, 0.0);
+        }
+        (Stuff::Soil, SOLID, 0.0)
+    }
+
+    /// A static thing that wears an exit mark.
+    fn marks(&self, e: Entity) -> bool {
+        !(self.bodies.contains(e) || self.items.contains(e) || self.robot_parts.contains(e))
     }
 }
 

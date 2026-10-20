@@ -41,9 +41,15 @@ not just the instance.
 
 ## Verifying
 
+- **Once per session, first:** `python3 scripts/fetch_assets.py`. The
+  textures it fetches are gitignored; without them trees fall back to a
+  heavier dev path and the frame-budget gauges print "frame budget NOT
+  CHECKED" instead of measuring the game that ships.
 - **Before you finish:** `cargo test --workspace` and
   `cargo run --profile fast -- --headless --scenario all` (must print
-  `all 9 scenarios OK`). While working, run only the tests you touched;
+  `all 11 scenarios OK`). `second_hour` (a bot's three-raid career past
+  the yard, onboarding) is longer and not in `all`: run it by name,
+  `--headless --scenario second_hour`. While working, run only the tests you touched;
   the full suite takes about 7 minutes. If it restarts your container,
   use `cargo test --workspace -j 2 -- --test-threads=2`.
 - **Looking at things:**
@@ -95,6 +101,7 @@ reformatting their code.
 | Underground | underground sites: new `src/world/underground.rs`, its prefabs and `art/props/bunker`, its lighting; placement in the valleys together with Map design |
 | Story | the Zone's story and its telling: `src/world/notes.rs` text, terminals' text, radio lines (`src/raid/chatter.rs` text), staged scenes (remains, abandoned camps) as data, a lore bible in `docs/LORE.md` |
 | Audio | `src/audio.rs`, `src/audio_mix.rs`, `assets/audio/` (+ `sounds.json`), `scripts/audio_*.py`, `scripts/fetch_audio.py`, `docs/AUDIO.md`; haptics' feel (`src/rig/haptics.rs`) |
+| Anomalies | `src/anomaly/` (kinds' rules, visuals, artifacts, the detector), `crates/extraction_core/src/anomaly.rs`, `assets/shaders/anomaly_*.wgsl`; standing anomalies' placement in the valleys together with Map design |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.

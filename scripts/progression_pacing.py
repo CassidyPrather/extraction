@@ -64,22 +64,31 @@ def region_of(regs, x, z):
 
 def tiers():
     src = open(os.path.join(ROOT, "crates/extraction_core/src/progression.rs")).read()
-    body = src[src.index("pub const TIERS"):src.index("pub const STANDING")]
+    # The ladder, then the standing (deep) jobs after it.
+    body = src[src.index("pub const TIERS"):src.index("/// The stash crate's room")]
     out = []
     for t in re.finditer(
-        r'name: "([^"]+)",\s*jobs: (\d+),\s*danger: \((\d), (\d)\),\s*far: (\w+),\s*kinds: &\[([^\]]*)\]',
+        r'name: "([^"]+)",\s*jobs: (\d+),\s*danger: \((\d), (\d)\),\s*far: (\w+),\s*kinds: &\[([^\]]*)\],\s*fits: &\[([^\]]*)\]',
         body,
     ):
         kinds = re.findall(r"JobKind::(\w+)", t.group(6))
+        names = {"StashRack": "stash_rack", "BenchVice": "bench_vice", "Aerial": "aerial",
+                 "MedCabinet": "med_cabinet", "StashRack2": "stash_rack_2"}
+        fits = [names[u] for u in re.findall(r"Upgrade::(\w+)", t.group(7))]
         out.append(dict(name=t.group(1), jobs=int(t.group(2)), danger=(int(t.group(3)), int(t.group(4))),
-                        far=t.group(5) == "true", kinds=kinds))
+                        far=t.group(5) == "true", kinds=kinds, fits=fits))
     wants_src = src[src.index("pub const WANTS"):src.index("pub const ANY_PARTS")]
     wants = []
     for tier in wants_src.split("&[\n")[1:]:
         wants.append([(m[0] or "robot_parts", int(m[1]), int(m[2]))
                       for m in re.findall(r'(?:"([a-z_]+)"|ANY_PARTS),\s*(\d+),\s*(\d+),', tier)])
-    return out, wants
+    return out[:-1], wants, out[-1]
 
+
+PRIOR = 4
+# Careers are walked to this many raids; "after the ladder" counts from LADDER_TO.
+HORIZON = 60
+LADDER_TO = 30
 
 PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
     ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
@@ -87,6 +96,25 @@ PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
 
 PARTS = re.findall(r'"([a-z_]+)"', re.search(r"pub const PARTS: &\[&str\] = &\[([^\]]*)\]", open(
     os.path.join(ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
+
+
+def upkeep():
+    """Each fitting's upkeep, as `Upgrade::upkeep` and `UPKEEP_EVERY` have it."""
+    src = open(os.path.join(ROOT, "crates/extraction_core/src/progression.rs")).read()
+    every = int(re.search(r"UPKEEP_EVERY: u32 = (\d+)", src).group(1))
+    id_fn = src[src.index("pub fn id(self)"):]
+    ids = dict(re.findall(r"Upgrade::(\w+) => \"([a-z_0-9]+)\",\n", id_fn[:id_fn.index("\n    }\n")]))
+    body = src[src.index("pub fn upkeep(self)"):]
+    body = body[:body.index("\n    }\n")]
+    out = {}
+    for arms, parts in re.findall(r"((?:Upgrade::\w+\s*\|?\s*)+)=> &\[([^\]]*)\]", body):
+        p = [(i, int(n)) for i, n in re.findall(r'\("([a-z_]+)",\s*(\d+)\)', parts)]
+        for u in re.findall(r"Upgrade::(\w+)", arms):
+            out[ids[u]] = p
+    return every, out
+
+
+UPKEEP_EVERY, UPKEEP = upkeep()
 
 
 def takes(want, item):
@@ -98,8 +126,14 @@ def main():
     maps = ["marrow_creek", "kettle_pass", "cinder_works"] if map_name == "all" else [map_name]
     paths = []
     for m in maps:
-        runs_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "target", "sim", m)
-        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl")))]
+        if len(sys.argv) > 2:
+            # A runs dir; with `all`, a dir holding one folder per map
+            # (and they may hold a folder per batch).
+            runs_dir = os.path.join(sys.argv[2], m) if map_name == "all" else sys.argv[2]
+        else:
+            runs_dir = os.path.join(ROOT, "target", "sim", m)
+        paths += [(m, p) for p in sorted(glob.glob(os.path.join(runs_dir, "*.jsonl"))
+                                          + glob.glob(os.path.join(runs_dir, "*", "*.jsonl")))]
     regs_by = {m: regions(m) for m in maps}
     runs = []
     for m, path in paths:
@@ -130,6 +164,9 @@ def main():
     def reach(lo, hi):
         return sum(r["home"] and any(lo <= d <= hi for _, d in r["visited"]) for r in runs) / n
 
+    def income(item):
+        return sum(r["loot"].count(item) for r in runs) / len(runs)
+
     def rate(item):
         return sum(sum(takes(item, i) for i in r["loot"]) for r in runs) / n
 
@@ -142,8 +179,11 @@ def main():
         for d in range(4):
             js = [r for r in jobs if r["job"].get("danger") == d]
             if js:
-                job_rate[d] = sum(r["home"] and r["job"]["seen"] for r in js) / len(js)
-                print(f"| {d} | {len(js)} | {job_rate[d]:.0%} |")
+                done = sum(r["home"] and r["job"]["seen"] for r in js)
+                # A few runs say little: lean on "reached that danger and
+                # got home" as a prior worth PRIOR runs.
+                job_rate[d] = (done + PRIOR * reach(d, d)) / (len(js) + PRIOR)
+                print(f"| {d} | {len(js)} | {done / len(js):.0%} (used: {job_rate[d]:.0%}) |")
         print()
 
     def place_odds(lo, hi):
@@ -154,7 +194,7 @@ def main():
             return sum(known) / len(known)
         return reach(lo, hi)
 
-    ts, wants = tiers()
+    ts, wants, STANDING = tiers()
     print(f"{map_name}: {n} sim raids, {home:.0%} home, "
           f"{sum(r['minutes'] for r in runs) / n:.0f} min a raid on average\n")
     print("| Danger reached and home | Share of raids |\n| - | - |")
@@ -174,43 +214,74 @@ def main():
         fin = [c for c in costs if math.isfinite(c)]
         fetch_cost.append(sum(fin) / len(fin) if fin else math.inf)
     print()
-    careers = []
+    fits = [t["fits"] for t in ts]
+    careers, after = [], []
     rng = random.Random(1)
     for _ in range(3000):
         stock = {}
         raids, at = 0, []
-        for ti, t in enumerate(ts):
+        due, laid = {}, {}   # fitting -> raid due; fitting -> raids laid up (30-60)
+        jobs_after = 0
+
+        def homecoming():
+            """A raid's end: its loot in the stash, then upkeep."""
+            for f in [f for tf in fits[:len(at)] for f in tf]:
+                if f not in due:
+                    due[f] = raids + UPKEEP_EVERY
+                    continue
+                if raids >= due[f]:
+                    parts = UPKEEP[f]
+                    if all(stock.get(i, 0) >= n for i, n in parts):
+                        for i, n in parts:
+                            stock[i] -= n
+                        due[f] = raids + UPKEEP_EVERY
+                    elif raids > LADDER_TO:
+                        laid[f] = laid.get(f, 0) + 1
+
+        def job(ti, t):
+            nonlocal raids
             lo, hi = t["danger"]
+
+            def draw():
+                want = rng.choice(wants[min(ti, len(wants) - 1)])
+                return rng.choice(t["kinds"]), want, rng.randint(want[1], want[2])
+            kind, want, n = draw()
+            since = 0
+            while raids < HORIZON:
+                if kind == "Fetch" and since >= PATIENCE:
+                    # The driver gives up waiting and asks for something else.
+                    kind, want, n = draw()
+                    since = 0
+                raids += 1
+                since += 1
+                r = rng.choice(runs)
+                if r["home"]:
+                    for item in r["loot"]:
+                        stock[item] = stock.get(item, 0) + 1
+                homecoming()
+                have = sum(c for i, c in stock.items() if takes(want[0], i))
+                if kind == "Fetch" and have >= n:
+                    for i in list(stock):
+                        while n and stock[i] and takes(want[0], i):
+                            stock[i] -= 1
+                            n -= 1
+                    return True
+                if kind != "Fetch" and rng.random() < place_odds(lo, hi):
+                    return True
+            return False
+
+        for ti, t in enumerate(ts):
             for _job in range(t["jobs"]):
-                def draw():
-                    want = rng.choice(wants[min(ti, len(wants) - 1)])
-                    return rng.choice(t["kinds"]), want, rng.randint(want[1], want[2])
-                kind, want, n = draw()
-                since = 0
-                while True:
-                    if kind == "Fetch" and since >= PATIENCE:
-                        # The driver gives up waiting and asks for something else.
-                        kind, want, n = draw()
-                        since = 0
-                    raids += 1
-                    since += 1
-                    r = rng.choice(runs)
-                    if r["home"]:
-                        for item in r["loot"]:
-                            stock[item] = stock.get(item, 0) + 1
-                    have = sum(c for i, c in stock.items() if takes(want[0], i))
-                    if kind == "Fetch" and have >= n:
-                        for i in list(stock):
-                            while n and stock[i] and takes(want[0], i):
-                                stock[i] -= 1
-                                n -= 1
-                        break
-                    if kind != "Fetch" and rng.random() < place_odds(lo, hi):
-                        break
-                    if raids > 400:
-                        break
+                job(ti, t)
             at.append(raids)
         careers.append(at)
+        # Past the ladder: deep jobs until HORIZON raids.
+        start = raids
+        while raids < HORIZON and job(len(ts), STANDING):
+            if raids > LADDER_TO:
+                jobs_after += 1
+        span = max(1, HORIZON - max(start, LADDER_TO))
+        after.append((jobs_after, span, {f: laid.get(f, 0) / span for f in UPKEEP}))
     print("| Tier | Jobs | Danger | Raids for the tier (median) | Career so far: median (1 in 10 take) |\n| - | - | - | - | - |")
     prev = 0
     for ti, t in enumerate(ts):
@@ -221,6 +292,26 @@ def main():
         where = f"{lo}-{hi}" + (" (another valley)" if t["far"] else "")
         print(f"| {ti + 1} {t['name']} | {t['jobs']} | {where} | {med - prev} | {med} ({slow}) |")
         prev = med
+    print()
+    done = [a for a in after if a[1] > 1]
+    if done:
+        rate = sum(a[0] for a in done) / sum(a[1] for a in done)
+        print(f"After the ladder (raids {LADDER_TO}-{HORIZON}): a deep job every "
+              f"{1 / rate if rate else float('inf'):.1f} raids.\n")
+        print("| Fitting | Upkeep every %d raids | Share of raids laid up |\n| - | - | - |" % UPKEEP_EVERY)
+        for f, parts in UPKEEP.items():
+            share = sum(a[2][f] for a in done) / len(done)
+            what = ", ".join(f"{n} {i}" for i, n in parts)
+            print(f"| {f} | {what} | {share:.0%} |")
+        print()
+        print("| Part | Home per raid | Upkeep per raid (all fitted) | Share of income |\n| - | - | - | - |")
+        need = {}
+        for parts in UPKEEP.values():
+            for i, n in parts:
+                need[i] = need.get(i, 0) + n / UPKEEP_EVERY
+        for i, per in need.items():
+            got = income(i)
+            print(f"| {i} | {got:.2f} | {per:.2f} | {per / got if got else float('inf'):.0%} |")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 //!
 //! | Key | Does |
 //! | --- | --- |
-//! | V | Work the action: tap-rack the slide / charging handle (drop the magazine first on a double feed), cycle the bolt, break the shotgun |
+//! | V | Work the action: tap-rack the slide / charging handle (drop the magazine first on a double feed), cycle the bolt, break the shotgun, thumb a revolver's hammer |
 //! | R | Reload from what you carry: swap magazines, or thumb rounds in |
 //! | X | Selector / safety |
 //! | C | Combine the items in your two hands (load a magazine from a box, clean a gun...) |
@@ -42,6 +42,14 @@ pub enum Step {
     Mode,
     /// Slap the magazine home.
     TapMag,
+    /// Thumb the hammer back.
+    Cock,
+    /// Open or shut a revolver's loading gate.
+    Gate(bool),
+    /// Turn a revolver's cylinder a chamber by hand.
+    Rotate,
+    /// Push the case at the gate out with the rod.
+    EjectGate,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -136,6 +144,17 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
                 }
                 steps.push((0.3, Step::Break(false)));
             }
+            ActionKind::Revolver => {
+                // Round the cylinder at the gate: rod out the case, thumb a
+                // round in, turn.
+                steps.push((0.1, Step::Gate(true)));
+                for _ in 0..gun.firearm.chambers.len() {
+                    steps.push((0.25, Step::EjectGate));
+                    steps.push((0.3, Step::LoadRound));
+                    steps.push((0.15, Step::Rotate));
+                }
+                steps.push((0.2, Step::Gate(false)));
+            }
         },
     }
     steps
@@ -157,6 +176,7 @@ fn rack_steps(action: ActionKind) -> Vec<(f32, Step)> {
             (0.08, Step::Lift(0.0)),
         ],
         ActionKind::BreakAction => vec![(0.1, Step::Break(true))],
+        ActionKind::Revolver => vec![(0.1, Step::Cock)],
     }
 }
 
@@ -261,6 +281,10 @@ fn run_macros(
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),
             Step::TapMag => gun.firearm.tap_magazine(),
+            Step::Cock => gun.firearm.cock_hammer(),
+            Step::Gate(open) => gun.firearm.set_gate(open),
+            Step::Rotate => gun.firearm.rotate_cylinder(),
+            Step::EjectGate => gun.firearm.eject_at_gate(),
             Step::DropMag => {
                 drop.write(DropMagazine { gun: e });
                 Vec::new()

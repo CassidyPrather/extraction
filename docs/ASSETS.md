@@ -187,7 +187,12 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.2k |
 | `art/guns/mosin.py` | `models/guns/mosin.glb` | 12.5k |
 | `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 23.9k (checkering) |
-| `art/mags/{pm_mag,ak_mag,mosin_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 3.9k (with their visible rounds) |
+| `art/guns/sks.py` | `models/guns/sks.glb` (folding bayonet, dovetail) | 11.6k |
+| `art/guns/nagant.py` | `models/guns/nagant.glb` (cylinder with 7 rounds and 7 cases, gate, rod) | 12.3k |
+| `art/guns/ppsh.py` | `models/guns/ppsh.glb` | 10.8k |
+| `art/mags/{pm_mag,ak_mag,mosin_clip,sks_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 4.3k (with their visible rounds) |
+| `art/mags/ppsh_drum.py` | `models/mags/ppsh_drum.glb` | 8.9k (14 rounds in the window) |
+| `art/items/ammo.py` | ammo_762x39 (20), ammo_762x38r (14), ammo_762x25 (70) and their loose rounds | 1.6k to 3.8k |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 16.5k |
@@ -195,7 +200,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
 | `art/vehicles/bench.py` | `models/vehicles/bench.glb` (the bed's workbench) | 5.3k |
-| `art/items/attachments.py` | `models/items/<item id>.glb`: scope, side rail, weapon light, laser, artifact adapter | 0.3k to 3k |
+| `art/items/attachments.py` | `models/items/<item id>.glb`: scope, side rail, weapon light, laser, artifact adapter, PSO-1 scope, PBS-1 suppressor | 0.3k to 3k |
 | `art/items/gadgets.py` | flashlight, power cell, compass, radio, binoculars, EMP grenade and trap, map case | 0.4k to 1.8k |
 | `art/items/supplies.py` | field dressing, regen injector, cleaning kit, gun oil, spare parts | 0.3k to 1k |
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |

@@ -139,6 +139,16 @@
                      (196.0, 76.0), (195.0, 50.0), (194.0, 21.0)],
             bridges: [(at: (195.0, 50.0), length: 26.0)],
         ),
+        // Off the slag road to the chimney and its strongbox.
+        (
+            name: "Chimney path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(82.0, -84.0), (94.0, -66.0), (102.0, -51.0)],
+        ),
+        // From the lookout track's end up to the tower's door.
+        (
+            name: "Lookout path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-150.0, -165.0), (-158.0, -160.0), (-168.0, -161.0), (-174.0, -166.0)],
+        ),
         // The towpath along the south bank.
         (
             name: "Towpath", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
@@ -220,21 +230,23 @@
     ],
 
     placements: [
+        // Hero landmark (Map design's sightline audit: fog-blind 51% -> 34%).
+        (prefab: "blast_furnace", at: (-150.0, 205.0), rot: 90.0),
         // South gate.
         (prefab: "quarantine_gate", at: (-110.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (-102.2, 285.0), rot: 180.0),
 
         // Ash Row: the workers' houses, either side of the works road. Long
         // since picked over; the works themselves are another matter.
-        (prefab: "house_plank", at: (-70.0, 150.0), rot: 90.0),
-        (prefab: "house_brick", at: (-40.0, 175.0), rot: 0.0),
+        (prefab: "house_plank_burnt", at: (-70.0, 150.0), rot: 90.0),
+        (prefab: "house_brick_damaged", at: (-40.0, 175.0), rot: 0.0),
         (prefab: "house_brick", at: (-110.0, 175.0), rot: 90.0, tag: "foreman"),
-        (prefab: "house_plank", at: (0.0, 150.0), rot: 270.0),
+        (prefab: "house_plank_damaged", at: (0.0, 150.0), rot: 270.0),
         (prefab: "shop", at: (-5.0, 165.0), rot: 270.0),
         (prefab: "shed", at: (-55.0, 120.0), rot: 0.0),
 
         // Cutter's farm, out west.
-        (prefab: "farmhouse", at: (-225.0, 112.0), rot: 90.0),
+        (prefab: "farmhouse_damaged", at: (-225.0, 112.0), rot: 90.0),
         (prefab: "barn", at: (-245.0, 130.0), rot: 0.0),
         (prefab: "shed", at: (-205.0, 130.0), rot: 0.0),
 
@@ -283,6 +295,9 @@
         (kind: RobotGate, at: (250.0, -255.0), rot: 315.0, name: "The Gate"),
         (kind: ArtifactField, at: (200.0, -150.0), name: "The slag heaps"),
         (kind: ArtifactField, at: (-200.0, 0.0), name: "The ash pit"),
+        // Standing anomalies: they lie here every cycle (Anomalies).
+        (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
         (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
         (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
         (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),

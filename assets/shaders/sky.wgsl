@@ -16,6 +16,8 @@ struct SkyParams {
     sun_dir: vec4<f32>,
     // x: deck heaviness (1 the reference overcast), y: scud amount.
     cloud: vec4<f32>,
+    // A low sun's glow on its side of the horizon: rgb, strength in w.
+    glow: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> sky: SkyParams;
@@ -96,6 +98,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let thin = 1.0 - belly * 0.7;
     col = col + vec3<f32>(0.30, 0.28, 0.24) * pow(s, 24.0) * thin * 0.6 * glow;
     col = col + vec3<f32>(0.08, 0.075, 0.06) * pow(s, 4.0) * glow;
+
+    // A low sun lights the horizon on its side, and the cloud's
+    // underside there, warm; the seams take the most of it.
+    if (sky.glow.w > 0.0) {
+        let sun_h = normalize(sky.sun_dir.xz + vec2<f32>(1e-4, 0.0));
+        let dir_h = normalize(dir.xz + vec2<f32>(1e-4, 0.0));
+        let side = pow(max(dot(dir_h, sun_h), 0.0), 2.0);
+        let low = 1.0 - smoothstep(0.0, 0.45, up);
+        let g = side * low * sky.glow.w * (0.55 + 0.45 * (1.0 - belly));
+        col = mix(col, col * sky.glow.rgb * 1.9, clamp(g, 0.0, 1.0));
+    }
 
     // Toward and below the horizon the sky is fog.
     let fog_t = 1.0 - smoothstep(-0.02, 0.14, up);

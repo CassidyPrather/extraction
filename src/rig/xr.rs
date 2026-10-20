@@ -22,6 +22,9 @@
 //! through the palm, while the game's hands, guns and the flat rig all take
 //! -Z as where you point and +Y as up, which is what the aim pose is.
 //!
+//! Fingers come from `XR_EXT_hand_tracking` where the runtime has it
+//! (`read_fingers`, `rig::fingers`).
+//!
 //! The headset path runs in CI-less checks against Monado's simulated
 //! headset (`scripts/xr_check.sh`): instance, session, swapchains, actions
 //! and what the eyes see. Real controllers still need a real headset.
@@ -34,8 +37,9 @@ use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_openxr::resources::OxrInstance;
 use bevy_mod_openxr::session::OxrSession;
 use bevy_mod_xr::camera::XrCamera;
+use bevy_mod_xr::hands::{HandBone, LeftHand, RightHand};
 use bevy_mod_xr::session::{XrSessionCreated, XrTrackingRoot, session_available};
-use bevy_mod_xr::spaces::XrSpaceSyncSet;
+use bevy_mod_xr::spaces::{XrSpaceLocationFlags, XrSpaceSyncSet};
 use openxr::Posef;
 
 use super::{LocalPlayer, RigDriverSystems, RigInput, Side};
@@ -63,7 +67,8 @@ impl Plugin for XrDriverPlugin {
             .add_systems(PostUpdate, play_haptics.run_if(openxr_session_running))
             .add_systems(
                 PreUpdate,
-                drive_xr_rig
+                (drive_xr_rig, read_fingers)
+                    .chain()
                     .after(XrSpaceSyncSet)
                     .after(OxrActionSetSyncSet)
                     .in_set(RigDriverSystems)
@@ -234,6 +239,9 @@ struct Actions {
     secondary: openxr::Action<bool>,
     stick: openxr::Action<openxr::Vector2f>,
     stick_click: openxr::Action<bool>,
+    /// The thumb resting on a face button, the stick or the thumb rest
+    /// (Index and Touch sense it).
+    thumb_rest: openxr::Action<bool>,
     haptic: openxr::Action<openxr::Haptic>,
     left: openxr::Path,
     right: openxr::Path,
@@ -268,6 +276,7 @@ fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
             secondary: set.create_action("secondary", "Secondary button", &both)?,
             stick: set.create_action("stick", "Thumbstick", &both)?,
             stick_click: set.create_action("stick_click", "Thumbstick click", &both)?,
+            thumb_rest: set.create_action("thumb_rest", "Thumb resting", &both)?,
             haptic: set.create_action("haptic", "Vibration", &both)?,
             set,
             left,
@@ -304,6 +313,7 @@ fn suggest_bindings(
     let secondary = a.secondary.as_raw();
     let stick = a.stick.as_raw();
     let click = a.stick_click.as_raw();
+    let thumb_rest = a.thumb_rest.as_raw();
     let haptic = a.haptic.as_raw();
     for profile in [
         // (Quest 3's Touch Plus is offered to apps as plain Touch unless
@@ -422,6 +432,31 @@ fn suggest_bindings(
             ],
         );
         if touchlike {
+            // Every touch sensor the thumb rests on.
+            let rests: &[&str] = if profile.contains("index") {
+                &[
+                    "/user/hand/left/input/a/touch",
+                    "/user/hand/left/input/b/touch",
+                    "/user/hand/left/input/thumbstick/touch",
+                    "/user/hand/left/input/trackpad/touch",
+                    "/user/hand/right/input/a/touch",
+                    "/user/hand/right/input/b/touch",
+                    "/user/hand/right/input/thumbstick/touch",
+                    "/user/hand/right/input/trackpad/touch",
+                ]
+            } else {
+                &[
+                    "/user/hand/left/input/x/touch",
+                    "/user/hand/left/input/y/touch",
+                    "/user/hand/left/input/thumbstick/touch",
+                    "/user/hand/left/input/thumbrest/touch",
+                    "/user/hand/right/input/a/touch",
+                    "/user/hand/right/input/b/touch",
+                    "/user/hand/right/input/thumbstick/touch",
+                    "/user/hand/right/input/thumbrest/touch",
+                ]
+            };
+            bind(profile, thumb_rest, rests);
             let (p, s) = if profile.contains("index") {
                 ("a", "b")
             } else {
@@ -620,6 +655,47 @@ struct TurnState {
     sprint: bool,
 }
 
+/// The fingers, where the runtime tracks them (`XR_EXT_hand_tracking`,
+/// asked for at start-up: SteamVR fills it from Index controllers' finger
+/// sensing). A hand with any joint untracked, or a runtime without the
+/// extension, leaves `fingers` empty and the glove to its own poses.
+fn read_fingers(
+    bones: Query<(
+        &HandBone,
+        &Transform,
+        &XrSpaceLocationFlags,
+        Has<LeftHand>,
+        Has<RightHand>,
+    )>,
+    mut players: Query<&mut RigInput, With<LocalPlayer>>,
+    mut said: Local<bool>,
+) {
+    let Some(mut input) = players.iter_mut().next() else {
+        return;
+    };
+    let mut joints = [[Transform::IDENTITY; super::fingers::JOINTS]; 2];
+    let mut seen = [0usize; 2];
+    for (bone, t, flags, left, right) in &bones {
+        if !(flags.position_tracked && flags.rotation_tracked) || left == right {
+            continue;
+        }
+        let side = if left { Side::Left } else { Side::Right };
+        joints[side.index()][*bone as usize] = *t;
+        seen[side.index()] += 1;
+    }
+    for side in Side::BOTH {
+        let i = side.index();
+        let fingers = (seen[i] == super::fingers::JOINTS)
+            .then(|| super::fingers::fingers_from_joints(&joints[i]))
+            .flatten();
+        if fingers.is_some() && !*said {
+            *said = true;
+            info!("input: fingers tracked ({side:?} hand first)");
+        }
+        input.hand_mut(side).fingers = fingers;
+    }
+}
+
 fn drive_xr_rig(
     actions: Option<Res<Actions>>,
     session: Res<OxrSession>,
@@ -679,6 +755,7 @@ fn drive_xr_rig(
         let primary = read_b(&a.primary, path);
         let secondary = read_b(&a.secondary, path);
         let click = read_b(&a.stick_click, path);
+        let thumb_rest = read_b(&a.thumb_rest, path);
         let stick = read_v(path);
         let hand = input.hand_mut(side);
         hand.grip = grip;
@@ -687,6 +764,7 @@ fn drive_xr_rig(
         hand.secondary = secondary;
         hand.stick = stick;
         hand.stick_click = click && side == Side::Right;
+        hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.
     input.mark = read_b(&a.stick_click, a.left)

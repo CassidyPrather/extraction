@@ -198,5 +198,8 @@ empty("pt_muzzle", (0.0, 0.035, -0.82))
 empty("pt_sight", (0.0, 0.07, -0.05))
 empty("pt_hinge", HINGE)
 
+# Where a sling attaches: the swivels under the barrels' rib and the butt.
+empty("pt_sling_front", (0.0, 0.006, -0.62))
+empty("pt_sling_rear", (0.0, -0.111, 0.25))
 report()
 export("assets/models/guns/toz_double.glb")

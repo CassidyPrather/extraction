@@ -16,12 +16,12 @@ use crate::audio_mix as mix;
 use crate::interact::InteractEvent;
 use crate::player::Footstep;
 use crate::rig::RigHead;
+use crate::robots::Robot;
 use crate::robots::drone::Drone;
-use crate::robots::{Robot, RobotPart};
 use crate::weapons::GunEvent;
-use crate::weapons::ballistics::{Hit, Shot};
+use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
-use crate::world::surfaces::{Surfaces, footstep_set, impact_set, underfoot};
+use crate::world::surfaces::{Surfaces, footstep_set, underfoot};
 use avian3d::prelude::*;
 
 /// Every sound set by name (`"guns/rifle_shot"`), as loaded handles.
@@ -52,19 +52,103 @@ struct RotorLoop;
 #[derive(Component)]
 struct RainLoop;
 
+/// A roof's own sound in the rain (`acoustics::rain_under`): tin
+/// drumming, a tent's patter.
+#[derive(Component)]
+struct RoofRain {
+    set: &'static str,
+    /// The heavy-rain loop (more and bigger drops) or the light one.
+    heavy: bool,
+}
+
+/// The rain bed follows the weather, and where you are: duller and quieter
+/// under a roof (a tin roof drumming over you if there's a recording for
+/// it), gone underground. Eased, so a doorway is a crossfade.
 fn rain_volume(
+    mut commands: Commands,
     conditions: Res<crate::world::weather::Conditions>,
+    listening: Res<Listening>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
     loops: Query<&SampleEffects, With<RainLoop>>,
+    roofs: Query<(&RoofRain, &SampleEffects)>,
     mut volumes: Query<&mut VolumeNode>,
+    mut lowpass: Query<&mut FastLowpassNode>,
+    mut now: Local<Option<(f32, f32)>>,
+    mut drums: Local<HashMap<&'static str, f32>>,
 ) {
+    let rain_db = if conditions.rain < 0.01 {
+        None
+    } else {
+        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt())
+    };
+    let (want_db, want_cut, drum) = crate::acoustics::rain_under(&listening.space);
+    let k = (time.delta_secs() * 2.0).min(1.0);
+    let (db, cut) = now.get_or_insert((want_db, want_cut));
+    *db += (want_db - *db) * k;
+    // Ease the cutoff in octaves.
+    *cut = (cut.log2() + (want_cut.log2() - cut.log2()) * k).exp2();
     for effects in &loops {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            let db = if conditions.rain < 0.01 {
-                -80.0
+            v.volume = rain_db.map_or(Volume::SILENT, |r| Volume::Decibels(r + *db));
+        }
+        if let Ok(mut lp) = lowpass.get_effect_mut(effects) {
+            if (lp.cutoff_hz - *cut).abs() > 1.0 {
+                lp.cutoff_hz = *cut;
+            }
+        }
+    }
+    // The roof's drumming: started the first time you're under that roof
+    // in the rain, faded in and out after.
+    if let (Some(set), Some(_)) = (drum, rain_db) {
+        if !drums.contains_key(set) && bank.has(set) {
+            drums.insert(set, 0.0);
+            for heavy in [true, false] {
+                let name = if heavy {
+                    set.to_string()
+                } else {
+                    format!("{set}_light")
+                };
+                if let Some(sample) = bank.pick(&name, &mut rng.0) {
+                    commands.spawn((
+                        RoofRain { set, heavy },
+                        SamplePlayer::new(sample).looping(),
+                        PlaybackSettings::default(),
+                        sample_effects![VolumeNode {
+                            volume: Volume::SILENT,
+                            ..default()
+                        }],
+                    ));
+                }
+            }
+        }
+    }
+    for (set, level) in drums.iter_mut() {
+        let target = if drum == Some(*set) && rain_db.is_some() {
+            1.0
+        } else {
+            0.0
+        };
+        *level += (target - *level) * k;
+    }
+    // The loops are levelled against the outdoor rain bed (light 6 LU
+    // under heavy): they play at the rain cue's level, the two blended
+    // by the rain's strength (equal power).
+    let strength = conditions.rain.clamp(0.0, 1.0);
+    for (roof, effects) in &roofs {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            let level = drums.get(roof.set).copied().unwrap_or(0.0);
+            let share = if roof.heavy {
+                strength.sqrt()
             } else {
-                mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt()
+                (1.0 - strength).sqrt()
             };
-            v.volume = Volume::Decibels(db);
+            let g = level * share;
+            v.volume = match rain_db {
+                Some(_) if g > 0.01 => Volume::Decibels(mix::db("rain") + 20.0 * g.log10()),
+                _ => Volume::SILENT,
+            };
         }
     }
 }
@@ -87,6 +171,7 @@ impl Plugin for AudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(SeedlingPlugins)
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
+            .init_resource::<Listening>()
             .add_systems(Startup, load_bank)
             .add_systems(PostStartup, (attach_listener, start_ambience))
             .add_systems(
@@ -128,6 +213,9 @@ impl Plugin for AudioPlugin {
                     drone_and_zip_sounds,
                     kitchen_sounds,
                     mind_sounds,
+                    casing_sounds,
+                    detector_sounds,
+                    power_sounds,
                 ),
             )
             .add_systems(
@@ -141,7 +229,14 @@ impl Plugin for AudioPlugin {
                     anomaly_loops,
                     anomaly_sounds,
                     rain_volume,
+                    room_acoustics,
                 ),
+            )
+            // After everything that plays, so a sound is placed the frame
+            // it starts.
+            .add_systems(
+                PostUpdate,
+                occlude.after(bevy::transform::TransformSystems::Propagate),
             );
     }
 }
@@ -191,6 +286,48 @@ fn attach_listener(
     }
 }
 
+/// The reverb bus's input: every placed sound sends here
+/// (`acoustics`), and the room's reverb comes back from it.
+#[derive(NodeLabel, PartialEq, Eq, Debug, Hash, Clone)]
+pub struct ReverbIn;
+
+/// A placed sound's effects: its distance falloff and muffle (and
+/// occlusion, set later by `occlude`), then a send to the reverb.
+fn spatial_fx(cue: &str) -> impl Bundle {
+    sample_effects![mix::spatial(cue), reverb_send(cue)]
+}
+
+/// The reverb bus: a level for the room, then the reverb, to the main
+/// bus. `room_acoustics` sets both from where you stand.
+fn spawn_reverb_bus(commands: &mut Commands) {
+    commands
+        .spawn((
+            ReverbIn,
+            VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            },
+        ))
+        .chain_node(FreeverbNode {
+            room_size: 0.5,
+            damping: 0.5,
+            width: 0.8,
+            ..default()
+        });
+}
+
+/// How much of a cue goes to the reverb: all of it, but for recordings
+/// with their own space baked in (the far-off shot's echo, the siren's
+/// valley) and the beds.
+fn reverb_send(cue: &str) -> SendNode {
+    let share = match mix::role(cue) {
+        Some(mix::Role::Bed) => 0.0,
+        _ if matches!(cue, "gun.distant" | "surge.siren" | "surge.crack") => 0.3,
+        _ => 1.0,
+    };
+    SendNode::new(Volume::Linear(share), ReverbIn)
+}
+
 /// Plays one variant of a set at a point (or unspatialised with `None`),
 /// at the cue's gain (`audio_mix`) plus `offset_db`, falling off from the
 /// cue's reach.
@@ -233,7 +370,7 @@ fn play_at_speed(
                 player,
                 settings,
                 Transform::from_translation(p),
-                sample_effects![mix::spatial(cue)],
+                spatial_fx(cue),
             ));
         }
         None => {
@@ -361,6 +498,7 @@ fn gun_sounds(
     mut rng: ResMut<AudioRng>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     guns: Query<&crate::weapons::Gun>,
+    suppressed: Query<(), With<crate::gadgets::Suppressed>>,
 ) {
     let ear = listener
         .iter()
@@ -373,10 +511,31 @@ fn gun_sounds(
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
-                if far {
-                    ("guns/distant_shot", "gun.distant", 0.0)
-                } else {
-                    (shot_set(&ev.item), "gun.shot", 0.0)
+                let quiet = suppressed.contains(ev.gun);
+                if quiet && !far {
+                    // A suppressor: a cough, the crack's highs and boom gone.
+                    if let Some(sample) = bank.pick(shot_set(&ev.item), &mut rng.0) {
+                        let cue = "gun.shot_suppressed";
+                        commands.spawn((
+                            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+                            PlaybackSettings::default().with_speed(0.94),
+                            Transform::from_translation(ev.at),
+                            sample_effects![
+                                mix::spatial(cue),
+                                FastLowpassNode::<2> {
+                                    cutoff_hz: 2_200.0,
+                                    ..default()
+                                },
+                                reverb_send(cue)
+                            ],
+                        ));
+                    }
+                    continue;
+                }
+                match (far, quiet) {
+                    (true, true) => ("guns/distant_shot", "gun.distant", -14.0),
+                    (true, false) => ("guns/distant_shot", "gun.distant", 0.0),
+                    _ => (shot_set(&ev.item), "gun.shot", 0.0),
                 }
             }
             (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire", 0.0),
@@ -402,8 +561,8 @@ fn gun_sounds(
             (FireEvent::Cocked, Some(BreakAction)) => {
                 ("guns/shotgun_open", "gun.shotgun_open", 0.0)
             }
-            // A spent case is lighter than a live round.
-            (FireEvent::Ejected(Round::Spent), _) => ("guns/casing", "gun.casing", -4.0),
+            // A spent case is heard where it lands (`casing_sounds`), a beat
+            // after the shot; a live round worked out by hand, here.
             (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
             _ => continue,
         };
@@ -449,77 +608,78 @@ fn shot_sounds(
                     SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("robot.shot"))),
                     PlaybackSettings::default().with_speed(speed),
                     Transform::from_translation(s.origin),
-                    sample_effects![mix::spatial("robot.shot")],
+                    spatial_fx("robot.shot"),
                 ));
             }
         }
     }
 }
 
+/// Rounds landing, as `weapons::impacts` classes them (so the sound and
+/// the spray can't disagree): concrete, wood, steel, glass, earth, water,
+/// a robot's part (armour rings, an eye shatters), a body. A round
+/// leaving the far side of a thin wall is a second, quieter crack; one
+/// glancing off whines.
 fn hit_sounds(
     mut commands: Commands,
-    mut hits: MessageReader<Hit>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut ricochets: MessageReader<crate::weapons::ballistics::Ricochet>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
-    parts: Query<(), With<RobotPart>>,
-    trees: Query<(), With<crate::world::trees::TreeTrunks>>,
-    structures: Query<(), With<crate::world::structures::Structure>>,
-    items: Query<(), With<crate::items::Item>>,
-    bodies: Query<(), With<crate::player::BodyCollider>>,
-    built: Query<(&GlobalTransform, &Surfaces)>,
 ) {
-    for h in hits.read() {
-        // A round into you is a thump, not the ground's spray of dirt.
-        if bodies.contains(h.entity) {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "physical/body_hit",
-                Some(h.point),
-                "hit.body",
-                0.0,
-                0.08,
-            );
-            continue;
-        }
-        let made_of = built
-            .get(h.entity)
-            .ok()
-            .and_then(|(gt, surf)| surf.at(gt, h.point));
-        let set = if parts.contains(h.entity) || items.contains(h.entity) {
-            "impacts/metal"
-        } else if trees.contains(h.entity) {
-            "impacts/wood"
-        } else if let Some(m) = made_of {
-            impact_set(m)
-        } else if structures.contains(h.entity) {
-            "impacts/concrete"
-        } else {
-            "impacts/dirt"
+    use crate::weapons::impacts::ImpactKind as K;
+    for i in impacts.read() {
+        // Out of the far side: the surface faces along the round.
+        let exit = i.entity.is_some() && i.normal.dot(i.velocity) > 0.0;
+        let trim = if exit { -6.0 } else { 0.0 };
+        let (set, cue, speed) = match i.kind {
+            K::Masonry => ("impacts/concrete", "hit.impact", 1.0),
+            K::Wood => ("impacts/wood", "hit.impact", 1.0),
+            K::Metal => ("impacts/metal", "hit.impact", 1.0),
+            K::Glass => ("physical/glass_break", "hit.glass", 1.15),
+            K::Soil => ("impacts/dirt", "hit.impact", 1.0),
+            K::Water => ("footsteps/water", "hit.water", 1.6),
+            K::Body => ("physical/body_hit", "hit.body", 1.0),
+            K::Robot => match (i.part, i.hurt) {
+                (Some(crate::robots::PartRole::Sensor), true) => {
+                    ("physical/glass_break", "hit.glass", 1.3)
+                }
+                // A dead part just rings.
+                (_, false) => ("impacts/metal", "hit.impact", 1.12),
+                _ => ("impacts/metal", "hit.impact", 1.0),
+            },
         };
-        play(
+        // Water takes a big round with more of a slap.
+        let trim = if i.kind == K::Water {
+            trim - 6.0 + 6.0 * (i.velocity.length() / 800.0).min(1.0)
+        } else {
+            trim
+        };
+        play_at_speed(
             &mut commands,
             &bank,
             &mut rng.0,
             set,
-            Some(h.point),
-            "hit.impact",
-            0.0,
+            Some(i.point),
+            cue,
+            trim,
+            if exit { speed * 0.9 } else { speed },
             0.08,
         );
-        if rng.0.chance(0.12) && set != "impacts/dirt" {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "impacts/ricochet",
-                Some(h.point),
-                "hit.ricochet",
-                0.0,
-                0.1,
-            );
-        }
+    }
+    // A round glancing off at a graze (`ballistics::Ricochet`): the whine,
+    // a little along the way it left.
+    for r in ricochets.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/ricochet",
+            Some(r.point + r.velocity.normalize_or_zero() * 1.5),
+            "hit.ricochet",
+            0.0,
+            0.1,
+        );
     }
 }
 
@@ -674,6 +834,8 @@ fn press_sounds(
     mut events: MessageReader<InteractEvent>,
     pressables: Query<(&crate::raid::truck::Pressable, &GlobalTransform)>,
     buttons: Query<&crate::interact::poke::PokeButton>,
+    locked: Query<(), With<crate::world::underground::PowerLocked>>,
+    wedged: Query<(), With<crate::robots::doors::Wedged>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
@@ -687,6 +849,10 @@ fn press_sounds(
         };
         let (set, cue) = match kind {
             Pressable::BellPull => ("physical/bell", "truck.bell"),
+            // A door that won't open: a locked bolt rattling, a wedge
+            // thudding. (One that opens sounds in `door_sounds`.)
+            Pressable::Door if locked.contains(*item) => ("machines/clank", "door.locked"),
+            Pressable::Door if wedged.contains(*item) => ("impacts/wood", "door.wedged"),
             Pressable::Door => continue,
             Pressable::FoldCover => ("physical/cloth", "hand.grab"),
             Pressable::BenchRun => ("physical/switch", "press.lever"),
@@ -730,7 +896,7 @@ fn far_sounds(
                             .with_volume(Volume::Decibels(mix::db("far.whoosh"))),
                         PlaybackSettings::default().with_speed(speed),
                         Transform::default(),
-                        sample_effects![mix::spatial("far.whoosh")],
+                        spatial_fx("far.whoosh"),
                         ChildOf(*item),
                     ));
                 }
@@ -792,7 +958,7 @@ fn rotor_loops(
                             .with_volume(Volume::Decibels(mix::db("drone.rotor"))),
                         PlaybackSettings::default(),
                         Transform::default(),
-                        sample_effects![mix::spatial("drone.rotor")],
+                        spatial_fx("drone.rotor"),
                         ChildOf(e),
                     ));
                 }
@@ -818,15 +984,22 @@ fn start_ambience(
         .map(|z| z.map.sounds.wind.as_str())
         .filter(|w| bank.has(w))
         .unwrap_or("ambience/wind_conifers");
+    spawn_reverb_bus(&mut commands);
     if let Some(sample) = bank.pick("ambience/rain_light", &mut rng.0) {
         commands.spawn((
             RainLoop,
             SamplePlayer::new(sample).looping(),
             PlaybackSettings::default(),
-            sample_effects![VolumeNode {
-                volume: Volume::SILENT,
-                ..default()
-            }],
+            sample_effects![
+                VolumeNode {
+                    volume: Volume::SILENT,
+                    ..default()
+                },
+                FastLowpassNode::<2> {
+                    cutoff_hz: 20_480.0,
+                    ..default()
+                }
+            ],
         ));
     }
     if let Some(sample) = bank.pick(wind, &mut rng.0) {
@@ -881,7 +1054,7 @@ fn start_ambience(
                 .with_volume(Volume::Decibels(mix::db("creek"))),
             PlaybackSettings::default(),
             Transform::default(),
-            sample_effects![mix::spatial("creek")],
+            spatial_fx("creek"),
         ));
     }
 }
@@ -1146,6 +1319,12 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Snare => {
                         ("anomaly/snare_buzz", "anomaly.snare")
                     }
+                    extraction_core::anomaly::AnomalyKind::Well => {
+                        ("anomaly/well_drone", "anomaly.well")
+                    }
+                    extraction_core::anomaly::AnomalyKind::Mirror => {
+                        ("anomaly/mirror_shimmer", "anomaly.mirror")
+                    }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
@@ -1160,7 +1339,8 @@ fn anomaly_loops(
                                 volume: Volume::Decibels(anomaly_fade(d)),
                                 ..default()
                             },
-                            mix::spatial(cue)
+                            mix::spatial(cue),
+                            reverb_send(cue)
                         ],
                     ));
                 }
@@ -1189,8 +1369,47 @@ fn anomaly_sounds(
     mut emps: MessageReader<crate::gadgets::EmpBlast>,
     mut offerings: MessageReader<crate::anomaly::offering::OfferingTaken>,
     mut harpoons: MessageReader<crate::robots::grappler::Harpoon>,
+    mut blinked: MessageReader<crate::anomaly::mirrors::Blinked>,
+    mut arcs: MessageReader<crate::anomaly::ArcStrike>,
     positions: Query<&GlobalTransform>,
 ) {
+    // Blinked: the air rushing in where it was, the pop where it is now.
+    for b in blinked.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/whoosh",
+            Some(b.from),
+            "anomaly.blink_air",
+            0.0,
+            0.1,
+        );
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "anomaly/mirror_blink",
+            Some(b.to),
+            "anomaly.blink",
+            0.0,
+            0.05,
+        );
+    }
+    // A snare's arc to what it struck: a short, sharp crack there.
+    for a in arcs.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "anomaly/surge_crack",
+            Some(a.to),
+            "anomaly.arc",
+            0.0,
+            2.2,
+            0.1,
+        );
+    }
     for h in harpoons.read() {
         let at = positions.get(h.from).ok().map(|g| g.translation());
         play(
@@ -1228,7 +1447,7 @@ fn anomaly_sounds(
                 SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("offering"))),
                 PlaybackSettings::default().with_speed(speed),
                 Transform::from_translation(o.at),
-                sample_effects![mix::spatial("offering")],
+                spatial_fx("offering"),
             ));
         }
     }
@@ -1239,6 +1458,24 @@ fn anomaly_sounds(
             AnomalyAct::Pop => ("anomaly/lift_pop", "anomaly.pop", 1.0),
             AnomalyAct::Bloom => ("anomaly/surge_crack", "anomaly.bloom", 0.6),
             AnomalyAct::Flare => continue,
+            // Each thing blinked sounds at both ends (`Blinked`, below).
+            AnomalyAct::Blink => continue,
+            AnomalyAct::Reveal => ("anomaly/reveal", "anomaly.reveal", 1.0),
+            // A well crushing something: the thing's metal giving (recorded,
+            // slowed), under the knot's deep whump.
+            AnomalyAct::Crush => {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "anomaly/lift_pop",
+                    Some(ev.at),
+                    "anomaly.pop",
+                    -4.0,
+                    0.05,
+                );
+                ("machines/groan", "anomaly.crush", 0.6)
+            }
         };
         let Some(sample) = bank.pick(set, &mut rng.0) else {
             continue;
@@ -1247,7 +1484,7 @@ fn anomaly_sounds(
             SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
             PlaybackSettings::default().with_speed(speed),
             Transform::from_translation(ev.at),
-            sample_effects![mix::spatial(cue)],
+            spatial_fx(cue),
         ));
     }
     for b in emps.read() {
@@ -1260,7 +1497,7 @@ fn anomaly_sounds(
                     SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
                     PlaybackSettings::default().with_speed(speed),
                     Transform::from_translation(b.at),
-                    sample_effects![mix::spatial(cue)],
+                    spatial_fx(cue),
                 ));
             }
         }
@@ -1349,7 +1586,7 @@ fn gadget_loops(
                             .with_volume(Volume::Decibels(mix::db(cue))),
                         PlaybackSettings { speed, ..default() },
                         Transform::default(),
-                        sample_effects![mix::spatial(cue)],
+                        spatial_fx(cue),
                         ChildOf(e),
                     ));
                 }
@@ -1427,8 +1664,10 @@ fn indoor_ambience(
     wind: Query<&SampleEffects, With<WindLoop>>,
     room: Query<&SampleEffects, With<RoomLoop>>,
     mut volumes: Query<&mut VolumeNode>,
+    listening: Res<Listening>,
     time: Res<Time>,
     mut inside: Local<f32>,
+    mut below: Local<f32>,
 ) {
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
@@ -1439,9 +1678,17 @@ fn indoor_ambience(
     let target = if indoors { 1.0 } else { 0.0 };
     *inside += (target - *inside).clamp(-time.delta_secs(), time.delta_secs());
     let k = *inside;
+    // Down the stairs the wind dies away altogether, over a few seconds.
+    let under = listening.space.kind == crate::acoustics::SpaceKind::Underground;
+    let target = if under { 1.0 } else { 0.0 };
+    *below += (target - *below).clamp(-time.delta_secs() * 0.4, time.delta_secs() * 0.4);
     for effects in &wind {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            v.volume = Volume::Decibels(mix::db("wind") - 14.0 * k);
+            v.volume = if *below > 0.99 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below)
+            };
         }
     }
     for effects in &room {
@@ -1553,8 +1800,10 @@ fn radio_sounds(
     }
 }
 
-/// Robot chatter on a carried radio: a squelch, a long hiss of static
-/// with servo-chirps through it — louder when it's about somewhere close.
+/// Robot chatter on a carried radio: a squelch, a hiss of static, and
+/// their talk (`machines/robot_voice`: synthesised machine syllables,
+/// band-limited and crushed like a cheap radio) — louder when it's about
+/// somewhere close.
 fn chatter_sounds(
     mut commands: Commands,
     mut heard: MessageReader<crate::raid::chatter::RobotChatter>,
@@ -1585,18 +1834,17 @@ fn chatter_sounds(
             gain,
             0.1,
         );
-        for _ in 0..2 {
-            play(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "machines/servo",
-                at,
-                "chatter.chirp",
-                gain,
-                0.4,
-            );
-        }
+        // Their talk: machine syllables through the radio's chain.
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/robot_voice",
+            at,
+            "chatter.voice",
+            gain,
+            0.04,
+        );
     }
 }
 
@@ -1771,7 +2019,7 @@ fn truck_sounds(
                         .with_volume(Volume::Decibels(mix::db("truck.idle"))),
                     PlaybackSettings::default(),
                     Transform::from_xyz(0.0, 1.0, -2.0),
-                    sample_effects![mix::spatial("truck.idle")],
+                    spatial_fx("truck.idle"),
                     ChildOf(truck),
                 ));
             }
@@ -2110,7 +2358,7 @@ fn dirigible_loops(
                             .with_volume(Volume::Decibels(mix::db("dirigible.engine"))),
                         PlaybackSettings::default().with_speed(0.4),
                         Transform::default(),
-                        sample_effects![mix::spatial("dirigible.engine")],
+                        spatial_fx("dirigible.engine"),
                         ChildOf(e),
                     ));
                 }
@@ -2279,6 +2527,7 @@ fn mind_sounds(
     for m in called.read() {
         if due(m.robot, 2, 10.0) {
             out.push(("machines/radio_squelch", "robot.callout", m.at, 1.0));
+            out.push(("machines/robot_voice", "robot.voice", m.at, 1.0));
         }
     }
     for m in aims.read() {
@@ -2302,6 +2551,263 @@ fn mind_sounds(
             speed,
             0.04,
         );
+    }
+}
+
+/// The space you're in, probed from your head a few times a second, sets
+/// the reverb: dry in the open, a short warm tail in a cabin, a ring in a
+/// tin shed, a long echo underground. Eased over half a second, so a
+/// doorway is a crossfade, not a switch.
+#[derive(Resource, Default, Clone, Copy, Debug)]
+pub struct Listening {
+    pub space: crate::acoustics::Space,
+}
+
+fn room_acoustics(
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    spatial: SpatialQuery,
+    built: Query<(&GlobalTransform, &Surfaces)>,
+    lighting: Option<Res<crate::robots::senses::Lighting>>,
+    time: Res<Time>,
+    mut listening: ResMut<Listening>,
+    mut send: Query<&mut VolumeNode, With<ReverbIn>>,
+    mut reverb: Query<&mut FreeverbNode>,
+    mut next: Local<f32>,
+    mut now: Local<Option<crate::acoustics::Reverb>>,
+) {
+    let Some(head) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    *next -= time.delta_secs();
+    if *next <= 0.0 {
+        *next = 0.2;
+        listening.space = crate::acoustics::probe(&spatial, &built, lighting.as_deref(), head);
+    }
+    let want = listening.space.reverb();
+    let k = (time.delta_secs() * 2.0).min(1.0);
+    let cur = now.get_or_insert(want);
+    cur.wet_db += (want.wet_db - cur.wet_db) * k;
+    cur.rt60 += (want.rt60 - cur.rt60) * k;
+    cur.damping += (want.damping - cur.damping) * k;
+    for mut v in &mut send {
+        v.volume = if cur.wet_db <= crate::acoustics::DRY + 1.0 {
+            Volume::SILENT
+        } else {
+            Volume::Decibels(cur.wet_db)
+        };
+    }
+    for mut r in &mut reverb {
+        let room = crate::acoustics::freeverb_room(cur.rt60);
+        if (r.room_size - room).abs() > 0.005 || (r.damping - cur.damping).abs() > 0.005 {
+            r.room_size = room;
+            r.damping = cur.damping;
+        }
+    }
+}
+
+/// A placed sound heard round or through what's between it and you
+/// (`acoustics::occlusion`, the robots' rule): checked as it starts, and
+/// every quarter second for loops, a few rays a frame.
+#[derive(Component)]
+struct Occluded {
+    next: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn occlude(
+    mut commands: Commands,
+    players: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            &SampleEffects,
+            &SamplePlayer,
+            Option<&Occluded>,
+        ),
+        Without<SpatialListener3D>,
+    >,
+    mut nodes: Query<&mut SpatialBasicNode>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    spatial: SpatialQuery,
+    doors: Query<&crate::world::buildings::Door>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    time: Res<Time>,
+) {
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let openings: Vec<Vec3> = entrances
+        .map(|e| {
+            e.doors
+                .iter()
+                .filter(|d| crate::robots::doors::is_open(doors.get(d.door).ok()))
+                .map(|d| d.mid)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut budget = 24;
+    for (e, gt, effects, player, occluded) in &players {
+        let due = match occluded {
+            None => true,
+            Some(o) => {
+                o.next.is_finite() && player.repeat_mode != RepeatMode::PlayOnce && now >= o.next
+            }
+        };
+        if !due || budget == 0 {
+            continue;
+        }
+        let Ok(mut node) = nodes.get_effect_mut(effects) else {
+            // Not placed (in your head): nothing to occlude, ever.
+            commands.entity(e).insert(Occluded {
+                next: f32::INFINITY,
+            });
+            continue;
+        };
+        budget -= 1;
+        let o = crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+        let v = Volume::Decibels(o.db);
+        if node.volume != v {
+            node.volume = v;
+        }
+        if (node.muffle_cutoff_hz - o.cutoff).abs() > 1.0 {
+            node.muffle_cutoff_hz = o.cutoff;
+        }
+        commands.entity(e).insert(Occluded { next: now + 0.25 });
+    }
+}
+
+/// Spent cases landing, a beat after the shot: brass rings on steel and
+/// concrete, knocks on boards, ticks in the grass, plips in water; a
+/// shotgun hull thunks. The first landing is the clink, the bounces
+/// quieter.
+fn casing_sounds(
+    mut commands: Commands,
+    mut landed: MessageReader<crate::weapons::CasingLanded>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::weapons::CasingFloor as F;
+    for c in landed.read() {
+        let (set, trim, speed) = match (c.floor, c.hull) {
+            (F::Water, _) => ("footsteps/water", -10.0, 2.2),
+            (F::Soft, false) => ("guns/casing", -14.0, 0.7),
+            (F::Soft, true) => continue,
+            (F::Metal, false) => ("guns/casing", 0.0, 1.1),
+            (F::Hard, false) => ("guns/casing", 0.0, 1.0),
+            (F::Wood, false) => ("guns/casing", -4.0, 0.8),
+            (_, true) => ("physical/drop_plastic", -6.0, 1.2),
+        };
+        let bounce = if c.first { 0.0 } else { -8.0 };
+        let hard = ((c.speed - 3.0) * 1.0).clamp(-4.0, 2.0);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(c.at),
+            "gun.casing",
+            trim + bounce + hard,
+            speed,
+            0.08,
+        );
+    }
+}
+
+/// The anomaly detector ticking: dry clicks, at the hand when it's held
+/// (close and louder), from the hip otherwise; brighter near an edge.
+fn detector_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::anomaly::detector::DetectorClick>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/detector_click",
+            Some(c.at),
+            "detector.click",
+            if c.held { 0.0 } else { -8.0 },
+            1.0 + 0.15 * c.near as f64,
+            0.03,
+        );
+    }
+}
+
+/// A site's power coming on: a breaker's lever clanks home; a generator
+/// is pulled (a whirr of cord) and runs by the switch for as long as it's
+/// on (`machines/generator`, synthesised until a recording can be had).
+#[derive(Component)]
+struct GeneratorLoop;
+
+fn power_sounds(
+    mut commands: Commands,
+    sites: Query<(Entity, &crate::world::underground::SitePower)>,
+    switches: Query<(&GlobalTransform, Option<&Children>)>,
+    loops: Query<Entity, With<GeneratorLoop>>,
+    mut was: Local<HashMap<(Entity, usize), bool>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use extraction_core::underground::PowerKind;
+    // Each stage of a site's power has its own switch, and its own sound.
+    for (site, power) in &sites {
+        for (i, stage) in power.stages.iter().enumerate() {
+            let before = was.insert((site, i), stage.on).unwrap_or(false);
+            let Ok((gt, children)) = switches.get(stage.switch) else {
+                continue;
+            };
+            let at = gt.translation();
+            if stage.on && !before {
+                match stage.kind {
+                    PowerKind::Breaker => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "machines/clank",
+                        Some(at),
+                        "power.breaker",
+                        0.0,
+                        0.8,
+                        0.05,
+                    ),
+                    PowerKind::Generator => play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "physical/whoosh",
+                        Some(at),
+                        "power.pull",
+                        0.0,
+                        0.7,
+                        0.05,
+                    ),
+                }
+            }
+            let running = stage.on && stage.kind == PowerKind::Generator;
+            let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+            match (running, existing) {
+                (true, None) => {
+                    if let Some(sample) = bank.pick("machines/generator", &mut rng.0) {
+                        commands.spawn((
+                            GeneratorLoop,
+                            SamplePlayer::new(sample)
+                                .looping()
+                                .with_volume(Volume::Decibels(mix::db("power.generator"))),
+                            PlaybackSettings::default(),
+                            Transform::default(),
+                            spatial_fx("power.generator"),
+                            ChildOf(stage.switch),
+                        ));
+                    }
+                }
+                (false, Some(l)) => commands.entity(l).despawn(),
+                _ => {}
+            }
+        }
     }
 }
 
@@ -2375,6 +2881,63 @@ mod tests {
             let handle = handling_set(crate::items::impacts::material_of(def));
             assert!(bank.get(handle).is_some(), "{handle}");
         }
+    }
+
+    /// On a real audio graph (seedling's mock backend): the reverb bus
+    /// feeds the reverb, and a placed sound's send reaches the bus.
+    #[test]
+    fn placed_sounds_reach_the_reverb() {
+        use bevy_seedling::node::FirewheelNode;
+        use bevy_seedling::platform::mock::MockBackendPlugin;
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy_seedling::SeedlingCorePlugin,
+            MockBackendPlugin,
+            TransformPlugin,
+        ))
+        .add_systems(Startup, |mut commands: Commands| {
+            spawn_reverb_bus(&mut commands);
+            commands.spawn((Transform::default(), SpatialListener3D));
+            commands.spawn((
+                SamplePlayer::new(Handle::<AudioSample>::default()).looping(),
+                Transform::from_xyz(3.0, 0.0, 0.0),
+                spatial_fx("step"),
+            ));
+        });
+        app.finish();
+        app.cleanup();
+        for _ in 0..10 {
+            app.update();
+        }
+        let world = app.world_mut();
+        let bus = world
+            .query_filtered::<&FirewheelNode, With<ReverbIn>>()
+            .iter(world)
+            .next()
+            .map(|n| n.0)
+            .expect("the bus is a node");
+        let verb = world
+            .query_filtered::<&FirewheelNode, With<FreeverbNode>>()
+            .iter(world)
+            .next()
+            .map(|n| n.0)
+            .expect("the reverb is a node");
+        let sends: Vec<_> = world
+            .query_filtered::<&FirewheelNode, With<SendNode>>()
+            .iter(world)
+            .map(|n| n.0)
+            .collect();
+        assert!(!sends.is_empty(), "a send was made");
+        let edges: Vec<(_, _)> = world
+            .resource_mut::<bevy_seedling::context::AudioContext>()
+            .with(|cx| cx.edges().map(|e| (e.src_node, e.dst_node)).collect());
+        assert!(edges.contains(&(bus, verb)), "bus -> reverb");
+        assert!(
+            sends.iter().any(|s| edges.contains(&(*s, bus))),
+            "send -> bus: {edges:?}"
+        );
     }
 
     /// Heavier sounds louder and lower, within bounds.

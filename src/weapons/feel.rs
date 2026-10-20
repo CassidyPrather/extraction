@@ -60,6 +60,21 @@ pub const SWAY_MOMENT: f32 = 0.012;
 /// Extra sway when out of breath (stamina empty), radians, any hold;
 /// shared by a second hand and halved again by a shoulder.
 pub const SWAY_TIRED: f32 = 0.006;
+/// Resting on something: the spring's frequency, the mass it lends, and
+/// what's left of sway, droop and lag.
+pub const RECOVER_BRACED: f32 = 45.0;
+pub const BRACE_REST: f32 = 8.0;
+pub const BRACED_SWAY: f32 = 0.15;
+pub const BRACED_LAG: f32 = 0.5;
+/// How near the handguard must be to something solid to rest on it, and
+/// how long a rest outlasts losing touch (so it doesn't flicker), s.
+pub const BRACE_REACH: f32 = 0.05;
+pub const BRACE_HOLD: f32 = 0.15;
+/// Crouched (or kneeling): sway's share, and the spring's.
+pub const CROUCH_SWAY: f32 = 0.6;
+pub const CROUCH_RECOVER: f32 = 1.15;
+/// Head height under which you're crouched, metres over the floor.
+pub const CROUCH_HEAD: f32 = 1.2;
 /// How close the stock's butt must be to the head to count as shouldered
 /// (a cheek weld or the shoulder pocket), metres.
 pub const SHOULDER_REACH: f32 = 0.3;
@@ -69,18 +84,24 @@ pub const SHOULDER_REACH: f32 = 0.3;
 pub struct Hold {
     pub hands: u8,
     pub shouldered: bool,
+    /// The handguard rests on something solid (a wall top, a sill).
+    pub braced: bool,
+    pub crouched: bool,
 }
 
 impl Hold {
     /// The spring's natural frequency.
     pub fn recover(self) -> f32 {
-        if self.shouldered {
+        let w = if self.braced {
+            RECOVER_BRACED
+        } else if self.shouldered {
             RECOVER_SHOULDER
         } else if self.hands >= 2 {
             RECOVER_TWO
         } else {
             RECOVER_ONE
-        }
+        };
+        w * if self.crouched { CROUCH_RECOVER } else { 1.0 }
     }
 
     /// Mass moving with the gun under recoil.
@@ -91,7 +112,7 @@ impl Hold {
             BRACE_TWO
         } else {
             BRACE_ONE
-        }
+        } + if self.braced { BRACE_REST } else { 0.0 }
     }
 
     /// Follow lag for a gun of `mass` kg.
@@ -102,7 +123,13 @@ impl Hold {
             LAG_TWO
         } else {
             LAG_ONE
-        }
+        } * if self.braced { BRACED_LAG } else { 1.0 }
+    }
+
+    /// What's left of sway.
+    pub fn steadiness(self) -> f32 {
+        (if self.braced { BRACED_SWAY } else { 1.0 })
+            * if self.crouched { CROUCH_SWAY } else { 1.0 }
     }
 }
 
@@ -119,6 +146,8 @@ pub struct Handling {
     /// Droop, radians down, eased toward its target.
     pub droop: f32,
     clock: f32,
+    /// Seconds a rest outlasts losing touch.
+    brace_left: f32,
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
@@ -197,8 +226,13 @@ fn handle_guns(
     )>,
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     bodies: Query<&Body>,
+    rigs: Query<&crate::rig::RigInput>,
     catalog: Res<Catalog>,
     time: Res<Time>,
+    spatial: avian3d::prelude::SpatialQuery,
+    mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    sockets: Query<&crate::interact::Socket>,
+    mags: Query<(&GlobalTransform, &super::Mag)>,
 ) {
     let dt = time.delta_secs();
     for (gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
@@ -218,10 +252,72 @@ fn handle_guns(
             (Some(b), Some(head)) => gt.transform_point(b).distance(head) < SHOULDER_REACH,
             _ => false,
         };
+        let mag_foot = gun
+            .magwell
+            .and_then(|w| sockets.get(w).ok())
+            .and_then(|s| s.occupant)
+            .and_then(|m| mags.get(m).ok())
+            .map(|(mgt, mag)| mgt.translation() - mgt.rotation() * Vec3::Y * (mag.height * 0.5));
+        // Resting: anything solid within reach of the handguard (or the
+        // middle of the barrel, on a pistol).
+        let rest_at = gt.transform_point(
+            gun.layout
+                .support
+                .unwrap_or((gun.layout.grip.translation + gun.layout.muzzle) * 0.5),
+        );
+        let world = avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World);
+        let near = |at: Vec3, shape: &avian3d::prelude::Collider, rot: Quat| {
+            !spatial
+                .shape_intersections(shape, at, rot, &world)
+                .is_empty()
+        };
+        // Anything solid at the handguard, against the gun itself, or under
+        // a seated magazine's foot (a rifle rests on its magazine too).
+        let (lo, hi) = gun.layout.bounds();
+        // A hand-driven gun stops a little short of what it's pressed onto,
+        // so "resting" allows the same reach as the handguard.
+        let pad = Vec3::splat(BRACE_REACH);
+        let size = hi - lo + pad * 2.0;
+        let touching = near(
+            rest_at,
+            &avian3d::prelude::Collider::sphere(BRACE_REACH),
+            Quat::IDENTITY,
+        ) || near(
+            gt.transform_point((lo + hi) * 0.5),
+            &avian3d::prelude::Collider::cuboid(size.x, size.y, size.z),
+            gt.rotation(),
+        ) || mag_foot.is_some_and(|foot| {
+            near(
+                foot,
+                &avian3d::prelude::Collider::sphere(0.04),
+                Quat::IDENTITY,
+            )
+        });
+        let was_braced = handling.hold.braced;
+        handling.brace_left = if touching {
+            BRACE_HOLD
+        } else {
+            (handling.brace_left - dt).max(0.0)
+        };
+        let braced = handling.brace_left > 0.0;
+        // Crouched: the flat key, or a head brought low in the room.
+        let crouched = rigs
+            .get(held.player)
+            .is_ok_and(|i| i.crouch || i.head.translation.y < CROUCH_HEAD);
         handling.hold = Hold {
             hands: 1 + u8::from(support.is_some()),
             shouldered,
+            braced,
+            crouched,
         };
+        // It takes: a settle in the hand.
+        if braced && !was_braced {
+            haptics.write(crate::rig::haptics::Haptic {
+                side: held.side,
+                amplitude: 0.3,
+                seconds: 0.025,
+            });
+        }
         handling.settle(dt);
         handling.cycle = (handling.cycle - dt / 0.07).max(0.0);
         handling.clock += dt;
@@ -229,7 +325,11 @@ fn handle_guns(
         // Strain: droop and sway, eased so changing grip doesn't snap.
         let one_handed = hold.hands < 2 && !hold.shouldered;
         let m = moment(gun, mass);
-        let droop_to = if one_handed { DROOP * m } else { 0.0 };
+        let droop_to = if one_handed && !hold.braced {
+            DROOP * m
+        } else {
+            0.0
+        };
         let ease = 1.0 - (-dt / 0.3).exp();
         handling.droop += (droop_to - handling.droop) * ease;
         let tired = bodies.get(held.player).map_or(0.0, |b| 1.0 - b.stamina);
@@ -245,6 +345,7 @@ fn handle_guns(
         } else {
             0.0
         } + SWAY_TIRED * tired.clamp(0.0, 1.0) * share;
+        let amp = amp * hold.steadiness();
         let t = handling.clock;
         let sway = Vec2::new(
             (t * 1.9).sin() * 0.7 + (t * 0.83 + 1.3).sin() * 0.3,
@@ -290,11 +391,14 @@ pub fn kick_guns(
 pub struct JamProp(pub Malfunction);
 
 /// Case radius and length for a cartridge, metres.
-fn case_size(cartridge: &str) -> (f32, f32) {
+pub(crate) fn case_size(cartridge: &str) -> (f32, f32) {
     match cartridge {
         "9x18" => (0.0049, 0.018),
         "5.45x39" => (0.005, 0.039),
         "7.62x39" => (0.0056, 0.039),
+        "12ga" => (0.0105, 0.07),
+        "7.62x38R" => (0.0049, 0.0385),
+        "7.62x25" => (0.0049, 0.025),
         "7.62x54R" => (0.0062, 0.054),
         _ => (0.005, 0.03),
     }
@@ -421,14 +525,17 @@ mod tests {
         let one = Hold {
             hands: 1,
             shouldered: false,
+            ..default()
         };
         let two = Hold {
             hands: 2,
             shouldered: false,
+            ..default()
         };
         let shoulder = Hold {
             hands: 2,
             shouldered: true,
+            ..default()
         };
         // The AK: 2.2 N s, 3.3 kg.
         let (a, b, c) = (
@@ -915,6 +1022,196 @@ mod vr_tests {
         }
         rack(&mut r);
         assert_eq!(fire(&mut r, 1, true).len(), 1);
+    }
+
+    /// A gun-hand button for one press (the headset's B is `secondary`).
+    fn press(r: &mut Range, which: &str) {
+        for down in [true, false] {
+            {
+                let mut input =
+                    r.vr.app
+                        .world_mut()
+                        .get_mut::<crate::rig::RigInput>(r.vr.player)
+                        .unwrap();
+                let h = input.hand_mut(Side::Right);
+                match which {
+                    "a" => h.primary = down,
+                    "b" => h.secondary = down,
+                    _ => h.stick_click = down,
+                }
+            }
+            r.vr.step(2);
+        }
+    }
+
+    /// The Nagant by hand: A swings the gate open; a round to the gate
+    /// goes in and B turns the cylinder, seven times; A shuts it; seven
+    /// double-action shots; open again, and the rod (stick click) and B
+    /// clear the seven cases.
+    #[test]
+    fn the_nagant_loads_at_the_gate_fires_and_clears_by_hand() {
+        let mut r = hold("nagant", false, false);
+        press(&mut r, "a");
+        assert!(gun_mut(&mut r).firearm.gate_open, "A opens the gate");
+        for n in 1..=7 {
+            take(&mut r, "round_762x38r", 1);
+            let (port, _) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port, 12);
+            r.vr.step(2);
+            r.vr.grip(Side::Left, 0.0);
+            r.vr.step(2);
+            assert_eq!(gun_mut(&mut r).firearm.live_rounds(), n, "round {n} in");
+            press(&mut r, "b");
+        }
+        press(&mut r, "a");
+        assert!(!gun_mut(&mut r).firearm.gate_open);
+        assert_eq!(fire(&mut r, 7, true).len(), 7, "seven double-action shots");
+        assert!(fire(&mut r, 1, true).is_empty(), "then clicks");
+        press(&mut r, "a");
+        let cases = |r: &mut Range| {
+            let mut q = r.vr.app.world_mut().query::<&crate::weapons::Casing>();
+            q.iter(r.vr.app.world()).count()
+        };
+        let before = cases(&mut r);
+        for _ in 0..7 {
+            press(&mut r, "stick");
+            press(&mut r, "b");
+        }
+        r.vr.step(3);
+        assert_eq!(cases(&mut r) - before, 7, "the rod pushed out seven cases");
+        assert!(gun_mut(&mut r).firearm.chambers.iter().all(|c| c.is_none()));
+    }
+
+    /// The PPSh by hand: a drum in, the bolt racked back onto the sear; a
+    /// second of trigger on auto is about fifteen rounds, and it ends back
+    /// on the sear.
+    #[test]
+    fn the_ppsh_racks_onto_its_sear_and_runs_on_auto() {
+        let mut r = hold("ppsh", true, true);
+        seat_mag(&mut r, "ppsh_drum", 71);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 1.0;
+            g.firearm.fouling = 0.0;
+        }
+        // Off the support to rack, then back on it.
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(3);
+        rack(&mut r);
+        assert!(gun_mut(&mut r).firearm.locked_back, "on the sear");
+        assert_eq!(
+            gun_mut(&mut r).firearm.live_rounds(),
+            71,
+            "nothing chambered"
+        );
+        while gun_mut(&mut r).firearm.fire_mode() != FireMode::Auto {
+            press(&mut r, "stick");
+        }
+        // Hold the trigger a second (90 ticks).
+        let shots = {
+            let mut seen: HashSet<Entity> = HashSet::new();
+            r.vr.trigger(Side::Right, 1.0);
+            for _ in 0..90 {
+                r.vr.step(1);
+                let mut q =
+                    r.vr.app
+                        .world_mut()
+                        .query_filtered::<Entity, With<Projectile>>();
+                seen.extend(q.iter(r.vr.app.world()));
+            }
+            r.vr.trigger(Side::Right, 0.0);
+            r.vr.step(3);
+            seen.len()
+        };
+        assert!((13..=16).contains(&shots), "{shots} rounds in a second");
+        assert!(gun_mut(&mut r).firearm.locked_back, "back on the sear");
+        assert_eq!(
+            gun_mut(&mut r).firearm.live_rounds() as usize,
+            71 - shots,
+            "every round fired, none lost"
+        );
+    }
+
+    /// How far the gun's bore wanders over three seconds held still, in
+    /// degrees (max from its mean).
+    fn wander(r: &mut Range) -> f32 {
+        let mut dirs = Vec::new();
+        for _ in 0..270 {
+            r.vr.step(1);
+            let g = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            dirs.push(g.forward().as_vec3());
+        }
+        let mean = dirs.iter().copied().sum::<Vec3>().normalize();
+        dirs.iter()
+            .map(|d| d.angle_between(mean))
+            .fold(0.0f32, f32::max)
+            .to_degrees()
+    }
+
+    /// An AK held out in one hand sways; rest its handguard on a block
+    /// of concrete and it all but stops, with a settle in the hand as it
+    /// takes.
+    #[test]
+    fn a_rested_gun_is_steady() {
+        #[derive(Resource, Default)]
+        struct Felt(Vec<crate::rig::haptics::Haptic>);
+        let mut r = hold("ak74", false, false);
+        r.vr.step(60);
+        let free = wander(&mut r);
+        r.vr.app.init_resource::<Felt>().add_systems(
+            Update,
+            |mut h: MessageReader<crate::rig::haptics::Haptic>, mut f: ResMut<Felt>| {
+                f.0.extend(h.read().copied())
+            },
+        );
+        // Where the handguard is.
+        let (support, down) = {
+            let s = gun_mut(&mut r).layout.support.unwrap();
+            let g = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            (g.transform_point(s), g.down().as_vec3())
+        };
+        // Clear below the gun's collider; then the hand lowers it on.
+        let (lo, _) = gun_mut(&mut r).layout.bounds();
+        let s_y = gun_mut(&mut r).layout.support.unwrap().y;
+        let top = support + down * (s_y - lo.y + 0.08);
+        r.vr.app.world_mut().spawn((
+            Transform::from_translation(top - Vec3::Y * 0.3),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(0.4, 0.6, 0.12),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+        ));
+        r.vr.step(5);
+        let hand = r.vr.hand_state(Side::Right).world.translation;
+        for i in 1..=20 {
+            r.vr.move_hand(Side::Right, hand + Vec3::NEG_Y * 0.006 * i as f32);
+            r.vr.step(1);
+        }
+        r.vr.step(30);
+        assert!(
+            r.vr.app.world().get::<Handling>(r.gun).unwrap().hold.braced,
+            "resting on the block"
+        );
+        // Let the droop ease off before measuring.
+        r.vr.step(120);
+        let rested = wander(&mut r);
+        // Most of it gone (what's left is the gun pressed on the block).
+        assert!(
+            rested < free * 0.4,
+            "free {free:.2} deg, rested {rested:.2}"
+        );
+        let settles =
+            r.vr.app
+                .world()
+                .resource::<Felt>()
+                .0
+                .iter()
+                .filter(|h| h.amplitude <= 0.35)
+                .count();
+        assert_eq!(settles, 1, "one settle as it takes");
     }
 
     /// A double feed on the pistol: racking does nothing with the magazine

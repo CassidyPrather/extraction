@@ -116,6 +116,9 @@ pub struct Hand {
     /// Hand pose when the handle was grabbed, in the item's space.
     pub handle_origin: Vec3,
     pub grip_down: bool,
+    /// Tracked fingers were closed last tick (for `Comfort::finger_grab`:
+    /// closing them grabs, as the squeeze does).
+    pub fingers_closed: bool,
     /// VR: the trigger is down (handles are worked with the trigger).
     pub trigger_down: bool,
     /// The handle in `handle` was taken with the trigger: its release ends
@@ -422,6 +425,7 @@ fn grip_from_input(
     bags: Query<(), With<body::Backpack>>,
     locals: Query<(), With<crate::rig::LocalPlayer>>,
     driver: Res<crate::rig::RigDriver>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
     spatial: SpatialQuery,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
@@ -440,9 +444,21 @@ fn grip_from_input(
             }
             let grip = input.hand(rh.side).grip;
             let trigger = input.hand(rh.side).trigger;
-            let pressed = !hand.grip_down && grip > 0.6;
-            let released = hand.grip_down && grip < 0.35;
             let busy = hand.holding.is_some() || hand.supporting.is_some() || hand.handle.is_some();
+            // A held thing goes when the grip opens and, where the fingers
+            // are tracked (Index controllers), the fingers open too: a
+            // relaxed hand reads no squeeze but still wraps the gun.
+            let wrapped = input
+                .hand(rh.side)
+                .fingers
+                .is_some_and(|f| crate::rig::fingers::wrapped(&f));
+            // With the comfort setting on, fingers closing take hold too.
+            let finger_grab =
+                comfort.as_ref().is_some_and(|c| c.finger_grab) && wrapped && !hand.fingers_closed;
+            hand.fingers_closed = wrapped;
+            let pressed = !hand.grip_down && (grip > 0.6 || finger_grab);
+            let holds = hand.holding.is_some() || hand.supporting.is_some();
+            let released = hand.grip_down && grip < 0.35 && !(holds && wrapped);
             // What the grip would take: the glove tints and the controller
             // ticks as something comes into reach.
             let hover = if busy || !locals.contains(player) || *driver != crate::rig::RigDriver::Xr
@@ -624,8 +640,10 @@ fn find_grab(
         if let (Some(z), Reach::Grip | Reach::Hover) = (zone, reach_for) {
             let local = gt.affine().inverse().transform_point3(hand.translation) - z.centre;
             if local.abs().cmple(z.half).all() {
-                // Anything you've actually got your hand on comes first.
-                let d = 0.12;
+                // Anything you've actually got your hand on comes first;
+                // of two zones, the smaller (a slung gun's over the
+                // pack's) is the one meant.
+                let d = 0.12 * (z.half.length() / 0.6).min(1.0);
                 if best.is_none_or(|b| d < b.0) {
                     best = Some((d, e, 0));
                 }
@@ -688,6 +706,7 @@ fn apply_hand_actions(
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
     time: Res<Time>,
+    slot_places: Query<&Transform, With<body::BodySlot>>,
 ) {
     for action in actions.read() {
         match *action {
@@ -874,8 +893,19 @@ fn apply_hand_actions(
                     if owner.is_some_and(|o| o.0 == item) {
                         continue;
                     }
-                    let d = sgt.translation().distance(pos);
-                    if d < socket.radius && target.is_none_or(|(bd, _)| d < bd) {
+                    let mut d = sgt.translation().distance(pos);
+                    let mut radius = socket.radius;
+                    // A long gun let go near a shoulder goes onto that side's
+                    // sling, front or back.
+                    if socket.kind == SocketKind::Body(SlotKind::Sling) {
+                        if let Ok(local) = slot_places.get(se) {
+                            let shoulder =
+                                sgt.transform_point(body::sling_shoulder(local.translation));
+                            d = d.min(shoulder.distance(pos));
+                            radius = radius.max(body::SLING_REACH);
+                        }
+                    }
+                    if d < radius && target.is_none_or(|(bd, _)| d < bd) {
                         target = Some((d, se));
                     }
                 }

@@ -8,6 +8,10 @@
 //!   gadget work).
 //! - **Glass eye**: hold it to your eye and the walls go thin (client side,
 //!   `anomaly::visuals`).
+//! - **Lodestone** (from wells): rounds fired at whoever carries it curve
+//!   aside (`wells::bend_rounds`).
+//! - **Mirror shard** (from mirrors): held and used, it steps you a few
+//!   metres ahead, once a minute (`mirrors::shards`).
 //!
 //! [`CarriedBy`] is kept up to date for every item a player has on them —
 //! in a hand, in a body slot, in a worn backpack, or seated in something

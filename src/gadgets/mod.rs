@@ -55,6 +55,14 @@ pub enum DeviceKind {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Powered;
 
+/// A gun with a suppressor on its muzzle: robots hear its shots from
+/// less far ([`SUPPRESSED_REACH`] of the usual), and it sounds quieter.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Suppressed;
+
+/// How far a suppressed shot carries, against the same shot bare.
+pub const SUPPRESSED_REACH: f32 = 0.35;
+
 /// Magnifying glass: where the eye goes (item space) and how much.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Optic {
@@ -108,6 +116,8 @@ impl Plugin for GadgetsPlugin {
                 FixedUpdate,
                 (
                     track_mounts,
+                    seat_on_muzzle,
+                    mark_suppressed,
                     power_devices,
                     arm_and_switch,
                     fuses,
@@ -127,6 +137,8 @@ fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
     match id {
         "ak74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
         "mosin" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.112, -0.1))),
+        // Over the receiver cover, clear of the rear sight.
+        "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1, -0.08))),
         _ => {}
     }
     if id != "toz_double" {
@@ -252,6 +264,12 @@ fn item_mounts(
                 eye: Vec3::new(0.0, 0.0, 0.2),
             });
         }
+        "pso_scope" => {
+            commands.entity(e).insert(Optic {
+                magnification: 4.0,
+                eye: Vec3::new(0.0, 0.0, 0.2),
+            });
+        }
         "binoculars" => {
             commands.entity(e).insert(Optic {
                 magnification: 6.0,
@@ -297,6 +315,47 @@ fn track_mounts(
                     commands.entity(e).remove::<MountedOn>();
                 }
             }
+        }
+    }
+}
+
+/// A thing on a muzzle sits with its back face on the muzzle, however
+/// long it is (the mount's seat is right for the short adapter only).
+fn seat_on_muzzle(
+    mut seated: Query<(&InSocket, &Item, &mut Transform), Added<InSocket>>,
+    sockets: Query<&Socket>,
+    catalog: Res<Catalog>,
+) {
+    for (in_socket, item, mut t) in &mut seated {
+        let Ok(socket) = sockets.get(in_socket.socket) else {
+            continue;
+        };
+        if socket.kind == SocketKind::Mount(Mount::Muzzle) {
+            t.translation.z = -catalog.get(item.kind()).size_m()[2] * 0.5;
+        }
+    }
+}
+
+/// Keeps [`Suppressed`] on every gun that has a suppressor on its muzzle.
+fn mark_suppressed(
+    mut commands: Commands,
+    guns: Query<(Entity, Has<Suppressed>), With<Gun>>,
+    sockets: Query<(&Socket, &SocketOwner)>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+) {
+    for (gun, marked) in &guns {
+        let fitted = sockets.iter().any(|(s, o)| {
+            o.0 == gun
+                && s.kind == SocketKind::Mount(Mount::Muzzle)
+                && s.occupant
+                    .and_then(|i| items.get(i).ok())
+                    .is_some_and(|i| catalog.get(i.kind()).has_tag("suppressor"))
+        });
+        if fitted && !marked {
+            commands.entity(gun).insert(Suppressed);
+        } else if !fitted && marked {
+            commands.entity(gun).remove::<Suppressed>();
         }
     }
 }
@@ -623,6 +682,29 @@ mod tests {
         app.cleanup();
         app.update();
         app
+    }
+
+    /// A PBS on an AK's muzzle: the gun is suppressed while it's on, and
+    /// the can sits with its back face on the muzzle.
+    #[test]
+    fn a_suppressor_on_the_muzzle_quiets_the_gun() {
+        let mut app = app();
+        let p = Vec3::new(40.0, 40.0, 262.0);
+        let ak = spawn(&mut app, "ak74", p);
+        let can = spawn(&mut app, "pbs_suppressor", p);
+        app.update();
+        assert!(app.world().get::<Suppressed>(ak).is_none());
+        seat(&mut app, can, ak, Mount::Muzzle);
+        app.update();
+        app.update();
+        assert!(app.world().get::<Suppressed>(ak).is_some());
+        let z = app.world().get::<Transform>(can).unwrap().translation.z;
+        assert!((z + 0.1).abs() < 1e-4, "seated at z {z}");
+        // Off again: no longer suppressed.
+        let se = app.world().get::<InSocket>(can).unwrap().socket;
+        app.world_mut().get_mut::<Socket>(se).unwrap().occupant = None;
+        app.update();
+        assert!(app.world().get::<Suppressed>(ak).is_none());
     }
 
     #[test]
