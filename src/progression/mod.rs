@@ -422,10 +422,13 @@ fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<
         .collect();
     let roll = |p: &Progress| extraction_core::progression::roll_job(p, opts.seed, &here, &valleys);
     if opts.sim_run.is_some() && progression.0.done == 0 {
-        // A sim bot takes a scout job of the first three tiers (the run's
-        // seed picks which), to measure what a job pulls: the telemetry's
-        // `end` says whether it was seen and got home.
-        let tier = (opts.seed % 3) as u32;
+        // A sim bot takes a scout job (the run's seed picks the tier), to
+        // measure what a job pulls: the telemetry's `end` says whether it
+        // was seen and got home.
+        // (Tiers 1-3 and the deep jobs after the ladder; tier 4's are in
+        // another valley, which a single sim raid can't go to.)
+        let tier =
+            [0, 1, 2, extraction_core::progression::TIERS.len() as u32][(opts.seed % 4) as usize];
         progression.0.tier = tier;
         progression.0.done = 1 + 3 * tier;
         for _ in 0..40 {
