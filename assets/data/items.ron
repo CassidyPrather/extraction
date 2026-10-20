@@ -70,7 +70,7 @@
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
             firearm: Some((
                 action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
-                modes: [Semi], double_action: true,
+                modes: [Semi], double_action: true, gate_offset: 5,
                 muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1,
                 wear_per_shot: 0.0004,
             )),
