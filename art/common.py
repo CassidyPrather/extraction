@@ -579,7 +579,7 @@ class Part:
         return self.loft(rings, mat, xf)
 
     def checkering(self, cutter, outline, width, power, panel, pitch=0.0028, angle=30.0,
-                   depth=0.0006, sides=(-1, 1)):
+                   depth=0.0006, sides=(-1, 1), mat="Wood"):
         """Checkering on a `stock`, both sides: `cutter` (cut from the stock)
         gets a recess 4 mm deep over `panel` = (z0, z1, y0, y1), and this
         Part (joined to the stock after the cut, or the cut eats it) an
@@ -587,8 +587,9 @@ class Part:
         tips on the stock's surface and the grooves between `depth` below
         it, the grooves at +-`angle` degrees to the bore, `pitch` apart.
         (Cutting each groove with a boolean costs ten times the triangles.)
-        Give it the stock's outline, width and power."""
-        surf = stock_surface(outline, width, power)
+        Give it the stock's outline, width and power, or as `outline` a
+        function x(z, y) of the surface's +X side (None off it)."""
+        surf = outline if callable(outline) else stock_surface(outline, width, power)
         z0, z1, y0, y1 = panel
         a = math.radians(angle)
         e1 = Vector((math.cos(a), math.sin(a)))
@@ -640,7 +641,7 @@ class Part:
                             faces.append(bm.faces.new((tc[(k + 1) % 4], tc[k], bc[k],
                                                        bc[(k + 1) % 4])))
                 verts += list(top.values()) + list(bot.values())
-                part._finish_piece(verts, faces, "Wood")
+                part._finish_piece(verts, faces, mat)
 
     def cut(self, part):
         """Subtract another Part (a cutter) when the object is made."""

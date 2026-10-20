@@ -183,7 +183,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 
 | Script | Output | Tris |
 | --- | --- | --- |
-| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 7.1k |
+| `art/guns/pm_pistol.py` | `models/guns/pm_pistol.glb` | 10.8k |
 | `art/guns/ak74.py` | `models/guns/ak74.glb` | 11.6k |
 | `art/guns/mosin.py` | `models/guns/mosin.glb` | 12.5k |
 | `art/guns/toz_double.py` | `models/guns/toz_double.glb` | 24.2k (checkering) |
