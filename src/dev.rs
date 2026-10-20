@@ -600,7 +600,8 @@ fn wear_kit(
 /// standing, the head drops 0.35 m and comes 0.25 m forward, looking down,
 /// as you bend to your belt (the torso keeps its standing height until the
 /// head has dropped further). `behind` puts the camera behind and above
-/// the player instead, to see the pack on their back. The free camera
+/// the player instead, to see the pack on their back; `above` high behind,
+/// looking down at the feet, to see the body's shadow. The free camera
 /// otherwise stays where `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
@@ -617,8 +618,12 @@ fn pose_body_for_gallery(
     let Some(spec) = opts.gallery.as_deref() else {
         return;
     };
-    let (stoop, behind) = (spec.contains("stoop"), spec.contains("behind"));
-    if !stoop && !behind {
+    let (stoop, behind, above) = (
+        spec.contains("stoop"),
+        spec.contains("behind"),
+        spec.contains("above"),
+    );
+    if !stoop && !behind && !above {
         return;
     }
     *frames += 1;
@@ -636,7 +641,14 @@ fn pose_body_for_gallery(
     let Ok(mut cam) = cams.single_mut() else {
         return;
     };
-    if behind {
+    if above {
+        // High behind, looking down at the feet: the body's shadow.
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let feet = root.translation;
+        *cam = Transform::from_translation(feet - flat * 1.8 + Vec3::Y * 3.2)
+            .looking_at(feet, Vec3::Y);
+    } else if behind {
         let fwd = head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
         let at = head.translation - flat * 1.3 + Vec3::Y * 0.25;
