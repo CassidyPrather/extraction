@@ -392,6 +392,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "headframe" => [6.0, 19.6, 15.0],
         "signal_box" => [6.0, 6.7, 3.8],
         "steeple" => [4.4, 19.0, 4.4],
+        // An underground site: its entrance kiosk and apron.
+        id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
     }
 }

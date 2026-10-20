@@ -248,6 +248,8 @@
         (prefab: "shop", at: (55.0, 98.0), rot: 270.0),
         (prefab: "house_plank", at: (62.0, 68.0), rot: 270.0),
         (prefab: "house_brick", at: (-55.0, 60.0), rot: 90.0, tag: "mine_office"),
+        // The mine gallery behind the office (assets/underground).
+        (prefab: "mine_kettle", at: (-55.0, 36.0), rot: 90.0),
         (prefab: "shed", at: (-72.0, 112.0), rot: 0.0),
 
         // The low farm.

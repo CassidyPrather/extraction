@@ -240,6 +240,8 @@
         (prefab: "shop", at: (-16.0, 35.0), rot: 90.0),
         (prefab: "house_plank", at: (-45.0, 75.0), rot: 0.0),
         (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
+        // The civil-defence shelter under the village (assets/underground).
+        (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
         
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).

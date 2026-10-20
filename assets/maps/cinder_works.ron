@@ -240,6 +240,8 @@
 
         // The works.
         (prefab: "factory_hall", at: (75.0, -20.0), rot: 0.0),
+        // The service tunnel and pump room under the works (assets/underground).
+        (prefab: "tunnel_cinder", at: (73.0, -2.0), rot: 180.0),
         (prefab: "bus_depot", at: (-20.0, -30.0), rot: 90.0, tag: "works_garage"),
         (prefab: "chimney", at: (105.0, -45.0), rot: 0.0),
         (prefab: "rail_shed", at: (140.0, 5.0), rot: 0.0),
