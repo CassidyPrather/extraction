@@ -1,0 +1,101 @@
+// Marrow Creek: the Depot under the Gate, where the haulers take what
+// they keep (format: crates/extraction_core/src/underground.rs; design:
+// docs/UNDERGROUND.md). Four levels, each lower and further in; the
+// power comes on in three stages, each louder than the last.
+(
+    name: "The Depot",
+    style: Bunker,
+    floor: -7.0,
+    corridor_height: 2.6,
+    rooms: [
+        // Level 1, the intake: the ramp's foot, where the haulers set down.
+        (id: "intake_bay", at: (0.0, 13.0), size: (10.0, 7.0), height: 3.5, lamp: Flicker, props: [
+            (kind: Pallet, at: (-3.2, 1.8)),
+            (kind: Pallet, at: (-3.2, -1.6)),
+            (kind: Crate, at: (3.4, 2.2), loot: Some("cargo_pod")),
+            (kind: Rubble, at: (3.0, -2.2)),
+        ]),
+        // The guard post: the intake breaker (stage 1).
+        (id: "guard_post", at: (9.0, 13.0), size: (4.0, 4.0), height: 2.6, lamp: Dead, props: [
+            (kind: Table, at: (-0.6, -0.9), loot: Some("ammo_common")),
+            (kind: Chair, at: (-0.6, -0.15), rot: 180.0),
+            (kind: Locker, at: (0.6, 1.65), rot: 180.0),
+        ]),
+        // Level 2, sorting: the hall, rows of bins by kind.
+        (id: "sorting_hall", at: (0.0, 40.0), size: (24.0, 16.0), floor: Some(-11.0), height: 6.0, lamp: Powered, stage: 0, props: [
+            (kind: Shelf, at: (-8.0, -3.5), loot: Some("house")),
+            (kind: Shelf, at: (-8.0, 3.5), loot: Some("kitchen")),
+            (kind: Crate, at: (-4.5, -3.5), loot: Some("cargo_pod")),
+            (kind: Crate, at: (-4.5, 3.5), loot: Some("house")),
+            (kind: Pallet, at: (4.5, -3.5)),
+            (kind: Crate, at: (4.5, 3.5), loot: Some("tools")),
+            (kind: Shelf, at: (8.0, -3.5), loot: Some("workshop")),
+            (kind: Shelf, at: (8.0, 3.5), loot: Some("curio")),
+            (kind: Pallet, at: (-1.5, 6.0)),
+            (kind: Pallet, at: (1.5, 6.0)),
+        ]),
+        // The tag office: the hall's control desk (stage 2), the terminal.
+        (id: "tag_office", at: (18.0, 40.0), size: (6.0, 6.0), floor: Some(-11.0), height: 2.6, lamp: Flicker, props: [
+            (kind: Table, at: (-0.8, 1.5), loot: Some("gadgets")),
+            (kind: Chair, at: (-0.8, 0.75)),
+            (kind: Shelf, at: (-2.6, -1.4), rot: 270.0, loot: Some("curio")),
+        ]),
+        // Level 3, the kept: long stacks by valley and house.
+        (id: "kept_stacks", at: (-32.0, 40.0), size: (8.0, 24.0), floor: Some(-15.0), height: 4.0, lamp: Powered, stage: 1, props: [
+            (kind: Shelf, at: (-3.6, -9.0), rot: 90.0, loot: Some("house")),
+            (kind: Shelf, at: (-3.6, -5.0), rot: 90.0, loot: Some("curio")),
+            (kind: Shelf, at: (-3.6, 3.0), rot: 90.0, loot: Some("house")),
+            (kind: Shelf, at: (-3.6, 7.0), rot: 90.0, loot: Some("medical")),
+            (kind: Crate, at: (1.5, -8.0)),
+            (kind: Crate, at: (1.5, -4.0), loot: Some("cargo_pod")),
+            (kind: Crate, at: (1.5, 4.0)),
+            (kind: Crate, at: (1.5, 8.0), loot: Some("curio")),
+            (kind: Shelf, at: (3.6, -6.0), rot: 270.0, loot: Some("tools")),
+            (kind: Shelf, at: (3.6, 6.0), rot: 270.0, loot: Some("kitchen")),
+        ]),
+        // Bay K-14: the Mareks, and Jan Holm.
+        (id: "bay_k14", at: (-32.0, 56.0), size: (6.0, 4.0), floor: Some(-15.0), height: 3.0, lamp: Dead, props: [
+            (kind: Crate, at: (-1.6, -0.6)),
+            (kind: SmallCrate, at: (-0.2, 0.0)),
+            (kind: Crate, at: (1.6, 0.8)),
+        ]),
+        // Level 4, the cistern: the pump gallery, flooded.
+        (id: "pump_gallery", at: (-32.0, 78.0), size: (10.0, 8.0), floor: Some(-19.0), height: 4.0, lamp: Dead, props: [
+            (kind: Machine, at: (-3.0, 2.0)),
+            (kind: Machine, at: (0.0, 2.0)),
+        ]),
+        // The pump room: the last breaker (stage 3), the stair out.
+        (id: "pump_room", at: (-16.0, 78.0), size: (6.0, 6.0), floor: Some(-19.0), height: 3.0, lamp: Powered, stage: 2, props: [
+            (kind: Shelf, at: (-2.6, -1.6), rot: 270.0, loot: Some("weapons_rare")),
+            (kind: Machine, at: (1.2, 1.6)),
+        ]),
+    ],
+    links: [
+        (from: "intake_bay", to: "guard_post", doors: To),
+        // The haul ramp, wide enough for a hauler, down to the hall.
+        (from: "intake_bay", to: "sorting_hall", width: 3.0, doors: To),
+        (from: "sorting_hall", to: "tag_office", doors: Both),
+        // The staff stair from the guard post to the office: round the
+        // hall's door, but the hall's still shut from that side too.
+        (from: "guard_post", to: "tag_office", via: [(18.0, 13.0)], doors: From),
+        (from: "sorting_hall", to: "kept_stacks", width: 2.0, doors: To),
+        (from: "kept_stacks", to: "bay_k14"),
+        (from: "bay_k14", to: "pump_gallery", doors: From),
+        (from: "pump_gallery", to: "pump_room", doors: To),
+    ],
+    patrol: ["intake_bay", "guard_post", "tag_office", "guard_post"],
+    crawlers: 1,
+    power: [
+        (kind: Breaker, room: "guard_post", at: (1.75, 0.8), rot: 270.0, doors: ["sorting_hall"]),
+        (kind: Breaker, room: "tag_office", at: (2.75, -1.5), rot: 270.0, doors: ["kept_stacks"]),
+        (kind: Breaker, room: "pump_room", at: (2.75, -1.6), rot: 270.0, doors: ["portal1"]),
+    ],
+    floods: [
+        (room: Some("pump_gallery"), depth: 1.2),
+    ],
+    portals: [
+        (),
+        // The service stair, from the pump room up to a hatch in the woods.
+        (at: (-16.0, 115.0), rot: 180.0, y: 3.7, floor: Some(-19.0)),
+    ],
+)

@@ -242,6 +242,8 @@
         (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
         // The civil-defence shelter under the village (assets/underground).
         (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
+        // The Depot, under the Gate: where the haulers take what they keep.
+        (prefab: "depot_marrow", at: (-230.0, -234.0), rot: 0.0),
         
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).

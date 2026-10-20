@@ -1830,22 +1830,38 @@ fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<
     indoor_to(plan, from, goal, within)
 }
 
+/// The longest single walk on an indoor route (m).
+const LEG_MAX: f32 = 10.0;
+
 fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
     let path = plan.path(a, goal)?;
     let mut tasks = Vec::new();
+    // A long straight run (an underground site's long stair) in legs, each
+    // well inside a walk's time.
+    let walk = |tasks: &mut Vec<Task>, from: Vec2, to: Vec2, within: f32| {
+        let legs = (from.distance(to) / LEG_MAX).ceil().max(1.0) as usize;
+        for k in 1..legs {
+            tasks.push(Task::WalkTo {
+                to: plan.world2(from.lerp(to, k as f32 / legs as f32)),
+                within: 0.6,
+            });
+        }
+        tasks.push(Task::WalkTo {
+            to: plan.world2(to),
+            within,
+        });
+    };
     let mut last = a;
     let n = path.len();
     for (i, p) in path.into_iter().enumerate().skip(1) {
+        let mut start = last;
         for (door, cross) in plan.doors_on(last, p) {
             let dir = (p - last).normalize_or_zero();
             let before = cross - dir * 1.1;
-            let square = (before - last).dot(dir) > 0.0;
+            let square = (before - start).dot(dir) > 0.0;
             if square {
-                tasks.push(Task::WalkTo {
-                    to: plan.world2(before),
-                    within: 0.3,
-                });
+                walk(&mut tasks, start, before, 0.3);
             }
             tasks.push(Task::OpenDoor(door));
             // A door swinging out can shove you aside: square up to the
@@ -1856,11 +1872,9 @@ fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option
                     within: 0.3,
                 });
             }
+            start = cross;
         }
-        tasks.push(Task::WalkTo {
-            to: plan.world2(p),
-            within: if i == n - 1 { within } else { 0.35 },
-        });
+        walk(&mut tasks, start, p, if i == n - 1 { within } else { 0.35 });
         last = p;
     }
     Some(tasks)

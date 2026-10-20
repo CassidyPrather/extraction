@@ -329,7 +329,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 3] = [
+pub const SITES: [(&str, &str); 4] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -341,6 +341,10 @@ pub const SITES: [(&str, &str); 3] = [
     (
         "tunnel_cinder",
         include_str!("../../../assets/underground/tunnel_cinder.ron"),
+    ),
+    (
+        "depot_marrow",
+        include_str!("../../../assets/underground/depot_marrow.ron"),
     ),
 ];
 
@@ -714,8 +718,45 @@ impl Raster {
                 continue;
             };
             let n = ((fb - fa).abs() / STEP_RISE).ceil() as usize;
-            for (c, s) in mine {
-                let k = (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n);
+            let mut tread: HashMap<usize, usize> = mine
+                .iter()
+                .map(|&(c, s)| {
+                    (
+                        c,
+                        (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n),
+                    )
+                })
+                .collect();
+            // Where it turns, cells either side of the corner's diagonal
+            // measure from different legs, a tread or two apart: lower
+            // each to one tread over its lowest neighbour, until none is
+            // more.
+            loop {
+                let mut changed = false;
+                for &(c, _) in &mine {
+                    let (i, j) = (c % r.nx, c / r.nx);
+                    let low = [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)]
+                        .iter()
+                        .filter_map(|(di, dj)| {
+                            let (a, b) = (i as i64 + di, j as i64 + dj);
+                            (a >= 0 && b >= 0 && (a as usize) < r.nx && (b as usize) < r.nz)
+                                .then(|| tread.get(&(b as usize * r.nx + a as usize)))
+                                .flatten()
+                                .copied()
+                        })
+                        .min();
+                    if let Some(low) = low {
+                        if tread[&c] > low + 1 {
+                            tread.insert(c, low + 1);
+                            changed = true;
+                        }
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+            for (c, k) in tread {
                 r.floors[c] = fa + (fb - fa) * k as f32 / n as f32;
             }
         }

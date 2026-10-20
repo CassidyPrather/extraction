@@ -19,6 +19,7 @@ use extraction_core::underground::{
     self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
     STAIR_TOP, Stair, Style, TREAD, WALL,
 };
+use std::collections::{HashMap, HashSet};
 
 use super::Zone;
 use super::buildings::{Builder, Geo, Shape, door};
@@ -989,8 +990,11 @@ impl Plugin for UndergroundPlugin {
                 throw_switches.after(wire_power),
                 generator_hum,
                 splashing,
+                depot_visits,
             ),
-        );
+        )
+        .add_message::<DepotEntered>()
+        .add_message::<CarriedOutOfDepot>();
     }
 }
 
@@ -1826,6 +1830,11 @@ pub fn site_water(zone: &Zone, feet: Vec3) -> Option<Option<f32>> {
 /// Where the floor is under a world point, if it's inside an underground
 /// site (on a stair or in a room, below the ground): the world y.
 pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
+    site_under(zone, p).map(|s| s.1)
+}
+
+/// The site a world point is down in, and its floor there.
+pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     for site in ug::placed(&zone.map) {
         let r = ug::raster(&site.id)?;
         let footing = zone.hm.footing(&site.id, site.at, site.rot);
@@ -1833,10 +1842,62 @@ pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
         let Some(f) = r.floor_at(local) else { continue };
         let floor = footing + f;
         if p.y > floor - 0.5 && p.y < floor + 4.5 && floor < zone.ground(p.x, p.z) - 0.5 {
-            return Some(floor);
+            return Some((site.id, floor));
         }
     }
     None
+}
+
+/// The Depot's site id.
+pub const DEPOT: &str = "depot_marrow";
+
+/// A player has gone down into the Depot (each time they do; the first
+/// of a raid is the reader's to pick out).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct DepotEntered {
+    pub player: Entity,
+}
+
+/// Something a player picked up in the Depot has left it with them (in
+/// a hand, on the body or in the pack), as they came out.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct CarriedOutOfDepot {
+    pub player: Entity,
+    pub item: Entity,
+}
+
+/// Logic: who's in the Depot, what they had on them going in, and what
+/// they came out with that they hadn't.
+fn depot_visits(
+    zone: Res<Zone>,
+    players: Query<(Entity, &GlobalTransform), With<crate::player::Player>>,
+    carried: Query<(Entity, &crate::anomaly::artifacts::CarriedBy)>,
+    mut inside: Local<HashMap<Entity, HashSet<Entity>>>,
+    mut entered: MessageWriter<DepotEntered>,
+    mut out: MessageWriter<CarriedOutOfDepot>,
+) {
+    for (player, gt) in &players {
+        let here = site_under(&zone, gt.translation()).is_some_and(|s| s.0 == DEPOT);
+        let on = |p: Entity| {
+            carried
+                .iter()
+                .filter(move |(_, c)| c.0 == p)
+                .map(|(e, _)| e)
+        };
+        match (here, inside.contains_key(&player)) {
+            (true, false) => {
+                inside.insert(player, on(player).collect());
+                entered.write(DepotEntered { player });
+            }
+            (false, true) => {
+                let had = inside.remove(&player).unwrap_or_default();
+                for item in on(player).filter(|e| !had.contains(e)) {
+                    out.write(CarriedOutOfDepot { player, item });
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1908,7 +1969,7 @@ mod tests {
         for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
             let mut app = app(map);
             let sites = sites_on(&app);
-            assert_eq!(sites.len(), 1, "{map}: one site");
+            assert!(!sites.is_empty(), "{map}: a site");
             let mut dirs = Vec::new();
             for a in 0..12 {
                 for e in [-0.3f32, 0.0, 0.4, 0.8, 1.2] {
@@ -2044,9 +2105,13 @@ mod tests {
                 app.update();
             }
             let zone = app.world().resource::<Zone>().clone();
-            let (site, xf) = sites_on(&app).remove(0);
-            let l = ug::layout(&site.id).unwrap();
-            {
+            let sites = sites_on(&app);
+            let crawlers: u32 = sites
+                .iter()
+                .map(|(s, _)| ug::layout(&s.id).unwrap().crawlers)
+                .sum();
+            for (site, xf) in &sites {
+                let l = ug::layout(&site.id).unwrap();
                 let lighting = app.world().resource::<Lighting>();
                 for room in &l.rooms {
                     let at = xf.transform_point(Vec3::new(
@@ -2074,7 +2139,7 @@ mod tests {
                     .collect()
             };
             let start = where_(&mut app);
-            assert_eq!(start.len(), l.crawlers as usize, "{map}: crawlers out");
+            assert_eq!(start.len(), crawlers as usize, "{map}: crawlers out");
             for _ in 0..90 * 40 {
                 app.update();
             }
@@ -2415,6 +2480,75 @@ mod tests {
         }
     }
 
+    /// Progression's hooks: going down into the Depot says so, and coming
+    /// out with something picked up there says what (not what you took
+    /// in).
+    #[test]
+    fn the_depot_knows_who_came_and_what_they_took() {
+        let mut app = app("marrow_creek");
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let (site, xf) = sites_on(&app)
+            .into_iter()
+            .find(|(s, _)| s.id == DEPOT)
+            .expect("the Depot on Marrow Creek");
+        let l = ug::layout(&site.id).unwrap();
+        let hall = l.rooms.iter().find(|r| r.id == "sorting_hall").unwrap();
+        let down = xf.transform_point(Vec3::new(hall.at[0], l.floor_of(hall) + 0.1, hall.at[1]));
+        assert_eq!(
+            floor_under(&zone, down).map(|f| (f - down.y).abs() < 0.2),
+            Some(true)
+        );
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::player::Player>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let mine = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let count = |app: &mut App| {
+            app.update();
+            let e = app.world().resource::<Messages<DepotEntered>>();
+            let o = app.world().resource::<Messages<CarriedOutOfDepot>>();
+            (
+                e.iter_current_update_messages().count(),
+                o.iter_current_update_messages()
+                    .map(|m| m.item)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let place = |app: &mut App, at: Vec3| {
+            *app.world_mut().get_mut::<Transform>(player).unwrap() =
+                Transform::from_translation(at);
+        };
+        place(&mut app, down);
+        let mut entered = 0;
+        for _ in 0..3 {
+            entered += count(&mut app).0;
+        }
+        assert_eq!(entered, 1, "going down into the Depot");
+        let found = app
+            .world_mut()
+            .spawn(crate::anomaly::artifacts::CarriedBy(player))
+            .id();
+        let up = zone.on_ground(xf.translation.x, xf.translation.z - 8.0) + Vec3::Y * 0.1;
+        place(&mut app, up);
+        let mut taken = Vec::new();
+        for _ in 0..3 {
+            taken.extend(count(&mut app).1);
+        }
+        assert_eq!(
+            taken,
+            vec![found],
+            "out with what was found there, not {mine:?}"
+        );
+    }
+
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
     /// in the site, and out by the other way (the exit kiosk).
     #[test]
@@ -2433,67 +2567,70 @@ mod tests {
                     },
                 )
                 .unwrap();
-            let plan = plans
+            let sites: Vec<BuildingPlan> = plans
                 .iter()
-                .find(|p| ug::is_site(&p.name))
-                .expect("a site plan")
-                .clone();
-            assert!(
-                plan.entries.len() >= 2,
-                "{map}: {} ways in",
-                plan.entries.len()
-            );
-            let player = app
-                .world_mut()
-                .query_filtered::<Entity, With<LocalPlayer>>()
-                .iter(app.world())
-                .next()
-                .unwrap();
-            // Stand outside the entrance (the nearest stand to the origin).
-            let entry = *plan
-                .entries
-                .iter()
-                .min_by(|a, b| a.length().total_cmp(&b.length()))
-                .unwrap();
-            let exit = *plan
-                .entries
-                .iter()
-                .max_by(|a, b| a.length().total_cmp(&b.length()))
-                .unwrap();
-            let start = plan.to_world(entry);
-            let ground = app.world().resource::<Zone>().ground(start.x, start.z);
-            app.world_mut()
-                .get_mut::<Transform>(player)
-                .unwrap()
-                .translation = Vec3::new(start.x, ground + 0.1, start.z);
-            app.update();
-            // The loot furthest from the entrance.
-            let spots: Vec<Vec3> = app
-                .world()
-                .resource::<super::super::buildings::BuildingLoot>()
-                .0
-                .iter()
-                .map(|s| s.at)
-                .filter(|s| plan.contains(*s, 0.0))
+                .filter(|p| ug::is_site(&p.name))
+                .cloned()
                 .collect();
-            assert!(spots.len() >= 8, "{map}: {} spots in the site", spots.len());
-            let goal = spots
-                .iter()
-                .map(|s| plan.to_local(*s).xz())
-                .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
-                .unwrap();
-            if std::env::var_os("SITE_DUMP").is_some() {
-                crate::sim::indoor::dump_plans(
-                    std::slice::from_ref(&plan),
-                    &spots,
-                    &crate::asset_root_path()
-                        .join("../target/site_plans")
-                        .join(map),
+            assert!(!sites.is_empty(), "{map}: a site plan");
+            for plan in sites {
+                let map = &plan.name;
+                assert!(
+                    plan.entries.len() >= 2,
+                    "{map}: {} ways in",
+                    plan.entries.len()
                 );
-            }
-            let walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
-                let pos = app.world().get::<Transform>(player).unwrap().translation;
-                let tasks = crate::sim::raider::indoor_route(&plan, pos, to, within)
+                let player = app
+                    .world_mut()
+                    .query_filtered::<Entity, With<LocalPlayer>>()
+                    .iter(app.world())
+                    .next()
+                    .unwrap();
+                // Stand outside the entrance (the nearest stand to the origin).
+                let entry = *plan
+                    .entries
+                    .iter()
+                    .min_by(|a, b| a.length().total_cmp(&b.length()))
+                    .unwrap();
+                let exit = *plan
+                    .entries
+                    .iter()
+                    .max_by(|a, b| a.length().total_cmp(&b.length()))
+                    .unwrap();
+                let start = plan.to_world(entry);
+                let ground = app.world().resource::<Zone>().ground(start.x, start.z);
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = Vec3::new(start.x, ground + 0.1, start.z);
+                app.update();
+                // The loot furthest from the entrance.
+                let spots: Vec<Vec3> = app
+                    .world()
+                    .resource::<super::super::buildings::BuildingLoot>()
+                    .0
+                    .iter()
+                    .map(|s| s.at)
+                    .filter(|s| plan.contains(*s, 0.0))
+                    .collect();
+                assert!(spots.len() >= 8, "{map}: {} spots in the site", spots.len());
+                let goal = spots
+                    .iter()
+                    .map(|s| plan.to_local(*s).xz())
+                    .max_by(|a, b| a.distance(entry).total_cmp(&b.distance(entry)))
+                    .unwrap();
+                if std::env::var_os("SITE_DUMP").is_some() {
+                    crate::sim::indoor::dump_plans(
+                        std::slice::from_ref(&plan),
+                        &spots,
+                        &crate::asset_root_path()
+                            .join("../target/site_plans")
+                            .join(map),
+                    );
+                }
+                let walk = |app: &mut App, to: Vec2, within: f32, what: &str| {
+                    let pos = app.world().get::<Transform>(player).unwrap().translation;
+                    let tasks = crate::sim::raider::indoor_route(&plan, pos, to, within)
                     .unwrap_or_else(|| {
                         let a = plan.to_local(pos).xz();
                         panic!(
@@ -2502,58 +2639,82 @@ mod tests {
                             crate::sim::raider::reach_cell(&plan, a, to)
                         )
                     });
-                app.world_mut().entity_mut(player).insert(Bot::new(tasks));
-                for _ in 0..90 * 120 {
-                    app.update();
-                    if app.world().get::<Bot>(player).unwrap().done() {
-                        break;
+                    app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                    for _ in 0..90 * 120 {
+                        app.update();
+                        if app.world().get::<Bot>(player).unwrap().done() {
+                            break;
+                        }
                     }
-                }
-                app.world().get::<Transform>(player).unwrap().translation
-            };
-            let at = walk(&mut app, goal, 0.3, "to the loot");
-            let local = plan.to_local(at);
-            assert!(
-                local.xz().distance(goal) < crate::bot::REACH + 0.3,
-                "{map}: stopped at {local:?} short of the loot at {goal:?}"
-            );
-            assert!(
-                local.y < plan.floor + 1.0,
-                "{map}: not down at the floor: {local:?}"
-            );
-            // From anywhere in the site (the deepest room, the stairs under
-            // the kiosks), the way out is one of the kiosks' doors.
-            for c in (0..plan.grid.n * plan.grid.n).step_by(37) {
-                let (i, j) = (c % plan.grid.n, c / plan.grid.n);
-                if plan.grid.cost[c] == extraction_core::nav::BLOCKED || plan.outside[c] {
-                    continue;
-                }
-                let from = Vec2::from_array(plan.grid.centre(i, j));
-                if let Some(to) = crate::sim::raider::way_out(&plan, from, &|_| false) {
+                    app.world().get::<Transform>(player).unwrap().translation
+                };
+                // On the power in stages: walk to each switch in turn and
+                // throw it (the deepest loot, or the way out, is behind it).
+                let mut switches: Vec<(usize, Entity, Vec3)> = app
+                    .world_mut()
+                    .query::<(Entity, &PowerSwitch, &GlobalTransform)>()
+                    .iter(app.world())
+                    .filter(|(_, sw, _)| sw.site == plan.entity)
+                    .map(|(e, sw, g)| (sw.stage, e, g.translation()))
+                    .collect();
+                switches.sort_by_key(|s| s.0);
+                for (stage, switch, at) in switches {
+                    walk(&mut app, plan.to_local(at).xz(), 0.5, "to a switch");
+                    app.world_mut()
+                        .entity_mut(player)
+                        .insert(Bot::new(vec![crate::bot::Task::Press(switch)]));
+                    for _ in 0..90 * 3 {
+                        app.update();
+                    }
                     assert!(
-                        plan.entries.iter().any(|e| e.distance(to) < 0.1),
-                        "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
+                        app.world().get::<SitePower>(plan.entity).unwrap().on(stage),
+                        "{map}: stage {stage} on"
                     );
                 }
+                let at = walk(&mut app, goal, 0.3, "to the loot");
+                let local = plan.to_local(at);
+                assert!(
+                    local.xz().distance(goal) < crate::bot::REACH + 0.3,
+                    "{map}: stopped at {local:?} short of the loot at {goal:?}"
+                );
+                assert!(
+                    local.y < plan.floor + 1.0,
+                    "{map}: not down at the floor: {local:?}"
+                );
+                // From anywhere in the site (the deepest room, the stairs under
+                // the kiosks), the way out is one of the kiosks' doors.
+                for c in (0..plan.grid.n * plan.grid.n).step_by(37) {
+                    let (i, j) = (c % plan.grid.n, c / plan.grid.n);
+                    if plan.grid.cost[c] == extraction_core::nav::BLOCKED || plan.outside[c] {
+                        continue;
+                    }
+                    let from = Vec2::from_array(plan.grid.centre(i, j));
+                    if let Some(to) = crate::sim::raider::way_out(&plan, from, &|_| false) {
+                        assert!(
+                            plan.entries.iter().any(|e| e.distance(to) < 0.1),
+                            "{map}: from {from:?} the way out is {to:?}, not a kiosk door"
+                        );
+                    }
+                }
+                let at = walk(&mut app, exit, 0.6, "out");
+                let local = plan.to_local(at);
+                assert!(
+                    local.xz().distance(exit) < 1.2,
+                    "{map}: stopped at {local:?}, not out at {exit:?}"
+                );
+                let ground = app.world().resource::<Zone>().ground(at.x, at.z);
+                assert!(at.y > ground - 0.3, "{map}: out but under the ground");
+                // Out on the ground, it's out: a raider there doesn't try to
+                // leave the site again.
+                assert!(
+                    !plan.contains(at, -0.1),
+                    "{map}: out, but still in the site"
+                );
+                assert!(
+                    plan.in_grid(at),
+                    "{map}: the ground by the kiosk is on the plan"
+                );
             }
-            let at = walk(&mut app, exit, 0.6, "out");
-            let local = plan.to_local(at);
-            assert!(
-                local.xz().distance(exit) < 1.2,
-                "{map}: stopped at {local:?}, not out at {exit:?}"
-            );
-            let ground = app.world().resource::<Zone>().ground(at.x, at.z);
-            assert!(at.y > ground - 0.3, "{map}: out but under the ground");
-            // Out on the ground, it's out: a raider there doesn't try to
-            // leave the site again.
-            assert!(
-                !plan.contains(at, -0.1),
-                "{map}: out, but still in the site"
-            );
-            assert!(
-                plan.in_grid(at),
-                "{map}: the ground by the kiosk is on the plan"
-            );
         }
     }
 }
