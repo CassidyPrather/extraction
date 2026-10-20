@@ -33,7 +33,10 @@ impl Plugin for ScenesPlugin {
                 // scene behind a gate waits for the rank that opens it.
                 spawn_scenes.after(crate::items::loot::LootSpawnSystems),
             )
-            .add_systems(Update, (unlock_scenes, super::story::tell_beats));
+            .add_systems(
+                Update,
+                (unlock_scenes, recall_screens, super::story::tell_beats),
+            );
     }
 }
 
@@ -116,7 +119,33 @@ pub struct Scene {
     pub items: Vec<Thing>,
     #[serde(default)]
     pub note: Option<Note>,
+    #[serde(default)]
+    pub terminal: Option<SceneTerminal>,
 }
+
+/// A terminal on the scene (a desk's), as a map's: in its frame, screen
+/// facing `rot`; press for the next page. After the recall it shows
+/// `recalled` instead, if there is one.
+#[derive(Deserialize, Debug, Clone)]
+pub struct SceneTerminal {
+    pub at: [f32; 3],
+    #[serde(default)]
+    pub rot: f32,
+    pub pages: Vec<String>,
+    #[serde(default)]
+    pub recalled: Vec<String>,
+}
+
+/// A scene terminal's screen, and what it says once the machines are
+/// recalled.
+#[derive(Component, Debug)]
+pub struct SceneScreen {
+    pub recalled: Vec<String>,
+}
+
+/// A scene terminal's case (dressed by the client).
+#[derive(Component)]
+pub struct TerminalCase;
 
 /// A piece of furniture, in the scene's frame (x, z; y up from where it
 /// rests), turned `rot` degrees.
@@ -393,7 +422,7 @@ fn spawn_scenes(
     let at = standing(progression.as_deref(), Some(&raid), &opts.map);
     for (id, scene) in of(&opts.map) {
         if scene.open(at) {
-            stage(&mut commands, &zone, &id, scene);
+            stage(&mut commands, &zone, &id, scene, raid.recalled);
             staged.0.insert(id);
         }
     }
@@ -420,14 +449,14 @@ fn unlock_scenes(
             continue;
         }
         info!("scene opens: {}", scene.name);
-        stage(&mut commands, &zone, &id, scene);
+        stage(&mut commands, &zone, &id, scene, raid.recalled);
         lay_things(&mut commands, &zone, scene, &catalog);
         staged.0.insert(id);
     }
 }
 
 /// Puts up one scene: its furniture (as a building) and its note.
-fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene) {
+fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled: bool) {
     let Some(geo) = geo(id) else {
         return;
     };
@@ -476,6 +505,98 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene) {
             note_pose(t, note),
             Visibility::default(),
         ));
+    }
+    if let Some(term) = &scene.terminal {
+        let pages = if recalled && !term.recalled.is_empty() {
+            term.recalled.clone()
+        } else {
+            term.pages.clone()
+        };
+        let screen = super::notes::Terminal { pages, page: 0 };
+        let text = screen.screen();
+        let root = commands
+            .spawn((
+                Name::new("Terminal"),
+                TerminalCase,
+                Transform::from_translation(t.transform_point(Vec3::from(term.at)))
+                    .with_rotation(t.rotation * Quat::from_rotation_y(yaw(term.rot))),
+                Visibility::default(),
+            ))
+            .id();
+        commands.spawn((
+            Name::new("Terminal screen"),
+            screen,
+            SceneScreen {
+                recalled: term.recalled.clone(),
+            },
+            super::notes::terminal_panel(text),
+            crate::raid::truck::Pressable::Terminal,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            Collider::cuboid(0.44, 0.38, 0.1),
+            CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            Transform::from_xyz(0.0, 0.23, 0.145),
+            Visibility::default(),
+            ChildOf(root),
+        ));
+    }
+}
+
+/// The recall changes what a scene terminal says (the Depot's: "Release
+/// procedure: NOT FOUND").
+fn recall_screens(
+    raid: Res<crate::raid::Raid>,
+    mut screens: Query<(
+        &mut super::notes::Terminal,
+        &mut crate::raid::bench::ScreenText,
+        &mut SceneScreen,
+    )>,
+) {
+    if !raid.recalled {
+        return;
+    }
+    for (mut term, mut text, mut s) in &mut screens {
+        if s.recalled.is_empty() {
+            continue;
+        }
+        term.pages = std::mem::take(&mut s.recalled);
+        term.page = 0;
+        text.text = term.screen();
+    }
+}
+
+/// Client: a scene terminal's monitor, as a map terminal's.
+pub struct ScenesVisualsPlugin;
+
+impl Plugin for ScenesVisualsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, dress_terminals);
+    }
+}
+
+fn dress_terminals(
+    mut commands: Commands,
+    cases: Query<Entity, Added<TerminalCase>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut library: ResMut<crate::render::materials::MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    for root in &cases {
+        let polymer = library.get(Mat::Polymer, &server, &mut materials);
+        for (size, at) in [
+            (Vec3::new(0.44, 0.38, 0.4), Vec3::new(0.0, 0.22, -0.06)),
+            (Vec3::new(0.2, 0.03, 0.2), Vec3::new(0.0, 0.015, -0.06)),
+            (Vec3::new(0.42, 0.03, 0.15), Vec3::new(0.0, 0.015, 0.25)),
+        ] {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
+                MeshMaterial3d(polymer.clone()),
+                Transform::from_translation(at),
+                ChildOf(root),
+            ));
+        }
     }
 }
 
@@ -545,7 +666,11 @@ mod tests {
                 s.name,
                 s.map
             );
-            assert!(!s.pieces.is_empty(), "{}: empty", s.name);
+            assert!(
+                !s.pieces.is_empty() || s.note.is_some() || s.terminal.is_some(),
+                "{}: empty",
+                s.name
+            );
             for t in &s.items {
                 assert!(
                     catalog.kind(&t.id).is_some(),
@@ -558,13 +683,16 @@ mod tests {
         for map in crate::world::story::VALLEYS {
             for (id, s) in of(map) {
                 let geo = geo(&id).unwrap_or_else(|| panic!("{}: no geometry", s.name));
-                assert!(!geo.pieces.is_empty());
                 let models: Vec<&str> = geo
                     .props
                     .iter()
                     .flat_map(|p| p.models.iter().map(|(n, _)| *n))
                     .collect();
-                assert!(!models.is_empty(), "{}: nothing dressed", s.name);
+                assert!(
+                    s.pieces.is_empty() || !models.is_empty(),
+                    "{}: nothing dressed",
+                    s.name
+                );
             }
         }
         assert!(crate::world::buildings::prefab("scene:marrow_creek:0").is_some());

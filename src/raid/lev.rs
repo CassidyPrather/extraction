@@ -43,7 +43,9 @@ pub const HATCH_AT: Vec3 = Vec3::new(0.23, FLOOR + 0.85, -1.79);
 pub const HATCH: Vec2 = Vec2::new(0.30, 0.26);
 /// The ledge under it: the centre of its top.
 pub const LEDGE_AT: Vec3 = Vec3::new(0.23, FLOOR + 0.70, -1.72);
-pub const LEDGE: Vec3 = Vec3::new(0.26, 0.03, 0.14);
+/// The ledge's collider (the model's timber is 0.34 wide; things go in
+/// its middle, clear of the cabinet).
+pub const LEDGE: Vec3 = Vec3::new(0.26, 0.025, 0.14);
 
 /// How long each move takes, seconds.
 const OPEN: f32 = 0.6;
@@ -329,8 +331,8 @@ fn homecoming(
     raid.say(line);
 }
 
-/// Client: the hatch's sliding panel, the ledge's timber, his hand and
-/// sleeve.
+/// Client: the hatch's sliding panel, his hand and sleeve (the opening
+/// and the ledge are in the truck model).
 pub struct LevVisualsPlugin;
 
 impl Plugin for LevVisualsPlugin {
@@ -346,7 +348,6 @@ struct HatchPanel;
 fn dress_hatch(
     mut commands: Commands,
     hatches: Query<Entity, Added<CabHatch>>,
-    ledges: Query<Entity, Added<HatchLedge>>,
     hands: Query<Entity, Added<LevHand>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -359,26 +360,13 @@ fn dress_hatch(
         })
     };
     for e in &hatches {
-        // The dark of the cab behind, and the panel over it.
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(HATCH.x, HATCH.y, 0.01))),
-            MeshMaterial3d(mat(Color::srgb(0.07, 0.07, 0.07), 1.0)),
-            Transform::from_xyz(0.0, 0.0, -0.03),
-            ChildOf(e),
-        ));
+        // The panel over the opening (the hole, its boot and the cab
+        // behind are the truck model's).
         commands.spawn((
             HatchPanel,
             Mesh3d(meshes.add(Cuboid::new(HATCH.x + 0.02, HATCH.y + 0.02, 0.015))),
             MeshMaterial3d(mat(Color::srgb(0.27, 0.30, 0.22), 0.7)),
             Transform::from_xyz(0.0, 0.0, 0.01),
-            ChildOf(e),
-        ));
-    }
-    for e in &ledges {
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(LEDGE.x, LEDGE.y, LEDGE.z))),
-            MeshMaterial3d(mat(Color::srgb(0.42, 0.32, 0.22), 0.85)),
-            Transform::IDENTITY,
             ChildOf(e),
         ));
     }

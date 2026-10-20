@@ -559,4 +559,84 @@
             rot: 0.0,
         )),
     ),
+    // --- The Depot under the Marrow Gate (Underground's depot_marrow):
+    // what the convoys keep. Positions are its rooms', floors from
+    // where_sites; the crates and desk are Underground's props.
+    (
+        map: "marrow_creek",
+        name: "Hauler's tag",
+        // On a pallet of bicycles in the sorting hall.
+        at: (-231.5, -188.0),
+        floor: Some(15.31),
+        note: Some((
+            name: "Hauler's tag",
+            text: "INTAKE 00412\nBicycle (1). Marrow, village.\nCondition: kept.",
+            at: (0.0, 0.144, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Tag office desk",
+        // The tag office's desk: the intake terminal and the review docket
+        // nobody stamped.
+        at: (-212.8, -192.5),
+        floor: Some(15.31),
+        note: Some((
+            name: "Review docket",
+            text: "REVIEW DOCKET - MARROW, KETTLE, CINDER\nPrepared for the Authority's review, 1 April.\nItems for decision: 48,212. Personnel: 31.\nRecommendation: ______\nStamp: ______\nPrepared by P. Rus, Inspector",
+            at: (-0.3, 0.785, 0.0),
+            rot: 180.0,
+        )),
+        terminal: Some((
+            at: (0.3, 0.785, 0.05),
+            rot: 180.0,
+            pages: [
+                "CUSTODIAN DEPOT - INTAKE\n\nKept pending review.\nNothing is destroyed.\n\nItems kept       48,212\nPersonnel kept       31\nReview date   (not set)",
+                "MAREK H.  civilian MARROW\nRecovered  3 FEB  village\nBay K-14   crate 2\nWith       basket (1)\nStatus     KEPT",
+                "HOLM J.   civilian MARROW\nRecovered  3 NOV  street\nBay K-14   crate 5\nStatus     KEPT",
+                "RELEASE PROCEDURE\n\nRelease of kept material\nis decided at review.\n\nReview date   (not set)",
+            ],
+            recalled: [
+                "RECALL ACCEPTED\nSweep: ended.\nReview: closed.\n\nKept material    48,212\nRelease procedure:\n  NOT FOUND",
+            ],
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Marek crate",
+        // Bay K-14, the long crate. Closed; her basket strapped on top.
+        at: (-263.6, -178.6),
+        floor: Some(11.31),
+        note: Some((
+            name: "Marek tag",
+            text: "CUSTODIAN - KEPT\nMAREK, H. Civilian. Marrow.\nRecovered: village, 3 FEB.\nWith: basket (1).\nReview: pending.",
+            at: (0.0, 0.9, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "The dog's crate",
+        at: (-262.2, -178.0),
+        floor: Some(11.31),
+        note: Some((
+            name: "Dog's tag",
+            text: "CUSTODIAN - KEPT\nMAREK. Domestic animal (1).\nRecovered: village, 14 NOV.\nTag on collar: RUSTY.\nReview: pending.",
+            at: (0.0, 0.6, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Holm crate",
+        at: (-260.4, -177.2),
+        floor: Some(11.31),
+        note: Some((
+            name: "Holm tag",
+            text: "CUSTODIAN - KEPT\nHOLM, J. Civilian. Marrow.\nRecovered: street, 3 NOV.\nReview: pending.",
+            at: (0.0, 0.9, 0.0),
+            rot: 0.0,
+        )),
+    ),
 ]

@@ -223,6 +223,7 @@ impl Plugin for WorldVisualsPlugin {
             water::WaterPlugin,
             trees::TreesPlugin,
             notes::NotesPlugin,
+            scenes::ScenesVisualsPlugin,
             rocks::RockVisualsPlugin,
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
