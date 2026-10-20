@@ -53,7 +53,15 @@ impl Plugin for RenderPlugin {
             budget::BudgetPlugin,
         ))
         .init_resource::<lod::StandInMaterial>()
-        .add_systems(Update, attach_flat_camera);
+        .init_resource::<grade::Adaptation>()
+        .init_resource::<grade::Dimmed>()
+        .add_systems(First, grade::undim)
+        .add_systems(PostUpdate, grade::dim_indoors)
+        .add_systems(Update, attach_flat_camera)
+        .add_systems(
+            Update,
+            grade::adapt_eyes.after(crate::world::sky::WeatherLook),
+        );
     }
 }
 
