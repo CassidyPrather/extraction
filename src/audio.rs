@@ -377,6 +377,9 @@ fn gun_sounds(
                 }
             }
             (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire", 0.0),
+            // The action stopping short on a stuck case: a bolt closing,
+            // slowed and lowered into a dull, wrong clack.
+            (FireEvent::Malfunctioned(_), _) => ("guns/bolt_close", "gun.malfunction", 0.0),
             (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
             (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
             (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
@@ -407,7 +410,12 @@ fn gun_sounds(
         } else {
             0.07
         };
-        play(
+        let speed = if matches!(ev.event, FireEvent::Malfunctioned(_)) {
+            0.72
+        } else {
+            1.0
+        };
+        play_at_speed(
             &mut commands,
             &bank,
             &mut rng.0,
@@ -415,6 +423,7 @@ fn gun_sounds(
             Some(ev.at),
             cue,
             offset,
+            speed,
             pitch,
         );
     }
