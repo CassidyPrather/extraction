@@ -22,6 +22,10 @@ pub enum ActionKind {
     BoltAction,
     /// Hinged barrels, loaded by hand, one round per barrel.
     BreakAction,
+    /// A cylinder of `internal_capacity` chambers behind a loading gate
+    /// (a Nagant): rounds go in and out one at a time at the gate; cocking
+    /// the hammer (by thumb, or the long double-action pull) turns it.
+    Revolver,
 }
 
 /// Fire-selector positions.
@@ -57,6 +61,10 @@ pub struct FirearmDef {
     /// Trigger can cock and drop the hammer itself.
     #[serde(default)]
     pub double_action: bool,
+    /// Fires from an open bolt (a PPSh): at rest the bolt is back on the
+    /// sear; the trigger lets it run forward, and it fires as it closes.
+    #[serde(default)]
+    pub open_bolt: bool,
     /// Metres per second.
     pub muzzle_velocity: f32,
     /// Base damage of one projectile (shot counts multiply this).
@@ -202,6 +210,16 @@ pub struct Firearm {
     /// bolt can't strip from it until it's tapped home.
     #[serde(default)]
     pub mag_unseated: bool,
+    /// A revolver: the chamber under the hammer (and at the gate).
+    #[serde(default)]
+    pub cylinder: usize,
+    /// A revolver's loading gate is open: the cylinder turns by hand and
+    /// the hammer is disconnected.
+    #[serde(default)]
+    pub gate_open: bool,
+    /// The ejector rod's stroke, 1 as it pushes a case out, easing to 0.
+    #[serde(default)]
+    pub rod: f32,
     /// 0..=1. Lower is worse: more malfunctions, more spread.
     pub condition: f32,
     /// 0..=1. Dirt from shooting; cleaning removes it.
@@ -220,9 +238,14 @@ impl Firearm {
     /// position.
     pub fn new(def: FirearmDef, condition: f32) -> Self {
         let n = def.barrels.max(1) as usize;
+        let chambers = if def.action == ActionKind::Revolver {
+            def.internal_capacity.max(1) as usize
+        } else {
+            n
+        };
         Self {
             def,
-            chambers: vec![None; n],
+            chambers: vec![None; chambers],
             hammers_cocked: vec![false; n],
             bolt_travel: 0.0,
             handle_lift: 0.0,
@@ -234,6 +257,9 @@ impl Firearm {
             mode: 0,
             malfunction: None,
             mag_unseated: false,
+            cylinder: 0,
+            gate_open: false,
+            rod: 0.0,
             condition: condition.clamp(0.0, 1.0),
             fouling: 0.0,
             trigger_down: false,
@@ -264,7 +290,17 @@ impl Firearm {
         let shut = self.bolt_travel <= CLOSED_AT && !self.locked_back;
         match self.def.action {
             ActionKind::BoltAction => shut && self.handle_lift <= HANDLE_DOWN_AT,
+            ActionKind::Revolver => !self.gate_open,
             _ => shut,
+        }
+    }
+
+    /// Ready to fire: closed, or for an open bolt, back on the sear.
+    pub fn is_ready(&self) -> bool {
+        if self.def.open_bolt {
+            self.locked_back
+        } else {
+            self.is_closed()
         }
     }
 
@@ -288,7 +324,10 @@ impl Firearm {
     /// Advances timers. Call once per fixed tick with the trigger state;
     /// handles automatic fire. `roll` supplies uniform randoms in `0..1`.
     pub fn update(&mut self, dt: f32, trigger: bool, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
-        self.cooldown = (self.cooldown - dt).max(0.0);
+        // Up to a tick of overshoot carries into the next interval, so the
+        // cyclic rate holds whatever the tick.
+        self.cooldown = (self.cooldown - dt).max(-dt);
+        self.rod = (self.rod - dt * 4.0).max(0.0);
         let mut events = Vec::new();
         if trigger && !self.trigger_down {
             self.trigger_down = true;
@@ -307,8 +346,17 @@ impl Firearm {
     /// One trigger stroke (or one auto-fire cycle).
     fn pull(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
         let mut events = Vec::new();
-        if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_closed() {
+        if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_ready() {
             return events;
+        }
+        if self.def.open_bolt {
+            if self.malfunction.is_some() {
+                return events;
+            }
+            if self.fire_mode() != FireMode::Auto {
+                self.trigger_reset = false;
+            }
+            return self.open_bolt_cycle(roll);
         }
         // A failure to feed leaves the bolt closed on an empty chamber: the
         // hammer falls and clicks. The others hold the bolt open anyway.
@@ -325,7 +373,9 @@ impl Firearm {
         let b = barrel as usize;
         if !self.hammers_cocked[b] {
             if self.def.double_action {
+                // The long pull cocks it (and turns a cylinder) first.
                 self.hammers_cocked[b] = true;
+                self.turn_cylinder();
             } else {
                 return events;
             }
@@ -334,7 +384,14 @@ impl Firearm {
         if self.def.barrels > 1 {
             self.next_barrel = (barrel + 1) % self.def.barrels;
         }
-        match self.chambers[b] {
+        // The chamber in line with the bore: a revolver's is under the
+        // hammer.
+        let c = if self.def.action == ActionKind::Revolver {
+            self.cylinder
+        } else {
+            b
+        };
+        match self.chambers[c] {
             Some(Round::Live) => {
                 // Duds are rare and mostly the gun's fault (light strikes).
                 let dud_chance = 0.002 + 0.02 * (1.0 - self.condition);
@@ -342,10 +399,10 @@ impl Firearm {
                     events.push(Event::Dud);
                     return events;
                 }
-                self.chambers[b] = Some(Round::Spent);
+                self.chambers[c] = Some(Round::Spent);
                 events.push(Event::Fired { barrel });
                 self.wear();
-                self.cooldown = 60.0 / self.def.rpm.max(1.0);
+                self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
                 if self.def.action == ActionKind::SemiAuto {
                     events.extend(self.auto_cycle(roll));
                 }
@@ -353,6 +410,107 @@ impl Firearm {
             _ => events.push(Event::DryFire),
         }
         events
+    }
+
+    /// An open bolt let go: it runs forward, strips a round, fires it as
+    /// it closes and blows back onto the sear (or on an empty feed closes
+    /// on nothing).
+    fn open_bolt_cycle(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        let mut events = Vec::new();
+        self.locked_back = false;
+        if !self.take_from_feed() {
+            self.bolt_travel = 0.0;
+            self.stroke_cleared = false;
+            events.push(Event::BoltClosed);
+            return events;
+        }
+        let dud_chance = 0.002 + 0.02 * (1.0 - self.condition);
+        if roll() < dud_chance {
+            // A dud stays chambered under a closed bolt: rack it out.
+            self.chambers[0] = Some(Round::Live);
+            self.bolt_travel = 0.0;
+            self.stroke_cleared = false;
+            events.push(Event::Chambered);
+            events.push(Event::Dud);
+            return events;
+        }
+        events.push(Event::Fired { barrel: 0 });
+        self.wear();
+        self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
+        if roll() < self.malfunction_chance() {
+            // Blowback catches the case: a stovepipe, the bolt short of
+            // the sear.
+            self.chambers[0] = Some(Round::Spent);
+            self.bolt_travel = STOVEPIPE_AT;
+            self.malfunction = Some(Malfunction::FailureToEject);
+            events.push(Event::Malfunctioned(Malfunction::FailureToEject));
+            return events;
+        }
+        events.push(Event::Ejected(Round::Spent));
+        self.bolt_travel = 1.0;
+        self.locked_back = true;
+        events
+    }
+
+    /// A revolver's cylinder steps one chamber on.
+    fn turn_cylinder(&mut self) {
+        if self.def.action == ActionKind::Revolver {
+            self.cylinder = (self.cylinder + 1) % self.chambers.len().max(1);
+        }
+    }
+
+    /// Thumbs the hammer back (single action): a revolver's cylinder turns
+    /// as it cocks. Not with a revolver's gate open.
+    pub fn cock_hammer(&mut self) -> Vec<Event> {
+        if self.def.open_bolt
+            || self.def.action == ActionKind::BoltAction
+            || self.hammers_cocked.first() != Some(&false)
+            || (self.def.action == ActionKind::Revolver && self.gate_open)
+        {
+            return Vec::new();
+        }
+        self.hammers_cocked[0] = true;
+        self.turn_cylinder();
+        vec![Event::Cocked]
+    }
+
+    /// Opens or shuts a revolver's loading gate (the hammer must be down
+    /// to open it).
+    pub fn set_gate(&mut self, open: bool) -> Vec<Event> {
+        if self.def.action != ActionKind::Revolver || open == self.gate_open {
+            return Vec::new();
+        }
+        if open && self.hammers_cocked[0] {
+            return Vec::new();
+        }
+        self.gate_open = open;
+        vec![if open {
+            Event::BoltLocked
+        } else {
+            Event::BoltClosed
+        }]
+    }
+
+    /// Turns a revolver's cylinder a chamber by hand (gate open).
+    pub fn rotate_cylinder(&mut self) -> Vec<Event> {
+        if self.def.action != ActionKind::Revolver || !self.gate_open {
+            return Vec::new();
+        }
+        self.turn_cylinder();
+        vec![Event::Cocked]
+    }
+
+    /// The ejector rod pushes out whatever is in the chamber at the gate.
+    pub fn eject_at_gate(&mut self) -> Vec<Event> {
+        if self.def.action != ActionKind::Revolver || !self.gate_open {
+            return Vec::new();
+        }
+        self.rod = 1.0;
+        self.chambers[self.cylinder]
+            .take()
+            .map(Event::Ejected)
+            .into_iter()
+            .collect()
     }
 
     /// Which barrel the trigger will drop next.
@@ -468,7 +626,10 @@ impl Firearm {
     /// first or the bolt will not move.
     pub fn set_bolt_travel(&mut self, travel: f32) -> Vec<Event> {
         let mut events = Vec::new();
-        if self.def.action == ActionKind::BreakAction {
+        if matches!(
+            self.def.action,
+            ActionKind::BreakAction | ActionKind::Revolver
+        ) {
             return events;
         }
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
@@ -539,6 +700,22 @@ impl Firearm {
     /// (or onto the slide stop); turn-bolts stay where they were left.
     pub fn release_bolt(&mut self) -> Vec<Event> {
         match self.def.action {
+            ActionKind::SemiAuto if self.def.open_bolt => {
+                if self.locked_back {
+                    return Vec::new();
+                }
+                if self.bolt_travel >= EJECT_AT {
+                    // Drawn back to the sear: it catches there, cocked.
+                    self.bolt_travel = 1.0;
+                    self.locked_back = true;
+                    self.stroke_cleared = false;
+                    return vec![Event::BoltLocked];
+                }
+                // Let go short of the sear: it rides home over the feed
+                // without stripping (an open bolt doesn't slam-fire here).
+                self.stroke_cleared = false;
+                self.set_bolt_travel(0.0)
+            }
             ActionKind::SemiAuto => {
                 let empty_hold = self.def.last_round_hold_open
                     && (self.magazine.as_ref().is_some_and(|m| m.rounds == 0)
@@ -563,7 +740,7 @@ impl Firearm {
     /// A hand tugs a locked-back slide or bolt rearward, off its stop: let
     /// go, it runs home ([`Self::release_bolt`]) and strips a round.
     pub fn take_off_stop(&mut self) {
-        if self.locked_back {
+        if self.locked_back && !self.def.open_bolt {
             self.locked_back = false;
             self.stroke_cleared = true;
         }
@@ -571,7 +748,8 @@ impl Firearm {
 
     /// Thumbs the slide stop down: a locked-back slide runs home.
     pub fn release_slide_stop(&mut self) -> Vec<Event> {
-        if !self.locked_back {
+        // An open bolt's sear is the trigger's business.
+        if !self.locked_back || self.def.open_bolt {
             return Vec::new();
         }
         self.locked_back = false;
@@ -665,6 +843,14 @@ impl Firearm {
     /// there is no room.
     pub fn load_round(&mut self) -> bool {
         match self.def.action {
+            ActionKind::Revolver => {
+                let c = self.cylinder;
+                if self.gate_open && self.chambers[c].is_none() {
+                    self.chambers[c] = Some(Round::Live);
+                    return true;
+                }
+                false
+            }
             ActionKind::BreakAction => {
                 if self.bolt_travel < 0.5 {
                     return false;
@@ -751,6 +937,7 @@ mod tests {
             rpm: 600.0,
             last_round_hold_open: true,
             double_action: true,
+            open_bolt: false,
             muzzle_velocity: 315.0,
             damage: 30.0,
             projectiles: 1,
@@ -1150,6 +1337,122 @@ mod tests {
         assert!(gun.locked_back, "locks back on the last round");
         assert!(gun.load_round(), "thumbs one in");
         assert_eq!(gun.internal_rounds, 1);
+    }
+
+    fn nagant() -> FirearmDef {
+        FirearmDef {
+            action: ActionKind::Revolver,
+            magazine_family: None,
+            internal_capacity: 7,
+            modes: vec![FireMode::Semi],
+            last_round_hold_open: false,
+            double_action: true,
+            ..pistol()
+        }
+    }
+
+    fn ppsh() -> FirearmDef {
+        FirearmDef {
+            magazine_family: Some("ppsh_drum".into()),
+            modes: vec![FireMode::Safe, FireMode::Auto, FireMode::Semi],
+            rpm: 900.0,
+            last_round_hold_open: false,
+            double_action: false,
+            open_bolt: true,
+            ..pistol()
+        }
+    }
+
+    /// A Nagant: gate open, a round in at the gate and a turn, seven
+    /// times; gate shut; seven shots, by thumb-cocking and by the long
+    /// pull; gate open, the rod pushes the empties out one at a turn.
+    #[test]
+    fn a_revolver_loads_at_the_gate_and_fires_round_the_cylinder() {
+        let mut gun = Firearm::new(nagant(), 1.0);
+        assert_eq!(gun.chambers.len(), 7);
+        assert!(!gun.load_round(), "gate shut");
+        assert!(!gun.set_gate(true).is_empty());
+        for _ in 0..7 {
+            assert!(gun.load_round());
+            assert!(!gun.load_round(), "that chamber's full");
+            gun.rotate_cylinder();
+        }
+        assert!(!fired(&shoot(&mut gun)), "won't fire with the gate open");
+        gun.set_gate(false);
+        assert!(gun.rotate_cylinder().is_empty(), "locked with it shut");
+        // Single action: thumb back (the cylinder turns), then a light pull.
+        assert_eq!(gun.cock_hammer(), vec![Event::Cocked]);
+        assert!(fired(&shoot(&mut gun)));
+        // Double action for the rest.
+        for _ in 0..6 {
+            assert!(fired(&shoot(&mut gun)));
+        }
+        let ev = shoot(&mut gun);
+        assert!(ev.contains(&Event::DryFire), "all seven gone: {ev:?}");
+        assert!(gun.set_gate(true).is_empty() || gun.gate_open);
+        gun.set_gate(true);
+        let mut out = 0;
+        for _ in 0..7 {
+            out += gun
+                .eject_at_gate()
+                .iter()
+                .filter(|e| **e == Event::Ejected(Round::Spent))
+                .count();
+            gun.rotate_cylinder();
+        }
+        assert_eq!(out, 7);
+        assert_eq!(gun.live_rounds(), 0);
+    }
+
+    /// A PPSh: rack it back onto the sear; the trigger runs the bolt home
+    /// and it fires, ending back on the sear; on auto it runs on at 900
+    /// rounds a minute; empty, it closes on nothing and wants racking.
+    #[test]
+    fn an_open_bolt_fires_as_it_closes() {
+        let mut gun = Firearm::new(ppsh(), 1.0);
+        gun.insert_magazine(Magazine {
+            family: "ppsh_drum".into(),
+            capacity: 71,
+            rounds: 71,
+        })
+        .unwrap();
+        gun.cycle_mode(); // Auto
+        gun.cycle_mode(); // Semi
+        assert!(!fired(&shoot(&mut gun)), "bolt forward: not cocked");
+        assert!(gun.release_slide_stop().is_empty());
+        gun.set_bolt_travel(1.0);
+        assert_eq!(gun.release_bolt(), vec![Event::BoltLocked]);
+        assert_eq!(gun.chambers[0], None, "nothing chambered at rest");
+        let ev = shoot(&mut gun);
+        assert!(fired(&ev) && ev.contains(&Event::Ejected(Round::Spent)));
+        assert!(gun.locked_back, "back on the sear");
+        assert_eq!(gun.rounds_in_feed(), 70);
+        gun.cycle_mode();
+        gun.cycle_mode(); // Auto
+        let mut r = lucky();
+        let mut shots = 0;
+        for _ in 0..60 {
+            shots += gun
+                .update(1.0 / 60.0, true, &mut r)
+                .iter()
+                .filter(|e| matches!(e, Event::Fired { .. }))
+                .count();
+        }
+        assert!((14..=16).contains(&shots), "{shots} in a second");
+        // Run it dry.
+        for _ in 0..600 {
+            gun.update(1.0 / 60.0, true, &mut r);
+        }
+        assert_eq!(gun.rounds_in_feed(), 0);
+        assert!(!gun.locked_back && gun.is_closed(), "closed on nothing");
+        // A handle let go short of the sear rides home, no shot.
+        gun.remove_magazine();
+        gun.insert_magazine(mag("ppsh_drum", 8)).unwrap();
+        gun.set_bolt_travel(0.5);
+        assert!(!gun.release_bolt().iter().any(|e| *e == Event::Chambered));
+        gun.set_bolt_travel(1.0);
+        gun.release_bolt();
+        assert!(fired(&shoot(&mut gun)));
     }
 
     #[test]
