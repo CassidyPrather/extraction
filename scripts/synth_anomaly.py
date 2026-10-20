@@ -223,6 +223,93 @@ def drone_lock(seed, seconds=0.85):
     return np.stack([x, x])
 
 
+def well_drone(seed=31, seconds=14.0):
+    """A gravity knot: a pressure in the ears, sub tones a few Hz apart
+    beating slowly, and air being drawn in, in long breaths."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        sub = (np.sin(2 * np.pi * 27 * t) + 0.8 * np.sin(2 * np.pi * (29.5 + 0.3 * ch) * t)
+               + 0.4 * np.sin(2 * np.pi * 41 * t))
+        n = rng.normal(size=t.size)
+        draw = lowpass(n, 260) - lowpass(n, 60)
+        # Breathing in: swells that rise slowly and stop short.
+        phase = (t / 3.5 + 0.3 * ch) % 1.0
+        breath = phase ** 2 * (1.0 - np.clip((phase - 0.92) / 0.08, 0, 1))
+        x = 0.8 * sub * (0.7 + 0.3 * np.sin(2 * np.pi * t / 7.0)) + 2.5 * draw * breath
+        out.append(loop_crossfade(x, 1.2))
+    return np.stack(out)
+
+
+def mirror_shimmer(seed=32, seconds=10.0):
+    """A fold in space: a glassy shimmer of high partials drifting against
+    each other, with a fine sparkle."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(seconds * SR)) / SR
+    out = []
+    for ch in range(2):
+        x = np.zeros_like(t)
+        for k, f in enumerate([1870.0, 2810.0, 3730.0, 4690.0, 5600.0]):
+            drift = 1.0 + 0.004 * np.sin(2 * np.pi * t / (3.0 + k) + ch + k)
+            amp = 0.5 + 0.5 * np.sin(2 * np.pi * t / (2.2 + 0.7 * k) + 1.3 * k + ch) ** 2
+            x += amp * np.sin(2 * np.pi * np.cumsum(f * drift) / SR) / (1 + k)
+        n = rng.normal(size=t.size)
+        sparkle = (n - lowpass(n, 6000)) * (rng.random(t.size) < 0.002)
+        out.append(loop_crossfade(0.35 * x + 2.0 * lowpass(sparkle, 9000), 1.0))
+    return np.stack(out)
+
+
+def mirror_blink(seed, seconds=0.7):
+    """Something blinked across a few metres: air rushing in backwards,
+    then a hard glassy pop."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    noise = rng.normal(size=n)
+    rush = lowpass(noise, 4000) - lowpass(noise, 400)
+    swell = np.clip(t / 0.28, 0, 1) ** 3 * (t < 0.28)
+    pop_t = np.clip(t - 0.28, 0, None)
+    pop = (np.sin(2 * np.pi * (3200 * pop_t - 2200 * pop_t ** 2)) * np.exp(-pop_t / 0.03)
+           * (t >= 0.28))
+    thump = np.sin(2 * np.pi * 70 * pop_t) * np.exp(-pop_t / 0.08) * (t >= 0.28)
+    x = 1.2 * rush * swell + pop + 0.8 * thump
+    return np.stack([x, x])
+
+
+def reveal(seed, seconds=1.2):
+    """A thrown thing touching an anomaly: a bright, falling glassy ping."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    f = 2600 + 300 * seed
+    x = (np.sin(2 * np.pi * np.cumsum(f * (1 - 0.15 * t / seconds)) / SR)
+         + 0.5 * np.sin(2 * np.pi * np.cumsum(2.76 * f * (1 - 0.15 * t / seconds)) / SR))
+    x *= np.exp(-t / 0.25) * np.minimum(1.0, t / 0.002)
+    return np.stack([x, x])
+
+
+def detector_click(seed, seconds=0.03):
+    """The anomaly detector's tick: a dry Geiger-counter click, a
+    snap with a little body."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    snap = rng.normal(size=n) * np.exp(-t / 0.0007)
+    body = np.sin(2 * np.pi * (1100 + 90 * seed) * t) * np.exp(-t / 0.004)
+    x = snap + 0.6 * body
+    return np.stack([x, x])
+
+
+def oneshots(entries, key, out, make, seeds):
+    files = []
+    name = key.split("/")[1]
+    for i, seed in enumerate(seeds):
+        path, secs = write(f"{name}_{i + 1}", make(seed), out=out)
+        files.append({"file": str(path.relative_to(ROOT / "assets")), "seconds": round(secs, 3),
+                      "source": "synth:scripts/synth_anomaly.py"})
+    entries[key] = {"type": "oneshot", "channels": 2, "loop": False, "files": files}
+
+
 def main():
     entries = {}
     loopset(entries, "lift_hum", lift_hum())
@@ -231,6 +318,12 @@ def main():
     loopset(entries, "attention", attention_ring())
     loopset(entries, "lift_pop", lift_pop(), kind="oneshot")
     loopset(entries, "offering", bowl(), kind="oneshot")
+    loopset(entries, "well_drone", well_drone())
+    loopset(entries, "mirror_shimmer", mirror_shimmer())
+    oneshots(entries, "anomaly/mirror_blink", OUT, mirror_blink, [41, 42, 43])
+    oneshots(entries, "anomaly/reveal", OUT, reveal, [0, 1, 2])
+    oneshots(entries, "machines/detector_click", ROOT / "assets" / "audio" / "machines",
+             detector_click, [0, 1, 2, 3])
     path, secs = write("surge_drone", surge_drone())
     entries["anomaly/surge_drone"] = {
         "type": "bed", "channels": 2, "loop": True,
