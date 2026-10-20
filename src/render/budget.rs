@@ -874,7 +874,7 @@ mod tests {
             new_game: true,
             robots: false,
             data_dir: Some(dir),
-            weather: Some("drizzle".into()),
+            weather: Some(std::env::var("BUDGET_WEATHER").unwrap_or("clearing".into())),
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })

@@ -114,6 +114,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Sun shadow map 1024 a cascade (Bevy's default 2048) | `budget::SHADOW_MAP` | Software frame spruce -14%, pines -12%; looks the same, a touch softer |
 | Near trunk chunks cast the sun's shadow only within 60 m (`ShadowReach`) | `world::trees` | Shadow triangles spruce 232k > 153k, pines 193k > 121k, edge 111k > 59k |
 | Doors fade over 120-150 m, after the stand-in takes over | `budget::reach_doors` | Draws -6..-54, triangles -1..-3% |
+| Forest far LOD (130 m on) one vertex-coloured mesh a chunk | `world::trees`, `render::lod` | Clear weather: draws -30..-130 a view (spruce 956 > 831) |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):
@@ -127,14 +128,16 @@ Shared tools for the next ones (in `render::budget`):
 ## Where it stands
 
 The gauges at every lookbook view of the four valleys (GPU-less client,
-one eye), worst view of each against the budget:
+one eye), in clear weather (the furthest you see, so the most drawn;
+`BUDGET_WEATHER=drizzle` for the reference look), worst view against
+the budget:
 
 | | Worst | Budget | Headroom |
 | - | - | - | - |
-| Draws | 994 (Marrow Creek spruce) | 1200 | 17% |
-| Triangles | 529k (Marrow Creek spruce) | 900k | 41% |
-| Shadow draws | 731 (Training Yard aerial) | 900 | 19% |
-| Shadow triangles | 268k (Cinder Works gate) | 700k | 62% |
+| Draws | 1081 (Marrow Creek spruce) | 1200 | 10% |
+| Triangles | 570k (Marrow Creek spruce) | 900k | 37% |
+| Shadow draws | 706 (Training Yard aerial) | 900 | 22% |
+| Shadow triangles | 247k (Cinder Works gate) | 700k | 65% |
 
 At the start the worst views were 3316 draws and 970 shadow draws.
 
