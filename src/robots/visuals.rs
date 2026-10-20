@@ -39,6 +39,7 @@ impl Plugin for RobotVisualsPlugin {
                     dress_debris,
                     alert_eyes,
                     shell_by_light,
+                    super::weathering::weather_meshes,
                 ),
             );
     }
@@ -518,6 +519,16 @@ fn attach(
         // Shell scorches with its part.
         if p.material.as_deref() == Some("Shell") {
             ec.insert(Skin { part, level: 0 });
+        }
+        // And wears its valley (soot, rust, moss, dust).
+        match p.material.as_deref() {
+            Some("Shell") => {
+                ec.insert(super::weathering::Weather { shell: true });
+            }
+            Some("Dark") | None => {
+                ec.insert(super::weathering::Weather { shell: false });
+            }
+            _ => {}
         }
     }
 }
@@ -1557,6 +1568,7 @@ fn shell_by_light(
     server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut done: Local<Option<f32>>,
+    zone: Option<Res<crate::world::Zone>>,
 ) {
     let (Some(c), Some(m)) = (conditions, mats) else {
         return;
@@ -1573,7 +1585,10 @@ fn shell_by_light(
         &server,
         &mut materials,
     );
-    let k = 0.22 * c.light.sqrt().max(0.12);
+    let valley = zone.map_or(super::weathering::Valley::None, |z| {
+        super::weathering::Valley::of_map(&z.map.name)
+    });
+    let k = 0.22 * c.light.sqrt().max(0.12) * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
     }

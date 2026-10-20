@@ -696,6 +696,16 @@ fn read_fingers(
     }
 }
 
+/// `EXTRACTION_XR_HAND_SHIFT=metres`: see `drive_xr_rig`.
+fn hand_shift() -> Option<f32> {
+    static SHIFT: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    *SHIFT.get_or_init(|| {
+        std::env::var("EXTRACTION_XR_HAND_SHIFT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+    })
+}
+
 fn drive_xr_rig(
     actions: Option<Res<Actions>>,
     session: Res<OxrSession>,
@@ -730,6 +740,12 @@ fn drive_xr_rig(
             hand.pose.rotation = aim.rotation;
         }
         hand.tracked = true;
+        // For looking at physics hands without a headset: slide both
+        // tracked hands this far ahead (Monado's simulated controllers
+        // can't be moved).
+        if let Some(shift) = hand_shift() {
+            hand.pose.translation += Vec3::NEG_Z * shift;
+        }
     }
     let read_f = |action: &openxr::Action<f32>, path: openxr::Path| {
         action

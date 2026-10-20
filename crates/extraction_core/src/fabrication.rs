@@ -213,6 +213,17 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 10.0,
     },
     Recipe {
+        id: "pack_762x25",
+        name: "Re-pack 7.62x25 (box of 70)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 2),
+            (Need::Item("scrap_metal"), 1),
+        ],
+        makes: Make::Items(&[("ammo_762x25", 1)]),
+        seconds: 12.0,
+    },
+    Recipe {
         id: "repair_gun_fine",
         name: "Strip and rebuild a worn gun",
         needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
@@ -385,6 +396,12 @@ mod tests {
                 .iter()
                 .any(|r| r.id == "pack_762x39"),
             "the vice packs the carbine's rounds"
+        );
+        assert!(
+            available_at(&carbine, &cat, 1)
+                .iter()
+                .any(|r| r.id == "pack_762x25"),
+            "and the sub-machine gun's"
         );
         assert!(ids(1).contains(&"make_side_rail"));
         assert!(recipe("make_emp_trap").is_some());

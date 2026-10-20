@@ -71,6 +71,61 @@ const CALL_ANCHOR: &str =
     "return bevy_pbr::fog::exponential_squared_fog(fog_params, input_color, distance, scattering);";
 const FN_ANCHOR: &str = "fn apply_fog(";
 
+// Wet surfaces: every PBR surface's lighting first goes through
+// `extraction_wet`, which reads how wet the world is from the fog colour's
+// alpha (`1 - wetness * WET_CODE`: a fog weaker by at most 0.2%, which no
+// one sees) and the surface's sky openness from its own alpha (opaque
+// surfaces ignore alpha: buildings bake it, `world::ao`; everything else
+// is 1, open; the terrain sets 0 and wets itself). Bevy forces an opaque
+// surface's alpha to 1 in `alpha_discard`; the patch keeps it until the
+// lighting has read it, and then puts the 1 back.
+const LIGHT_ANCHOR: &str =
+    "fn apply_pbr_lighting(\n    in: pbr_types::PbrInput,\n) -> vec4<f32> {\n";
+const LIGHT_PATCHED: &str = "fn apply_pbr_lighting(\n    in_dry: pbr_types::PbrInput,\n) -> vec4<f32> {\n    let in = extraction_wet(in_dry); // EXTRACTION_WET\n";
+
+/// The patched lighting entry, with `extraction_wet` just above it (where
+/// it's in scope whatever the shader defs; next to `apply_fog` it wasn't).
+fn light_patched() -> String {
+    format!("{WET_WGSL}{LIGHT_PATCHED}")
+}
+const OPAQUE_ANCHOR: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        color.a = 1.0;\n";
+const OPAQUE_PATCHED: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        // EXTRACTION_WET: kept (the sky openness) until the lighting reads it.\n        color.a = clamp(color.a, 0.0, 1.0);\n";
+/// Wetness rides the fog colour's alpha as `1 - wetness * WET_CODE`.
+pub const WET_CODE: f32 = 0.002;
+
+const WET_WGSL: &str = r#"
+fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
+    var o = p;
+    let alpha_mode = p.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
+    if (alpha_mode != pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE) {
+        return o;
+    }
+    o.material.base_color.a = 1.0;
+#ifdef DISTANCE_FOG
+    let w = clamp((1.0 - view_bindings::fog.base_color.a) * 500.0, 0.0, 1.0);
+#else
+    // A view with no fog (the impostors' capture) has no weather either.
+    let w = 0.0;
+#endif
+    if (w < 0.002) {
+        return o;
+    }
+    // Rain falls on what faces up; walls take the run-off, a little.
+    let open = clamp(p.material.base_color.a, 0.0, 1.0);
+    let up = clamp(p.world_normal.y, 0.0, 1.0);
+    let k = w * open * (0.3 + 0.7 * up);
+    // Darker (soaked), and glossy, metal less so.
+    let soak = mix(0.62, 0.85, p.material.metallic);
+    o.material.base_color = vec4<f32>(p.material.base_color.rgb * mix(1.0, soak, k), 1.0);
+    o.material.perceptual_roughness = mix(
+        p.material.perceptual_roughness,
+        min(p.material.perceptual_roughness, 0.32),
+        k * 0.85,
+    );
+    return o;
+}
+"#;
+
 fn height_fog_wgsl(f: &HeightFog) -> String {
     format!(
         r#"{MARKER}
@@ -164,6 +219,8 @@ fn unpatched(src: &str) -> String {
     out.push_str(&src[..start]);
     out.push_str(&src[end..]);
     out.replace(&patched_call(), CALL_ANCHOR)
+        .replace(&light_patched(), LIGHT_ANCHOR)
+        .replace(OPAQUE_PATCHED, OPAQUE_ANCHOR)
 }
 
 fn patched_call() -> String {
@@ -175,12 +232,22 @@ fn patch(src: &str, fog: &HeightFog) -> Option<String> {
     if !base.contains(CALL_ANCHOR) || !base.contains(FN_ANCHOR) {
         return None;
     }
+    // Wet surfaces only where both anchors are there (else dry, as before).
+    let wet = base.contains(LIGHT_ANCHOR) && base.contains(OPAQUE_ANCHOR);
     let with_fns = base.replacen(
         FN_ANCHOR,
         &format!("{}{FN_ANCHOR}", height_fog_wgsl(fog)),
         1,
     );
-    Some(with_fns.replacen(CALL_ANCHOR, &patched_call(), 1))
+    let mut out = with_fns.replacen(CALL_ANCHOR, &patched_call(), 1);
+    if wet {
+        out = out.replacen(LIGHT_ANCHOR, &light_patched(), 1).replacen(
+            OPAQUE_ANCHOR,
+            OPAQUE_PATCHED,
+            1,
+        );
+    }
+    Some(out)
 }
 
 fn patch_pbr_functions(
@@ -261,5 +328,21 @@ mod tests {
         .unwrap();
         assert_eq!(b.matches(MARKER).count(), 1);
         assert!(b.contains("0.500000"));
+    }
+
+    #[test]
+    fn wet_patch_round_trips() {
+        let src = format!(
+            "{SAMPLE}{LIGHT_ANCHOR}    return in.x;\n}}\nfn alpha_discard() {{\n{OPAQUE_ANCHOR}}}\n"
+        );
+        let a = patch(&src, &HeightFog::default()).unwrap();
+        assert!(a.contains("let in = extraction_wet(in_dry);"));
+        assert!(a.contains("fn extraction_wet("));
+        assert!(!a.contains(OPAQUE_ANCHOR));
+        assert_eq!(unpatched(&a), src);
+        // Patched twice, still once.
+        let b = patch(&a, &HeightFog::default()).unwrap();
+        assert_eq!(b.matches("fn extraction_wet(").count(), 1);
+        assert_eq!(unpatched(&b), src);
     }
 }

@@ -316,6 +316,26 @@
             tags: ["metal", "electronics"],
         ),
         (
+            id: "steel_plate", dims: Some((0.25, 0.30, 0.031)), name: "Steel plate",
+            description: "Six millimetres of armour steel, curved to the chest. Stops what a pistol or a carbine throws at it, until it's been hit enough times not to.",
+            category: Tool, size: Medium, mass: 3.5, bulk: 1.2,
+            armour: Some((stuff: ArmourPlate, thickness_mm: 6.0, area: Front)),
+            tags: ["metal"],
+        ),
+        (
+            id: "helmet", dims: Some((0.258, 0.254, 0.286)), name: "Steel helmet",
+            description: "An old pattern steel helmet. Fragments and a glancing pistol round turn off it; a round fired head-on doesn't.",
+            category: Tool, size: Medium, mass: 1.3, bulk: 2.0,
+            armour: Some((stuff: Helmet, thickness_mm: 1.2, area: Head)),
+            tags: ["metal"],
+        ),
+        (
+            id: "vest", dims: Some((0.392, 0.458, 0.28)), name: "Plate carrier",
+            description: "A canvas vest with a plate pocket front and back. Carries steel; stops nothing on its own.",
+            category: Tool, size: Large, mass: 1.4, bulk: 3.0,
+            tags: ["cloth"],
+        ),
+        (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,
@@ -506,6 +526,38 @@
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
         ),
+        // One part per class, dropped by a robot's part still alive when it
+        // dies (robots/wreck.rs).
+        (
+            id: "drone_rotor_motor", dims: Some((0.253, 0.084, 0.251)), name: "Drone rotor motor",
+            description: "A drone's motor on its snapped struts, a curl of the duct still on it. The windings are good.",
+            category: RobotPart, size: Small, mass: 0.5, bulk: 0.8,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "walker_leg_actuator", dims: Some((0.143, 0.388, 0.165)), name: "Walker knee actuator",
+            description: "A walker's knee, torn off between thigh and shin. The screw jack behind it could lift a truck.",
+            category: RobotPart, size: Medium, mass: 3.5, bulk: 2.5,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "crawler_capacitor", dims: Some((0.126, 0.126, 0.284)), name: "Crawler capacitor bank",
+            description: "The spark gun off a crawler, still on the cans that fed it. Don't touch the prongs.",
+            category: RobotPart, size: Small, mass: 1.2, bulk: 1.0,
+            tags: ["electronics"],
+        ),
+        (
+            id: "dirigible_gas_valve", dims: Some((0.37, 0.198, 0.332)), name: "Airship gas valve",
+            description: "A lift-gas valve with a scrap of the envelope still clamped under its ring.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 3.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "pylon_relay_coil", dims: Some((0.132, 0.266, 0.118)), name: "Pylon relay coil",
+            description: "Copper wound on a dark core, warm to the touch long after the pylon went quiet.",
+            category: RobotPart, size: Small, mass: 1.8, bulk: 1.0,
+            tags: ["electronics", "metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Artifacts. Every one draws attention while carried.
@@ -565,6 +617,12 @@
         (id: "wristwatch", name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
         (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
         (id: "chess_piece", name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        // The first deep job after the ladder: the depot's ledger (`progression`).
+        (
+            id: "intake_ledger", dims: Some((0.24, 0.05, 0.32)), name: "Intake ledger",
+            description: "A canvas-bound ledger stencilled GATE-M INTAKE. Every line in the same machine hand: what, where from, when, which bay.",
+            category: Curio, size: Small, mass: 1.0, bulk: 0.5, tags: ["paper"],
+        ),
         // The last of the driver's jobs (`progression`, `docs/LORE.md`).
         (
             id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",

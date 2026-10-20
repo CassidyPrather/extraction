@@ -230,21 +230,23 @@
     ],
 
     placements: [
+        // Hero landmark (Map design's sightline audit: fog-blind 51% -> 34%).
+        (prefab: "blast_furnace", at: (-150.0, 205.0), rot: 90.0),
         // South gate.
         (prefab: "quarantine_gate", at: (-110.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (-102.2, 285.0), rot: 180.0),
 
         // Ash Row: the workers' houses, either side of the works road. Long
         // since picked over; the works themselves are another matter.
-        (prefab: "house_plank", at: (-70.0, 150.0), rot: 90.0),
-        (prefab: "house_brick", at: (-40.0, 175.0), rot: 0.0),
+        (prefab: "house_plank_burnt", at: (-70.0, 150.0), rot: 90.0),
+        (prefab: "house_brick_damaged", at: (-40.0, 175.0), rot: 0.0),
         (prefab: "house_brick", at: (-110.0, 175.0), rot: 90.0, tag: "foreman"),
-        (prefab: "house_plank", at: (0.0, 150.0), rot: 270.0),
+        (prefab: "house_plank_damaged", at: (0.0, 150.0), rot: 270.0),
         (prefab: "shop", at: (-5.0, 165.0), rot: 270.0),
         (prefab: "shed", at: (-55.0, 120.0), rot: 0.0),
 
         // Cutter's farm, out west.
-        (prefab: "farmhouse", at: (-225.0, 112.0), rot: 90.0),
+        (prefab: "farmhouse_damaged", at: (-225.0, 112.0), rot: 90.0),
         (prefab: "barn", at: (-245.0, 130.0), rot: 0.0),
         (prefab: "shed", at: (-205.0, 130.0), rot: 0.0),
 

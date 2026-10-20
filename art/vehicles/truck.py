@@ -35,8 +35,8 @@ import bmesh
 import bpy
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, S, export, fillet, arc, main_guard, make, report,
-                    section_rect, section_circle)
+from common import (Part, RX, RY, RZ, T, S, export, fillet, arc, join, main_guard, make,
+                    report, section_rect, section_circle)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
 
@@ -275,6 +275,12 @@ for sx in (-1, 1):
             xf=T(sx * 0.52, 2.24, -3.5) @ RX(tilt))
 # Rear window.
 cut.box((0.7, 0.3, 0.2), (0.0, 2.3, -1.9), "Iron", bevel=0.03, segs=1)
+# The pass-through below it, open (Lev's hand comes through; Story's sliding
+# hatch covers it in code), lined up with the hole in the canvas front.
+HATCH_X, HATCH_Y = (0.08, 0.38), (FLOOR + 0.72, FLOOR + 0.98)
+cut.box((HATCH_X[1] - HATCH_X[0], HATCH_Y[1] - HATCH_Y[0], 0.2),
+        ((HATCH_X[0] + HATCH_X[1]) / 2, (HATCH_Y[0] + HATCH_Y[1]) / 2, -1.9), "Iron",
+        bevel=0.01, segs=1)
 cab_obj = make_cut(cab, cut)
 
 cab2 = Part("cab_parts")
@@ -308,8 +314,10 @@ cab2.cyl(0.03, 0.0, 0.08, "Iron", segs=10, xf=T(-1.0, 2.6, -2.0) @ UP)
 cab2.cyl(0.006, 0.0, 1.6, "Iron", segs=6, xf=T(-1.0, 2.68, -2.0) @ RX(-math.pi / 2 + 0.08))
 # Interior: a bench seat, dashboard, steering wheel (left-hand drive).
 cab2.box((2.0, 0.12, 0.55), (0.0, 1.62, -2.3), "Olive", bevel=0.04, segs=2)
-cab2.box((2.0, 0.6, 0.1), (0.0, 1.95, -2.02), "Olive", bevel=0.04, segs=2,
-         xf=RX(0.15, about=(0, 1.65, -2.02)))
+# Two backrests, driver's and passenger's, with a gap behind the hatch.
+for x0, x1 in ((-1.0, HATCH_X[0] - 0.02), (HATCH_X[1] + 0.02, 1.0)):
+    cab2.box((x1 - x0, 0.6, 0.1), ((x0 + x1) / 2, 1.95, -2.02), "Olive", bevel=0.04, segs=2,
+             xf=RX(0.15, about=(0, 1.65, -2.02)))
 cab2.box((2.1, 0.32, 0.25), (0.0, 1.72, -3.58), "Paint", bevel=0.02, segs=1)
 for x in (-0.75, -0.45):
     cab2.cyl(0.045, 0.0, 0.01, "Lens", segs=12, xf=T(x, 1.78, -3.452))
@@ -561,7 +569,36 @@ canvas_skin(cv, -1.83, 1.83)
 front = canopy_profile(0.004)
 front = [(x, y) for x, y in front] + [(front[-1][0], FLOOR + 0.36)]
 # (Clear of the skin's end and the bed's top cap at z -1.83.)
-cv.prism(front, -1.846, -1.837, "Canvas", axis="z")
+fw = Part("canopy_front")
+fw.prism(front, -1.846, -1.837, "Canvas", axis="z")
+hole = Part("cut")
+hole.box((HATCH_X[1] - HATCH_X[0], HATCH_Y[1] - HATCH_Y[0], 0.04),
+         ((HATCH_X[0] + HATCH_X[1]) / 2, (HATCH_Y[0] + HATCH_Y[1]) / 2, -1.8415), "Canvas")
+fw.cut(hole)
+# A rubber boot from the canvas to the cab's wall round the pass-through,
+# and a timber ledge under it on two iron struts down to the front board's
+# cap (Story's: 0.34 x 0.14, its top at FLOOR + 0.70).
+hx0, hx1 = HATCH_X
+hy0, hy1 = HATCH_Y
+# (Its ends sink into the canvas and the cab's wall, and it laps 3 mm over
+# the hole's edges, so none of its faces lie flush on theirs.)
+B, LAP = 0.018, 0.003
+a0, a1, b0, b1 = hx0 + LAP, hx1 - LAP, hy0 + LAP, hy1 - LAP
+for x, y, w, h in ((a0 - B / 2, (b0 + b1) / 2, B, b1 - b0 + 2 * B),
+                   (a1 + B / 2, (b0 + b1) / 2, B, b1 - b0 + 2 * B),
+                   ((a0 + a1) / 2, b0 - B / 2, a1 - a0, B),
+                   ((a0 + a1) / 2, b1 + B / 2, a1 - a0, B)):
+    fw.box((w, h, 0.064), (x, y, -1.873), "Rubber")
+fw.box((0.34, 0.025, 0.14), (0.23, FLOOR + 0.6875, -1.72), "Boards", bevel=0.004, segs=1)
+# Runner rails above and below the hole for Story's sliding cover
+# (cab_hatch_panel: 0.32 x 0.28 x 0.015, its centre at (0.23, FLOOR + 0.85,
+# -1.8255) shut, sliding -X by its width to open): a strip each side of
+# the panel's edge, and a lip in front of it.
+for edge, sy in ((FLOOR + 0.71, -1), (FLOOR + 0.99, 1)):
+    fw.box((0.66, 0.012, 0.024), (0.07, edge + sy * 0.006, -1.824), "Iron", segs=1)
+    fw.box((0.66, 0.016, 0.006), (0.07, edge - sy * 0.002, -1.811), "Iron", segs=1)
+for x in (0.1, 0.36):
+    fw.box((0.02, 0.12, 0.02), (x, FLOOR + 0.615, -1.77), "Iron")
 # A rope lacing hem along the bottom edge of each side.
 for sx in (-1, 1):
     cv.box((0.02, 0.05, 3.66), (sx * 1.203, FLOOR + 0.38, 0.0), "Canvas", bevel=0.008, segs=1)
@@ -612,8 +649,12 @@ cv.lathe([(0.0, 0.0), (0.03, 0.0), (0.045, 0.06), (0.06, 0.08), (0.0, 0.08)], "B
          segs=16, xf=T(0.45, 2.9, -1.74) @ RX(math.pi / 2))
 cv.box((0.015, 0.015, 0.08), (0.45, 2.91, -1.78), "Iron")
 
-for p_ in (wheel, ch, cab2, bed, cv):
+for p_ in (wheel, ch, cab2):
     make(p_)
+join("canopy", cv, fw)
+# The bed's painted steel (stakes, the top cap, the tie-down rails) wears
+# to bare metal on its edges, where cargo and boots rub it.
+make(bed, worn={"mats": ("Paint",), "width": 0.012, "amount": 0.35, "seed": 3.0})
 # The cab shell and its fittings are one object.
 bpy.ops.object.select_all(action="DESELECT")
 cab_parts = bpy.data.objects["cab_parts"]

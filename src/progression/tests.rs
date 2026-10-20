@@ -437,22 +437,28 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
 }
 
 #[test]
-fn the_second_and_third_tiers_leave_guns_in_the_stash() {
+fn the_second_and_third_tiers_hand_over_guns() {
     let mut app = crate::raid::requests::tests::app();
     let catalog = app.world().resource::<Catalog>().clone();
-    let stash = one::<With<Stash>>(&mut app);
+    // What Lev has passed back through the cab's hatch (`raid::lev`).
     let ids = |app: &mut App| -> Vec<String> {
-        let contents = app.world().get::<Backpack>(stash).unwrap().contents.clone();
-        contents
+        app.world()
+            .resource::<crate::raid::lev::Handovers>()
+            .handed
             .iter()
-            .filter_map(|e| app.world().get::<Item>(*e))
-            .map(|i| catalog.get(i.kind()).id.clone())
+            .map(|(id, _)| id.clone())
             .collect()
     };
     let before = ids(&mut app).len();
     for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
         app.world_mut().write_message(JobDone);
         app.update();
+    }
+    for _ in 0..2000 {
+        app.update();
+        if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
+            break;
+        }
     }
     let after = ids(&mut app);
     let known: Vec<&str> = gifts(Upgrade::BenchVice)
@@ -461,12 +467,14 @@ fn the_second_and_third_tiers_leave_guns_in_the_stash() {
         .filter(|g| catalog.kind(g.0).is_some())
         .map(|g| g.0)
         .collect();
+    // Every gift's item is in the catalog (the SKS, the PPSh and their
+    // ammunition), and every one came through the hatch.
+    let all = gifts(Upgrade::BenchVice).len() + gifts(Upgrade::Aerial).len();
+    assert_eq!(known.len(), all, "a gift names an item the catalog lacks");
     for id in &known {
         assert!(after.iter().any(|a| a == id), "{id} in {after:?}");
     }
-    if known.is_empty() {
-        assert_eq!(after.len(), before, "nothing given that doesn't exist yet");
-    }
+    assert!(after.len() > before);
 }
 
 #[test]
@@ -683,4 +691,50 @@ fn the_order_card_turns_the_caches() {
         after >= before + 12,
         "a cache of rounds: {before} -> {after}"
     );
+}
+
+/// The first deep job, once Underground's depot is on the map: the intake
+/// ledger, left in its bay, handed in from the stash.
+#[test]
+fn the_ledger_job_puts_the_ledger_in_its_bay_and_takes_it_home() {
+    use extraction_core::progression::{LEDGER_AT, LEDGER_ITEM};
+    let mut app = crate::raid::requests::tests::app();
+    app.world_mut()
+        .resource_mut::<Progression>()
+        .0
+        .credit(TIERS.iter().map(|t| t.jobs).sum());
+    app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Ledger);
+    for _ in 0..3 {
+        app.update();
+    }
+    let catalog = app.world().resource::<Catalog>().clone();
+    let kind = catalog.kind(LEDGER_ITEM).unwrap();
+    let ledger = app
+        .world_mut()
+        .query::<(Entity, &Item, &Transform)>()
+        .iter(app.world())
+        .find(|(_, i, _)| i.kind() == kind)
+        .map(|(e, _, t)| (e, t.translation))
+        .expect("the ledger is in its bay");
+    assert!(
+        ledger
+            .1
+            .xz()
+            .distance(Vec2::new(LEDGER_AT[0], LEDGER_AT[2]))
+            < 0.5
+    );
+    press_card(&mut app);
+    assert_eq!(progress(&app).job, Some(Job::Ledger), "not without it");
+    app.world_mut().despawn(ledger.0);
+    stash(&mut app, LEDGER_ITEM, 1);
+    press_card(&mut app);
+    assert_ne!(progress(&app).job, Some(Job::Ledger), "handed in");
+    let log: Vec<String> = app
+        .world()
+        .resource::<Raid>()
+        .log
+        .iter()
+        .map(|l| l.0.clone())
+        .collect();
+    assert!(log.iter().any(|l| l == lines::LEDGER_HOME), "{log:?}");
 }

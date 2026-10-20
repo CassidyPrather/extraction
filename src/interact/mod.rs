@@ -17,6 +17,7 @@
 pub mod body;
 pub mod far;
 pub mod flat;
+pub mod physics_hands;
 pub mod poke;
 
 use avian3d::prelude::*;
@@ -137,6 +138,11 @@ pub struct Hand {
     last: Option<Transform>,
     /// World pose this tick.
     pub world: Transform,
+    /// The hand's physics body (VR, see [`physics_hands`]), if it has one.
+    pub body: Option<Entity>,
+    /// Where that body got to: the hand you see, stopped at walls (`None`:
+    /// no body, or the hand is holding something and rides on it).
+    pub felt: Option<Transform>,
 }
 
 /// A box (in the item's space) that counts as reaching it: the backpack on
@@ -264,6 +270,7 @@ pub struct InteractPlugin;
 impl Plugin for InteractPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HandAction>()
+            .init_resource::<LeashBlocked>()
             .add_message::<InteractEvent>()
             .configure_sets(
                 FixedUpdate,
@@ -287,13 +294,15 @@ impl Plugin for InteractPlugin {
                     )
                         .chain()
                         .in_set(InteractSystems::Grab),
-                    follow_hands.in_set(InteractSystems::Follow),
+                    (leash_check, follow_hands)
+                        .chain()
+                        .in_set(InteractSystems::Follow),
                 ),
             )
             .add_observer(held_layers)
             .add_observer(poke::mount_button)
             .add_observer(unheld_layers)
-            .add_plugins(body::BodyPlugin);
+            .add_plugins((body::BodyPlugin, physics_hands::PhysicsHandsPlugin));
     }
 }
 
@@ -301,7 +310,7 @@ impl Plugin for InteractPlugin {
 /// your hands pass through each other (a magazine has to go up inside the
 /// gun in your other hand; the first headset playtest found the gun's box
 /// keeping it out), still meeting the world and robots.
-const LOOSE: [Layer; 3] = [Layer::World, Layer::Item, Layer::Robot];
+pub(crate) const LOOSE: [Layer; 4] = [Layer::World, Layer::Item, Layer::Robot, Layer::Hand];
 const IN_HAND: [Layer; 2] = [Layer::World, Layer::Robot];
 
 fn held_layers(add: On<Add, Held>, mut commands: Commands) {
@@ -640,8 +649,10 @@ fn find_grab(
         if let (Some(z), Reach::Grip | Reach::Hover) = (zone, reach_for) {
             let local = gt.affine().inverse().transform_point3(hand.translation) - z.centre;
             if local.abs().cmple(z.half).all() {
-                // Anything you've actually got your hand on comes first.
-                let d = 0.12;
+                // Anything you've actually got your hand on comes first;
+                // of two zones, the smaller (a slung gun's over the
+                // pack's) is the one meant.
+                let d = 0.12 * (z.half.length() / 0.6).min(1.0);
                 if best.is_none_or(|b| d < b.0) {
                     best = Some((d, e, 0));
                 }
@@ -704,6 +715,7 @@ fn apply_hand_actions(
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
     time: Res<Time>,
+    slot_places: Query<&Transform, With<body::BodySlot>>,
 ) {
     for action in actions.read() {
         match *action {
@@ -890,8 +902,19 @@ fn apply_hand_actions(
                     if owner.is_some_and(|o| o.0 == item) {
                         continue;
                     }
-                    let d = sgt.translation().distance(pos);
-                    if d < socket.radius && target.is_none_or(|(bd, _)| d < bd) {
+                    let mut d = sgt.translation().distance(pos);
+                    let mut radius = socket.radius;
+                    // A long gun let go near a shoulder goes onto that side's
+                    // sling, front or back.
+                    if socket.kind == SocketKind::Body(SlotKind::Sling) {
+                        if let Ok(local) = slot_places.get(se) {
+                            let shoulder =
+                                sgt.transform_point(body::sling_shoulder(local.translation));
+                            d = d.min(shoulder.distance(pos));
+                            radius = radius.max(body::SLING_REACH);
+                        }
+                    }
+                    if d < radius && target.is_none_or(|(bd, _)| d < bd) {
                         target = Some((d, se));
                     }
                 }
@@ -1172,10 +1195,52 @@ fn hand_of(
 /// collide. Heavy things and one-handed long guns are slower to swing.
 /// How far a held item can lag its hand before it's put back in it.
 const LEASH: f32 = 0.6;
+/// Past this the item goes back to the hand even through a wall.
+const LEASH_FAR: f32 = 2.0;
+
+/// Held items with something solid between them and their hand this tick
+/// (`leash_check`): the leash doesn't snap them back through it.
+#[derive(Resource, Default)]
+pub struct LeashBlocked(pub std::collections::HashSet<Entity>);
+
+/// Which held items have a wall between them and where their hand wants
+/// them (worked out apart from `follow_hands`, which moves bodies the
+/// spatial query reads).
+fn leash_check(
+    hands: Query<&Hand>,
+    held: Query<(Entity, &Held, &Position)>,
+    spatial: SpatialQuery,
+    mut blocked: ResMut<LeashBlocked>,
+) {
+    blocked.0.clear();
+    for (e, h, pos) in &held {
+        let Ok(hand) = hands.get(h.hand) else {
+            continue;
+        };
+        let gap = hand.world.mul_transform(h.offset).translation - pos.0;
+        if gap.length() <= LEASH {
+            continue;
+        }
+        if let Ok(dir) = Dir3::new(gap)
+            && spatial
+                .cast_ray(
+                    pos.0,
+                    dir,
+                    gap.length(),
+                    true,
+                    &SpatialQueryFilter::from_mask(Layer::World),
+                )
+                .is_some()
+        {
+            blocked.0.insert(e);
+        }
+    }
+}
 
 fn follow_hands(
     hands: Query<&Hand>,
     mut held: Query<(
+        Entity,
         &Held,
         Option<&Supported>,
         &Grabbable,
@@ -1187,10 +1252,11 @@ fn follow_hands(
         Option<&mut HoldFeel>,
     )>,
     roots: Query<&GlobalTransform, With<Player>>,
+    blocked: Res<LeashBlocked>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel) in &mut held {
+    for (e, h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel) in &mut held {
         let Ok(hand) = hands.get(h.hand) else {
             continue;
         };
@@ -1248,8 +1314,12 @@ fn follow_hands(
             feel.smoothed = Some(s);
             target = root.mul_transform(s).mul_transform(feel.offset);
         }
-        // Snagged on a door frame and left behind: back into the hand.
-        if pos.0.distance(target.translation) > LEASH {
+        // Snagged on a door frame and left behind: back into the hand, if
+        // nothing solid is between (a gun pushed into a wall stays this
+        // side of it), or come what may when the hand is far away.
+        let gap = target.translation - pos.0;
+        let clear = || !blocked.0.contains(&e);
+        if gap.length() > LEASH_FAR || (gap.length() > LEASH && clear()) {
             pos.0 = target.translation;
             rot.0 = target.rotation;
         }

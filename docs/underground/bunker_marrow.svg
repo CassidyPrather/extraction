@@ -6891,7 +6891,7 @@
 <line x1='195.0' y1='188.9' x2='213.0' y2='188.9' stroke='#c0392b' stroke-width='4'/>
 <line x1='213.0' y1='674.6' x2='195.0' y2='674.6' stroke='#c0392b' stroke-width='4'/>
 <rect x='44.2' y='441.4' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
-<text x='57.2' y='450.4' fill='#f1c40f'>Generator</text>
+<text x='57.2' y='450.4' fill='#f1c40f'>Generator 1</text>
 <line x1='339.0' y1='441.0' x2='357.0' y2='441.0' stroke='#f1c40f' stroke-width='4'/>
 <circle cx='218.4' cy='207.0' r='4' fill='#5a5650'/>
 <text x='204.0' y='201.0' fill='#1d1c1a' text-anchor='middle'>lock x</text>

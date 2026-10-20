@@ -73,7 +73,7 @@ coming ("Do these and I'll fit a vice to the bench").
 | Tier | Jobs | Where | Fitted at the end |
 | - | - | - | - |
 | 1 **Odd jobs** | 3 | danger 1 (the village, the farm) | **Stash rack**: a timber rack over the crate, the stash grows 200 → 300 L |
-| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns six more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS) |
+| 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns seven more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS, 7.62x25 for the PPSh) |
 | 3 **Runs** | 4 | danger 2-3 | **Whip aerial** on the cab: the truck radios a Surge warning at ten minutes instead of five, and robot chatter says how far |
 | 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (a dressing in it each raid) and a **second rack**: 400 L |
 

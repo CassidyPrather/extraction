@@ -372,6 +372,214 @@ mod tests {
         }
     }
 
+    /// A wall of the world's in front of you, its near face `near` m ahead.
+    fn wall(vr: &mut Vr, feet: Vec3, near: f32) {
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(3.0, 3.0, 0.2),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, 1.2, -near - 0.1)),
+        ));
+        vr.step(2);
+    }
+
+    /// A hand pushed into a wall stops at its face: the hand you see stays
+    /// this side while the tracked one goes in.
+    #[test]
+    fn a_hand_pressed_into_a_wall_stops_at_its_face() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        wall(&mut vr, feet, 0.5);
+        vr.hand(
+            Side::Right,
+            feet + Vec3::new(0.2, 1.2, -0.3),
+            Quat::IDENTITY,
+            0.0,
+            0.0,
+        );
+        vr.step(5);
+        vr.move_hand(Side::Right, feet + Vec3::new(0.2, 1.2, -0.75));
+        vr.step(15);
+        let hand = vr.hand_state(Side::Right);
+        let felt = hand.felt.expect("a physics hand").translation;
+        let face = feet.z - 0.5;
+        // The body's front: its centre plus its box toward the fingers.
+        let front = felt.z + crate::interact::physics_hands::HAND_CENTRE.z
+            - crate::interact::physics_hands::HAND_HALF.z;
+        assert!(
+            front > face - 0.015,
+            "the hand went {:.3} m into the wall",
+            face - front
+        );
+        assert!(
+            front < face + 0.05,
+            "the hand stopped {:.3} m short",
+            front - face
+        );
+        assert!(
+            hand.world.translation.z < face - 0.2,
+            "the tracked hand is in the wall"
+        );
+    }
+
+    /// Shots seen leaving guns.
+    #[derive(Resource, Default)]
+    struct Shots(Vec<crate::weapons::ballistics::Shot>);
+
+    fn collect_shots(
+        mut shots: MessageReader<crate::weapons::ballistics::Shot>,
+        mut seen: ResMut<Shots>,
+    ) {
+        seen.0.extend(shots.read().cloned());
+    }
+
+    /// A pistol pushed against a wall stays this side of it, and a round
+    /// fired with its muzzle at the wall can't come out the far side.
+    #[test]
+    fn a_gun_pushed_into_a_wall_cant_fire_through_it() {
+        use extraction_core::firearm::Magazine;
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Shots>()
+            .add_systems(FixedUpdate, collect_shots);
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        wall(&mut vr, feet, 0.55);
+        let gun = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(0.15, 1.2, -0.3)),
+        );
+        vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+        let grip = vr.point(gun, |r| *r == GripRole::Primary);
+        let rake = vr
+            .app
+            .world()
+            .get::<crate::weapons::Gun>(gun)
+            .unwrap()
+            .layout
+            .grip
+            .rotation;
+        vr.hand(Side::Right, grip, rake, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(gun)
+            .insert(RigidBody::Dynamic);
+        vr.step(10);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        {
+            let mut g = vr
+                .app
+                .world_mut()
+                .get_mut::<crate::weapons::Gun>(gun)
+                .unwrap();
+            let f = &mut g.firearm;
+            f.insert_magazine(Magazine {
+                family: "pm".into(),
+                capacity: 8,
+                rounds: 8,
+            })
+            .unwrap();
+            f.set_bolt_travel(1.0);
+            f.release_bolt();
+            while f.fire_mode() != extraction_core::firearm::FireMode::Semi {
+                f.cycle_mode();
+            }
+            f.condition = 1.0;
+        }
+        // Shove the hand 0.4 m on, well through the wall.
+        vr.move_hand(Side::Right, grip + Vec3::new(0.0, 0.0, -0.45));
+        vr.step(30);
+        let face = feet.z - 0.55;
+        let gt = *vr.app.world().get::<GlobalTransform>(gun).unwrap();
+        assert!(gt.translation().z > face, "the gun went through the wall");
+        vr.trigger(Side::Right, 1.0);
+        vr.step(4);
+        vr.trigger(Side::Right, 0.0);
+        let shots = &vr.app.world().resource::<Shots>().0;
+        assert!(!shots.is_empty(), "the pistol fired");
+        for s in shots {
+            assert!(
+                s.origin.z > face - 0.005,
+                "a round left from {} beyond the wall",
+                s.origin
+            );
+        }
+        // However the muzzle got past a wall (poked through a gap, a fast
+        // swing), the round stops at it: pin the gun with a thin board
+        // across it between grip and muzzle, and fire again.
+        vr.app.world_mut().resource_mut::<Shots>().0.clear();
+        vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+        vr.step(2);
+        let gt = *vr.app.world().get::<GlobalTransform>(gun).unwrap();
+        let layout = vr
+            .app
+            .world()
+            .get::<crate::weapons::Gun>(gun)
+            .unwrap()
+            .layout
+            .clone();
+        let (g, m) = (
+            gt.transform_point(layout.grip.translation),
+            gt.transform_point(layout.muzzle),
+        );
+        let board = (g + m) / 2.0;
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(0.6, 0.6, 0.01),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(board),
+        ));
+        vr.step(2);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(4);
+        vr.trigger(Side::Right, 0.0);
+        let shots = &vr.app.world().resource::<Shots>().0;
+        assert!(!shots.is_empty(), "the pistol fired again");
+        for s in shots {
+            assert!(
+                s.origin.z > board.z,
+                "a round left from {} past the board at {}",
+                s.origin,
+                board.z
+            );
+        }
+    }
+
+    /// A palm pushed against a door, from the side it swings away from,
+    /// opens it: no grip needed.
+    #[test]
+    fn a_palm_pushes_a_door_open() {
+        let mut vr = Vr::new("training_yard");
+        let doors: Vec<(Entity, crate::world::buildings::DoorLeaf, GlobalTransform)> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .map(|(e, d, g)| (e, *d, *g))
+            .collect();
+        let (door, leaf, gt) = doors.first().cloned().expect("a door in the yard");
+        // Stand on the leaf's +Z side (it swings toward -Z, away from you).
+        let mid = gt.transform_point(Vec3::new(leaf.0.width * 0.6, 1.1, 0.0));
+        let out = gt.rotation() * Vec3::Z;
+        let feet = on_ground(&vr, mid.x + out.x * 0.55, mid.z + out.z * 0.55);
+        let yaw = (-out.x).atan2(-out.z).to_degrees();
+        vr.stand(feet, yaw);
+        let face = Quat::from_rotation_arc(Vec3::NEG_Z, -out);
+        vr.hand(Side::Right, mid + out * 0.25, face, 0.0, 0.0);
+        vr.step(5);
+        // Push: the real hand goes on through the leaf.
+        vr.move_hand(Side::Right, mid - out * 0.15);
+        vr.step(60);
+        let d = vr
+            .app
+            .world()
+            .get::<crate::world::buildings::Door>(door)
+            .unwrap();
+        assert!(d.open && d.angle > 0.5, "the door didn't swing open: {d:?}");
+    }
+
     /// Pistol in the right hand; the left hand's trigger takes the slide
     /// and pulls it back. The grip alone never grabs the slide.
     #[test]

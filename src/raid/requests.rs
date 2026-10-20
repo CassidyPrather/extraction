@@ -11,7 +11,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use extraction_core::noise::Rng;
-use extraction_core::progression::{Job, LETTER_ITEM, RECOVER_ITEM, TIERS};
+use extraction_core::progression::{Job, LEDGER_ITEM, LETTER_ITEM, RECOVER_ITEM, TIERS};
 
 use super::truck::{FLOOR, Pressable, Stash, Truck};
 use super::{Phase, Raid};
@@ -164,6 +164,14 @@ fn press_card(
                 }
                 have
             }
+            Job::Ledger => {
+                let have = in_stash(LEDGER_ITEM, 1, &stash);
+                if have.is_empty() {
+                    raid.say(lines::NO_LEDGER);
+                    continue;
+                }
+                have
+            }
             Job::Scout { place, seen, .. } => {
                 if !seen {
                     raid.say(lines::scout_not_seen(place));
@@ -202,6 +210,9 @@ fn press_card(
         };
         if job == Job::Letter {
             raid.say(lines::LETTER_HOME);
+        }
+        if job == Job::Ledger {
+            raid.say(lines::LEDGER_HOME);
         }
         match placed {
             Some((where_, at)) => {

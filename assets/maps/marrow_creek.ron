@@ -118,6 +118,12 @@
             points: [(-179.0, -36.0), (-182.0, -62.0), (-192.0, -95.0), (-196.0, -118.0), (-212.0, -128.0),
                      (-226.0, -131.0)],
         ),
+        // The haulers' track: from the Gate down to the Depot's intake ramp,
+        // worn by the convoys.
+        (
+            name: "Haulers' track", kind: Dirt, width: 4.0, smoothing: 10.0,
+            points: [(-246.0, -247.0), (-238.0, -243.0), (-231.0, -240.0)],
+        ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
         (
@@ -216,6 +222,8 @@
     ],
 
     placements: [
+        // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
+        (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
         // South gate: the fence and the truck pull-in.
         (prefab: "quarantine_gate", at: (40.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (47.8, 285.0), rot: 180.0),
@@ -242,6 +250,8 @@
         (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
         // The civil-defence shelter under the village (assets/underground).
         (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
+        // The Depot, under the Gate: where the haulers take what they keep.
+        (prefab: "depot_marrow", at: (-230.0, -234.0), rot: 0.0),
         
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).
@@ -294,6 +304,8 @@
         (kind: Poi, at: (25.0, -225.0), name: "Bus depot"),
         (kind: Poi, at: (-120.0, -175.0), name: "Radio mast"),
         (kind: Poi, at: (185.0, -215.0), name: "Rail yard"),
+        // The haulers' depot under the Gate's hill: its intake ramp.
+        (kind: Poi, at: (-230.0, -238.0), name: "The Depot"),
         (kind: ValleyKey(item: "key_marrow"), at: (152.0, -44.0), rot: 20.0, name: "Hollow survey lockbox"),
         // Caches worth the walk to places off the straight line north: the
         // logging camp's lock-up, the pump keeper's store by the footbridge

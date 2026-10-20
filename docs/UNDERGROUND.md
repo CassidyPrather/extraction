@@ -165,59 +165,72 @@ a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
 
-## The Depot (design, in progress)
+## The Depot
 
 The place the convoys go. The lore says each Gate is a depot, the
 machines keep everything they take "pending review", and only the three
 keys end it. The Depot makes that physical: the valleys' things, sorted
 and stacked under the Gate, your own lost kit among them.
 
-**Where.** Under the Marrow Gate (-250, -255), in the robots' corner of
-the valley where it began; Hana's dog was carried "to the Gate", and so
-was she. One depot is built (Marrow's), deeper and bigger than the three
-sites: four levels stepping down, about 60 x 45 m, 7 m to 20 m below
-the yard.
+**Where.** `depot_marrow`, placed at (-230, -234) rot 0 on Marrow Creek,
+in the Gate's danger zone 29 m from the Gate itself (scouted for rock
+cover and a kiosk clear of buildings: `SCOUT=marrow_creek:depot_marrow:
+-230:-230:60`). Four levels stepping down, 7 m to 19 m under the yard,
+about 60 x 120 m (plan: `docs/underground/depot_marrow.svg`).
 
-**The way in: follow the haul.** The Depot's intake is a wide ramp in
-the Gate's yard behind a steel shutter. After every Surge the machines
-bring in what it swept: a haul convoy walks down the ramp and the
-shutter stands open for a few minutes; you go in behind it, or wait for
-the next. (In the recall's epilogue it stands open for good, the
-machines asleep in their bays.) Lev tells you about it on the radio at
-rank 4, after her letter ("she says they keep everything"), and
-Progression's late jobs send you there; Story places what you find.
-*Proposed to Progression and Story; theirs to decide.*
+**The way in** is the intake ramp at the entrance kiosk. It is open: the
+Depot is a destination from rank 4 (Progression's deep jobs draw it as
+any site with a layout, the first after Hana's letter a fixed one), and
+Lev's line points there (Story). The shutter that opens behind a haul
+convoy after a Surge stays a proposal.
 
-**The way out** is the service stair from the bottom level, up to a
-hatch in the rim woods: only the last power stage opens it.
-
-**Levels** (each a set of rooms on its own floor; stairs between them;
-no level over another, so one plan grid still serves the bots):
+**The way out** is the service stair from the pump room, 23 m up to a
+hatch north of the Depot at (-246, -119): only the last power stage
+opens it (`portal1` on stage 3), and raiders never leave by a held exit.
 
 | Level | Floor | Rooms | Power |
 | - | - | - | - |
-| 1 Intake | -7 m | the ramp's foot, a receiving bay where the haulers set down, a guard post | stage 1: the intake breaker, by the bay |
-| 2 Sorting | -11 m | the sorting hall (24 x 16, 6 m high): rows of bins by kind, a gantry; the tag office (a terminal: "KEPT FOR REVIEW") | stage 2: the hall's control desk, opens the stacks |
-| 3 The kept | -15 m | long stacks by valley and house: crates with names on; one says MAREK | lights only on stage 2 |
-| 4 Cistern | -19 m | the pump gallery, flooded (1.2 m), the old pumps; the service stair's foot | stage 3: the pump room's breaker opens the stair out |
+| 1 Intake | -7 m | `intake_bay` (the ramp's foot), `guard_post` | stage 1: the guard post's breaker opens the haul ramp's door into the hall and lights the hall |
+| 2 Sorting | -11 m | `sorting_hall` (24 x 16, 6 m high: rows of bins), `tag_office` (a staff stair round from the guard post) | stage 2: the office's board opens the stacks and lights them |
+| 3 The kept | -15 m | `kept_stacks` (shelves both walls, crates down the middle), `bay_k14` (the Mareks' crates and Jan Holm's) | - |
+| 4 Cistern | -19 m | `pump_gallery` (flooded 1.2 m: swim), `pump_room` (the best shelf) | stage 3: the pump room's breaker opens the hatch |
+
+Each switch is dead until the one before ("Nothing upstream."), and
+each is loud. Corridors between levels are stepped (a tread per half
+metre, 0.19 m); where one turns, its treads stay one apart across the
+corner.
 
 **What's there.**
-- *Your lost kit.* Everything the memorial convoy carried off
-  (`Memorial::lost`) lies in the sorting hall's bins, tagged with the
-  raid it was taken on. You can take it back.
-- *The valleys' things.* Bicycles, the bins, bus four's destination
-  board, the chapel's candlesticks: what the notes say was taken.
-- *The kept.* Rusty's lead and whatever Story decides of Hana's in the
-  MAREK crate, and the Holms'.
-- *Danger.* Crawlers on every level, and on the sorting floor something
-  heavier (Robot minds and bodies). Every power stage is louder than
-  the last: the generator wakes the hall.
+- *Your lost kit.* The latest 16 of `Memorial::lost`, by catalog name,
+  lie on the hall's crates and pallets (`LostKit`), for the taking
+  back (`the_lost_kit_lies_in_the_sorting_hall`).
+- *The kept.* Bay K-14's crates are closed props: Hana's long crate
+  with her basket, the small one for the dog, Jan Holm's. Story places
+  their tags, the tag office terminal and the review docket as scenes.
+  Progression puts the `intake_ledger` in the bay while its job is on.
+- *Danger.* Crawlers on the three dry levels (`rounds`: the intake's
+  round, two in the hall, one in the stacks), shut in behind the power
+  until it lets them out; none in the cistern (too deep). Something
+  heavier in the hall waits on Robot minds.
 
-**Budget.** Everything below the yard is in the `Below` group (drawn
-only from inside or near the ramp and the hatch); at most 8 unshadowed
-lamps, range-hidden; the bins and stacks are instanced props or merged
-boxes. Checked with Performance's gauges once built.
+**Hooks.** `DepotEntered { player }` each time a player goes down into
+it; `CarriedOutOfDepot { player, item }` for each thing they come back
+up with that they didn't take in (`the_depot_knows_who_came_and_what_
+they_took`).
 
-**Built in stages:** per-room floors and stairs between levels; the
-layout and its placement; power in stages; the flooded level; the bins
-and the kept; robots; the way in. Each with its tests and shots.
+**Tested.** The layout check (stages reached in order, steps, floods);
+the headset throws its switches out of turn (nothing) and then in turn;
+a bot walks to each switch and throws it, takes the deepest loot (over
+the swim) and leaves by the hatch; daylight and crawler tests take every
+site on a map.
+
+**Budget.** Everything below is in the `Below` group, drawn only from
+inside or near the ramp and the hatch; five lamps (three on the power),
+range-hidden.
+
+**Shots** (`docs/shots/underground/d_*.jpg`, torch on, power off): the
+ramp kiosk (`d_ramp`; still the shelter's kiosk, a wider shuttered one
+is to come), the intake down the haul ramp (`d_intake`), the dark
+sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
+`d_bay`), the flooded cistern (`d_cistern`), the service stair up
+(`d_stair`) and the hatch (`d_hatch`).

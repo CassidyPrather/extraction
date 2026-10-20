@@ -245,5 +245,8 @@ empty("pt_sight", (0.0, 0.085, -0.02))
 empty("pt_load_port", (0.0, 0.07, -0.09))
 empty("pt_bayonet_tip", (0.0, SPIKE_Y, SPIKE_TIP))
 
+# Where a sling attaches: the slots through the forend and the butt (the 91/30's sling runs through them).
+empty("pt_sling_front", (0.0, -0.009, -0.64))
+empty("pt_sling_rear", (0.0, -0.045, 0.17))
 report()
 export("assets/models/guns/mosin.glb")

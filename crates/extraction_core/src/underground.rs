@@ -223,6 +223,9 @@ pub struct Layout {
     pub patrol: Vec<String>,
     #[serde(default)]
     pub crawlers: u32,
+    /// More rounds, each with its own crawlers (a level each, say).
+    #[serde(default)]
+    pub rounds: Vec<Round>,
     /// The site's power, in stages: each one's switch does nothing until
     /// the one before is on.
     #[serde(default)]
@@ -230,6 +233,14 @@ pub struct Layout {
     /// Flooded rooms and corridors.
     #[serde(default)]
     pub floods: Vec<Flood>,
+}
+
+/// A round of rooms the crawlers on it walk, in order (one room: round
+/// its quarters).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Round {
+    pub rooms: Vec<String>,
+    pub crawlers: u32,
 }
 
 /// Standing water over a room's or a corridor's floor: slow to wade, loud,
@@ -314,6 +325,14 @@ impl Hazard {
 
 impl Layout {
     /// A room's floor, site y.
+    /// Every round and its crawlers: `patrol` first, then `rounds`.
+    pub fn residents(&self) -> Vec<(&[String], u32)> {
+        std::iter::once((self.patrol.as_slice(), self.crawlers))
+            .chain(self.rounds.iter().map(|r| (r.rooms.as_slice(), r.crawlers)))
+            .filter(|(rooms, n)| *n > 0 && !rooms.is_empty())
+            .collect()
+    }
+
     pub fn floor_of(&self, room: &Room) -> f32 {
         room.floor.unwrap_or(self.floor)
     }
@@ -329,7 +348,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 3] = [
+pub const SITES: [(&str, &str); 4] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -341,6 +360,10 @@ pub const SITES: [(&str, &str); 3] = [
     (
         "tunnel_cinder",
         include_str!("../../../assets/underground/tunnel_cinder.ron"),
+    ),
+    (
+        "depot_marrow",
+        include_str!("../../../assets/underground/depot_marrow.ron"),
     ),
 ];
 
@@ -714,8 +737,45 @@ impl Raster {
                 continue;
             };
             let n = ((fb - fa).abs() / STEP_RISE).ceil() as usize;
-            for (c, s) in mine {
-                let k = (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n);
+            let mut tread: HashMap<usize, usize> = mine
+                .iter()
+                .map(|&(c, s)| {
+                    (
+                        c,
+                        (((s - s_lo) / CELL).floor() as usize / STEP_CELLS).min(n),
+                    )
+                })
+                .collect();
+            // Where it turns, cells either side of the corner's diagonal
+            // measure from different legs, a tread or two apart: lower
+            // each to one tread over its lowest neighbour, until none is
+            // more.
+            loop {
+                let mut changed = false;
+                for &(c, _) in &mine {
+                    let (i, j) = (c % r.nx, c / r.nx);
+                    let low = [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)]
+                        .iter()
+                        .filter_map(|(di, dj)| {
+                            let (a, b) = (i as i64 + di, j as i64 + dj);
+                            (a >= 0 && b >= 0 && (a as usize) < r.nx && (b as usize) < r.nz)
+                                .then(|| tread.get(&(b as usize * r.nx + a as usize)))
+                                .flatten()
+                                .copied()
+                        })
+                        .min();
+                    if let Some(low) = low {
+                        if tread[&c] > low + 1 {
+                            tread.insert(c, low + 1);
+                            changed = true;
+                        }
+                    }
+                }
+                if !changed {
+                    break;
+                }
+            }
+            for (c, k) in tread {
                 r.floors[c] = fa + (fb - fa) * k as f32 / n as f32;
             }
         }
@@ -1098,6 +1158,11 @@ pub fn check(l: &Layout) -> Vec<String> {
             ));
         }
     }
+    for id in l.rounds.iter().flat_map(|r| &r.rooms) {
+        if !l.rooms.iter().any(|r| &r.id == id) {
+            bad.push(format!("a round through no room `{id}`"));
+        }
+    }
     for f in &l.floods {
         let found = match (&f.room, &f.link) {
             (Some(id), None) => l.rooms.iter().any(|r| &r.id == id),
@@ -1246,14 +1311,17 @@ pub fn placed(map: &MapDef) -> Vec<Placed> {
         .collect()
 }
 
-/// Every kiosk on the surface past each site's entrance, as a footprint
-/// rectangle (world centre, yaw degrees, half extents): what the ground is
-/// levelled under and the walkers keep off, like a placement's.
-pub fn exit_footprints(map: &MapDef) -> Vec<(P2, f32, P2)> {
+/// Half extents of a kiosk's shell, walls and all: what the robots walk
+/// round (its apron they walk over).
+pub const SHELL_HALF: P2 = [KIOSK[0] + WALL * 0.5, KIOSK[1] + WALL * 0.5];
+
+/// Every kiosk of the map's sites, the entrances' too: (centre, rot).
+pub fn kiosks(map: &MapDef) -> Vec<(P2, f32)> {
     placed(map)
         .iter()
-        .flat_map(|s| s.exits())
-        .map(|(at, rot, _)| (at, rot, [FOOTPRINT[0] * 0.5, FOOTPRINT[2] * 0.5]))
+        .flat_map(|s| {
+            std::iter::once((s.at, s.rot)).chain(s.exits().into_iter().map(|e| (e.0, e.1)))
+        })
         .collect()
 }
 

@@ -87,7 +87,7 @@ impl Upgrade {
     pub fn does(self) -> &'static str {
         match self {
             Upgrade::StashRack => "stash +100 L",
-            Upgrade::BenchVice => "six more recipes",
+            Upgrade::BenchVice => "seven more recipes",
             Upgrade::Aerial => "Surge warning at 10 min",
             Upgrade::MedCabinet => "a dressing each raid",
             Upgrade::StashRack2 => "stash +100 L",
@@ -233,6 +233,15 @@ pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
 /// The tier index from which nights come (after "Runs").
 pub const NIGHTS_FROM: u32 = 3;
 
+/// The first deep job after the ladder: the intake ledger from the
+/// Custodian's depot under the Marrow Gate (Underground's `depot_marrow`),
+/// in the Mareks' bay off the kept stacks, behind two power stages.
+pub const LEDGER_ITEM: &str = "intake_ledger";
+pub const DEPOT_PREFAB: &str = "depot_marrow";
+pub const LEDGER_MAP: &str = "marrow_creek";
+/// World (x, y, z): the bay's floor, clear of its crates.
+pub const LEDGER_AT: [f32; 3] = [-262.0, 11.31, -179.4];
+
 /// Raids the driver waits on a fetch before asking for something else.
 pub const FETCH_PATIENCE: u32 = 3;
 
@@ -343,6 +352,9 @@ pub enum Job {
     /// Bring home what's on the table in the house by the well
     /// ([`LETTER_ITEM`]): the last job of the last tier.
     Letter,
+    /// Bring home the intake ledger from the depot ([`LEDGER_ITEM`]): the
+    /// first deep job.
+    Ledger,
     /// Go and look at `place` in `map`, then get home.
     Scout {
         map: String,
@@ -359,6 +371,7 @@ impl Job {
         match self {
             Job::Fetch { .. } => None,
             Job::Letter => Some(LETTER_MAP),
+            Job::Ledger => Some(LEDGER_MAP),
             Job::Recover { map, .. } | Job::Scout { map, .. } => Some(map),
         }
     }
@@ -368,6 +381,7 @@ impl Job {
         match self {
             Job::Fetch { .. } => None,
             Job::Letter => Some((LETTER_MAP, LETTER_AT)),
+            Job::Ledger => Some((LEDGER_MAP, [LEDGER_AT[0], LEDGER_AT[2]])),
             Job::Recover { map, at, .. } => at.map(|a| (map.as_str(), a)),
             Job::Scout { map, at, .. } => Some((map.as_str(), *at)),
         }
@@ -624,7 +638,7 @@ pub fn underground_site(map: &MapDef, region: &str) -> Option<(String, [f32; 2],
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
-        prefab,
+        crate::map::prefab_base(prefab),
         "house_plank"
             | "house_brick"
             | "cabin_log"
@@ -676,6 +690,14 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
     let tier = progress.tier_def();
     if progress.tier as usize == TIERS.len() - 1 && progress.done_in_tier + 1 == tier.jobs {
         return Job::Letter;
+    }
+    // The first deep job: the ledger, once there's a depot to fetch it from.
+    let ladder: u32 = TIERS.iter().map(|t| t.jobs).sum();
+    let depot = valleys
+        .iter()
+        .any(|v| v.id == LEDGER_MAP && v.map.placements.iter().any(|p| p.prefab == DEPOT_PREFAB));
+    if progress.past_ladder() && progress.done == ladder && depot {
+        return Job::Ledger;
     }
     let roll = number as u64 + 1000 * progress.swaps as u64;
     let mut rng = Rng::new(seed ^ 0x10B5_0F7E ^ roll.wrapping_mul(0x9E37_79B9));
@@ -969,10 +991,39 @@ mod tests {
                                 .any(|r| r.name == region && r.danger == 3);
                         assert!(deep, "{id}: {region}");
                     }
-                    Job::Fetch { .. } | Job::Letter => {}
+                    Job::Fetch { .. } | Job::Letter | Job::Ledger => {}
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_first_deep_job_is_the_ledger_once_there_is_a_depot() {
+        let mut v = valleys();
+        let p = Progress {
+            tier: TIERS.len() as u32,
+            done: TIERS.iter().map(|t| t.jobs).sum(),
+            ..Default::default()
+        };
+        // Marrow Creek has the depot; without it, an ordinary deep job.
+        assert!(
+            v[0].1.placements.iter().any(|p| p.prefab == DEPOT_PREFAB),
+            "the depot is on Marrow Creek's map"
+        );
+        assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
+        v[0].1.placements.retain(|p| p.prefab != DEPOT_PREFAB);
+        assert_ne!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
+        let v = valleys();
+        assert_eq!(roll_job(&p, 3, "kettle_pass", &as_valleys(&v)), Job::Ledger);
+        // Only the first.
+        let later = Progress {
+            done: p.done + 1,
+            ..p.clone()
+        };
+        assert_ne!(
+            roll_job(&later, 3, "kettle_pass", &as_valleys(&v)),
+            Job::Ledger
+        );
     }
 
     #[test]

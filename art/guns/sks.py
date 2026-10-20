@@ -219,5 +219,8 @@ empty("pt_load_port", (0.0, 0.075, -0.2))
 # through pi about the pin).
 empty("pt_bayonet_tip", (0.0, 2 * BAYONET_PIN[1] - 0.0175, 2 * BAYONET_PIN[2] + 0.405))
 
+# Where a sling attaches: the swivels on the band's left and the butt's left.
+empty("pt_sling_front", (-0.0195, 0.0, -0.482))
+empty("pt_sling_rear", (-0.021, -0.075, 0.152))
 report()
 export("assets/models/guns/sks.glb")
