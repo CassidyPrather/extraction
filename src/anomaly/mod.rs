@@ -991,6 +991,84 @@ mod tests {
     }
 
     #[test]
+    fn a_carried_lodestone_turns_rounds_aside() {
+        let mut app = app(false);
+        let p = player(&mut app);
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == p && b.carried)
+            .map(|(e, _)| e)
+            .unwrap();
+        // Out in the open in the Hollow, away from trunks and the well.
+        let open = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(146.0, -10.0);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = open;
+        for _ in 0..3 {
+            app.update();
+        }
+        let chest = pos(&app, p) + Vec3::Y * 1.2;
+        let turn = |app: &mut App| {
+            // Fired from the south, passing a metre over the chest (clear
+            // of the body, its arms and its pack).
+            let round = app
+                .world_mut()
+                .spawn((
+                    crate::weapons::ballistics::Projectile {
+                        velocity: Vec3::NEG_Z * 330.0,
+                        damage: 0.0,
+                        shooter: None,
+                        gun: Entity::PLACEHOLDER,
+                        life: 2.0,
+                        mods: Default::default(),
+                    },
+                    Transform::from_translation(chest + Vec3::new(0.0, 1.0, 12.0)),
+                ))
+                .id();
+            let mut v = Vec3::NEG_Z;
+            for _ in 0..6 {
+                app.update();
+                match app
+                    .world()
+                    .get::<crate::weapons::ballistics::Projectile>(round)
+                {
+                    Some(p) => v = p.velocity,
+                    None => break,
+                }
+            }
+            v.y.atan2(-v.z).to_degrees()
+        };
+        let bare = turn(&mut app);
+        let stone = drop_item(&mut app, "art_lodestone", Vec3::ZERO);
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(stone);
+        app.world_mut().entity_mut(stone).insert((
+            crate::interact::body::InBackpack { bag: pack },
+            ChildOf(pack),
+            RigidBodyDisabled,
+            ColliderDisabled,
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(
+            app.world().get::<artifacts::CarriedBy>(stone).is_some(),
+            "carried"
+        );
+        let carried = turn(&mut app);
+        assert!(
+            carried - bare > 1.0,
+            "a lodestone pushes it up, away from you ({carried:.2}° against {bare:.2}° bare)"
+        );
+    }
+
+    #[test]
     fn a_lead_case_hides_an_artifact() {
         let mut app = app(true);
         let player = app
