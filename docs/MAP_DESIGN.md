@@ -176,7 +176,7 @@ robot that's investigating or searching is in sight within 30 m. Any
 but the reckless, with junk in its pack, **throws it** about 15 m off to
 one side when a walker within 45 m is about but not onto it (at work, or
 already looking for someone: the sims showed that's when bots meet
-walkers), so the walker goes to look there instead. The cautious play it properly: they creep, crouched,
+walkers), so the walker goes to look there instead. With `SIM_STALK=1` the cautious play it properly: they creep, crouched,
 round behind an unaware walker within 70 m (by way of a point 25 m out
 behind it), to 10 m off, and lob the junk 5 m past it. So far the walkers
 spot most of them crossing open ground on the way in; they'd need routes
