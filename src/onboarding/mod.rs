@@ -144,7 +144,7 @@ impl Goal {
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
             (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "Hold it. Press A or X.",
+            (Goal::Dressing, false) => "In one hand, wind it\nround the other forearm.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
