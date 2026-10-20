@@ -110,6 +110,8 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Items fade at 300x their size (15-60 m; artifacts excepted) | `budget::range_items` | Draws -15..-30%, triangles -10..-30%, village shadow triangles 128k > 56k |
 | Forest cards cast the sun's shadow only within 30 m (`ShadowReach`) | `world::trees`, `budget::shadow_reach` | Wood shadow draws -30..-45%; software frame spruce -15%, pines -11% |
 | Fence posts and plates fade by 90 m (`LodReach`) | `world::structures`, `budget::range_items` | Kettle Pass draws -20..-30% (gate 1491 > 1146) |
+| Buildings past 120 m: one vertex-coloured stand-in of the shell | `render::lod`, `world::buildings` | Gate 851 > 700, meadow 871 > 699, spruce 927 > 788 draws |
+| Sun shadow map 1024 a cascade (Bevy's default 2048) | `budget::SHADOW_MAP` | Software frame spruce -14%, pines -12%; looks the same, a touch softer |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 
 Shared tools for the next ones (in `render::budget`):
