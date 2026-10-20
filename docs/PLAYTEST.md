@@ -279,6 +279,14 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   "hard enough" match what your arm did? Fix the SKS's bayonet (A).
 - Cover by material: shoot through a shed's plank wall with the AK, then
   try the pistol; skip rounds off concrete at a slant. Does it read?
+- Ammunition. Thumb a few AP rounds onto a magazine of ball and fire:
+  does the order make sense without a HUD? Load a box with every fourth
+  a tracer and fire at dusk or in fog: can you walk your rounds onto a
+  target by the streaks? Try a slug in the double at 50 m.
+- Zeroing. Put a PSO on the AK, take its drum with the other hand's
+  trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
+  and are the clicks clear? Range a robot with the rangefinder and hold
+  over for it at 400 m.
 - Armour. Put on the plate carrier by letting it go at your chest, and
   push a plate into its front pocket. Put the helmet on at your head.
   Does putting it on feel like dressing, or like hunting for a hotspot?
