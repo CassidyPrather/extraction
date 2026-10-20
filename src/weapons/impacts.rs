@@ -165,6 +165,13 @@ pub const DECAL_LIFE: f32 = 90.0;
 /// How far a mark stands proud of its surface, metres (house rule: 4-5 mm).
 pub const DECAL_PROUD: f32 = 0.005;
 
+/// The valley's wind at head height, m/s: the direction the trees sway
+/// in, as hard as the weather blows it.
+pub fn wind_velocity(weather: Option<&crate::world::weather::Conditions>) -> Vec3 {
+    let strength = weather.map_or(0.4, |c| c.wind());
+    Vec3::new(0.8, 0.0, 0.6) * 2.5 * strength
+}
+
 /// A first-in, first-out set with a cap: pushing past it hands back the
 /// oldest to remove.
 #[derive(Debug, Default)]
@@ -200,17 +207,19 @@ impl Capped {
 /// A flying bit of an impact (client side).
 #[derive(Component)]
 pub struct Bit {
-    vel: Vec3,
-    age: f32,
-    life: f32,
-    size: Vec3,
+    pub(crate) vel: Vec3,
+    pub(crate) age: f32,
+    pub(crate) life: f32,
+    pub(crate) size: Vec3,
     /// Grows by this share of its size over its life (dust spreads).
-    grow: f32,
-    gravity: f32,
-    drag: f32,
+    pub(crate) grow: f32,
+    pub(crate) gravity: f32,
+    pub(crate) drag: f32,
     /// Stretched along its velocity (sparks).
-    align: bool,
-    spin: Vec3,
+    pub(crate) align: bool,
+    pub(crate) spin: Vec3,
+    /// Share of the wind it rides (smoke drifts, chips don't).
+    pub(crate) wind: f32,
 }
 
 /// A mark left on a surface (client side).
@@ -221,33 +230,36 @@ pub struct Decal {
 }
 
 #[derive(Resource)]
-struct FxAssets {
-    cube: Handle<Mesh>,
-    ball: Handle<Mesh>,
-    disc: Handle<Mesh>,
-    dust: Handle<StandardMaterial>,
-    soil_dust: Handle<StandardMaterial>,
-    chip: Handle<StandardMaterial>,
-    splinter: Handle<StandardMaterial>,
-    spark: Handle<StandardMaterial>,
-    shard: Handle<StandardMaterial>,
-    clod: Handle<StandardMaterial>,
-    spray: Handle<StandardMaterial>,
-    hole: Handle<StandardMaterial>,
-    pale_rim: Handle<StandardMaterial>,
-    bright_pock: Handle<StandardMaterial>,
-    soil_mark: Handle<StandardMaterial>,
-    flake: Handle<StandardMaterial>,
-    fizz: Handle<StandardMaterial>,
-    oil: Handle<StandardMaterial>,
-    gas: Handle<StandardMaterial>,
+pub(crate) struct FxAssets {
+    pub(crate) cube: Handle<Mesh>,
+    pub(crate) ball: Handle<Mesh>,
+    pub(crate) disc: Handle<Mesh>,
+    pub(crate) dust: Handle<StandardMaterial>,
+    pub(crate) soil_dust: Handle<StandardMaterial>,
+    pub(crate) chip: Handle<StandardMaterial>,
+    pub(crate) splinter: Handle<StandardMaterial>,
+    pub(crate) spark: Handle<StandardMaterial>,
+    pub(crate) shard: Handle<StandardMaterial>,
+    pub(crate) clod: Handle<StandardMaterial>,
+    pub(crate) spray: Handle<StandardMaterial>,
+    pub(crate) hole: Handle<StandardMaterial>,
+    pub(crate) pale_rim: Handle<StandardMaterial>,
+    pub(crate) bright_pock: Handle<StandardMaterial>,
+    pub(crate) soil_mark: Handle<StandardMaterial>,
+    pub(crate) flake: Handle<StandardMaterial>,
+    pub(crate) fizz: Handle<StandardMaterial>,
+    pub(crate) oil: Handle<StandardMaterial>,
+    pub(crate) gas: Handle<StandardMaterial>,
+    pub(crate) cone: Handle<Mesh>,
+    pub(crate) flash: Handle<StandardMaterial>,
+    pub(crate) smoke: Handle<StandardMaterial>,
 }
 
 #[derive(Resource)]
-struct FxPool {
-    bits: Capped,
-    decals: Capped,
-    rng: Rng,
+pub(crate) struct FxPool {
+    pub(crate) bits: Capped,
+    pub(crate) decals: Capped,
+    pub(crate) rng: Rng,
 }
 
 pub struct ImpactFxPlugin;
@@ -269,6 +281,13 @@ fn fx_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let flash = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.8, 0.45),
+        emissive: LinearRgba::rgb(1.0, 0.75, 0.4) * 12.0,
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        ..default()
+    });
     let mut m = |r: f32, g: f32, b: f32, a: f32, glow: f32, rough: f32, metal: f32| {
         materials.add(StandardMaterial {
             base_color: Color::srgba(r, g, b, a),
@@ -305,30 +324,40 @@ fn fx_assets(
         fizz: m(0.55, 0.85, 1.0, 1.0, 8.0, 1.0, 0.0),
         oil: m(0.05, 0.04, 0.03, 1.0, 0.0, 0.08, 0.0),
         gas: m(0.8, 0.82, 0.8, 0.3, 0.001, 1.0, 0.0),
+        cone: meshes.add(
+            Cone::new(0.5, 1.0)
+                .mesh()
+                .resolution(8)
+                .build()
+                .rotated_by(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        ),
+        flash,
+        smoke: m(0.72, 0.72, 0.7, 0.22, 0.001, 1.0, 0.0),
     };
     commands.insert_resource(assets);
 }
 
 /// One kind of bit in an impact's recipe.
-struct Spray {
-    n: usize,
-    mesh: fn(&FxAssets) -> Handle<Mesh>,
-    mat: fn(&FxAssets) -> Handle<StandardMaterial>,
-    size: Vec3,
+pub(crate) struct Spray {
+    pub(crate) n: usize,
+    pub(crate) mesh: fn(&FxAssets) -> Handle<Mesh>,
+    pub(crate) mat: fn(&FxAssets) -> Handle<StandardMaterial>,
+    pub(crate) size: Vec3,
     /// Speed out of the surface, and of scatter, m/s.
-    out: f32,
-    scatter: f32,
+    pub(crate) out: f32,
+    pub(crate) scatter: f32,
     /// Share of the round's own direction it keeps (sparks skate on).
-    carry: f32,
-    life: f32,
-    grow: f32,
-    gravity: f32,
-    drag: f32,
-    align: bool,
-    spin: f32,
+    pub(crate) carry: f32,
+    pub(crate) life: f32,
+    pub(crate) grow: f32,
+    pub(crate) gravity: f32,
+    pub(crate) drag: f32,
+    pub(crate) align: bool,
+    pub(crate) spin: f32,
+    pub(crate) wind: f32,
 }
 
-const SPRAY: Spray = Spray {
+pub(crate) const SPRAY: Spray = Spray {
     n: 0,
     mesh: |a| a.cube.clone(),
     mat: |a| a.chip.clone(),
@@ -342,6 +371,7 @@ const SPRAY: Spray = Spray {
     drag: 0.0,
     align: false,
     spin: 0.0,
+    wind: 0.0,
 };
 
 /// A robot hit, by the part and whether it hurt: what it hurt shows
@@ -418,6 +448,7 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
                 grow: 3.0,
                 gravity: -0.5,
                 drag: 1.5,
+                wind: 0.8,
                 ..SPRAY
             },
         ],
@@ -450,6 +481,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         grow: 2.2,
         gravity: -0.25,
         drag: 2.5,
+        wind: 0.7,
         ..SPRAY
     };
     match kind {
@@ -527,6 +559,60 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
     }
 }
 
+/// Throws one spray's bits from `at`: out along `n`, carried along
+/// `glance`.
+pub(crate) fn spray_bits(
+    commands: &mut Commands,
+    pool: &mut FxPool,
+    a: &FxAssets,
+    s: &Spray,
+    at: Vec3,
+    n: Vec3,
+    glance: Vec3,
+) {
+    for _ in 0..s.n {
+        let rand = Vec3::new(
+            pool.rng.range(-1.0, 1.0),
+            pool.rng.range(-1.0, 1.0),
+            pool.rng.range(-1.0, 1.0),
+        );
+        let vel = n * s.out * pool.rng.range(0.6, 1.2)
+            + rand * s.scatter
+            + glance * s.carry * pool.rng.range(0.5, 1.0);
+        let rot = if s.align {
+            Quat::from_rotation_arc(Vec3::Z, vel.normalize_or(Vec3::Z))
+        } else {
+            Quat::IDENTITY
+        };
+        let e = commands
+            .spawn((
+                Bit {
+                    vel,
+                    age: 0.0,
+                    life: s.life * pool.rng.range(0.7, 1.2),
+                    size: s.size,
+                    grow: s.grow,
+                    gravity: s.gravity,
+                    drag: s.drag,
+                    align: s.align,
+                    spin: rand * s.spin,
+                    wind: s.wind,
+                },
+                Mesh3d((s.mesh)(a)),
+                MeshMaterial3d((s.mat)(a)),
+                Transform::from_translation(at)
+                    .with_rotation(rot)
+                    .with_scale(s.size),
+                NotShadowCaster,
+                NotShadowReceiver,
+            ))
+            .id();
+        if let Some(old) = pool.bits.push(e) {
+            commands.entity(old).try_despawn();
+        }
+    }
+}
+
 fn spawn_fx(
     mut commands: Commands,
     mut impacts: MessageReader<Impact>,
@@ -549,39 +635,7 @@ fn spawn_fx(
             recipe(imp.kind)
         };
         for s in sprays {
-            for _ in 0..s.n {
-                let rand = Vec3::new(
-                    pool.rng.range(-1.0, 1.0),
-                    pool.rng.range(-1.0, 1.0),
-                    pool.rng.range(-1.0, 1.0),
-                );
-                let vel = n * s.out * pool.rng.range(0.6, 1.2)
-                    + rand * s.scatter
-                    + glance * s.carry * pool.rng.range(0.5, 1.0);
-                let e = commands
-                    .spawn((
-                        Bit {
-                            vel,
-                            age: 0.0,
-                            life: s.life * pool.rng.range(0.7, 1.2),
-                            size: s.size,
-                            grow: s.grow,
-                            gravity: s.gravity,
-                            drag: s.drag,
-                            align: s.align,
-                            spin: rand * s.spin,
-                        },
-                        Mesh3d((s.mesh)(&a)),
-                        MeshMaterial3d((s.mat)(&a)),
-                        Transform::from_translation(imp.point + n * 0.01).with_scale(s.size),
-                        NotShadowCaster,
-                        NotShadowReceiver,
-                    ))
-                    .id();
-                if let Some(old) = pool.bits.push(e) {
-                    commands.entity(old).try_despawn();
-                }
-            }
+            spray_bits(&mut commands, pool, &a, &s, imp.point + n * 0.01, n, glance);
         }
         if imp.decal {
             // The mark, and on wood and metal a smaller layer on top of it
@@ -627,8 +681,10 @@ fn fly_bits(
     mut commands: Commands,
     mut bits: Query<(Entity, &mut Bit, &mut Transform)>,
     time: Res<Time>,
+    weather: Option<Res<crate::world::weather::Conditions>>,
 ) {
     let dt = time.delta_secs();
+    let wind = wind_velocity(weather.as_deref());
     for (e, mut b, mut t) in &mut bits {
         b.age += dt;
         if b.age >= b.life {
@@ -639,7 +695,7 @@ fn fly_bits(
         let drag = b.drag;
         b.vel += Vec3::NEG_Y * g * dt;
         b.vel *= 1.0 - (drag * dt).min(1.0);
-        t.translation += b.vel * dt;
+        t.translation += (b.vel + wind * b.wind) * dt;
         let k = b.age / b.life;
         // Dust spreads; everything shrinks away at the end of its life.
         let s = b.size * (1.0 + b.grow * k) * (1.0 - k * k * k);
