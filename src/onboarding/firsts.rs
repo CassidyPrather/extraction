@@ -99,18 +99,18 @@ impl First {
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
             First::DroneLock => &["Truck: \"That chirp is it taking aim. Get behind something.\""],
             First::Anomaly => &["Truck: \"Air's wrong ahead. Throw something in first.\""],
-            First::Underground => &["Truck: \"Dark down there, and not empty. Torch on.\""],
+            First::Underground => &["Truck: \"Dark down there, and not empty. Torch on, go slow.\""],
             First::Surge => &["Truck: \"Sky's turning. That's the Surge coming. Come home.\""],
             First::Lamed => &["Truck: \"You've lamed it. It can't chase you now.\""],
             First::PackFull => &["Truck: \"Pack's full. Leave the worst of it behind.\""],
-            First::Worn => &["Truck: \"That gun's worn. It'll jam. The bench mends it.\""],
+            First::Worn => &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""],
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
-                "Truck: \"I got you back. The crate's as you left it: {s} things.\"",
+                "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
                 "Truck: \"{n} things you carried are where you fell.\"",
                 "Truck: \"Beat their convoy there and they're yours again.\"",
             ],
-            First::ConvoyTook => &["Truck: \"That's through the Gate now. Gone. Be quicker.\""],
+            First::ConvoyTook => &["Truck: \"That's through the Gate. Kept, they call it. Be quicker.\""],
             First::KitRecovered => &["Truck: \"That's how you get it back. Take it home.\""],
         }
     }
