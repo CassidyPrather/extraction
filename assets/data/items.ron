@@ -51,6 +51,19 @@
             tags: ["metal", "wood"],
         ),
         (
+            id: "sks", dims: Some((0.07, 0.2, 1.05)),
+            name: "SKS carbine",
+            description: "A ten-shot self-loader with a fixed magazine and a folding bayonet. Lock the bolt back, push a clip down through the top, let it go.",
+            category: Firearm, size: Bulky, mass: 3.85, bulk: 6.5,
+            firearm: Some((
+                action: SemiAuto, cartridge: "7.62x39", internal_capacity: 10,
+                modes: [Safe, Semi], last_round_hold_open: true,
+                muzzle_velocity: 735.0, damage: 70.0, spread_moa: 3.0, recoil: 2.8,
+                wear_per_shot: 0.00035,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
             id: "toz_double", dims: Some((0.075, 0.16, 1.12)),
             name: "Double-barrel shotgun",
             description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
@@ -101,6 +114,18 @@
             tags: ["brass", "powder"],
         ),
         (
+            id: "sks_clip", dims: Some((0.014, 0.06, 0.085)), name: "Stripper clip (7.62x39)",
+            description: "Ten rounds on a strip of spring steel, for the SKS.",
+            category: Magazine, size: Tiny, mass: 0.012, bulk: 0.03,
+            magazine: Some((fits: "sks", cartridge: "7.62x39", capacity: 10, stripper: true)),
+            tags: ["metal"],
+        ),
+        (
+            id: "ammo_762x39", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 rounds (box)",
+            category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20,
+            tags: ["brass", "powder"],
+        ),
+        (
             id: "ammo_762r", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R rounds (box)",
             category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10,
             tags: ["brass", "powder"],
@@ -114,6 +139,7 @@
         // what you thumb into magazines one at a time.
         (id: "round_9x18", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_545", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, tags: ["brass", "powder"]),
+        (id: "round_762x39", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, tags: ["brass", "powder"]),
         (id: "round_762r", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, tags: ["brass", "powder"]),
         (id: "shell_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, tags: ["brass", "powder", "polymer"]),
         (

@@ -243,6 +243,10 @@ fn spawn_dev_cache(
         ("compass", 0),
         ("map_case", 0),
         ("binoculars", 0),
+        // (Last, so nothing above moves.)
+        ("sks", 0),
+        ("ammo_762x39", 20),
+        ("sks_clip", 10),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
