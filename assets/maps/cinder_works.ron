@@ -262,6 +262,7 @@
         (prefab: "boxcar", at: (60.0, -240.0), rot: 15.0),
         (prefab: "rail_shed", at: (52.0, -263.0), rot: 195.0),
         (prefab: "mast_hut", at: (95.0, -238.0), rot: 350.0),
+        (prefab: "signal_box", at: (100.0, -262.0), rot: 0.0),
 
         // The thing in the slag.
         (prefab: "anomaly_core", at: (200.0, -150.0), rot: 0.0),

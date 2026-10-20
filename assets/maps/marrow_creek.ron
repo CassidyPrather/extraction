@@ -258,6 +258,8 @@
         (prefab: "radio_mast", at: (-120.0, -175.0), rot: 0.0),
         (prefab: "mast_hut", at: (-112.0, -160.0), rot: 30.0),
         (prefab: "rail_shed", at: (185.0, -210.0), rot: 10.0),
+        // The yard's water tower: the landmark you see the yard by.
+        (prefab: "water_tower", at: (232.0, -196.0), rot: 0.0),
         (prefab: "boxcar", at: (148.7, -235.3), rot: 114.6),
         (prefab: "boxcar", at: (110.5, -246.9), rot: 100.5),
         (prefab: "ranger_tower", at: (-240.0, -138.0), rot: 0.0),
