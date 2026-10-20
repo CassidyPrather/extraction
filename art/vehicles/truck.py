@@ -590,6 +590,13 @@ for x, y, w, h in ((a0 - B / 2, (b0 + b1) / 2, B, b1 - b0 + 2 * B),
                    ((a0 + a1) / 2, b1 + B / 2, a1 - a0, B)):
     fw.box((w, h, 0.064), (x, y, -1.873), "Rubber")
 fw.box((0.34, 0.025, 0.14), (0.23, FLOOR + 0.6875, -1.72), "Boards", bevel=0.004, segs=1)
+# Runner rails above and below the hole for Story's sliding cover
+# (cab_hatch_panel: 0.32 x 0.28 x 0.015, its centre at (0.23, FLOOR + 0.85,
+# -1.8255) shut, sliding -X by its width to open): a strip each side of
+# the panel's edge, and a lip in front of it.
+for edge, sy in ((FLOOR + 0.71, -1), (FLOOR + 0.99, 1)):
+    fw.box((0.66, 0.012, 0.024), (0.07, edge + sy * 0.006, -1.824), "Iron", segs=1)
+    fw.box((0.66, 0.016, 0.006), (0.07, edge - sy * 0.002, -1.811), "Iron", segs=1)
 for x in (0.1, 0.36):
     fw.box((0.02, 0.12, 0.02), (x, FLOOR + 0.615, -1.77), "Iron")
 # A rope lacing hem along the bottom edge of each side.

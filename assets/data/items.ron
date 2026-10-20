@@ -506,6 +506,38 @@
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
         ),
+        // One part per class, dropped by a robot's part still alive when it
+        // dies (robots/wreck.rs).
+        (
+            id: "drone_rotor_motor", dims: Some((0.253, 0.084, 0.251)), name: "Drone rotor motor",
+            description: "A drone's motor on its snapped struts, a curl of the duct still on it. The windings are good.",
+            category: RobotPart, size: Small, mass: 0.5, bulk: 0.8,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "walker_leg_actuator", dims: Some((0.143, 0.388, 0.165)), name: "Walker knee actuator",
+            description: "A walker's knee, torn off between thigh and shin. The screw jack behind it could lift a truck.",
+            category: RobotPart, size: Medium, mass: 3.5, bulk: 2.5,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "crawler_capacitor", dims: Some((0.126, 0.126, 0.284)), name: "Crawler capacitor bank",
+            description: "The spark gun off a crawler, still on the cans that fed it. Don't touch the prongs.",
+            category: RobotPart, size: Small, mass: 1.2, bulk: 1.0,
+            tags: ["electronics"],
+        ),
+        (
+            id: "dirigible_gas_valve", dims: Some((0.37, 0.198, 0.332)), name: "Airship gas valve",
+            description: "A lift-gas valve with a scrap of the envelope still clamped under its ring.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 3.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "pylon_relay_coil", dims: Some((0.132, 0.266, 0.118)), name: "Pylon relay coil",
+            description: "Copper wound on a dark core, warm to the touch long after the pylon went quiet.",
+            category: RobotPart, size: Small, mass: 1.8, bulk: 1.0,
+            tags: ["electronics", "metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Artifacts. Every one draws attention while carried.
