@@ -75,6 +75,55 @@ pub const SIGHT_GAIN_NEAR: f32 = 30.0;
 /// Suspicion lost per second with nothing seen.
 pub const SUSPICION_DECAY: f32 = 0.05;
 
+// --- Darkness --------------------------------------------------------
+
+/// In the dark (underground: [`Lighting::dark`]) with no light on you,
+/// this much of daylight's exposure is left: a few metres at most.
+pub const DARK: f32 = 0.08;
+/// A lamp lights you fully at its foot, falling to nothing at its range.
+pub const LAMP_FALLOFF: f32 = 1.5;
+/// A torch you carry lights you up in the dark, fully...
+pub const TORCH: f32 = 1.0;
+/// ...and its beam pointed at a robot (within this angle, radians) is seen
+/// as a light from as far as the beam carries...
+pub const TORCH_CONE: f32 = 0.45;
+pub const TORCH_REACH: f32 = 45.0;
+/// ...with at least this exposure, at the robot's end.
+pub const TORCH_GLARE: f32 = 0.6;
+
+/// Where it's dark and what lights it: dark volumes (a centre transform and
+/// half extents: the underground sites) and lamps (where, how far they
+/// reach). Whoever builds the dark places fills it.
+#[derive(Resource, Default, Debug, Clone)]
+pub struct Lighting {
+    pub dark: Vec<(Transform, Vec3)>,
+    pub lamps: Vec<(Vec3, f32)>,
+}
+
+impl Lighting {
+    pub fn in_dark(&self, p: Vec3) -> bool {
+        self.dark.iter().any(|(xf, half)| {
+            let l = xf.compute_affine().inverse().transform_point3(p);
+            l.x.abs() <= half.x && l.y.abs() <= half.y && l.z.abs() <= half.z
+        })
+    }
+
+    /// How lit `p` is, 0..1, by the lamps alone (1 outside the dark).
+    pub fn lamplight(&self, p: Vec3) -> f32 {
+        if !self.in_dark(p) {
+            return 1.0;
+        }
+        self.lamps
+            .iter()
+            .map(|(at, range)| {
+                (1.0 - at.distance(p) / range.max(0.1))
+                    .max(0.0)
+                    .powf(LAMP_FALLOFF)
+            })
+            .fold(0.0, f32::max)
+    }
+}
+
 // --- Hearing -----------------------------------------------------------
 
 /// A wall or a hill in the way: the sound carries this share as far.
@@ -100,6 +149,12 @@ pub const GUNSHOT: f32 = 220.0;
 pub const FOOTSTEP: f32 = 7.0;
 /// A door swinging.
 pub const DOOR: f32 = 14.0;
+/// Underground, sound follows the corridors: round a corner, it's heard as
+/// far as the walk there, this much further than in the open.
+pub const CORRIDOR: f32 = 1.3;
+/// At most this many corridor walks worked out a tick (each is a path on
+/// the site's grid).
+const CORRIDOR_BUDGET: usize = 8;
 
 // --- Memory ------------------------------------------------------------
 
@@ -129,6 +184,9 @@ pub struct SightCase {
     pub indoors: bool,
     /// Angle below the horizontal the robot looks down at you, radians.
     pub depression: f32,
+    /// In the dark: how lit you are there (0..1: lamps, your torch). None
+    /// in daylight.
+    pub dark: Option<f32>,
 }
 
 /// How much of you a robot makes out (see the module docs).
@@ -138,8 +196,12 @@ pub fn exposure(c: &SightCase) -> f32 {
     }
     let range = 1.0 - (c.distance / c.reach).powi(2);
     let fog = (-c.ground_fog * FOG_SIGHT * c.distance).exp();
-    let light =
-        (c.sun / DAYLIGHT).clamp(0.5, 1.3).sqrt() * if c.indoors { INDOORS_DIM } else { 1.0 };
+    let light = match c.dark {
+        Some(l) => l.clamp(DARK, 1.0),
+        None => {
+            (c.sun / DAYLIGHT).clamp(0.5, 1.3).sqrt() * if c.indoors { INDOORS_DIM } else { 1.0 }
+        }
+    };
     let height = if c.height > 0.0 { c.height } else { STANDING };
     let posture = (height / STANDING).clamp(POSTURE_MIN, 1.0);
     let hidden = if c.cover && height < CROUCHED && c.distance > GRASS_NEAR {
@@ -262,8 +324,11 @@ pub(crate) fn perceive(
         &GlobalTransform,
         &mut Awareness,
         Has<Stunned>,
+        Option<&super::indoor::LocalNav>,
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
+    torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
+    lighting: Res<Lighting>,
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
     parts_of: Query<&Children>,
@@ -293,7 +358,9 @@ pub(crate) fn perceive(
             continue;
         };
         let p = [s.position.x, s.position.z];
-        let loud = if entrances.building_at(s.position + Vec3::Y * 0.5).is_some() {
+        let loud = if entrances.building_at(s.position + Vec3::Y * 0.5).is_some()
+            || lighting.in_dark(s.position + Vec3::Y * 0.5)
+        {
             FLOOR_LOUDNESS
         } else {
             surface_loudness(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
@@ -313,6 +380,10 @@ pub(crate) fn perceive(
         speed: f32,
         cover: bool,
         indoors: bool,
+        /// In the dark: how lit (see `SightCase::dark`).
+        dark: Option<f32>,
+        /// A torch on: where, and which way its beam goes.
+        torch: Option<(Vec3, Vec3)>,
     }
     let targets: Vec<Seen> = players
         .iter()
@@ -332,18 +403,37 @@ pub(crate) fn perceive(
             let p = [feet.x, feet.z];
             let indoors = entrances.building_at(feet + Vec3::Y * 0.5).is_some();
             let surface = zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5);
+            // A powered light on you (in a hand, on your gun, at your head).
+            let torch = torches
+                .iter()
+                .filter(|(d, _)| d.kind == crate::gadgets::DeviceKind::Light)
+                .find(|(_, g)| g.translation().distance(head) < 1.4)
+                .map(|(_, g)| (g.translation(), g.forward().as_vec3()));
+            let dark = lighting.in_dark(feet + Vec3::Y * 0.5).then(|| {
+                let lamps = lighting.lamplight(feet + Vec3::Y * 0.5);
+                if torch.is_some() {
+                    TORCH.max(lamps)
+                } else {
+                    lamps
+                }
+            });
             Seen {
                 e,
                 feet,
                 head,
                 height,
                 speed: Vec2::new(body.velocity.x, body.velocity.z).length(),
-                cover: !indoors && matches!(surface, Surface::Grass | Surface::Forest),
+                cover: !indoors
+                    && dark.is_none()
+                    && matches!(surface, Surface::Grass | Surface::Forest),
                 indoors,
+                dark,
+                torch,
             }
         })
         .collect();
-    for (robot_e, robot, senses, gt, mut aware, stunned) in &mut robots {
+    let mut corridor_budget = CORRIDOR_BUDGET;
+    for (robot_e, robot, senses, gt, mut aware, stunned, local) in &mut robots {
         aware.news = false;
         if robot.wrecked {
             continue;
@@ -395,7 +485,7 @@ pub(crate) fn perceive(
                 if blocked.is_some() {
                     continue;
                 }
-                let e = exposure(&SightCase {
+                let mut e = exposure(&SightCase {
                     distance: dist,
                     reach,
                     ground_fog: conditions.ground_fog,
@@ -405,7 +495,15 @@ pub(crate) fn perceive(
                     cover: t.cover,
                     indoors: t.indoors && !robot_indoors,
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
+                    dark: t.dark,
                 });
+                // In the dark, a torch pointed this way is a light in its eyes.
+                if let (Some(_), Some((at, beam))) = (t.dark, t.torch) {
+                    let back = (eye - at).normalize_or_zero();
+                    if beam.angle_between(back) < TORCH_CONE && dist < TORCH_REACH {
+                        e = e.max(TORCH_GLARE * (1.0 - dist / TORCH_REACH).max(0.25));
+                    }
+                }
                 if e < GLIMPSE {
                     continue;
                 }
@@ -457,7 +555,9 @@ pub(crate) fn perceive(
             }
             let d = s.at.distance(ear);
             let mut reach = s.radius * senses.hearing * conditions.hearing();
-            if d >= reach {
+            // On a site of its own, round corners it hears as far as the walk.
+            let site = local.filter(|l| l.contains(s.at) && l.contains(ear));
+            if d >= reach * if site.is_some() { CORRIDOR } else { 1.0 } {
                 continue;
             }
             // Through a wall or over a hill it carries less far.
@@ -468,13 +568,24 @@ pub(crate) fn perceive(
                         .cast_ray(s.at + Vec3::Y * HEARD_OVER, dir, d - 0.5, true, &world)
                         .is_some()
                 });
+            let mut heard_over = d;
             if occluded {
-                reach *= OCCLUDED;
-                if d >= reach {
+                let walk = site.filter(|_| corridor_budget > 0).and_then(|l| {
+                    corridor_budget -= 1;
+                    super::indoor::NavRef::Local(l).walk_length(s.at, ear)
+                });
+                match walk {
+                    Some(len) => {
+                        reach *= CORRIDOR;
+                        heard_over = len;
+                    }
+                    None => reach *= OCCLUDED,
+                }
+                if heard_over >= reach {
                     continue;
                 }
             }
-            let loud = 1.0 - d / reach;
+            let loud = 1.0 - heard_over / reach;
             let share = (s.radius / HEARD_FULL).min(1.0);
             aware.suspicion = (aware.suspicion + (HEARD_BASE + loud * HEARD_LOUD) * share).min(1.0);
             // Heard, not seen: they know roughly where, not exactly.
@@ -513,6 +624,7 @@ mod tests {
             cover: true,
             indoors: false,
             depression: 0.05,
+            dark: None,
         }
     }
 

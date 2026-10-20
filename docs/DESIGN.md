@@ -235,6 +235,19 @@ look over what you're behind; walkers move between pieces of cover in
 range and push through doors; grapplers lie low and wait for you to come
 within reach, then rush.
 
+**Crawlers keep the dark** (`robots/indoor.rs`). Underground sites have
+residents: small walkers that walk a round of the rooms on the site's own
+grid (`LocalNav`), pausing to look round at each, and hunt with the same
+senses and brain as any walker, with a 15 m spark gun that crackles 0.5 s
+before each zap (`CrawlerCharge`). Below ground it's dark
+(`senses::Lighting`): unlit, you're a tenth as visible, a shape at arm's
+length. A lamp lights you near it; a torch lights you up, and its beam
+pointed at a crawler is seen from as far as it carries. Sound follows the
+corridors: round a corner it carries as far as the walk there, not cut as
+if through rock. Sites register their grids, lamps, routes and crawler
+counts (`indoor::IndoorSites`, `senses::Lighting`); the director puts the
+crawlers on their rounds once.
+
 **The radio listens.** Whenever a response team is sent — gunfire heard,
 the airship or a pylon reporting you, the Zone's attention coming due —
 the robots talk about it, and a radio you carry picks it up: a squelch

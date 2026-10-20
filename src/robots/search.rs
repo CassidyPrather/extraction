@@ -18,11 +18,10 @@
 //! Each change is announced, for sound and the wrist: [`Investigating`],
 //! [`Searching`], [`LostYou`] (and [`super::Noticed`], when it has you).
 
-use bevy::prelude::*;
-use extraction_core::nav::NavGrid;
-
 use super::doors::Entrances;
+use super::indoor::NavRef;
 use super::{Awareness, Brain, Job, JobKind, NOTICED, Noticed, Robot};
+use bevy::prelude::*;
 
 /// Suspicion past which a robot goes to look.
 pub const INVESTIGATE_AT: f32 = 0.35;
@@ -152,13 +151,7 @@ pub fn lost_sight(brain: &mut Brain, aware: &Awareness, patience: f32, fallback:
 }
 
 /// Arrived where it was going to look: start searching round it.
-pub fn begin_search(
-    at: Vec3,
-    aware: &Awareness,
-    from: Vec3,
-    nav: &NavGrid,
-    e: &Entrances,
-) -> Brain {
+pub fn begin_search(at: Vec3, aware: &Awareness, from: Vec3, nav: NavRef, e: &Entrances) -> Brain {
     Brain::Search {
         at,
         left: SEARCH_TIME,
@@ -227,7 +220,7 @@ pub fn plan_search(
     at: Vec3,
     radius: f32,
     from: Vec3,
-    nav: &NavGrid,
+    nav: NavRef,
     entrances: &Entrances,
 ) -> Vec<Vec3> {
     let r = radius.clamp(SEARCH_RADIUS.0, SEARCH_RADIUS.1);
@@ -240,7 +233,7 @@ pub fn plan_search(
         .collect();
     doors.sort_by(|a, b| flat(*a - at).total_cmp(&flat(*b - at)));
     picks.extend(doors.into_iter().take(2));
-    let blocked = |p: Vec3| !nav.walkable([p.x, p.z]);
+    let blocked = |p: Vec3| !nav.walkable(p);
     for ring in [0.45, 1.0] {
         for k in 0..12 {
             let a = k as f32 * std::f32::consts::TAU / 12.0 + ring;

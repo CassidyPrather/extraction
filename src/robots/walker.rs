@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use extraction_core::nav::NavGrid;
 use std::sync::Arc;
 
+use super::indoor::NavRef;
 use super::search::{self, Step};
 use super::{
     Awareness, Brain, Intent, Job, PartDestroyed, PartRole, Robot, RobotKind, RobotPart, Senses,
@@ -315,6 +316,11 @@ fn walker_brain(
         &mut Intent,
         Option<&mut super::doors::Battering>,
         Has<super::grappler::Grappler>,
+        (
+            Option<&super::indoor::LocalNav>,
+            Option<&mut super::indoor::Patrol>,
+            Has<super::indoor::Crawler>,
+        ),
     )>,
     targets: Query<&GlobalTransform>,
     nav: Res<Nav>,
@@ -332,9 +338,22 @@ fn walker_brain(
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 1.1;
-    for (e, mut w, mut brain, mut job, aware, t, robot, mut intent, mut battering, grappler) in
-        &mut walkers
+    for (
+        e,
+        mut w,
+        mut brain,
+        mut job,
+        aware,
+        t,
+        robot,
+        mut intent,
+        mut battering,
+        grappler,
+        (local, mut patrol, crawler),
+    ) in &mut walkers
     {
+        // A site's own grid, or the Zone's.
+        let navr = local.map_or(NavRef::Zone(&nav.0), NavRef::Local);
         if robot.wrecked {
             *brain = Brain::Down;
             w.goal = None;
@@ -375,7 +394,13 @@ fn walker_brain(
                     }
                     *brain = Brain::Leave { to: job.exit };
                 }
-                None
+                // On its rounds.
+                patrol.as_deref_mut().and_then(|p| {
+                    let (go, look) = p.step(pos, dt, sweep);
+                    intent.pace = super::indoor::PATROL_PACE;
+                    intent.look = look;
+                    go
+                })
             }
             Brain::Investigate { at, left } => {
                 *left -= dt;
@@ -389,7 +414,7 @@ fn walker_brain(
                 let there = Vec2::new(pos.x - at.x, pos.z - at.z).length() < 3.0
                     && entrances.building_at(at).is_none();
                 if there || *left <= 0.0 {
-                    *brain = search::begin_search(at, aware, pos, &nav.0, &entrances);
+                    *brain = search::begin_search(at, aware, pos, navr, &entrances);
                     None
                 } else {
                     Some(at)
@@ -445,12 +470,17 @@ fn walker_brain(
                             None
                         }
                     }
+                    (Some(tp), _) if crawler => {
+                        // Close in to spark range, then hold.
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        (d > super::indoor::CRAWLER_HOLD).then_some(tp)
+                    }
                     (Some(tp), _) => {
                         // Fight from cover: move between pieces of it, in range.
                         w.rethink -= dt;
                         if w.rethink <= 0.0 {
                             w.rethink = COVER_RETHINK;
-                            w.cover = pick_cover(pos, tp, &nav.0, &spatial);
+                            w.cover = pick_cover(pos, tp, navr, &spatial);
                         }
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
                         match w.cover {
@@ -471,7 +501,7 @@ fn walker_brain(
                         intent.low = grappler;
                         intent.look = Some(lk);
                         if Vec2::new(pos.x - lk.x, pos.z - lk.z).length() < 3.0 {
-                            *brain = search::begin_search(lk, aware, pos, &nav.0, &entrances);
+                            *brain = search::begin_search(lk, aware, pos, navr, &entrances);
                             None
                         } else {
                             Some(lk)
@@ -569,22 +599,14 @@ fn walker_brain(
         // Through the open door and nobody in view: search from here.
         if at_door {
             if let Brain::Investigate { at, .. } = *brain {
-                *brain = search::begin_search(at, aware, pos, &nav.0, &entrances);
+                *brain = search::begin_search(at, aware, pos, navr, &entrances);
             }
         }
         w.repath -= dt;
         if goal != w.goal || (goal.is_some() && w.repath <= 0.0 && w.path.is_empty()) {
             w.goal = goal;
             w.repath = 3.0;
-            w.path = goal
-                .and_then(|g| nav.0.path([pos.x, pos.z], [g.x, g.z]))
-                .map(|p| {
-                    p.into_iter()
-                        .skip(1)
-                        .map(|q| Vec3::new(q[0], 0.0, q[1]))
-                        .collect()
-                })
-                .unwrap_or_default();
+            w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
         }
     }
 }
@@ -592,8 +614,8 @@ fn walker_brain(
 /// Somewhere to fight `target` from: walkable ground hard by an obstacle
 /// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
 /// line to it, not far from `pos`. Where it stands, if that will do.
-fn pick_cover(pos: Vec3, target: Vec3, nav: &NavGrid, spatial: &SpatialQuery) -> Option<Vec3> {
-    let blocked = |p: Vec3| !nav.walkable([p.x, p.z]);
+fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> Option<Vec3> {
+    let blocked = |p: Vec3| !nav.walkable(p);
     let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
     let head = target + Vec3::Y * 1.4;
     let ground_y = pos.y - BODY_HEIGHT;

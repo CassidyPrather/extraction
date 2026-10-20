@@ -297,7 +297,13 @@ fn drone_brain(
                     None => Vec2::new(pos.x - at.x, pos.z - at.z).length() < 9.0,
                 };
                 if there || *left <= 0.0 {
-                    *brain = search::begin_search(at, aware, pos, &nav.0, &entrances);
+                    *brain = search::begin_search(
+                        at,
+                        aware,
+                        pos,
+                        super::indoor::NavRef::Zone(&nav.0),
+                        &entrances,
+                    );
                 }
             }
             Brain::Search { .. } => match search::search_step(&mut brain, pos, 4.0, dt, sweep) {
