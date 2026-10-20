@@ -69,7 +69,7 @@
         (from: "stair_hall", to: "pump_room", via: [(-10.0, 10.0)]),
     ],
     anomalies: [
-        (kind: "Snare", room: "overflow", at: (0.3, 0.3), radius: 1.2),
+        (kind: "Snare", room: "overflow", at: (1.6, -1.6), radius: 1.0),
     ],
     // Resident maintenance crawlers walk this round (robots::indoor).
     patrol: ["tunnel_a", "pump_room", "valve_chamber", "tunnel_b", "workshop", "overflow", "switch_room"],
