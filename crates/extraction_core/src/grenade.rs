@@ -170,7 +170,7 @@ mod tests {
             assert!(g.update(0.01).is_empty(), "held: safe");
         }
         assert_eq!(g.release_spoon(), vec![Event::SpoonOff]);
-        let mut t = 0.0;
+        let mut t: f32 = 0.0;
         loop {
             t += 0.01;
             if g.update(0.01).contains(&Event::Exploded) {

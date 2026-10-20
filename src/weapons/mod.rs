@@ -13,6 +13,7 @@
 pub mod ballistics;
 pub mod feel;
 pub mod flat;
+pub mod grenades;
 pub mod impacts;
 pub mod layout;
 pub mod muzzle;
@@ -186,6 +187,7 @@ impl Plugin for WeaponsPlugin {
                 ballistics::BallisticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
+                grenades::GrenadePlugin,
             ))
             .add_systems(
                 FixedUpdate,
