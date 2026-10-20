@@ -559,6 +559,75 @@
       }
     ]
   },
+  "explosions/grenade_heavy": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/explosions/grenade_heavy_1.ogg",
+        "seconds": 1.075,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_heavy_2.ogg",
+        "seconds": 1.32,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_heavy_3.ogg",
+        "seconds": 0.83,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_heavy_4.ogg",
+        "seconds": 0.86,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_heavy_5.ogg",
+        "seconds": 0.8,
+        "source": "oga_bangs"
+      }
+    ]
+  },
+  "explosions/grenade_sharp": {
+    "type": "oneshot",
+    "channels": 1,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/explosions/grenade_sharp_1.ogg",
+        "seconds": 0.845,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_sharp_2.ogg",
+        "seconds": 0.818,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_sharp_3.ogg",
+        "seconds": 1.035,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_sharp_4.ogg",
+        "seconds": 0.89,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_sharp_5.ogg",
+        "seconds": 0.865,
+        "source": "oga_bangs"
+      },
+      {
+        "file": "audio/explosions/grenade_sharp_6.ogg",
+        "seconds": 1.038,
+        "source": "oga_bangs"
+      }
+    ]
+  },
   "footsteps/concrete": {
     "type": "oneshot",
     "channels": 1,
