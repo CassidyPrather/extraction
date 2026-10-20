@@ -62,6 +62,15 @@ pub enum Task {
         kind: crate::robots::RobotKind,
         at: Vec3,
     },
+    /// Put an anomaly here holding a stone (`at` on the ground), and loose
+    /// kit to work it with (anomaly harvesting scenarios).
+    Stage {
+        kind: extraction_core::anomaly::AnomalyKind,
+        at: Vec3,
+        radius: f32,
+        artifact: String,
+        kit: Vec<(String, Vec3)>,
+    },
     /// Fight the nearest robot: aim at its core, shoot until it's wrecked
     /// or `shots` trigger pulls are spent.
     Engage {
@@ -590,6 +599,20 @@ fn run_tasks(
                     }
                 }
                 bot.note(format!("spawned a {kind:?}"));
+                bot.next();
+            }
+            Task::Stage {
+                kind,
+                at,
+                radius,
+                artifact,
+                kit,
+            } => {
+                let (artifact, kit) = (artifact.clone(), kit.clone());
+                commands.queue(move |world: &mut World| {
+                    crate::anomaly::harvest::stage(world, kind, at, radius, &artifact, &kit);
+                });
+                bot.note(format!("staged a {kind:?}"));
                 bot.next();
             }
             Task::Engage { shots } => {

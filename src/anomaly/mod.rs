@@ -20,6 +20,7 @@ pub mod detector;
 pub mod harvest;
 pub mod mirrors;
 pub mod offering;
+pub mod scenarios;
 pub mod surge;
 pub mod visuals;
 pub mod wells;

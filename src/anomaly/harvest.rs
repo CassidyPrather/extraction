@@ -109,6 +109,35 @@ pub fn heat(
     }
 }
 
+/// Where each kind holds its stone, over its ground position.
+pub fn stone_height(kind: AnomalyKind) -> f32 {
+    match kind {
+        AnomalyKind::Lift => 1.2,
+        AnomalyKind::Snare => 0.8,
+        AnomalyKind::Mirror => super::mirrors::MIRROR_HEIGHT,
+        AnomalyKind::Well => 0.3,
+        AnomalyKind::Burner => 0.3,
+    }
+}
+
+/// An anomaly with a stone in it, and loose kit to work it with
+/// (scenarios, tests).
+pub fn stage(
+    world: &mut World,
+    kind: AnomalyKind,
+    at: Vec3,
+    radius: f32,
+    artifact: &str,
+    kit: &[(String, Vec3)],
+) -> Entity {
+    let a = super::spawn_anomaly(world, kind, at, radius, None);
+    super::surge::grow(world, artifact, at + Vec3::Y * stone_height(kind));
+    for (id, p) in kit {
+        super::surge::grow(world, id, *p);
+    }
+    a
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

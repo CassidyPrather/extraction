@@ -31,6 +31,11 @@ pub const NAMES: &[&str] = &[
     "pack_mule",
     "drone_duel",
     "walker_hunt",
+    crate::anomaly::scenarios::NAMES[0],
+    crate::anomaly::scenarios::NAMES[1],
+    crate::anomaly::scenarios::NAMES[2],
+    crate::anomaly::scenarios::NAMES[3],
+    crate::anomaly::scenarios::NAMES[4],
     crate::onboarding::bot::SCENARIO,
 ];
 
@@ -315,6 +320,9 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(5.0),
                 Expect(super::Expect::Wrecked(1)),
             ]
+        }
+        n if crate::anomaly::scenarios::NAMES.contains(&n) => {
+            crate::anomaly::scenarios::tasks(n, zone)?
         }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
