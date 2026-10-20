@@ -106,6 +106,17 @@ fn here(opts: &LaunchOptions) -> String {
     }
 }
 
+/// An item's name, or what a fetch of several kinds calls them.
+pub fn want_name(catalog: &Catalog, id: &str) -> String {
+    if id == extraction_core::progression::ANY_PARTS {
+        return "robot parts (any)".to_owned();
+    }
+    catalog
+        .kind(id)
+        .map(|k| catalog.get(k).name.clone())
+        .unwrap_or(id.to_owned())
+}
+
 /// The job as the card says it.
 pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
     let elsewhere = |m: &str| {
@@ -117,10 +128,7 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
     };
     match job {
         Job::Fetch { item, n } => {
-            let name = catalog
-                .kind(item)
-                .map(|k| catalog.get(k).name.clone())
-                .unwrap_or(item.clone());
+            let name = want_name(catalog, item);
             lines::ask_fetch(*n, &name, extraction_core::progression::why(item))
         }
         Job::Recover {
@@ -171,10 +179,7 @@ fn count_raids(
     // else instead (rolled by `offer_job`).
     if home && progression.0.fetch_gone_stale(raid.raids) {
         if let Some(Job::Fetch { item, .. }) = progression.0.job.take() {
-            let name = catalog
-                .kind(&item)
-                .map(|k| catalog.get(k).name.clone())
-                .unwrap_or(item);
+            let name = want_name(&catalog, &item);
             raid.say(lines::fetch_swapped(&name));
         }
         progression.0.swaps += 1;

@@ -73,16 +73,24 @@ def tiers():
         kinds = re.findall(r"JobKind::(\w+)", t.group(6))
         out.append(dict(name=t.group(1), jobs=int(t.group(2)), danger=(int(t.group(3)), int(t.group(4))),
                         far=t.group(5) == "true", kinds=kinds))
-    wants_src = src[src.index("pub const WANTS"):src.index("pub fn why")]
+    wants_src = src[src.index("pub const WANTS"):src.index("pub const ANY_PARTS")]
     wants = []
     for tier in wants_src.split("&[\n")[1:]:
-        wants.append([(m[0], int(m[1]), int(m[2]))
-                      for m in re.findall(r'"([a-z_]+)",\s*(\d+),\s*(\d+),', tier)])
+        wants.append([(m[0] or "robot_parts", int(m[1]), int(m[2]))
+                      for m in re.findall(r'(?:"([a-z_]+)"|ANY_PARTS),\s*(\d+),\s*(\d+),', tier)])
     return out, wants
 
 
 PATIENCE = int(re.search(r"FETCH_PATIENCE: u32 = (\d+)", open(os.path.join(
     ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
+
+
+PARTS = re.findall(r'"([a-z_]+)"', re.search(r"pub const PARTS: &\[&str\] = &\[([^\]]*)\]", open(
+    os.path.join(ROOT, "crates/extraction_core/src/progression.rs")).read()).group(1))
+
+
+def takes(want, item):
+    return want == item or (want == "robot_parts" and item in PARTS)
 
 
 def main():
@@ -123,7 +131,7 @@ def main():
         return sum(r["home"] and any(lo <= d <= hi for _, d in r["visited"]) for r in runs) / n
 
     def rate(item):
-        return sum(r["loot"].count(item) for r in runs) / n
+        return sum(sum(takes(item, i) for i in r["loot"]) for r in runs) / n
 
     ts, wants = tiers()
     print(f"{map_name}: {n} sim raids, {home:.0%} home, "
@@ -169,8 +177,12 @@ def main():
                     if r["home"]:
                         for item in r["loot"]:
                             stock[item] = stock.get(item, 0) + 1
-                    if kind == "Fetch" and stock.get(want[0], 0) >= n:
-                        stock[want[0]] -= n
+                    have = sum(c for i, c in stock.items() if takes(want[0], i))
+                    if kind == "Fetch" and have >= n:
+                        for i in list(stock):
+                            while n and stock[i] and takes(want[0], i):
+                                stock[i] -= 1
+                                n -= 1
                         break
                     if kind != "Fetch" and r["home"] and any(lo <= d <= hi for _, d in r["visited"]):
                         break

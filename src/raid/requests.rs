@@ -79,13 +79,6 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     }
 }
 
-fn item_name(catalog: &Catalog, id: &str) -> String {
-    catalog
-        .kind(id)
-        .map(|k| catalog.get(k).name.clone())
-        .unwrap_or(id.to_owned())
-}
-
 #[allow(clippy::too_many_arguments)]
 fn press_card(
     mut commands: Commands,
@@ -134,7 +127,11 @@ fn press_card(
                 .contents
                 .iter()
                 .copied()
-                .filter(|e| items.get(*e).is_ok_and(|i| catalog.get(i.kind()).id == id))
+                .filter(|e| {
+                    items.get(*e).is_ok_and(|i| {
+                        extraction_core::progression::fetch_takes(id, &catalog.get(i.kind()).id)
+                    })
+                })
                 .take(n as usize)
                 .collect()
         };
@@ -142,7 +139,11 @@ fn press_card(
             Job::Fetch { item: id, n } => {
                 let have = in_stash(id, *n, &stash);
                 if (have.len() as u32) < *n {
-                    raid.say(lines::fetch_short(have.len(), *n, &item_name(&catalog, id)));
+                    raid.say(lines::fetch_short(
+                        have.len(),
+                        *n,
+                        &crate::progression::want_name(&catalog, id),
+                    ));
                     continue;
                 }
                 have

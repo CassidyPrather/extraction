@@ -156,7 +156,7 @@ pub const LETTER_MAP: &str = "marrow_creek";
 pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
 
 /// Raids the driver waits on a fetch before asking for something else.
-pub const FETCH_PATIENCE: u32 = 4;
+pub const FETCH_PATIENCE: u32 = 3;
 
 /// What a Recover job sends you for.
 pub const RECOVER_ITEM: &str = "field_recorder";
@@ -189,7 +189,12 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
             "One of their cells. I want to see inside.",
         ),
         ("servo", 1, 2, "A servo or two. I'm making a thing."),
-        ("rotor_assembly", 1, 2, "Drone rotors. Don't ask what for."),
+        (
+            ANY_PARTS,
+            2,
+            3,
+            "Robot parts, any. Eyes, servos, cells. I'm not fussy.",
+        ),
     ],
     &[
         (
@@ -200,10 +205,10 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
         ),
         ("robot_cell", 2, 2, "Two of their cells. The cab heater."),
         (
-            "sensor_eye",
-            2,
-            2,
-            "Two eyes. A man in town is building one.",
+            ANY_PARTS,
+            4,
+            4,
+            "Four of their parts, any. A man in town is building one.",
         ),
         ("servo", 2, 2, "Two servos. The winch, properly this time."),
         (
@@ -214,6 +219,24 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
         ),
     ],
 ];
+
+/// A fetch of this "item" takes any of [`PARTS`]: robots don't drop the
+/// same thing in every valley.
+pub const ANY_PARTS: &str = "robot_parts";
+/// What counts as a robot part.
+pub const PARTS: &[&str] = &[
+    "sensor_eye",
+    "servo",
+    "robot_cell",
+    "rotor_assembly",
+    "robot_gunpod",
+    "robot_ammo_belt",
+];
+
+/// Whether an item of `id` counts toward a fetch of `want`.
+pub fn fetch_takes(want: &str, id: &str) -> bool {
+    want == id || (want == ANY_PARTS && PARTS.contains(&id))
+}
 
 /// Why the driver wants it (any tier's reason for that item).
 pub fn why(id: &str) -> &'static str {
@@ -637,6 +660,24 @@ mod tests {
             .find(|m| m.name == "Village note")
             .expect("the note on the table");
         assert!(crate::geom::dist(note.at, LETTER_AT) < 0.5);
+    }
+
+    #[test]
+    fn any_parts_takes_any_robot_part() {
+        assert!(fetch_takes(ANY_PARTS, "servo"));
+        assert!(fetch_takes(ANY_PARTS, "sensor_eye"));
+        assert!(!fetch_takes(ANY_PARTS, "canned_stew"));
+        assert!(fetch_takes("servo", "servo"));
+        assert!(!fetch_takes("servo", "sensor_eye"));
+        let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
+        for id in PARTS {
+            assert!(cat.kind(id).is_some(), "{id}");
+        }
+        for tier in WANTS {
+            for w in tier.iter() {
+                assert!(w.0 == ANY_PARTS || cat.kind(w.0).is_some(), "{}", w.0);
+            }
+        }
     }
 
     #[test]
