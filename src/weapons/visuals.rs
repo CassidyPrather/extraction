@@ -48,7 +48,7 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
             ),
         )
-        .add_plugins(super::impacts::ImpactFxPlugin);
+        .add_plugins((super::impacts::ImpactFxPlugin, super::sling::SlingPlugin));
     }
 }
 
@@ -258,10 +258,16 @@ fn animate_parts(
         &Children,
         Option<&Handling>,
         Option<&super::melee::Bayonet>,
+        Option<&super::sling::SlingSwing>,
     )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
 ) {
-    for (gun, children, handling, bayonet) in &guns {
+    for (gun, children, handling, bayonet, swing) in &guns {
+        // A slung gun's parts swing on its strap, about the rear swivel.
+        let swung = swing
+            .filter(|s| s.angle != Vec2::ZERO)
+            .zip(super::sling::swivels(gun))
+            .map(|(s, (_, rear))| s.about(rear));
         let f = &gun.firearm;
         let travel = gun.layout.handle.as_ref().map_or(0.0, |h| h.travel);
         // A self-loader's carrier or slide runs back and home after a shot
@@ -360,6 +366,9 @@ fn animate_parts(
                     r
                 }
             };
+            if let Some(sw) = swung {
+                *t = sw * *t;
+            }
         }
     }
 }

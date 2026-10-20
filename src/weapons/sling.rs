@@ -1,0 +1,271 @@
+//! Slings, as you see them (client side): a strap on every long gun in
+//! someone's hands or on their back, and a slung gun swinging on it.
+//!
+//! - In the hands the strap hangs slack between its swivels; slung, it
+//!   runs from the front swivel up over the shoulder and down to the rear.
+//! - A slung gun is a pendulum hung from its rear swivel: the body's
+//!   acceleration and turning set it swinging, and it settles. Only the
+//!   drawn parts swing; the gun itself stays where its slot holds it.
+//!
+//! Swivels come from the gun's layout guess (under the handguard, under
+//! the butt) until the models carry their own.
+
+use bevy::light::NotShadowCaster;
+use bevy::prelude::*;
+
+use super::Gun;
+use crate::interact::{Held, InSocket, Socket, SocketKind};
+use extraction_core::inventory::SlotKind;
+
+/// Segments a strap is drawn in.
+const SEGMENTS: usize = 8;
+/// How far a slack strap sags, metres.
+const SAG: f32 = 0.12;
+/// The strap's width and thickness, metres.
+const STRAP: Vec2 = Vec2::new(0.025, 0.004);
+/// The shoulder in the torso's frame (as the arms have it).
+const SHOULDER: Vec3 = Vec3::new(0.17, 0.12, 0.03);
+/// The swing: natural frequency (rad/s), damping ratio, and how far it
+/// may go (rad).
+const SWING_W: f32 = 6.0;
+const SWING_DAMP: f32 = 0.25;
+const SWING_MAX: f32 = 0.45;
+
+/// A gun's front and rear sling swivels, gun space.
+pub fn swivels(gun: &Gun) -> Option<(Vec3, Vec3)> {
+    let support = gun.layout.support?;
+    let (lo, hi) = gun.layout.bounds();
+    let front = Vec3::new(0.0, support.y - 0.03, support.z);
+    let rear = Vec3::new(0.0, lo.y + 0.02, hi.z - 0.06);
+    Some((front, rear))
+}
+
+/// A long gun's strap: its drawn segments.
+#[derive(Component)]
+pub struct Strap {
+    segments: Vec<Entity>,
+}
+
+/// A slung gun's swing: angles about its rear swivel (pitch, roll) and
+/// their rates, and where its rear swivel was, to feel the body move.
+#[derive(Component, Default)]
+pub struct SlingSwing {
+    pub angle: Vec2,
+    rate: Vec2,
+    last: Option<(Vec3, Vec3)>,
+}
+
+impl SlingSwing {
+    /// The swing as a rotation about the rear swivel, in gun space.
+    pub fn about(&self, pivot: Vec3) -> Transform {
+        let r = Quat::from_rotation_x(self.angle.x) * Quat::from_rotation_z(self.angle.y);
+        Transform::from_translation(pivot - r * pivot).with_rotation(r)
+    }
+}
+
+#[derive(Resource)]
+struct StrapLook {
+    mesh: Handle<Mesh>,
+    mat: Handle<StandardMaterial>,
+}
+
+pub struct SlingPlugin;
+
+impl Plugin for SlingPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, strap_look)
+            .add_systems(Update, (give_straps, swing, lay_straps).chain());
+    }
+}
+
+fn strap_look(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    commands.insert_resource(StrapLook {
+        mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+        mat: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.24, 0.22, 0.15),
+            perceptual_roughness: 0.9,
+            ..default()
+        }),
+    });
+}
+
+/// Long guns get a strap (drawn only when someone has the gun).
+fn give_straps(
+    mut commands: Commands,
+    guns: Query<(Entity, &Gun), Without<Strap>>,
+    look: Option<Res<StrapLook>>,
+) {
+    let Some(look) = look else {
+        return;
+    };
+    for (e, gun) in &guns {
+        if swivels(gun).is_none() {
+            continue;
+        }
+        let segments = (0..SEGMENTS)
+            .map(|_| {
+                commands
+                    .spawn((
+                        Name::new("Strap"),
+                        Mesh3d(look.mesh.clone()),
+                        MeshMaterial3d(look.mat.clone()),
+                        Transform::default(),
+                        Visibility::Hidden,
+                        NotShadowCaster,
+                    ))
+                    .id()
+            })
+            .collect();
+        commands
+            .entity(e)
+            .insert((Strap { segments }, SlingSwing::default()));
+    }
+}
+
+/// Where a slung gun hangs from: the shoulder its slot is on, world.
+fn slung_shoulder(
+    in_socket: Option<&InSocket>,
+    sockets: &Query<(&Socket, &Transform, &ChildOf)>,
+    torsos: &Query<&GlobalTransform>,
+) -> Option<Vec3> {
+    let (socket, local, parent) = sockets.get(in_socket?.socket).ok()?;
+    if socket.kind != SocketKind::Body(SlotKind::Sling) {
+        return None;
+    }
+    let side = if local.translation.x < 0.0 { -1.0 } else { 1.0 };
+    let torso = torsos.get(parent.parent()).ok()?;
+    Some(torso.transform_point(SHOULDER * Vec3::new(side, 1.0, 1.0)))
+}
+
+/// Slung guns swing on their straps: the body's acceleration and turn push
+/// them, a damped spring brings them back.
+fn swing(
+    mut guns: Query<(&Gun, &GlobalTransform, &mut SlingSwing, Option<&InSocket>)>,
+    sockets: Query<(&Socket, &Transform, &ChildOf)>,
+    torsos: Query<&GlobalTransform>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs().clamp(1e-4, 0.05);
+    for (gun, gt, mut s, in_socket) in &mut guns {
+        if slung_shoulder(in_socket, &sockets, &torsos).is_none() {
+            *s = SlingSwing::default();
+            continue;
+        }
+        let Some((_, rear)) = swivels(gun) else {
+            continue;
+        };
+        let at = gt.transform_point(rear);
+        // Push from the pivot's acceleration, in gun space.
+        let mut push = Vec2::ZERO;
+        if let Some((p0, v0)) = s.last {
+            let v = (at - p0) / dt;
+            let a = (v - v0) / dt;
+            let local = gt.rotation().inverse() * a;
+            push = Vec2::new(local.z, -local.x) * 0.05;
+            s.last = Some((at, v));
+        } else {
+            s.last = Some((at, Vec3::ZERO));
+        }
+        let w = SWING_W;
+        let c = 2.0 * SWING_DAMP * w;
+        let accel = -w * w * s.angle - c * s.rate + push * w * w;
+        s.rate += accel * dt;
+        let next = s.angle + s.rate * dt;
+        s.angle = next.clamp(Vec2::splat(-SWING_MAX), Vec2::splat(SWING_MAX));
+    }
+}
+
+/// Draws each strap: slack between the swivels in the hands, over the
+/// shoulder when slung, hidden otherwise.
+#[allow(clippy::type_complexity)]
+fn lay_straps(
+    guns: Query<(
+        &Gun,
+        &GlobalTransform,
+        &Strap,
+        &SlingSwing,
+        Option<&Held>,
+        Option<&InSocket>,
+    )>,
+    sockets: Query<(&Socket, &Transform, &ChildOf)>,
+    torsos: Query<&GlobalTransform>,
+    mut segs: Query<(&mut Transform, &mut Visibility), Without<Socket>>,
+) {
+    for (gun, gt, strap, s, held, in_socket) in &guns {
+        let shoulder = slung_shoulder(in_socket, &sockets, &torsos);
+        let shown = held.is_some() || shoulder.is_some();
+        let Some((front, rear)) = swivels(gun) else {
+            continue;
+        };
+        // Swing moves the swivels with the drawn gun.
+        let sw = gt.compute_transform() * s.about(rear);
+        let (f, r) = (sw.transform_point(front), sw.transform_point(rear));
+        let curve = |t: f32| -> Vec3 {
+            match shoulder {
+                // Front up to the shoulder, down to the rear.
+                Some(sh) => {
+                    let lift = sh + Vec3::Y * 0.02;
+                    if t < 0.5 {
+                        f.lerp(lift, t * 2.0)
+                    } else {
+                        lift.lerp(r, (t - 0.5) * 2.0)
+                    }
+                }
+                // Slack: a sag in the middle.
+                None => f.lerp(r, t) - Vec3::Y * SAG * 4.0 * t * (1.0 - t),
+            }
+        };
+        for (i, seg) in strap.segments.iter().enumerate() {
+            let Ok((mut t, mut vis)) = segs.get_mut(*seg) else {
+                continue;
+            };
+            let want = if shown {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != want {
+                *vis = want;
+            }
+            if !shown {
+                continue;
+            }
+            let a = curve(i as f32 / SEGMENTS as f32);
+            let b = curve((i + 1) as f32 / SEGMENTS as f32);
+            let d = b - a;
+            let len = d.length().max(1e-3);
+            *t = Transform::from_translation((a + b) * 0.5)
+                .looking_to(d / len, Vec3::Y)
+                .with_scale(Vec3::new(STRAP.x, STRAP.y, len + 0.004));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A shove sets a slung gun swinging, and it settles within a few
+    /// seconds; it never swings past its limit.
+    #[test]
+    fn a_swing_settles() {
+        let mut s = SlingSwing::default();
+        s.rate = Vec2::new(3.0, -2.0);
+        let mut most = 0.0f32;
+        for _ in 0..300 {
+            let w = SWING_W;
+            let c = 2.0 * SWING_DAMP * w;
+            let accel = -w * w * s.angle - c * s.rate;
+            s.rate += accel / 90.0;
+            s.angle =
+                (s.angle + s.rate / 90.0).clamp(Vec2::splat(-SWING_MAX), Vec2::splat(SWING_MAX));
+            most = most.max(s.angle.length());
+        }
+        assert!(most > 0.1 && most <= SWING_MAX * 1.5);
+        assert!(s.angle.length() < 0.01, "settled: {:?}", s.angle);
+    }
+}

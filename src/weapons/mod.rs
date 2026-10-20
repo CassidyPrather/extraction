@@ -19,6 +19,7 @@ pub mod layout;
 pub mod melee;
 pub mod muzzle;
 pub mod range;
+pub mod sling;
 pub mod visuals;
 
 use avian3d::prelude::*;
