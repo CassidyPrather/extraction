@@ -66,7 +66,8 @@ pub struct FirearmDef {
     #[serde(default)]
     pub open_bolt: bool,
     /// A revolver's loading gate is this many chambers round from the one
-    /// under the hammer (clockwise seen from behind).
+    /// under the hammer, counting the way the cylinder turns (the Nagant's
+    /// is 5: two back, on the right).
     #[serde(default)]
     pub gate_offset: u32,
     /// Metres per second.
@@ -1358,7 +1359,7 @@ mod tests {
             modes: vec![FireMode::Semi],
             last_round_hold_open: false,
             double_action: true,
-            gate_offset: 2,
+            gate_offset: 5,
             ..pistol()
         }
     }

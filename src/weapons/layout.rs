@@ -38,8 +38,8 @@ pub enum Moves {
     /// A revolver's cylinder: turns about its axis (the origin, local Z) a
     /// chamber at a time.
     Cylinder,
-    /// A revolver's loading gate: swings about its hinge (the origin,
-    /// local Y) when open.
+    /// A revolver's loading gate: swings about its upright hinge (the
+    /// origin, local Y) out to the right when open.
     Gate,
     /// A revolver's ejector rod: strokes back along +Z as it pushes a case.
     Rod,

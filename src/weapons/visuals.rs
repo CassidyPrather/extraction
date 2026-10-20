@@ -287,7 +287,7 @@ fn animate_parts(
                 Moves::Gate => {
                     let mut r = part.rest;
                     let open = if f.gate_open { GATE_OPEN } else { 0.0 };
-                    r.rotation = Quat::from_rotation_z(-open) * r.rotation;
+                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
                     r
                 }
                 Moves::Rod => {
