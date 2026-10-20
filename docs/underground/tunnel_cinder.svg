@@ -8118,6 +8118,9 @@
 <line x1='384.0' y1='330.0' x2='384.0' y2='348.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='195.0' y1='177.0' x2='213.0' y2='177.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='333.0' y1='609.0' x2='315.0' y2='609.0' stroke='#c0392b' stroke-width='4'/>
+<rect x='177.4' y='604.0' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
+<text x='190.4' y='613.0' fill='#f1c40f'>Breaker</text>
+<line x1='384.0' y1='330.0' x2='384.0' y2='348.0' stroke='#f1c40f' stroke-width='4'/>
 <text x='204.0' y='189.0' fill='#1d1c1a' text-anchor='middle'>stair_hall x</text>
 <circle cx='213.6' cy='369.0' r='4' fill='#5a5650'/>
 <text x='204.0' y='309.0' fill='#1d1c1a' text-anchor='middle'>tunnel_a ~</text>
@@ -8130,7 +8133,7 @@
 <text x='84.0' y='333.0' fill='#1d1c1a' text-anchor='middle'>pump_room *</text>
 <circle cx='69.6' cy='492.6' r='4' fill='#5a5650'/>
 <circle cx='52.2' cy='501.0' r='4' fill='#5a5650'/>
-<text x='84.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>valve_chamber ~</text>
+<text x='84.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>valve_chamber x</text>
 <text x='252.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>tunnel_b</text>
 <circle cx='326.4' cy='370.8' r='4' fill='#5a5650'/>
 <circle cx='338.4' cy='370.8' r='4' fill='#5a5650'/>
@@ -8147,13 +8150,13 @@
 <circle cx='136.8' cy='589.8' r='4' fill='#5a5650'/>
 <circle cx='170.4' cy='622.2' r='4' fill='#5a5650'/>
 <circle cx='136.8' cy='629.4' r='4' fill='#d4a017'/>
-<text x='156.0' y='597.0' fill='#1d1c1a' text-anchor='middle'>cable_vault</text>
+<text x='156.0' y='597.0' fill='#1d1c1a' text-anchor='middle'>cable_vault +</text>
 <circle cx='446.4' cy='483.0' r='4' fill='#d4a017'/>
 <circle cx='410.4' cy='514.8' r='4' fill='#5a5650'/>
 <circle cx='398.4' cy='451.8' r='4' fill='#d4a017'/>
 <text x='420.0' y='477.0' fill='#1d1c1a' text-anchor='middle'>workshop *</text>
 <circle cx='439.2' cy='358.2' r='4' fill='#d4a017'/>
 <circle cx='403.2' cy='324.6' r='4' fill='#5a5650'/>
-<text x='420.0' y='333.0' fill='#1d1c1a' text-anchor='middle'>overflow</text>
-<text x='8' y='798' fill='#e8e2d0'>Service tunnel (tunnel_cinder): floor -6.5 m; grid 0.2 m; gold = loot, red = door, blue = stair; lamp * on, ~ flickering, x dead</text>
+<text x='420.0' y='333.0' fill='#1d1c1a' text-anchor='middle'>overflow +</text>
+<text x='8' y='798' fill='#e8e2d0'>Service tunnel (tunnel_cinder): floor -6.5 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

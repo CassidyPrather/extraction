@@ -6410,6 +6410,9 @@
 <line x1='195.0' y1='579.0' x2='213.0' y2='579.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='195.0' y1='188.9' x2='213.0' y2='188.9' stroke='#c0392b' stroke-width='4'/>
 <line x1='213.0' y1='674.6' x2='195.0' y2='674.6' stroke='#c0392b' stroke-width='4'/>
+<rect x='44.2' y='441.4' width='10' height='10' fill='#f1c40f' stroke='#1d1c1a'/>
+<text x='57.2' y='450.4' fill='#f1c40f'>Generator</text>
+<line x1='339.0' y1='441.0' x2='357.0' y2='441.0' stroke='#f1c40f' stroke-width='4'/>
 <circle cx='218.4' cy='207.0' r='4' fill='#5a5650'/>
 <text x='204.0' y='201.0' fill='#1d1c1a' text-anchor='middle'>lock x</text>
 <circle cx='184.2' cy='261.0' r='4' fill='#5a5650'/>
@@ -6425,7 +6428,7 @@
 <circle cx='177.6' cy='475.8' r='4' fill='#d4a017'/>
 <circle cx='187.8' cy='419.4' r='4' fill='#5a5650'/>
 <circle cx='156.0' cy='425.4' r='4' fill='#5a5650'/>
-<text x='144.0' y='441.0' fill='#1d1c1a' text-anchor='middle'>dorm x</text>
+<text x='144.0' y='441.0' fill='#1d1c1a' text-anchor='middle'>dorm +</text>
 <circle cx='267.6' cy='447.0' r='4' fill='#d4a017'/>
 <circle cx='267.6' cy='438.0' r='4' fill='#5a5650'/>
 <circle cx='267.6' cy='456.0' r='4' fill='#5a5650'/>
@@ -6439,7 +6442,7 @@
 <circle cx='36.0' cy='435.0' r='4' fill='#5a5650'/>
 <circle cx='82.8' cy='424.2' r='4' fill='#5a5650'/>
 <circle cx='72.0' cy='472.2' r='4' fill='#d4a017'/>
-<text x='60.0' y='441.0' fill='#1d1c1a' text-anchor='middle'>generator</text>
+<text x='60.0' y='441.0' fill='#1d1c1a' text-anchor='middle'>generator +</text>
 <circle cx='348.0' cy='358.2' r='4' fill='#d4a017'/>
 <circle cx='348.0' cy='367.8' r='4' fill='#5a5650'/>
 <circle cx='379.8' cy='381.0' r='4' fill='#5a5650'/>
@@ -6449,11 +6452,11 @@
 <circle cx='331.2' cy='487.8' r='4' fill='#d4a017'/>
 <circle cx='328.8' cy='451.8' r='4' fill='#d4a017'/>
 <circle cx='352.8' cy='497.4' r='4' fill='#5a5650'/>
-<text x='348.0' y='465.0' fill='#1d1c1a' text-anchor='middle'>armoury x</text>
+<text x='348.0' y='465.0' fill='#1d1c1a' text-anchor='middle'>armoury +</text>
 <circle cx='186.0' cy='545.4' r='4' fill='#5a5650'/>
 <circle cx='224.4' cy='564.0' r='4' fill='#d4a017'/>
 <circle cx='217.2' cy='532.2' r='4' fill='#d4a017'/>
 <text x='204.0' y='537.0' fill='#1d1c1a' text-anchor='middle'>medical</text>
 <text x='204.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>escape</text>
-<text x='8' y='882' fill='#e8e2d0'>Civil-defence shelter (bunker_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door, blue = stair; lamp * on, ~ flickering, x dead</text>
+<text x='8' y='882' fill='#e8e2d0'>Civil-defence shelter (bunker_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair; lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

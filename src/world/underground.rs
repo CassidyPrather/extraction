@@ -13,6 +13,7 @@
 //! heightfield collider and the terrain mesh leave those cells out, and
 //! the kiosk's walls and apron cover the edge.
 
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::underground::{
     self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
@@ -150,6 +151,17 @@ fn build(l: &'static Layout, r: &Raster) -> Geo {
         for p in &room.props {
             let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
             prop(&mut b, p.kind, at, -p.rot.to_radians(), p.loot.as_deref());
+        }
+    }
+    // A breaker board on its wall (a generator is the room's machine).
+    if let Some(p) = l
+        .power
+        .as_ref()
+        .filter(|p| p.kind == ug::PowerKind::Breaker)
+    {
+        if let Some(room) = l.rooms.iter().find(|room| room.id == p.room) {
+            let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+            prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
     b.finish()
@@ -949,6 +961,218 @@ pub fn spawn_anomalies(world: &mut World) {
     }
 }
 
+/// Logic: power, residents and the robots' map of the dark.
+pub struct UndergroundPlugin;
+
+impl Plugin for UndergroundPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                register_residents,
+                wire_power,
+                throw_switches.after(wire_power),
+                generator_hum,
+            ),
+        );
+    }
+}
+
+/// A site's power ([`ug::PowerDef`]): off until its switch is thrown.
+#[derive(Component, Debug)]
+pub struct SitePower {
+    pub on: bool,
+    pub kind: ug::PowerKind,
+    pub switch: Entity,
+}
+
+/// The lever (a breaker's) or pull-start (a generator's) that turns a
+/// site's power on.
+#[derive(Component, Debug)]
+pub struct PowerSwitch {
+    pub site: Entity,
+}
+
+/// A door held shut until its site's power is on.
+#[derive(Component, Debug)]
+pub struct PowerLocked {
+    pub site: Entity,
+}
+
+/// Where a site's power switch is, building space, and which way it faces.
+pub fn switch_pose(l: &Layout, r: &Raster) -> Option<Transform> {
+    let p = l.power.as_ref()?;
+    let room = l.rooms.iter().find(|room| room.id == p.room)?;
+    let rot = Quat::from_rotation_y(-p.rot.to_radians());
+    let at = Vec3::new(room.at[0] + p.at[0], r.floor, room.at[1] + p.at[1]);
+    // A breaker's lever on its board's face; a generator's pull-start low
+    // on its end.
+    let (up, out) = match p.kind {
+        ug::PowerKind::Breaker => (1.2, 0.26),
+        ug::PowerKind::Generator => (0.9, 0.05),
+    };
+    Some(
+        Transform::from_translation(at + Vec3::Y * up + rot * Vec3::new(0.0, 0.0, -out))
+            .with_rotation(rot),
+    )
+}
+
+/// The door leaves (building space hinges) a site's power holds shut.
+pub fn powered_hinges(id: &str) -> Vec<Vec3> {
+    let (Some(l), Some(r), Some(g)) = (ug::layout(id), ug::raster(id), geo(id)) else {
+        return Vec::new();
+    };
+    let Some(p) = &l.power else {
+        return Vec::new();
+    };
+    // The geometry's doors: each kiosk's, then the raster's in order.
+    let first = r.portals.len();
+    r.doors
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| {
+            d.room
+                .is_some_and(|k| p.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+        })
+        .filter_map(|(k, _)| g.doors.get(first + k).map(|d| d.hinge))
+        .collect()
+}
+
+/// Logic, once: each powered site gets its switch, its state, and its
+/// held doors.
+fn wire_power(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building)>,
+    doors: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
+    mut done: Local<bool>,
+) {
+    if *done || buildings.is_empty() {
+        return;
+    }
+    *done = true;
+    for (site, b) in &buildings {
+        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+            continue;
+        };
+        let (Some(p), Some(pose)) = (&l.power, switch_pose(l, r)) else {
+            continue;
+        };
+        let switch = commands
+            .spawn((
+                Name::new("Power switch"),
+                PowerSwitch { site },
+                crate::raid::truck::Pressable::BenchRun,
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Collider::cuboid(0.3, 0.3, 0.15),
+                CollisionLayers::new(super::Layer::Item, LayerMask::NONE),
+                pose,
+                Visibility::default(),
+                ChildOf(site),
+            ))
+            .id();
+        commands.entity(site).insert(SitePower {
+            on: false,
+            kind: p.kind,
+            switch,
+        });
+        for hinge in powered_hinges(&b.prefab) {
+            for (d, leaf, parent) in &doors {
+                if parent.parent() == site && leaf.0.hinge.distance(hinge) < 1e-3 {
+                    commands.entity(d).insert(PowerLocked { site });
+                }
+            }
+        }
+    }
+}
+
+/// Throwing a switch: the power comes on (for good), the held doors are
+/// free, the lamps on the power light (and the robots know it), and it
+/// clanks or roars loud enough to bring the crawlers.
+#[allow(clippy::too_many_arguments)]
+fn throw_switches(
+    mut commands: Commands,
+    mut events: MessageReader<crate::interact::InteractEvent>,
+    switches: Query<(&PowerSwitch, &GlobalTransform)>,
+    mut sites: Query<(&mut SitePower, &super::buildings::Building, &Transform)>,
+    locked: Query<(Entity, &PowerLocked)>,
+    lighting: Option<ResMut<crate::robots::senses::Lighting>>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut raid: ResMut<crate::raid::Raid>,
+) {
+    let mut lighting = lighting;
+    for ev in events.read() {
+        let crate::interact::InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        let Ok((sw, at)) = switches.get(*item) else {
+            continue;
+        };
+        let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
+            continue;
+        };
+        if power.on {
+            continue;
+        }
+        power.on = true;
+        for (d, l) in &locked {
+            if l.site == sw.site {
+                commands.entity(d).remove::<PowerLocked>();
+            }
+        }
+        let (radius, line) = match power.kind {
+            ug::PowerKind::Generator => (45.0, "The generator coughs, catches and roars. Lights."),
+            ug::PowerKind::Breaker => (30.0, "The breaker slams home. Somewhere, relays clack."),
+        };
+        noise.write(crate::robots::Noise {
+            at: at.translation(),
+            radius,
+            source: None,
+        });
+        raid.say(line);
+        if let (Some(lighting), Some(l), Some(r)) = (
+            lighting.as_mut(),
+            ug::layout(&b.prefab),
+            ug::raster(&b.prefab),
+        ) {
+            for room in l.rooms.iter().filter(|room| room.lamp == ug::Lamp::Powered) {
+                let p = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
+                lighting
+                    .lamps
+                    .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
+            }
+        }
+    }
+}
+
+/// A running generator is heard all round it, every few seconds.
+fn generator_hum(
+    sites: Query<&SitePower>,
+    switches: Query<&GlobalTransform, With<PowerSwitch>>,
+    time: Res<Time>,
+    mut noise: MessageWriter<crate::robots::Noise>,
+    mut wait: Local<f32>,
+) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 4.0;
+    for p in sites
+        .iter()
+        .filter(|p| p.on && p.kind == ug::PowerKind::Generator)
+    {
+        if let Ok(at) = switches.get(p.switch) {
+            noise.write(crate::robots::Noise {
+                at: at.translation(),
+                radius: 22.0,
+                source: None,
+            });
+        }
+    }
+}
+
 /// Logic, once the sites are built: tells the robots where it's dark and
 /// where the lamps are (`senses::Lighting`), and registers each site's
 /// resident crawlers with their round (`robots::indoor::IndoorSites`).
@@ -1038,8 +1262,11 @@ pub struct UndergroundVisualsPlugin;
 
 impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_lamps, flicker, torch))
-            .add_systems(PostUpdate, (go_dark, no_rain_below));
+        app.add_systems(
+            Update,
+            (light_lamps, flicker, torch, near_doors_only, show_below),
+        )
+        .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
 }
 
@@ -1053,6 +1280,8 @@ const LAMP_RANGE: f32 = 45.0;
 #[derive(Component)]
 pub struct EmergencyLamp {
     pub stutter: bool,
+    /// On its site's power (dark until it's on).
+    pub site: Option<Entity>,
     seed: f32,
     base: f32,
     lens: Handle<StandardMaterial>,
@@ -1074,7 +1303,12 @@ fn light_lamps(
         let lit = l
             .rooms
             .iter()
-            .filter(|room| matches!(room.lamp, ug::Lamp::Steady | ug::Lamp::Flicker))
+            .filter(|room| {
+                matches!(
+                    room.lamp,
+                    ug::Lamp::Steady | ug::Lamp::Flicker | ug::Lamp::Powered
+                )
+            })
             .take(LAMP_BUDGET);
         for (k, room) in lit.enumerate() {
             let at = Vec3::new(room.at[0], r.floor + room.height - 0.2, room.at[1]);
@@ -1090,6 +1324,7 @@ fn light_lamps(
                     Name::new("Emergency lamp"),
                     EmergencyLamp {
                         stutter: room.lamp == ug::Lamp::Flicker,
+                        site: (room.lamp == ug::Lamp::Powered).then_some(e),
                         seed: k as f32 * 3.7 + room.at[0] * 0.13,
                         base,
                         lens: lens.clone(),
@@ -1109,6 +1344,11 @@ fn light_lamps(
                     Mesh3d(meshes.add(Cuboid::new(0.22, 0.03, 0.1))),
                     MeshMaterial3d(lens),
                     bevy::light::NotShadowCaster,
+                    bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (DOOR_REACH * 0.8)..DOOR_REACH,
+                        use_aabb: false,
+                    },
                     Transform::from_xyz(0.0, 0.03, 0.0),
                 ));
         }
@@ -1126,6 +1366,7 @@ fn flicker(
         &mut PointLight,
         &mut Visibility,
     )>,
+    power: Query<&SitePower>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let t = time.elapsed_secs();
@@ -1135,7 +1376,8 @@ fn flicker(
         .map(|(g, _)| g.translation())
         .next();
     for (lamp, at, mut light, mut vis) in &mut lamps {
-        let near = eye.is_none_or(|e| e.distance(at.translation()) < LAMP_RANGE);
+        let powered = lamp.site.is_none_or(|s| power.get(s).is_ok_and(|p| p.on));
+        let near = powered && eye.is_none_or(|e| e.distance(at.translation()) < LAMP_RANGE);
         let want = if near {
             Visibility::Inherited
         } else {
@@ -1151,6 +1393,115 @@ fn flicker(
         light.intensity = lamp.base * k;
         if let Some(mut m) = materials.get_mut(&lamp.lens) {
             m.emissive = GLOW * k;
+        }
+    }
+}
+
+/// A site's geometry deeper than this (building space y) is drawn apart
+/// from its kiosks ([`Below`]).
+pub const BELOW_Y: f32 = -1.0;
+/// From this near a kiosk you might see down its stair.
+const KIOSK_SIGHT: f32 = 18.0;
+
+/// A site's rooms and stairs' meshes (merged, below [`BELOW_Y`]): drawn
+/// only while the eye is underground or near one of its kiosks. Nothing
+/// culls by the rock over them, and a site under a village counted in
+/// every view of it.
+#[derive(Component)]
+pub struct Below;
+
+/// Below-ground meshes shown or hidden with where the eye is.
+fn show_below(
+    zone: Res<Zone>,
+    eyes: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    sites: Query<(Entity, &super::buildings::Building, &Transform, &Children)>,
+    mut below: Query<&mut Visibility, With<Below>>,
+) {
+    let Some(eye) = eyes
+        .iter()
+        .filter(|(_, c)| c.is_active)
+        .map(|(g, _)| g.translation())
+        .next()
+    else {
+        return;
+    };
+    let underground = floor_under(&zone, eye).is_some();
+    for (_, b, xf, children) in &sites {
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let near = l.portals.iter().any(|p| {
+            let at = xf.transform_point(Vec3::new(p.at[0], p.y, p.at[1]));
+            at.distance(eye) < KIOSK_SIGHT
+        });
+        let want = if underground || near {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        for c in children.iter() {
+            if let Ok(mut v) = below.get_mut(c) {
+                if *v != want {
+                    *v = want;
+                }
+            }
+        }
+    }
+}
+
+/// How near the eye a door down in a site is drawn: from the surface
+/// nothing shows them (the rock's in the way, but nothing culls by it),
+/// and below, the rooms are small.
+const DOOR_REACH: f32 = 25.0;
+/// How near a kiosk's door leaf is drawn (the kiosk itself, always).
+const KIOSK_DOOR_REACH: f32 = 50.0;
+
+/// A site's doors are drawn only near the eye: below ground, its
+/// dozen-odd leaves (each a handful of meshes) counted in every view of
+/// the village over the shelter; a kiosk's, past 50 m, is a pixel or two.
+#[allow(clippy::type_complexity)]
+fn near_doors_only(
+    mut commands: Commands,
+    added: Query<
+        Entity,
+        (
+            Added<Mesh3d>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+        ),
+    >,
+    parents: Query<&ChildOf>,
+    leaves: Query<&super::buildings::DoorLeaf>,
+    sites: Query<&super::buildings::Building>,
+) {
+    for e in &added {
+        // The mesh, its door (a parent or two up), the door's building.
+        let mut at = e;
+        for _ in 0..3 {
+            let Ok(p) = parents.get(at) else { break };
+            at = p.parent();
+            let Ok(leaf) = leaves.get(at) else { continue };
+            let site = parents
+                .get(at)
+                .ok()
+                .and_then(|b| sites.get(b.parent()).ok())
+                .is_some_and(|b| ug::is_site(&b.prefab));
+            if site {
+                // Down below, near only; a kiosk's door, as far as a door
+                // that small shows.
+                let reach = if leaf.0.hinge.y < BELOW_Y {
+                    DOOR_REACH
+                } else {
+                    KIOSK_DOOR_REACH
+                };
+                commands
+                    .entity(e)
+                    .try_insert(bevy::camera::visibility::VisibilityRange {
+                        start_margin: 0.0..0.0,
+                        end_margin: (reach * 0.8)..reach,
+                        use_aabb: false,
+                    });
+            }
+            break;
         }
     }
 }
@@ -1677,6 +2028,118 @@ mod tests {
                 .can_see_target;
         }
         assert!(seen, "the torch gave you away");
+    }
+
+    /// Power, through the headset: in every site the powered door won't
+    /// open; a hand squeezed on the breaker or the generator's pull-start
+    /// turns the power on; then the robots know the powered lamps, and the
+    /// door opens.
+    #[test]
+    fn a_hand_on_the_switch_powers_the_site() {
+        use crate::interact::InteractEvent;
+        use crate::rig::Side;
+        use crate::world::buildings::Door;
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let mut vr = crate::vr_harness::Vr::new(map);
+            vr.step(3);
+            let (switch, at, site) = {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query::<(Entity, &PowerSwitch, &GlobalTransform)>();
+                let (e, sw, g) = q.iter(vr.app.world()).next().expect("a power switch");
+                (e, *g, sw.site)
+            };
+            let held: Vec<Entity> = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &PowerLocked)>()
+                .iter(vr.app.world())
+                .filter(|(_, l)| l.site == site)
+                .map(|(e, _)| e)
+                .collect();
+            assert!(!held.is_empty(), "{map}: a door on the power");
+            let player = vr.player;
+            for d in &held {
+                vr.app
+                    .world_mut()
+                    .write_message(InteractEvent::Pressed { item: *d, player });
+            }
+            vr.step(60);
+            for d in &held {
+                assert!(
+                    !vr.app.world().get::<Door>(*d).unwrap().open,
+                    "{map}: held shut"
+                );
+            }
+            let lamps = vr
+                .app
+                .world()
+                .resource::<crate::robots::senses::Lighting>()
+                .lamps
+                .len();
+            // Stand in front of it, a hand on it, squeeze.
+            let handle = at.translation();
+            let out = at.rotation() * Vec3::NEG_Z;
+            let feet = handle + out * 0.6;
+            let zone = vr.app.world().resource::<Zone>().clone();
+            let floor = floor_under(&zone, feet).unwrap_or_else(|| {
+                panic!(
+                    "{map}: the switch at {handle:?} (in front {feet:?}) isn't underground; ground {}",
+                    zone.ground(feet.x, feet.z)
+                )
+            });
+            vr.stand(Vec3::new(feet.x, floor + 0.05, feet.z), 0.0);
+            vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(3);
+            assert!(
+                vr.pressed().contains(&switch),
+                "{map}: the switch answered the hand"
+            );
+            vr.grip(Side::Right, 0.0);
+            vr.step(5);
+            assert!(
+                vr.app.world().get::<SitePower>(site).unwrap().on,
+                "{map}: power on"
+            );
+            let now = vr
+                .app
+                .world()
+                .resource::<crate::robots::senses::Lighting>()
+                .lamps
+                .len();
+            let powered = ug::layout(
+                &vr.app
+                    .world()
+                    .get::<super::super::buildings::Building>(site)
+                    .unwrap()
+                    .prefab,
+            )
+            .unwrap()
+            .rooms
+            .iter()
+            .filter(|r| r.lamp == ug::Lamp::Powered)
+            .count();
+            assert_eq!(now, lamps + powered, "{map}: the robots see the new lamps");
+            for d in &held {
+                assert!(
+                    vr.app.world().get::<PowerLocked>(*d).is_none(),
+                    "{map}: unbolted"
+                );
+                vr.app
+                    .world_mut()
+                    .write_message(InteractEvent::Pressed { item: *d, player });
+            }
+            vr.step(90);
+            for d in &held {
+                assert!(
+                    vr.app.world().get::<Door>(*d).unwrap().open,
+                    "{map}: the door opens"
+                );
+            }
+        }
     }
 
     /// A bot goes in at the entrance, down the stairs, to the deepest loot

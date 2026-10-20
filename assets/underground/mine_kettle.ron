@@ -20,7 +20,7 @@
             (kind: Rubble, at: (0.9, -2.5)),
         ]),
         (id: "west_crosscut", at: (-9.0, 24.0), size: (9.0, 2.5), height: 2.5),
-        (id: "stope", at: (-12.0, 33.0), size: (8.0, 10.0), height: 4.0, lamp: Dead, props: [
+        (id: "stope", at: (-12.0, 33.0), size: (8.0, 10.0), height: 4.0, lamp: Powered, props: [
             (kind: Rubble, at: (-2.4, -2.6)),
             (kind: Rubble, at: (2.5, 3.0)),
             (kind: Rubble, at: (-2.8, 3.4)),
@@ -29,7 +29,7 @@
         ]),
         (id: "east_crosscut", at: (8.0, 28.0), size: (10.0, 2.5), height: 2.5),
         // Explosives store, behind its steel door: the best of it.
-        (id: "magazine", at: (8.0, 34.0), size: (4.0, 4.0), height: 2.4, props: [
+        (id: "magazine", at: (8.0, 34.0), size: (4.0, 4.0), height: 2.4, lamp: Powered, props: [
             (kind: Crate, at: (-1.2, 1.2), loot: Some("weapons_rare")),
             (kind: Crate, at: (1.2, 1.2), loot: Some("ammo_common")),
             (kind: Shelf, at: (1.65, -0.8), rot: 90.0, loot: Some("gadgets")),
@@ -67,6 +67,9 @@
     // Resident maintenance crawlers walk this round (robots::indoor).
     patrol: ["station", "main_drive", "east_crosscut", "sump", "main_drive", "west_crosscut", "stope", "refuge"],
     crawlers: 1,
+    // The breaker board in the wet sump, by the pump: throw it and the
+    // stope and the magazine light, and the magazine's door opens.
+    power: Some((kind: Breaker, room: "sump", at: (2.75, 0.6), rot: 270.0, doors: ["magazine"])),
     portals: [
         (),
         (at: (0.0, 58.0), rot: 180.0, y: 0.4),
