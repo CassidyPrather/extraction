@@ -28,6 +28,18 @@ pub struct Fingers {
     pub thumb_bend: f32,
 }
 
+/// The hand is closed round something: the middle, ring and little
+/// fingers curled past halfway (the index may be on a trigger, the thumb
+/// anywhere). Index controllers sense the fingers wrapped round the handle
+/// while the grip's squeeze reads nothing when the hand relaxes, so a held
+/// gun stays held as long as this does (`interact::grip_from_input`).
+pub fn wrapped(f: &Fingers) -> bool {
+    (f.curl[1] + f.curl[2] + f.curl[3]) / 3.0 > WRAPPED
+}
+
+/// How far the three fingers must curl to count as closed round a grip.
+pub const WRAPPED: f32 = 0.45;
+
 pub const JOINTS: usize = 26;
 const PALM: usize = 0;
 const THUMB: usize = 2;
