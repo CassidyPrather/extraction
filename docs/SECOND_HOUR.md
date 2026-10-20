@@ -73,7 +73,9 @@ Last run (merged main, 113 s):
 - **Waking in the truck after going down restarted the raid.** It said
   "Out of the truck..." while you were in the bed, and counted a raid.
   `leave_base` read stale global poses. Fixed, with a test.
-- **The bot couldn't reach the cord at the ranger tower.** The bench's
-  corner at waist height blocks a straight line from the bed's centre to
-  the cord. A person can lean, but the gap between the crate and the
-  bench is narrower than the body. Worth checking in a headset.
+- **The bot couldn't reach the cord at the ranger tower.** It caught the
+  bench's waist-high corner on a straight line from the back of the bed.
+  A person isn't blocked: walking at the cord from where you start in the
+  bed brings the body to 0.21 m of its toggle, well inside an arm
+  (`the_cord_is_in_reach_from_the_bed`). The bot's route was the
+  problem, so it now goes round the middle of the bed.
