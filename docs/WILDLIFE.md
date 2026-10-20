@@ -81,6 +81,74 @@ jackdaw greyer). The wingbeat runs 3.2 to 6 beats a second by how hard it
 works; turning, it banks. Past 45 m the far stand-in, past 380 m nothing.
 No shadows.
 
+## Deer and dogs
+
+One larger animal a valley (`wildlife::herd`): two to four roe deer in
+Marrow Creek and Kettle Pass, three or four stray dogs in Cinder Works.
+They live on the walkers' nav grid (`robots::walker::Nav`), so never in
+a building, a rock, a trunk or deep water; a herd's home is open ground
+at a forest's edge at least 150 m from the insertion point.
+
+**Deer** graze, heads down, wandering a little, looking up now and then.
+Something coming and they look up and turn to watch it; come on and they
+bolt into the trees and settle somewhere else:
+
+| What | They look up | They run |
+| - | - | - |
+| You | 20 m standing, 20 + 16 m per m/s moving (walking 42 m), up to 80 | at 0.6 of that, or after 5 s of you still coming |
+| You, crouched | 0.55 of that (a creep at 0.5 m/s: 15 m) | likewise |
+| A walker or hound / drone / the airship | 50 / 45 / 90 m | at 0.6 of that |
+| A shot or a blast | | within 0.7 of its reach |
+
+A run is flat out (10 m/s) for 8 s, then a trot, until whatever it was
+is 110 m behind (or 25 s), the way most open and away, favouring cover.
+The roe's bark and the bolt are `herd::Startled` (for sound).
+
+**Dogs** keep their distance from people: one comes within 40 m and they
+trot off to keep 28 m from them, watching; within 34 m they bark at you,
+and a bark is heard by robots within 70 m as a noise from you at the
+dogs (once every 45 s a pack). They fear the robot hounds above all: a
+hound within 45 m and they run; one it catches (1.4 m) is killed and lies
+where it fell. A dog a hound is chasing is a hound coming.
+
+**Looks** (`wildlife::herd_look`): a procedural gait in the house style
+of `robots::anim`. A walk (each foot in turn, 68% of the cycle down), a
+trot (diagonal pairs) and a bound (fronts, then hinds, the body arching),
+by speed with some hysteresis; each foot stays planted until its turn,
+then swings in an arc to just ahead of the hip; two-bone legs reach it
+(front knees forward, hind hocks back). The body rides on the legs,
+bobbing with the gait and pitched with the slope; the head goes down to
+graze and up to look, turned toward what it's watching. Models in parts
+(`art/animals/deer.py`, `dog.py`: body, head on its neck pivot, upper and
+lower legs, a far stand-in past 90 m), 0.7k triangles an animal near,
+ten draws. Body and head cast shadows, legs don't.
+
+## Fish
+
+Trout in the creeks (`wildlife::fish`): the water near you is cut into
+14 m cells, and about half the cells with water 0.45 m deep have a shoal
+of two to five, always the same for the seed. They hold nose into the
+current between the bed and the surface; someone on the bank within 6 m
+(11 m wading or moving fast), a walker in the water, or a shot within
+40 m and they dart off downstream (3.5 m/s) and hide, drifting back after
+12 s. Fish there means nobody's been by. They never leave water 0.3 m
+deep. Drawn within 30 m (`art/animals/fish.py`, 118 triangles).
+
+## Moths
+
+At dusk and at night (not in heavy rain), seven moths flit round each of
+the nearest six lit lamps within 35 m of you: any point light, house
+lamps, lanterns, the camp's (`wildlife::small_look`; visual only).
+
+## The chorus
+
+`wildlife::insects::Chorus` is how loud the small life round you is, 0
+to 1, for sound to play: crickets at dusk and night, flies and small
+birds by day. Machines hush it (silent within 25 m, untouched beyond
+70 m); a shot or blast, a flock going up or a herd bolting within 120 m
+drops it to almost nothing, and it comes back over a minute; rain and
+wind thin it. When the insects stop, something is close.
+
 ## Checks
 
 - `wildlife::perches::tests`: rays against boxes and cylinders; every
@@ -98,6 +166,17 @@ No shadows.
   14 m off, nothing. No bird is ever inside any collider (buildings,
   bridges, trees, rocks, fences, the ground) by the physics' own point
   queries while you chase a flock round.
+- `wildlife::herd::tests`: every valley has a home for its herd; walking
+  at deer they look up within a tick of the walk's alert radius and bolt
+  before you're at their flight distance (a crouched creep gets within
+  18 m); six minutes of being chased at a run and shot at, per valley,
+  never puts an animal anywhere it can't stand or off the ground, and
+  they get away; dogs keep more than 10 m from you and bark once; a hound
+  takes a dog; determinism. `herd_look::tests`: knees reach the foot and
+  bend the right way; gaits follow speed and keep feet down.
+- `wildlife::fish::tests`: every valley has shoals; walking to the bank,
+  wading in and shooting, no fish leaves deep water or the space between
+  bed and surface, and they dart.
 - The sim logs `flush` (`cause`, `birds`, `alarm`, `x`, `z`) and
   `bird_alarm` (a robot sent to look by an alarm: `robot`, `x`, `z`,
   `dist`). `EXTRACTION_WILDLIFE=off` runs without animals, to compare.

@@ -14,10 +14,14 @@
 
 use bevy::prelude::*;
 
+pub mod fish;
 pub mod flock;
 pub mod herd;
 pub mod herd_look;
+pub mod insects;
 pub mod perches;
+pub mod rats;
+pub mod small_look;
 mod telemetry;
 pub mod visuals;
 
@@ -142,17 +146,22 @@ impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Flushed>()
             .add_message::<herd::Startled>()
+            .add_message::<rats::Scurried>()
             .init_resource::<Threats>()
+            .init_resource::<insects::Chorus>()
             .add_systems(Startup, setup)
             .add_systems(
                 FixedUpdate,
-                (gather_threats, (flock::flocks, herd::herds))
+                (
+                    gather_threats,
+                    (flock::flocks, herd::herds, fish::shoals, rats::rats),
+                )
                     .chain()
                     .in_set(WildlifeSystems),
             )
             .add_systems(
                 FixedUpdate,
-                (flock::alarm_robots, herd::bark_alarm).after(WildlifeSystems),
+                (flock::alarm_robots, herd::bark_alarm, insects::chorus).after(WildlifeSystems),
             )
             .add_systems(Last, telemetry::log_wildlife);
     }
@@ -184,6 +193,10 @@ pub struct WildlifeVisualsPlugin;
 
 impl Plugin for WildlifeVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((visuals::VisualsPlugin, herd_look::HerdLookPlugin));
+        app.add_plugins((
+            visuals::VisualsPlugin,
+            herd_look::HerdLookPlugin,
+            small_look::SmallLookPlugin,
+        ));
     }
 }

@@ -13,8 +13,9 @@
 //! round you at [`DOG_KEEP`] metres and bark at you if you come closer —
 //! and barking is a noise the machines hear ([`crate::robots::Noise`], from
 //! you, at the dogs; at most once every [`DOG_BARK_EVERY`] s). The robot
-//! hounds are what they truly fear: a hound near and the pack runs, and
-//! one a hound catches is killed ([`Startled::killed`]).
+//! hounds are what they truly fear: a hound near and the pack runs,
+//! barking (and hounds hunt by ear, so it comes after them), and one a
+//! hound catches is killed ([`Startle::Killed`]).
 //!
 //! Movement is on the walkers' nav grid (`robots::walker::Nav`), never
 //! into a building, a rock, deep water or a tree trunk: each step is
@@ -308,10 +309,12 @@ impl Herd {
         {
             danger = Some((p, None, true));
         }
+        let mut hound = false;
         if kind == Kind::Dog {
             for &(e, p) in ctx.hounds {
                 if p.distance(lead) < DOG_HOUND {
                     danger = Some((p, Some(e), true));
+                    hound = true;
                 }
             }
             // Caught.
@@ -336,6 +339,12 @@ impl Herd {
                     out.push((Startle::Bolt, lead, who, false));
                     if kind == Kind::Deer {
                         out.push((Startle::Bark, lead, who, false));
+                    }
+                    // Dogs bark at a hound as they go: and hounds hunt by
+                    // ear (a noise from nobody: it comes to the dogs).
+                    if hound && self.bark_cool <= 0.0 {
+                        self.bark_cool = DOG_BARK_EVERY;
+                        out.push((Startle::Bark, lead, None, true));
                     }
                 }
                 let for_s = match s {
@@ -610,7 +619,8 @@ pub(crate) fn herds(
     }
 }
 
-/// A dog barking at you is heard by the machines, as from you, at the dog.
+/// A dog barking is heard by the machines: at you, as from you, at the dog;
+/// at a hound, as from nobody (the hound comes to the dogs).
 pub(crate) fn bark_alarm(
     mut startled: MessageReader<Startled>,
     mut noise: MessageWriter<crate::robots::Noise>,
