@@ -340,6 +340,26 @@ mod tests {
     #[test]
     fn hitches_hold_their_ceiling() {
         let _one_at_a_time = heavy();
+        // In its own process: Bevy's task pools are the process's, and
+        // beside the rest of the suite this one's background work (the
+        // buildings' bakes, the forest) would queue behind every other
+        // test's, which is no hitch of the game's.
+        if std::env::var_os("SPIKE_ALONE").is_none() {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "render::spikes::tests::hitches_hold_their_ceiling",
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env("SPIKE_ALONE", "1")
+                .output()
+                .expect("the test binary, again");
+            print!("{}", String::from_utf8_lossy(&out.stdout));
+            eprint!("{}", String::from_utf8_lossy(&out.stderr));
+            assert!(out.status.success(), "hitches over their ceiling (above)");
+            return;
+        }
         let map = std::env::var("SPIKE_MAP").unwrap_or("marrow_creek".into());
         if std::env::var_os("SPIKE_PROFILE").is_some() {
             use bevy::log::tracing_subscriber::layer::SubscriberExt;
