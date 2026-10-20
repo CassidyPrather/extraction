@@ -2,10 +2,10 @@
 assets/models/props/<name>.glb, one node `static` each, in truck space
 axes (x across, y up, -Z forward) about the origin noted:
 
-- `stash_rack`    a timber rack over the stash crate; origin at the crate's
-                  centre (truck (-0.55, 1.75, -1.0)): posts bolted to the
-                  crate's corners up to y +0.6, a slatted shelf at +0.45,
-                  a cross brace on the -X side
+- `stash_rack`    a timber rack over the wall-side 0.4 m of the stash crate
+                  (x -0.45 to -0.05), the rest left open to reach into;
+                  origin at the crate's centre (truck (-0.55, 1.75, -1.0)):
+                  posts on the crate's rim, a slatted shelf at +0.465
 - `stash_rack_2`  a shelf 1.0 along Z by 0.3 deep hung on the left canvas
                   wall; origin at the shelf's centre (truck (-0.95, 1.55,
                   -1.0)), the wall at x -0.15
@@ -15,7 +15,8 @@ axes (x across, y up, -Z forward) about the origin noted:
                   (0.95, 2.6, -2.1)), coax back over the roof's rear edge
                   (z +0.2) and down
 - `med_cabinet`   a wall cabinet 0.40 x 0.48 x 0.14; origin at its centre
-                  (truck (0.55, 2.05, -1.74)), its back on the wall, door +Z
+                  (truck (0.60, 2.05, -1.74)), its back on the wall, open to
+                  +Z, its door standing open, the floor inside at y -0.21
 
 Materials: Planks, Timber, Iron, Painted, Steel, Rubber, Enamel, Red, Zinc.
 """
@@ -33,31 +34,36 @@ from common import Part, T  # noqa: E402
 def stash_rack():
     w = Wear(91)
     p = Part("static")
-    # The stash crate is 0.95 x 1.25 outside, its rim's top at y +0.325.
-    hx, hz = 0.475, 0.625
-    y0, y1 = 0.0, 0.6
-    for sx in (-1, 1):
+    # Over the wall-side 0.4 m of the stash crate only (local x -0.45 to
+    # -0.05), so a hand still goes straight down into the rest of it: four
+    # posts on the crate's rim (its top at y +0.325), a slatted shelf at
+    # +0.465, a brace on the wall side.
+    hz = 0.605
+    x0, x1 = -0.43, -0.07
+    rim, y1 = 0.325, 0.62
+    for x in (x0, x1):
         for sz in (-1, 1):
-            x, z = sx * (hx + 0.02), sz * (hz + 0.02)
-            board(p, (0.04, y1 - y0, 0.04), (x, (y0 + y1) / 2, z), "Planks", bevel=0.003)
-            # An angle bracket bolting it to the crate's corner.
-            p.box((0.006, 0.12, 0.05), (x - sx * 0.023, 0.06, z), "Iron")
-            bolt(p, (x + sx * 0.02, 0.03, z), (sx, 0, 0), r=0.007, h=0.004)
-            bolt(p, (x + sx * 0.02, 0.09, z), (sx, 0, 0), r=0.007, h=0.004)
-    # Rails under the shelf, the slats across them.
-    for sx in (-1, 1):
-        board(p, (0.025, 0.05, 2 * hz + 0.06), (sx * (hx + 0.005), 0.42, 0.0), "Planks",
-              bevel=0.003)
-    for k in range(6):
-        z = -hz + 0.1 + k * (2 * hz - 0.2) / 5
-        board(p, (2 * hx + 0.1, 0.02, 0.1), (0.0, 0.455, z), "Planks", w, bevel=0.003)
-    # The brace on the -X side, corner to corner, and a top rail round.
-    L = math.hypot(2 * hz + 0.04, y1 - 0.1)
-    board(p, (0.02, L, 0.05), (-(hx + 0.045), (y1 + 0.1) / 2, 0.0), "Planks",
-          tilt=math.atan2(2 * hz + 0.04, y1 - 0.1), bevel=0.003)
+            z = sz * hz
+            board(p, (0.04, y1 - rim - 0.005, 0.04), (x, (rim + 0.005 + y1) / 2, z), "Planks",
+                  bevel=0.003)
+            # A plate screwed to the rim at its foot.
+            p.box((0.09, 0.005, 0.07), (x, rim + 0.0025, z), "Iron")
+            bolt(p, (x + 0.03, rim + 0.005, z), (0, 1, 0), r=0.007, h=0.004)
+            bolt(p, (x - 0.03, rim + 0.005, z), (0, 1, 0), r=0.007, h=0.004)
+    # Rails between the posts along Z, under the slats.
+    for x in (x0, x1):
+        board(p, (0.025, 0.05, 2 * hz - 0.04), (x, 0.43, 0.0), "Planks", bevel=0.003)
+    for k in range(7):
+        z = -hz + 0.07 + k * (2 * hz - 0.14) / 6
+        board(p, (0.42, 0.02, 0.1), ((x0 + x1) / 2, 0.465, z), "Planks", w, bevel=0.003)
+    # The brace on the wall side, corner to corner, and a top rail at each
+    # end.
+    L = math.hypot(2 * hz - 0.04, y1 - rim - 0.08)
+    board(p, (0.02, L, 0.05), (x0 - 0.03, (rim + 0.04 + y1 - 0.04) / 2, 0.0), "Planks",
+          tilt=math.atan2(2 * hz - 0.04, y1 - rim - 0.08), bevel=0.003)
     for sz in (-1, 1):
-        board(p, (2 * hx + 0.08, 0.04, 0.025), (0.0, y1 - 0.025, sz * (hz + 0.045)), "Planks",
-              bevel=0.003)
+        board(p, (x1 - x0 + 0.04, 0.04, 0.025), ((x0 + x1) / 2, y1 - 0.025, sz * (hz + 0.0325)),
+              "Planks", bevel=0.003)
     return [p]
 
 
@@ -117,18 +123,31 @@ def aerial():
 def med_cabinet():
     p = Part("static")
     W, H, D = 0.40, 0.48, 0.14
-    p.box((W, H, D - 0.02), (0.0, 0.0, -0.01), "Enamel", bevel=0.006, segs=1)
-    p.box((W - 0.01, H - 0.01, 0.016), (0.0, 0.0, D / 2 - 0.012), "Enamel", bevel=0.004,
-          segs=1)
-    # A red cross on the door, 4 mm proud.
-    dz = D / 2 - 0.004 + 0.002
-    p.box((0.16, 0.05, 0.004), (0.0, 0.03, dz), "Red")
-    p.box((0.05, 0.16 - 0.002, 0.004), (0.0, 0.03, dz + 0.004), "Red")
-    # A latch and two hinges.
-    p.box((0.02, 0.06, 0.012), (W / 2 - 0.03, -0.05, dz + 0.002), "Zinc", bevel=0.002, segs=1)
+    t = 0.015
+    back = -D / 2 + 0.01
+    # A hollow carcass: back, sides, top, and a floor whose top is at
+    # y -0.21 (what's kept in it lies there), its door standing open on
+    # hinges at -X.
+    p.box((W, H, t), (0.0, 0.0, back + t / 2), "Enamel", bevel=0.003, segs=1)
+    for sx in (-1, 1):
+        p.box((t, H, D - 0.01 - t), (sx * (W / 2 - t / 2), 0.0, back + t + (D - 0.01 - t) / 2),
+              "Enamel", bevel=0.003, segs=1)
+    for y, h in ((H / 2 - t / 2, t), (-0.21 - 0.015, 0.03)):
+        p.box((W - 2 * t, h, D - 0.01 - t), (0.0, y, back + t + (D - 0.01 - t) / 2), "Enamel")
+    # The door, swung open about 110 degrees, the cross on its outside.
+    from common import RY
+    front = back + D - 0.01
+    hinge = (-W / 2, front)
+    a = math.radians(-110)  # out into the room (+Z), not into the wall
+    door = T(hinge[0], 0.0, hinge[1]) @ RY(a)
+    p.box((W - 0.01, H - 0.01, 0.016), (W / 2, 0.0, 0.008), "Enamel", bevel=0.004, segs=1,
+          xf=door)
+    p.box((0.16, 0.05, 0.004), (W / 2, 0.03, 0.018), "Red", xf=door)
+    p.box((0.05, 0.158, 0.004), (W / 2, 0.03, 0.022), "Red", xf=door)
+    p.box((0.02, 0.06, 0.012), (W - 0.03, -0.05, 0.022), "Zinc", bevel=0.002, segs=1, xf=door)
     for y in (-0.16, 0.16):
-        rod(p, (-W / 2 - 0.004, y - 0.03, D / 2 - 0.01), (-W / 2 - 0.004, y + 0.03, D / 2 - 0.01),
-            0.006, "Zinc", segs=6)
+        rod(p, (hinge[0], y - 0.03, hinge[1]), (hinge[0], y + 0.03, hinge[1]), 0.006, "Zinc",
+            segs=6)
     return [p]
 
 
