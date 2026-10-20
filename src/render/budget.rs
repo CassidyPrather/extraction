@@ -51,6 +51,11 @@ pub const BUDGET: Budget = Budget {
     shadowed_lights: 2,
 };
 
+/// The sun's shadow map, a side, per cascade per eye. Bevy's default is
+/// 2048; at 1024 the software frame was 7-18% quicker and the shadows
+/// look the same, a touch softer (which the overcast wants anyway).
+pub const SHADOW_MAP: usize = 1024;
+
 /// One eye's load.
 #[derive(Clone, Debug, Default, serde::Serialize)]
 pub struct ViewLoad {
@@ -147,11 +152,11 @@ impl Plugin for BudgetPlugin {
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
         let knobs = Knobs::from_env();
+        app.insert_resource(bevy::light::DirectionalLightShadowMap {
+            size: knobs.shadow_map.unwrap_or(SHADOW_MAP),
+        });
         if knobs != Knobs::default() {
             info!("perf knobs: {knobs:?}");
-            if let Some(size) = knobs.shadow_map {
-                app.insert_resource(bevy::light::DirectionalLightShadowMap { size });
-            }
             app.insert_resource(knobs)
                 .add_systems(PostUpdate, apply_knobs);
         }
