@@ -158,12 +158,15 @@ pub fn spawn_walker_with(
     armed: bool,
     core_hp: f32,
 ) -> Entity {
-    spawn_walker_sized(commands, zone, at, job, armed, core_hp, 1.0)
+    spawn_walker_sized(commands, zone, at, job, armed, core_hp, 1.0, None)
 }
 
 /// [`spawn_walker_with`] at `size` times a walker's size (a crawler for
 /// low ceilings is about 0.6): the body, its legs, gait and wreck all
-/// scale with it.
+/// scale with it. `floor` is the height it stands on underground (on an
+/// underground site's floor, below the terrain); None stands it on the
+/// terrain.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_walker_sized(
     commands: &mut Commands,
     zone: &Zone,
@@ -172,12 +175,13 @@ pub fn spawn_walker_sized(
     armed: bool,
     core_hp: f32,
     size: f32,
+    floor: Option<f32>,
 ) -> Entity {
-    let ground = zone.ground(at.x, at.z);
-    let pos = Vec3::new(at.x, ground + BODY_HEIGHT * size, at.z);
+    let floor = |x: f32, z: f32| floor.unwrap_or_else(|| zone.ground(x, z));
+    let pos = Vec3::new(at.x, floor(at.x, at.z) + BODY_HEIGHT * size, at.z);
     let feet = std::array::from_fn(|i| {
         let p = pos + rest_offset(i) * size;
-        let f = Vec3::new(p.x, zone.ground(p.x, p.z), p.z);
+        let f = Vec3::new(p.x, floor(p.x, p.z), p.z);
         Foot {
             planted: f,
             from: f,
