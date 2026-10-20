@@ -97,6 +97,20 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
         }
         MacroKind::Mode => steps.push((0.0, Step::Mode)),
         MacroKind::Reload => match action {
+            ActionKind::SemiAuto if gun.firearm.def.magazine_family.is_none() => {
+                // A fixed magazine (an SKS): hold the bolt open, thumb
+                // rounds in, let it run home.
+                steps.push((0.1, Step::Bolt(1.0)));
+                for _ in gun.firearm.internal_rounds..gun.firearm.def.internal_capacity {
+                    steps.push((0.3, Step::LoadRound));
+                }
+                let home = if gun.firearm.locked_back {
+                    Step::SlideStop
+                } else {
+                    Step::ReleaseBolt
+                };
+                steps.push((0.15, home));
+            }
             ActionKind::SemiAuto => {
                 steps.push((0.05, Step::DropMag));
                 steps.push((0.6, Step::InsertBestMag));
