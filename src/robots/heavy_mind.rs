@@ -132,6 +132,7 @@ fn heavy_brain(
     doors: Query<&crate::world::buildings::Door>,
     mut orders: MessageWriter<ArmOrder>,
     mut tears: MessageWriter<HeavyTear>,
+    spatial: avian3d::prelude::SpatialQuery,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -309,13 +310,19 @@ fn heavy_brain(
                     if mind.tear_gap <= 0.0 {
                         mind.tear_gap = TEAR_EVERY;
                         // The wall between it and you.
-                        let to = (at - ent.mid).with_y(0.0);
-                        tears.write(HeavyTear {
-                            heavy: e,
-                            building,
-                            at: ent.mid + to.normalize_or_zero() * 1.5,
-                            out: ent.out,
-                        });
+                        if let Some((at, out)) = entrances
+                            .shells
+                            .iter()
+                            .find(|s| s.building == building)
+                            .and_then(|shell| tear_point(shell, at, pos, &spatial))
+                        {
+                            tears.write(HeavyTear {
+                                heavy: e,
+                                building,
+                                at,
+                                out,
+                            });
+                        }
                     }
                     None
                 } else {
@@ -331,6 +338,58 @@ fn heavy_brain(
             w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
         }
     }
+}
+
+/// Where to tear at `shell` to get at `target` inside it, from `heavy`
+/// outside: the outer wall the line from the target toward it leaves the
+/// building by, at chest height, a few centimetres into the wall (where a
+/// ray from outside meets it). And the way to pull: out toward the heavy.
+pub fn tear_point(
+    shell: &super::doors::Shell,
+    target: Vec3,
+    heavy: Vec3,
+    spatial: &avian3d::prelude::SpatialQuery,
+) -> Option<(Vec3, Vec3)> {
+    use avian3d::prelude::SpatialQueryFilter;
+    let inv = shell.xf.compute_affine().inverse();
+    let local = inv.transform_point3(target);
+    let toward = inv
+        .transform_vector3((heavy - target).with_y(0.0))
+        .normalize_or_zero();
+    if toward == Vec3::ZERO {
+        return None;
+    }
+    // Leave the box's footprint along `toward`.
+    let mut t = f32::INFINITY;
+    for (p, d, h) in [
+        (local.x, toward.x, shell.half.x),
+        (local.z, toward.z, shell.half.y),
+    ] {
+        if d.abs() > 1e-5 {
+            t = t.min(((h * d.signum()) - p) / d);
+        }
+    }
+    if !t.is_finite() {
+        return None;
+    }
+    let exit = shell
+        .xf
+        .compute_affine()
+        .transform_point3(local + toward * t);
+    let out = (heavy - target).with_y(0.0).normalize_or_zero();
+    let chest = Vec3::new(exit.x, target.y + 1.0, exit.z);
+    let dir = Dir3::new(-out).ok()?;
+    let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    // From a metre outside, back in, onto the wall's face; where that's an
+    // opening (the doorway it came in by), beside it along the same wall.
+    let along = out.cross(Vec3::Y);
+    // (The box can run past the wall, a porch: go in as far as the target.)
+    let reach = 1.0 + Vec2::new(chest.x - target.x, chest.z - target.z).length();
+    [0.0, 1.6, -1.6, 2.6, -2.6].into_iter().find_map(|side| {
+        let from = chest + out * 1.0 + along * side;
+        let hit = spatial.cast_ray(from, dir, reach, true, &filter)?;
+        Some((from - out * (hit.distance + 0.08), out))
+    })
 }
 
 /// Whether someone carrying a valley key stands near a Gate.
@@ -566,5 +625,71 @@ mod tests {
                 assert!(*t as f32 + 1.0 >= rules::EARLY);
             }
         }
+    }
+
+    /// On every building with a door: from the door, someone in the middle
+    /// of it, the tear lands on a wall between them (not in the doorway),
+    /// inside the wall's thickness (a wall face just outside it), at chest
+    /// height, pulling outward.
+    #[test]
+    fn it_tears_at_the_wall_between_you() {
+        use bevy::ecs::system::RunSystemOnce;
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        let checked = app
+            .world_mut()
+            .run_system_once(
+                |entrances: Res<super::super::doors::Entrances>,
+                 spatial: avian3d::prelude::SpatialQuery| {
+                    let mut checked = 0;
+                    let filter = avian3d::prelude::SpatialQueryFilter::from_mask([
+                        crate::world::Layer::World,
+                    ]);
+                    for shell in &entrances.shells {
+                        let Some(door) = entrances
+                            .doors
+                            .iter()
+                            .find(|d| d.building == shell.building)
+                        else {
+                            continue;
+                        };
+                        let target = shell.xf.translation + Vec3::Y * 0.2;
+                        let heavy = door.mid + door.out * DOOR_STAND;
+                        let Some((at, out)) = tear_point(shell, target, heavy, &spatial) else {
+                            panic!("no tear point on {:?}", shell.building);
+                        };
+                        // Between you and it, short of you.
+                        let flat = |v: Vec3| Vec2::new(v.x, v.z);
+                        assert!(
+                            flat(at - target).length() > 0.5
+                                && flat(at - target).length() < flat(heavy - target).length(),
+                            "{at:.1} not between {target:.1} and {heavy:.1}"
+                        );
+                        assert!((at.y - target.y - 1.0).abs() < 0.01);
+                        assert!(out.dot(heavy - target) > 0.0, "pulls outward");
+                        // A wall face just outside it.
+                        let face = spatial.cast_ray(
+                            at + out * 0.5,
+                            Dir3::new(-out).unwrap(),
+                            0.6,
+                            true,
+                            &filter,
+                        );
+                        assert!(face.is_some(), "no wall at {at:.1}");
+                        checked += 1;
+                    }
+                    checked
+                },
+            )
+            .unwrap();
+        assert!(checked >= 5, "checked {checked} buildings");
     }
 }
