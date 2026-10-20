@@ -312,6 +312,7 @@ fn apply_weather(
     mut ambient: ResMut<GlobalAmbientLight>,
     zone: Res<super::Zone>,
     mut adapt: ResMut<crate::render::grade::Adaptation>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
     // New cameras (the player's, a scope's) take the weather as they appear.
     let fresh = fogs.iter_mut().any(|(f, _)| f.is_added());
@@ -327,7 +328,7 @@ fn apply_weather(
         super::weather::WeatherKind::Drizzle => 1.0,
     };
     let haze = zone.map.haze.unwrap_or([1.0; 3]);
-    let hour = HourLook::of(conditions.hour);
+    let hour = HourLook::of(conditions.hour, opts.sun_elevation);
     let light = conditions.light;
     let scale = |c: Color, tint: Vec3| {
         let l = c.to_linear();
@@ -417,8 +418,15 @@ struct HourLook {
 }
 
 impl HourLook {
-    fn of(hour: super::weather::Hour) -> Self {
+    /// `elevation`: the low sun's height at dawn and dusk, degrees.
+    fn of(hour: super::weather::Hour, elevation: f32) -> Self {
         use super::weather::Hour;
+        // Light travelling from a sun at this bearing (degrees from +X,
+        // toward +Z) and height.
+        let from = |bearing: f32, up: f32| {
+            let (b, e) = (bearing.to_radians(), up.to_radians());
+            -Vec3::new(b.cos() * e.cos(), e.sin(), b.sin() * e.cos())
+        };
         match hour {
             Hour::Day => Self {
                 horizon: Vec3::ONE,
@@ -429,12 +437,12 @@ impl HourLook {
                 glow: Vec4::ZERO,
             },
             // Low in the east, pale gold through the cloud; the air cool
-            // and milky. (About 20 degrees up: lower, its shadows ran in
-            // ruled lines across the meadows.)
+            // and milky. (20 degrees up by default, `--sun-elevation`:
+            // lower, its shadows ran in ruled lines across the meadows.)
             Hour::Dawn => Self {
                 horizon: Vec3::new(1.06, 1.02, 1.0),
                 zenith: Vec3::new(0.9, 0.95, 1.08),
-                sun_dir: Some(Vec3::new(-0.92, -0.34, -0.18).normalize()),
+                sun_dir: Some(from(11.0, elevation)),
                 sun_color: Color::srgb(1.0, 0.9, 0.78),
                 ambient_color: Color::srgb(0.66, 0.69, 0.76),
                 glow: Vec4::new(1.0, 0.82, 0.66, 0.7),
@@ -444,7 +452,7 @@ impl HourLook {
             Hour::Dusk => Self {
                 horizon: Vec3::new(1.22, 0.95, 0.8),
                 zenith: Vec3::new(0.8, 0.84, 1.08),
-                sun_dir: Some(Vec3::new(0.9, -0.34, 0.27).normalize()),
+                sun_dir: Some(from(197.0, elevation)),
                 sun_color: Color::srgb(1.0, 0.72, 0.5),
                 ambient_color: Color::srgb(0.6, 0.6, 0.74),
                 glow: Vec4::new(1.0, 0.52, 0.3, 1.0),
