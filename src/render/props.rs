@@ -44,6 +44,7 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
+                ghost_through_walls,
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -785,6 +786,45 @@ fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread
         JOINT_BEND[joint]
     };
     Quat::from_rotation_x(-bend * c)
+}
+
+/// The ghost glove shows through whatever stopped the hand you see: your
+/// real hand is in the wall, so a ghost drawn behind its face would never
+/// be seen. Its meshes swap to the glass eye's material once dressed: a
+/// faint rim, additive, with no depth test. (Without that material, in
+/// tests, it keeps its plain translucent one.)
+fn ghost_through_walls(
+    mut commands: Commands,
+    ghosts: Query<(Entity, &HandVisual)>,
+    children: Query<&Children>,
+    plain: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
+    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
+    mut handle: Local<Option<Handle<crate::anomaly::visuals::XrayMaterial>>>,
+) {
+    let Some(mut xray) = xray else {
+        return;
+    };
+    for (e, v) in &ghosts {
+        if !v.ghost {
+            continue;
+        }
+        for d in children.iter_descendants(e) {
+            if !plain.contains(d) {
+                continue;
+            }
+            let m = handle
+                .get_or_insert_with(|| {
+                    xray.add(crate::anomaly::visuals::XrayMaterial {
+                        color: LinearRgba::rgb(0.11, 0.12, 0.13),
+                    })
+                })
+                .clone();
+            commands
+                .entity(d)
+                .remove::<MeshMaterial3d<StandardMaterial>>()
+                .insert((MeshMaterial3d(m), bevy::light::NotShadowCaster));
+        }
+    }
 }
 
 /// A glove: the palm at the root, joints below it. Without a tracked hand
