@@ -390,8 +390,11 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
         "headframe" => [6.0, 19.6, 15.0],
-        "signal_box" => [6.0, 6.7, 3.8],
+        "signal_box" => [8.4, 6.9, 4.2],
         "steeple" => [4.4, 19.0, 4.4],
+        // A nave 10 x 14 with its steps at the west door, the bell tower
+        // off the east end.
+        "chapel" => [10.4, 19.0, 23.0],
         _ => [4.0, 3.0, 4.0],
     }
 }
@@ -403,7 +406,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
 pub fn prefab_foundation(id: &str) -> f32 {
     match id {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
-        | "mast_hut" | "guard_booth" | "pump_station" => 1.5,
+        | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
         _ => 0.0,
     }

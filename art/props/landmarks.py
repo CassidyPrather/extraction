@@ -198,9 +198,14 @@ def headframe():
 prop("headframe", headframe)
 
 # --- Signal box -------------------------------------------------------------------------------
+#
+# The recipe (`signal_box` in src/world/buildings.rs) builds the brick
+# ground floor as a building, with its door, windows and steps; this is
+# what stands on it: the glazed cab on the floor slab, its roof and
+# chimney, the outside stair to a landing and the cab's door.
 
-SB = (4.0, 3.0)        # footprint x, z
-SB_FLOOR = 3.0         # the cab floor
+SB = (6.0, 3.6)        # the walls' centre lines, x and z
+SB_FLOOR = 3.15        # the cab floor (the slab's top)
 SB_EAVE = 5.4
 
 
@@ -208,26 +213,18 @@ def signal_box():
     p = Part("static")
     W, D = SB
     hw, hd = W / 2, D / 2
-    # Brick lower floor on a concrete plinth, small barred windows.
-    p.box((W + 0.1, 0.45, D + 0.1), (0.0, 0.225, 0.0), "Concrete", bevel=0.02, segs=1)
-    p.box((W, SB_FLOOR - 0.4, D), (0.0, 0.4 + (SB_FLOOR - 0.4) / 2, 0.0), "Brick")
-    for x in (-1.0, 1.0):
-        p.box((0.6, 0.8, 0.04), (x, 1.7, -hd - 0.01), "Glass")
-        p.box((0.75, 0.1, 0.12), (x, 1.25, -hd - 0.04), "Concrete")
-    p.box((0.6, 0.8, 0.04), (-hw - 0.01, 1.7, 0.0), "Glass", xf=None)
-    # The station's name board on the front.
-    p.box((2.2, 0.35, 0.04), (0.0, 2.55, -hd - 0.02), "Cream")
-    # The cab floor slab, then panelled timber walls with a band of glass.
-    p.box((W + 0.3, 0.15, D + 0.3), (0.0, SB_FLOOR + 0.075, 0.0), "Concrete", bevel=0.01, segs=1)
-    y0 = SB_FLOOR + 0.15
-    cw, cd = W - 0.1, D - 0.1
+    # The station's name board on the brick front, over the door.
+    p.box((1.6, 0.3, 0.04), (0.5, 2.62, -hd - 0.15 - 0.02), "Cream")
+    # Panelled timber walls with a band of glass, a sill round it.
+    y0 = SB_FLOOR
+    cw, cd = W, D
     p.box((cw, 0.75, cd), (0.0, y0 + 0.375, 0.0), "Planks")
     p.box((cw - 0.04, 1.16, cd - 0.04), (0.0, y0 + 1.35, 0.0), "Glass")
     p.box((cw, SB_EAVE - (y0 + 1.95), cd), (0.0, (y0 + 1.95 + SB_EAVE) / 2, 0.0), "Planks")
     p.box((cw + 0.08, 0.05, cd + 0.08), (0.0, y0 + 0.775, 0.0), "Timber")
     # Glazing bars round the band: posts proud of the glass.
-    for k in range(7):
-        x = -cw / 2 + cw * k / 6
+    for k in range(9):
+        x = -cw / 2 + cw * k / 8
         for sz in (-1, 1):
             p.box((0.07, 1.1, 0.05), (x, y0 + 1.35, sz * (cd / 2 + 0.01)), "Timber")
     for k in range(1, 5):
@@ -237,33 +234,62 @@ def signal_box():
     # A pyramid roof of iron sheet over the cab, a chimney through it.
     r = (D + 0.8) / math.sqrt(2)
     from common import S
-    p.lathe([(0.0, SB_EAVE), (r, SB_EAVE), (r, SB_EAVE + 0.08), (0.12, SB_EAVE + 1.25),
-             (0.0, SB_EAVE + 1.25)], "Corrugated", segs=4, start=45.0,
+    p.lathe([(0.0, SB_EAVE), (r, SB_EAVE), (r, SB_EAVE + 0.08), (0.12, SB_EAVE + 1.4),
+             (0.0, SB_EAVE + 1.4)], "Corrugated", segs=4, start=45.0,
             xf=S((W + 0.8) / (D + 0.8), 1.0, 1.0) @ UP)
-    p.box((0.45, 1.6, 0.45), (1.1, SB_EAVE + 0.7, 0.55), "Brick")
-    p.box((0.55, 0.08, 0.55), (1.1, SB_EAVE + 1.54, 0.55), "Concrete")
-    # The stair up the +X end to a landing and the cab's door.
-    sx0, sx1 = hw + 0.05, hw + 0.95
-    z0, z1 = -hd + 0.1, 0.4
-    n = 15
+    p.box((0.45, 1.9, 0.45), (1.6, SB_EAVE + 0.85, 0.6), "Brick")
+    p.box((0.55, 0.08, 0.55), (1.6, SB_EAVE + 1.84, 0.6), "Concrete")
+    # The stair up the +X end, past the brick (its face at hw + 0.15), to
+    # a landing at the cab floor and the cab's door.
+    sx0, sx1 = hw + 0.2, hw + 1.1
+    z0, z1 = -hd + 0.1, 0.5
+    top = SB_FLOOR - 0.15
+    n = 16
     for k in range(n):
-        y = SB_FLOOR * (k + 1) / (n + 1)
+        y = top * (k + 1) / (n + 1)
         z = z0 + (z1 - z0) * (k + 0.5) / n
         board(p, (0.86, 0.04, 0.24), ((sx0 + sx1) / 2, y, z), "Planks", bevel=0.004)
     for x in (sx0 + 0.03, sx1 - 0.03):
-        from mathutils import Vector
-        beam(p, (x, 0.0, z0 - 0.1), (x, SB_FLOOR, z1 + 0.1), 0.05, "Timber", d=0.22)
-        beam(p, (x, 1.0, z0 - 0.1), (x, SB_FLOOR + 1.0, z1 + 0.1), 0.04, "Timber")
-    p.box((0.9, 0.1, 1.1), ((sx0 + sx1) / 2, SB_FLOOR - 0.01, z1 + 0.55), "Planks", bevel=0.005,
-          segs=1)
-    for z in (z1 + 0.05, z1 + 1.05):
-        rod(p, (sx1 - 0.03, 0.0, z), (sx1 - 0.03, SB_FLOOR + 1.0, z), 0.04, "Timber", segs=4)
-    p.box((0.05, 2.0, 0.85), (hw - 0.025, SB_FLOOR + 1.15, z1 + 0.55), "Painted", bevel=0.005,
-          segs=1)
+        beam(p, (x, 0.0, z0 - 0.1), (x, top, z1 + 0.1), 0.05, "Timber", d=0.22)
+    beam(p, (sx1 - 0.03, 1.0, z0 - 0.1), (sx1 - 0.03, top + 1.0, z1 + 0.1), 0.04, "Timber")
+    p.box((0.9, 0.1, 1.2), ((sx0 + sx1) / 2, top - 0.01, z1 + 0.6), "Planks", bevel=0.005, segs=1)
+    p.box((0.2, 0.1, 1.2), (hw + 0.1, top - 0.01, z1 + 0.6), "Timber")
+    for z in (z1 + 0.05, z1 + 1.15):
+        rod(p, (sx1 - 0.03, 0.0, z), (sx1 - 0.03, top + 1.0, z), 0.04, "Timber", segs=4)
+    rod(p, (sx1 - 0.03, top + 1.0, z1 + 0.05), (sx1 - 0.03, top + 1.0, z1 + 1.15), 0.03, "Timber",
+        segs=4)
+    p.box((0.05, 2.0, 0.85), (hw + 0.025, y0 + 1.0, z1 + 0.6), "Painted", bevel=0.005, segs=1)
+    return [p]
+
+
+def lever_frame():
+    """The signal box's lever frame, 2.4 x 1.0 x 0.5 (origin on the floor
+    under its centre, the signalman's side -Z): a cast frame, twelve levers
+    in their quadrants, some pulled, number plates, a shelf of block
+    instruments over it."""
+    p = Part("static")
+    p.box((2.4, 0.35, 0.45), (0.0, 0.175, 0.04), "Cast", bevel=0.01, segs=1)
+    p.box((2.44, 0.06, 0.5), (0.0, 0.38, 0.04), "Cast", bevel=0.006, segs=1)
+    for k in range(12):
+        x = -1.1 + k * 0.2
+        pulled = k in (2, 3, 7, 10)
+        a = -0.35 if pulled else 0.3
+        top = (x, 0.41 + 0.6 * math.cos(a), 0.04 + 0.6 * math.sin(a))
+        rod(p, (x, 0.41, 0.04), top, 0.015, "Steel", segs=6)
+        p.box((0.05, 0.1, 0.05), top, "Red" if k % 3 == 0 else "Cream", bevel=0.005, segs=1)
+        p.box((0.12, 0.05, 0.004), (x, 0.3, -0.18), "Cream")
+    # The block instruments on a shelf behind.
+    p.box((2.4, 0.03, 0.25), (0.0, 1.3, 0.2), "Timber", bevel=0.004, segs=1)
+    for x in (-0.8, 0.0, 0.8):
+        p.box((0.3, 0.4, 0.2), (x, 1.515, 0.2), "Timber", bevel=0.01, segs=1)
+        p.cyl(0.07, 0.096, 0.104, "Cream", segs=12, xf=T(x, 1.55, 0.0) @ RY(math.pi))
+    for x in (-1.15, 1.15):
+        p.box((0.05, 1.32, 0.05), (x, 0.66, 0.29), "Timber")
     return [p]
 
 
 prop("signal_box", signal_box)
+prop("lever_frame", lever_frame)
 
 # --- Steeple ----------------------------------------------------------------------------------
 

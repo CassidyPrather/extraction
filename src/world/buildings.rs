@@ -955,6 +955,28 @@ impl Builder {
         )
     }
 
+    /// A chapel bench 2.4 long, facing -Z (its back at +Z).
+    pub fn pew(&mut self, at: Vec3, yaw: f32) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = Quat::from_rotation_y(yaw);
+        self.piece(
+            Shape::Box(Vec3::new(2.4, 0.45, 0.4)),
+            Transform::from_translation(at + Vec3::Y * 0.225).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.piece(
+            Shape::Box(Vec3::new(2.4, 0.5, 0.05)),
+            Transform::from_translation(at + rot * Vec3::new(0.0, 0.72, 0.19)).with_rotation(rot),
+            Mat::Timber,
+            true,
+        );
+        self.dress(
+            from,
+            vec![("pew", Transform::from_translation(at).with_rotation(rot))],
+        )
+    }
+
     /// A steel locker, its door on -Z.
     pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
         let from = self.geo.pieces.len();
@@ -1013,7 +1035,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 27] = [
+pub const PREFABS: [&str; 28] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1041,6 +1063,7 @@ pub const PREFABS: [&str; 27] = [
     "headframe",
     "signal_box",
     "steeple",
+    "chapel",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1101,6 +1124,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "headframe" => headframe(&mut b),
         "signal_box" => signal_box(&mut b),
         "steeple" => steeple(&mut b),
+        "chapel" => chapel(&mut b),
         "target" => target(&mut b),
         _ => return None,
     }
@@ -1925,46 +1949,147 @@ fn headframe(b: &mut Builder) {
     b.dress_structure(from, vec![("headframe", Transform::IDENTITY)]);
 }
 
-/// A railway signal box: brick below, a glazed cab up its outside stair.
+/// A railway signal box: an enterable brick ground floor (its lever frame,
+/// a desk), the glazed cab above it up an outside stair.
 fn signal_box(b: &mut Builder) {
+    let (w, d, f, h) = (6.0, 3.6, 0.3, 2.7);
+    b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        0.3,
+        Mat::Brick,
+        [
+            &[door(1.5), window(4.3)],
+            &[],
+            &[window(1.5), window(4.5)],
+            &[window(1.8)],
+        ],
+    );
+    // The cab (drawn by its model, `art/props/landmarks.py`) on a slab
+    // over the brick, its roof, and its stair as a ramp up the +X end.
     let from = b.geo.pieces.len();
     b.bx(
-        Vec3::new(4.0, 3.0, 3.0),
-        Vec3::new(0.0, 1.5, 0.0),
-        Mat::Brick,
-    );
-    b.bx(
-        Vec3::new(4.3, 0.15, 3.3),
-        Vec3::new(0.0, 3.075, 0.0),
+        Vec3::new(w + 0.6, 0.15, d + 0.6),
+        Vec3::new(0.0, f + h + 0.075, 0.0),
         Mat::Concrete,
     );
+    let floor = f + h + 0.15;
     b.bx(
-        Vec3::new(3.9, 2.25, 2.9),
-        Vec3::new(0.0, 4.275, 0.0),
+        Vec3::new(w, 2.25, d),
+        Vec3::new(0.0, floor + 1.125, 0.0),
         Mat::Planks,
     );
     b.piece(
-        Shape::Prism(Vec3::new(4.8, 1.25, 3.8)),
-        Transform::from_xyz(0.0, 5.4, 0.0),
+        Shape::Prism(Vec3::new(w + 0.8, 1.4, d + 0.8)),
+        Transform::from_xyz(0.0, floor + 2.25, 0.0),
         Mat::Corrugated,
         true,
     );
-    // The stair as a ramp under its treads, and its landing.
-    let (a, c) = (Vec3::new(2.5, 0.0, -1.5), Vec3::new(2.5, 3.0, 0.5));
-    let d = c - a;
+    let (a, c) = (
+        Vec3::new(w * 0.5 + 0.65, 0.0, -d * 0.5 + 0.1),
+        Vec3::new(w * 0.5 + 0.65, floor - 0.15, 0.5),
+    );
+    let along = c - a;
     b.piece(
-        Shape::Box(Vec3::new(0.9, 0.08, d.length())),
+        Shape::Box(Vec3::new(0.9, 0.08, along.length())),
         Transform::from_translation((a + c) * 0.5 - Vec3::Y * 0.1)
-            .with_rotation(Quat::from_rotation_x(-d.y.atan2(d.z))),
+            .with_rotation(Quat::from_rotation_x(-along.y.atan2(along.z))),
         Mat::Planks,
         true,
     );
     b.bx(
-        Vec3::new(0.9, 0.1, 1.1),
-        Vec3::new(2.5, 2.99, 0.95),
+        Vec3::new(0.9, 0.1, 1.2),
+        Vec3::new(w * 0.5 + 0.65, floor - 0.16, 1.1),
         Mat::Planks,
     );
     b.dress_structure(from, vec![("signal_box", Transform::IDENTITY)]);
+    // Inside: the lever frame along the back wall, a desk and a shelf.
+    let from = b.geo.pieces.len();
+    let lever = Vec3::new(0.5, f, d * 0.5 - 0.15 - 0.3);
+    b.bx(
+        Vec3::new(2.44, 1.0, 0.5),
+        lever + Vec3::new(0.0, 0.5, 0.04),
+        Mat::DarkMetal,
+    );
+    b.dress(
+        from,
+        vec![("lever_frame", Transform::from_translation(lever))],
+    );
+    b.table(Vec3::new(-1.9, f, 1.0), 0.0, Some("house"));
+    b.chair(Vec3::new(-1.9, f, 0.4), std::f32::consts::PI);
+    b.shelf(
+        Vec3::new(-w * 0.5 + 0.35, f, -0.6),
+        std::f32::consts::FRAC_PI_2,
+        Some("tools"),
+    );
+}
+
+/// A village chapel: a whitewashed nave you can go into (pews, an altar
+/// table) under a green iron roof, its bell tower at the east end.
+fn chapel(b: &mut Builder) {
+    let (w, d, f, h) = (10.0, 14.0, 0.5, 4.5);
+    let tall = |c: f32| Opening {
+        centre: c,
+        width: 1.0,
+        bottom: 1.5,
+        top: 3.6,
+        kind: OpeningKind::Window,
+    };
+    b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        0.35,
+        Mat::Plaster,
+        [
+            &[door(w * 0.5)],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+            &[],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+        ],
+    );
+    b.gable_roof_with(
+        w + 0.4,
+        d + 0.4,
+        f + h,
+        38.0,
+        0.5,
+        Mat::PaintedMetal,
+        Mat::Plaster,
+        true,
+    );
+    // Pews either side of the aisle, the altar table at the east end.
+    for k in 0..5 {
+        let z = -d * 0.5 + 3.0 + k as f32 * 1.1;
+        for x in [-2.6, 2.6] {
+            b.pew(Vec3::new(x, f, z), std::f32::consts::PI);
+        }
+    }
+    b.table(Vec3::new(0.0, f, d * 0.5 - 1.6), 0.0, Some("house"));
+    b.shelf(
+        Vec3::new(-w * 0.5 + 0.45, f, d * 0.5 - 1.0),
+        std::f32::consts::FRAC_PI_2,
+        Some("medical"),
+    );
+    // The bell tower against the east wall, on a foundation as deep as the
+    // nave's (it's lifted with it on a slope), its door turned outward.
+    let at = Vec3::new(0.0, 0.0, d * 0.5 + 0.175 + 2.0);
+    b.bx(Vec3::new(4.2, 1.5, 4.2), at - Vec3::Y * 0.75, Mat::Concrete);
+    let from = b.geo.pieces.len();
+    let mut tower = Builder::default();
+    steeple(&mut tower);
+    let turn =
+        Transform::from_translation(at).with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
+    for mut p in tower.geo.pieces {
+        p.at = turn * p.at;
+        b.geo.pieces.push(p);
+    }
+    b.dress_structure(from, vec![("steeple", turn)]);
 }
 
 /// A chapel's bell tower: brick, a whitewashed belfry, an onion dome.
@@ -3081,6 +3206,8 @@ mod tests {
             }
         }
         for name in [
+            "pew",
+            "lever_frame",
             "hay_bale",
             "door_metal",
             "road_block",
