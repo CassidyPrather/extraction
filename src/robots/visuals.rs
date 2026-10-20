@@ -296,6 +296,21 @@ fn dress_parts(
             }
         };
         commands.entity(e).remove::<Undressed>();
+        // A dirigible's gondola plates: plain slabs, with a dark rim.
+        if robot.kind == RobotKind::Dirigible && matches!(part.role, PartRole::Armour(_)) {
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.86, 0.05, 3.3))),
+                MeshMaterial3d(m.shell.clone()),
+                Skin { part: e, level: 0 },
+                ChildOf(e),
+            ));
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.92, 0.04, 3.4))),
+                MeshMaterial3d(m.dark.clone()),
+                ChildOf(e),
+            ));
+            continue;
+        }
         let Some(model) = model else {
             dress_blockout(
                 &mut commands,
