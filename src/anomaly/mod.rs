@@ -832,6 +832,9 @@ mod tests {
                     gun: Entity::PLACEHOLDER,
                     life: 2.0,
                     mods: Default::default(),
+                    mass_g: 8.0,
+                    seed: 0,
+                    passes: 0,
                 },
                 Transform::from_translation(from),
             ))
@@ -961,7 +964,7 @@ mod tests {
             RigidBodyDisabled,
             ColliderDisabled,
         ));
-        let mut count = |app: &mut App, d: f32| {
+        let count = |app: &mut App, d: f32| {
             app.world_mut().get_mut::<Transform>(p).unwrap().translation =
                 at + Vec3::new(r + d, 0.0, 0.0);
             for _ in 0..10 {

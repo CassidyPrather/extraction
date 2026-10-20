@@ -1784,7 +1784,6 @@ pub fn floor_under(zone: &Zone, p: Vec3) -> Option<f32> {
 mod tests {
     use super::*;
     use crate::launch::LaunchOptions;
-    use avian3d::prelude::*;
     use bevy::ecs::system::RunSystemOnce;
 
     /// Every site's pieces are sound (positive sizes, finite poses) and it
