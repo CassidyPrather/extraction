@@ -93,8 +93,9 @@ headset and smears on OLED/LCD). **Nothing pure white** except emissives.
 ## Legibility and comfort (VR)
 
 - Nothing flickers or crawls: thin things (grass blades, wires, fences,
-  far branches) are alpha-to-coverage or faded, never 1-pixel aliased
-  lines; procedural detail in shaders fades out before it would alias.
+  far branches) are widened to hold a pixel, faded, or alpha to coverage
+  where the headset can afford it, never 1-pixel aliased lines;
+  procedural detail in shaders fades out before it would alias.
 - Robots stand out from everything behind them at 30-60 m in drizzle:
   pale against the dark forest, dark-edged against the sky.
 - The darkest areas the player stands in (forest floor under spruce)
