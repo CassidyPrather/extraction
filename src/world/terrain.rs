@@ -136,6 +136,24 @@ fn spawn_terrain_meshes(
     }
 }
 
+/// A valley's old water line, where a reservoir was drained (m): below
+/// it the ground is bare silt and mud, with a damp band at the tide mark.
+pub fn drowned_line(map: &str) -> Option<f32> {
+    match map {
+        // The dam's tide mark is at 49.8 m.
+        "Sallow Reservoir" => Some(50.5),
+        _ => None,
+    }
+}
+
+/// How drowned ground at height `y` is under the old water line `line`:
+/// (silt 0..1, damp 0..1 for the tide mark's band just under it).
+pub fn drowned(line: f32, y: f32) -> (f32, f32) {
+    let silt = smooth(line + 0.3, line - 0.8, y);
+    let damp = smooth(line - 3.0, line - 1.5, y) * smooth(line + 0.2, line - 0.3, y);
+    (silt, damp)
+}
+
 /// Splat weights packed into vertex colour: r = bare dirt/mud, g = rock,
 /// b = road gravel/asphalt, a = forest floor (needles, moss). Grass is
 /// whatever is left over. Road kind goes in UV1.x so the shader can pick
@@ -151,6 +169,7 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
     };
     let (is, js) = (ticks(i0, i1), ticks(j0, j1));
     let (w, h) = (is.len(), js.len());
+    let line = drowned_line(&zone.map.name);
     let mut positions = Vec::with_capacity(w * h);
     let mut normals = Vec::with_capacity(w * h);
     let mut uvs = Vec::with_capacity(w * h);
@@ -187,14 +206,20 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
                 Some(RoadKind::Path) => 5.0,
                 None => 0.0,
             };
-            uv1.push([kind, hm.wet[hm.idx(i, j)]]);
+            let (silt, damp) = line.map_or((0.0, 0.0), |l| drowned(l, y));
+            uv1.push([kind, hm.wet[hm.idx(i, j)].max(damp)]);
             let slope = hm.slope_deg(p);
             let rock = smooth(28.0, 42.0, slope);
             let wet = hm.wet[hm.idx(i, j)];
             let forest = zone.forest_cover(p[0], p[1]);
             // Hollows are muddy, and where puddles stand (`puddles`).
             let hollow = super::puddles::hollow(hm, p);
-            colors.push([wet.max(0.15 * rock).max(hollow), rock, road_w, forest]);
+            colors.push([
+                wet.max(0.15 * rock).max(hollow).max(silt),
+                rock,
+                road_w,
+                forest * (1.0 - silt),
+            ]);
         }
     }
     let mut indices = Vec::with_capacity((w - 1) * (h - 1) * 6);
@@ -331,6 +356,22 @@ mod tangent_tests {
         // (mikktspace averages faces; on steep cells it leans a few degrees.)
         assert!(worst > 0.95, "directions agree: worst cos {worst}");
         assert!(sum / count > 0.995, "on average: cos {}", sum / count);
+    }
+}
+
+#[cfg(test)]
+mod drowned_tests {
+    use super::*;
+
+    #[test]
+    fn the_reservoir_bed_is_silt_and_the_tide_mark_damp() {
+        let line = drowned_line("Sallow Reservoir").unwrap();
+        assert!(drowned_line("Marrow Creek").is_none());
+        assert_eq!(drowned(line, 33.0).0, 1.0, "the bed");
+        assert_eq!(drowned(line, 52.0), (0.0, 0.0), "the crest");
+        let (_, band) = drowned(line, line - 1.2);
+        assert!(band > 0.9, "the tide mark: {band}");
+        assert_eq!(drowned(line, 40.0).1, 0.0, "the bed isn't a band");
     }
 }
 
