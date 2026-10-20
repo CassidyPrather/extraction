@@ -1199,3 +1199,127 @@ fn minds_shift_once_per_change() {
         .count();
     assert_eq!(answers, 1, "b answered a's call once: {:?}", of(b));
 }
+
+/// A shot heard from 40 m off is a guess: two walkers each put it a few
+/// metres off the true spot, inside what they know they don't know, and
+/// not in the same place.
+#[test]
+fn a_heard_shot_is_a_guess_not_a_fix() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let a = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(103.0, 200.0));
+    app.update();
+    let shot = zone.on_ground(101.0, 240.0);
+    app.world_mut().write_message(super::Noise {
+        at: shot,
+        radius: super::senses::GUNSHOT,
+        source: Some(player),
+    });
+    app.update();
+    app.update();
+    let guess = |e: Entity| {
+        let aware = app.world().get::<Awareness>(e).unwrap();
+        (aware.last_known.expect("heard it"), aware.uncertainty)
+    };
+    let (ga, ua) = guess(a);
+    let (gb, _) = guess(b);
+    let off = flat(ga - shot);
+    assert!(ua > 3.0, "40 m off it's rough: {ua:.1} m");
+    assert!(
+        off >= ua * super::senses::HEARD_MISS * 0.99 && off <= ua * 1.01,
+        "off the spot but within its spread: {off:.1} of {ua:.1} m"
+    );
+    assert!(flat(ga - gb) > 0.5, "each its own guess: {ga} {gb}");
+}
+
+/// A measurement, not a test (run it with `--ignored --nocapture`): how
+/// often a walker that comes to look for one shot from 40 m finds a
+/// shooter crouched still in grass. About half: 3 of 6 when written.
+#[test]
+#[ignore]
+fn experiment_crouched_shooter_at_40m() {
+    let mut found = 0;
+    let mut tried = 0;
+    for k in 0..6 {
+        let (mut app, player, zone) = app(None);
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let spot = (0..600)
+            .map(|i| {
+                let a = i as f32 * 2.399 + k as f32 * 0.7;
+                let r = 20.0 + i as f32 * 0.6 + k as f32 * 37.0;
+                zone.on_ground(a.cos() * r, a.sin() * r)
+            })
+            .find(|p| {
+                let post = zone.on_ground(p.x, p.z + 40.0);
+                let grass = |q: Vec3| {
+                    zone.hm
+                        .surface([q.x, q.z], zone.forest_cover(q.x, q.z) > 0.5)
+                        == extraction_core::terrain::Surface::Grass
+                };
+                grass(*p)
+                    && nav.walkable([p.x, p.z])
+                    && nav.walkable([post.x, post.z])
+                    && (post.y - p.y).abs() < 1.5
+                    && nav.line_clear([p.x, p.z], [post.x, post.z])
+            })
+            .expect("open grass");
+        put(&mut app, player, spot);
+        let head = |app: &mut App| {
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation
+                .y = 0.85;
+        };
+        let walker = walker_at(&mut app, &zone, zone.on_ground(spot.x, spot.z + 40.0));
+        let mut early = false;
+        for _ in 0..90 * 4 {
+            head(&mut app);
+            app.update();
+            early |= app.world().get::<Awareness>(walker).unwrap().can_see_target;
+        }
+        if early {
+            eprintln!("spot {k}: seen before the shot");
+            continue;
+        }
+        tried += 1;
+        app.world_mut().write_message(super::Noise {
+            at: spot + Vec3::Y,
+            radius: super::senses::GUNSHOT,
+            source: Some(player),
+        });
+        let mut seen = false;
+        let mut glimpsed = false;
+        let mut closest = f32::MAX;
+        for _ in 0..90 * 45 {
+            head(&mut app);
+            app.update();
+            let at = app.world().get::<Transform>(walker).unwrap().translation;
+            closest = closest.min(flat(at - spot));
+            let aware = app.world().get::<Awareness>(walker).unwrap();
+            if aware.exposure >= super::senses::GLIMPSE && !glimpsed {
+                glimpsed = true;
+                eprintln!(
+                    "spot {k}: first glimpse at {:.1} m, e {:.3}",
+                    flat(at - spot),
+                    aware.exposure
+                );
+            }
+            if aware.can_see_target && !seen {
+                eprintln!(
+                    "spot {k}: first seen at {:.1} m, guess off {:.1} unc {:.1} brain {:?}",
+                    flat(at - spot),
+                    aware.last_known.map(|l| flat(l - spot)).unwrap_or(-1.0),
+                    aware.uncertainty,
+                    app.world().get::<Brain>(walker).unwrap()
+                );
+            }
+            seen |= aware.can_see_target;
+        }
+        eprintln!("spot {k} at {spot}: seen {seen}, closest {closest:.1} m");
+        found += seen as u32;
+    }
+    eprintln!("FOUND {found} of {tried}");
+}

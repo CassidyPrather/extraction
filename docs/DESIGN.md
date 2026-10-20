@@ -210,7 +210,12 @@ carry by calibre (a pistol 150 m, the AK 220, a Mosin 250), footsteps by
 what's underfoot (gravel and boards loud, grass soft), how fast and how
 low you go, doors when you open them, and things that land; a wall or a
 hill between cuts a sound's reach by more than half. A heard sound tells
-a robot where the *sound* was.
+a robot roughly where the *sound* was: a guess a fifth of the distance
+out, never on the spot, so it comes to look nearby, not at you. A glimpse
+of you moving is a guess the same way; a glimpse of you keeping still
+places you nowhere new. Crouched still in grass, a robot makes you out
+only within 4 m: shoot once from the grass at 40 m and keep still, and
+the one that comes to look finds you about half the time.
 
 **Light and dark.** Robot eyes follow the same light the player sees
 (`Conditions::light_at`, Visual design's time of day): exposure scales by
