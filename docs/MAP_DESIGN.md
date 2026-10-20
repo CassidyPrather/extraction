@@ -125,6 +125,11 @@ group of buildings, a site, a hazard with artifacts. The valley is about
   minute and a half) without something to find within 60 m
   (`NEAR_ROUTE`): a point of interest, a building, a loot spot, an
   offering, an artifact field.
+- A road, track or footpath leads to every point of interest: one within
+  30 m (`FUNNEL`) of it. Hazards you approach across country (an artifact
+  field within 40 m, `HAZARD_NEAR`) are the exception. Paths are the
+  paths of least resistance: people (and the sim's bots, on the cheaper
+  road cells) follow them to the door.
 - Small things fill the gaps: a shed by a field, a boxcar on a siding, a
   hut on a switchback. They're each one or two loot spots and a roof.
 - The truck takes about two minutes to come; a scavenging crossing takes
