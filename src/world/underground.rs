@@ -2250,6 +2250,72 @@ mod tests {
         }
     }
 
+    /// Each valley's flooded corridor: standing in it you're wading (deep
+    /// in Kettle's drowned drive, afloat); and the crawlers' grid stops at
+    /// deep water while the bots' plan only costs it.
+    #[test]
+    fn floods_wade_swim_and_keep_crawlers_out() {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let mut app = app(map);
+            app.update();
+            let (site, xf) = sites_on(&app).remove(0);
+            let l = ug::layout(&site.id).unwrap();
+            let r = ug::raster(&site.id).unwrap();
+            let f = l
+                .floods
+                .iter()
+                .find(|f| f.link.is_some())
+                .expect("a flooded corridor");
+            // The middle of the corridor's wettest cells.
+            let cells: Vec<(usize, usize)> = (0..r.nz)
+                .flat_map(|j| (0..r.nx).map(move |i| (i, j)))
+                .filter(|&(i, j)| (r.water[j * r.nx + i] - f.depth).abs() < 1e-3)
+                .collect();
+            let (i, j) = cells[cells.len() / 2];
+            let c = r.centre(i, j);
+            let at = xf.transform_point(Vec3::new(c[0], r.floor, c[1]));
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at + Vec3::Y * 0.05;
+            for _ in 0..90 {
+                app.update();
+            }
+            let body = app.world().get::<crate::player::Body>(player).unwrap();
+            assert!(
+                body.wading > 0.5,
+                "{map}: wading {:.2} in the flood",
+                body.wading
+            );
+            assert_eq!(
+                body.swimming,
+                f.depth > crate::player::FLOAT_DEPTH - 0.05,
+                "{map}: afloat in {} m",
+                f.depth
+            );
+            let zone = app.world().resource::<Zone>().clone();
+            let t = app.world().get::<Transform>(player).unwrap().translation;
+            assert!(
+                t.y < zone.ground(t.x, t.z) - 2.0,
+                "{map}: still down in the corridor"
+            );
+            let residents = app.world().resource::<crate::robots::indoor::IndoorSites>();
+            let nav = &residents.sites[0].nav;
+            assert_eq!(
+                nav.walkable(at + Vec3::Y * 0.1),
+                f.depth < ug::DEEP,
+                "{map}: crawlers and {} m of water",
+                f.depth
+            );
+        }
+    }
+
     /// A bot goes in at the entrance, down the stairs, to the deepest loot
     /// in the site, and out by the other way (the exit kiosk).
     #[test]
