@@ -17,6 +17,7 @@
 pub mod body;
 pub mod far;
 pub mod flat;
+pub mod hand_climb;
 pub mod physics_hands;
 pub mod poke;
 
@@ -302,7 +303,11 @@ impl Plugin for InteractPlugin {
             .add_observer(held_layers)
             .add_observer(poke::mount_button)
             .add_observer(unheld_layers)
-            .add_plugins((body::BodyPlugin, physics_hands::PhysicsHandsPlugin));
+            .add_plugins((
+                body::BodyPlugin,
+                physics_hands::PhysicsHandsPlugin,
+                hand_climb::HandClimbPlugin,
+            ));
     }
 }
 
@@ -714,6 +719,7 @@ fn apply_hand_actions(
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
+    ladders: Query<(), With<hand_climb::Ladder>>,
     time: Res<Time>,
     slot_places: Query<&Transform, With<body::BodySlot>>,
 ) {
@@ -736,6 +742,20 @@ fn apply_hand_actions(
                         since: time.elapsed_secs(),
                         speed: 0.0,
                     });
+                events.write(InteractEvent::Grabbed { item, side });
+            }
+            HandAction::Grab {
+                player, side, item, ..
+            } if ladders.contains(item) => {
+                // A ladder: the hand holds on where it is.
+                let Some((hand_e, hand_world)) = hand_of(&players, &hands, player, side) else {
+                    continue;
+                };
+                commands.entity(hand_e).insert(hand_climb::HandHold {
+                    on: hand_climb::Hold::Ladder(item),
+                    at: hand_world.translation,
+                    since: time.elapsed_secs(),
+                });
                 events.write(InteractEvent::Grabbed { item, side });
             }
             HandAction::Grab {
@@ -841,7 +861,7 @@ fn apply_hand_actions(
                 };
                 commands
                     .entity(hand_e)
-                    .remove::<crate::gadgets::climbing::RopeGrip>();
+                    .remove::<(crate::gadgets::climbing::RopeGrip, hand_climb::HandHold)>();
                 let Ok((_, _, mut hand)) = hands.get_mut(hand_e) else {
                     continue;
                 };
