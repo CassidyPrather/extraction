@@ -40,7 +40,7 @@ is shortened for the sim: same tick rate, same truck timings, same robots.
 `--sim-minutes` is the knob for shorter raids. Sims never touch the save (headless runs only
 save with `--save`).
 
-Environment knobs for debugging: `SIM_DEBUG=1` logs every plan the raider
+Environment knobs for debugging: `SIM_STALK=1` lets the cautious creep up on walkers to throw a distraction (off by default: walkers spot them on open ground); `SIM_DEBUG=1` logs every plan the raider
 makes as a `plan` event; `SIM_DUMP_PLANS=1` writes each building's indoor
 grid as text to `<out>/plans/`; `SIM_NO_JOB=1` has the raider ignore
 the driver's scout job, to compare with runs from before bots took jobs.
@@ -148,7 +148,7 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `crouch` | `secs` | Stood up after crouching (creeping) near robots for `secs` (see `docs/MAP_DESIGN.md`, "How the bots move"). |
 | `freeze` | `secs`, `x`, `z` | Froze, crouched and still, while a robot searched close by. |
 | `distract` | `x`, `z`, `walker_dist` | Threw junk to send a walker looking somewhere else. |
-| `stalk` | `dist`, `x`, `z` | (Cautious.) Set off creeping up on an unaware walker `dist` m off, to throw a distraction past it. |
+| `stalk` | `dist`, `x`, `z` | (Cautious, with `SIM_STALK=1`.) Set off creeping up on an unaware walker `dist` m off, to throw a distraction past it. |
 | `distract_result` | `outcome` (`drawn`, `ignored`, `spotted`, `broke_off`), `why`, `thrown` | How a creep-and-throw ended, 8 s after the throw or when it was given up. |
 | `cover` | `why` (`hurt`), `dist`, `hp` | Hurt and still being hit: broke off the fight into cover `dist` m away (the fight ends `took_cover`). |
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |

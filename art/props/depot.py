@@ -24,6 +24,14 @@ Prop space: metres, Y up, origin on the floor under the centre, the front
                      pt_disc on the wire loop a collar disc hangs from
 - `depot_disc`       that brass disc, 0.04 across, hole at the top
                      (origin at its centre)
+- `depot_intake_facade` a Custodian front for the kiosk at the ramp,
+                     3.0 x 3.4 x 0.5, a 1.2 x 2.2 opening for its door: a
+                     `shutter` node rolled up under its housing (origin at
+                     the housing's bottom edge: scale its Y up to 22x to
+                     close it), hazard stripes, pt_label over the opening
+- `depot_sign`       a wall plate 0.9 x 0.4 x 0.03, origin at its centre
+                     (its back on the wall at z +0.015): a blank face in a
+                     black frame, pt_label at the face's centre
 - `depot_cradle`     a walker's charging cradle, 2.2 x 2.6 x 2.0, its back
                      (+Z) to a wall: a plinth, two uprights and a gantry
                      with the charging arm, a cable to the wall; pt_dock
@@ -279,6 +287,56 @@ def depot_disc():
     write("depot_disc", [d], {"pt_hole": (0.0, 0.0, 0.0)})
 
 
+# --- Intake facade and signs -------------------------------------------------------------
+
+def depot_intake_facade():
+    """A Custodian front over the kiosk's door end: two jambs and a header,
+    a roller shutter's housing over the opening, hazard stripes on the
+    jambs, a plate for the gate's name."""
+    reset()
+    W, H, D = 3.0, 3.4, 0.5
+    OW, OH = 1.2, 2.2               # the clear opening (the door is 1.1 x 2.1)
+    f = Part("static_facade")
+    jw = (W - OW) / 2
+    for sx in (-1, 1):
+        bar(f, (jw, OH, D), (sx * (OW / 2 + jw / 2), OH / 2, 0.0))
+        # Hazard stripes down the jamb's front, by the opening: an orange
+        # strip and black bands across it at 45 degrees.
+        x0, x1 = sx * OW / 2, sx * (OW / 2 + 0.15)
+        f.box((0.15, OH - 0.1, 0.004), (sx * (OW / 2 + 0.075), (OH - 0.1) / 2 + 0.05,
+              -D / 2 - 0.002), "Orange", segs=1)
+        for k in range(7):
+            y0 = 0.1 + 0.3 * k
+            band = [(x0, y0), (x1, y0 + 0.15), (x1, y0 + 0.25), (x0, y0 + 0.1)]
+            f.prism(band if sx > 0 else band[::-1], -D / 2 - 0.01, -D / 2 - 0.003, "Black",
+                    axis="z")
+    bar(f, (W, H - OH, D), (0.0, OH + (H - OH) / 2, 0.0))
+    # The shutter's housing over the opening, standing out of the header.
+    bar(f, (OW + 0.16, 0.36, 0.3), (0.0, OH + 0.18, -D / 2 - 0.15), "Zinc")
+    # The name plate above, and a glowing strip under the housing.
+    bar(f, (1.6, 0.36, 0.01), (0.0, OH + 0.72, -D / 2 - 0.005), "Black")
+    bar(f, (OW, 0.02, 0.02), (0.0, OH - 0.01, -D / 2 - 0.2), "Glow")
+    # The shutter, rolled up: a band of slats under the housing. Its
+    # origin is the housing's bottom edge; scale its Y about that (up to
+    # 22x) to drop it to the floor.
+    sh = Part("shutter", origin=(0.0, OH, -D / 2 - 0.15))
+    bar(sh, (OW - 0.02, 0.1, 0.03), (0.0, OH - 0.05, -D / 2 - 0.15), "Zinc")
+    write("depot_intake_facade", [f, sh], {"pt_label": (0.0, OH + 0.72, -D / 2 - 0.011)})
+
+
+def depot_sign():
+    """A wall plate with a blank face in a black stencil frame."""
+    reset()
+    W, H, D = 0.9, 0.4, 0.03
+    g = Part("static_sign")
+    bar(g, (W - 0.02, H - 0.02, D - 0.01), (0.0, 0.0, 0.0))
+    for sy in (-1, 1):
+        bar(g, (W, 0.03, D), (0.0, sy * (H / 2 - 0.015), 0.0), "Black")
+    for sx in (-1, 1):
+        bar(g, (0.03, H - 0.06, D), (sx * (W / 2 - 0.015), 0.0, 0.0), "Black")
+    write("depot_sign", [g], {"pt_label": (0.0, 0.0, -D / 2 + 0.0045)})
+
+
 # --- Charging cradle ------------------------------------------------------------------------
 
 def depot_cradle():
@@ -341,6 +399,8 @@ if __name__ == "__main__":
     for name, build in (("depot_bin", depot_bin), ("depot_conveyor", depot_conveyor),
                         ("depot_tagger", depot_tagger), ("depot_crate_long", depot_crate_long),
                         ("depot_crate_small", depot_crate_small), ("depot_disc", depot_disc),
-                        ("depot_cradle", depot_cradle)):
+                        ("depot_cradle", depot_cradle),
+                        ("depot_intake_facade", depot_intake_facade),
+                        ("depot_sign", depot_sign)):
         if wanted(name):
             build()

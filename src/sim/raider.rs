@@ -140,7 +140,9 @@ impl Traits {
                 duck: 0.9,
                 sneak_range: 45.0,
                 distract: true,
-                stalk: true,
+                // Off by default: it costs raids and the walkers spot it on
+                // open ground (`SIM_STALK=1` turns it on to study it).
+                stalk: std::env::var_os("SIM_STALK").is_some(),
                 ..base
             },
             "reckless" => Traits {
@@ -591,7 +593,7 @@ pub struct Scene<'w, 's> {
         ),
     >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
-    crawlers: Query<'w, 's, (), With<crate::robots::indoor::Crawler>>,
+    breeds: Query<'w, 's, &'static crate::robots::Breed>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
@@ -1068,7 +1070,7 @@ fn react_to_robots(
             continue;
         }
         if threat.as_ref().is_none_or(|t| d < t.1) {
-            let name = crate::robots::robot_name(robot.kind, scene.crawlers.contains(e));
+            let name = crate::robots::robot_name(robot.kind, scene.breeds.get(e).ok());
             threat = Some((e, d, onto_me, name, at));
         }
     }

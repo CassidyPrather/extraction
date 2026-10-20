@@ -77,6 +77,7 @@ fn take_hits(
     mut hurt: MessageWriter<Hurt>,
     mut downed: MessageWriter<Downed>,
     mut glanced: MessageWriter<Glanced>,
+    mut armour: crate::weapons::armour::Armour,
 ) {
     for hit in hits.read() {
         let Ok(parent) = colliders.get(hit.entity) else {
@@ -89,7 +90,8 @@ fn take_hits(
         if h.down {
             continue;
         }
-        let mut damage = hit.damage;
+        // Whatever armour it met takes its share first.
+        let mut damage = armour.filter(player, hit);
         // The aegis knot turns the first hit.
         if let Some(mut fx) = fx {
             if fx.aegis && fx.aegis_recharge <= 0.0 && damage > 5.0 {

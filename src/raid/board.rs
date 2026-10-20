@@ -483,6 +483,8 @@ impl Plugin for BoardVisualsPlugin {
 #[derive(Component)]
 struct StringMesh;
 
+use crate::render::world_props::{Blockout, SwapIn};
+
 fn dress_board(
     mut commands: Commands,
     boards: Query<Entity, Added<CorkBoard>>,
@@ -500,16 +502,20 @@ fn dress_board(
             perceptual_roughness: 0.8,
             ..default()
         });
+        // Boxes until the board's model (`cork_board`) is in.
+        commands.entity(board).insert(SwapIn::one("cork_board"));
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(BOARD.x, BOARD.y, 0.02))),
             MeshMaterial3d(cork),
             Transform::from_xyz(0.0, 0.0, 0.0),
+            Blockout,
             ChildOf(board),
         ));
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(BOARD.x + 0.05, BOARD.y + 0.05, 0.012))),
             MeshMaterial3d(frame),
             Transform::from_xyz(0.0, 0.0, -0.008),
+            Blockout,
             ChildOf(board),
         ));
     }

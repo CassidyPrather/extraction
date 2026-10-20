@@ -2831,6 +2831,8 @@ dependencies = [
  "bevy_seedling",
  "extraction_core",
  "fastrand",
+ "firewheel",
+ "hrtf",
  "openxr",
  "ron 0.10.1",
  "serde",

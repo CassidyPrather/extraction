@@ -232,6 +232,11 @@ pub fn solve_knee_sized(hip: Vec3, foot: Vec3, pole: Vec3, size: f32) -> Vec3 {
     hip + dir * a + bend * h
 }
 
+/// An angle brought into -pi..pi.
+pub fn wrap_angle(a: f32) -> f32 {
+    wrap(a)
+}
+
 fn wrap(mut a: f32) -> f32 {
     while a > std::f32::consts::PI {
         a -= std::f32::consts::TAU;

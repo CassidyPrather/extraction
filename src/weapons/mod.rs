@@ -10,6 +10,7 @@
 //!   rounds thrown from the port, recoil ([`feel`]) and [`GunEvent`]s
 //!   for sound.
 
+pub mod armour;
 pub mod ballistics;
 pub mod feel;
 pub mod flat;
@@ -186,6 +187,7 @@ impl Plugin for WeaponsPlugin {
                 update_aim_hints.before(crate::rig::RigDriverSystems),
             )
             .add_plugins((
+                armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
@@ -690,6 +692,27 @@ pub struct Ejection {
     pub velocity: Vec3,
 }
 
+/// Where a shot leaves from: the muzzle, unless something solid lies
+/// between the grip and the muzzle (a gun pushed against a wall, its muzzle
+/// in or past it), when it leaves from just this side of that and spends
+/// itself there: you can't shoot through a wall from behind it.
+fn muzzle_clear(spatial: &SpatialQuery, gt: &GlobalTransform, grip: Vec3, muzzle: Vec3) -> Vec3 {
+    let (from, to) = (gt.transform_point(grip), gt.transform_point(muzzle));
+    let Ok(dir) = Dir3::new(to - from) else {
+        return to;
+    };
+    match spatial.cast_ray(
+        from,
+        dir,
+        from.distance(to),
+        true,
+        &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+    ) {
+        Some(hit) => from + dir * (hit.distance - 0.002).max(0.0),
+        None => to,
+    }
+}
+
 fn triggers(
     players: Query<&RigInput, With<Player>>,
     mut guns: Query<(Entity, &mut Gun, Option<&Held>, &GlobalTransform, &Item)>,
@@ -699,6 +722,7 @@ fn triggers(
     mut ejected: MessageWriter<Ejection>,
     mut shots: MessageWriter<ballistics::Shot>,
     catalog: Res<Catalog>,
+    spatial: SpatialQuery,
 ) {
     let dt = time.delta_secs();
     for (e, mut gun, held, gt, item) in &mut guns {
@@ -715,10 +739,11 @@ fn triggers(
                 if def.barrels > 1 {
                     muzzle.x += if *barrel == 0 { -0.0128 } else { 0.0128 };
                 }
+                let origin = muzzle_clear(&spatial, gt, gun.layout.grip.translation, muzzle);
                 shots.write(ballistics::Shot {
                     gun: e,
                     shooter: held.map(|h| h.player),
-                    origin: gt.transform_point(muzzle),
+                    origin,
                     direction: gt.rotation() * Vec3::NEG_Z,
                     speed: def.muzzle_velocity,
                     damage: def.damage,

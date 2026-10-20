@@ -67,6 +67,10 @@ macro_rules! cue {
 /// the Surge siren included; air itself is far gentler.
 pub const MUFFLE_FULL: f32 = 900.0;
 
+/// The score's gain (`audio_score`), set by measurement: at full it stays
+/// under the wind and hides no robot (`scripts/audio_score.py`).
+pub const SCORE_DB: f32 = -42.0;
+
 #[rustfmt::skip]
 pub const MIX: &[Cue] = &[
     // Your own body and hands.
@@ -123,6 +127,11 @@ pub const MIX: &[Cue] = &[
     cue!("gun.charging", "guns/charging_handle", -10.5, 80.0, 0.5, Detail),
     cue!("gun.slide_rack", "guns/slide_rack", -6.0, 80.0, 0.5, Detail),
     cue!("gun.casing", "guns/casing", -9.0, 60.0, 1.5, Detail),
+    cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
+    cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),
+    cue!("grenade.spoon", "guns/casing", -8.0, 65.0, 1.0, Detail),
+    cue!("grenade.bang", "explosions/grenade_sharp", 2.0, 160.0, 15.0, Event, 15.0),
+    cue!("grenade.bang_heavy", "explosions/grenade_heavy", 1.5, 162.0, 15.0, Event, 15.0),
     // Bullets landing.
     cue!("hit.impact", "impacts/metal", -2.0, 95.0, 15.0, Action, 8.0),
     cue!("hit.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
@@ -253,6 +262,26 @@ pub fn db(name: &str) -> f32 {
         };
         c.db + lift
     })
+}
+
+/// A cue's name as the table holds it (for components that keep it).
+pub fn static_name(name: &str) -> &'static str {
+    find(name).map_or("step", |c| c.name)
+}
+
+/// The head-related node a cue plays through in the headset: the same
+/// reach and muffle as `spatial`.
+pub fn hrtf(name: &str) -> bevy_seedling::prelude::HrtfNode {
+    use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
+    let reach = find(name).map_or(5.0, |c| c.reach);
+    bevy_seedling::prelude::HrtfNode {
+        distance_attenuation: DistanceAttenuation {
+            reference_distance: reach,
+            max_muffle_distance: MUFFLE_FULL,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }
 
 /// A cue's role, if it's in the mix.

@@ -19,6 +19,10 @@
 # scripts/monado-simulated-hands.patch applied (simulated controllers
 # report XR_EXT_hand_tracking joints, fingers cycling open and shut), and
 # fails unless the game logs that it saw tracked fingers.
+#
+# SIMULATED_REACH="dx,dy,dz,delay,secs" (same patch) moves the right
+# controller by (dx, dy, dz) metres, starting `delay` seconds in and taking
+# `secs`: a hand pushed into a wall, to see the physics hands' ghost glove.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 MAP="${1:-training_yard}"; OUT="${2:-target/xr_check/eye.png}"; shift 2 || shift $#
@@ -40,6 +44,7 @@ export XR_RUNTIME_JSON=$MONADO/share/openxr/1/openxr_monado.json
 export LD_LIBRARY_PATH=$WORK/lib
 export XRT_COMPOSITOR_NULL=1 SIMULATED_ENABLE=1 SIMULATED_LEFT=wmr SIMULATED_RIGHT=wmr
 export SIMULATED_HANDS=${SIMULATED_HANDS:-0}
+${SIMULATED_REACH:+export SIMULATED_REACH=$SIMULATED_REACH}
 mkfifo $WORK/stdin
 $MONADO/bin/monado-service < $WORK/stdin > $WORK/monado.log 2>&1 &
 MPID=\$!

@@ -1,5 +1,5 @@
 diff --git a/src/xrt/drivers/simulated/simulated_controller.c b/src/xrt/drivers/simulated/simulated_controller.c
-index 959f826..009feea 100644
+index 959f826..fcfcf8e 100644
 --- a/src/xrt/drivers/simulated/simulated_controller.c
 +++ b/src/xrt/drivers/simulated/simulated_controller.c
 @@ -21,6 +21,7 @@
@@ -10,7 +10,53 @@ index 959f826..009feea 100644
  
  #include "simulated_interface.h"
  
-@@ -167,6 +168,45 @@ simulated_device_get_tracked_pose(struct xrt_device *xdev,
+@@ -118,6 +119,37 @@ simulated_device_update_inputs(struct xrt_device *xdev)
+ 	return XRT_SUCCESS;
+ }
+ 
++DEBUG_GET_ONCE_OPTION(simulated_reach, "SIMULATED_REACH", NULL)
++
++/*!
++ * A scripted reach (SIMULATED_REACH="dx,dy,dz,delay,secs", metres and
++ * seconds): the right controller holds still for `delay` seconds after
++ * its pose is first asked for, then moves by (dx, dy, dz) in tracking
++ * space over `secs`, and stays there. So an app can be shown a hand
++ * pushed into something without anyone holding a controller.
++ */
++static void
++simulated_reach(struct simulated_device *sd, int64_t at_ns, struct xrt_pose *pose)
++{
++	static int64_t start_ns = 0;
++	const char *spec = debug_get_option_simulated_reach();
++	if (spec == NULL || sd->base.device_type != XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER) {
++		return;
++	}
++	float dx = 0, dy = 0, dz = 0, delay = 0, secs = 1;
++	if (sscanf(spec, "%f,%f,%f,%f,%f", &dx, &dy, &dz, &delay, &secs) < 3) {
++		return;
++	}
++	if (start_ns == 0) {
++		start_ns = at_ns;
++	}
++	double t = ((double)(at_ns - start_ns) / 1e9 - delay) / (secs > 0 ? secs : 1);
++	t = t < 0 ? 0 : (t > 1 ? 1 : t);
++	pose->position.x += (float)(dx * t);
++	pose->position.y += (float)(dy * t);
++	pose->position.z += (float)(dz * t);
++}
++
+ static xrt_result_t
+ simulated_device_get_tracked_pose(struct xrt_device *xdev,
+                                   enum xrt_input_name name,
+@@ -145,6 +177,7 @@ simulated_device_get_tracked_pose(struct xrt_device *xdev,
+ 	}
+ 
+ 	struct xrt_pose pose = sd->center;
++	simulated_reach(sd, at_timestamp_ns, &pose);
+ 	struct xrt_vec3 linear_velocity = XRT_VEC3_ZERO;
+ 	struct xrt_vec3 angular_velocity = XRT_VEC3_ZERO;
+ 
+@@ -167,6 +200,46 @@ simulated_device_get_tracked_pose(struct xrt_device *xdev,
  }
  
  
@@ -42,6 +88,7 @@ index 959f826..009feea 100644
 +	};
 +	struct xrt_space_relation rel = {0};
 +	rel.pose = sd->center;
++	simulated_reach(sd, at_timestamp_ns, &rel.pose);
 +	rel.relation_flags = (enum xrt_space_relation_flags)(
 +	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT |
 +	    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
@@ -56,7 +103,7 @@ index 959f826..009feea 100644
  /*
   *
   * Various data driven arrays.
-@@ -345,14 +385,19 @@ simulated_create_controller(enum xrt_device_name name,
+@@ -345,14 +418,19 @@ simulated_create_controller(enum xrt_device_name name,
  	default: assert(false); return NULL;
  	}
  
@@ -79,7 +126,7 @@ index 959f826..009feea 100644
  	sd->base.name = name;
  	sd->base.device_type = type;
  	sd->base.binding_profiles = binding_profiles;
-@@ -365,6 +410,12 @@ simulated_create_controller(enum xrt_device_name name,
+@@ -365,6 +443,12 @@ simulated_create_controller(enum xrt_device_name name,
  		sd->base.inputs[i].active = true;
  		sd->base.inputs[i].name = inputs[i];
  	}
