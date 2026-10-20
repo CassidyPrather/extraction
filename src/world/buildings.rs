@@ -4350,58 +4350,16 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 Visibility::default(),
             ))
             .id();
-        let mut colliders = Vec::new();
-        let mut surfaces = Vec::new();
-        for piece in &geo.pieces {
-            let half = match piece.shape {
-                Shape::Box(s) => s * 0.5,
-                Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
-                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
-            };
-            // Visual-only pieces count too: floorboards over a plinth.
-            surfaces.push((half, piece.at, piece.mat));
-            if !piece.collide {
-                continue;
-            }
-            let c = match piece.shape {
-                Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
-                Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
-                Shape::Cylinder(r, h) => Collider::cylinder(r, h),
-            };
-            colliders.push((piece.at.translation, piece.at.rotation, c));
-        }
-        if !colliders.is_empty() {
+        if let Some((collider, surfaces)) = body(&geo) {
             commands.entity(root).insert((
                 RigidBody::Static,
-                Collider::compound(colliders),
+                collider,
                 CollisionLayers::new(Layer::World, LayerMask::ALL),
-                super::surfaces::Surfaces(surfaces),
+                surfaces,
             ));
         }
         for d in &geo.doors {
-            commands
-                .spawn((
-                    Name::new("Door"),
-                    Door {
-                        open: false,
-                        angle: 0.0,
-                    },
-                    crate::raid::truck::Pressable::Door,
-                    crate::interact::Grabbable {
-                        points: vec![crate::interact::GrabPoint::free()],
-                    },
-                    DoorLeaf(*d),
-                    Transform::from_translation(d.hinge)
-                        .with_rotation(Quat::from_rotation_y(d.yaw)),
-                    Visibility::default(),
-                    RigidBody::Kinematic,
-                    ChildOf(root),
-                ))
-                .with_child((
-                    Collider::cuboid(d.width, d.height, 0.05),
-                    CollisionLayers::new(Layer::World, LayerMask::ALL),
-                    Transform::from_xyz(d.width * 0.5, d.height * 0.5 + 0.01, 0.0),
-                ));
+            spawn_door(&mut commands, root, *d);
         }
         for s in &geo.loot {
             loot.0.push(LootSpot {
@@ -4424,6 +4382,67 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     }
     info!("{} building loot spots", loot.0.len());
     commands.insert_resource(loot);
+}
+
+/// A building's compound collider and its pieces' materials (also how a
+/// breach rebuilds them: `destruction::breach`). None if nothing collides.
+pub fn body(geo: &Geo) -> Option<(Collider, super::surfaces::Surfaces)> {
+    let mut colliders = Vec::new();
+    let mut surfaces = Vec::new();
+    // Crates are their own things (`destruction::wood`): they break.
+    let crates = crate::destruction::wood::crate_pieces(geo);
+    for (piece, _) in geo.pieces.iter().zip(&crates).filter(|(_, c)| !**c) {
+        let half = match piece.shape {
+            Shape::Box(s) => s * 0.5,
+            Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+            Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+        };
+        // Visual-only pieces count too: floorboards over a plinth.
+        surfaces.push((half, piece.at, piece.mat));
+        if !piece.collide {
+            continue;
+        }
+        let c = match piece.shape {
+            Shape::Box(s) => Collider::cuboid(s.x, s.y, s.z),
+            Shape::Prism(s) => Collider::cuboid(s.x, s.y * 0.5, s.z),
+            Shape::Cylinder(r, h) => Collider::cylinder(r, h),
+        };
+        colliders.push((piece.at.translation, piece.at.rotation, c));
+    }
+    (!colliders.is_empty()).then(|| {
+        (
+            Collider::compound(colliders),
+            super::surfaces::Surfaces(surfaces),
+        )
+    })
+}
+
+/// A hinged door in a building (also how the Surge rehangs one that was
+/// broken down: `destruction::wood`).
+pub fn spawn_door(commands: &mut Commands, root: Entity, d: DoorDef) -> Entity {
+    commands
+        .spawn((
+            Name::new("Door"),
+            Door {
+                open: false,
+                angle: 0.0,
+            },
+            crate::raid::truck::Pressable::Door,
+            crate::interact::Grabbable {
+                points: vec![crate::interact::GrabPoint::free()],
+            },
+            DoorLeaf(d),
+            Transform::from_translation(d.hinge).with_rotation(Quat::from_rotation_y(d.yaw)),
+            Visibility::default(),
+            RigidBody::Kinematic,
+            ChildOf(root),
+        ))
+        .with_child((
+            Collider::cuboid(d.width, d.height, 0.05),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_xyz(d.width * 0.5, d.height * 0.5 + 0.01, 0.0),
+        ))
+        .id()
 }
 
 /// The door's definition, kept for visuals.
@@ -4467,6 +4486,12 @@ pub fn swing_doors(
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
 pub struct PropsPending(u32);
+
+/// Build a building's meshes again (its walls changed: a breach, or the
+/// Surge mending one). Its merged meshes go; `dress_buildings` makes new.
+pub fn redress(commands: &mut Commands, e: Entity) {
+    commands.entity(e).insert(PropsPending(0));
+}
 
 /// Client: lights for buildings, and door leaves (their boxes until the
 /// door model is in). The meshes come once the props' models have loaded
@@ -4692,6 +4717,7 @@ pub fn dress_buildings(
     mut materials: ResMut<Assets<StandardMaterial>>,
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
     mut bakes: Local<std::collections::HashMap<String, Bake>>,
+    breaches: Option<Res<crate::destruction::breach::Breaches>>,
 ) {
     use crate::render::world_props::Resolved;
     // A few buildings a frame, each once its prefab's shading is baked
@@ -4704,6 +4730,19 @@ pub fn dress_buildings(
         let Some(mut geo) = prefab(&b.prefab) else {
             commands.entity(e).remove::<PropsPending>();
             continue;
+        };
+        // Holes torn in its walls (`destruction::breach`): a building
+        // with holes has its own shading, not its prefab's.
+        let holes = breaches
+            .as_ref()
+            .map_or(0, |h| crate::destruction::breach::apply(&mut geo, xf, &h.0));
+        let bake_key = if holes == 0 {
+            b.prefab.clone()
+        } else {
+            format!(
+                "{} at {:.1},{:.1} with {holes} holes",
+                b.prefab, xf.translation.x, xf.translation.z
+            )
         };
         // Years empty: some of the panes smashed (all of a ruin's), the
         // same as the logic's panes see them (`decay::weathered_sashes`).
@@ -4740,7 +4779,7 @@ pub fn dress_buildings(
             }
         }
         wait.0 += 1;
-        let bake = bakes.entry(b.prefab.clone()).or_insert_with(|| {
+        let bake = bakes.entry(bake_key).or_insert_with(|| {
             let geo = geo.clone();
             let site = super::underground::ids().any(|id| id == b.prefab);
             Bake::Baking(
@@ -4802,7 +4841,18 @@ pub fn dress_buildings(
         // (furniture's boxes too, so the floor darkens round their feet),
         // not its glass.
         let occluders = occluders(&geo);
-        let mut skip = vec![false; geo.pieces.len()];
+        // Window glass is the panes' (`destruction::glass`): they draw it,
+        // whole or broken; and crates are their own (`destruction::wood`):
+        // they break.
+        let mut skip = crate::destruction::glass::window_glass(&geo);
+        for (s, c) in skip
+            .iter_mut()
+            .zip(crate::destruction::wood::crate_pieces(&geo))
+        {
+            *s |= c;
+        }
+        let panes = skip.clone();
+        let crate_props = crate::destruction::wood::crate_props(&geo);
         for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
             for i in d.pieces.clone() {
                 skip[i] = true;
@@ -4849,7 +4899,7 @@ pub fn dress_buildings(
             }
         };
         for (i, piece) in geo.pieces.iter().enumerate() {
-            if skip[i] && !far[i] {
+            if (skip[i] && !far[i]) || panes[i] {
                 continue;
             }
             let mat = props.lib.get(piece.mat, &props.server, &mut materials);
@@ -4892,7 +4942,13 @@ pub fn dress_buildings(
                 mesh,
             );
         }
-        for (d, _) in geo.props.iter().zip(&ready).filter(|(_, r)| **r) {
+        for ((d, _), _) in geo
+            .props
+            .iter()
+            .zip(&ready)
+            .zip(&crate_props)
+            .filter(|((_, r), c)| **r && !**c)
+        {
             if let Some([mid, far]) = d.lods {
                 let (near, at) = d.models[0];
                 for (name, group) in [(near, Some(HERO)), (mid, Some(HERO_MID)), (far, None)] {
@@ -4915,6 +4971,9 @@ pub fn dress_buildings(
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
                 for (mat, mesh) in prims {
+                    if crate::destruction::glass::drawn_by_panes(name, &mat) {
+                        continue;
+                    }
                     let mat = props.material(&mat, &mut materials);
                     if !d.inside {
                         if let Some(m) = materials.get(&mat) {

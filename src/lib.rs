@@ -13,6 +13,7 @@ pub mod bot;
 pub mod camp;
 pub mod capstone;
 pub mod capture;
+pub mod destruction;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -86,6 +87,7 @@ impl Plugin for GamePlugin {
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
                 foley::FoleyPlugin,
+                destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
             ),
         ))
@@ -117,6 +119,7 @@ impl Plugin for ClientPlugin {
         ))
         .add_plugins(capture::CapturePlugin)
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
+        .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
