@@ -15,6 +15,7 @@ pub mod comfort_board;
 pub mod epilogue;
 pub mod kitchen;
 pub mod lev;
+pub mod lev_walk;
 pub mod lines;
 pub mod logbook;
 pub mod requests;

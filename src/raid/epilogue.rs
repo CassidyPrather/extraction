@@ -92,7 +92,7 @@ pub struct LevWalker {
 
 /// How close he keeps behind you, and how fast he walks.
 const BEHIND: f32 = 2.2;
-const PACE: f32 = 1.35;
+pub(crate) const PACE: f32 = 1.35;
 /// Near enough to the terminal, you and he, for the release.
 const AT_TERMINAL: f32 = 3.0;
 const LEV_NEAR: f32 = 7.0;
@@ -445,13 +445,21 @@ fn home(
     epi.said = 0;
 }
 
-/// Client: Lev's body (`lev_body`, his arm `lev_hand`), boxes until the
-/// models are in, and a slow walker's sway.
+/// Client: Lev jointed and walking (`lev_walk`), or whole (`lev_body`, his
+/// arm `lev_hand`) without the rig; boxes until the models are in.
 pub struct EpilogueVisualsPlugin;
 
 impl Plugin for EpilogueVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, dress_lev);
+        app.add_systems(
+            Update,
+            (
+                dress_lev,
+                super::lev_walk::rig_lev,
+                super::lev_walk::walk_lev,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -479,10 +487,15 @@ fn dress_lev(
             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
                 * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
         );
-        commands.entity(e).insert(SwapIn(vec![
-            ("lev_body", Transform::IDENTITY),
-            ("lev_hand", hand),
-        ]));
+        // Jointed and walking when Kit models' rig is there; else whole.
+        if super::lev_walk::on_disk() {
+            commands.entity(e).insert(super::lev_walk::PendingRig);
+        } else {
+            commands.entity(e).insert(SwapIn(vec![
+                ("lev_body", Transform::IDENTITY),
+                ("lev_hand", hand),
+            ]));
+        }
         for (size, at, m) in [
             (Vec3::new(0.46, 0.95, 0.3), Vec3::new(0.0, 0.95, 0.0), &coat),
             (Vec3::new(0.36, 0.5, 0.22), Vec3::new(0.0, 0.25, 0.0), &coat),
