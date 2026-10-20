@@ -3,7 +3,9 @@
 // docs/UNDERGROUND.md, "Signature sites"). The water's the puzzle: three
 // basins, one under the next, each lowered by what the one above hides.
 (
-    name: "Pumping station",
+    // Not the region over it ("Pumping station"): a Recover job by that
+    // name is the surface's.
+    name: "The pump wells",
     style: Service,
     floor: -6.0,
     // Tall corridors: the flooded ones keep air over the water.

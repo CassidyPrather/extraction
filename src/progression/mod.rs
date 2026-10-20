@@ -493,10 +493,14 @@ fn place_recorder(
             p.xz().distance(Vec2::from_array(*at)) < UNDERGROUND_REACH
                 && p.y < zone.ground(p.x, p.z) - 1.5
         }
-        None => zone
-            .map
-            .region_at([p.x, p.z])
-            .is_some_and(|r| r.name == *region),
+        // A region's: above ground (a site under it is its own job).
+        None => {
+            p.y >= zone.ground(p.x, p.z) - 1.5
+                && zone
+                    .map
+                    .region_at([p.x, p.z])
+                    .is_some_and(|r| r.name == *region)
+        }
     };
     let mut candidates: Vec<Vec3> = spots
         .iter()
