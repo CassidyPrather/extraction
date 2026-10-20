@@ -109,6 +109,15 @@
                      (-156.0, -171.0), (-149.0, -184.0), (-138.0, -191.0), (-128.0, -191.0),
                      (-120.0, -180.0)],
         ),
+        // The ranger's path: off the forest path at the footbridge, north
+        // under the ridge to the tower. With the logging road and the forest
+        // path it makes the west way to the ranger tower rendezvous: camp,
+        // pumping station, tower.
+        (
+            name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-179.0, -36.0), (-182.0, -62.0), (-192.0, -95.0), (-196.0, -118.0), (-212.0, -128.0),
+                     (-226.0, -131.0)],
+        ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
         (
