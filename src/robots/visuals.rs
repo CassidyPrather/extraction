@@ -38,6 +38,7 @@ impl Plugin for RobotVisualsPlugin {
                     scorch,
                     dress_debris,
                     alert_eyes,
+                    shell_by_light,
                 ),
             );
     }
@@ -1404,7 +1405,7 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
 
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
-struct AlertEye(Handle<StandardMaterial>);
+struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
 
 /// Eyes say what the robot knows: a dull red at work, brighter as its
 /// suspicion rises, and hot (toward orange-white) while it can make you
@@ -1413,7 +1414,9 @@ fn alert_eyes(
     mut commands: Commands,
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
     parts: Query<&RobotPart>,
-    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>)>,
+    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mats: Option<Res<RobotMats>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Handle<StandardMaterial>>>,
@@ -1450,18 +1453,45 @@ fn alert_eyes(
         if part.role != PartRole::Sensor || !robots.contains(part.robot) {
             continue;
         }
+        let kind = robots.get(part.robot).map(|r| r.3.kind).ok();
         let own = made
             .entry(part.robot)
             .or_insert_with(|| {
                 let base = materials.get(&m.eye).cloned().unwrap_or_default();
                 let h = materials.add(base);
-                commands.entity(part.robot).insert(AlertEye(h.clone()));
+                // A soft glow round the eye, so in the dusk and the dark
+                // you see its mood before you see it.
+                let glow = materials.add(StandardMaterial {
+                    base_color: Color::srgba(1.0, 0.25, 0.1, 0.0),
+                    alpha_mode: AlphaMode::Add,
+                    unlit: true,
+                    fog_enabled: false,
+                    ..default()
+                });
+                let r = if kind == Some(RobotKind::Drone) {
+                    0.08
+                } else {
+                    0.15
+                };
+                commands.spawn((
+                    Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
+                    MeshMaterial3d(glow.clone()),
+                    Transform::from_xyz(0.0, 0.0, -0.03),
+                    NotShadowCaster,
+                    ChildOf(eye.part),
+                ));
+                commands
+                    .entity(part.robot)
+                    .insert(AlertEye(h.clone(), glow));
                 h
             })
             .clone();
         commands.entity(e).insert(MeshMaterial3d(own));
     }
-    for (robot, aware, own) in &robots {
+    let light = conditions.map_or(1.0, |c| c.light);
+    // The glow tells more the darker it is.
+    let dark = (1.2 - light).clamp(0.3, 1.0);
+    for (robot, aware, own, _) in &robots {
         let Some(own) = own else {
             continue;
         };
@@ -1487,5 +1517,45 @@ fn alert_eyes(
                 mat.emissive = want;
             }
         }
+        let alpha = (0.03 + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0);
+        let tint = Color::srgba(1.0, 0.25 + 0.3 * x, 0.1 + 0.1 * x, alpha);
+        if let Some(mut g) = materials.get_mut(&own.1) {
+            if g.base_color != tint {
+                g.base_color = tint;
+            }
+        }
+    }
+}
+
+/// The shell's own faint glow (what keeps a robot pale against the forest
+/// by day, `robot_material`) dims with the light: at night a robot is a
+/// dark shape with its eyes and running lights, not a lit ghost.
+fn shell_by_light(
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    mats: Option<Res<RobotMats>>,
+    mut model_mats: ResMut<ModelMaterials>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut done: Local<Option<f32>>,
+) {
+    let (Some(c), Some(m)) = (conditions, mats) else {
+        return;
+    };
+    if *done == Some(c.light) {
+        return;
+    }
+    *done = Some(c.light);
+    let shell = robot_material(
+        Some("Shell"),
+        &m,
+        &mut model_mats,
+        &mut lib,
+        &server,
+        &mut materials,
+    );
+    let k = 0.22 * c.light.sqrt().max(0.12);
+    if let Some(mut mat) = materials.get_mut(&shell) {
+        mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
     }
 }
