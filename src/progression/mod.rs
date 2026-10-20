@@ -68,6 +68,7 @@ impl Plugin for ProgressionPlugin {
                     offer_job,
                     place_recorder,
                     place_letter,
+                    place_ledger,
                     scout,
                     aerial_warning,
                     fit_props,
@@ -150,6 +151,7 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
             elsewhere(m) + &lines::ask_recover(&where_)
         }
         Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
+        Job::Ledger => elsewhere(extraction_core::progression::LEDGER_MAP) + lines::ASK_LEDGER,
         Job::Scout {
             map: m,
             place,
@@ -596,6 +598,45 @@ fn place_letter(
         },
     );
     info!("Hana's letter on the table at {top:?}");
+}
+
+/// The ledger job: the intake ledger lies in the Mareks' bay in the
+/// depot until it's taken home (put back if the Surge or the convoy takes
+/// it).
+fn place_ledger(
+    mut commands: Commands,
+    progression: Res<Progression>,
+    opts: Res<LaunchOptions>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut tried: Local<u32>,
+) {
+    use extraction_core::progression::{LEDGER_AT, LEDGER_ITEM, LEDGER_MAP};
+    if progression.0.job != Some(Job::Ledger) || opts.map != LEDGER_MAP {
+        return;
+    }
+    let Some(kind) = catalog.kind(LEDGER_ITEM) else {
+        return;
+    };
+    if items.iter().any(|i| i.kind() == kind) {
+        return;
+    }
+    // Only so often: the depot may still be going up.
+    *tried += 1;
+    if *tried % 30 != 1 {
+        return;
+    }
+    let at = Vec3::from_array(LEDGER_AT) + Vec3::Y * 0.05;
+    spawn_item(
+        &mut commands,
+        &catalog,
+        SpawnItem {
+            kind,
+            transform: Transform::from_translation(at),
+            condition: 0.9,
+        },
+    );
+    info!("the intake ledger in bay K-14 at {at:?}");
 }
 
 fn progression_seed(opts: &LaunchOptions, n: usize) -> usize {

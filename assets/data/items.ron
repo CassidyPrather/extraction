@@ -486,6 +486,12 @@
         (id: "wristwatch", name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
         (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
         (id: "chess_piece", name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        // The first deep job after the ladder: the depot's ledger (`progression`).
+        (
+            id: "intake_ledger", dims: Some((0.24, 0.05, 0.32)), name: "Intake ledger",
+            description: "A Custodian intake ledger, VILLAGE OF MARROW, every page a name and a bay.",
+            category: Curio, size: Small, mass: 1.0, bulk: 0.5, tags: ["paper"],
+        ),
         // The last of the driver's jobs (`progression`, `docs/LORE.md`).
         (
             id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",
