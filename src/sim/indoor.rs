@@ -1068,6 +1068,23 @@ mod tests {
                 // raider's own rules about which cells count are its own).
                 let g = &plan.grid;
                 let n = g.n;
+                // Under a site, heat that's vented and a pit the crane
+                // carries you over are ways too (the raider's plan bars them:
+                // it doesn't vent, nor ride).
+                let (layout, raster) = (
+                    extraction_core::underground::layout(&plan.name),
+                    extraction_core::underground::raster(&plan.name),
+                );
+                let gated = |k: usize| {
+                    let (Some(l), Some(r)) = (layout, raster) else {
+                        return false;
+                    };
+                    let c = g.centre(k % n, k / n);
+                    r.cell_of(c).is_some_and(|(a, b)| {
+                        let q = b * r.nx + a;
+                        (r.pit[q] && l.crane.is_some()) || r.heat[q].is_some()
+                    })
+                };
                 let mut seen = vec![false; n * n];
                 let mut stack: Vec<(usize, usize)> = plan
                     .entries
@@ -1088,7 +1105,7 @@ mod tests {
                             continue;
                         }
                         let k = nj as usize * n + ni as usize;
-                        if !seen[k] && g.cost[k] != BLOCKED {
+                        if !seen[k] && (g.cost[k] != BLOCKED || gated(k)) {
                             seen[k] = true;
                             stack.push((ni as usize, nj as usize));
                         }
