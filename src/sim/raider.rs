@@ -1394,9 +1394,20 @@ pub fn indoor_route(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> O
     indoor(plan, from, to, within)
 }
 
+/// To something to take: stand where it can be reached.
 fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
+    indoor_to(plan, from, goal, within)
+}
+
+/// Out of the building: to the floor nearest the way out.
+fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let goal = stand_near(plan, plan.to_local(from).xz(), to)?;
+    indoor_to(plan, from, goal, within)
+}
+
+fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
-    let goal = reach_cell(plan, a, to)?;
     let path = plan.path(a, goal)?;
     let mut tasks = Vec::new();
     let mut last = a;
@@ -1467,7 +1478,10 @@ fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
 
 /// The walkable cell nearest a goal among those reachable from `from`
 /// (the nearest walkable cell might be through a wall).
-pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+/// The floor cell nearest `goal` that a bot can walk to from `from`, on
+/// the same side of the walls as `goal` when it's indoors: somewhere to
+/// stand, not something to reach (that's [`reach_cell`]).
+pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
     let g = &plan.grid;
     let start = if g.walkable(from.to_array()) {
         from
@@ -1481,7 +1495,6 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
-    // Reach for indoor things from indoors, not through the wall.
     let indoors = plan.indoors(goal);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
@@ -1503,6 +1516,84 @@ pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     }
     best.filter(|b| b.0 < 2.0).map(|b| b.1)
 }
+
+pub(crate) fn reach_cell(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+    let g = &plan.grid;
+    let start = if g.walkable(from.to_array()) {
+        from
+    } else {
+        near_walkable_same_side(plan, from)
+            .or_else(|| g.nearest_walkable(from.to_array()).map(Vec2::from_array))?
+    };
+    let (si, sj) = g.cell_of(start.to_array())?;
+    let n = g.n;
+    let mut seen = vec![false; n * n];
+    let mut stack = vec![(si, sj)];
+    seen[sj * n + si] = true;
+    let mut best: Option<(f32, Vec2)> = None;
+    let solid = has_no_floor(plan);
+    while let Some((i, j)) = stack.pop() {
+        let c = Vec2::from_array(g.centre(i, j));
+        let d = c.distance(goal);
+        let reach = reaches_with(plan, solid, c, goal);
+        if best.is_none_or(|b| d < b.0) && reach {
+            best = Some((d, c));
+        }
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (ni, nj) = (i as i64 + di, j as i64 + dj);
+            if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                continue;
+            }
+            let k = nj as usize * n + ni as usize;
+            if !seen[k] && g.cost[k] != extraction_core::nav::BLOCKED {
+                seen[k] = true;
+                stack.push((ni as usize, nj as usize));
+            }
+        }
+    }
+    best.filter(|b| b.0 < 2.0).map(|b| b.1)
+}
+
+/// Whether a bot standing at `from` (building-local) can reach `goal`:
+/// along a clear line, not through a wall or a window, nor round one (a
+/// barn's open gaps join its floor to the outside, so "which side" isn't
+/// the test, the line is). Something with no floor of its own on the grid
+/// (a wagon, its bed at chest height) is reached into from beside it.
+pub(crate) fn reaches(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> bool {
+    reaches_with(plan, has_no_floor(plan), from, goal)
+}
+
+fn reaches_with(plan: &BuildingPlan, solid: bool, from: Vec2, goal: Vec2) -> bool {
+    if solid {
+        from.distance(goal) <= SOLID_REACH
+    } else {
+        clear_reach(&plan.grid, from, goal)
+    }
+}
+
+fn has_no_floor(plan: &BuildingPlan) -> bool {
+    let g = &plan.grid;
+    !(0..g.n * g.n).any(|k| {
+        let c = Vec2::from_array(g.centre(k % g.n, k / g.n));
+        g.cost[k] != extraction_core::nav::BLOCKED
+            && c.x.abs() < plan.half.x
+            && c.y.abs() < plan.half.y
+    })
+}
+
+/// Whether a hand can go from standing at `from` to `goal` in a straight
+/// line over open floor: everything between walkable but the last
+/// [`SHELF`] metres, where the thing rests on its shelf or table.
+fn clear_reach(g: &extraction_core::nav::NavGrid, from: Vec2, goal: Vec2) -> bool {
+    let d = from.distance(goal);
+    let n = ((d - SHELF).max(0.0) / 0.1).ceil() as usize;
+    (0..=n).all(|k| g.walkable(from.lerp(goal, (k as f32 * 0.1 / d).min(1.0)).to_array()))
+}
+
+/// How deep a shelf, table or crate may be between a bot and what's on it.
+const SHELF: f32 = 1.1;
+/// How far into something with no floor of its own (a wagon) a bot reaches.
+const SOLID_REACH: f32 = 1.4;
 
 /// The next thing to do while raiding.
 fn raid_step(
@@ -1615,7 +1706,7 @@ fn raid_step(
                                     .min_by(|a, b| a.distance(local).total_cmp(&b.distance(local)))
                                     .copied()
                                     .unwrap();
-                                if let Some(t) = indoor(plan, pos, exit, 0.6) {
+                                if let Some(t) = indoor_out(plan, pos, exit, 0.6) {
                                     return t;
                                 }
                             }
@@ -1784,7 +1875,7 @@ fn leave_building(r: &Raider, pos: Vec3) -> Option<Vec<Task>> {
         })
         .min_by(|a, b| a.0.total_cmp(&b.0))?
         .1;
-    indoor(plan, pos, exit, 0.6)
+    indoor_out(plan, pos, exit, 0.6)
 }
 
 fn go_to_site(r: &Raider, s: usize, pos: Vec3) -> Option<Vec<Task>> {

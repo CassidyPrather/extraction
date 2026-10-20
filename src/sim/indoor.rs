@@ -542,6 +542,62 @@ mod tests {
         }
     }
 
+    /// Every loot spot in every building can be reached from somewhere a
+    /// bot can stand, along a clear line: a barn's open gaps join its floor
+    /// to the outside, which once left nothing in a barn reachable, and a
+    /// thing just outside a window was reached for through the wall.
+    #[test]
+    fn every_loot_spot_is_reached_from_its_own_side() {
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let spots: Vec<Vec3> = app
+                .world()
+                .get_resource::<crate::world::buildings::BuildingLoot>()
+                .map(|l| l.0.iter().map(|s| s.at).collect())
+                .unwrap_or_default();
+            let mut failed = Vec::new();
+            let mut tried = 0;
+            for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
+                for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
+                    if !plan.reachable_height(*spot) {
+                        continue;
+                    }
+                    tried += 1;
+                    let goal = plan.to_local(*spot).xz();
+                    match super::super::raider::reach_cell(plan, plan.entries[0], goal) {
+                        Some(c) if super::super::raider::reaches(plan, c, goal) => {}
+                        Some(c) => failed.push(format!(
+                            "{map} {} at {:.0?}: spot {goal:.2?} reached from {c:.2?} through a wall",
+                            plan.name, plan.xf.translation
+                        )),
+                        None => {
+                            failed.push(format!(
+                                "{map} {} at {:.0?}: spot {goal:.2?} out of reach",
+                                plan.name, plan.xf.translation
+                            ))
+                        }
+                    }
+                }
+            }
+            assert!(tried > 0, "{map}: no loot spots tried");
+            assert!(
+                failed.is_empty(),
+                "{} of {tried} loot spots failed:\n{}",
+                failed.len(),
+                failed.join("\n")
+            );
+        }
+    }
+
     /// Every outside door of every building on the map lets a bot in, as
     /// far as the room behind it.
     #[test]
@@ -572,7 +628,7 @@ mod tests {
                     let mid = (d.a + d.b) * 0.5;
                     // A metre and a half past the doorway, inside (or as near
                     // as the furniture allows).
-                    let Some(goal) = super::super::raider::reach_cell(
+                    let Some(goal) = super::super::raider::stand_near(
                         plan,
                         entry,
                         mid + (mid - entry).normalize() * 1.5,
