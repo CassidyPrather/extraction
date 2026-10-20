@@ -3,7 +3,9 @@
 // in its own frame: x right, -z ahead (where `rot` faces, as a marker's),
 // y up from where it rests. Tables' tops are at 0.785; a crate's top is its
 // size; a chair's seat is at 0.45. Things are laid out again each Surge
-// cycle, with the loot.
+// cycle, with the loot. A note at rot 0 reads upright from its +z side
+// (from a chair at +z facing the table). Scenes keep off roads, paths and
+// water, on level ground clear of trees (world::scenes tests).
 [
     (
         map: "marrow_creek",

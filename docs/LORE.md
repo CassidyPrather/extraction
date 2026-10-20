@@ -174,7 +174,9 @@ He drives people in now, and out, and keeps their count. He is dry,
 practical, generous in small ways, and talks about himself only sideways.
 His sister **Anna** lives in town and is ill (the dressings he asks for
 "aren't for him"). Hana's letter to Anna is still on the table in the
-house by the well, in Marrow.
+house by the well, in Marrow; it says she has written to Lev as well. The
+last of his jobs (`src/progression`) sends you for that second letter,
+sealed: "For Lev, when he comes back for me." He reads it alone.
 
 The game reveals him slowly, a line at a time on the drive home
 (`src/raid/lines.rs`): first the job, then the bus, then the gate, then
