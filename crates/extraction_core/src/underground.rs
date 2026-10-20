@@ -255,7 +255,24 @@ pub struct Layout {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Round {
     pub rooms: Vec<String>,
+    #[serde(default)]
     pub crawlers: u32,
+    /// Full-size armed walkers on the round too (`robots::indoor`).
+    #[serde(default)]
+    pub heavy: u32,
+    /// Asleep till something loud (a breaker, a shot) wakes them.
+    #[serde(default)]
+    pub dormant: bool,
+}
+
+/// A round as the residents get it: `patrol` and `crawlers`, or one of
+/// `rounds`.
+#[derive(Clone, Copy, Debug)]
+pub struct Resident<'a> {
+    pub rooms: &'a [String],
+    pub crawlers: u32,
+    pub heavy: u32,
+    pub dormant: bool,
 }
 
 /// Standing water over a room's or a corridor's floor: slow to wade, loud,
@@ -341,11 +358,21 @@ impl Hazard {
 impl Layout {
     /// A room's floor, site y.
     /// Every round and its crawlers: `patrol` first, then `rounds`.
-    pub fn residents(&self) -> Vec<(&[String], u32)> {
-        std::iter::once((self.patrol.as_slice(), self.crawlers))
-            .chain(self.rounds.iter().map(|r| (r.rooms.as_slice(), r.crawlers)))
-            .filter(|(rooms, n)| *n > 0 && !rooms.is_empty())
-            .collect()
+    pub fn residents(&self) -> Vec<Resident<'_>> {
+        std::iter::once(Resident {
+            rooms: self.patrol.as_slice(),
+            crawlers: self.crawlers,
+            heavy: 0,
+            dormant: false,
+        })
+        .chain(self.rounds.iter().map(|r| Resident {
+            rooms: r.rooms.as_slice(),
+            crawlers: r.crawlers,
+            heavy: r.heavy,
+            dormant: r.dormant,
+        }))
+        .filter(|r| r.crawlers + r.heavy > 0 && !r.rooms.is_empty())
+        .collect()
     }
 
     pub fn floor_of(&self, room: &Room) -> f32 {

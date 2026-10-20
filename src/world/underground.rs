@@ -1448,8 +1448,8 @@ pub fn register_residents(
             xf,
             floors: Some(std::sync::Arc::new(floors)),
         };
-        for (rooms, crawlers) in rounds {
-            let points: Vec<(&ug::Room, [f32; 2])> = match rooms {
+        for round in rounds {
+            let points: Vec<(&ug::Room, [f32; 2])> = match round.rooms {
                 // One room: round its quarters.
                 [id] => l
                     .rooms
@@ -1461,7 +1461,7 @@ pub fn register_residents(
                             .map(|d| (room, [room.at[0] + d[0], room.at[1] + d[1]]))
                     })
                     .collect(),
-                _ => rooms
+                rooms => rooms
                     .iter()
                     .filter_map(|id| l.rooms.iter().find(|room| &room.id == id))
                     .map(|room| (room, room.at))
@@ -1479,9 +1479,9 @@ pub fn register_residents(
                 nav: nav.clone(),
                 patrol,
                 spawn,
-                crawlers,
-                heavy: 0,
-                dormant: false,
+                crawlers: round.crawlers,
+                heavy: round.heavy,
+                dormant: round.dormant,
             });
         }
     }
@@ -2480,7 +2480,7 @@ mod tests {
             let crawlers: u32 = sites
                 .iter()
                 .flat_map(|(s, _)| ug::layout(&s.id).unwrap().residents())
-                .map(|r| r.1)
+                .map(|r| r.crawlers)
                 .sum();
             for (site, xf) in &sites {
                 let l = ug::layout(&site.id).unwrap();

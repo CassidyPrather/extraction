@@ -241,3 +241,100 @@ is to come), the intake down the haul ramp (`d_intake`), the dark
 sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
 `d_bay`), the flooded cistern (`d_cistern`), the service stair up
 (`d_stair`) and the hatch (`d_hatch`).
+
+## Signature sites (design)
+
+One more site per valley, each built on a mechanic the others don't
+have. Layouts stay data (`assets/underground/*.ron`); each mechanic is
+a field or two in the layout and one small system, tested headless by a
+scenario that walks it end to end.
+
+### Marrow Creek: the pump station (`pump_marrow`)
+
+The village's sewage and storm pumping station, drowned since the
+pumps stopped. **The water level is the puzzle.**
+
+- *Levels, not floods.* A flood gets a `basin`: rooms and corridors
+  that share one water level, a height (site y) rather than a depth.
+  The level moves; every cell's water is `level - floor`, so a basin
+  can be chest deep in its upper rooms and over your head in its sump.
+- *Valves* (`valves: [(room, at, basin, to)]`): a wheel you turn (held
+  grip, a few seconds) opens a gravity drain from one basin into a lower
+  one, or out. A basin drains at a set rate until it reaches the valve's
+  `to` level or the lower basin's. Valves are loud (Noise r20, a
+  gurgle).
+- *The hand pump* (`pump: (room, at, basin, rate)`): a crank you work
+  (each press lifts a few litres; held, a steady rate) for the last
+  basin, the sump, which has nowhere to drain to.
+- *Order matters*: the inlet chamber drains into the screen room,
+  which only drains once its own valve (behind the inlet's water) is
+  reached; the sump needs the pump. The best loot (the operator's
+  locker, a weapons cache) is in the sump, under 2.4 m of water at the
+  start: swim for it (cold, slow, loud) or pump it down.
+- *Wading and swimming* as on the surface and in the floods; the water
+  surface follows the level (Visual design's water look).
+  Sound carries over water: noise made in or over a basin carries half
+  as far again (Audio).
+- *Residents*: crawlers that keep to the water's edge (Robot minds):
+  their round is recomputed as the level drops, along the cells just
+  dry.
+
+### Kettle Pass: the deep mine (`deep_kettle`)
+
+Below the existing mine, the old workings: **darkness and bad air**.
+
+- *Bad air* (`gas: [(room or link, kind)]`): firedamp pockets in the
+  low headings. A pocket hisses (Audio, looped, near it) and fills its
+  cells; standing in it slowly hurts and blurs. A spark ignites it: a
+  gunshot fired in or into it, a torch switched on in it, a grenade.
+  Ignition is an explosion through the pocket's cells (the grenades'
+  blast, scaled by the pocket's size) and then the air's clear.
+- *The canary* (`canary` item, Kit models): a caged detector you carry;
+  it chirps and its light goes amber, then red, as gas nears, and goes
+  quiet (dead) after long enough in it.
+- *The mine cart* (`carts: [(rail id, at)]`): a tub on a rail
+  (`rails: [[points]]`, along the corridors' legs). Push it (grab and
+  walk) or ride it (grab its rim and press: you're carried, like a
+  zipline grip) down the haulage; let it run into a doorway and it
+  blocks it (crawlers can't pass a blocked cell).
+- *Shoring* (`shoring: [(link, at)]`): timber sets that hold up a bad
+  roof. Shoot one out (two hits) and the roof comes down behind it,
+  rubble that blocks the corridor for good (a way closed behind you,
+  or ahead of a crawler).
+- *Light identity*: no emergency lamps at all; only your torch, the
+  canary's glow and the gas's faint shimmer.
+
+### Cinder Works: the furnace cellars (`cellars_cinder`)
+
+Under the furnace hall: flues, ash pits and the charging crane.
+
+- *Heat* (`heat: [(room or link, level)]`): hot passages hurt as a
+  Burner's edge does; over a level they're impassable. *Vents*
+  (`vents: [(room, at, heat zones)]`): open one (a lever) and its
+  passages cool over half a minute. Burner anomalies breed here: the
+  cycle's anomaly spawn favours hot cells.
+- *The crane* (`crane: (rail from, rail to, hook height, pit)`): a
+  travelling crane over the ash pit. A lever runs it along its rail;
+  its hook carries what hangs on it (loot crates hooked by the cellar's
+  workers) and you, if you grip the hook's chain (a moving rope grip).
+  The pit's floor is far below and hot: the crane is the way across.
+- *Light identity*: no lamps; the glow of the hot passages, dull red,
+  fading as they're vented.
+
+### Each site
+
+- A guard behaviour that suits it (Robot minds): edge-walkers at the
+  pump station; crawlers that avoid gas and are lured into it by noise
+  in the mine; in the cellars, crawlers that keep to the cool side and
+  wait for you at the vents.
+- A story beat placed with Story, a deep-job hook for Progression
+  (`underground_sites` already counts any site with a layout).
+- Tests: the layout validator (basins, valves, rails, gas, heat checked
+  for sense), a headless scenario per site (drain the station; cross
+  the gas; vent the cellar and ride the crane), a sim smoke (bots reach
+  and leave each), and Performance's budget underground.
+- Entrances: proposed to Map design with the report (scouted for rock
+  cover and a clear kiosk, as before).
+
+Built in that order: the pump station first (it extends the floods
+already there), then the mine, then the cellars.
