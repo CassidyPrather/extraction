@@ -151,6 +151,9 @@ pub struct HazeParams {
     pub wave: Vec4,
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
+    /// x: how much colour it drains from what's seen through it (a Hush's
+    /// dead air), y: how much it dims it.
+    pub drain: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -320,7 +323,7 @@ fn init_assets(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
-    let hushed = ground(Color::srgba(0.55, 0.55, 0.53, 0.45), LinearRgba::BLACK);
+    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
@@ -545,6 +548,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.0, 0.0, 0.0),
                         wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -564,6 +568,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.4, 0.0, 0.0),
                         wave: Vec4::new(0.5, 1.6, 1.4, 0.0),
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -580,6 +585,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 0.8, 0.0, 0.0),
                         wave: Vec4::new(0.08, 2.5, 3.0, 0.0),
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -602,6 +608,7 @@ fn dress_anomalies(
                         shape: Vec4::new(2.0, 0.0, 0.0, 0.0),
                         wave: Vec4::new(0.04, 1.5, 0.5, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -618,6 +625,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, MIRROR_HEIGHT, 0.0, 0.0),
                         wave: Vec4::new(0.3, 0.9, 0.6, 1.0),
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
                     0.0,
@@ -627,9 +635,22 @@ fn dress_anomalies(
             // and no light of its own.
             AnomalyKind::Hush => (
                 Some(&a.hushed),
-                vec![soft(7.0, 120, 0.05, Vec3::new(0.62, 0.62, 0.6), 0.75)],
+                vec![soft(7.0, 220, 0.06, Vec3::new(0.85, 0.85, 0.82), 0.9)],
                 (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
-                None,
+                // Seen through, the world inside goes grey and a little
+                // dim: a bubble with the colour gone out of it.
+                Some((
+                    1.02,
+                    0.2,
+                    HazeParams {
+                        shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
+                        wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
+                        tint: Vec4::ZERO,
+                        drain: Vec4::new(0.95, 0.4, 0.0, 0.0),
+                    },
+                    Vec3::new(r * 2.3, r * 2.3, 1.0),
+                    0.0,
+                )),
             ),
         };
         commands
