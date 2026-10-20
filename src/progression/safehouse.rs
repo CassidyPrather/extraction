@@ -43,6 +43,10 @@ pub struct Safehouse {
 #[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
 pub struct HourShift(pub u8);
 
+/// A night was slept (the client fades the view out and back).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Slept;
+
 /// The safehouse's stove, bed and radio: pressed to light, sleep, call.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SafehouseThing {
@@ -70,7 +74,8 @@ pub struct SafehousePlugin;
 
 impl Plugin for SafehousePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Safehouse>()
+        app.add_message::<Slept>()
+            .init_resource::<Safehouse>()
             .init_resource::<HourShift>()
             .add_systems(
                 Update,
@@ -228,6 +233,7 @@ fn press(
     mut attention: Query<&mut Attention>,
     mut director: Option<ResMut<crate::robots::director::Director>>,
     doors: Query<&GlobalTransform, With<DoorLeaf>>,
+    mut slept: MessageWriter<Slept>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, player } = ev else {
@@ -277,6 +283,7 @@ fn press(
                     .map_or(0, |a| a.feeling() as u8)
                     .max(house.peak.min(2));
                 sleep(&mut raid, &mut house, &mut shift);
+                slept.write(Slept);
                 if feeling >= 2 {
                     // They've followed you: something at the door before
                     // light.
