@@ -95,6 +95,30 @@
       }
     ]
   },
+  "ambience/rain_canvas": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_canvas.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_canvas_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_canvas_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
   "ambience/rain_light": {
     "type": "loop",
     "channels": 2,
@@ -109,6 +133,54 @@
         "file": "audio/ambience/rain_light_2.ogg",
         "seconds": 45.0,
         "source": "fs_200273"
+      }
+    ]
+  },
+  "ambience/rain_tin": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_tin.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_tin_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_tin_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_wood": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_wood.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_wood_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_wood_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
       }
     ]
   },

@@ -351,10 +351,28 @@ down the stairs, and the rain with it.
 - **Under a porch:** a little duller.
 - **Underground:** none.
 
-A roof's own drumming (`ambience/rain_tin`, `rain_wood`,
-`rain_canvas`) fades in when its set is in the bank. Those recordings
-aren't fetched yet: Freesound refused this container's requests (403)
-when they were sought.
+A roof's own drumming plays over that, blended by the rain's strength
+from a light loop to a heavy one (more and bigger drops). The loops are
+`ambience/rain_tin`, `rain_wood` and `rain_canvas`, plus `_light`
+versions.
+
+They're synthesised (`scripts/make_rain_roofs.py`), an exception to
+the recorded-world rule. No CC0 recordings were reachable: Freesound
+refused this container, and OpenGameArt and Commons had none. Rain on
+a roof is a dense Poisson stream of drop impacts, each a short burst
+exciting the roof's modes, over 16 patches of roof so no one resonance
+sings:
+- **Tin:** bright modes at 1-4 kHz, ringing 80-150 ms, and a low boom
+  from the panel.
+- **Wood:** 300-900 Hz, about 20 ms.
+- **Canvas:** soft, low-passed thumps.
+
+Each loop is a circular convolution of the drop train with the roof's
+response, so it repeats seamlessly. It's levelled against the outdoor
+rain bed: tin +3 LU, canvas 0, wood -4, light loops 6 LU under. The
+audit checks those levels to within 1.5 LU, and that tin rings
+brightest ([spectra](shots/audio/rain_roofs.png)). Replace them with
+recordings when they can be had.
 
 **Measuring it.** `cargo test acoustics::tests::every_place_is_probed_for_the_audit`
 probes every building and underground room on the three maps and writes

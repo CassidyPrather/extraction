@@ -55,7 +55,11 @@ struct RainLoop;
 /// A roof's own sound in the rain (`acoustics::rain_under`): tin
 /// drumming, a tent's patter.
 #[derive(Component)]
-struct RoofRain(&'static str);
+struct RoofRain {
+    set: &'static str,
+    /// The heavy-rain loop (more and bigger drops) or the light one.
+    heavy: bool,
+}
 
 /// The rain bed follows the weather, and where you are: duller and quieter
 /// under a roof (a tin roof drumming over you if there's a recording for
@@ -100,16 +104,23 @@ fn rain_volume(
     if let (Some(set), Some(_)) = (drum, rain_db) {
         if !drums.contains_key(set) && bank.has(set) {
             drums.insert(set, 0.0);
-            if let Some(sample) = bank.pick(set, &mut rng.0) {
-                commands.spawn((
-                    RoofRain(set),
-                    SamplePlayer::new(sample).looping(),
-                    PlaybackSettings::default(),
-                    sample_effects![VolumeNode {
-                        volume: Volume::SILENT,
-                        ..default()
-                    }],
-                ));
+            for heavy in [true, false] {
+                let name = if heavy {
+                    set.to_string()
+                } else {
+                    format!("{set}_light")
+                };
+                if let Some(sample) = bank.pick(&name, &mut rng.0) {
+                    commands.spawn((
+                        RoofRain { set, heavy },
+                        SamplePlayer::new(sample).looping(),
+                        PlaybackSettings::default(),
+                        sample_effects![VolumeNode {
+                            volume: Volume::SILENT,
+                            ..default()
+                        }],
+                    ));
+                }
             }
         }
     }
@@ -121,11 +132,21 @@ fn rain_volume(
         };
         *level += (target - *level) * k;
     }
+    // The loops are levelled against the outdoor rain bed (light 6 LU
+    // under heavy): they play at the rain cue's level, the two blended
+    // by the rain's strength (equal power).
+    let strength = conditions.rain.clamp(0.0, 1.0);
     for (roof, effects) in &roofs {
         if let Ok(mut v) = volumes.get_effect_mut(effects) {
-            let level = drums.get(roof.0).copied().unwrap_or(0.0);
+            let level = drums.get(roof.set).copied().unwrap_or(0.0);
+            let share = if roof.heavy {
+                strength.sqrt()
+            } else {
+                (1.0 - strength).sqrt()
+            };
+            let g = level * share;
             v.volume = match rain_db {
-                Some(r) if level > 0.01 => Volume::Decibels(r + 20.0 * level.log10()),
+                Some(_) if g > 0.01 => Volume::Decibels(mix::db("rain") + 20.0 * g.log10()),
                 _ => Volume::SILENT,
             };
         }
