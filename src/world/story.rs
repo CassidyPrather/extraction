@@ -461,6 +461,22 @@ pub const THREAD: &[Lead] = &[
         note: "Mast terminal",
         mentions: &[(K, "Mast terminal")],
     },
+    // The signature sites below (Underground's).
+    Lead {
+        map: M,
+        note: "Pump log, below",
+        mentions: &[(M, "Pumping station"), (M, "Pump station note")],
+    },
+    Lead {
+        map: K,
+        note: "Novakova's note",
+        mentions: &[(K, "The pass"), (K, "Mine yard")],
+    },
+    Lead {
+        map: C,
+        note: "Sorter's chit",
+        mentions: &[(C, "The works")],
+    },
     // Sallow Reservoir: the water works, and the village it drowned.
     Lead {
         map: S,
