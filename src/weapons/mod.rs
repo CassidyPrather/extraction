@@ -15,6 +15,7 @@ pub mod feel;
 pub mod flat;
 pub mod impacts;
 pub mod layout;
+pub mod muzzle;
 pub mod visuals;
 
 use avian3d::prelude::*;
