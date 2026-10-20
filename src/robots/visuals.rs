@@ -37,6 +37,7 @@ impl Plugin for RobotVisualsPlugin {
                     lock_flares,
                     scorch,
                     dress_debris,
+                    alert_eyes,
                 ),
             );
     }
@@ -1339,4 +1340,66 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
     .with_inserted_indices(bevy::mesh::Indices::U32(idx))
+}
+
+/// A robot's own eye material, so its eye can say how alert it is.
+#[derive(Component)]
+struct AlertEye(Handle<StandardMaterial>);
+
+/// Eyes say what the robot knows: a dull red at work, brighter as its
+/// suspicion rises, and hot (toward orange-white) while it can make you
+/// out. In the dark or fog that change is the first thing you see.
+fn alert_eyes(
+    mut commands: Commands,
+    eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
+    parts: Query<&RobotPart>,
+    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>)>,
+    mats: Option<Res<RobotMats>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<std::collections::HashMap<Entity, Handle<StandardMaterial>>>,
+) {
+    let Some(m) = mats else {
+        return;
+    };
+    made.retain(|e, _| robots.contains(*e));
+    // Sensor eyes still on the shared material get their robot's own.
+    for (e, eye, mat) in &eyes {
+        if mat.0 != m.eye {
+            continue;
+        }
+        let Ok(part) = parts.get(eye.part) else {
+            continue;
+        };
+        if part.role != PartRole::Sensor || !robots.contains(part.robot) {
+            continue;
+        }
+        let own = made
+            .entry(part.robot)
+            .or_insert_with(|| {
+                let base = materials.get(&m.eye).cloned().unwrap_or_default();
+                let h = materials.add(base);
+                commands.entity(part.robot).insert(AlertEye(h.clone()));
+                h
+            })
+            .clone();
+        commands.entity(e).insert(MeshMaterial3d(own));
+    }
+    for (_, aware, own) in &robots {
+        let Some(own) = own else {
+            continue;
+        };
+        let a = aware.suspicion.clamp(0.0, 1.0);
+        let x = if aware.can_see_target {
+            aware.exposure.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let level = 0.45 + 0.9 * a + 1.4 * x;
+        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level;
+        if let Some(mut mat) = materials.get_mut(&own.0) {
+            if mat.emissive != want {
+                mat.emissive = want;
+            }
+        }
+    }
 }
