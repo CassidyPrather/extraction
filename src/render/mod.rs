@@ -1,6 +1,7 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
 pub mod bench;
+pub mod budget;
 pub mod comfort;
 pub mod fog;
 pub mod grade;
@@ -43,6 +44,7 @@ impl Plugin for RenderPlugin {
             stats::RenderStatsPlugin,
             world_props::WorldPropsPlugin,
             kit::KitVisualsPlugin,
+            budget::BudgetPlugin,
         ))
         .add_systems(Update, attach_flat_camera);
     }
