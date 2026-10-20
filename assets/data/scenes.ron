@@ -414,11 +414,33 @@
     ),
     (
         map: "marrow_creek",
+        name: "At the fence",
+        // After the recall: by the south gate where the soldiers turned bus
+        // four back, his flask and a note on a crate.
+        at: (33.0, 290.0),
+        rot: 180.0,
+        after: Some(Recalled),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.5),
+        ],
+        items: [
+            (id: "water_bottle", at: (0.12, 0.5, 0.1)),
+        ],
+        note: Some((
+            name: "Lev's fence note",
+            text: "The fence. Last time I stood here there were soldiers on it.\nThree keys, she wrote, and you found them.\nNext time you go in, I'm coming. - L.",
+            at: (-0.05, 0.5, -0.05),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
         name: "Lev's chair",
-        // After the recall: a chair by the well, facing her house.
+        // After the ending (he's been down to the Depot with you): a chair
+        // by the well, facing her house.
         at: (-26.0, 112.0),
         rot: 25.0,
-        after: Some(Recalled),
+        after: Some(Ended),
         pieces: [
             Chair(at: (0.0, 0.0), rot: 0.0),
             Crate(at: (0.7, 0.1), size: 0.5),
@@ -429,7 +451,7 @@
         ],
         note: Some((
             name: "Lev's note",
-            text: "Mum -\nThey've gone home through the Gates and shut them. I came in.\nRusty's lead is still on the hook. I've left it there.\n- Lev",
+            text: "Mum -\nThey've gone home through the Gates and shut them. I came in, and found you where they kept you.\nRusty's collar is on the hook with his lead now.\n- Lev",
             at: (0.0, 0.45, 0.0),
             rot: 0.0,
         )),

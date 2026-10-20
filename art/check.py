@@ -106,10 +106,10 @@ def zfighting(objs):
                 # Neighbours share a vertex; a face can't fight itself.
                 if abs(a[2] - b[2]) > PLANE_GAP or a[4] & b[4]:
                     continue
-                # A node and its far stand-in (`<name>_lod1`) are never
-                # drawn together.
+                # A node and its far stand-ins (`<name>_lod1`, `_lod2`) are
+                # never drawn together.
                 oa, ob = a[0].split("/")[0], b[0].split("/")[0]
-                if oa + "_lod1" == ob or ob + "_lod1" == oa:
+                if oa != ob and oa.split("_lod")[0] == ob.split("_lod")[0]:
                     continue
                 n = a[1]
                 t = Vector((1, 0, 0)) if abs(n.x) < 0.9 else Vector((0, 1, 0))

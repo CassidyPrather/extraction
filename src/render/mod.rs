@@ -56,6 +56,7 @@ impl Plugin for RenderPlugin {
         ))
         .add_plugins(crate::raid::board::BoardVisualsPlugin)
         .add_plugins(crate::raid::lev::LevVisualsPlugin)
+        .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)

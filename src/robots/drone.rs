@@ -228,6 +228,7 @@ fn drone_brain(
         &Transform,
         &Robot,
         &mut Intent,
+        Option<&super::flee::Fleeing>,
     )>,
     zone: Res<Zone>,
     targets: Query<&GlobalTransform>,
@@ -240,7 +241,7 @@ fn drone_brain(
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 0.9;
-    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent) in &mut drones {
+    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent, fleeing) in &mut drones {
         if robot.wrecked {
             *brain = Brain::Down;
             continue;
@@ -248,6 +249,13 @@ fn drone_brain(
         let pos = t.translation;
         *intent = Intent::default();
         let ground = zone.ground(pos.x, pos.z);
+        // A live grenade under it: up and away, out past its reach.
+        if let Some(f) = fleeing {
+            let to = f.away(pos);
+            d.goal = Vec3::new(to.x, zone.ground(to.x, to.z).max(ground) + 12.0, to.z);
+            intent.look = Some(f.from);
+            continue;
+        }
         let cruise = |p: Vec3, h: f32| Vec3::new(p.x, zone.ground(p.x, p.z).max(ground) + h, p.z);
         // Someone indoors: hover outside a doorway, low, and look in
         // (further back from one that's shut, waiting for it to open).

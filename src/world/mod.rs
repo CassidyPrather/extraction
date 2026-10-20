@@ -6,6 +6,7 @@
 pub mod ao;
 pub mod bridges;
 pub mod buildings;
+pub mod clutter;
 pub mod cover;
 pub mod impostors;
 pub mod notes;
@@ -95,7 +96,7 @@ impl Zone {
 
 /// Reads `assets/maps/<name>.ron`, falling back to the built-in copy of
 /// Marrow Creek so tests and odd working directories still get a map.
-fn load_map_def(name: &str) -> MapDef {
+pub(crate) fn load_map_def(name: &str) -> MapDef {
     let candidates = [
         crate::asset_root_path()
             .join("maps")
@@ -168,6 +169,10 @@ fn init_zone(mut commands: Commands, opts: Res<LaunchOptions>) {
     commands.insert_resource(zone);
 }
 
+/// The ground's collider (one heightfield for the whole map).
+#[derive(Component)]
+pub struct TerrainCollider;
+
 /// The ground: one heightfield collider for the whole map.
 fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     let hm = &zone.hm;
@@ -203,6 +208,7 @@ fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
     }
     commands.spawn((
         Name::new("Terrain collider"),
+        TerrainCollider,
         RigidBody::Static,
         collider,
         CollisionLayers::new(Layer::World, LayerMask::ALL),

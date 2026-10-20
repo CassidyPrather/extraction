@@ -8,8 +8,8 @@
 
 use bevy::prelude::*;
 use extraction_core::anomaly::{
-    AnomalyKind, SURGE_FORMING, SURGE_SWELL, clear_of_roads, placeable, surge_agitation,
-    surge_bloom_spot, surge_blooms_due,
+    AnomalyKind, SURGE_FORMING, SURGE_SWELL, bloom_ok, surge_agitation, surge_bloom_spot,
+    surge_blooms_due,
 };
 use extraction_core::noise::Rng;
 
@@ -113,8 +113,7 @@ pub fn surge_blooms(
         let radius = rng.range(lo, hi);
         let danger = kind.danger_radius(radius);
         let ok = |p: [f32; 2]| {
-            placeable(&zone.map, &zone.hm, p)
-                && clear_of_roads(&zone.hm, p, danger)
+            bloom_ok(&zone.map, &zone.hm, p, kind, radius)
                 && taken
                     .iter()
                     .all(|(c, r)| c.distance(Vec2::from_array(p)) > r + danger + 1.0)

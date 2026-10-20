@@ -403,7 +403,8 @@ pub fn finish(
             // The driver's scout job (`progression`), when there is one here.
             "job": progression.as_ref().and_then(|p| match &p.0.job {
                 Some(extraction_core::progression::Job::Scout { map, place, at, seen }) if *map == opts.map => {
-                    Some(json!({"kind": "scout", "place": place, "seen": seen,
+                    Some(json!({"kind": "scout", "place": place, "seen": seen, "tier": p.0.tier,
+                                "armour": std::env::var("SIM_ARMOUR").ok(),
                                 "danger": zone.map.region_at(*at).map(|r| r.danger)}))
                 }
                 _ => None,

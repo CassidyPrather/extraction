@@ -140,7 +140,7 @@ impl Space {
             SpaceKind::Sheltered => -24.0 + 6.0 * self.enclosed,
             SpaceKind::Room => -16.0 + 4.0 * self.enclosed,
             SpaceKind::Hall => -13.0 + 4.0 * self.enclosed,
-            SpaceKind::Underground => -11.0 + 3.0 * self.enclosed,
+            SpaceKind::Underground => -10.5 + 2.0 * self.enclosed,
         };
         Reverb {
             wet_db,

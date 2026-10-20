@@ -70,6 +70,12 @@ pub const BRACED_LAG: f32 = 0.5;
 /// how long a rest outlasts losing touch (so it doesn't flicker), s.
 pub const BRACE_REACH: f32 = 0.05;
 pub const BRACE_HOLD: f32 = 0.15;
+/// Rests are looked for every this many fixed ticks (the hold above covers
+/// the gap), each gun on its own beat.
+pub const BRACE_EVERY: u32 = 3;
+/// How near a static collider's bounds must come before the gun's own
+/// shapes are tested against it, metres.
+pub const BRACE_BROAD: f32 = 0.1;
 /// Crouched (or kneeling): sway's share, and the spring's.
 pub const CROUCH_SWAY: f32 = 0.6;
 pub const CROUCH_RECOVER: f32 = 1.15;
@@ -133,6 +139,73 @@ impl Hold {
     }
 }
 
+/// How often the rest test reached its shape queries (a gauge: they're the
+/// costly part, so most held-gun ticks shouldn't).
+#[derive(Resource, Debug, Default)]
+pub struct BraceChecks {
+    /// Ticks the rest was looked for.
+    pub looked: u32,
+    /// Of those, ticks something static was near enough to test shapes.
+    pub shapes: u32,
+}
+
+/// Is anything solid (not the ground) at the handguard, against the gun
+/// itself, or under a seated magazine's foot (a rifle rests on its
+/// magazine too)? A broad bounds check first: only near something static
+/// are the gun's shapes tested. The bare ground doesn't count: resting on
+/// it is lying prone.
+#[allow(clippy::too_many_arguments)]
+fn touching(
+    spatial: &avian3d::prelude::SpatialQuery,
+    statics: &Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
+    terrain: Option<Entity>,
+    gt: &GlobalTransform,
+    layout: &super::GunLayout,
+    rest_at: Vec3,
+    mag_foot: Option<Vec3>,
+    checks: &mut BraceChecks,
+) -> bool {
+    use avian3d::prelude::{Collider, ColliderAabb, SpatialQueryFilter};
+    checks.looked += 1;
+    let (lo, hi) = layout.bounds();
+    // A hand-driven gun stops a little short of what it's pressed onto,
+    // so "resting" allows the same reach as the handguard.
+    let pad = Vec3::splat(BRACE_REACH);
+    let size = hi - lo + pad * 2.0;
+    let centre = gt.transform_point((lo + hi) * 0.5);
+    let half = gt.rotation() * (size * 0.5);
+    let reach = half.abs() + Vec3::splat(BRACE_BROAD);
+    let world = crate::world::Layer::World;
+    let mut near = false;
+    spatial.aabb_intersections_with_aabb_callback(
+        ColliderAabb::from_min_max(centre - reach, centre + reach),
+        |e| {
+            near = Some(e) != terrain
+                && statics
+                    .get(e)
+                    .is_ok_and(|l| l.is_none_or(|l| l.memberships.has_all(world)));
+            !near
+        },
+    );
+    if !near {
+        return false;
+    }
+    checks.shapes += 1;
+    let filter = SpatialQueryFilter::from_mask(world).with_excluded_entities(terrain);
+    let hits = |at: Vec3, shape: &Collider, rot: Quat| {
+        !spatial
+            .shape_intersections(shape, at, rot, &filter)
+            .is_empty()
+    };
+    hits(rest_at, &Collider::sphere(BRACE_REACH), Quat::IDENTITY)
+        || hits(
+            centre,
+            &Collider::cuboid(size.x, size.y, size.z),
+            gt.rotation(),
+        )
+        || mag_foot.is_some_and(|foot| hits(foot, &Collider::sphere(0.04), Quat::IDENTITY))
+}
+
 /// A gun's handling state: the recoil spring and the strain on the hold.
 #[derive(Component, Debug, Default)]
 pub struct Handling {
@@ -148,6 +221,9 @@ pub struct Handling {
     clock: f32,
     /// Seconds a rest outlasts losing touch.
     brace_left: f32,
+    /// Fixed ticks since the rest was last looked for, and what was found.
+    brace_tick: u32,
+    touching: bool,
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
@@ -181,12 +257,14 @@ pub struct FeelPlugin;
 
 impl Plugin for FeelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(add_handling).add_systems(
-            FixedUpdate,
-            handle_guns
-                .after(crate::interact::InteractSystems::Grab)
-                .before(crate::interact::InteractSystems::Follow),
-        );
+        app.init_resource::<BraceChecks>()
+            .add_observer(add_handling)
+            .add_systems(
+                FixedUpdate,
+                handle_guns
+                    .after(crate::interact::InteractSystems::Grab)
+                    .before(crate::interact::InteractSystems::Follow),
+            );
     }
 }
 
@@ -216,6 +294,7 @@ fn moment(gun: &Gun, mass: f32) -> f32 {
 #[allow(clippy::type_complexity)]
 fn handle_guns(
     mut guns: Query<(
+        Entity,
         &Gun,
         &Item,
         &GlobalTransform,
@@ -233,9 +312,13 @@ fn handle_guns(
     mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
     sockets: Query<&crate::interact::Socket>,
     mags: Query<(&GlobalTransform, &super::Mag)>,
+    statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
+    mut checks: ResMut<BraceChecks>,
 ) {
     let dt = time.delta_secs();
-    for (gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
+    let terrain = terrain.single().ok();
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -265,34 +348,21 @@ fn handle_guns(
                 .support
                 .unwrap_or((gun.layout.grip.translation + gun.layout.muzzle) * 0.5),
         );
-        let world = avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World);
-        let near = |at: Vec3, shape: &avian3d::prelude::Collider, rot: Quat| {
-            !spatial
-                .shape_intersections(shape, at, rot, &world)
-                .is_empty()
-        };
-        // Anything solid at the handguard, against the gun itself, or under
-        // a seated magazine's foot (a rifle rests on its magazine too).
-        let (lo, hi) = gun.layout.bounds();
-        // A hand-driven gun stops a little short of what it's pressed onto,
-        // so "resting" allows the same reach as the handguard.
-        let pad = Vec3::splat(BRACE_REACH);
-        let size = hi - lo + pad * 2.0;
-        let touching = near(
-            rest_at,
-            &avian3d::prelude::Collider::sphere(BRACE_REACH),
-            Quat::IDENTITY,
-        ) || near(
-            gt.transform_point((lo + hi) * 0.5),
-            &avian3d::prelude::Collider::cuboid(size.x, size.y, size.z),
-            gt.rotation(),
-        ) || mag_foot.is_some_and(|foot| {
-            near(
-                foot,
-                &avian3d::prelude::Collider::sphere(0.04),
-                Quat::IDENTITY,
-            )
-        });
+        // Looked for on this gun's beat only; the hold covers between.
+        handling.brace_tick += 1;
+        if (handling.brace_tick + gun_e.index_u32()) % BRACE_EVERY == 0 {
+            handling.touching = touching(
+                &spatial,
+                &statics,
+                terrain,
+                gt,
+                &gun.layout,
+                rest_at,
+                mag_foot,
+                &mut checks,
+            );
+        }
+        let touching = handling.touching;
         let was_braced = handling.hold.braced;
         handling.brace_left = if touching {
             BRACE_HOLD
@@ -560,6 +630,7 @@ mod vr_tests {
     use crate::rig::Side;
     use crate::vr_harness::Vr;
     use crate::weapons::ballistics::Projectile;
+    use extraction_core::ammo::Load;
     use extraction_core::firearm::{FireMode, Magazine};
     use std::collections::HashSet;
 
@@ -634,6 +705,7 @@ mod vr_tests {
             family: family.into(),
             capacity: rounds,
             rounds,
+            ..Default::default()
         })
         .unwrap();
         f.set_bolt_travel(1.0);
@@ -674,6 +746,157 @@ mod vr_tests {
         r.vr.trigger(Side::Right, 0.0);
         r.vr.step(2);
         dirs
+    }
+
+    /// Takes `id` from where it lies into the `side` hand.
+    fn take_in(r: &mut Range, side: Side, id: &str, at: Vec3) -> Entity {
+        let e = r.vr.spawn(id, Transform::from_translation(at));
+        r.vr.app
+            .world_mut()
+            .entity_mut(e)
+            .insert(avian3d::prelude::RigidBody::Static);
+        r.vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(side, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(e)
+            .insert(avian3d::prelude::RigidBody::Dynamic);
+        assert_eq!(r.vr.hand_state(side).holding, Some(e), "took {id}");
+        e
+    }
+
+    /// Two AP rounds thumbed onto a magazine of ball, by hand: seated and
+    /// fired, the AP comes out first, then the ball; each shot is the round
+    /// that fired.
+    #[test]
+    fn ap_thumbed_on_top_of_ball_fires_first() {
+        let mut r = hold("ak74", false, false);
+        // Set the rifle down where it is (held still in the air) to free
+        // the hand.
+        r.vr.app
+            .world_mut()
+            .entity_mut(r.gun)
+            .insert(avian3d::prelude::RigidBody::Static);
+        let grip = r.vr.hand_state(Side::Right).world;
+        r.vr.grip(Side::Right, 0.0);
+        r.vr.step(3);
+        let mag = take(&mut r, "ak_mag", 28);
+        let at_mag = r.vr.hand_state(Side::Left).world.translation;
+        for k in 0..2 {
+            let spot = r.feet + Vec3::new(0.4, 1.0, -0.2 - 0.1 * k as f32);
+            take_in(&mut r, Side::Right, "round_545_ap", spot);
+            glide_side(&mut r, Side::Right, spot, at_mag, 10);
+            r.vr.step(3);
+            r.vr.move_hand(Side::Right, spot);
+            r.vr.step(3);
+        }
+        {
+            let it = r.vr.app.world().get::<Item>(mag).unwrap();
+            assert_eq!(it.rounds, 30);
+            assert_eq!(it.loads.0, vec![Load::Ap, Load::Ap], "two AP on top");
+        }
+        // The rifle back in hand.
+        r.vr.hand(Side::Right, grip.translation, grip.rotation, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(Side::Right, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(r.gun)
+            .insert(avian3d::prelude::RigidBody::Dynamic);
+        r.vr.step(10);
+        assert_eq!(r.vr.hand_state(Side::Right).holding, Some(r.gun));
+        let well = {
+            let w = gun_mut(&mut r).magwell.unwrap();
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(w)
+                .unwrap()
+                .translation()
+        };
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, well - Vec3::Y * 0.25, 15);
+        glide(&mut r, well - Vec3::Y * 0.25, well, 30);
+        r.vr.step(5);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        assert!(
+            r.vr.app
+                .world()
+                .get::<crate::interact::InSocket>(mag)
+                .is_some(),
+            "seated"
+        );
+        {
+            let mut g = gun_mut(&mut r);
+            while g.firearm.fire_mode() != FireMode::Semi {
+                g.firearm.cycle_mode();
+            }
+        }
+        #[derive(Resource, Default)]
+        struct Shots(Vec<Load>);
+        r.vr.app.init_resource::<Shots>().add_systems(
+            FixedPostUpdate,
+            |new: Query<&Projectile, Added<Projectile>>, mut shots: ResMut<Shots>| {
+                shots.0.extend(new.iter().map(|p| p.load))
+            },
+        );
+        rack(&mut r);
+        for _ in 0..3 {
+            assert_eq!(fire(&mut r, 1, true).len(), 1);
+        }
+        let loads = r.vr.app.world().resource::<Shots>().0.clone();
+        assert_eq!(loads, vec![Load::Ap, Load::Ap, Load::Standard]);
+    }
+
+    /// A slug in one barrel and buckshot in the other, by hand: the slug
+    /// is one heavy ball, the buckshot its spread of pellets.
+    #[test]
+    fn a_slug_and_a_shell_in_the_double() {
+        #[derive(Resource, Default)]
+        struct Shots(Vec<(Load, f32)>);
+        let mut r = hold("toz_double", false, false);
+        r.vr.app.init_resource::<Shots>().add_systems(
+            FixedPostUpdate,
+            |new: Query<&Projectile, Added<Projectile>>, mut shots: ResMut<Shots>| {
+                shots.0.extend(new.iter().map(|p| (p.load, p.mass_g)))
+            },
+        );
+        r.vr.primary(Side::Right, true);
+        r.vr.step(2);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(2);
+        for id in ["slug_12ga", "shell_12ga"] {
+            take(&mut r, id, 1);
+            let (port, _) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port, 15);
+            r.vr.step(2);
+            r.vr.grip(Side::Left, 0.0);
+            r.vr.step(2);
+        }
+        r.vr.primary(Side::Right, true);
+        r.vr.step(2);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 2);
+        fire(&mut r, 1, true);
+        fire(&mut r, 1, true);
+        let shots = r.vr.app.world().resource::<Shots>().0.clone();
+        let slugs: Vec<_> = shots.iter().filter(|(l, _)| *l == Load::Slug).collect();
+        assert_eq!(slugs.len(), 1, "{shots:?}");
+        assert_eq!(slugs[0].1, extraction_core::ammo::SLUG_MASS_G);
+        let pellets = shots.iter().filter(|(l, _)| *l == Load::Standard).count();
+        assert!(pellets > 4, "buckshot spreads: {shots:?}");
+    }
+
+    fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
+        for i in 1..=steps {
+            r.vr.move_hand(side, a.lerp(b, i as f32 / steps as f32));
+            r.vr.step(1);
+        }
     }
 
     /// RMS angle of the shots from their mean: the group's size.
@@ -1158,7 +1381,19 @@ mod vr_tests {
         struct Felt(Vec<crate::rig::haptics::Haptic>);
         let mut r = hold("ak74", false, false);
         r.vr.step(60);
+        *r.vr.app.world_mut().resource_mut::<BraceChecks>() = BraceChecks::default();
         let free = wander(&mut r);
+        // Held up in the open, over the ground: the rest is looked for on
+        // one tick in three, and nothing near enough to test shapes against
+        // (they're the costly part).
+        let checks = std::mem::take(&mut *r.vr.app.world_mut().resource_mut::<BraceChecks>());
+        let ticks = 270.0;
+        assert!(checks.looked > 0, "looked: {checks:?}");
+        assert!(
+            (checks.looked as f32) < ticks / BRACE_EVERY as f32 + 2.0,
+            "looked every {BRACE_EVERY} ticks: {checks:?}"
+        );
+        assert_eq!(checks.shapes, 0, "no shapes in the open: {checks:?}");
         r.vr.app.init_resource::<Felt>().add_systems(
             Update,
             |mut h: MessageReader<crate::rig::haptics::Haptic>, mut f: ResMut<Felt>| {
@@ -1194,6 +1429,10 @@ mod vr_tests {
         assert!(
             r.vr.app.world().get::<Handling>(r.gun).unwrap().hold.braced,
             "resting on the block"
+        );
+        assert!(
+            r.vr.app.world().resource::<BraceChecks>().shapes > 0,
+            "the block is tested"
         );
         // Let the droop ease off before measuring.
         r.vr.step(120);

@@ -25,11 +25,45 @@ pub const HOUND_SIZE: f32 = 0.7;
 #[derive(Component, Debug, Default)]
 pub struct Hound;
 
+/// A hound coils to spring at `at` (the tell, 0.6 s, before a lunge).
+/// A mind sends it; the body crouches, haunches down, nose up toward it.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct HoundCrouch {
+    pub hound: Entity,
+    pub at: Vec3,
+}
+
+/// How long a hound stays coiled.
+pub const COIL_TIME: f32 = 0.6;
+/// How long the gait lets a lunge carry it past its top speed.
+pub const LEAP_TIME: f32 = 0.4;
+
+/// Launch a lunge: `speed` m/s toward `toward` (horizontal), carried
+/// past the gait's top speed for [`LEAP_TIME`].
+pub fn lunge(w: &mut Walker, g: &mut Gait, from: Vec3, toward: Vec3, speed: f32) {
+    let d = toward - from;
+    w.velocity = Vec3::new(d.x, 0.0, d.z).normalize_or_zero() * speed;
+    g.leap = LEAP_TIME;
+    g.coil = 0.0;
+}
+
 pub struct HoundPlugin;
 
 impl Plugin for HoundPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, shape_hounds.after(super::perceive));
+        app.add_message::<HoundCrouch>().add_systems(
+            FixedUpdate,
+            (shape_hounds, coil_hounds).after(super::perceive),
+        );
+    }
+}
+
+fn coil_hounds(mut crouches: MessageReader<HoundCrouch>, mut gaits: Query<&mut Gait, With<Hound>>) {
+    for c in crouches.read() {
+        if let Ok(mut g) = gaits.get_mut(c.hound) {
+            g.coil = COIL_TIME;
+            g.coil_at = c.at;
+        }
     }
 }
 
@@ -56,10 +90,11 @@ pub fn spawn_hound(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> 
         Hound,
         Gait::hound(s),
         Transform::from_translation(pos).with_scale(Vec3::splat(s)),
+        // An ear more than an eye: it sees short and narrow and hears far.
         Senses {
-            sight: 60.0,
-            fov_deg: 220.0,
-            hearing: 1.6,
+            sight: 25.0,
+            fov_deg: 120.0,
+            hearing: 2.5,
             eye: Vec3::new(0.0, 0.1, -0.7),
         },
     ));
@@ -182,7 +217,8 @@ mod tests {
             "got there: {:.1?}",
             t.translation
         );
-        assert!(fastest > 2.5, "ran ({fastest:.2} m/s)");
+        // (At a walker's brain's pace, its lope.)
+        assert!(fastest > 1.7, "ran ({fastest:.2} m/s)");
         // No orb plates on a hound.
         let plates = app
             .world_mut()
@@ -191,5 +227,117 @@ mod tests {
             .filter(|p| p.robot == hound && matches!(p.role, PartRole::Armour(_)))
             .count();
         assert_eq!(plates, 0);
+    }
+
+    /// Coiled, it all but stops, haunches down and nose up toward the
+    /// mark; a lunge then carries it past its run, and it comes back to
+    /// its legs after.
+    #[test]
+    fn it_coils_then_lunges() {
+        use super::super::anim::{Drive, leg_poses, step_walker};
+        let size = HOUND_SIZE;
+        let shape = Shape::Hound;
+        let start = Vec3::new(0.0, shape.height() * size, 0.0);
+        let feet = std::array::from_fn(|i| {
+            let p = start + shape.rest(i) * size;
+            let f = Vec3::new(p.x, 0.0, p.z);
+            Foot {
+                planted: f,
+                from: f,
+                to: f,
+                t: 1.0,
+                alive: true,
+            }
+        });
+        let mut w = Walker {
+            feet,
+            path: Vec::new(),
+            repath: 0.0,
+            velocity: Vec3::ZERO,
+            yaw: 0.0,
+            gun_cooldown: 0.0,
+            turret_yaw: 0.0,
+            phase: 0,
+            collapsed: false,
+            goal: None,
+            aim: 0.0,
+            cover: None,
+            rethink: 0.0,
+            waited: 0.0,
+        };
+        let mut g = Gait::hound(size);
+        let mut t = Transform::from_translation(start).with_scale(Vec3::splat(size));
+        let mark = Vec3::new(0.0, 0.0, -5.0);
+        let drive = |pace: f32| Drive {
+            desired: Vec3::NEG_Z * g_top(),
+            face: None,
+            pace,
+            down: false,
+            stunned: false,
+            low: true,
+        };
+        fn g_top() -> f32 {
+            Gait::hound(HOUND_SIZE).top_speed()
+        }
+        let dt = 1.0 / 90.0;
+        for _ in 0..90 {
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive(0.5),
+                dt,
+                &mut |_| 0.0,
+                &mut |_| {},
+            );
+        }
+        g.coil = COIL_TIME;
+        g.coil_at = mark;
+        for _ in 0..40 {
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive(0.5),
+                dt,
+                &mut |_| 0.0,
+                &mut |_| {},
+            );
+        }
+        assert!(
+            w.velocity.length() < 0.4,
+            "coiled, near still ({:.2})",
+            w.velocity.length()
+        );
+        // Nose up: the front's higher than the back.
+        let nose = t.transform_point(Vec3::new(0.0, 0.0, -0.5));
+        let tail = t.transform_point(Vec3::new(0.0, 0.0, 0.5));
+        assert!(
+            nose.y > tail.y + 0.05,
+            "nose {:.2} tail {:.2}",
+            nose.y,
+            tail.y
+        );
+        let from = t.translation;
+        lunge(&mut w, &mut g, from, mark, 7.0);
+        let mut fastest = 0.0f32;
+        for _ in 0..150 {
+            step_walker(
+                &mut w,
+                &mut g,
+                &mut t,
+                &drive(0.5),
+                dt,
+                &mut |_| 0.0,
+                &mut |_| {},
+            );
+            fastest = fastest.max(w.velocity.length());
+            for p in leg_poses(&w, &g, &t).iter().flatten() {
+                assert!(p.is_finite());
+            }
+        }
+        assert!(fastest > 6.5, "lunged at {fastest:.2}");
+        assert!(t.translation.distance(from) > 2.5, "covered ground");
+        assert!(w.velocity.length() < 2.0, "and came back to its feet");
     }
 }

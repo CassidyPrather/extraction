@@ -99,7 +99,9 @@ fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
     zone: Res<Zone>,
-    robots: Query<&Robot>,
+    // Robots that live in a site (underground residents) aren't the
+    // director's to count: they'd use up the budget for the valley.
+    robots: Query<&Robot, Without<super::indoor::LocalNav>>,
     pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
 ) {

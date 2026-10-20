@@ -246,7 +246,20 @@ share of the frame (`budget::CPU_SHARE`: PostUpdate 50%, Update 40%,
 physics 35%, ...) and the frame to 160 units of a fixed reference
 workload (three times today's): shares survive a busy machine, wall
 milliseconds don't (beside the rest of the suite they more than double).
-`busy_moments` (ignored) prints all three valleys.
+`busy_moments` (ignored) prints all three valleys. The moment is staged
+by `perf::fight`: two guns in the player's hands (a rifle and a pistol,
+taken through `HandAction::Grab`, so held guns run their handling every
+tick) and the ten robots.
+
+`perf::tests::headless_ticks_hold_their_floor` stages the same fight in
+the headless game (`GamePlugin` alone) and holds its tick under 60
+reference units: a slowdown anywhere in the simulation fails there, where
+the shares only notice one schedule outgrowing the rest. A healthy busy
+tick is about 21 units (9 ms, ~107 ticks a second, dev build); with
+Weapon feel's three world shape queries per held gun per tick it was 139
+(61 ms, 16 a second), and in the client FixedUpdate went from 12% of the
+frame to 75% (`weapons::feel::handle_guns`, 66 ms a frame). Both gauges
+fail on that until its fix lands.
 
 To name systems: `cargo test --lib system_profile --features "bevy/trace
 bevy/debug" -- --ignored --nocapture` (a one-off Bevy rebuild with

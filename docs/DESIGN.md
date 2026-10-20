@@ -212,6 +212,21 @@ low you go, doors when you open them, and things that land; a wall or a
 hill between cuts a sound's reach by more than half. A heard sound tells
 a robot where the *sound* was.
 
+**Light and dark.** Robot eyes follow the same light the player sees
+(`Conditions::light_at`, Visual design's time of day): exposure scales by
+its square root, so dusk leaves about 0.6 of the day's, a room by day
+0.55, a night 0.2. A torch lights you up wherever the sky doesn't, and its
+beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
+carries a shot a third as far. Robots hear round open doorways and
+through walls by the same rule the player's ears do (`acoustics`).
+
+**Hounds hunt by ear** (`robots/hound_mind.rs`). Poor eyes tuned to
+movement, the best ears in the Zone: a sound sends a hound running, the
+last stretch it stalks low, then noses round. Seen, it comes round to
+your side, crouches (the tell) and lunges to bite. The way to beat one is
+the opposite of a drone: keep still and quiet. The director answers
+gunfire with a pair of hounds a third of the time.
+
 **Robots remember and search** (`robots/search.rs`). Each keeps a
 last-known position and an uncertainty that grows at walking pace while
 you're out of sight (it knows which way you went for a second, then it's
@@ -407,8 +422,8 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   of the vest's pockets (the pocket decides front or back). A round that
   lands where a plate or the helmet covers goes through `armour_strike`:
   a stop leaves a bruise (5% of the damage) and wears the plate, a
-  ricochet does nothing, and a round that goes through keeps the square of
-  its remaining speed. A 6 mm plate stops pistol rounds and buckshot. A
+  ricochet does nothing, and a round that goes through does harm in
+  proportion to the speed it keeps. A 6 mm plate stops pistol rounds and buckshot. A
   new one dents under a rifle round, and a worn one lets it through.
   Blasts and blades go round plates.
 

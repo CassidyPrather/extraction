@@ -422,6 +422,7 @@ mod tests {
                 damage: 100.0,
                 shooter: None,
                 mass_g: 3.4,
+                load: Default::default(),
             });
         for _ in 0..3 {
             app.update();

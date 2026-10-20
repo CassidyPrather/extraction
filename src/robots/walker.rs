@@ -329,6 +329,8 @@ fn walker_brain(
             Has<super::indoor::Crawler>,
             Option<&super::anim::Gait>,
             Option<&mut super::hound_mind::HoundMind>,
+            Option<&super::flee::Fleeing>,
+            (Has<super::indoor::Dormant>, Has<super::indoor::Heavy>),
         ),
     )>,
     targets: Query<&GlobalTransform>,
@@ -364,7 +366,7 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait, mut hound),
+        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, heavy)),
     ) in &mut walkers
     {
         let is_hound = hound.is_some();
@@ -380,6 +382,26 @@ fn walker_brain(
         }
         let pos = t.translation;
         *intent = Intent::default();
+        // Asleep in its bay: still, low.
+        if dormant {
+            intent.low = true;
+            w.goal = None;
+            w.path.clear();
+            continue;
+        }
+        // A live grenade it knows about: run, out past its reach.
+        if let Some(f) = fleeing {
+            intent.pace = 1.4;
+            intent.look = Some(f.from);
+            let reach = f.radius + super::flee::FLEE_MARGIN;
+            if w.goal.is_none_or(|g| g.distance(f.from) < reach) || w.path.is_empty() {
+                let to = f.away(pos);
+                w.goal = Some(to);
+                w.repath = 3.0;
+                w.path = navr.path(pos, to).unwrap_or_default();
+            }
+            continue;
+        }
         let lame = gait.is_some_and(|g| g.limp > LAME);
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
@@ -429,7 +451,11 @@ fn walker_brain(
                 // On its rounds.
                 patrol.as_deref_mut().and_then(|p| {
                     let (go, look) = p.step(pos, dt, sweep);
-                    intent.pace = super::indoor::PATROL_PACE;
+                    intent.pace = if heavy {
+                        super::indoor::HEAVY_PACE
+                    } else {
+                        super::indoor::PATROL_PACE
+                    };
                     intent.look = look;
                     go
                 })

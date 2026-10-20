@@ -498,6 +498,7 @@ mod tests {
                 family: "pm".into(),
                 capacity: 8,
                 rounds: 8,
+                ..Default::default()
             })
             .unwrap();
             f.set_bolt_travel(1.0);
@@ -1203,6 +1204,53 @@ mod tests {
         if before.is_some() {
             assert_ne!(before, after, "the setting moved on");
         }
+    }
+
+    /// The MUSIC card, in the row over the stash, pushed in by a fingertip:
+    /// the score goes off.
+    #[test]
+    fn a_fingertip_turns_the_score_off() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::raid::comfort_board::ComfortCard;
+        let mut vr = Vr::new("training_yard");
+        vr.step(5);
+        *vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>() = Default::default();
+        vr.step(1);
+        let card = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &ComfortCard)>()
+            .iter(vr.app.world())
+            .find(|(_, c)| **c == ComfortCard::Score)
+            .map(|(e, _)| e)
+            .expect("the music card");
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(b, _)| b.target == card)
+            .map(|(_, gt)| gt)
+            .expect("a button on it");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006));
+            vr.step(1);
+        }
+        for k in 0..6 {
+            vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+            vr.step(1);
+        }
+        vr.step(2);
+        assert!(vr.pressed().contains(&card), "pressed");
+        let c = vr.app.world().resource::<crate::rig::comfort::Comfort>();
+        assert!(!c.score, "the score is off");
     }
 
     /// Something on the ground three metres off: point at it, squeeze,
