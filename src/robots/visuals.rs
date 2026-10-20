@@ -318,6 +318,8 @@ fn dress_parts(
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
+            (RobotKind::Walker, PartRole::Armour(_)) => "plate",
+            (RobotKind::Drone, PartRole::Armour(_)) => "panel",
             (RobotKind::Drone, PartRole::Rotor(_)) => "rotor",
             (RobotKind::Walker, PartRole::Leg(_)) if leg => "leg",
             (RobotKind::Dirigible, PartRole::GasCell(i)) => match i {
@@ -375,6 +377,19 @@ fn dress_parts(
                     MeshMaterial3d(m.rotor.clone()),
                     ChildOf(disc),
                 ));
+            }
+            (_, PartRole::Armour(_)) => {
+                let Some(node) = ModelNode::find(model, node_name) else {
+                    continue;
+                };
+                attach(
+                    &mut commands,
+                    e,
+                    node,
+                    plate_turn(robot.kind, node),
+                    e,
+                    &mut mat,
+                );
             }
             (RobotKind::Walker, PartRole::Leg(i)) => {
                 // The collider entity stays invisible; segments are drawn separately.
@@ -1227,6 +1242,16 @@ fn dress_debris(
                     );
                 })
             }
+            Piece::Plate => {
+                let name = if d.kind == RobotKind::Walker {
+                    "plate"
+                } else {
+                    "panel"
+                };
+                node(name).map(|n| {
+                    attach(&mut commands, e, n, plate_turn(d.kind, n), e, &mut mat);
+                })
+            }
             Piece::Sensor => node("sensor").map(|n| {
                 attach(&mut commands, e, n, Transform::IDENTITY, e, &mut mat);
             }),
@@ -1302,7 +1327,7 @@ fn dress_debris(
                     ChildOf(e),
                 ));
             }
-            Piece::Sensor | Piece::Gun => {
+            Piece::Sensor | Piece::Gun | Piece::Plate => {
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::new(0.08, 0.06, 0.2))),
                     MeshMaterial3d(m.dark.clone()),
@@ -1324,6 +1349,18 @@ fn dress_debris(
                 ));
             }
         }
+    }
+}
+
+/// How a plate's model sits on its part, whose +Y faces out: a walker's
+/// plate is modelled facing out from the orb at its origin, a drone's
+/// (its top panel, worn under the belly) already faces +Y.
+fn plate_turn(kind: RobotKind, node: &ModelNode) -> Transform {
+    if kind == RobotKind::Walker {
+        let out = node.transform.translation.normalize_or(Vec3::Y);
+        Transform::from_rotation(Quat::from_rotation_arc(out, Vec3::Y))
+    } else {
+        Transform::IDENTITY
     }
 }
 

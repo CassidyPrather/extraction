@@ -187,7 +187,7 @@ fn reel(
     }
     if frame == 5 {
         if let Ok(mut w) = walkers.get_mut(subject) {
-            if what == "zap" {
+            if what == "zap" || what == "shot" {
                 // Facing you.
                 w.yaw = flat.x.atan2(flat.z);
             }
@@ -264,7 +264,7 @@ fn reel(
                 origin,
                 direction: (target - origin).normalize_or(Vec3::NEG_Z),
                 speed: 700.0,
-                damage: 4.0,
+                damage: 7.0,
                 projectiles: 1,
                 spread: 0.0,
                 recoil: 0.0,

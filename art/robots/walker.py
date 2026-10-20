@@ -11,6 +11,7 @@ and their origins (each the spawn offset of its part):
 - `leg_upper`  origin at the hip, modelled along +Y, 0.8 m to the knee
 - `leg_lower`  origin at the knee, modelled along +Y, 0.95 m to the foot
 - `emitter` (0, -0.1, -0.42)     a crawler's spark gun, under the visor; collider sphere r 0.08
+- `plate`   (0, 0, -0.4)       an armour plate over the orb, facing -Z (the game turns it)
 - `panel`   a loose shell panel for wrecks, origin at its middle (on the orb's surface)
 
 Leg segments have their bend axis along X (the game points X along the
@@ -172,6 +173,24 @@ emitter.tube(0.034, 0.012, -0.476, -0.468, "Glow", segs=20, xf=T(ex, ey, 0))
 for sx in (-1, 1):
     emitter.box((0.012, 0.012, 0.06), (sx * 0.026, ey, -0.49), "Dark", bevel=0.003, segs=1)
 
+# --- Armour plate --------------------------------------------------------------------------
+# A curved plate bolted over the orb (the game hangs three: low front and
+# both flanks), proud of the shell, with a dark rim and four bolts. Origin
+# at its middle on the orb's surface; the game turns it to face out.
+PLATE_LAT = 0.0
+plate = Part("plate", origin=(0.0, 0.0, -R))
+plate.lathe(lat_arc(R + 0.008, R + 0.032, PLATE_LAT - 19, PLATE_LAT + 19, 8), "Shell", segs=10,
+            xf=UP, start=68, sweep=44, closed=True)
+plate.lathe(lat_arc(R + 0.006, R + 0.026, PLATE_LAT - 21, PLATE_LAT + 21, 8), "Dark", segs=12,
+            xf=UP, start=66, sweep=48, closed=True)
+for da in (-17.0, 17.0):
+    for dl in (-14.0, 14.0):
+        a = math.radians(90 + da)
+        l = math.radians(PLATE_LAT + dl)
+        rr = R + 0.034
+        bolt = (rr * math.cos(l) * math.cos(a), rr * math.sin(l), -rr * math.cos(l) * math.sin(a))
+        plate.sphere(0.009, bolt, "Dark", segs=10, rings=5)
+
 # --- A loose shell panel, for wrecks ----------------------------------------------------------
 # One of the orb's upper-band panels on its own (a wreck throws a couple
 # off; the game spins it to land wherever). Its origin is its middle, so
@@ -182,7 +201,7 @@ panel = Part("panel", origin=(0.0, R * math.sin(math.radians(PANEL_LAT)),
 panel.lathe(lat_arc(R - 0.016, R + 0.004, PANEL_LAT - 16, PANEL_LAT + 16, 6), "Shell", segs=7,
             xf=UP, start=70, sweep=40, closed=True)
 
-for p in (core, sensor, turret, upper, lower, panel, emitter):
+for p in (core, sensor, turret, upper, lower, panel, emitter, plate):
     make(p)
 report()
 export("assets/models/robots/walker.glb")
