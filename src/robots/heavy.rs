@@ -1436,6 +1436,134 @@ fn footfalls(
     }
 }
 
+/// Heavies' wrecks, for the save: they stay where they fell until the
+/// Surge.
+pub fn save_wrecks(world: &mut World) -> Vec<extraction_core::save::WreckSave> {
+    let seats: Vec<(Entity, Slot, bool)> = world
+        .query::<(&HeavySeat, &Socket)>()
+        .iter(world)
+        .map(|(s, sock)| (s.robot, s.slot, sock.occupant.is_some()))
+        .collect();
+    let out = world
+        .query::<(Entity, &Robot, &Heavy, &Walker, &Transform)>()
+        .iter(world)
+        .filter(|(_, r, ..)| r.wrecked)
+        .map(|(e, _, h, w, t)| extraction_core::save::WreckSave {
+            at: t.translation.to_array(),
+            yaw: w.yaw,
+            lean: h.lean.to_array(),
+            plates: h.plates_on,
+            cell: !h.cell_pulled
+                && seats
+                    .iter()
+                    .any(|(r, s, on)| *r == e && *s == Slot::Cell && *on),
+        })
+        .collect();
+    out
+}
+
+/// A saved wreck back where it lay: sunk on its legs, its plates and cell
+/// as they were, loose for a hand.
+pub fn restore_wreck(world: &mut World, saved: &extraction_core::save::WreckSave) {
+    let zone = world.resource::<Zone>().clone();
+    let catalog = world.resource::<Catalog>().clone();
+    let at = Vec3::from_array(saved.at);
+    let e = {
+        let mut c = world.commands();
+        spawn_heavy(
+            &mut c,
+            &zone,
+            &catalog,
+            at,
+            Job {
+                kind: super::JobKind::Survey,
+                site: at,
+                duration: 0.0,
+                exit: at,
+            },
+        )
+    };
+    world.flush();
+    let mut gone: Vec<Entity> = Vec::new();
+    let mut opened: Vec<Entity> = Vec::new();
+    let mut loose: Vec<Entity> = Vec::new();
+    let mut emptied: Vec<Entity> = Vec::new();
+    let children: Vec<Entity> = world
+        .get::<Children>(e)
+        .map(|c| c.iter().collect())
+        .unwrap_or_default();
+    for c in children {
+        if let Some(part) = world.get::<HeavyPart>(c).map(|p| p.0) {
+            match part {
+                Slot::Plate(i) | Slot::Bolt { plate: i, .. } if !saved.plates[i as usize] => {
+                    gone.push(c)
+                }
+                Slot::Cell if !saved.cell => gone.push(c),
+                s if s.behind().is_some_and(|p| !saved.plates[p]) => opened.push(c),
+                _ => {}
+            }
+        }
+        if let (Some(seat), Some(sock)) = (world.get::<HeavySeat>(c), world.get::<Socket>(c)) {
+            let keep = match seat.slot {
+                Slot::Plate(i) => saved.plates[i as usize],
+                _ => saved.cell,
+            };
+            if let Some(item) = sock.occupant {
+                if keep {
+                    // (The cell only once its hatch is off.)
+                    if seat.slot != Slot::Cell || !saved.plates[rules::HATCH] {
+                        loose.push(item);
+                    }
+                } else {
+                    gone.push(item);
+                    emptied.push(c);
+                }
+            }
+        }
+    }
+    for g in gone {
+        world.despawn(g);
+    }
+    for s in emptied {
+        if let Some(mut sock) = world.get_mut::<Socket>(s) {
+            sock.occupant = None;
+        }
+    }
+    for o in opened {
+        world.entity_mut(o).remove::<ColliderDisabled>();
+    }
+    for item in loose {
+        let mut em = world.entity_mut(item);
+        if let Some(f) = em.take::<Fastened>() {
+            em.insert(f.0);
+        }
+    }
+    let mut em = world.entity_mut(e);
+    em.insert((super::wreck::Broken, super::Salvaged));
+    em.get_mut::<Robot>().unwrap().wrecked = true;
+    em.get_mut::<Walker>().unwrap().yaw = saved.yaw;
+    let mut h = em.get_mut::<Heavy>().unwrap();
+    h.plates_on = saved.plates;
+    h.bolts = saved.plates.map(|on| if on { 2 } else { 0 });
+    h.cell_pulled = !saved.cell;
+    h.lean = Vec3::from_array(saved.lean);
+    // Long since settled: no second fall, no second thump.
+    h.down_for = 60.0;
+}
+
+/// The Surge sweeps heavies' wrecks away with everything else.
+pub fn clear_wrecks(world: &mut World) {
+    let wrecks: Vec<Entity> = world
+        .query::<(Entity, &Robot, &Heavy)>()
+        .iter(world)
+        .filter(|(_, r, _)| r.wrecked)
+        .map(|(e, ..)| e)
+        .collect();
+    for e in wrecks {
+        world.despawn(e);
+    }
+}
+
 /// The salvage table a heavy's wreck answers to (its parts are its loot:
 /// see `fell_heavy`).
 pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];

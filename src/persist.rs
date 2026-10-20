@@ -604,6 +604,9 @@ fn apply_restore(world: &mut World) {
                 placed += 1;
             }
         }
+        for w in &save.zone.wrecks {
+            crate::robots::heavy::restore_wreck(world, w);
+        }
         for r in &save.zone.remains {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
@@ -860,6 +863,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         });
     }
     save.zone.remains = remains.into_values().collect();
+    save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
     save.loadout = loadout;
     save
 }
@@ -976,6 +980,7 @@ pub fn reset_zone(world: &mut World) {
         gone += contents.len();
         world.despawn(bag);
     }
+    crate::robots::heavy::clear_wrecks(world);
     let cycle = {
         let mut raid = world.resource_mut::<Raid>();
         raid.cycle += 1;
@@ -1094,6 +1099,126 @@ mod tests {
         assert_eq!(raid.raids, 7, "the record came across");
         assert_eq!(raid.cycle, 4, "and the Zone's cycle");
         assert!(stash_len(app.world_mut()) > 0, "and the stash");
+    }
+
+    /// A heavy's wreck stays where it fell between sessions (its plates
+    /// and cell as they were) until the Surge sweeps it away.
+    #[test]
+    fn a_heavys_wreck_keeps_until_the_surge() {
+        use crate::robots::heavy::{Heavy, HeavyPart, HeavySeat};
+        use extraction_core::heavy::Slot;
+        let path = temp_save("wreck.ron");
+        let mut a = app_with_save(&path);
+        let zone = a.world().resource::<crate::world::Zone>().clone();
+        let catalog = a.world().resource::<crate::items::Catalog>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let heavy = {
+            let mut c = a.world_mut().commands();
+            let e = crate::robots::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e).remove::<crate::robots::Senses>();
+            a.world_mut().flush();
+            e
+        };
+        for _ in 0..30 {
+            a.update();
+        }
+        // The left plate shot off, then two knees: down for good.
+        let parts: Vec<(Entity, Slot)> = a
+            .world_mut()
+            .query::<(Entity, &HeavyPart, &crate::robots::RobotPart)>()
+            .iter(a.world())
+            .filter(|(_, _, p)| p.robot == heavy)
+            .map(|(e, h, _)| (e, h.0))
+            .collect();
+        for (e, s) in &parts {
+            if matches!(
+                s,
+                Slot::Bolt { plate: 1, .. } | Slot::Knee(0) | Slot::Knee(2)
+            ) {
+                a.world_mut()
+                    .write_message(crate::weapons::ballistics::Hit {
+                        entity: *e,
+                        point: Vec3::ZERO,
+                        normal: Vec3::Y,
+                        velocity: Vec3::ZERO,
+                        damage: 1000.0,
+                        shooter: None,
+                        mass_g: 0.0,
+                        load: Default::default(),
+                    });
+                a.update();
+            }
+        }
+        for _ in 0..180 {
+            a.update();
+        }
+        let save = snapshot(a.world_mut());
+        assert_eq!(save.zone.wrecks.len(), 1);
+        let w = &save.zone.wrecks[0];
+        assert_eq!(w.plates, [true, false, true]);
+        assert!(w.cell);
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+
+        let mut b = app_with_save(&path);
+        let found: Vec<(Entity, Vec3, bool)> = b
+            .world_mut()
+            .query::<(Entity, &crate::robots::Robot, &Transform, &Heavy)>()
+            .iter(b.world())
+            .map(|(e, r, t, _)| (e, t.translation, r.wrecked))
+            .collect();
+        assert_eq!(found.len(), 1, "the wreck is back");
+        let (e, pos, wrecked) = found[0];
+        assert!(wrecked);
+        assert!(
+            Vec2::new(pos.x - w.at[0], pos.z - w.at[2]).length() < 0.5,
+            "where it fell"
+        );
+        let seated: Vec<(Slot, bool)> = b
+            .world_mut()
+            .query::<(&HeavySeat, &crate::interact::Socket)>()
+            .iter(b.world())
+            .filter(|(s, sock)| s.robot == e && sock.occupant.is_some())
+            .map(|(s, sock)| {
+                let free = b
+                    .world()
+                    .get::<crate::interact::Grabbable>(sock.occupant.unwrap())
+                    .is_some();
+                (s.slot, free)
+            })
+            .collect();
+        assert!(
+            !seated.iter().any(|(s, _)| *s == Slot::Plate(1)),
+            "{seated:?}"
+        );
+        assert!(seated.contains(&(Slot::Plate(0), true)), "{seated:?}");
+        assert!(
+            seated.contains(&(Slot::Cell, false)),
+            "behind its hatch: {seated:?}"
+        );
+        // Saved again, it's the same wreck.
+        let again = snapshot(b.world_mut()).zone.wrecks;
+        assert_eq!(again.len(), 1);
+        assert_eq!((again[0].plates, again[0].cell), (w.plates, w.cell));
+        // The Surge takes it.
+        b.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
+        b.update();
+        b.update();
+        let left = b.world_mut().query::<&Heavy>().iter(b.world()).count();
+        assert_eq!(left, 0, "swept away");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
