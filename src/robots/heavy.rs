@@ -238,6 +238,8 @@ pub struct HeavyEvent {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeavyAct {
+    /// A foot came down (heard far, felt near).
+    Step,
     /// The arm rose: the tell before a blow.
     Raise,
     /// The claw came down (`hit`: on someone).
@@ -300,7 +302,7 @@ impl Plugin for HeavyPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                (pose_heavy, move_arm, fell_heavy)
+                (pose_heavy, move_arm, fell_heavy, footfalls)
                     .chain()
                     .after(super::anim::walk)
                     .before(PhysicsSystems::First),
@@ -1409,6 +1411,28 @@ fn fell_heavy(
         // each tick; this goes on top).
         let k = smooth(h.down_for / 1.6);
         t.rotation = Quat::from_scaled_axis(t.rotation * (h.lean * k)) * t.rotation;
+    }
+}
+
+/// Which walker footfalls are a heavy's: [`HeavyAct::Step`] for its
+/// sound and the shake in your hands.
+fn footfalls(
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    heavies: Query<(Entity, &Walker), With<Heavy>>,
+    mut out: MessageWriter<HeavyEvent>,
+) {
+    for s in steps.read() {
+        if let Some((e, _)) = heavies.iter().find(|(_, w)| {
+            w.feet
+                .iter()
+                .any(|f| f.planted.distance_squared(s.at) < 0.01)
+        }) {
+            out.write(HeavyEvent {
+                heavy: e,
+                at: s.at,
+                what: HeavyAct::Step,
+            });
+        }
     }
 }
 

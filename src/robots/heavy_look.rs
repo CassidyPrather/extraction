@@ -35,6 +35,7 @@ impl Plugin for HeavyLookPlugin {
                 light_heavies,
                 dress_doors,
                 gallery,
+                felt_footfalls,
             ),
         );
     }
@@ -506,5 +507,60 @@ fn gallery(
             }
         }
         _ => {}
+    }
+}
+
+/// Within this of a heavy's foot coming down, you feel it in both hands:
+/// a knock close (the house scale's "that took force"), fading to a tick.
+pub const FELT_WITHIN: f32 = 25.0;
+
+/// How hard a footfall `d` metres off is felt, if at all.
+pub fn footfall_pulse(d: f32) -> Option<(f32, f32)> {
+    (d < FELT_WITHIN).then(|| {
+        let k = 1.0 - (d / FELT_WITHIN).clamp(0.0, 1.0);
+        (0.12 + 0.36 * k * k, 0.04 + 0.06 * k)
+    })
+}
+
+/// Its footfalls and its blows, in your hands.
+fn felt_footfalls(
+    mut events: MessageReader<super::heavy::HeavyEvent>,
+    players: Query<&GlobalTransform, With<crate::rig::LocalPlayer>>,
+    mut out: MessageWriter<crate::rig::haptics::Haptic>,
+) {
+    let Some(me) = players.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    for ev in events.read() {
+        let (super::heavy::HeavyAct::Step | super::heavy::HeavyAct::Slam { .. }) = ev.what else {
+            continue;
+        };
+        let Some((amplitude, seconds)) = footfall_pulse(ev.at.distance(me)) else {
+            continue;
+        };
+        for side in [crate::rig::Side::Left, crate::rig::Side::Right] {
+            out.write(crate::rig::haptics::Haptic {
+                side,
+                amplitude,
+                seconds,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A footfall is felt on the house scale: never a kick (that's shots
+    /// and hits), a knock close by, a tick at the edge, nothing past it.
+    #[test]
+    fn footfalls_are_knocks_not_kicks() {
+        let (close, _) = footfall_pulse(1.0).unwrap();
+        assert!((0.4..0.6).contains(&close), "{close}");
+        let (far, secs) = footfall_pulse(FELT_WITHIN - 0.5).unwrap();
+        assert!((0.1..0.15).contains(&far), "{far}");
+        assert!(secs >= 0.01);
+        assert!(footfall_pulse(FELT_WITHIN + 1.0).is_none());
     }
 }
