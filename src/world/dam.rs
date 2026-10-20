@@ -287,6 +287,8 @@ fn tower(b: &mut Builder) {
         );
     }
     b.crate_box(Vec3::new(-2.2, TOWER_BRIDGE, -2.6), 0.8, Some("tools"));
+    // The keeper's table by the bridge door (Story's note lies on it).
+    b.table(Vec3::new(-1.0, TOWER_BRIDGE, 1.9), 0.0, None);
     // The bridge to the crest: its deck, rails, and two piers down to the
     // bed.
     let (z0, z1) = (hw, hw + BRIDGE_RUN);
@@ -518,6 +520,9 @@ fn gantry(b: &mut Builder) {
             Mat::PaintedMetal,
         );
     }
+    // The tagging desk between the legs, under the girder (the stock
+    // ground's terminal stands on it).
+    b.table(Vec3::new(-6.0, 0.0, 0.0), 0.0, None);
     // The trolley over the third bay, its cables and the grab.
     let tx = 3.0;
     b.bx(
