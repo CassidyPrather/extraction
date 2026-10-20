@@ -462,11 +462,34 @@ fn keep(ledger: &mut DebrisLedger, commands: &mut Commands, ids: &[Entity]) {
     ledger.0.extend(ids.iter().copied());
     while ledger.0.len() > MAX_DEBRIS {
         if let Some(old) = ledger.0.pop_front() {
-            if let Ok(mut ec) = commands.get_entity(old) {
-                ec.despawn();
-            }
+            commands.queue(move |world: &mut World| despawn_debris(world, old));
         }
     }
+}
+
+/// Despawn a piece and what hangs off it, its joints first: despawning a
+/// joint that's `JointDisabled` re-adds it to the physics islands on the
+/// way out (avian), between bodies that may be gone, and that panics.
+fn despawn_debris(world: &mut World, piece: Entity) {
+    if world.get_entity(piece).is_err() {
+        return;
+    }
+    let mut stack = vec![piece];
+    let mut joints = Vec::new();
+    while let Some(x) = stack.pop() {
+        if let Some(children) = world.get::<Children>(x) {
+            stack.extend(children.iter());
+        }
+        if world.get::<SphericalJoint>(x).is_some() || world.get::<RevoluteJoint>(x).is_some() {
+            joints.push(x);
+        }
+    }
+    for j in joints {
+        let mut j = world.entity_mut(j);
+        j.remove::<SphericalJoint>();
+        j.remove::<RevoluteJoint>();
+    }
+    world.entity_mut(piece).despawn();
 }
 
 /// As a walker lands, its weak legs (shot up, or already dead) tear off
@@ -619,6 +642,48 @@ fn settle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Old debris goes (the ledger is full) with a torn joint hanging off
+    /// it, the body at its other end already gone: no panic.
+    #[test]
+    fn old_debris_with_a_torn_joint_goes_quietly() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let body = |app: &mut App, x: f32| {
+            app.world_mut()
+                .spawn((
+                    RigidBody::Dynamic,
+                    Collider::sphere(0.2),
+                    Transform::from_xyz(x, 500.0, 0.0),
+                ))
+                .id()
+        };
+        let core = body(&mut app, 0.0);
+        let leg = body(&mut app, 0.5);
+        app.world_mut().spawn((
+            SphericalJoint::new(core, leg),
+            JointCollisionDisabled,
+            ChildOf(leg),
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        let joint = app.world().get::<Children>(leg).unwrap()[0];
+        app.world_mut().entity_mut(joint).insert(JointDisabled);
+        app.update();
+        app.world_mut().despawn(core);
+        app.update();
+        despawn_debris(app.world_mut(), leg);
+        app.update();
+        assert!(app.world().get_entity(leg).is_err());
+        assert!(app.world().get_entity(joint).is_err());
+    }
 
     /// A walker shot through the core comes apart: its pieces fall, come to
     /// rest on the ground (not through it) within seconds, and nothing is

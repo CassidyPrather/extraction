@@ -425,7 +425,7 @@ fn crawler_at(
         patrol: route.clone(),
         spawn: at,
         crawlers: 1,
-        heavy: 0,
+        wardens: 0,
         dormant: false,
     };
     let mut queue = CommandQueue::default();
@@ -1406,7 +1406,7 @@ fn a_new_site_grid_reroutes_its_crawlers() {
             patrol: vec![a, b],
             spawn: a,
             crawlers: 1,
-            heavy: 0,
+            wardens: 0,
             dormant: false,
         });
         sites.sites.len() - 1
