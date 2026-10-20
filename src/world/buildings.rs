@@ -74,6 +74,9 @@ pub struct Geo {
     /// Warm interior lamps (rare; most of the Zone is dark).
     pub lights: Vec<Vec3>,
     pub props: Vec<PropDef>,
+    /// Outside doors and doorways: what must be kept clear in front of
+    /// them (mirrored in `map::prefab_entrances` for the map lint).
+    pub entrances: Vec<extraction_core::map::Entrance>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -377,7 +380,18 @@ impl Builder {
                 Mat::Concrete
             };
             for o in ops.iter().filter(|o| o.kind != OpeningKind::Window) {
-                self.door_steps(a, dir, rot, o.centre, o.width, y0, steps);
+                let reach = self.door_steps(a, dir, rot, o.centre, o.width, y0, steps);
+                // From the wall's face: its steps, then a metre to stand in.
+                let out = rot * Vec3::NEG_Z;
+                let c = a + dir * o.centre;
+                let face = Vec2::new(c.x + out.x * thick * 0.5, c.y + out.z * thick * 0.5);
+                let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+                self.geo.entrances.push(extraction_core::map::Entrance {
+                    at: [r(face.x), r(face.y)],
+                    out: [r(out.x), r(out.z)],
+                    width: r(o.width),
+                    clear: r((reach - thick * 0.5).max(0.0) + 1.0),
+                });
             }
         }
         self
@@ -567,13 +581,23 @@ impl Builder {
     /// than the one above by a tread either side: it's climbed one riser
     /// at a time from in front or from either side (from beside a flight
     /// of equal steps, the ground is a whole flight lower).
+    /// Returns how far the flight reaches out from the wall's centre line.
     #[allow(clippy::too_many_arguments)]
-    fn door_steps(&mut self, a: Vec2, dir: Vec2, rot: Quat, s: f32, width: f32, y0: f32, mat: Mat) {
+    fn door_steps(
+        &mut self,
+        a: Vec2,
+        dir: Vec2,
+        rot: Quat,
+        s: f32,
+        width: f32,
+        y0: f32,
+        mat: Mat,
+    ) -> f32 {
         // Not up a tower (a cabin's door opens onto its own landing), nor
         // where the floor is as good as the ground.
         let low = y0 + self.drop;
         if y0 > 1.0 || low < 0.12 {
-            return;
+            return 0.0;
         }
         // Risers of 0.17 down from the floor, until one is at or below
         // the lowest the ground can be.
@@ -595,6 +619,7 @@ impl Builder {
                 true,
             );
         }
+        n as f32 * tread
     }
 
     /// A pitched roof along Z (ridge runs front to back).
@@ -3244,6 +3269,31 @@ mod tests {
                 } && p.at.translation.is_finite()
                     && p.at.rotation.is_finite();
                 assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
+            }
+        }
+    }
+
+    /// The map's copy of every prefab's doors (`map::prefab_entrances`,
+    /// for the lint that keeps their steps and the space in front clear)
+    /// is the recipes' own. If this fails, regenerate the table from
+    /// `Geo::entrances`.
+    #[test]
+    fn entrances_match_the_map() {
+        for id in PREFABS {
+            let built = prefab(id).unwrap().entrances;
+            let listed = extraction_core::map::prefab_entrances(id);
+            assert_eq!(built.len(), listed.len(), "{id}: doors built vs listed");
+            for (b, l) in built.iter().zip(listed) {
+                let close = |a: f32, b: f32| (a - b).abs() < 0.011;
+                assert!(
+                    close(b.at[0], l.at[0])
+                        && close(b.at[1], l.at[1])
+                        && close(b.out[0], l.out[0])
+                        && close(b.out[1], l.out[1])
+                        && close(b.width, l.width)
+                        && close(b.clear, l.clear),
+                    "{id}: built {b:?}, listed {l:?}"
+                );
             }
         }
     }
