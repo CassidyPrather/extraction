@@ -6,12 +6,15 @@ Gun space as in src/weapons/layout.rs (`sks()`): origin at the palm on
 the wrist, -Z down the bore (bore axis y = 0.048), +Y up, metres.
 
 - `static`        stock, receiver and its cover, barrel, gas system,
-                  sights, magazine box, guard, bayonet
+                  sights, magazine box, guard, the bayonet's pivot block
+- `bayonet`       the folding blade, folded back under the barrel; origin on
+                  its pin, it turns +pi about X to fixed
 - `bolt_carrier`  the carrier and bolt with the charging handle on the
                   right; slides back with the bolt (origin on the bore)
 - `trigger`
 - empties `pt_muzzle`, `pt_sight`, `pt_load_port` (the clip guide, where
-  a clip seats over the open action)
+  a clip seats over the open action), `pt_bayonet_tip` (the point with
+  the bayonet fixed)
 """
 
 import math
@@ -182,9 +185,13 @@ for k in range(8):
 barrel.box((0.016, 0.018, 0.024), (0, 0.026, -0.69), "Blued", bevel=0.002)
 blade = fillet([(-0.69, 0.024), (-0.42, 0.024), (-0.405, 0.017), (-0.42, 0.012), (-0.69, 0.016)],
                [0.002, 0.003, 0.002, 0.003, 0.002], 2)
-barrel.prism(blade, -0.0022, 0.0022, "Steel", axis="x", bevel=0.0006, segs=1)
-barrel.prism(fillet([(-0.69, 0.017), (-0.62, 0.017), (-0.62, 0.011), (-0.69, 0.011)], 0.0025, 3),
-             -0.0045, 0.0045, "Blued", axis="x", bevel=0.0008, segs=1)
+# The blade and its grip turn on the block's pin: +pi about X swings the
+# point down and forward to fixed, well past the muzzle.
+BAYONET_PIN = (0.0, 0.022, -0.69)
+bayonet = Part("bayonet", origin=BAYONET_PIN)
+bayonet.prism(blade, -0.0022, 0.0022, "Steel", axis="x", bevel=0.0006, segs=1)
+bayonet.prism(fillet([(-0.69, 0.017), (-0.62, 0.017), (-0.62, 0.011), (-0.69, 0.011)], 0.0025,
+                     3), -0.0045, 0.0045, "Blued", axis="x", bevel=0.0008, segs=1)
 
 # --- Bolt carrier (slides back) ----------------------------------------------------
 carrier = Part("bolt_carrier", origin=(0.0, BORE, -0.2))
@@ -202,12 +209,15 @@ trig.sweep(catmull([(-0.05, -0.012), (-0.052, -0.022), (-0.049, -0.031), (-0.044
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 
 join("static", stock, furn, recv, mag, barrel, worn={})
-for p in (carrier, trig):
+for p in (carrier, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.0875, -0.02))
 empty("pt_load_port", (0.0, 0.075, -0.2))
+# The point with the bayonet fixed (the folded point, -0.405, turned
+# through pi about the pin).
+empty("pt_bayonet_tip", (0.0, 2 * BAYONET_PIN[1] - 0.0175, 2 * BAYONET_PIN[2] + 0.405))
 
 report()
 export("assets/models/guns/sks.glb")
