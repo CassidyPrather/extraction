@@ -14,7 +14,6 @@ use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use std::collections::HashMap;
 
-use super::Raid;
 use super::bench::{ScreenStyle, ScreenText};
 use super::truck::{FLOOR, Pressable, Truck};
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
@@ -160,7 +159,7 @@ fn read_notes(
     locals: Query<(), With<LocalPlayer>>,
     time: Res<Time>,
     mut read: ResMut<NotesRead>,
-    mut raid: ResMut<Raid>,
+    mut firsts: MessageWriter<crate::onboarding::firsts::MeetFirst>,
     mut cache: Local<(usize, Vec<(String, Vec3)>)>,
     mut dwell: Local<HashMap<String, f32>>,
 ) {
@@ -186,9 +185,10 @@ fn read_notes(
         let t = dwell.entry(id.clone()).or_default();
         *t += time.delta_secs();
         if *t >= READ_TIME {
-            if read.0.is_empty() {
-                raid.say(super::lines::FIRST_PIN);
-            }
+            // The first ever: Lev says he keeps copies (once a career).
+            firsts.write(crate::onboarding::firsts::MeetFirst(
+                crate::onboarding::firsts::First::NotePinned,
+            ));
             info!("read: {id}");
             read.0.push(id.clone());
         }
@@ -736,12 +736,13 @@ mod tests {
             vr.app.world().resource::<NotesRead>().0.contains(&id),
             "looking at it, read"
         );
-        let raid = vr.app.world().resource::<Raid>();
+        let met = vr
+            .app
+            .world()
+            .resource::<crate::onboarding::firsts::Firsts>();
         assert!(
-            raid.log
-                .iter()
-                .any(|(l, _)| l == super::super::lines::FIRST_PIN),
-            "Lev says so"
+            met.met(crate::onboarding::firsts::First::NotePinned),
+            "Lev's first-pin moment is met"
         );
     }
 
