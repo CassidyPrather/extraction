@@ -196,6 +196,8 @@ struct Site {
     spots: usize,
     visited: bool,
     tries: u8,
+    /// The driver's job on the card sends it here (`progression`).
+    job: bool,
 }
 
 /// What the raider is in the middle of.
@@ -352,6 +354,7 @@ pub fn attach_raider(
             spots: n,
             visited: false,
             tries: 0,
+            job: false,
         });
     }
     for m in &zone.map.markers {
@@ -377,6 +380,7 @@ pub fn attach_raider(
                     spots: 1,
                     visited: false,
                     tries: 0,
+                    job: false,
                 });
             }
             MarkerKind::ArtifactField => sites.push(Site {
@@ -386,6 +390,7 @@ pub fn attach_raider(
                 spots: 6,
                 visited: false,
                 tries: 0,
+                job: false,
             }),
             _ => {}
         }
@@ -534,6 +539,8 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     spatial: SpatialQuery<'w, 's>,
+    progression: Option<Res<'w, crate::progression::Progression>>,
+    opts: Res<'w, LaunchOptions>,
 }
 
 impl Scene<'_, '_> {
@@ -1201,6 +1208,7 @@ fn fight_on(
                         spots: 2,
                         visited: false,
                         tries: 0,
+                        job: false,
                     });
                 }
             }
@@ -1626,6 +1634,7 @@ fn raid_step(
     for _ in 0..8 {
         match r.act {
             Act::Idle => {
+                add_job_site(r, scene);
                 let Some(s) = choose_site(r, scene, here) else {
                     r.pack_full = true; // nothing left worth the walk
                     return vec![Task::Wait(0.2)];
@@ -1769,6 +1778,10 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             continue;
         }
         let pull = match s.kind {
+            // The driver's scout job: a player goes for it, as long as
+            // they're fit to.
+            _ if s.job && r.hp >= 50.0 => 12.0,
+            _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
@@ -1795,6 +1808,30 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         }
     }
     best.map(|b| b.1)
+}
+
+/// The scout job on the card, as a site to walk to (once).
+fn add_job_site(r: &mut Raider, scene: &Scene) {
+    if r.sites.iter().any(|s| s.job) {
+        return;
+    }
+    let Some(extraction_core::progression::Job::Scout { map, place, at, .. }) =
+        scene.progression.as_ref().and_then(|p| p.0.job.clone())
+    else {
+        return;
+    };
+    if map != scene.opts.map {
+        return;
+    }
+    r.sites.push(Site {
+        name: format!("job: {place}"),
+        kind: SiteKind::Spot,
+        at: Vec2::from_array(at),
+        spots: 0,
+        visited: false,
+        tries: 0,
+        job: true,
+    });
 }
 
 fn rv_centroid(zone: &Zone) -> Vec2 {

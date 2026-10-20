@@ -199,14 +199,19 @@ player's, so read the numbers as the shape of the arc, not its minutes.
 
 ## Measuring it
 
-`scripts/progression_pacing.py target/sim/<map>` reads the sims' telemetry
-(each run's `end` line: outcome, loot ids, and its `pos` trail through the
-regions) and works out, per job kind and tier, the chance a raid finishes
-it: a fetch needs the items to come home, a recover or scout needs a visit
-to a region of the right danger and the raid to end at home. Tier length
-is the jobs it needs over those chances. The bots don't take jobs (they'd
-need a planner for it); the estimate assumes a player who goes for the job,
-which is the point of a job.
+`scripts/progression_pacing.py <map|all> [runs-dir]` reads the sims'
+telemetry (each run's `end` line: outcome, loot ids, the job, and its
+`pos` trail through the regions) and walks a few thousand careers through
+the tiers, raid by raid, on those raids: every raid home adds its loot to
+the stash, so a fetch is often met from what's piled up.
+
+Sim bots take jobs: each sim run is handed a scout job of one of the first
+three tiers (the run's seed picks which), and the raider treats the job's
+place as a site worth a long walk (while it's fit for it). The `end` line
+says whether the place was seen and the bot got home, and the pacing
+script uses that, by the place's danger, as a place job's odds per raid
+(falling back on "reached that danger and got home" for runs from before).
+Fetches aren't played: the bots don't hunt items to order.
 
 ## What's cut
 

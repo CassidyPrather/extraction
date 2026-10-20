@@ -119,7 +119,7 @@ def main():
             elif e["ev"] == "end":
                 end = e
         if end:
-            runs.append(dict(visited=visited, home=end["outcome"] == "extracted",
+            runs.append(dict(visited=visited, home=end["outcome"] == "extracted", job=end.get("job"),
                              loot=end.get("loot", []) if end["outcome"] == "extracted" else [],
                              minutes=end.get("raid_time", 0) / 60.0, personality=personality))
     if not runs:
@@ -132,6 +132,27 @@ def main():
 
     def rate(item):
         return sum(sum(takes(item, i) for i in r["loot"]) for r in runs) / n
+
+    # Runs where the bot had the driver's scout job (the game hands sim bots
+    # one): how often it saw the place and got home, by the place's danger.
+    jobs = [r for r in runs if r["job"]]
+    job_rate = {}
+    if jobs:
+        print("| Scout job, danger | Bots given it | Seen and home |\n| - | - | - |")
+        for d in range(4):
+            js = [r for r in jobs if r["job"].get("danger") == d]
+            if js:
+                job_rate[d] = sum(r["home"] and r["job"]["seen"] for r in js) / len(js)
+                print(f"| {d} | {len(js)} | {job_rate[d]:.0%} |")
+        print()
+
+    def place_odds(lo, hi):
+        """A place job's chance per raid: what bots that had the job did, else
+        the share of raids that reached that danger and got home."""
+        known = [job_rate[d] for d in range(lo, hi + 1) if d in job_rate]
+        if known:
+            return sum(known) / len(known)
+        return reach(lo, hi)
 
     ts, wants = tiers()
     print(f"{map_name}: {n} sim raids, {home:.0%} home, "
@@ -184,7 +205,7 @@ def main():
                                 stock[i] -= 1
                                 n -= 1
                         break
-                    if kind != "Fetch" and r["home"] and any(lo <= d <= hi for _, d in r["visited"]):
+                    if kind != "Fetch" and rng.random() < place_odds(lo, hi):
                         break
                     if raids > 400:
                         break
