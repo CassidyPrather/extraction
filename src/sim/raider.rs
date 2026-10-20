@@ -1459,7 +1459,9 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
         let at = gt.translation().xz();
         if at.distance(here) < 30.0 {
             r.known.insert(e);
-            new.push((at, a.radius));
+            // The berth a careful walker gives it: a well's pull and a
+            // mirror's far side reach past its edge.
+            new.push((at, a.kind.danger_radius(a.radius)));
         }
     }
     if new.is_empty() || !r.traits.avoid_anomalies {
@@ -2160,14 +2162,17 @@ fn take_item(
                 .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
-                // Not hurt, it doesn't.
-                if r.hp < 60.0 && r.traits.avoid_anomalies {
+                // Not hurt, it doesn't; and nobody careful reaches into a
+                // well's heart.
+                if r.traits.avoid_anomalies && (r.hp < 60.0 || kind == AnomalyKind::Well) {
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
-                if kind == AnomalyKind::Snare && r.traits.test_anomalies {
+                if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
+                    && r.traits.test_anomalies
+                {
                     if let Some(junk) = junk(r, scene) {
                         tasks.push(Task::Grab {
                             item: junk,

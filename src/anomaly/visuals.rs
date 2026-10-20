@@ -1,26 +1,47 @@
-//! How anomalies look: a lift is a slow column of circling leaves and grit
-//! over a flattened ring; a burner is a charred patch shedding embers under
-//! a coal-red glow that flickers under a column of smoke (a steady orange
-//! glow read as a tutorial marker in the first headset session); a snare
-//! is a knot of blue
-//! arcs that lashes out when something touches it. Plus the glass eye's
-//! x-ray, which shows robots through walls while you hold it to your eye.
+//! How anomalies look, made to read from 20 m in fog and rain:
+//!
+//! - **Particles on the GPU** ([`ParticleMaterial`],
+//!   `shaders/anomaly_particles.wgsl`): each system (a lift's leaves, a
+//!   burner's embers and smoke, a snare's sparks, a well's grit, a
+//!   mirror's glints) is one mesh of quads whose motion is a function of
+//!   time and seed in the vertex shader: one draw each, however many.
+//! - **Refraction** ([`HazeMaterial`], `shaders/anomaly_haze.wgsl`): the
+//!   view behind shimmers through screen-space transmission: heat over a
+//!   burner, a lift's draught, a mirror's fold, and a well's lens, which
+//!   turns the world over at its heart.
+//! - **Light in step**: one light each, and the flicker that drives it
+//!   drives the particles' brightness and the haze's glow too, so a
+//!   burner's embers surge with its light. Things thrown in (see
+//!   `detector::Touched`) light an anomaly up for a few seconds.
+//! - A snare's arcs are one mesh, rebuilt as they re-strike, and reach out
+//!   to whatever it discharged into (metal in your hand first).
+//!
+//! Plus the glass eye's x-ray, which shows robots through walls while you
+//! hold it to your eye, and the looks of the anomaly items (bolt,
+//! detector, lodestone, mirror shard).
 
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::visibility::VisibilityRange;
+use bevy::camera::primitives::Aabb;
+use bevy::camera::visibility::{NoAutoAabb, VisibilityRange};
 use bevy::light::NotShadowCaster;
-use bevy::mesh::MeshVertexBufferLayoutRef;
-use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
+use bevy::mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::pbr::{
+    ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline,
+    MaterialPipeline, MaterialPipelineKey,
+};
 use bevy::prelude::*;
 use bevy::render::render_resource::{
-    AsBindGroup, CompareFunction, Extent3d, RenderPipelineDescriptor, SpecializedMeshPipelineError,
-    TextureDimension, TextureFormat,
+    AsBindGroup, CompareFunction, Extent3d, RenderPipelineDescriptor, ShaderType,
+    SpecializedMeshPipelineError, TextureDimension, TextureFormat,
 };
 use bevy::shader::ShaderRef;
-use extraction_core::anomaly::AnomalyKind;
+use extraction_core::anomaly::{AnomalyKind, WELL_HEIGHT};
 
 use super::artifacts::ArtifactEffects;
-use super::{Anomaly, AnomalyAct, AnomalyEvent};
+use super::detector::{DetectorClick, REVEAL_TIME, Touched};
+use super::mirrors::{Blinked, MIRROR_HEIGHT};
+use super::{Anomaly, AnomalyAct, AnomalyEvent, ArcStrike};
+use crate::items::{Catalog, CustomVisual, Item};
 use crate::rig::{LocalPlayer, RigHead};
 use crate::robots::RobotPart;
 
@@ -28,77 +49,185 @@ pub struct AnomalyVisualsPlugin;
 
 impl Plugin for AnomalyVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<XrayMaterial>::default())
-            .add_systems(Startup, init_assets)
-            .add_systems(
-                Update,
-                (
-                    dress_anomalies,
-                    animate_motes,
-                    animate_smoke,
-                    snare_arcs,
-                    react_to_events,
-                    xray_parts,
-                    glass_eye,
-                ),
-            );
+        app.add_plugins((
+            MaterialPlugin::<XrayMaterial>::default(),
+            MaterialPlugin::<ParticleMaterial>::default(),
+            MaterialPlugin::<HazeMaterial>::default(),
+        ))
+        .add_observer(claim_item_looks)
+        .add_systems(Startup, init_assets)
+        .add_systems(
+            Update,
+            (
+                dress_anomalies,
+                (react_to_events, pulse, snare_arcs).chain(),
+                blink_flashes,
+                dress_items,
+                detector_lamps,
+                xray_parts,
+                glass_eye,
+            ),
+        );
     }
 }
 
-/// A drifting particle belonging to an anomaly; its motion is a pure
-/// function of time and its seed.
-#[derive(Component)]
-struct Mote {
-    kind: AnomalyKind,
-    seed: f32,
-    radius: f32,
+// --- Materials -------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, Default, ShaderType, Reflect)]
+pub struct ParticleParams {
+    /// x: mode (see the shader), y: radius, z: reach, w: glow (additive).
+    pub mode: Vec4,
+    /// x: charge, y: revealed 0..1, z: flash 0..1, w: base size.
+    pub state: Vec4,
+    /// rgb: colour, a: opacity.
+    pub color: Vec4,
 }
 
-#[derive(Component)]
-struct Glow {
-    base: f32,
-    flash: f32,
-    /// How deep its flicker goes (0 steady, 1 down to dark).
-    flicker: f32,
+/// One anomaly particle system: a mesh of quads moved in the shader.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct ParticleMaterial {
+    #[uniform(0)]
+    pub params: ParticleParams,
+    #[texture(1)]
+    #[sampler(2)]
+    pub texture: Handle<Image>,
+    /// Additive (glowing) or blended.
+    pub additive: bool,
 }
 
-/// A puff of a burner's smoke: rises, swells and drifts off.
-#[derive(Component)]
-struct Smoke {
-    seed: f32,
-    radius: f32,
+impl Material for ParticleMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/anomaly_particles.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/anomaly_particles.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        if self.additive {
+            AlphaMode::Add
+        } else {
+            AlphaMode::Blend
+        }
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(1),
+            Mesh::ATTRIBUTE_UV_1.at_shader_location(2),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex];
+        descriptor.primitive.cull_mode = None;
+        if let Some(ds) = descriptor.depth_stencil.as_mut() {
+            ds.depth_write_enabled = Some(false);
+        }
+        Ok(())
+    }
 }
 
-#[derive(Component)]
-struct ArcSegment {
-    arc: usize,
-    index: usize,
+#[derive(Clone, Copy, Debug, Default, ShaderType, Reflect)]
+pub struct HazeParams {
+    /// x: 0 card, 1 column, 2 the mesh as it is; y: card centre's lift;
+    /// z: index of refraction; w: thickness.
+    pub shape: Vec4,
+    /// x: amplitude, y: scale (1/m), z: speed, w: swirl (0 rising, 1 circling).
+    pub wave: Vec4,
+    /// rgb: glow at the heart, a: how much.
+    pub tint: Vec4,
 }
 
-#[derive(Component, Default)]
-struct Arcs {
-    timer: f32,
-    flash: f32,
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct HazeExt {
+    #[uniform(100)]
+    pub haze: HazeParams,
 }
 
-const ARC_SEGMENTS: usize = 6;
-const ARCS: usize = 4;
+/// Refraction: Bevy's screen-space transmission, bent by a moving normal.
+pub type HazeMaterial = ExtendedMaterial<StandardMaterial, HazeExt>;
+
+impl MaterialExtension for HazeExt {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/anomaly_haze.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/anomaly_haze.wgsl".into()
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+
+    fn specialize(
+        _pipeline: &MaterialExtensionPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialExtensionKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        // A card in the air must not hide what's behind it from the
+        // particles drawn after it.
+        if let Some(ds) = descriptor.depth_stencil.as_mut() {
+            ds.depth_write_enabled = Some(false);
+        }
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+fn haze_material(ior: f32, thickness: f32, mut haze: HazeParams) -> HazeMaterial {
+    haze.shape.z = ior;
+    haze.shape.w = thickness;
+    ExtendedMaterial {
+        // Only what puts it in the transmissive pass; the shader does the
+        // rest.
+        base: StandardMaterial {
+            base_color: Color::WHITE,
+            specular_transmission: 1.0,
+            ior,
+            thickness,
+            ..default()
+        },
+        extension: HazeExt { haze },
+    }
+}
+
+// --- Assets ----------------------------------------------------------------
 
 #[derive(Resource)]
 struct AnomalyAssets {
-    quad: Handle<Mesh>,
-    leaf: Handle<StandardMaterial>,
-    grit: Handle<StandardMaterial>,
-    ember: Handle<StandardMaterial>,
-    spark: Handle<StandardMaterial>,
-    segment: Handle<Mesh>,
+    card: Handle<Mesh>,
+    lens: Handle<Mesh>,
+    core: Handle<Mesh>,
+    leaf: Handle<Image>,
+    radial: Handle<Image>,
     scorch: Handle<StandardMaterial>,
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
-    smoke: Handle<StandardMaterial>,
+    crushed: Handle<StandardMaterial>,
+    spark: Handle<StandardMaterial>,
+    void: Handle<StandardMaterial>,
 }
 
-/// A soft round alpha falloff, for ground marks.
+/// A soft round alpha falloff, for ground marks and soft particles.
 fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     let n = 128u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
@@ -134,22 +263,12 @@ fn init_assets(
     mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
 ) {
-    let a = assets(&mut meshes, &mut materials, &mut images, &server);
-    commands.insert_resource(a);
-}
-
-fn assets(
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    images: &mut Assets<Image>,
-    server: &AssetServer,
-) -> AnomalyAssets {
-    let leaf_tex: Handle<Image> = server
+    let leaf: Handle<Image> = server
         .load_builder()
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
         .load("textures/foliage/birch_leaves/albedo.ktx2");
-    let radial = radial_texture(images);
-    let ground = |c: Color, emissive: LinearRgba, materials: &mut Assets<StandardMaterial>| {
+    let radial = radial_texture(&mut images);
+    let mut ground = |c: Color, emissive: LinearRgba| {
         materials.add(StandardMaterial {
             base_color: c,
             base_color_texture: Some(radial.clone()),
@@ -160,64 +279,72 @@ fn assets(
             ..default()
         })
     };
+    let scorch = ground(
+        Color::srgba(0.02, 0.018, 0.015, 0.92),
+        LinearRgba::rgb(0.14, 0.02, 0.0),
+    );
+    let flattened = ground(Color::srgba(0.08, 0.07, 0.05, 0.6), LinearRgba::BLACK);
+    let glassy = ground(
+        Color::srgba(0.22, 0.26, 0.32, 0.55),
+        LinearRgba::rgb(0.0, 0.02, 0.06),
+    );
+    let crushed = ground(
+        Color::srgba(0.03, 0.025, 0.035, 0.85),
+        LinearRgba::rgb(0.02, 0.0, 0.05),
+    );
     let a = AnomalyAssets {
-        quad: meshes.add(Rectangle::new(1.0, 1.0)),
-        leaf: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.75, 0.62, 0.38),
-            base_color_texture: Some(leaf_tex),
-            alpha_mode: AlphaMode::Mask(0.5),
-            double_sided: true,
-            cull_mode: None,
-            perceptual_roughness: 0.9,
-            ..default()
-        }),
-        grit: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.2, 0.18, 0.15),
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        }),
-        ember: materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.5, 0.15),
-            emissive: LinearRgba::rgb(40.0, 9.0, 1.5),
-            unlit: true,
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        }),
+        card: meshes.add(Rectangle::new(1.0, 1.0)),
+        lens: meshes.add(Sphere::new(1.0).mesh().uv(32, 18)),
+        core: meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
+        leaf,
+        radial,
+        scorch,
+        flattened,
+        glassy,
+        crushed,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
-            emissive: LinearRgba::rgb(6.0, 14.0, 40.0),
+            emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
             unlit: true,
+            cull_mode: None,
             ..default()
         }),
-        segment: meshes.add(Cuboid::new(0.012, 0.012, 1.0)),
-        scorch: ground(
-            Color::srgba(0.02, 0.018, 0.015, 0.92),
-            LinearRgba::rgb(0.14, 0.02, 0.0),
-            materials,
-        ),
-        flattened: ground(
-            Color::srgba(0.08, 0.07, 0.05, 0.6),
-            LinearRgba::BLACK,
-            materials,
-        ),
-        glassy: ground(
-            Color::srgba(0.22, 0.26, 0.32, 0.55),
-            LinearRgba::rgb(0.0, 0.02, 0.06),
-            materials,
-        ),
-        smoke: materials.add(StandardMaterial {
-            base_color: Color::srgba(0.13, 0.12, 0.11, 0.3),
-            base_color_texture: Some(radial.clone()),
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            double_sided: true,
-            cull_mode: None,
+        void: materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::rgb(0.15, 0.04, 0.35),
+            perceptual_roughness: 0.2,
+            reflectance: 0.9,
             ..default()
         }),
     };
-    a
+    commands.insert_resource(a);
+}
+
+/// A mesh of `n` quads for the particle shader: corners in POSITION, the
+/// quad's UVs in UV_0, its seeds in UV_1.
+fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
+    let mut pos = Vec::with_capacity(n * 4);
+    let mut uv = Vec::with_capacity(n * 4);
+    let mut seed = Vec::with_capacity(n * 4);
+    let mut idx = Vec::with_capacity(n * 6);
+    for i in 0..n {
+        let s = [rng.f32(), rng.f32()];
+        for (x, y) in [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)] {
+            pos.push([x, y, 0.0]);
+            uv.push([x + 0.5, 0.5 - y]);
+            seed.push(s);
+        }
+        let k = (i * 4) as u32;
+        idx.extend_from_slice(&[k, k + 1, k + 2, k, k + 2, k + 3]);
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, seed)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 /// A ground mark draped over the terrain round `centre` (the anomaly's
@@ -253,138 +380,328 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
         }
     }
     Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
+        PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_indices(bevy::mesh::Indices::U32(idx))
+    .with_inserted_indices(Indices::U32(idx))
 }
 
+// --- Dressing --------------------------------------------------------------
+
+/// How an anomaly looks this frame: what its light, particles and haze
+/// all follow.
+#[derive(Component, Debug, Default)]
+pub struct Look {
+    /// The kind's own flicker, 0..1 about a mean of ~0.6.
+    pub flicker: f32,
+    /// A burst (a discharge, a pop, a blink), decaying to 0.
+    pub flash: f32,
+    /// Shown up by something thrown in, 0..1.
+    pub reveal: f32,
+}
+
+/// A particle system of an anomaly: its colour and opacity at rest.
+#[derive(Component)]
+struct Particles {
+    color: Vec3,
+    alpha: f32,
+}
+
+/// An anomaly's light, at rest.
+#[derive(Component)]
+struct Glow {
+    base: f32,
+    /// How much a flash adds, times `base` (or absolute for a dark one).
+    burst: f32,
+}
+
+/// An anomaly's haze, at rest.
+#[derive(Component)]
+struct Haze {
+    amp: f32,
+    /// Extra amplitude at full charge (a lift winding up).
+    charged: f32,
+    tint: f32,
+}
+
+/// A snare's arcs: one mesh, re-struck every few frames.
+#[derive(Component, Default)]
+struct Arcs {
+    timer: f32,
+    /// Arcs out to something it struck: target (local), seconds left.
+    reaching: Vec<(Vec3, f32)>,
+}
+
+const ARC_SEGMENTS: usize = 7;
+const ARCS: usize = 5;
+
+struct System {
+    mode: f32,
+    count: usize,
+    size: f32,
+    texture: Handle<Image>,
+    additive: bool,
+    color: Vec3,
+    alpha: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn dress_anomalies(
     mut commands: Commands,
     added: Query<(Entity, &Anomaly, &Transform), Added<Anomaly>>,
     a: Res<AnomalyAssets>,
     zone: Res<crate::world::Zone>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut particles: ResMut<Assets<ParticleMaterial>>,
+    mut hazes: ResMut<Assets<HazeMaterial>>,
 ) {
-    let near = VisibilityRange {
+    let near = |end: f32| VisibilityRange {
         start_margin: 0.0..0.0,
-        end_margin: 70.0..90.0,
+        end_margin: end - 15.0..end,
         use_aabb: false,
     };
     for (e, anomaly, at) in &added {
         let r = anomaly.radius;
-        let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
+        let kind = anomaly.kind;
+        let reach = kind.reach(r);
         let mut rng = extraction_core::noise::Rng::new(e.to_bits());
-        let (mark, motes, mote_mat, mote_size) = match anomaly.kind {
-            AnomalyKind::Lift => (&a.flattened, 64, None, 0.2),
-            AnomalyKind::Burner => (&a.scorch, 36, Some(&a.ember), 0.035),
-            AnomalyKind::Snare => (&a.glassy, 14, Some(&a.spark), 0.025),
+        let leaf = |count, size| System {
+            mode: 0.0,
+            count,
+            size,
+            texture: a.leaf.clone(),
+            additive: false,
+            color: Vec3::new(0.85, 0.7, 0.45),
+            alpha: 1.0,
         };
-        commands.entity(e).with_children(|c| {
-            c.spawn((
-                Mesh3d(disc),
-                MeshMaterial3d(mark.clone()),
-                Transform::IDENTITY,
-                NotShadowCaster,
-                near.clone(),
-            ));
-            for i in 0..motes {
-                let mat = match (anomaly.kind, mote_mat) {
-                    (_, Some(m)) => m.clone(),
-                    (AnomalyKind::Lift, None) if i % 3 == 0 => a.grit.clone(),
-                    _ => a.leaf.clone(),
-                };
-                let grit = anomaly.kind == AnomalyKind::Lift && i % 3 == 0;
-                let size = mote_size * rng.range(0.6, 1.4) * if grit { 0.2 } else { 1.0 };
-                c.spawn((
-                    Mote {
-                        kind: anomaly.kind,
-                        seed: rng.f32() * 100.0,
-                        radius: r,
+        let soft = |mode, count, size, color: Vec3, alpha| System {
+            mode,
+            count,
+            size,
+            texture: a.radial.clone(),
+            additive: false,
+            color,
+            alpha,
+        };
+        let glow = |mode, count, size, color: Vec3| System {
+            mode,
+            count,
+            size,
+            texture: a.radial.clone(),
+            additive: true,
+            color,
+            alpha: 1.0,
+        };
+        let (mark, systems, light, haze) = match kind {
+            AnomalyKind::Lift => (
+                Some(&a.flattened),
+                vec![
+                    leaf(90, 0.2),
+                    soft(6.0, 26, 0.7, Vec3::new(0.32, 0.27, 0.2), 0.22),
+                ],
+                (Color::srgb(0.9, 0.85, 0.7), 0.0, 60_000.0, 1.6),
+                Some((
+                    1.15,
+                    0.6,
+                    HazeParams {
+                        shape: Vec4::new(1.0, 2.0, 0.0, 0.0),
+                        wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
+                        tint: Vec4::ZERO,
                     },
-                    Mesh3d(a.quad.clone()),
-                    MeshMaterial3d(mat),
-                    Transform::from_scale(Vec3::splat(size)),
-                    NotShadowCaster,
-                    near.clone(),
-                ));
-            }
-            match anomaly.kind {
-                AnomalyKind::Burner => {
-                    for _ in 0..10 {
-                        c.spawn((
-                            Smoke {
-                                seed: rng.f32() * 100.0,
-                                radius: r,
+                    Vec3::new(r * 2.2, 4.5, 1.0),
+                    0.4,
+                )),
+            ),
+            AnomalyKind::Burner => (
+                Some(&a.scorch),
+                vec![
+                    glow(1.0, 70, 0.055, Vec3::new(16.0, 4.0, 0.7)),
+                    soft(2.0, 14, 1.0, Vec3::new(0.12, 0.11, 0.1), 0.32),
+                ],
+                (Color::srgb(1.0, 0.32, 0.08), 35_000.0, 3.0, 0.5),
+                Some((
+                    1.2,
+                    0.6,
+                    HazeParams {
+                        shape: Vec4::new(1.0, 2.4, 0.0, 0.0),
+                        wave: Vec4::new(0.5, 1.6, 1.4, 0.0),
+                        tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
+                    },
+                    Vec3::new(r * 2.2, 5.0, 1.0),
+                    0.0,
+                )),
+            ),
+            AnomalyKind::Snare => (
+                Some(&a.glassy),
+                vec![glow(3.0, 30, 0.03, Vec3::new(5.0, 9.0, 20.0))],
+                (Color::srgb(0.45, 0.65, 1.0), 5_000.0, 25.0, 0.2),
+                Some((
+                    1.1,
+                    0.4,
+                    HazeParams {
+                        shape: Vec4::new(0.0, 0.8, 0.0, 0.0),
+                        wave: Vec4::new(0.08, 2.5, 3.0, 0.0),
+                        tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
+                    },
+                    Vec3::new(r * 1.4, r * 1.4, 1.0),
+                    0.0,
+                )),
+            ),
+            AnomalyKind::Well => (
+                Some(&a.crushed),
+                vec![
+                    soft(4.0, 140, 0.1, Vec3::new(0.09, 0.08, 0.085), 1.0),
+                    soft(6.0, 20, 0.6, Vec3::new(0.2, 0.18, 0.2), 0.18),
+                ],
+                (Color::srgb(0.6, 0.3, 1.0), 2_500.0, 4.0, 1.0),
+                Some((
+                    1.33,
+                    r * 0.7,
+                    HazeParams {
+                        shape: Vec4::new(2.0, 0.0, 0.0, 0.0),
+                        wave: Vec4::new(0.04, 1.5, 0.5, 1.0),
+                        tint: Vec4::ZERO,
+                    },
+                    Vec3::splat(r * 0.45),
+                    0.0,
+                )),
+            ),
+            AnomalyKind::Mirror => (
+                None,
+                vec![glow(5.0, 40, 0.035, Vec3::new(6.0, 10.0, 14.0))],
+                (Color::srgb(0.6, 0.85, 1.0), 0.0, 40_000.0, 0.0),
+                Some((
+                    1.33,
+                    0.8,
+                    HazeParams {
+                        shape: Vec4::new(0.0, MIRROR_HEIGHT, 0.0, 0.0),
+                        wave: Vec4::new(0.3, 0.9, 0.6, 1.0),
+                        tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
+                    },
+                    Vec3::new(r * 2.2, r * 2.2, 1.0),
+                    0.0,
+                )),
+            ),
+        };
+        commands
+            .entity(e)
+            .insert(Look::default())
+            .with_children(|c| {
+                if let Some(mark) = mark {
+                    let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
+                    c.spawn((
+                        Mesh3d(disc),
+                        MeshMaterial3d(mark.clone()),
+                        Transform::IDENTITY,
+                        NotShadowCaster,
+                        near(90.0),
+                    ));
+                }
+                for s in systems {
+                    let mesh = meshes.add(particle_mesh(s.count, &mut rng));
+                    let ext = reach * 1.9 + s.size * 3.0 + 2.0;
+                    c.spawn((
+                        Particles {
+                            color: s.color,
+                            alpha: s.alpha,
+                        },
+                        Mesh3d(mesh),
+                        MeshMaterial3d(particles.add(ParticleMaterial {
+                            params: ParticleParams {
+                                mode: Vec4::new(s.mode, r, reach, s.additive as u8 as f32),
+                                state: Vec4::new(anomaly.charge, 0.0, 0.0, s.size),
+                                color: s.color.extend(s.alpha),
                             },
-                            Mesh3d(a.quad.clone()),
-                            MeshMaterial3d(a.smoke.clone()),
-                            Transform::from_scale(Vec3::ZERO),
+                            texture: s.texture,
+                            additive: s.additive,
+                        })),
+                        Transform::IDENTITY,
+                        Aabb::from_min_max(Vec3::new(-ext, -0.5, -ext), Vec3::new(ext, 7.0, ext)),
+                        NoAutoAabb,
+                        NotShadowCaster,
+                        near(95.0),
+                    ));
+                }
+                let (color, base, burst, height): (Color, f32, f32, f32) = light;
+                c.spawn((
+                    Glow { base, burst },
+                    PointLight {
+                        color,
+                        intensity: base,
+                        range: r * 4.0 + 5.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_xyz(0.0, height.max(0.4), 0.0),
+                    if base > 0.0 {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    },
+                ));
+                if let Some((ior, thickness, params, scale, charged)) = haze {
+                    let mesh = if params.shape.x > 1.5 {
+                        a.lens.clone()
+                    } else {
+                        a.card.clone()
+                    };
+                    let at = if params.shape.x > 1.5 {
+                        Vec3::Y * WELL_HEIGHT
+                    } else {
+                        Vec3::ZERO
+                    };
+                    let ext = scale.x.max(scale.y) + params.shape.y + 1.0;
+                    c.spawn((
+                        Haze {
+                            amp: params.wave.x,
+                            charged,
+                            tint: params.tint.w,
+                        },
+                        Mesh3d(mesh),
+                        MeshMaterial3d(hazes.add(haze_material(ior, thickness, params))),
+                        Transform::from_translation(at).with_scale(scale),
+                        Aabb::from_min_max(Vec3::splat(-ext) / scale, Vec3::splat(ext) / scale),
+                        NoAutoAabb,
+                        NotShadowCaster,
+                        near(55.0),
+                    ));
+                }
+                match kind {
+                    AnomalyKind::Well => {
+                        // The heart: a dark knot that drinks the light.
+                        c.spawn((
+                            Mesh3d(a.core.clone()),
+                            MeshMaterial3d(a.void.clone()),
+                            Transform::from_xyz(0.0, WELL_HEIGHT, 0.0)
+                                .with_scale(Vec3::splat(0.05 + r * 0.015)),
                             NotShadowCaster,
-                            near.clone(),
+                            near(90.0),
                         ));
                     }
-                    c.spawn((
-                        Glow {
-                            base: 35_000.0,
-                            flash: 0.0,
-                            flicker: 0.6,
-                        },
-                        PointLight {
-                            color: Color::srgb(1.0, 0.32, 0.08),
-                            intensity: 35_000.0,
-                            range: r * 4.0 + 4.0,
-                            shadow_maps_enabled: false,
-                            ..default()
-                        },
-                        Transform::from_xyz(0.0, 0.5, 0.0),
-                    ));
+                    AnomalyKind::Snare => {
+                        let mesh = meshes.add(arc_mesh(&[]));
+                        let ext = r + super::SNARE_METAL_REACH + 1.0;
+                        c.spawn((
+                            Arcs::default(),
+                            Mesh3d(mesh),
+                            MeshMaterial3d(a.spark.clone()),
+                            Transform::from_xyz(0.0, 0.8, 0.0),
+                            Aabb::from_min_max(Vec3::splat(-ext), Vec3::splat(ext)),
+                            NoAutoAabb,
+                            NotShadowCaster,
+                            near(90.0),
+                        ));
+                    }
+                    _ => {}
                 }
-                AnomalyKind::Snare => {
-                    c.spawn((
-                        Glow {
-                            base: 4_000.0,
-                            flash: 0.0,
-                            flicker: 0.15,
-                        },
-                        PointLight {
-                            color: Color::srgb(0.45, 0.65, 1.0),
-                            intensity: 4_000.0,
-                            range: r * 3.0 + 3.0,
-                            shadow_maps_enabled: false,
-                            ..default()
-                        },
-                        Transform::from_xyz(0.0, 0.8, 0.0),
-                    ));
-                    c.spawn((
-                        Arcs::default(),
-                        Transform::from_xyz(0.0, 0.8, 0.0),
-                        Visibility::default(),
-                    ))
-                    .with_children(|arcs| {
-                        for arc in 0..ARCS {
-                            for index in 0..ARC_SEGMENTS {
-                                arcs.spawn((
-                                    ArcSegment { arc, index },
-                                    Mesh3d(a.segment.clone()),
-                                    MeshMaterial3d(a.spark.clone()),
-                                    Transform::default(),
-                                    NotShadowCaster,
-                                    near.clone(),
-                                ));
-                            }
-                        }
-                    });
-                }
-                AnomalyKind::Lift => {}
-            }
-        });
+            });
     }
 }
 
+/// Where the eye is (the flat camera, else the local player's head).
 fn eye_position(
     heads: &Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: &Query<(), With<LocalPlayer>>,
@@ -398,178 +715,100 @@ fn eye_position(
     })
 }
 
-fn animate_smoke(
-    mut puffs: Query<(&Smoke, &mut Transform, &ChildOf)>,
-    anomalies: Query<&GlobalTransform, With<Anomaly>>,
+/// A kind's flicker at time `t` (0..1, about 0.6 on average): what its
+/// light, embers and haze all follow.
+pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
+    let t = t + seed * 17.0;
+    let v = match kind {
+        // Coals: slow surges with quick gutters on top.
+        AnomalyKind::Burner => {
+            0.5 + 0.3 * (t * 2.3).sin() * (t * 0.9).sin()
+                + 0.15 * (t * 13.0).sin() * (t * 7.3).sin()
+                + 0.05 * (t * 31.0).sin()
+        }
+        // Steady, with a crackle now and then.
+        AnomalyKind::Snare => {
+            let tick = (t * 12.0).floor();
+            let crack = ((tick * 12.9898).sin() * 43758.545).fract().abs();
+            0.55 + 0.3 * charge + if crack > 0.93 { 0.4 } else { 0.0 }
+        }
+        // A slow, heavy throb.
+        AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
+        AnomalyKind::Lift => 0.3 + 0.7 * charge,
+        AnomalyKind::Mirror => 0.5 + 0.1 * (t * 0.7).sin(),
+    };
+    v.clamp(0.0, 1.0)
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn pulse(
+    mut anomalies: Query<(
+        Entity,
+        &Anomaly,
+        &Touched,
+        &mut Look,
+        &GlobalTransform,
+        &Children,
+    )>,
+    mut glows: Query<(&Glow, &mut PointLight, &mut Visibility)>,
+    systems: Query<(&Particles, &MeshMaterial3d<ParticleMaterial>)>,
+    hazes: Query<(&Haze, &MeshMaterial3d<HazeMaterial>)>,
+    mut particle_mats: ResMut<Assets<ParticleMaterial>>,
+    mut haze_mats: ResMut<Assets<HazeMaterial>>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
     let t = time.elapsed_secs();
-    let eye = eye_position(&heads, &locals, &cams);
-    for (p, mut tf, parent) in &mut puffs {
-        let Ok(origin) = anomalies.get(parent.parent()) else {
-            continue;
-        };
-        let o = origin.translation();
-        if eye.is_some_and(|e| e.distance(o) > 95.0) {
-            continue;
-        }
-        let s = p.seed;
-        let fr = |k: f32| (s * k).fract().abs();
-        // Each puff lives eight to twelve seconds, rising five metres,
-        // swelling and leaning off downwind as it goes.
-        let life = (t / (8.0 + 4.0 * fr(1.9)) + fr(6.1)).fract();
-        let a = s * std::f32::consts::TAU;
-        let start = Vec3::new(a.cos(), 0.0, a.sin()) * p.radius * 0.5 * fr(3.7);
-        let drift = Vec3::new(0.8, 0.0, 0.5) * life * life * 2.5;
-        let local = start + drift + Vec3::Y * (0.4 + life * 5.0);
-        // Swells, then thins out to nothing at the top.
-        let size = (0.6 + life * 2.2) * (1.0 - life).sqrt();
-        tf.translation = local;
-        tf.scale = Vec3::splat(size);
-        if let Some(e) = eye {
-            tf.rotation = Transform::from_translation(o + local)
-                .looking_at(e, Vec3::Y)
-                .rotation
-                * Quat::from_rotation_z(s + t * 0.1);
-        }
-    }
-}
-
-fn animate_motes(
-    mut motes: Query<(&Mote, &mut Transform, &ChildOf)>,
-    anomalies: Query<&GlobalTransform, With<Anomaly>>,
-    heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
-    locals: Query<(), With<LocalPlayer>>,
-    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
-    time: Res<Time>,
-) {
-    let t = time.elapsed_secs();
-    let eye = eye_position(&heads, &locals, &cams);
-    for (m, mut tf, parent) in &mut motes {
-        let Ok(origin) = anomalies.get(parent.parent()) else {
-            continue;
-        };
-        let o = origin.translation();
-        if eye.is_some_and(|e| e.distance(o) > 95.0) {
-            continue;
-        }
-        let s = m.seed;
-        let fr = |k: f32| (s * k).fract().abs();
-        let local = match m.kind {
-            AnomalyKind::Lift => {
-                let speed = 0.5 + fr(1.7) * 0.7;
-                let a = s * std::f32::consts::TAU + t * speed;
-                let r = m.radius * (0.15 + 0.75 * fr(7.1));
-                let h =
-                    0.2 + 2.6 * (0.5 + 0.5 * (t * 0.35 + s * 11.0).sin()) * (0.4 + 0.6 * fr(3.3));
-                Vec3::new(a.cos() * r, h, a.sin() * r)
-            }
-            AnomalyKind::Burner => {
-                let life = (t * (0.3 + 0.25 * fr(2.9)) + fr(5.3)).fract();
-                let a = s * std::f32::consts::TAU;
-                let r = m.radius * 0.8 * fr(4.7).sqrt();
-                let wob =
-                    Vec3::new((t * 2.0 + s).sin(), 0.0, (t * 1.7 + s * 2.0).cos()) * 0.12 * life;
-                Vec3::new(a.cos() * r, life * 3.2, a.sin() * r) + wob
-            }
-            AnomalyKind::Snare => {
-                // Sparks blink in and out around the core.
-                let phase = (t * (3.0 + 4.0 * fr(1.3)) + s).fract();
-                let a = s * std::f32::consts::TAU + t * 0.4;
-                let b = fr(8.9) * std::f32::consts::PI - std::f32::consts::FRAC_PI_2;
-                let r = m.radius * 0.35 * (0.6 + 0.4 * phase);
-                Vec3::new(
-                    a.cos() * b.cos() * r,
-                    0.8 + b.sin() * r,
-                    a.sin() * b.cos() * r,
-                )
-            }
-        };
-        tf.translation = local;
-        let world = o + local;
-        let size = tf.scale.x;
-        tf.rotation = match (m.kind, eye) {
-            // Leaves tumble; everything else faces the eye.
-            (AnomalyKind::Lift, _) => {
-                Quat::from_euler(EulerRot::XYZ, t * 1.3 + s, t * 0.7 + s * 2.0, s)
-            }
-            (_, Some(e)) => {
-                Transform::from_translation(world)
-                    .looking_at(e, Vec3::Y)
-                    .rotation
-            }
-            _ => tf.rotation,
-        };
-        tf.scale = Vec3::splat(size);
-    }
-}
-
-/// Arcs crawl about the snare's core, re-striking every few frames; when
-/// it discharges they reach out to its full radius.
-fn snare_arcs(
-    mut arcs: Query<(&mut Arcs, &Children, &ChildOf)>,
-    mut segments: Query<(&ArcSegment, &mut Transform, &mut Visibility)>,
-    anomalies: Query<&Anomaly>,
-    time: Res<Time>,
-    mut seed: Local<u64>,
-) {
     let dt = time.delta_secs();
-    for (mut a, children, parent) in &mut arcs {
-        let Ok(anomaly) = anomalies.get(parent.parent()) else {
-            continue;
-        };
-        a.flash = (a.flash - dt * 2.5).max(0.0);
-        a.timer -= dt;
-        if a.timer > 0.0 {
+    let eye = eye_position(&heads, &locals, &cams);
+    for (e, a, touched, mut look, gt, children) in &mut anomalies {
+        look.flash = (look.flash - dt * 2.5).max(0.0);
+        look.reveal = (touched.revealed / REVEAL_TIME).clamp(0.0, 1.0);
+        let seed = (e.index_u32() % 97) as f32 * 0.37;
+        look.flicker = flicker(a.kind, t, a.charge, seed);
+        // Only the near ones get their materials touched.
+        if eye.is_some_and(|p| p.distance(gt.translation()) > 100.0) {
             continue;
         }
-        a.timer = 0.06;
-        *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut rng = extraction_core::noise::Rng::new(*seed);
-        let reach =
-            anomaly.radius * (0.3 + 0.7 * a.flash) * (0.4 + 0.6 * anomaly.charge.max(a.flash));
-        // One jagged polyline per arc, core to a point on the sphere.
-        let mut paths = [[Vec3::ZERO; ARC_SEGMENTS + 1]; ARCS];
-        for path in &mut paths {
-            let dir = Vec3::new(
-                rng.range(-1.0, 1.0),
-                rng.range(-0.6, 1.0),
-                rng.range(-1.0, 1.0),
-            )
-            .normalize_or(Vec3::Y);
-            let end = dir * reach;
-            for (k, p) in path.iter_mut().enumerate() {
-                let f = k as f32 / ARC_SEGMENTS as f32;
-                let jag = if k == 0 || k == ARC_SEGMENTS {
-                    Vec3::ZERO
-                } else {
-                    Vec3::new(
-                        rng.range(-1.0, 1.0),
-                        rng.range(-1.0, 1.0),
-                        rng.range(-1.0, 1.0),
-                    ) * reach
-                        * 0.12
-                };
-                *p = end * f + jag;
-            }
-        }
-        let live = rng.chance(0.25 + 0.75 * anomaly.charge.max(a.flash));
+        let lift = look.flicker + 2.5 * look.flash + 1.5 * look.reveal;
         for c in children.iter() {
-            if let Ok((seg, mut tf, mut vis)) = segments.get_mut(c) {
-                let p0 = paths[seg.arc][seg.index];
-                let p1 = paths[seg.arc][seg.index + 1];
-                let len = p0.distance(p1).max(1e-3);
-                *tf = Transform::from_translation((p0 + p1) * 0.5)
-                    .looking_at(p1, Vec3::Y)
-                    .with_scale(Vec3::new(1.0 + a.flash * 2.0, 1.0 + a.flash * 2.0, len));
-                *vis = if live {
+            if let Ok((g, mut light, mut vis)) = glows.get_mut(c) {
+                let i = if g.base > 0.0 {
+                    g.base * (0.4 + 0.6 * look.flicker) * (1.0 + g.burst * look.flash)
+                        + g.base * 2.0 * look.reveal
+                } else {
+                    g.burst * (look.flash + 0.5 * look.reveal)
+                };
+                light.intensity = i;
+                let want = if i > 1.0 {
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
                 };
+                vis.set_if_neq(want);
+            }
+            if let Ok((p, m)) = systems.get(c)
+                && let Some(mut mat) = particle_mats.get_mut(&m.0)
+            {
+                mat.params.state.x = a.charge;
+                mat.params.state.y = look.reveal;
+                mat.params.state.z = look.flash;
+                let b = 0.45 + 0.55 * lift;
+                let glowing = mat.params.mode.w > 0.5;
+                mat.params.color = if glowing {
+                    (p.color * b).extend(p.alpha)
+                } else {
+                    p.color.extend((p.alpha * (1.0 + look.reveal)).min(1.0))
+                };
+            }
+            if let Ok((h, m)) = hazes.get(c)
+                && let Some(mut mat) = haze_mats.get_mut(&m.0)
+            {
+                let amp = h.amp + h.charged * a.charge + 0.25 * look.flash + 0.3 * look.reveal;
+                mat.extension.haze.wave.x = amp;
+                mat.extension.haze.tint.w = h.tint * lift + 0.3 * look.reveal;
             }
         }
     }
@@ -577,42 +816,430 @@ fn snare_arcs(
 
 fn react_to_events(
     mut events: MessageReader<AnomalyEvent>,
-    children: Query<&Children>,
-    mut glows: Query<(&mut Glow, &mut PointLight)>,
+    mut strikes: MessageReader<ArcStrike>,
+    mut looks: Query<(&mut Look, &GlobalTransform, &Children)>,
     mut arcs: Query<&mut Arcs>,
-    time: Res<Time>,
 ) {
     for ev in events.read() {
-        let Ok(kids) = children.get(ev.anomaly) else {
+        let Ok((mut look, _, kids)) = looks.get_mut(ev.anomaly) else {
             continue;
         };
-        for c in kids.iter() {
-            if let Ok((mut g, _)) = glows.get_mut(c) {
-                g.flash = match ev.what {
-                    AnomalyAct::Discharge => 25.0,
-                    AnomalyAct::Flare => 3.0,
-                    _ => 1.0,
-                };
-            }
-            if let Ok(mut a) = arcs.get_mut(c) {
-                if ev.what == AnomalyAct::Discharge {
-                    a.flash = 1.0;
+        look.flash = look.flash.max(match ev.what {
+            AnomalyAct::Discharge | AnomalyAct::Pop | AnomalyAct::Blink => 1.0,
+            AnomalyAct::Bloom => 0.8,
+            AnomalyAct::Flare | AnomalyAct::Crush => 0.6,
+            AnomalyAct::Reveal => 0.4,
+        });
+        if ev.what == AnomalyAct::Discharge {
+            for c in kids.iter() {
+                if let Ok(mut a) = arcs.get_mut(c) {
                     a.timer = 0.0;
                 }
             }
         }
     }
-    let t = time.elapsed_secs();
+    for s in strikes.read() {
+        let Ok((_, gt, kids)) = looks.get(s.anomaly) else {
+            continue;
+        };
+        for c in kids.iter() {
+            if let Ok(mut a) = arcs.get_mut(c) {
+                // Arcs' local space: 0.8 m over the anomaly.
+                let local = s.to - gt.translation() - Vec3::Y * 0.8;
+                a.reaching.push((local, 0.35));
+                a.timer = 0.0;
+            }
+        }
+    }
+}
+
+/// Ribbons along polylines, each segment two crossed quads so it reads
+/// from any side without knowing where the eye is.
+fn arc_mesh(paths: &[(Vec<Vec3>, f32)]) -> Mesh {
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut uv: Vec<[f32; 2]> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    for (path, w) in paths {
+        for seg in path.windows(2) {
+            let (p0, p1) = (seg[0], seg[1]);
+            let d = (p1 - p0).normalize_or(Vec3::Y);
+            let s1 = d.any_orthonormal_vector() * *w;
+            let s2 = d.cross(s1).normalize_or_zero() * *w;
+            for side in [s1, s2] {
+                let k = pos.len() as u32;
+                for p in [p0 - side, p0 + side, p1 + side, p1 - side] {
+                    pos.push(p.to_array());
+                    nrm.push([0.0, 1.0, 0.0]);
+                    uv.push([0.0, 0.0]);
+                }
+                idx.extend_from_slice(&[k, k + 1, k + 2, k, k + 2, k + 3]);
+            }
+        }
+    }
+    if pos.is_empty() {
+        // Something to hold the buffers' shape.
+        pos.extend([[0.0; 3]; 3]);
+        nrm.extend([[0.0, 1.0, 0.0]; 3]);
+        uv.extend([[0.0; 2]; 3]);
+        idx.extend([0, 1, 2]);
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
+
+/// One jagged polyline from `from` to `to`.
+fn jag(rng: &mut extraction_core::noise::Rng, from: Vec3, to: Vec3, rough: f32) -> Vec<Vec3> {
+    let len = from.distance(to);
+    (0..=ARC_SEGMENTS)
+        .map(|k| {
+            let f = k as f32 / ARC_SEGMENTS as f32;
+            let j = if k == 0 || k == ARC_SEGMENTS {
+                Vec3::ZERO
+            } else {
+                Vec3::new(
+                    rng.range(-1.0, 1.0),
+                    rng.range(-1.0, 1.0),
+                    rng.range(-1.0, 1.0),
+                ) * len
+                    * rough
+            };
+            from.lerp(to, f) + j
+        })
+        .collect()
+}
+
+/// Arcs crawl about the snare's core, re-striking every few frames; when
+/// it discharges they reach out to its full radius, and to whatever it
+/// struck.
+fn snare_arcs(
+    mut arcs: Query<(&mut Arcs, &Mesh3d, &ChildOf)>,
+    anomalies: Query<(&Anomaly, &Look)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    time: Res<Time>,
+    mut seed: Local<u64>,
+) {
     let dt = time.delta_secs();
-    for (mut g, mut light) in &mut glows {
-        g.flash = (g.flash - dt * g.flash.max(1.0) * 3.0).max(0.0);
-        // Coals: slow surges with quick gutters on top.
-        let wave = 0.5
-            + 0.3 * (t * 2.3).sin() * (t * 0.9).sin()
-            + 0.15 * (t * 13.0).sin() * (t * 7.3).sin()
-            + 0.05 * (t * 31.0).sin();
-        let flicker = 1.0 - g.flicker * (1.0 - wave.clamp(0.0, 1.0));
-        light.intensity = g.base * flicker * (1.0 + g.flash);
+    for (mut a, mesh, parent) in &mut arcs {
+        let Ok((anomaly, look)) = anomalies.get(parent.parent()) else {
+            continue;
+        };
+        for r in &mut a.reaching {
+            r.1 -= dt;
+        }
+        a.reaching.retain(|r| r.1 > 0.0);
+        a.timer -= dt;
+        if a.timer > 0.0 {
+            continue;
+        }
+        a.timer = 0.05;
+        *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut rng = extraction_core::noise::Rng::new(*seed);
+        let hot = anomaly.charge.max(look.flash).max(look.reveal);
+        let reach = anomaly.radius * (0.3 + 0.7 * look.flash) * (0.4 + 0.6 * hot);
+        let mut paths = Vec::new();
+        let width = 0.006 * (1.0 + 2.5 * look.flash);
+        for _ in 0..ARCS {
+            if !rng.chance(0.25 + 0.75 * hot) {
+                continue;
+            }
+            let dir = Vec3::new(
+                rng.range(-1.0, 1.0),
+                rng.range(-0.6, 1.0),
+                rng.range(-1.0, 1.0),
+            )
+            .normalize_or(Vec3::Y);
+            let main = jag(&mut rng, Vec3::ZERO, dir * reach, 0.12);
+            // A fork off the middle now and then.
+            if rng.chance(0.4) {
+                let from = main[ARC_SEGMENTS / 2];
+                let fork = from + (dir + Vec3::Y * 0.5).normalize() * reach * 0.4;
+                paths.push((jag(&mut rng, from, fork, 0.15), width * 0.6));
+            }
+            paths.push((main, width));
+        }
+        for (to, _) in a.reaching.clone() {
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), 0.012));
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.16), 0.007));
+        }
+        if let Some(mut m) = meshes.get_mut(&mesh.0) {
+            *m = arc_mesh(&paths);
+        }
+    }
+}
+
+/// A blink leaves a flash where it took something and where it set it
+/// down.
+#[derive(Component)]
+struct BlinkFlash(f32);
+
+fn blink_flashes(
+    mut commands: Commands,
+    mut blinks: MessageReader<Blinked>,
+    mut flashes: Query<(Entity, &mut BlinkFlash, &mut PointLight)>,
+    time: Res<Time>,
+) {
+    for b in blinks.read() {
+        for at in [b.from, b.to] {
+            commands.spawn((
+                BlinkFlash(0.45),
+                PointLight {
+                    color: Color::srgb(0.6, 0.85, 1.0),
+                    intensity: 60_000.0,
+                    range: 8.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_translation(at + Vec3::Y * 0.8),
+            ));
+        }
+    }
+    let dt = time.delta_secs();
+    for (e, mut f, mut light) in &mut flashes {
+        f.0 -= dt;
+        light.intensity = 60_000.0 * (f.0 / 0.45).max(0.0).powi(2);
+        if f.0 <= 0.0 {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+// --- The anomaly items' looks ------------------------------------------------
+
+/// The items whose looks are built here rather than loaded.
+const OWN_LOOKS: [&str; 4] = ["bolt", "detector", "art_lodestone", "art_shard"];
+
+/// Claims the look of an anomaly item as it's spawned, before the item
+/// placeholder system gives it a box.
+fn claim_item_looks(
+    add: On<Add, Item>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut commands: Commands,
+) {
+    let Ok(item) = items.get(add.entity) else {
+        return;
+    };
+    if OWN_LOOKS.contains(&catalog.get(item.kind()).id.as_str()) {
+        commands.entity(add.entity).insert(CustomVisual);
+    }
+}
+
+/// A detector's lamp, lit by each click.
+#[derive(Component)]
+struct Lamp {
+    material: Handle<StandardMaterial>,
+    lit: f32,
+}
+
+fn hex_prism(radius: f32, height: f32) -> Mesh {
+    Cylinder::new(radius, height).mesh().resolution(6).build()
+}
+
+/// A thin wedge of glass: a triangle, extruded.
+fn shard_mesh() -> Mesh {
+    let tri = [
+        Vec2::new(0.0, 0.055),
+        Vec2::new(-0.022, -0.05),
+        Vec2::new(0.025, -0.045),
+    ];
+    let t = 0.008;
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    for (z, n) in [(t, 1.0), (-t, -1.0)] {
+        let k = pos.len() as u32;
+        for p in tri {
+            pos.push([p.x, p.y, z * 0.5]);
+            nrm.push([0.0, 0.0, n]);
+        }
+        if n > 0.0 {
+            idx.extend([k, k + 1, k + 2]);
+        } else {
+            idx.extend([k, k + 2, k + 1]);
+        }
+    }
+    for i in 0..3 {
+        let (a, b) = (tri[i], tri[(i + 1) % 3]);
+        let d = b - a;
+        let n = Vec3::new(d.y, -d.x, 0.0).normalize();
+        let k = pos.len() as u32;
+        for (p, z) in [(a, t), (b, t), (b, -t), (a, -t)] {
+            pos.push([p.x, p.y, z * 0.5]);
+            nrm.push(n.to_array());
+        }
+        idx.extend([k, k + 2, k + 1, k, k + 3, k + 2]);
+    }
+    let uv = vec![[0.0f32, 0.0]; pos.len()];
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
+
+#[allow(clippy::type_complexity)]
+fn dress_items(
+    mut commands: Commands,
+    added: Query<(Entity, &Item), (Added<CustomVisual>, With<Item>)>,
+    catalog: Res<Catalog>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, item) in &added {
+        let id = catalog.get(item.kind()).id.as_str();
+        let mut mat = |c: Color, metal: f32, rough: f32, emissive: LinearRgba| {
+            materials.add(StandardMaterial {
+                base_color: c,
+                metallic: metal,
+                perceptual_roughness: rough,
+                emissive,
+                ..default()
+            })
+        };
+        let mut parts: Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> = Vec::new();
+        let mut lamp = None;
+        match id {
+            "bolt" => {
+                let steel = mat(Color::srgb(0.36, 0.3, 0.25), 0.7, 0.65, LinearRgba::BLACK);
+                let along = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+                parts.push((
+                    meshes.add(Cylinder::new(0.005, 0.06).mesh().resolution(10)),
+                    steel.clone(),
+                    Transform::from_xyz(0.0, 0.0, 0.004).with_rotation(along),
+                ));
+                parts.push((
+                    meshes.add(hex_prism(0.0085, 0.007)),
+                    steel.clone(),
+                    Transform::from_xyz(0.0, 0.0, -0.0315).with_rotation(along),
+                ));
+                parts.push((
+                    meshes.add(hex_prism(0.0085, 0.008)),
+                    steel,
+                    Transform::from_xyz(0.0, 0.0, 0.018).with_rotation(along),
+                ));
+            }
+            "detector" => {
+                let olive = mat(Color::srgb(0.2, 0.23, 0.14), 0.1, 0.7, LinearRgba::BLACK);
+                let black = mat(Color::srgb(0.04, 0.04, 0.04), 0.3, 0.5, LinearRgba::BLACK);
+                let glass = mat(
+                    Color::srgb(0.15, 0.03, 0.02),
+                    0.0,
+                    0.2,
+                    LinearRgba::rgb(0.2, 0.02, 0.0),
+                );
+                parts.push((
+                    meshes.add(Cuboid::new(0.07, 0.04, 0.11)),
+                    olive,
+                    Transform::from_xyz(0.0, 0.0, 0.025),
+                ));
+                // A grille on top and a dial face on the back.
+                parts.push((
+                    meshes.add(Cuboid::new(0.05, 0.004, 0.05)),
+                    black.clone(),
+                    Transform::from_xyz(0.0, 0.021, 0.04),
+                ));
+                parts.push((
+                    meshes.add(Cylinder::new(0.004, 0.05).mesh().resolution(8)),
+                    black.clone(),
+                    Transform::from_xyz(0.018, 0.0, -0.055)
+                        .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                ));
+                parts.push((
+                    meshes.add(Sphere::new(0.006).mesh().ico(1).unwrap()),
+                    black,
+                    Transform::from_xyz(0.018, 0.0, -0.078),
+                ));
+                parts.push((
+                    meshes.add(Sphere::new(0.005).mesh().ico(1).unwrap()),
+                    glass.clone(),
+                    Transform::from_xyz(-0.02, 0.021, -0.01),
+                ));
+                lamp = Some(glass);
+            }
+            "art_lodestone" => {
+                let iron = mat(
+                    Color::srgb(0.1, 0.095, 0.11),
+                    0.85,
+                    0.42,
+                    LinearRgba::rgb(0.03, 0.0, 0.08),
+                );
+                let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
+                // Knobbled, like a lump of slag.
+                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+                    m.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+                {
+                    for v in p.iter_mut() {
+                        let q = Vec3::from_array(*v);
+                        let k = 1.0
+                            + 0.12 * (q.x * 7.0 + q.y * 3.0).sin() * (q.z * 5.0).cos()
+                            + 0.06 * (q.y * 13.0).sin();
+                        *v = (q * k).to_array();
+                    }
+                }
+                m.compute_smooth_normals();
+                parts.push((
+                    meshes.add(m),
+                    iron,
+                    Transform::from_scale(Vec3::new(0.028, 0.023, 0.026)),
+                ));
+            }
+            "art_shard" => {
+                let glass = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.85, 0.9, 0.97),
+                    metallic: 1.0,
+                    perceptual_roughness: 0.04,
+                    emissive: LinearRgba::rgb(0.03, 0.06, 0.12),
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                });
+                parts.push((meshes.add(shard_mesh()), glass, Transform::IDENTITY));
+            }
+            _ => continue,
+        }
+        commands.entity(e).insert(Visibility::default());
+        if let Some(material) = lamp {
+            commands.entity(e).insert(Lamp { material, lit: 0.0 });
+        }
+        commands.entity(e).with_children(|c| {
+            for (mesh, material, tf) in parts {
+                c.spawn((Mesh3d(mesh), MeshMaterial3d(material), tf));
+            }
+        });
+    }
+}
+
+/// A detector's lamp blinks red with each click.
+fn detector_lamps(
+    mut clicks: MessageReader<DetectorClick>,
+    mut lamps: Query<&mut Lamp>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    for c in clicks.read() {
+        if let Ok(mut l) = lamps.get_mut(c.detector) {
+            l.lit = 1.0;
+        }
+    }
+    let dt = time.delta_secs();
+    for mut l in &mut lamps {
+        if l.lit <= 0.0 {
+            continue;
+        }
+        l.lit = (l.lit - dt * 12.0).max(0.0);
+        if let Some(mut m) = materials.get_mut(&l.material) {
+            m.emissive = LinearRgba::rgb(0.2 + 30.0 * l.lit, 0.02 + 3.0 * l.lit, 0.0);
+        }
     }
 }
 
