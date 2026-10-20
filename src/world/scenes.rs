@@ -89,6 +89,15 @@ pub enum Piece {
     Lantern {
         at: [f32; 3],
     },
+    /// A sleeping bag rolled out on the ground.
+    Bedroll {
+        at: [f32; 2],
+        rot: f32,
+    },
+    /// A cold fire: a ring of stones, charred logs.
+    Campfire {
+        at: [f32; 2],
+    },
     /// Someone who stayed: in a chair (`seated`, facing as a chair does)
     /// or on the ground.
     Remains {
@@ -205,6 +214,28 @@ pub fn geo(id: &str) -> Option<Geo> {
                     vec![("lantern", Transform::from_xyz(at[0], at[1], at[2]))],
                 );
             }
+            Piece::Bedroll { at, rot } => {
+                let from = b.geo.pieces.len();
+                let t = Transform::from_translation(v(at))
+                    .with_rotation(Quat::from_rotation_y(yaw(rot)));
+                b.piece(
+                    Shape::Box(Vec3::new(0.7, 0.08, 1.9)),
+                    Transform::from_translation(v(at) + Vec3::Y * 0.04).with_rotation(t.rotation),
+                    Mat::Canvas,
+                    false,
+                );
+                b.dress(from, vec![("bedroll", t)]);
+            }
+            Piece::Campfire { at } => {
+                let from = b.geo.pieces.len();
+                b.piece(
+                    Shape::Cylinder(0.4, 0.12),
+                    Transform::from_translation(v(at) + Vec3::Y * 0.06),
+                    Mat::Boulder,
+                    false,
+                );
+                b.dress(from, vec![("campfire", Transform::from_translation(v(at)))]);
+            }
             Piece::Remains { at, rot, seated } => remains(&mut b, v(at), yaw(rot), seated),
         }
     }
@@ -234,20 +265,16 @@ fn remains(b: &mut Builder, at: Vec3, yaw: f32, seated: bool) {
             ),
         ]
     } else {
-        // Face down, one knee drawn up.
+        // Face down along Z, head toward -Z, one knee drawn up.
         &[
-            (Vec3::new(0.46, 0.24, 0.70), Vec3::new(0.0, 0.12, 0.2), 0.0),
-            (Vec3::new(0.2, 0.19, 0.22), Vec3::new(0.05, 0.1, 0.7), 0.0),
+            (Vec3::new(0.46, 0.24, 0.70), Vec3::new(0.0, 0.12, -0.2), 0.0),
+            (Vec3::new(0.2, 0.19, 0.22), Vec3::new(0.05, 0.1, -0.7), 0.0),
             (
                 Vec3::new(0.18, 0.16, 0.85),
-                Vec3::new(-0.11, 0.08, -0.55),
+                Vec3::new(-0.11, 0.08, 0.55),
                 0.0,
             ),
-            (
-                Vec3::new(0.18, 0.16, 0.6),
-                Vec3::new(0.16, 0.08, -0.4),
-                -0.5,
-            ),
+            (Vec3::new(0.18, 0.16, 0.6), Vec3::new(0.16, 0.08, 0.4), -0.5),
         ]
     };
     for (size, centre, tilt) in parts {

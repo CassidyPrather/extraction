@@ -241,7 +241,8 @@ fn radio_calls(
                         }
                     }
                     if paid {
-                        raid.say(lines::pick(lines::SHORT_RUN, raid.clock as u32));
+                        let n = raid.clock as u32;
+                        raid.say(lines::pick(lines::SHORT_RUN, n));
                         raid.phase = Phase::TruckWaiting {
                             rv: SHORT_EXFIL,
                             left: TRUCK_WAIT,
