@@ -66,6 +66,8 @@ pub struct ShotMods {
     pub stun: f32,
     /// Glass eye: the round bends toward robots ahead of it.
     pub seek: bool,
+    /// Air drag scale on its own (a grenade's fragments slow fast).
+    pub drag: f32,
 }
 
 impl Default for ShotMods {
@@ -75,6 +77,7 @@ impl Default for ShotMods {
             damage: 1.0,
             stun: 0.0,
             seek: false,
+            drag: 1.0,
         }
     }
 }
@@ -342,7 +345,8 @@ pub(crate) fn fly_projectiles(
         t.translation += step;
         let fall = p.mods.fall;
         p.velocity += GRAVITY * dt * fall;
-        p.velocity *= 1.0 - DRAG * dt * fall;
+        let drag = (DRAG * p.mods.drag * dt * fall).min(0.9);
+        p.velocity *= 1.0 - drag;
         if p.mods.seek {
             // Bend toward the nearest robot part within a narrow cone.
             let dir = p.velocity.normalize_or_zero();

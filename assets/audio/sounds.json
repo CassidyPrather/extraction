@@ -95,6 +95,30 @@
       }
     ]
   },
+  "ambience/rain_canvas": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_canvas.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_canvas_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_canvas_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
   "ambience/rain_light": {
     "type": "loop",
     "channels": 2,
@@ -109,6 +133,54 @@
         "file": "audio/ambience/rain_light_2.ogg",
         "seconds": 45.0,
         "source": "fs_200273"
+      }
+    ]
+  },
+  "ambience/rain_tin": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_tin.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_tin_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_tin_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_wood": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_wood.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
+      }
+    ]
+  },
+  "ambience/rain_wood_light": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/ambience/rain_wood_light.ogg",
+        "seconds": 20.0,
+        "source": "synth:scripts/make_rain_roofs.py"
       }
     ]
   },
@@ -361,6 +433,40 @@
       }
     ]
   },
+  "anomaly/mirror_blink": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/mirror_blink_1.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/mirror_blink_2.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/mirror_blink_3.ogg",
+        "seconds": 0.7,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/mirror_shimmer": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/mirror_shimmer.ogg",
+        "seconds": 9.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "anomaly/offering": {
     "type": "oneshot",
     "channels": 2,
@@ -369,6 +475,28 @@
       {
         "file": "audio/anomaly/offering.ogg",
         "seconds": 7.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/reveal": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/anomaly/reveal_1.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/reveal_2.ogg",
+        "seconds": 1.2,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/anomaly/reveal_3.ogg",
+        "seconds": 1.2,
         "source": "synth:scripts/synth_anomaly.py"
       }
     ]
@@ -415,6 +543,18 @@
       {
         "file": "audio/anomaly/surge_drone.ogg",
         "seconds": 32.0,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
+  "anomaly/well_drone": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/anomaly/well_drone.ogg",
+        "seconds": 12.8,
         "source": "synth:scripts/synth_anomaly.py"
       }
     ]
@@ -1638,6 +1778,33 @@
       }
     ]
   },
+  "machines/detector_click": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/detector_click_1.ogg",
+        "seconds": 0.06,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_2.ogg",
+        "seconds": 0.06,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_3.ogg",
+        "seconds": 0.06,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/detector_click_4.ogg",
+        "seconds": 0.06,
+        "source": "synth:scripts/synth_anomaly.py"
+      }
+    ]
+  },
   "machines/drone_lock": {
     "type": "oneshot",
     "channels": 2,
@@ -1669,6 +1836,18 @@
         "file": "audio/machines/drone_rotor_2.ogg",
         "seconds": 2.414,
         "source": "fs_383852"
+      }
+    ]
+  },
+  "machines/generator": {
+    "type": "loop",
+    "channels": 2,
+    "loop": true,
+    "files": [
+      {
+        "file": "audio/machines/generator.ogg",
+        "seconds": 7.5,
+        "source": "synth:scripts/synth_anomaly.py"
       }
     ]
   },
@@ -1777,6 +1956,53 @@
         "file": "audio/machines/radio_static_2.ogg",
         "seconds": 12.0,
         "source": "fs_38693"
+      }
+    ]
+  },
+  "machines/robot_voice": {
+    "type": "oneshot",
+    "channels": 2,
+    "loop": false,
+    "files": [
+      {
+        "file": "audio/machines/robot_voice_1.ogg",
+        "seconds": 0.776,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_2.ogg",
+        "seconds": 0.624,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_3.ogg",
+        "seconds": 1.069,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_4.ogg",
+        "seconds": 0.764,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_5.ogg",
+        "seconds": 0.619,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_6.ogg",
+        "seconds": 0.936,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_7.ogg",
+        "seconds": 0.588,
+        "source": "synth:scripts/synth_anomaly.py"
+      },
+      {
+        "file": "audio/machines/robot_voice_8.ogg",
+        "seconds": 0.475,
+        "source": "synth:scripts/synth_anomaly.py"
       }
     ]
   },

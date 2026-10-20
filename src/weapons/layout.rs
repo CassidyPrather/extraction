@@ -43,6 +43,9 @@ pub enum Moves {
     Gate,
     /// A revolver's ejector rod: strokes back along +Z as it pushes a case.
     Rod,
+    /// A bayonet: a folding one turns about its pin (the origin, local X)
+    /// from folded to fixed; a fixed one stays as modelled.
+    Bayonet,
 }
 
 #[derive(Clone, Copy, Debug)]

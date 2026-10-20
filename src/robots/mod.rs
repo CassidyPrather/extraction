@@ -11,6 +11,7 @@
 //! (see [`director`]).
 
 pub mod anim;
+pub mod armour;
 pub mod collector;
 pub mod director;
 pub mod dirigible;
@@ -19,6 +20,7 @@ pub mod drone;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod hound;
 pub mod indoor;
 #[cfg(test)]
 mod mind_tests;
@@ -75,6 +77,9 @@ pub enum PartRole {
     Leg(u8),
     /// One of a dirigible's gas cells.
     GasCell(u8),
+    /// An armour plate over the body: it takes the rounds that strike it
+    /// until it comes loose and drops, exposing what's behind (`armour`).
+    Armour(u8),
 }
 
 #[derive(Component, Debug)]
@@ -237,6 +242,8 @@ impl Plugin for RobotsPlugin {
                 anim::AnimPlugin,
                 flight::FlightPlugin,
                 wreck::WreckPlugin,
+                armour::ArmourPlugin,
+                hound::HoundPlugin,
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))

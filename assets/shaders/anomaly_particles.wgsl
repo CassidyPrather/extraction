@@ -11,14 +11,19 @@
 //   5 mirror glints   twinkles on the fold's surface, bright when revealed
 //   6 lift dust       a low swirl over the flattened ring
 //
-// Fog is applied here (the valleys' exponential-squared fog), less on
-// glowing things so embers and arcs carry a little further than leaves.
+// Fog is applied here through bevy_pbr's apply_fog, which render/fog.rs
+// patches to add the ground-fog banks and Kettle Pass's cloud cap, so a
+// leaf in a bank is as lost as the ground under it; glowing things lose
+// a little less, so embers and sparks carry a little further.
 
 #import bevy_pbr::{
     mesh_functions,
     mesh_view_bindings::{view, globals, fog},
     view_transformations::position_world_to_clip,
 }
+#ifdef DISTANCE_FOG
+#import bevy_pbr::pbr_functions::apply_fog
+#endif
 
 struct Params {
     // x: mode, y: radius, z: reach (well), w: glow (0 lit-ish, 1 emissive)
@@ -44,7 +49,7 @@ struct VOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) alpha: f32,
-    @location(2) dist: f32,
+    @location(2) world: vec3<f32>,
     @location(3) heat: f32,
 };
 
@@ -170,13 +175,17 @@ fn vertex(v: Vertex) -> VOut {
     var corner = vec2<f32>(v.position.x * c - v.position.y * sn, v.position.x * sn + v.position.y * c);
     // A leaf seen edge-on as it tumbles.
     corner.x *= mix(1.0, abs(cos(p.spin * 0.7)) + 0.15, p.tumble);
-    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size;
+    // Thickened with distance (more for glowing things), so a spark or an
+    // ember keeps a pixel or two at 20 m instead of flickering out.
+    let far = distance(centre + p.pos, view.world_position);
+    let grow = clamp(far / mix(15.0, 7.0, params.mode.w), 1.0, mix(2.0, 2.5, params.mode.w));
+    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size * grow;
     var out: VOut;
     out.clip = position_world_to_clip(world);
     out.uv = v.uv;
     let d = distance(world, view.world_position);
     out.alpha = p.alpha * (1.0 - smoothstep(70.0, 95.0, d));
-    out.dist = d;
+    out.world = world;
     out.heat = p.heat;
     return out;
 }
@@ -184,9 +193,6 @@ fn vertex(v: Vertex) -> VOut {
 @fragment
 fn fragment(in: VOut) -> @location(0) vec4<f32> {
     let texel = textureSample(tex, tex_sampler, in.uv);
-    // The fog's binding is the fragment stage's only.
-    let dd = in.dist * fog.be.x;
-    let fogged = 1.0 - exp(-dd * dd);
     let glow = params.mode.w;
     var rgb = params.color.rgb * mix(texel.rgb, vec3<f32>(1.0), glow);
     // Grit falling into a well warms toward its violet glow.
@@ -194,12 +200,20 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
     let a = texel.a * params.color.a * in.alpha;
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only
-        // dims it, and less than it hides leaves.
-        return vec4<f32>(rgb * a * (1.0 - fogged * 0.75), 0.0);
+        // dims it. The fog is mix(x, F, f), so f is 1 - (fog(1) - fog(0)).
+        var keep = vec3<f32>(1.0);
+#ifdef DISTANCE_FOG
+        keep = apply_fog(fog, vec4<f32>(1.0), in.world, view.world_position, in.clip.xy).rgb
+            - apply_fog(fog, vec4<f32>(0.0, 0.0, 0.0, 1.0), in.world, view.world_position, in.clip.xy).rgb;
+#endif
+        let dim = mix(vec3<f32>(1.0), keep, 0.75);
+        return vec4<f32>(rgb * a * dim, 0.0);
     }
     if (a < 0.02) {
         discard;
     }
-    rgb = mix(rgb, fog.base_color.rgb, fogged);
+#ifdef DISTANCE_FOG
+    rgb = apply_fog(fog, vec4<f32>(rgb, 1.0), in.world, view.world_position, in.clip.xy).rgb;
+#endif
     return vec4<f32>(rgb, a);
 }

@@ -710,3 +710,35 @@ fn a_searching_drone_looks_in_at_a_doorway() {
     }
     assert!(best < 2.5, "hung low outside the doorway ({best:.1} m off)");
 }
+
+/// A crawler's wreck doesn't wall off a corridor: once it's wrecked,
+/// players walk past it (the sims found bots stuck behind one).
+#[test]
+fn a_wrecked_crawler_does_not_block_the_way() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let centre = zone.on_ground(100.0, 200.0);
+    let crawler = crawler_at(&mut app, &zone, site(centre, |_| false), vec![]);
+    let blocks = |app: &mut App| {
+        let parts: Vec<Entity> = app
+            .world()
+            .get::<Children>(crawler)
+            .unwrap()
+            .iter()
+            .collect();
+        parts.iter().any(|p| {
+            app.world()
+                .get::<avian3d::prelude::CollisionLayers>(*p)
+                .is_some_and(|l| l.filters.has_all(crate::world::Layer::Player))
+        })
+    };
+    assert!(blocks(&mut app), "a live crawler is solid");
+    app.world_mut()
+        .get_mut::<super::Robot>(crawler)
+        .unwrap()
+        .wrecked = true;
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(!blocks(&mut app), "its wreck isn't");
+}

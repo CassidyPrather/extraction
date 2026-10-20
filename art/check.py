@@ -185,6 +185,11 @@ def main():
     for path in paths:
         objs = load(path)
         faults = zfighting(objs) + floating(objs)
+        # World props carry their baked ambient occlusion (art/props/_kit.py
+        # `bake_ao`) as a colour attribute; one without it would read flat.
+        if os.sep + "props" + os.sep in os.path.abspath(path):
+            faults += [f"no baked AO (colour attribute) on {o.name}" for o in objs
+                       if not o.data.color_attributes]
         print(f"{'ok  ' if not faults else 'FAIL'} {path}")
         for f in faults:
             print("    " + f)

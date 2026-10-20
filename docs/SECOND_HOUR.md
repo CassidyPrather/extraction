@@ -11,7 +11,7 @@ Each line fits the wrist (3 lines of 26 characters) and uses no game words.
 | Moment | When | He says |
 | - | - | - |
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
-| Heard | a machine turns to look for you | get low, keep still |
+| Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
 | Drone lock | the chirp before it fires | get behind something |
 | Anomaly | within 4 m of one's edge | throw something in first |
@@ -29,11 +29,12 @@ Other systems can add their own moment with `MeetFirst(First::...)`.
 ## The bot's career: `--scenario second_hour`
 
 A bot plays three raids in Marrow Creek, plus the start of a fourth, in
-about two minutes of wall clock (headless). The scenario sets each moment
+about three minutes of wall clock (headless). The scenario sets each moment
 up the way the drills set things up:
 - a rifle worn to 0.2;
 - a walker about its own business that hears a shot;
-- a drone;
+- a drone, met by a house in the village (where most of the Zone's
+  cover is);
 - the Surge's clock wound on;
 - health run out.
 
@@ -45,7 +46,7 @@ The scenario isn't in `--scenario all`; run it by name. It also shortens
 the truck's drive to 10 seconds and clears its own robots after their
 moments.
 
-Last run (merged main, 113 s):
+Last run (193 s):
 
 | Moment | Raid | Bot did | Worked |
 | - | - | - | - |
@@ -56,20 +57,29 @@ Last run (merged main, 113 s):
 | Surge | 1 | call the truck, go home | yes |
 | Heard | 2 | move off low, then keep still | yes |
 | Jam (failure to feed) | 2 | rack it | yes |
-| Drone lock | 2 | fight it (two hands, a sound rifle) | **no**: it died |
-| First death | 2 | go back for it | yes |
-| Kit recovered | 3 | went back for it before the convoy | yes |
+| Drone lock | 2 | get behind something (indoors, beside the door) | yes |
+| Lost you | 2 | stay low a while | yes |
+| First death | 3 | go back for it | yes |
+| Kit recovered | 4 | went back for it before the convoy | yes |
 
 ### What it found
 
 - **"Get low and keep still" fails after a gunshot.** A walker that heard
   your shot comes to where the shot was. A bot that kept still there was
   found and killed. Moving off 20 m low, *then* keeping still, lost it.
-  The line should say to move: a wording question for Story.
+  Lev's line now says to move off quiet, then go still.
 - **Fighting a drone that has already locked on loses.** That held even
-  with a sound rifle, both hands on it, and the drone 40 m off. Lev's
-  "get behind something" is the right advice. The run doesn't yet try
-  cover, so that row tests the wrong answer: next.
+  with a sound rifle, both hands on it, and the drone 40 m off.
+- **Cover beats it, if it's the right cover.** In through the door and
+  one step to the side, out of the doorway's line: the drone hovered at
+  the door, searched round the house for about 40 s, gave up and left,
+  and the bot walked out unhurt ("Lost you" came too). Two kinds of
+  cover failed first:
+  - a shed: the drone hovers at the door and looks straight in;
+  - deep in the house, across the far room: the drone searches indoors,
+    came in and found it.
+  Lev's "get behind something" is right; "inside, beside the door" would
+  be more exact, but it doesn't fit his line.
 - **Waking in the truck after going down restarted the raid.** It said
   "Out of the truck..." while you were in the bed, and counted a raid.
   `leave_base` read stale global poses. Fixed, with a test.

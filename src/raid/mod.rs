@@ -9,6 +9,7 @@
 //! Stay too long and the Surge comes for everyone.
 
 pub mod bench;
+pub mod board;
 pub mod chatter;
 pub mod comfort_board;
 pub mod kitchen;
@@ -152,6 +153,7 @@ impl Plugin for RaidPlugin {
             chatter::ChatterPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,
+            board::BoardPlugin,
         ))
         .add_systems(
             Update,
