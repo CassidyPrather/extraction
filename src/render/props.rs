@@ -3,7 +3,7 @@
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
 
-use crate::interact::body::{Backpack, BodySlot};
+use crate::interact::body::Backpack;
 use crate::interact::{Grabbable, GripRole, Hand, Held};
 use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
 use crate::raid::Remains;
@@ -20,7 +20,6 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 (dress_truck, dress_containers, finish_models).chain(),
-                dress_slots,
                 spawn_hand_visuals,
                 dress_gloves,
                 dress_camp,
@@ -351,20 +350,8 @@ fn dress_containers(
                 ),
                 MeshMaterial3d(bag),
             ));
-        } else {
-            // The backpack: a canvas pack with a lid flap.
-            let canvas = mat(&mut materials, Color::srgb(0.27, 0.29, 0.20), 0.95, 0.0);
-            commands.entity(e).insert((
-                Mesh3d(meshes.add(Cuboid::new(0.34, 0.48, 0.2))),
-                MeshMaterial3d(canvas.clone()),
-            ));
-            commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.35, 0.04, 0.22))),
-                MeshMaterial3d(canvas),
-                Transform::from_xyz(0.0, 0.25, 0.01),
-                ChildOf(e),
-            ));
         }
+        // The worn pack is `kit::dress_pack`'s.
     }
 }
 
@@ -410,32 +397,6 @@ fn body_casts_no_shadow(
                 .entity(e)
                 .try_remove::<(OnBody, bevy::light::NotShadowCaster)>();
         }
-    }
-}
-
-/// Pouches and the holster on the chest rig, so you can see where to reach.
-fn dress_slots(
-    mut commands: Commands,
-    slots: Query<(Entity, &BodySlot), Added<BodySlot>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    locals: Query<(), With<LocalPlayer>>,
-) {
-    let _ = locals;
-    for (e, slot) in &slots {
-        let size = match slot.0 {
-            0 | 1 => continue,
-            2 => Vec3::new(0.05, 0.16, 0.06),
-            3..=6 => Vec3::new(0.07, 0.11, 0.035),
-            _ => Vec3::new(0.06, 0.07, 0.03),
-        };
-        let m = mat(&mut materials, Color::srgb(0.24, 0.26, 0.19), 0.95, 0.0);
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::from_size(size))),
-            MeshMaterial3d(m),
-            Transform::from_xyz(0.0, -0.04, 0.0),
-            ChildOf(e),
-        ));
     }
 }
 
