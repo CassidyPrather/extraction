@@ -27,6 +27,7 @@ pub mod nav;
 pub mod noise;
 pub mod progression;
 pub mod rocks;
+pub mod safehouse;
 pub mod save;
 pub mod terrain;
 pub mod underground;

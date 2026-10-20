@@ -75,6 +75,9 @@ pub struct ZoneSave {
     /// left, things you dropped).
     pub items: Vec<PlacedItem>,
     pub remains: Vec<RemainsSave>,
+    /// The valley's safehouse (`safehouse`), once you've started on it.
+    #[serde(default)]
+    pub safehouse: Option<crate::safehouse::SafehouseSave>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
