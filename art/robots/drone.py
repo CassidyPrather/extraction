@@ -13,6 +13,7 @@ the game can hang it straight on the part entity:
                                  copies to the other corners); collider
                                  cylinder r 0.15 h 0.04
 - `blades`  (0.32, 0.07, 0.32)   the propeller, spun by the game
+- `panel`   (0, 0.055, -0.132)   a loose top-skin panel for wrecks, facing up
 
 Materials: Shell (pale), Dark (joints, motors), Eye (emissive), Rotor.
 """
@@ -149,7 +150,16 @@ for k in range(3):
     blades.prism(blade, -0.0015, 0.0015, "Rotor", axis="y", bevel=0.0008, segs=1,
                  xf=bat @ RY(math.radians(120 * k)))
 
-for p in (core, sensor, gun, rotor, blades):
+# --- A loose shell panel, for wrecks ----------------------------------------------------
+# A wedge of the lens's top skin on its own, 70 degrees of it; a wreck
+# throws it off. Origin at its middle; it faces up.
+skin = [(0.07, 0.0632), (0.12, 0.055), (0.175, 0.038)]
+PANEL = (0.0, 0.055, -0.12 * 1.1)
+panel = Part("panel", origin=PANEL)
+panel.lathe(skin + [(r, z - 0.008) for r, z in reversed(skin)], "Shell", segs=10,
+            xf=S(0.96, 1.0, 1.1) @ UP, start=55, sweep=70, closed=True)
+
+for p in (core, sensor, gun, rotor, blades, panel):
     make(p)
 # Where the game hangs the top beacon's halo (a glow seen from far off).
 empty("halo", (0.0, 0.112, 0.03))

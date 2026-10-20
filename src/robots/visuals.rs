@@ -1246,7 +1246,13 @@ fn dress_debris(
             // The model's loose panel, turned so its outside faces up (the
             // piece's +Y, as it was thrown).
             Piece::Panel(_) => node("panel").map(|n| {
-                let out = n.transform.translation.normalize_or(Vec3::Y);
+                // A walker's panel faces out from the orb's centre; a
+                // drone's (off the top of the lens) already faces up.
+                let out = if d.kind == RobotKind::Walker {
+                    n.transform.translation.normalize_or(Vec3::Y)
+                } else {
+                    Vec3::Y
+                };
                 attach(
                     &mut commands,
                     e,
