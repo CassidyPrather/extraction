@@ -124,6 +124,7 @@ fn reel(
                 false,
                 60.0,
                 0.6,
+                None,
             ),
             _ => spawn_walker(&mut commands, &zone, walk_start, job(walk_start)),
         };
