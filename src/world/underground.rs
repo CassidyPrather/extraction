@@ -365,7 +365,8 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                 if c - a < 0.01 {
                     continue;
                 }
-                let (lo, hi) = (band.0 as f32 / 100.0, band.1 as f32 / 100.0);
+                // A centimetre past the slabs, not flush with their faces.
+                let (lo, hi) = (band.0 as f32 / 100.0 - 0.01, band.1 as f32 / 100.0 + 0.01);
                 let line = t as f32 * cell;
                 // The wall's band: on the rock side of the line.
                 let off = line - side as f32 * WALL * 0.5;
@@ -455,7 +456,8 @@ fn walls(b: &mut Builder, r: &Raster, m: &Mats) {
                 while s < len && lintel(s) == Some(band) {
                     s += 1;
                 }
-                let (lo, hi) = (band.0 as f32 / 100.0, band.1 as f32 / 100.0);
+                // A centimetre inside both slabs, not flush with them.
+                let (lo, hi) = (band.0 as f32 / 100.0 + 0.01, band.1 as f32 / 100.0 - 0.01);
                 let line = t as f32 * cell;
                 let (a, c) = (s0 as f32 * cell, s as f32 * cell);
                 let (size, centre) = if vertical {
@@ -671,10 +673,11 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
         );
         z = next;
     }
-    // Under the kiosk's back wall, down to the tunnel's soffit.
+    // Under the kiosk's back wall, down to the tunnel's soffit (a touch
+    // thinner than the walls beside it, whose faces would fight its).
     let soffit = ceiling_at(back + 0.01);
     kb.bx(
-        Vec3::new(2.0 * ox, top - soffit, WALL),
+        Vec3::new(2.0 * ox, top - soffit, WALL - 0.02),
         Vec3::new(0.0, (top + soffit) * 0.5, KIOSK[1]),
         m.kiosk,
     );
