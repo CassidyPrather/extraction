@@ -49,6 +49,7 @@ impl Plugin for RenderPlugin {
             upgrades::UpgradeVisualsPlugin,
             budget::BudgetPlugin,
         ))
+        .add_plugins(crate::raid::board::BoardVisualsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_systems(Update, attach_flat_camera);
     }
