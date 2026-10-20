@@ -23,9 +23,9 @@ Prop space: metres, Y up, origin on the floor under the centre, the front
 - `depot_crate_small` the same family, 0.8 x 0.5 x 0.6: `lid`, pt_tag, and
                      pt_disc on the wire loop a collar disc hangs from
 - `depot_crate_long_open`, `depot_crate_small_open`  the same crates opened:
-                     hollow (zinc inside, the floor 6 cm up) with the lid
-                     swung back 105 degrees on its hinge; pt_top is the
-                     floor inside
+                     hollow (dark padding inside, the floor 6 cm up), the
+                     lid swung back 105 degrees on its hinge, the straps
+                     unbuckled and hanging; pt_top is the floor inside
 - `depot_disc`       that brass disc, 0.04 across, hole at the top
                      (origin at its centre)
 - `depot_intake_facade` a Custodian front for the kiosk at the ramp,
@@ -251,9 +251,10 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
     b = Part("static_crate")
     b.box((W, H - LID, D), (0.0, (H - LID) / 2 + 0.03, 0.0), "Shell", bevel=0.01, segs=1)
     if open_:
-        # Hollow it: walls 2 cm thick, the floor 6 cm up, zinc inside.
+        # Hollow it: walls 2 cm thick, the floor 6 cm up, lined with dark
+        # padding (the game never shows what's in it).
         inside = Part("cut")
-        inside.box((W - 0.04, H, D - 0.04), (0.0, 0.09 + H / 2, 0.0), "Zinc", segs=1)
+        inside.box((W - 0.04, H, D - 0.04), (0.0, 0.09 + H / 2, 0.0), "Padding", segs=1)
         b.cut(inside, paint=True)
     for sx in (-1, 1):
         bar(b, (0.06, 0.03, D - 0.04), (sx * (W / 2 - 0.12), 0.015, 0.0), "Steel")
@@ -273,7 +274,13 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
             segs=1, xf=swing)
     for z in strap_z:
         lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.033, z), "Black", segs=1, xf=swing)
-        lid.box((0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel", segs=1, xf=swing)
+        if open_:
+            # Unbuckled: the buckle's half hangs loose down the crate's
+            # right end.
+            bar(b, (0.006, 0.16, 0.05), (W / 2 + 0.006, H - 0.1, z), "Black")
+            bar(b, (0.012, 0.05, 0.065), (W / 2 + 0.009, H - 0.2, z), "Steel")
+        else:
+            lid.box((0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel", segs=1)
     write(name, [b, lid], {
         "pt_tag": (W * 0.3, H * 0.62 - 0.02, -D / 2 - 0.01),
         # Open, the top point is the crate's floor (what's in it).
