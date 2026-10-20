@@ -358,10 +358,12 @@ fn finish_raid(
     }
     raid.phase = Phase::AtBase;
     save.write(crate::persist::SaveNow);
+    // On the drive home the driver says a little more each time.
+    let home = super::lines::coming_home(raid.extractions, raid.recalled);
     raid.say(if died {
         "You wake in the back of the truck. Your kit is gone."
     } else {
-        "Home. Unload, sort, sleep."
+        home
     });
 }
 

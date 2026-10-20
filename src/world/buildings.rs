@@ -1151,6 +1151,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "steeple" => steeple(&mut b),
         "chapel" => chapel(&mut b),
         "target" => target(&mut b),
+        id if id.starts_with(super::scenes::PREFIX) => return super::scenes::geo(id),
         _ => return None,
     }
     Some(b.finish())

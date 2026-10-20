@@ -454,8 +454,8 @@
 
         // Curios: no use but to keep, or to offer.
         // ---------------------------------------------------------------
-        (id: "wristwatch", name: "Stopped wristwatch", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
-        (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
-        (id: "chess_piece", name: "Wooden chess knight", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        (id: "wristwatch", name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
+        (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
+        (id: "chess_piece", name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
     ],
 )
