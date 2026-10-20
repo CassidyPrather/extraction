@@ -704,6 +704,7 @@ mod vr_tests {
             family: family.into(),
             capacity: rounds,
             rounds,
+            ..Default::default()
         })
         .unwrap();
         f.set_bolt_travel(1.0);
