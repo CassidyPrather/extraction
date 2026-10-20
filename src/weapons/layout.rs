@@ -32,6 +32,9 @@ pub enum Moves {
     Trigger,
     /// Rotates through the selector positions.
     Selector,
+    /// An exposed hammer: tips back about its pin (the origin, local X)
+    /// when cocked.
+    Hammer,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -107,6 +110,25 @@ pub struct GunLayout {
     /// Hinge for break actions.
     pub hinge: Vec3,
     pub parts: Vec<Part>,
+}
+
+impl GunLayout {
+    /// The blockout's bounds, (low, high) corners in gun space.
+    pub fn bounds(&self) -> (Vec3, Vec3) {
+        self.parts.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), p| {
+                let half = match p.shape {
+                    Shape::Box(s) => s * 0.5,
+                    Shape::Cylinder(r, l) => Vec3::new(r, r, l * 0.5),
+                };
+                (
+                    lo.min(p.at.translation - half),
+                    hi.max(p.at.translation + half),
+                )
+            },
+        )
+    }
 }
 
 pub fn layout(id: &str) -> Option<GunLayout> {

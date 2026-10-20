@@ -469,7 +469,7 @@ impl Firearm {
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
             return events;
         }
-        let mut to = travel.clamp(0.0, 1.0);
+        let to = travel.clamp(0.0, 1.0);
         let from = self.bolt_travel;
         if self.malfunction == Some(Malfunction::DoubleFeed) && self.magazine.is_some() {
             // Wedged against the magazine's lips: the bolt comes back but
