@@ -13,6 +13,7 @@
 pub mod ballistics;
 pub mod feel;
 pub mod flat;
+pub mod impacts;
 pub mod layout;
 pub mod visuals;
 
@@ -141,7 +142,11 @@ impl Plugin for WeaponsPlugin {
                 PreUpdate,
                 update_aim_hints.before(crate::rig::RigDriverSystems),
             )
-            .add_plugins((ballistics::BallisticsPlugin, feel::FeelPlugin))
+            .add_plugins((
+                ballistics::BallisticsPlugin,
+                feel::FeelPlugin,
+                impacts::ImpactPlugin,
+            ))
             .add_systems(
                 FixedUpdate,
                 (

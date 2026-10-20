@@ -173,6 +173,8 @@ fn fly_projectiles(
     mut hits: MessageWriter<Hit>,
     parents: Query<&ChildOf>,
     parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut splashes: MessageWriter<super::impacts::Impact>,
 ) {
     let dt = time.delta_secs();
     let filter =
@@ -206,6 +208,26 @@ fn fly_projectiles(
         let hit = Dir3::new(step).ok().and_then(|dir| {
             spatial.cast_ray_predicate(from, dir, len, true, &filter, &|h| !is_own(h))
         });
+        // Into a water surface before anything else: a splash, and the
+        // round is spent (it doesn't go on to the bed).
+        let end = from + step;
+        let water = zone
+            .as_ref()
+            .and_then(|z| z.hm.water_level([end.x, end.z]))
+            .filter(|w| from.y >= *w && end.y < *w)
+            .map(|w| len * (from.y - w) / (from.y - end.y).max(1e-6));
+        if let Some(d) = water.filter(|d| hit.as_ref().is_none_or(|h| h.distance > *d)) {
+            splashes.write(super::impacts::Impact {
+                kind: super::impacts::ImpactKind::Water,
+                point: from + step.normalize() * d,
+                normal: Vec3::Y,
+                velocity: p.velocity,
+                entity: None,
+                decal: false,
+            });
+            commands.entity(e).despawn();
+            continue;
+        }
         if let Some(hit) = hit {
             let point = from + step.normalize() * hit.distance;
             hits.write(Hit {
