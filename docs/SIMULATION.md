@@ -42,7 +42,8 @@ save with `--save`).
 
 Environment knobs for debugging: `SIM_DEBUG=1` logs every plan the raider
 makes as a `plan` event; `SIM_DUMP_PLANS=1` writes each building's indoor
-grid as text to `<out>/plans/`.
+grid as text to `<out>/plans/`; `SIM_NO_JOB=1` has the raider ignore
+the driver's scout job, to compare with runs from before bots took jobs.
 
 ## The raiding bot
 
