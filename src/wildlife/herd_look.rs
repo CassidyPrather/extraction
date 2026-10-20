@@ -189,8 +189,12 @@ pub struct HerdLookPlugin;
 
 impl Plugin for HerdLookPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BeastArt>()
-            .add_systems(Update, (load_parts, draw_herds, pose_beasts).chain());
+        app.init_resource::<BeastArt>().add_systems(
+            Update,
+            (load_parts, draw_herds, pose_beasts)
+                .chain()
+                .before(super::visuals::build_far),
+        );
     }
 }
 
@@ -338,6 +342,10 @@ fn draw_herds(
                  shadow: bool,
                  reach: bevy::camera::visibility::VisibilityRange| {
                     let mut c = commands.spawn((
+                        Name::new(match herd.kind {
+                            Kind::Deer => "Deer",
+                            Kind::Dog => "Dog",
+                        }),
                         Mesh3d(mesh.clone()),
                         MeshMaterial3d(material.clone()),
                         Transform::from_translation(b.pos),
@@ -373,6 +381,8 @@ fn draw_herds(
             all[1] = head;
             all[2..10].copy_from_slice(&legs);
             all[10] = far;
+            // Drawn in the animals' one far mesh instead (`visuals::FarParts`).
+            commands.entity(far).insert(Visibility::Hidden);
             commands.spawn((
                 Name::new(format!("{:?}", herd.kind)),
                 BeastVisual {
@@ -397,13 +407,17 @@ fn facing(yaw: f32) -> Quat {
     Quat::from_rotation_y(-yaw - std::f32::consts::FRAC_PI_2)
 }
 
-fn pose_beasts(
+pub(crate) fn pose_beasts(
     herds: Query<&Herd>,
     mut visuals: Query<&mut BeastVisual>,
     mut parts: Query<&mut Transform>,
     zone: Option<Res<Zone>>,
     time: Res<Time>,
+    art: Res<BeastArt>,
+    mut far_parts: ResMut<super::visuals::FarParts>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
 ) {
+    let eye = cams.iter().next().map(|g| g.translation());
     let Some(zone) = zone else {
         return;
     };
@@ -517,6 +531,16 @@ fn pose_beasts(
         }
         if let Ok(mut t) = parts.get_mut(far) {
             *t = Transform::from_translation(body_at).with_rotation(body_rot);
+        }
+        let away = eye.map_or(0.0, |e| e.distance(body_at));
+        if away > FAR && away < HIDE {
+            if let Some((_, p)) = art.parts.iter().find(|(k, _)| *k == herd.kind) {
+                far_parts.parts.push((
+                    p.far.clone(),
+                    Transform::from_translation(body_at).with_rotation(body_rot),
+                    LinearRgba::WHITE,
+                ));
+            }
         }
         if let Ok(mut t) = parts.get_mut(head) {
             *t = Transform::from_translation(head_at).with_rotation(head_rot);

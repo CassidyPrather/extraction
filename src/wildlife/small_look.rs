@@ -185,6 +185,7 @@ fn draw_fish(
         for (i, f) in s.fish.iter().enumerate() {
             // Children of the shoal: they go when it's dropped.
             commands.spawn((
+                Name::new("Fish"),
                 FishVisual { shoal: e, index: i },
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(mat.clone()),
@@ -290,6 +291,7 @@ fn moths(
         let n = have.get(light).copied().unwrap_or(0);
         for _ in n..MOTHS {
             commands.spawn((
+                Name::new("Moth"),
                 Moth {
                     light: *light,
                     phase: rng.f32(),
@@ -365,6 +367,7 @@ fn draw_rats(
     for (e, h) in &houses {
         for (i, r) in h.rats.iter().enumerate() {
             commands.spawn((
+                Name::new("Rat"),
                 RatVisual { house: e, index: i },
                 Mesh3d(rat[0].clone()),
                 MeshMaterial3d(mat.clone()),
