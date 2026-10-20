@@ -633,4 +633,95 @@ mod tests {
             );
         }
     }
+
+    /// Every loot spot in a building can be reached: some cell the body
+    /// can stand in (furniture's colliders in place, the capsule's
+    /// clearance round them) is within a bot's reach of it (`bot::REACH`),
+    /// from a door.
+    #[test]
+    fn every_loot_spot_is_in_reach() {
+        const REACH: f32 = crate::bot::REACH;
+        let mut far = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let spots: Vec<Vec3> = app
+                .world()
+                .resource::<crate::world::buildings::BuildingLoot>()
+                .0
+                .iter()
+                .map(|s| s.at)
+                .collect();
+            if std::env::var_os("REACH_DUMP").is_some() {
+                dump_plans(
+                    &plans,
+                    &spots,
+                    &crate::asset_root_path().join("../target/reach").join(&map),
+                );
+            }
+            for at in spots {
+                let Some(plan) = plans.iter().find(|p| p.contains(at, 0.0)) else {
+                    continue;
+                };
+                // A boxcar's floor is a climb up from the ground, which the
+                // indoor grid doesn't walk.
+                if plan.name == "boxcar" {
+                    continue;
+                }
+                let local = plan.to_local(at);
+                let goal = local.xz();
+                // Flood the open cells from the entries (geometry only: the
+                // raider's own rules about which cells count are its own).
+                let g = &plan.grid;
+                let n = g.n;
+                let mut seen = vec![false; n * n];
+                let mut stack: Vec<(usize, usize)> = plan
+                    .entries
+                    .iter()
+                    .filter_map(|e| g.nearest_walkable(e.to_array()))
+                    .filter_map(|c| g.cell_of(c))
+                    .collect();
+                for &(i, j) in &stack {
+                    seen[j * n + i] = true;
+                }
+                let mut best: Option<f32> = None;
+                while let Some((i, j)) = stack.pop() {
+                    let d = Vec2::from_array(g.centre(i, j)).distance(goal);
+                    best = Some(best.map_or(d, |b| b.min(d)));
+                    for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                        let (ni, nj) = (i as i64 + di, j as i64 + dj);
+                        if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                            continue;
+                        }
+                        let k = nj as usize * n + ni as usize;
+                        if !seen[k] && g.cost[k] != BLOCKED {
+                            seen[k] = true;
+                            stack.push((ni as usize, nj as usize));
+                        }
+                    }
+                }
+                match best {
+                    Some(d) if d <= REACH => {}
+                    _ => far.push(format!(
+                        "{map} {} at {:.0?}: spot {:.2?} nearest standing {best:.2?}",
+                        plan.name, plan.xf.translation, local
+                    )),
+                }
+            }
+            assert!(
+                far.is_empty(),
+                "{} spots out of reach:\n{}",
+                far.len(),
+                far.join("\n")
+            );
+        }
+    }
 }

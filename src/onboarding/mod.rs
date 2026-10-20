@@ -125,7 +125,7 @@ impl Goal {
             (Goal::FarGrab, false) => "Point at it. Squeeze GRIP.\nFlick your hand back.",
             (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
             (Goal::FillMag, false) => "Mag in one hand, box in\nthe other. Touch them.",
-            (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press C.",
+            (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press T.",
             (Goal::SeatMag, false) => "Pistol in one hand. Push\nthe mag up into the grip.",
             (Goal::SeatMag, true) => "Pistol in hand. Press R.",
             (Goal::Rack, false) => "Other hand on the slide:\nTRIGGER, pull back, let go.",

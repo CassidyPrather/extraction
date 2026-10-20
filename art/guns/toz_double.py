@@ -60,10 +60,10 @@ def fe_w(z, yc, h):
 
 
 bar.stock(fe, -0.2126, -0.4305, "Wood", fe_w, stations=36, power=3.2)
-# A finger groove along each side.
+# Checkering on both sides under the hand: fine diamonds, cut 0.6 mm in.
 fc = Part("cut")
-for sx in (-1, 1):
-    fc.cyl(0.0026, -0.395, -0.255, "Wood", segs=10, xf=T(sx * 0.0262, 0.003, 0))
+fe_check = Part("barrels_checkering", origin=HINGE)
+fe_check.checkering(fc, fe, fe_w, 3.2, (-0.385, -0.27, -0.009, 0.017))
 bar.cut(fc)
 bar.box((0.008, 0.005, 0.014), (0.0, 0.0045, -0.205), "Steel", bevel=0.0015)  # forend latch
 # Front sling swivel on the bottom rib.
@@ -167,6 +167,13 @@ stock = Part("stock")
 stock.stock(stock_prof, -0.0455, 0.3595, "Wood",
             lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
             stations=56, power=2.4)
+# Checkering round the wrist, both sides, where the hand closes on it.
+sc = Part("cut")
+wrist_check = Part("stock_checkering")
+wrist_check.checkering(sc, stock_prof,
+                 lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
+                 2.4, (0.014, 0.072, -0.021, 0.007))
+stock.cut(sc)
 # Rubber butt pad.
 pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
              [0.001, 0.004, 0.004, 0.001], 3)
@@ -183,8 +190,8 @@ trig = Part("trigger", origin=(0.0, -0.012, -0.05))
 trig.sweep(catmull([(-0.049, -0.017), (-0.0505, -0.025), (-0.048, -0.032), (-0.043, -0.036)], 3,
                    closed=False), section_rect(0.0045, 0.003, 0.0011), "Blued")
 
-join("static", act, stock)
-make(bar)
+join("static", act, stock, wrist_check)
+join("barrels", bar, fe_check)
 make(trig)
 
 empty("pt_muzzle", (0.0, 0.035, -0.82))

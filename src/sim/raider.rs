@@ -1690,7 +1690,12 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let d = s.at.distance(here);
         // Later in the raid, sites toward the rendezvous side look better.
         let toward = (here.distance(rv_side) - s.at.distance(rv_side)) / 200.0;
-        let score = pull / (1.0 + d / 80.0)
+        // What a player reads off the field map: richer (riskier) regions
+        // are worth the walk, picked-over ones less so. Loot richness
+        // already rises with danger (docs/MAP_DESIGN.md, "what the bots
+        // value").
+        let rich = scene.zone.map.richness_at(s.at.to_array());
+        let score = pull * rich / (1.0 + d / 80.0)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {

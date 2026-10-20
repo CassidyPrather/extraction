@@ -148,6 +148,17 @@ Risk pays, and the map says where the risk is.
 - The best loot is where you'd least like to be: under the robots'
   Gate, in the anomaly fields, in the hall in the middle of the works.
 
+### What the bots value
+
+The sim's raiders (`src/sim/raider.rs`, `choose_site`) pick where to go by
+what a site holds (loot spots; artifact fields for hunters), how far it
+is, the rendezvous side late in the raid, and the region's loot
+richness, as a player reading the field map would: a site's pull is
+multiplied by `Region::richness`. So a rich region off the road is worth
+a bot's detour in proportion to what it pays; a picked-over village near
+the gate is worth less. If a place you meant to matter is never visited
+in the sims, check its richness and its loot spots before its routes.
+
 ## Indoor and outdoor rhythm
 
 Buildings are where the hands-on looting is, and a roof is cover from

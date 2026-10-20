@@ -530,9 +530,9 @@ pub fn material(image: Handle<Image>, tint: Color) -> ImpostorMaterial {
         base: StandardMaterial {
             base_color: tint,
             base_color_texture: Some(image),
-            // Alpha to coverage (cut at 0.5, as the mips' coverage is kept
-            // at `CUTOFF`): far trees are where an alpha test crawls worst.
-            alpha_mode: AlphaMode::AlphaToCoverage,
+            // (Alpha to coverage, when on, cuts at 0.5 too, matching the
+            // coverage the mips keep at `CUTOFF`.)
+            alpha_mode: super::trees::foliage_alpha(CUTOFF),
             perceptual_roughness: 0.85,
             reflectance: 0.2,
             diffuse_transmission: 0.2,

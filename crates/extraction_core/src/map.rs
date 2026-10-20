@@ -386,6 +386,12 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
         "target" => [2.4, 1.7, 2.0],
+        // Landmarks (src/world/buildings.rs); the headframe's back struts
+        // reach 7 m behind its shaft.
+        "water_tower" => [6.0, 18.2, 6.0],
+        "headframe" => [6.0, 19.6, 15.0],
+        "signal_box" => [6.0, 6.7, 3.8],
+        "steeple" => [4.4, 19.0, 4.4],
         _ => [4.0, 3.0, 4.0],
     }
 }

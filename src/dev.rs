@@ -17,6 +17,7 @@ impl Plugin for DevPlugin {
                 screenshot_when_ready,
                 gallery,
                 first_person_hands,
+                wear_kit,
             ),
         );
     }
@@ -99,7 +100,14 @@ fn gallery(
         let dist: Option<f32> = parts.next().and_then(|v| v.parse().ok());
         let shift: f32 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         // The camera as `render` places it.
-        let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+        // As the camera places itself: y 0 stands you there, eyes 1.7 m up.
+        let ground = zone.ground(cam.x, cam.z);
+        let eye_y = if cam.y == 0.0 {
+            ground + 1.7
+        } else {
+            cam.y.max(ground + 0.3)
+        };
+        let eye = Vec3::new(cam.x, eye_y, cam.z);
         let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
         let fwd = rot * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
@@ -227,8 +235,8 @@ fn gallery(
                     );
                 }
             }
-            // `first_person_hands` has these.
-            s if s.starts_with("fp:") => {}
+            // `first_person_hands` and `wear_kit` have these.
+            s if s.starts_with("fp:") || s.starts_with("kit") => {}
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -507,5 +515,78 @@ fn first_person_hands(
             hold_curl(None, 0.0, thinnest),
         );
         glove(&mut commands, Side::Right, rest(Side::Right), [0.15; 5]);
+    }
+}
+
+/// `--gallery kit` fills the worn slots, to see the rig full: the pistol
+/// holstered, magazines in three of the four pouches, a clip in one hip
+/// pocket, the compass on the chest mount. `kit+pack` also hangs the pack
+/// open in front.
+fn wear_kit(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    mut slots: Query<(
+        Entity,
+        &crate::interact::body::BodySlot,
+        &mut crate::interact::Socket,
+    )>,
+    players: Query<Entity, With<crate::rig::LocalPlayer>>,
+    mut events: MessageWriter<crate::interact::InteractEvent>,
+    mut toggle: MessageWriter<crate::interact::body::ToggleBackpack>,
+    mut stage: Local<u32>,
+    mut pending: Local<Vec<(Entity, usize)>>,
+) {
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let Some(rest) = spec.split(',').next().and_then(|s| s.strip_prefix("kit")) else {
+        return;
+    };
+    *stage += 1;
+    if *stage == 15 {
+        let fill = [
+            (2, "pm_pistol"),
+            (3, "ak_mag"),
+            (4, "ak_mag"),
+            (6, "pm_mag"),
+            (8, "mosin_clip"),
+            (9, "compass"),
+        ];
+        for (slot, id) in fill {
+            let Some(kind) = catalog.kind(id) else {
+                continue;
+            };
+            let e = crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: 1.0,
+                },
+            );
+            pending.push((e, slot));
+        }
+        if rest == "+pack" {
+            if let Some(player) = players.iter().next() {
+                toggle.write(crate::interact::body::ToggleBackpack { player });
+            }
+        }
+    }
+    // Seat each once the item exists.
+    if *stage > 15 {
+        pending.retain(|&(item, slot)| {
+            let Some((socket_e, _, mut socket)) = slots.iter_mut().find(|(_, s, _)| s.0 == slot)
+            else {
+                return true;
+            };
+            crate::interact::seat_in_socket(&mut commands, item, socket_e, &mut socket);
+            events.write(crate::interact::InteractEvent::Socketed {
+                item,
+                socket: socket_e,
+            });
+            false
+        });
     }
 }
