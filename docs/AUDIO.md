@@ -236,6 +236,8 @@ is what it did before.
 | The truck leaving, with you or without | `truck.depart` | — | silent |
 | A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
 | A robot noticing you (its suspicion passing `robots::NOTICED`) | `robot.notice`: the whirr of its head snapping round, at most every 8 s per robot | — | silent |
+| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch); search sounds at most every 6 s per robot | — | silent |
+| A walker's turret settling before its first shot; a grappler winding up | `walker.aim` + `walker.aim_lock` at the muzzle, `harpoon.windup`: the 0.6-0.7 s warning, heard 43-71 m through a downpour | — | silent |
 | The convoy loading, setting off through the Gate | `convoy.loaded`, `convoy.delivered` | — | silent |
 | A dirigible overhead | `dirigible.engine`: a slow throb (the rotor loop at 0.4x), quickening as it moves, gone when wrecked | — | silent |
 | Drones, walkers, grapplers, pylons | rotor loop, `drone.lock`, `walker.step`, `walker.servo`, `harpoon.*`, `pylon.work` | — | same |
@@ -256,8 +258,9 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Still open.** Searching robots and the walker's and grappler's
-attack tells wait on the robot-minds branch. The audit measures the dirigible's engine
+**Still open.** Nothing known. Robot sounds are recorded servos and
+clanks pitched; if they read too alike in the headset, the robots'
+synthesised voices (`docs/DESIGN.md` allows them) are the next step. The audit measures the dirigible's engine
 at normal speed, so its spectrum (and audible range) is placed higher
 than it plays. The truck
 doesn't move between stops (it is moved while you're away), so its
