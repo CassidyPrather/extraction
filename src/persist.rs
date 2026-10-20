@@ -1239,6 +1239,7 @@ mod tests {
             ) {
                 a.world_mut()
                     .write_message(crate::weapons::ballistics::Hit {
+                        blow: None,
                         entity: *e,
                         point: Vec3::ZERO,
                         normal: Vec3::Y,

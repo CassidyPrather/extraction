@@ -617,7 +617,7 @@ type Kinds<'w, 's> = Query<
         Has<crate::robots::hound::Hound>,
         Has<crate::robots::indoor::Crawler>,
         Has<crate::robots::grappler::Grappler>,
-        Has<crate::robots::indoor::Heavy>,
+        Has<crate::robots::indoor::Warden>,
     ),
 >;
 

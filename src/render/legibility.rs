@@ -658,7 +658,7 @@ mod tests {
             .collect();
         assert!(!rooms.is_empty(), "no buildings");
         let outside = zone.on_ground(site.at[0] + 30.0, site.at[1] + 30.0) + Vec3::Y * 1.7;
-        let mut go = |app: &mut App, at: Vec3, frames: usize| {
+        let go = |app: &mut App, at: Vec3, frames: usize| {
             {
                 let w = app.world_mut();
                 let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
@@ -693,7 +693,7 @@ mod tests {
         let amb = app
             .world()
             .components()
-            .resource_id::<GlobalAmbientLight>()
+            .component_id::<GlobalAmbientLight>()
             .expect("the ambient");
         let schedules = app.world().resource::<bevy::ecs::schedule::Schedules>();
         use bevy::ecs::schedule::ScheduleLabel;
