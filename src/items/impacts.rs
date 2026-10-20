@@ -214,8 +214,11 @@ mod tests {
             }
         }
         let at = looked.expect("the walker went to look");
+        // It heard roughly where: within its guess's spread of the spot.
+        let spread = (14.0 * crate::robots::senses::HEARD_SPREAD)
+            .max(crate::robots::senses::HEARD_SPREAD_MIN);
         assert!(
-            Vec2::new(at.x - spot.x, at.z - spot.z).length() < 2.0,
+            Vec2::new(at.x - spot.x, at.z - spot.z).length() < spread + 0.5,
             "at where the can landed ({at:.1} vs {spot:.1})"
         );
     }
