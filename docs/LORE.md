@@ -268,7 +268,7 @@ only his mother's letter names him.
 | **Vlasta Králová** | Cinder, the foreman's house | His wife; the ash |
 | **The lookout** | Cinder, fire lookout | The fire's spread, hour by hour |
 | **A scavenger** | Cinder, Ash Row | Someone who came in on Lev's truck before you |
-| **Tomas**, logging crew | Marrow, logging camp cabin | A tally that stops on bus day; pears under the bed |
+| **Tomas**, logging crew | Marrow, logging camp cabin | A tally that stops on bus day; beans under the bed |
 | **Mirek Hájek**, charcoal burner | Kettle, the charcoal hut | Stayed four days for his kiln |
 | **T. Veselý**, woodward | Cinder, the woodward's cabin | Wet the roof and stayed; where the matches are |
 | **Alois Pech**, keeper | Sallow, the keeper's cottage and the gauge house | Born in the drowned village; few words |
