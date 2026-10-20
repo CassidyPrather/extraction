@@ -389,7 +389,11 @@ fn stair(b: &mut Builder) {
 /// the windscreen.
 fn buses(b: &mut Builder) {
     for (i, x) in [-4.95f32, -1.65, 1.65, 4.95].into_iter().enumerate() {
+        let from = b.geo.pieces.len();
         super::buildings::wrecked_bus(b, Vec3::new(x, 0.0, 0.0));
+        // Drawn by `kept_bus` (art/props/dam.py); its boxes stay the
+        // colliders.
+        b.dress_structure(from, vec![("kept_bus", Transform::from_xyz(x, 0.0, 0.0))]);
         // The tag: a white card behind the windscreen, its number on it.
         b.deco(
             Vec3::new(0.5, 0.35, 0.02),
@@ -419,6 +423,8 @@ fn bicycles(b: &mut Builder) {
         );
     }
     let n = 38;
+    let from = b.geo.pieces.len();
+    let mut models = Vec::new();
     for k in 0..n {
         let z = -len * 0.5 + 0.4 + (len - 0.8) * k as f32 / (n - 1) as f32;
         // Alternate sides of the rack, front wheel in.
@@ -457,13 +463,27 @@ fn bicycles(b: &mut Builder) {
             Vec3::new(front + side * 0.05, 0.92, z),
             Mat::DarkMetal,
         );
+        // `kept_bicycle` runs along +X, front wheel first.
+        let yaw = if side > 0.0 {
+            std::f32::consts::PI
+        } else {
+            0.0
+        };
+        models.push((
+            "kept_bicycle",
+            Transform::from_xyz(mid, 0.0, z).with_rotation(Quat::from_rotation_y(yaw)),
+        ));
     }
+    // Drawn near, as furniture is.
+    b.dress(from, models);
 }
 
 /// Wheelie bins in a rank along z, lids shut, 20 m of them.
 fn bins(b: &mut Builder) {
     let len = 20.0;
     let n = 27;
+    let from = b.geo.pieces.len();
+    let mut models = Vec::new();
     for k in 0..n {
         let z = -len * 0.5 + 0.36 + (len - 0.72) * k as f32 / (n - 1) as f32;
         let mat = if k % 3 == 1 {
@@ -478,7 +498,9 @@ fn bins(b: &mut Builder) {
             Vec3::new(-0.33, 0.95, z),
             Mat::DarkMetal,
         );
+        models.push(("wheelie_bin", Transform::from_xyz(0.0, 0.0, z)));
     }
+    b.dress(from, models);
 }
 
 /// The Custodian's gantry over its rows: two braced legs 19 m apart, a
@@ -580,6 +602,21 @@ mod tests {
                     bridge || (at.x.abs() <= w * 0.5 + slack && at.z.abs() <= d * 0.5 + slack),
                     "{id} piece {i} at {at:?} is outside its {w} x {d} footprint"
                 );
+            }
+        }
+    }
+
+    /// Every model a Sallow prefab is dressed with is built
+    /// (`art/props/dam.py`, `python3 art/build.py dam`).
+    #[test]
+    fn sallow_models_exist() {
+        let root = crate::asset_root_path();
+        for id in PREFABS {
+            for d in geo(id).unwrap().props {
+                for (name, _) in d.models {
+                    let p = root.join(crate::render::world_props::path(name));
+                    assert!(p.exists(), "{id}: no model {}", p.display());
+                }
             }
         }
     }
