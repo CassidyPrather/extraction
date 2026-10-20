@@ -44,6 +44,12 @@ pub enum Mat {
     Asphalt,
     /// Weathered rock: boulders and outcrops.
     Boulder,
+    /// Burnt timber: a ruin's planks, rafters and floor.
+    Charred,
+    /// Brick blackened by a fire.
+    SootBrick,
+    /// Plaster blackened by a fire.
+    SootPlaster,
 }
 
 impl Mat {
@@ -128,6 +134,19 @@ impl Mat {
             Mat::Timber => (Some("timber"), 1.5, Color::srgb(0.9, 0.85, 0.8), 0.8),
             Mat::Asphalt => (Some("asphalt"), 4.0, Color::srgb(0.25, 0.25, 0.24), 0.75),
             Mat::Boulder => (Some("boulder"), 2.4, Color::srgb(0.62, 0.56, 0.47), 0.85),
+            Mat::Charred => (
+                Some("weathered_planks"),
+                2.0,
+                Color::srgb(0.07, 0.06, 0.055),
+                0.95,
+            ),
+            Mat::SootBrick => (Some("red_brick"), 2.0, Color::srgb(0.2, 0.13, 0.11), 0.9),
+            Mat::SootPlaster => (
+                Some("plaster_wall_dirty"),
+                3.0,
+                Color::srgb(0.18, 0.17, 0.16),
+                0.95,
+            ),
         }
     }
 }
@@ -182,6 +201,11 @@ impl MaterialLibrary {
                 // The rock scan is a pale, cool granite: warmer and darker
                 // to sit in the valleys' soil (rocks vary it per rock).
                 Mat::Boulder => color,
+                // Burnt: the planks' grain under soot, the brick's courses
+                // blackened.
+                Mat::Charred => Color::srgb(0.3, 0.26, 0.23),
+                Mat::SootBrick => Color::srgb(0.45, 0.4, 0.38),
+                Mat::SootPlaster => Color::srgb(0.3, 0.28, 0.26),
                 _ => Color::WHITE,
             };
             m.base_color_texture = Some(load("albedo", true));

@@ -359,9 +359,22 @@ impl Region {
     }
 }
 
+/// A ruined house's prefab id is its house's with the ruin's state after
+/// it (`house_plank_burnt`); built from the same plan, it stands on the
+/// same footprint with the same doors.
+pub const RUIN_STATES: [&str; 2] = ["_damaged", "_burnt"];
+
+/// The prefab a ruin is a ruin of (any other id as it is).
+pub fn prefab_base(id: &str) -> &str {
+    RUIN_STATES
+        .iter()
+        .find_map(|s| id.strip_suffix(s))
+        .unwrap_or(id)
+}
+
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
-    match id {
+    match prefab_base(id) {
         "quarantine_gate" => [12.0, 4.0, 3.0],
         "guard_booth" => [2.6, 2.7, 2.6],
         "sawmill" => [24.0, 7.0, 12.0],
@@ -429,7 +442,7 @@ pub struct Entrance {
 /// with the game's recipes by `buildings::tests::entrances_match_the_map`;
 /// regenerate it from the recipes when they change.
 pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
-    match id {
+    match prefab_base(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],
             out: [0.0, -1.0],
@@ -613,7 +626,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
 /// under it, less a margin, and still be footed. `qa` in the game checks
 /// this against the models.
 pub fn prefab_foundation(id: &str) -> f32 {
-    match id {
+    match prefab_base(id) {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,

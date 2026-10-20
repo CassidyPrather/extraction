@@ -441,7 +441,7 @@ fn regions(map: &MapDef, (lo, hi): (u8, u8)) -> Vec<String> {
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
-        prefab,
+        crate::map::prefab_base(prefab),
         "house_plank"
             | "house_brick"
             | "cabin_log"

@@ -652,7 +652,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for (i, rc) in &rects {
         let p = &map.placements[*i];
-        if ENTERABLE.contains(&p.prefab.as_str()) {
+        if ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)) {
             targets.push((p.prefab.clone(), rc.at, geom::len(rc.half) + 3.0));
         }
     }
@@ -859,14 +859,14 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .chain(
             map.placements
                 .iter()
-                .filter(|p| ENTERABLE.contains(&p.prefab.as_str()))
+                .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
                 .map(|p| p.at),
         )
         .collect();
     let shelters: Vec<P2> = map
         .placements
         .iter()
-        .filter(|p| ENTERABLE.contains(&p.prefab.as_str()))
+        .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
         .map(|p| p.at)
         .collect();
     for route in &routes {
