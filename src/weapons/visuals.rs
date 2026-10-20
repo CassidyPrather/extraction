@@ -259,14 +259,16 @@ fn animate_parts(
         Option<&Handling>,
         Option<&super::melee::Bayonet>,
         Option<&super::sling::SlingSwing>,
+        &Item,
     )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
+    catalog: Res<Catalog>,
 ) {
-    for (gun, children, handling, bayonet, swing) in &guns {
+    for (gun, children, handling, bayonet, swing, item) in &guns {
         // A slung gun's parts swing on its strap, about the rear swivel.
         let swung = swing
             .filter(|s| s.angle != Vec2::ZERO)
-            .zip(super::sling::swivels(gun))
+            .zip(super::sling::swivels(&catalog.get(item.kind()).id, gun))
             .map(|(s, (_, rear))| s.about(rear));
         let f = &gun.firearm;
         let travel = gun.layout.handle.as_ref().map_or(0.0, |h| h.travel);

@@ -15,6 +15,7 @@ use bevy::prelude::*;
 
 use super::Gun;
 use crate::interact::{Held, InSocket, Socket, SocketKind};
+use crate::items::{Catalog, Item};
 use extraction_core::inventory::SlotKind;
 
 /// Segments a strap is drawn in.
@@ -31,8 +32,22 @@ const SWING_W: f32 = 6.0;
 const SWING_DAMP: f32 = 0.25;
 const SWING_MAX: f32 = 0.45;
 
-/// A gun's front and rear sling swivels, gun space.
-pub fn swivels(gun: &Gun) -> Option<(Vec3, Vec3)> {
+/// A gun's front and rear sling swivels, gun space: the models' own
+/// (`pt_sling_front`, `pt_sling_rear`), else a guess under the handguard
+/// and the butt.
+pub fn swivels(id: &str, gun: &Gun) -> Option<(Vec3, Vec3)> {
+    let v = Vec3::new;
+    let known = match id {
+        "ak74" => Some((v(-0.0145, 0.039, -0.461), v(-0.022, -0.06, 0.269))),
+        "mosin" => Some((v(0.0, -0.009, -0.64), v(0.0, -0.045, 0.17))),
+        "sks" => Some((v(-0.0195, 0.0, -0.482), v(-0.021, -0.075, 0.152))),
+        "toz_double" => Some((v(0.0, 0.006, -0.62), v(0.0, -0.111, 0.25))),
+        "ppsh" => Some((v(-0.021, 0.006, -0.185), v(0.0, -0.063, 0.17))),
+        _ => None,
+    };
+    if known.is_some() {
+        return known;
+    }
     let support = gun.layout.support?;
     let (lo, hi) = gun.layout.bounds();
     let front = Vec3::new(0.0, support.y - 0.03, support.z);
@@ -96,14 +111,15 @@ fn strap_look(
 /// Long guns get a strap (drawn only when someone has the gun).
 fn give_straps(
     mut commands: Commands,
-    guns: Query<(Entity, &Gun), Without<Strap>>,
+    guns: Query<(Entity, &Gun, &Item), Without<Strap>>,
     look: Option<Res<StrapLook>>,
+    catalog: Res<Catalog>,
 ) {
     let Some(look) = look else {
         return;
     };
-    for (e, gun) in &guns {
-        if swivels(gun).is_none() {
+    for (e, gun, item) in &guns {
+        if swivels(&catalog.get(item.kind()).id, gun).is_none() {
             continue;
         }
         let segments = (0..SEGMENTS)
@@ -144,18 +160,25 @@ fn slung_shoulder(
 /// Slung guns swing on their straps: the body's acceleration and turn push
 /// them, a damped spring brings them back.
 fn swing(
-    mut guns: Query<(&Gun, &GlobalTransform, &mut SlingSwing, Option<&InSocket>)>,
+    mut guns: Query<(
+        &Gun,
+        &Item,
+        &GlobalTransform,
+        &mut SlingSwing,
+        Option<&InSocket>,
+    )>,
     sockets: Query<(&Socket, &Transform, &ChildOf)>,
     torsos: Query<&GlobalTransform>,
+    catalog: Res<Catalog>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().clamp(1e-4, 0.05);
-    for (gun, gt, mut s, in_socket) in &mut guns {
+    for (gun, item, gt, mut s, in_socket) in &mut guns {
         if slung_shoulder(in_socket, &sockets, &torsos).is_none() {
             *s = SlingSwing::default();
             continue;
         }
-        let Some((_, rear)) = swivels(gun) else {
+        let Some((_, rear)) = swivels(&catalog.get(item.kind()).id, gun) else {
             continue;
         };
         let at = gt.transform_point(rear);
@@ -185,6 +208,7 @@ fn swing(
 fn lay_straps(
     guns: Query<(
         &Gun,
+        &Item,
         &GlobalTransform,
         &Strap,
         &SlingSwing,
@@ -194,11 +218,12 @@ fn lay_straps(
     sockets: Query<(&Socket, &Transform, &ChildOf)>,
     torsos: Query<&GlobalTransform>,
     mut segs: Query<(&mut Transform, &mut Visibility), Without<Socket>>,
+    catalog: Res<Catalog>,
 ) {
-    for (gun, gt, strap, s, held, in_socket) in &guns {
+    for (gun, item, gt, strap, s, held, in_socket) in &guns {
         let shoulder = slung_shoulder(in_socket, &sockets, &torsos);
         let shown = held.is_some() || shoulder.is_some();
-        let Some((front, rear)) = swivels(gun) else {
+        let Some((front, rear)) = swivels(&catalog.get(item.kind()).id, gun) else {
             continue;
         };
         // Swing moves the swivels with the drawn gun.
