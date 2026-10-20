@@ -268,6 +268,9 @@ pub struct Layout {
     /// the roof comes down there.
     #[serde(default)]
     pub shoring: Vec<Shoring>,
+    /// Particular things left about (by catalog id), every cycle.
+    #[serde(default)]
+    pub items: Vec<ItemSpot>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -335,6 +338,16 @@ pub struct Pocket {
     pub room: Option<String>,
     #[serde(default)]
     pub link: Option<(String, String)>,
+}
+
+/// A catalog item lying in a room, `y` over its floor (on a bench, say).
+#[derive(Clone, Debug, Deserialize)]
+pub struct ItemSpot {
+    pub id: String,
+    pub room: String,
+    pub at: P2,
+    #[serde(default)]
+    pub y: f32,
 }
 
 /// A mine cart on rail `rail`, `at` metres along it.
@@ -1457,6 +1470,15 @@ pub fn check(l: &Layout) -> Vec<String> {
                 bad.push(format!("a cart off the end of rail {}", c.rail))
             }
             _ => {}
+        }
+    }
+    for it in &l.items {
+        match l.rooms.iter().find(|r| r.id == it.room) {
+            Some(room) if r.at(add(room.at, it.at)).open() => {}
+            _ => bad.push(format!(
+                "item `{}` in the rock or no room `{}`",
+                it.id, it.room
+            )),
         }
     }
     for sh in &l.shoring {

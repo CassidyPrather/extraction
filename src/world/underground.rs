@@ -1154,6 +1154,7 @@ impl Plugin for UndergroundPlugin {
                 work_drains.after(wire_drains),
             ),
         )
+        .add_plugins(super::workings::WorkingsPlugin)
         .init_resource::<Levels>()
         .add_message::<BasinDrained>()
         .add_message::<DepotEntered>()
@@ -1544,20 +1545,21 @@ pub struct UndergroundVisualsPlugin;
 
 impl Plugin for UndergroundVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                light_lamps,
-                flicker,
-                torch,
-                near_doors_only,
-                show_below,
-                water_surfaces,
-                basin_levels,
-                kept_crate_looks,
-            ),
-        )
-        .add_systems(PostUpdate, (go_dark, no_rain_below));
+        app.add_plugins(super::workings::WorkingsVisualsPlugin)
+            .add_systems(
+                Update,
+                (
+                    light_lamps,
+                    flicker,
+                    torch,
+                    near_doors_only,
+                    show_below,
+                    water_surfaces,
+                    basin_levels,
+                    kept_crate_looks,
+                ),
+            )
+            .add_systems(PostUpdate, (go_dark, no_rain_below));
     }
 }
 

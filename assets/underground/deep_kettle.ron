@@ -55,7 +55,7 @@
         (from: "crosscut", to: "lower_heading"),
     ],
     gas: [
-        (room: Some("old_heading")),
+        (room: Some("old_heading"), link: Some(("haulage", "old_heading"))),
         (link: Some(("crosscut", "lower_heading"))),
     ],
     // The haulage rail, from the landing's mouth to the crosscut's.
@@ -63,11 +63,13 @@
     carts: [(rail: 0, at: 4.0)],
     // A bad roof between the old heading and the refuge.
     shoring: [(link: ("old_heading", "refuge"), along: 0.5)],
+    // The canary on the landing's bench.
+    items: [(id: "canary", room: "cage_landing", at: (-2.2, 0.6), y: 1.0)],
     patrol: ["haulage", "crosscut", "refuge", "crosscut", "haulage", "stables"],
     crawlers: 1,
     portals: [
         (),
         // The old incline, up from the crosscut.
-        (at: (0.0, 65.0), rot: 180.0, y: 0.0, floor: Some(-11.0)),
+        (at: (0.0, 67.0), rot: 180.0, y: 2.4, floor: Some(-11.0)),
     ],
 )

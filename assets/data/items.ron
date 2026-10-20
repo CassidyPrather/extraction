@@ -390,6 +390,12 @@
             tags: ["metal", "electronics"],
         ),
         (
+            id: "canary", dims: Some((0.16, 0.24, 0.16)), name: "Canary cage",
+            description: "A little brass cage with a bird-shaped flame-safety lamp in it, from the deep workings' landing. Carried, its glow goes amber, then red, as firedamp gathers near; too long in the gas and it goes out for good.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.5,
+            tags: ["metal"],
+        ),
+        (
             id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,

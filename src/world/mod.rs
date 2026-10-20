@@ -24,6 +24,7 @@ pub mod trees;
 pub mod underground;
 pub mod water;
 pub mod weather;
+pub mod workings;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
