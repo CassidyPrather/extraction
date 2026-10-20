@@ -5,6 +5,7 @@ pub mod bench;
 pub mod budget;
 pub mod cards;
 pub mod comfort;
+pub mod cpu;
 pub mod fog;
 pub mod grade;
 pub mod kit;
@@ -54,6 +55,7 @@ impl Plugin for RenderPlugin {
             budget::BudgetPlugin,
         ))
         .add_plugins(crate::raid::board::BoardVisualsPlugin)
+        .add_plugins(cpu::CpuSplitPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()
