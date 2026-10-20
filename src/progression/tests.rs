@@ -434,3 +434,35 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
     );
     assert_eq!(progress(&app).done, 1, "a swap isn't a job done");
 }
+
+#[test]
+fn the_second_tier_leaves_the_drivers_carbine_in_the_stash() {
+    let mut app = crate::raid::requests::tests::app();
+    let catalog = app.world().resource::<Catalog>().clone();
+    let stash = one::<With<Stash>>(&mut app);
+    let ids = |app: &mut App| -> Vec<String> {
+        let contents = app.world().get::<Backpack>(stash).unwrap().contents.clone();
+        contents
+            .iter()
+            .filter_map(|e| app.world().get::<Item>(*e))
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .collect()
+    };
+    let before = ids(&mut app).len();
+    for _ in 0..TIERS[0].jobs + TIERS[1].jobs {
+        app.world_mut().write_message(JobDone);
+        app.update();
+    }
+    let after = ids(&mut app);
+    let known: Vec<&str> = gifts(Upgrade::BenchVice)
+        .iter()
+        .filter(|g| catalog.kind(g.0).is_some())
+        .map(|g| g.0)
+        .collect();
+    for id in &known {
+        assert!(after.iter().any(|a| a == id), "{id} in {after:?}");
+    }
+    if known.is_empty() {
+        assert_eq!(after.len(), before, "nothing given that doesn't exist yet");
+    }
+}

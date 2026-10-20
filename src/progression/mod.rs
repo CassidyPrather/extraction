@@ -191,6 +191,20 @@ fn count_raids(
     }
 }
 
+/// What the driver leaves in the stash along with a fitting: (item id,
+/// how many, condition). Ids the catalog doesn't know are skipped.
+pub fn gifts(u: Upgrade) -> &'static [(&'static str, u32, f32)] {
+    match u {
+        // The end of the second tier: the driver's own old carbine.
+        Upgrade::BenchVice => &[
+            ("sks", 1, 0.6),
+            ("sks_clip", 2, 1.0),
+            ("ammo_762x39", 1, 1.0),
+        ],
+        _ => &[],
+    }
+}
+
 /// A job handed in: count it, and fit what a finished tier earns.
 fn job_done(
     mut commands: Commands,
@@ -198,6 +212,8 @@ fn job_done(
     mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
     mut save: MessageWriter<crate::persist::SaveNow>,
+    stashes: Query<Entity, With<Stash>>,
+    catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
         let fitted = progression.0.complete();
@@ -206,6 +222,43 @@ fn job_done(
                 "Driver: \"And I've put up {}. Have a look.\"",
                 u.name()
             ));
+            let Some(stash) = stashes.iter().next() else {
+                continue;
+            };
+            let mut gave = false;
+            for (i, (id, n, condition)) in gifts(*u).iter().enumerate() {
+                let Some(kind) = catalog.kind(id) else {
+                    continue;
+                };
+                for k in 0..*n {
+                    let local = Vec3::new(0.25, 0.08, -0.45 + 0.12 * (i as f32 + k as f32 * 0.5));
+                    let e = spawn_item(
+                        &mut commands,
+                        &catalog,
+                        SpawnItem {
+                            kind,
+                            transform: Transform::from_translation(local),
+                            condition: *condition,
+                        },
+                    );
+                    commands.entity(e).insert((
+                        crate::interact::body::InBackpack { bag: stash },
+                        ChildOf(stash),
+                        Transform::from_translation(local),
+                        RigidBodyDisabled,
+                        ColliderDisabled,
+                    ));
+                    commands.queue(move |world: &mut World| {
+                        if let Some(mut b) = world.get_mut::<Backpack>(stash) {
+                            b.contents.push(e);
+                        }
+                    });
+                    gave = true;
+                }
+            }
+            if gave {
+                raid.say("Driver: \"And my old carbine's in the crate. I'm past it.\"");
+            }
         }
         if !fitted.is_empty() {
             commands.write_message(crate::rig::haptics::StepDone {

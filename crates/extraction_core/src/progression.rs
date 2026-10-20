@@ -194,16 +194,11 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
         ("robot_cell", 2, 2, "Two of their cells. The cab heater."),
         (
             "sensor_eye",
-            3,
-            3,
-            "Three eyes. A man in town is building one.",
+            2,
+            2,
+            "Two eyes. A man in town is building one.",
         ),
-        (
-            "servo",
-            3,
-            3,
-            "Three servos. The winch, properly this time.",
-        ),
+        ("servo", 2, 2, "Two servos. The winch, properly this time."),
         (
             "regen_injector",
             1,

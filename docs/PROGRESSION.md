@@ -141,7 +141,51 @@ card, and the cache it pays shows up as a red cross on the map.
 How many raids each tier takes, at the sim bots' rates (see "Measuring it"
 below for how the numbers were made).
 
-PACING_TABLE
+Measured on 24 sim raids (8 in each valley, seed 11, bots of every
+personality: 79% home, 9 minutes a raid). `python3
+scripts/progression_pacing.py all` walks 3000 careers through the tiers
+on those raids:
+
+| Tier | Jobs | Danger | Raids for the tier (median) | Career so far: median (1 in 10 take) |
+| - | - | - | - | - |
+| 1 Odd jobs | 3 | 1-1 | 5 | 5 (9) |
+| 2 Errands | 3 | 1-2 | 7 | 12 (19) |
+| 3 Runs | 4 | 2-3 | 8 | 20 (29) |
+| 4 Far jobs | 4 | 2-3 (another valley) | 5 | 25 (34) |
+
+By valley, the whole ladder takes a median of 24 raids in Marrow Creek, 23
+in Kettle Pass and 36 in Cinder Works (its bots reach danger 3 and get home
+less often).
+
+What it says:
+
+- **The first evening has a fitting in it.** Tier 1 is about five raids:
+  the stash rack comes in the first session.
+- **The middle of the career is the danger ladder.** Tier 3 asks for
+  danger-2 and -3 places; only 38% of bot raids reach danger 3 and get
+  home, against 79% for danger 2:
+
+| Danger reached and home | Share of raids |
+| - | - |
+| 0 | 79% |
+| 1 | 79% |
+| 2 | 79% |
+| 3 | 38% |
+
+- **Robot parts are the bottleneck of fetches.** The bots bring home about
+  one sensor eye or robot cell in twelve raids and a servo in twenty-five
+  (they fight what comes for them and rarely strip the wreck). A fetch for
+  them was the one way a career could stall for good (one in ten never got
+  past tier 2 in the first model), so the driver gives up on a fetch after
+  four raids (`FETCH_PATIENCE`) and asks for something else. A player who
+  hunts robots will meet them far sooner.
+- **The ladder ends around raid 25 (1 in 10: past 34)**, a dozen hours of
+  play at a player's pace. Then the standing jobs and the keys: by then
+  tier 3 has walked you through the danger-3 places where the keys lie.
+  Raid 30 is about the capstone, not the driver.
+
+The bots don't take jobs, and their raids are short and timid next to a
+player's, so read the numbers as the shape of the arc, not its minutes.
 
 ## Measuring it
 
