@@ -1576,6 +1576,7 @@ pub struct EmergencyLamp {
     seed: f32,
     base: f32,
     lens: Handle<StandardMaterial>,
+    glow: LinearRgba,
 }
 
 /// The lens's glow at full brightness.
@@ -1603,9 +1604,17 @@ fn light_lamps(
             .take(LAMP_BUDGET);
         for (k, room) in lit.enumerate() {
             let at = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
+            // The site's own light: tungsten, or its layout's colour.
+            let (colour, glow) = match l.lamp_colour {
+                Some((r, g, b)) => (
+                    Color::linear_rgb(r, g, b),
+                    LinearRgba::rgb(r, g, b) * (GLOW.red / 1.0),
+                ),
+                None => (Color::srgb(1.0, 0.86, 0.68), GLOW),
+            };
             let lens = materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 0.85, 0.6),
-                emissive: GLOW,
+                emissive: glow,
                 ..default()
             });
             let size = room.size[0].max(room.size[1]);
@@ -1619,9 +1628,10 @@ fn light_lamps(
                         seed: k as f32 * 3.7 + room.at[0] * 0.13,
                         base,
                         lens: lens.clone(),
+                        glow,
                     },
                     PointLight {
-                        color: Color::srgb(1.0, 0.86, 0.68),
+                        color: colour,
                         intensity: base,
                         range: size + 4.0,
                         radius: 0.05,
@@ -1774,7 +1784,7 @@ fn flicker(
         let k = stutter(t, lamp.seed);
         light.intensity = lamp.base * k;
         if let Some(mut m) = materials.get_mut(&lamp.lens) {
-            m.emissive = GLOW * k;
+            m.emissive = lamp.glow * k;
         }
     }
 }
@@ -2064,6 +2074,12 @@ pub fn site_water(zone: &Zone, levels: Option<&Levels>, feet: Vec3) -> Option<Op
         }
     }
     None
+}
+
+/// Whether a world point is over (or in) a basin's water now: sound
+/// carries further there (Audio).
+pub fn over_water(zone: &Zone, levels: &Levels, p: Vec3) -> bool {
+    site_water(zone, Some(levels), p).flatten().is_some()
 }
 
 /// Every site's basins' levels now (site y), by site id; set from the

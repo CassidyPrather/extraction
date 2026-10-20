@@ -254,6 +254,10 @@ pub struct Layout {
     /// What lowers a basin: a valve wheel or a hand pump.
     #[serde(default)]
     pub drains: Vec<Drain>,
+    /// Its lamps' colour (linear RGB, full brightness 1), if not the
+    /// shelters' warm tungsten: each site's own light.
+    #[serde(default)]
+    pub lamp_colour: Option<(f32, f32, f32)>,
 }
 
 /// A round of rooms the crawlers on it walk, in order (one room: round

@@ -8,6 +8,8 @@
     floor: -6.0,
     // Tall corridors: the flooded ones keep air over the water.
     corridor_height: 3.4,
+    // Cold, green-white lamps over the water.
+    lamp_colour: Some((0.62, 0.95, 0.88)),
     rooms: [
         // The dry top: the stair's foot, the control room, the valve gallery.
         (id: "upper_gallery", at: (0.0, 12.0), size: (10.0, 4.0), height: 3.0, lamp: Flicker, props: [
