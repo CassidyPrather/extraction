@@ -86,6 +86,13 @@ impl BuildingPlan {
         (!y.is_nan()).then_some(y)
     }
 
+    /// The floor under a building-local point: its level's, or the
+    /// building's.
+    pub fn floor_at(&self, p: Vec2) -> f32 {
+        self.level(Vec3::new(p.x, self.floor, p.y))
+            .unwrap_or(self.floor)
+    }
+
     /// Whether a world point is inside (or on) the building's footprint
     /// (on a plan with levels: over one of its floors, near it).
     pub fn contains(&self, p: Vec3, pad: f32) -> bool {
@@ -702,9 +709,11 @@ mod tests {
                     }
                     let mid = (d.a + d.b) * 0.5;
                     let inside = mid + (mid - entry).normalize() * 1.0;
-                    let at = plan
-                        .xf
-                        .transform_point(Vec3::new(inside.x, plan.floor, inside.y));
+                    let at = plan.xf.transform_point(Vec3::new(
+                        inside.x,
+                        plan.floor_at(inside),
+                        inside.y,
+                    ));
                     steps.push((format!("{} door", plan.name), at));
                 }
             }

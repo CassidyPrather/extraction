@@ -83,6 +83,9 @@
         (from: "mess", to: "medical", via: [(5.0, 39.0)], doors: To),
         (from: "medical", to: "escape", doors: To),
     ],
+    anomalies: [
+        (kind: "Snare", room: "generator", at: (-1.2, 1.5), radius: 0.9),
+    ],
     portals: [
         (),
         (at: (0.0, 60.0), rot: 180.0, y: 0.6),

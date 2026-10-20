@@ -166,6 +166,7 @@ pub fn spawn_cycle_anomalies(world: &mut World) {
             None,
         );
     }
+    crate::world::underground::spawn_anomalies(world);
 }
 
 pub fn spawn_anomaly(

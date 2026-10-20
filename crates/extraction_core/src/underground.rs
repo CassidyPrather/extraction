@@ -202,6 +202,28 @@ pub struct Layout {
     #[serde(default)]
     pub links: Vec<Link>,
     pub portals: Vec<Portal>,
+    /// Anomalies that live down here, every cycle.
+    #[serde(default)]
+    pub anomalies: Vec<Hazard>,
+}
+
+/// An anomaly in a room: `kind` names an `anomaly::AnomalyKind` (Lift,
+/// Burner, Snare); `at` is relative to the room's centre.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Hazard {
+    pub kind: String,
+    pub room: String,
+    #[serde(default)]
+    pub at: P2,
+    pub radius: f32,
+}
+
+impl Hazard {
+    pub fn kind(&self) -> Option<crate::anomaly::AnomalyKind> {
+        crate::anomaly::AnomalyKind::ALL
+            .into_iter()
+            .find(|k| format!("{k:?}") == self.kind)
+    }
 }
 
 fn corridor_height() -> f32 {
@@ -746,6 +768,31 @@ pub fn check(l: &Layout) -> Vec<String> {
                 if near && r.get(i, j).flat() {
                     bad.push(format!("portal {k}: its kiosk or stair is over a room"));
                     break;
+                }
+            }
+        }
+    }
+    for h in &l.anomalies {
+        if h.kind().is_none() {
+            bad.push(format!("an anomaly of no kind `{}`", h.kind));
+        }
+        match l.rooms.iter().find(|r| r.id == h.room) {
+            None => bad.push(format!("an anomaly in no room `{}`", h.room)),
+            Some(room) => {
+                // Inside its room, clear of the doorways: a hazard you go
+                // round, not one you must walk through.
+                let at = add(room.at, h.at);
+                let inside = (at[0] - room.at[0]).abs() + h.radius <= room.size[0] * 0.5 + 0.3
+                    && (at[1] - room.at[1]).abs() + h.radius <= room.size[1] * 0.5 + 0.3;
+                let clear = r.mouths.iter().all(|m| {
+                    let d = sub(at, m.at);
+                    (d[0] * d[0] + d[1] * d[1]).sqrt() > h.radius + m.width * 0.5 + 0.6
+                });
+                if !inside || !clear {
+                    bad.push(format!(
+                        "{}: its anomaly fills a doorway or leaves the room",
+                        h.room
+                    ));
                 }
             }
         }

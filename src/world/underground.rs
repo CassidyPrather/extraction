@@ -880,6 +880,35 @@ fn prop(b: &mut Builder, kind: PropKind, at: Vec3, yaw: f32, loot: Option<&'stat
     }
 }
 
+/// Logic: the anomalies that live in the sites (their layouts'
+/// `anomalies`), laid out again with every cycle's.
+pub fn spawn_anomalies(world: &mut World) {
+    let zone = world.resource::<Zone>().clone();
+    for p in zone
+        .map
+        .placements
+        .iter()
+        .filter(|p| ug::is_site(&p.prefab))
+    {
+        let Some(l) = ug::layout(&p.prefab) else {
+            continue;
+        };
+        let xf = super::buildings::placement_transform(&zone, p);
+        for h in &l.anomalies {
+            let (Some(kind), Some(room)) = (h.kind(), l.rooms.iter().find(|r| r.id == h.room))
+            else {
+                continue;
+            };
+            let at = xf.transform_point(Vec3::new(
+                room.at[0] + h.at[0],
+                l.floor,
+                room.at[1] + h.at[1],
+            ));
+            crate::anomaly::spawn_anomaly(world, kind, at, h.radius, None);
+        }
+    }
+}
+
 /// Client: the sites' emergency lamps, and the daylight taken away below
 /// ground.
 pub struct UndergroundVisualsPlugin;
