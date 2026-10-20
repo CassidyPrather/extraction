@@ -18,6 +18,7 @@ pub mod body;
 pub mod far;
 pub mod first_aid;
 pub mod flat;
+pub mod gestures;
 pub mod hand_climb;
 #[cfg(test)]
 mod physics_audit;
@@ -313,6 +314,7 @@ impl Plugin for InteractPlugin {
                 hand_climb::HandClimbPlugin,
                 tools::ToolsPlugin,
                 first_aid::FirstAidPlugin,
+                gestures::GesturesPlugin,
             ));
     }
 }

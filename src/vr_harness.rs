@@ -3191,3 +3191,96 @@ mod first_aid {
         }
     }
 }
+
+/// Gestures the world can read.
+mod gestures {
+    use super::*;
+    use crate::interact::gestures::{BREATH, Gestures, HUSHED};
+    use crate::robots::Noise;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Noises heard: whose, how far.
+    #[derive(Resource, Default)]
+    struct Heard(Vec<(Option<Entity>, f32)>);
+
+    fn listen(mut n: MessageReader<Noise>, mut heard: ResMut<Heard>) {
+        heard.0.extend(n.read().map(|n| (n.source, n.radius)));
+    }
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Heard>()
+            .add_systems(FixedUpdate, listen);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        (vr, feet)
+    }
+
+    /// Winded, you're heard breathing; a hand over your mouth cuts it.
+    #[test]
+    fn a_hand_over_the_mouth_quietens_hard_breathing() {
+        for over in [false, true] {
+            let (mut vr, feet) = setup();
+            let at = if over {
+                feet + Vec3::new(0.0, 1.65 - 0.08, -0.1)
+            } else {
+                feet + Vec3::new(0.3, 1.0, -0.2)
+            };
+            vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(3);
+            vr.app.world_mut().resource_mut::<Heard>().0.clear();
+            // Winded throughout.
+            for _ in 0..200 {
+                vr.app
+                    .world_mut()
+                    .get_mut::<crate::player::Body>(vr.player)
+                    .unwrap()
+                    .stamina = 0.0;
+                vr.step(1);
+            }
+            let hush = vr.app.world().get::<Gestures>(vr.player).unwrap().hush;
+            assert_eq!(hush, over, "a hand over the mouth: {over}");
+            let player = vr.player;
+            let loudest = vr
+                .app
+                .world()
+                .resource::<Heard>()
+                .0
+                .iter()
+                .filter(|(by, _)| *by == Some(player))
+                .map(|(_, r)| *r)
+                .fold(0.0, f32::max);
+            let want = if over { BREATH * HUSHED } else { BREATH };
+            assert!(
+                (loudest - want).abs() < 0.3,
+                "breathing heard {loudest} m, want {want} (hand over mouth {over})"
+            );
+        }
+    }
+
+    /// An open palm raised over the head reads as one; a raised fist
+    /// doesn't.
+    #[test]
+    fn a_raised_open_palm_is_read_and_a_fist_is_not() {
+        for open in [true, false] {
+            let (mut vr, feet) = setup();
+            let up = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.25, 1.85, -0.15),
+                up,
+                if open { 0.0 } else { 1.0 },
+                0.0,
+            );
+            vr.step(60);
+            let palm = vr.app.world().get::<Gestures>(vr.player).unwrap().palm;
+            assert_eq!(palm, open, "open hand {open}");
+        }
+    }
+}
