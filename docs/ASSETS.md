@@ -214,7 +214,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
 | `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire (staged scenes) | 0.3k to 2.9k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 4.9k right, 5.1k left (palm 2.2k, plus the wrist display housing on the left; fingers 2.7k) |
-| `art/kit/rig.py` | `models/kit/rig.glb` (harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
+| `art/kit/rig.py` | `models/kit/rig.glb` (harness_panel, harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
 ## Conventions
 
@@ -273,8 +273,9 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   `Padding` are per-glove copies, tinted while the hand is in reach of
   something. `--gallery fp:open|point|<item id>` shows them first-person.
 - **Worn kit.** `rig.glb` lays the rig out as worn, in torso space
-  (`interact::body`: origin mid-chest under the neck): `harness` (chest
-  panel, shoulder straps, belt) hangs on the torso, and `holster`,
+  (`interact::body`: origin mid-chest under the neck): `harness_panel`
+  (chest panel, shoulder straps) and `harness` (belt, the straps down to
+  it) hang on the torso, and `holster`,
   `pouch`, `pocket`, `mount` and their `<kind>_flap_closed` sit at one
   slot of their kind; the game hangs each slot piece's mesh on every slot
   of its kind (`render::kit`), so the mesh is in slot space and the node's
@@ -282,7 +283,12 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   shown while a slot holds something. The pack's `pack_lid_closed` /
   `pack_lid_open` follow `Backpack::open`. Slot positions, seats and snap
   radii are gameplay and the models are built round them. `--gallery kit`
-  fills the slots (`kit+pack` also opens the pack).
+  fills the slots (`kit+pack` also opens the pack). Worn armour
+  (`weapons::armour::Worn`) draws `kit/vest.glb` (torso space) in place
+  of `harness_panel`, its `plate_front` / `plate_back` while a plate is in
+  that pocket, and `kit/helmet.glb` on the head (your own only in the
+  sun's shadow layer: its brim would hang in your view);
+  `--gallery kit+armour` puts them all on.
 - **Items.** `models/items/<item id>.glb` (magazines stay in
   `models/mags/`) is in item space: origin at the centre of the item's
   `dims` box from `items.ron` (a cube of side cbrt(bulk / 1000) without
