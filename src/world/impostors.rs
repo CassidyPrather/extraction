@@ -447,37 +447,40 @@ fn bleed(px: &mut [[f32; 4]], w: usize, h: usize) {
     }
 }
 
-/// Three quads crossed at 60 degrees round a tree's axis, both faces each
-/// (their own normals, mostly up: lit like a crown, not like a wall),
-/// transformed to the tree. UV1 carries the tree's base (x, z), for the
-/// near cut: the horizontal distance `trees::cut_near_detail` measures for
-/// the cards.
+/// One quad a tree, the picture's width and height, standing on the
+/// tree's base; the vertex shader (`impostor.wgsl`) turns it about the
+/// tree's axis to face the eye. Three crossed quads stacked up to three
+/// layers of shaded fragments where one picture shows the same tree
+/// (see `render::overdraw`). Its normal is mostly up, lit like a crown,
+/// and the shader tips it toward the eye. UV1 carries the tree's base
+/// (x, z): the axis it turns about, and the near cut (the horizontal
+/// distance `trees::cut_near_detail` measures for the cards).
 pub fn quads(imp: &Impostor, t: &Transform, out: &mut Builder) {
     let base = t.translation;
     let r = imp.max.x;
-    for k in 0..3 {
-        let a = k as f32 * std::f32::consts::PI / 3.0;
-        let across = Vec3::new(a.cos(), 0.0, a.sin());
-        let facing = across.cross(Vec3::Y);
-        for side in [1.0f32, -1.0] {
-            let n = (facing * side * 0.35 + Vec3::Y * 0.65).normalize();
-            let first = out.pos.len() as u32;
-            for (u, v) in [(0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)] {
-                let local = across * (u * 2.0 - 1.0) * r
-                    + Vec3::Y * (imp.min.y + (1.0 - v) * (imp.max.y - imp.min.y));
-                out.pos.push(t.transform_point(local).to_array());
-                out.nrm.push((t.rotation * n).to_array());
-                out.uv.push([if side > 0.0 { u } else { 1.0 - u }, v]);
-                out.base.push([base.x, base.z]);
-            }
-            let tri = if side > 0.0 {
-                [0, 1, 2, 0, 2, 3]
-            } else {
-                [0, 2, 1, 0, 3, 2]
-            };
-            out.idx.extend(tri.iter().map(|i| first + i));
-        }
+    let across = Vec3::X;
+    let n = (Vec3::Z * 0.35 + Vec3::Y * 0.65).normalize();
+    let first = out.pos.len() as u32;
+    for (u, v) in [(0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)] {
+        let local = across * (u * 2.0 - 1.0) * r
+            + Vec3::Y * (imp.min.y + (1.0 - v) * (imp.max.y - imp.min.y));
+        out.pos.push(t.transform_point(local).to_array());
+        out.nrm.push((t.rotation * n).to_array());
+        out.uv.push([u, v]);
+        out.base.push([base.x, base.z]);
     }
+    out.idx.extend([0, 1, 2, 0, 2, 3].iter().map(|i| first + i));
+}
+
+/// Where a billboard corner stands, turned to face `eye` about the tree's
+/// axis: what `impostor.wgsl`'s vertex stage does (the overdraw gauge
+/// uses it too). `u` is the corner's side (0 left, 1 right).
+pub fn face(world: Vec3, base: Vec2, u: f32, eye: Vec2) -> Vec3 {
+    let half = (world.xz() - base).length();
+    let to_eye = (eye - base).normalize_or(Vec2::Y);
+    let right = Vec2::new(to_eye.y, -to_eye.x);
+    let p = base + right * (u * 2.0 - 1.0) * half;
+    Vec3::new(p.x, world.y, p.y)
 }
 
 /// Accumulates impostor quads for one chunk.

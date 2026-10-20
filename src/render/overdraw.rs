@@ -145,11 +145,27 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
             continue;
         };
         let model = w.get::<GlobalTransform>(e).unwrap().affine();
-        let to_view = view * model;
-        let vs: Vec<Vec3> = pos
+        let mut world: Vec<Vec3> = pos
             .iter()
-            .map(|p| to_view.transform_point3(Vec3::from(*p)))
+            .map(|p| model.transform_point3(Vec3::from(*p)))
             .collect();
+        // Impostors turn to face the eye in their vertex shader.
+        if w.get::<MeshMaterial3d<crate::world::impostors::ImpostorMaterial>>(e)
+            .is_some()
+        {
+            if let (
+                Some(VertexAttributeValues::Float32x2(uv)),
+                Some(VertexAttributeValues::Float32x2(bases)),
+            ) = (
+                mesh.attribute(Mesh::ATTRIBUTE_UV_0),
+                mesh.attribute(Mesh::ATTRIBUTE_UV_1),
+            ) {
+                for (i, p) in world.iter_mut().enumerate() {
+                    *p = crate::world::impostors::face(*p, Vec2::from(bases[i]), uv[i][0], eye);
+                }
+            }
+        }
+        let vs: Vec<Vec3> = world.iter().map(|p| view.transform_point3(*p)).collect();
         let idx: Vec<usize> = match mesh.indices() {
             Some(i) => i.iter().collect(),
             None => (0..vs.len()).collect(),

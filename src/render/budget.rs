@@ -53,8 +53,8 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
-    overdraw_mean: 11.0,
-    overdraw_p95: 45,
+    overdraw_mean: 10.0,
+    overdraw_p95: 35,
 };
 
 /// The sun's shadow map, a side, per cascade per eye. Bevy's default is
