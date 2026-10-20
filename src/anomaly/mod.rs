@@ -15,6 +15,7 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod costs;
 pub mod detector;
 pub mod mirrors;
 pub mod offering;
@@ -156,6 +157,7 @@ impl Plugin for AnomalyPlugin {
             .add_message::<mirrors::Blinked>()
             .add_message::<detector::DetectorClick>()
             .add_message::<wells::EnteredWell>()
+            .add_message::<costs::ArtifactBite>()
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
             .add_observer(surge::remember_size)
@@ -170,6 +172,7 @@ impl Plugin for AnomalyPlugin {
                     surge::stir,
                     // Before anything can blink or fling what was thrown.
                     detector::reveal,
+                    costs::feathers_wake_lifts,
                     lifts,
                     burners,
                     snares,
@@ -177,6 +180,7 @@ impl Plugin for AnomalyPlugin {
                     mirrors::mirrors,
                     mirrors::shards,
                     detector::detectors,
+                    costs::bites,
                     measure_attention,
                     spend_attention,
                     age_blooms,

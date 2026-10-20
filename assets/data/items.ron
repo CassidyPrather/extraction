@@ -624,12 +624,12 @@
         // ---------------------------------------------------------------
         (
             id: "art_featherstone", dims: Some((0.036, 0.031, 0.03)), name: "Featherstone",
-            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
+            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up. It wants to go home: lifts you pass wind up and pop.",
             category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
         (
             id: "art_hearth", dims: Some((0.053, 0.054, 0.054)), name: "Hearth",
-            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down.",
+            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down. Carried, it runs you hot; your wind comes back slowly.",
             category: Artifact, size: Small, mass: 0.8, bulk: 0.3, attention: 1.2,
         ),
         (
@@ -639,17 +639,17 @@
         ),
         (
             id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
-            description: "A tangle of something like copper. While you carry it, the first hit always glances.",
+            description: "A tangle of something like copper. While you carry it, the first hit always glances. It holds a charge, and wet it bites.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
         ),
         (
             id: "art_lodestone", dims: Some((0.06, 0.05, 0.055)), name: "Lodestone",
-            description: "A fist of dark iron, heavier than it looks and heavier the nearer you hold it to your chest. Rounds fired at whoever carries it curve aside.",
-            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1,
+            description: "A fist of dark iron, far heavier than it looks once it's on you. Rounds fired at whoever carries it curve aside.",
+            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1, lift_kg: -5.0,
         ),
         (
             id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
-            description: "A sliver of something not quite glass. Your reflection in it moves a moment late. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
+            description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
 

@@ -287,6 +287,49 @@ pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
     })
 }
 
+// --- What artifacts cost ----------------------------------------------------
+
+/// A carried featherstone wants home: lifts within this many metres of it
+/// wind up toward popping.
+pub const FEATHER_WAKE_RANGE: f32 = 15.0;
+
+/// How fast a lift `d` metres from a carried featherstone winds up, charge
+/// a second (a lift with nothing in it unwinds at 1/6 a second, so this
+/// beats that only within about two thirds of the range).
+pub fn feather_wake(d: f32) -> f32 {
+    if d >= FEATHER_WAKE_RANGE {
+        0.0
+    } else {
+        0.6 * (1.0 - d / FEATHER_WAKE_RANGE)
+    }
+}
+
+/// Whether a carried aegis is wet enough to bite: soaked ground (it's
+/// been raining) or wading.
+pub fn aegis_wet(wetness: f32, wading: f32) -> bool {
+    wetness > 0.35 || wading > 0.1
+}
+
+/// Seconds to a wet aegis's next shock, `roll` in 0..1.
+pub fn aegis_shock_in(roll: f32) -> f32 {
+    8.0 + 7.0 * roll
+}
+
+/// Health a wet aegis's shock takes.
+pub const AEGIS_SHOCK: f32 = 5.0;
+
+/// A carried hearth runs you hot: stamina a second it takes back (a
+/// rested walker gets 1/8 a second, so you still recover, at half speed).
+pub const HEARTH_TIRE: f32 = 1.0 / 16.0;
+
+/// Seconds between a carried shard's glints, `roll` in 0..1.
+pub fn shard_glint_in(roll: f32) -> f32 {
+    20.0 + 20.0 * roll
+}
+
+/// How far a shard's glint gives you away, metres.
+pub const SHARD_GLINT_RADIUS: f32 = 35.0;
+
 // --- The Surge ---------------------------------------------------------------
 
 /// How agitated the anomalies are with `surge_in` seconds to the Surge
@@ -656,6 +699,23 @@ mod tests {
             }
             assert!(n > 100, "{}: blooms found ground ({n})", map.name);
         }
+    }
+
+    #[test]
+    fn artifacts_cost_what_they_should() {
+        // A featherstone wakes a lift it's near, faster than an empty
+        // lift settles (1/6 a second), but not from across a field.
+        assert!(feather_wake(3.0) > 1.0 / 6.0);
+        assert!(feather_wake(12.0) < 1.0 / 6.0);
+        assert_eq!(feather_wake(FEATHER_WAKE_RANGE), 0.0);
+        // An aegis bites wet, not dry.
+        assert!(aegis_wet(0.8, 0.0) && aegis_wet(0.0, 0.3));
+        assert!(!aegis_wet(0.1, 0.0));
+        assert!((8.0..=15.0).contains(&aegis_shock_in(0.0)));
+        assert!((8.0..=15.0).contains(&aegis_shock_in(1.0)));
+        // A hearth halves recovery: still positive at rest.
+        assert!(1.0 / 8.0 - HEARTH_TIRE > 0.0);
+        assert!((20.0..=40.0).contains(&shard_glint_in(0.5)));
     }
 
     #[test]
