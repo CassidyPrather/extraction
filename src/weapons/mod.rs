@@ -21,6 +21,7 @@ pub mod melee;
 pub mod muzzle;
 pub mod range;
 pub mod sling;
+pub mod tracers;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -594,14 +595,18 @@ fn feed_by_hand(
             }
         } else if def.rounds <= 1 {
             // A loose round: thumbed in, out of the hand.
-            if gun.firearm.load_round_of(def.load) {
+            let load = it.loads.pop_or(1, def.load);
+            if gun.firearm.load_round_of(load) {
                 events.push(FireEvent::RoundLoaded);
                 hand.holding = None;
                 commands.entity(held).despawn();
             }
         } else if boxes.get(&hand_e).is_none_or(|t| now - t >= BOX_FEED) {
             // A box at the port: a round at a time, as fast as fingers.
-            if gun.firearm.load_round_of(def.load) {
+            let mut left = it.loads.clone();
+            let load = left.pop_or(it.rounds, def.load);
+            if gun.firearm.load_round_of(load) {
+                it.loads = left;
                 it.rounds -= 1;
                 events.push(FireEvent::RoundLoaded);
                 boxes.insert(hand_e, now);
