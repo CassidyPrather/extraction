@@ -696,3 +696,68 @@ fn a_crowbar_wrenches_a_door_once_it_has_the_torque() {
     }
     assert!(app.world().get::<Door>(door).is_none(), "wrenched off");
 }
+
+#[test]
+fn a_rifle_round_would_reach_through_a_plank_door_and_not_a_steel_one() {
+    let mut app = app(None);
+    let doors: Vec<(DoorLeaf, GlobalTransform)> = app
+        .world_mut()
+        .query::<(&DoorLeaf, &GlobalTransform)>()
+        .iter(app.world())
+        .map(|(l, g)| (*l, *g))
+        .collect();
+    let world = app.world_mut();
+    let mut state = bevy::ecs::system::SystemState::<(
+        SpatialQuery,
+        crate::weapons::ballistics::Struck,
+    )>::new(world);
+    let (spatial, struck) = state.get(world).unwrap();
+    let line = |l: &DoorLeaf, g: &GlobalTransform| {
+        let mid = g.transform_point(Vec3::new(l.0.width * 0.5, 1.4, 0.0));
+        let n = g.rotation() * Vec3::Z;
+        (mid + n * 1.0, mid - n * 1.0)
+    };
+    let reach = |from: Vec3, to: Vec3, mass: f32, speed: f32| {
+        super::through::would_reach(
+            &spatial,
+            &struck,
+            from,
+            to,
+            mass,
+            speed,
+            &|_| false,
+            &|_| false,
+        )
+    };
+    let planks = doors
+        .iter()
+        .filter(|(l, _)| l.0.mat == crate::render::materials::Mat::Planks)
+        .map(|(l, g)| line(l, g))
+        .collect::<Vec<_>>();
+    let steel = doors
+        .iter()
+        .filter(|(l, _)| l.0.mat != crate::render::materials::Mat::Planks)
+        .map(|(l, g)| line(l, g))
+        .collect::<Vec<_>>();
+    assert!(!planks.is_empty() && !steel.is_empty());
+    // Most doors have a clear metre either side; count the lines that do.
+    let rifle = planks
+        .iter()
+        .filter(|(a, b)| reach(*a, *b, 7.9, 715.0))
+        .count();
+    let pistol = planks
+        .iter()
+        .filter(|(a, b)| reach(*a, *b, 6.1, 300.0))
+        .count();
+    let through_steel = steel
+        .iter()
+        .filter(|(a, b)| reach(*a, *b, 7.9, 715.0))
+        .count();
+    assert!(
+        rifle * 2 > planks.len(),
+        "a rifle round gets through plank doors ({rifle} of {})",
+        planks.len()
+    );
+    assert_eq!(pistol, 0, "a pistol round never does");
+    assert_eq!(through_steel, 0, "nor any round a steel door");
+}

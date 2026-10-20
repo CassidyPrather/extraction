@@ -65,6 +65,13 @@ decision is a pure function): their panes start broken with
 `Break { weathered: true }`, draw nothing (the model has the shards),
 can't break again, and the Surge leaves them be.
 
+## Would it get through?
+
+`destruction::through::would_reach(spatial, struck, from, to, mass_g,
+speed, skip, is_target)` walks a line through what's between by the
+rounds' own rules, without firing: for a robot deciding whether to shoot
+through a wall at what it heard (offered to Robot minds).
+
 ## Rounds through wood
 
 Ballistics already prices a material per millimetre
@@ -102,7 +109,10 @@ solver an island to trip on.
 
 One mesh per building draws all its panes whole (`Mat::Glass`), and one its
 broken panes' teeth in a paler, glinting shard material, rebuilt when a
-pane changes. `buildings::dress_buildings` leaves the sash models' glass
+pane changes. Under each broken pane a scatter of small flat shards lies
+on the floor (or the ground) on the side the glass fell (`Break::fell`;
+a restored pane's fell in), a few millimetres proud: what tells a window
+was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass
 and the window glass boxes to the panes (`glass::window_glass`,
 `glass::drawn_by_panes`). Flying pieces are their own small slabs (on a
 child entity, so shrinking one never touches its body).
@@ -162,7 +172,8 @@ test --lib stage_broken_house -- --ignored`, then `--save /tmp/s/career.ron`.
 
 Shots in `docs/shots/destruction/`: `teeth.png` (a window shot out, the
 teeth left in its sashes), `door_down.png` (a plank door shot down, its
-splinters in the doorway).
+splinters in the doorway), `litter.png` (glass glittering on the ground
+under a window broken from inside).
 
 ## Next
 

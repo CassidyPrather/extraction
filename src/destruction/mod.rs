@@ -23,6 +23,7 @@ pub mod debris;
 pub mod glass;
 pub mod hooks;
 pub mod scenario;
+pub mod through;
 pub mod visuals;
 pub mod wood;
 

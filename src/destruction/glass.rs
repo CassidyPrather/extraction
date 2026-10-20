@@ -57,6 +57,9 @@ pub struct Break {
     /// (`window_sash_broken`) has the shards, so the pane draws none, and
     /// the Surge doesn't mend it.
     pub weathered: bool,
+    /// Which side of the pane its glass fell (+1 along its local z, the
+    /// room side of an outside wall; -1 out).
+    pub fell: f32,
 }
 
 impl Pane {
@@ -248,6 +251,7 @@ fn glaze(
                     seed: seed_of(k),
                     impact: Vec2::ZERO,
                     weathered: true,
+                    fell: 1.0,
                 })
             } else {
                 broken.0.contains(&k).then(|| restored(k))
@@ -278,6 +282,8 @@ fn restored(k: [i32; 3]) -> Break {
         seed: seed_of(k),
         impact: Vec2::ZERO,
         weathered: false,
+        // Most windows are broken from outside.
+        fell: 1.0,
     }
 }
 
@@ -323,10 +329,12 @@ pub fn shatter(
     let seed = seed_of(k)
         ^ ((impact * 100.0).round().as_ivec2().x as u64) << 20
         ^ (impact * 100.0).round().as_ivec2().y as u64;
+    let normal = pane.world.rotation * Vec3::Z;
     let b = Break {
         seed,
         impact,
         weathered: false,
+        fell: if push.dot(normal) < 0.0 { -1.0 } else { 1.0 },
     };
     pane.broken = Some(b);
     broken.0.insert(k);

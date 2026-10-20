@@ -444,7 +444,7 @@ impl Struck<'_, '_> {
             .is_ok_and(|p| matches!(p.role, crate::robots::PartRole::Armour(_)))
     }
 
-    fn stuff(
+    pub(crate) fn stuff(
         &self,
         e: Entity,
         point: Vec3,

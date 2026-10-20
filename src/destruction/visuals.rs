@@ -136,6 +136,7 @@ fn glaze_buildings(
     mut library: ResMut<MaterialLibrary>,
     server: Res<AssetServer>,
     mut shards: ResMut<ShardMaterial>,
+    spatial: avian3d::prelude::SpatialQuery,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
     let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
@@ -174,6 +175,17 @@ fn glaze_buildings(
                 for k in &s.kept {
                     let at = xf * Affine3A::from_translation(Vec3::new(k.at[0], k.at[1], 0.0));
                     append_slab(pos, nrm, uv, idx, &k.poly, THICK, at);
+                }
+                // And glitter on the floor where it fell, the room's side
+                // or the street's: what tells a window was broken after
+                // the pieces are swept away.
+                let to_building = (p.world.compute_affine() * xf.inverse()).inverse();
+                for (at, poly) in litter(&spatial, p, b) {
+                    let flat = Affine3A::from_rotation_translation(
+                        Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+                        at,
+                    );
+                    append_slab(pos, nrm, uv, idx, &poly, 0.002, to_building * flat);
                 }
             }
         }
@@ -226,6 +238,48 @@ fn glaze_buildings(
             }
         }
     }
+}
+
+/// Bits of glass on the floor under a broken pane, on the side it fell:
+/// where each lies (world, on the floor) and its outline. Deterministic
+/// from the break.
+fn litter(
+    spatial: &avian3d::prelude::SpatialQuery,
+    p: &Pane,
+    b: super::glass::Break,
+) -> Vec<(Vec3, Vec<P2>)> {
+    use avian3d::prelude::SpatialQueryFilter;
+    let mut rng = extraction_core::noise::Rng::new(b.seed ^ 0x1177);
+    let n = (5.0 + p.area() * 25.0).min(14.0) as usize;
+    let normal = p.world.rotation * Vec3::Z * b.fell;
+    let filter = SpatialQueryFilter::from_mask(crate::world::Layer::World);
+    (0..n)
+        .filter_map(|_| {
+            let across = rng.range(-p.half.x, p.half.x) * 0.9;
+            let out = rng.range(0.06, 0.7);
+            let start = p.world.transform_point(Vec3::new(across, -p.half.y, 0.0))
+                + normal * out
+                + Vec3::Y * 0.05;
+            let hit = spatial.cast_ray(start, Dir3::NEG_Y, 3.0, true, &filter)?;
+            let r = rng.range(0.012, 0.035);
+            let a0 = rng.range(0.0, std::f32::consts::TAU);
+            let poly: Vec<P2> = (0..3)
+                .map(|i| {
+                    let a = a0 + i as f32 * 2.1 + rng.range(-0.3, 0.3);
+                    let rr = r * rng.range(0.6, 1.4);
+                    [a.cos() * rr, a.sin() * rr]
+                })
+                .collect();
+            // Wound counter-clockwise for the slab's faces.
+            let poly = if fracture::area(&poly) < 0.0 {
+                poly.into_iter().rev().collect()
+            } else {
+                poly
+            };
+            // A few millimetres proud of the floor (the house rule).
+            Some((start - Vec3::Y * (hit.distance - 0.005), poly))
+        })
+        .collect()
 }
 
 /// Broken glass: paler than a whole pane and catching the light on its
@@ -346,27 +400,69 @@ fn shoot_for_screenshot(
 }
 
 /// A building's crate, drawn on its own: its box until its model is in.
+/// Furniture's range (`buildings::dress_buildings`): drawn near, gone
+/// past 25-35 m, where the room's dark anyway (each mesh carries it: a
+/// range doesn't pass to children).
 fn dress_crates(
     mut commands: Commands,
-    added: Query<(Entity, &super::wood::BuildingCrate), Added<super::wood::BuildingCrate>>,
+    crates: Query<(Entity, &super::wood::BuildingCrate, Option<&Children>), Without<CrateDressed>>,
+    boxes: Query<(), With<CrateBox>>,
+    mut props: crate::render::world_props::PropModels,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut library: ResMut<MaterialLibrary>,
-    server: Res<AssetServer>,
 ) {
-    use crate::render::world_props::{Blockout, SwapIn};
-    for (e, c) in &added {
-        let planks = library.get(Mat::Planks, &server, &mut materials);
-        commands.spawn((
-            Mesh3d(meshes.add(crate::render::materials::metric_box(Vec3::splat(c.size)))),
-            MeshMaterial3d(planks),
-            Transform::IDENTITY,
-            Blockout,
-            ChildOf(e),
-        ));
-        commands.entity(e).insert((
-            SwapIn(vec![(c.model, c.model_at)]),
-            crate::render::lod::near_range(),
-        ));
+    use crate::render::world_props::Resolved;
+    let range = || bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: 25.0..35.0,
+        use_aabb: true,
+    };
+    for (e, c, children) in &crates {
+        let has_box = children.into_iter().flatten().any(|k| boxes.contains(*k));
+        match props.resolve_all([c.model].into_iter()) {
+            Resolved::Loading => {
+                if !has_box {
+                    let planks = props.lib.get(Mat::Planks, &props.server, &mut materials);
+                    commands.spawn((
+                        CrateBox,
+                        Mesh3d(
+                            meshes.add(crate::render::materials::metric_box(Vec3::splat(c.size))),
+                        ),
+                        MeshMaterial3d(planks),
+                        Transform::IDENTITY,
+                        range(),
+                        ChildOf(e),
+                    ));
+                }
+            }
+            // Missing: the box stays.
+            Resolved::Missing => {
+                commands.entity(e).insert(CrateDressed);
+            }
+            Resolved::Ready => {
+                for k in children.into_iter().flatten() {
+                    if boxes.contains(*k) {
+                        commands.entity(*k).despawn();
+                    }
+                }
+                for (mesh, t, mat) in props.primitives(c.model) {
+                    let material = props.material(&mat, &mut materials);
+                    commands.spawn((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material),
+                        c.model_at * t,
+                        range(),
+                        ChildOf(e),
+                    ));
+                }
+                commands.entity(e).insert(CrateDressed);
+            }
+        }
     }
 }
+
+#[derive(Component)]
+pub struct CrateBox;
+
+#[derive(Component)]
+pub struct CrateDressed;
