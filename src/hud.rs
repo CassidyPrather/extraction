@@ -95,11 +95,10 @@ fn describe(
             Some(extraction_core::firearm::Round::Spent) => "spent case",
             None => "empty chamber",
         };
-        let jam = if f.malfunction.is_some() {
-            " JAMMED"
-        } else {
-            ""
-        };
+        let jam = f
+            .malfunction
+            .map(|m| format!(" JAMMED: {}", m.remedy()))
+            .unwrap_or_default();
         return format!(
             "{} [{} | {} in feed | {}{} | cond {:.0}% fouling {:.0}%]",
             def.name,

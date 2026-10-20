@@ -96,13 +96,30 @@ pub enum Round {
     Spent,
 }
 
-/// What can go wrong when a gun is worn and dirty.
+/// What can go wrong when a gun is worn and dirty. Each one has its own
+/// cure, as on the real thing ([`Malfunction::remedy`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Malfunction {
-    /// The spent case caught in the port; the bolt is not closed. Rack it.
+    /// Stovepipe: the spent case caught upright in the port, the bolt
+    /// riding on it. Rack it.
     FailureToEject,
-    /// The next round did not make it into the chamber. Rack it.
+    /// The magazine slipped in the well and the bolt closed on an empty
+    /// chamber: the trigger clicks. Tap the magazine home, then rack.
     FailureToFeed,
+    /// The spent case stayed in the chamber and the next round rammed into
+    /// it. The magazine holds both in place: drop it, rack, reload.
+    DoubleFeed,
+}
+
+impl Malfunction {
+    /// What clears it, in the words a range officer would use.
+    pub fn remedy(self) -> &'static str {
+        match self {
+            Self::FailureToEject => "rack",
+            Self::FailureToFeed => "tap, rack",
+            Self::DoubleFeed => "drop the mag, rack",
+        }
+    }
 }
 
 /// A detachable magazine as an inventory object.
@@ -152,6 +169,10 @@ const STRIP_AT: f32 = 0.6;
 const CLOSED_AT: f32 = 0.03;
 /// Bolt-handle lift at or below which a turn-bolt is locked down.
 const HANDLE_DOWN_AT: f32 = 0.05;
+/// Where a stovepipe's case holds the bolt.
+const STOVEPIPE_AT: f32 = 0.2;
+/// Where a double feed wedges the bolt: it won't come further forward.
+const DOUBLE_FEED_AT: f32 = 0.4;
 
 /// One gun's live state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -177,6 +198,10 @@ pub struct Firearm {
     pub internal_rounds: u32,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
+    /// The magazine has slipped down in the well (a failure to feed): the
+    /// bolt can't strip from it until it's tapped home.
+    #[serde(default)]
+    pub mag_unseated: bool,
     /// 0..=1. Lower is worse: more malfunctions, more spread.
     pub condition: f32,
     /// 0..=1. Dirt from shooting; cleaning removes it.
@@ -208,6 +233,7 @@ impl Firearm {
             internal_rounds: 0,
             mode: 0,
             malfunction: None,
+            mag_unseated: false,
             condition: condition.clamp(0.0, 1.0),
             fouling: 0.0,
             trigger_down: false,
@@ -284,7 +310,12 @@ impl Firearm {
         if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_closed() {
             return events;
         }
-        if self.malfunction.is_some() {
+        // A failure to feed leaves the bolt closed on an empty chamber: the
+        // hammer falls and clicks. The others hold the bolt open anyway.
+        if self
+            .malfunction
+            .is_some_and(|m| m != Malfunction::FailureToFeed)
+        {
             return events;
         }
         if self.fire_mode() != FireMode::Auto {
@@ -343,7 +374,9 @@ impl Firearm {
         self.fouling = (self.fouling + self.def.fouling_per_shot).min(1.0);
     }
 
-    /// Chance per cycle that a self-loader jams.
+    /// Chance per cycle that a self-loader jams: one in a thousand for a
+    /// clean gun in good order, about one in twenty-five at half condition,
+    /// one in six worn out and filthy.
     pub fn malfunction_chance(&self) -> f32 {
         let wear = (1.0 - self.condition).powi(2);
         (0.001 + 0.15 * wear + 0.03 * self.fouling).min(0.5)
@@ -354,19 +387,37 @@ impl Firearm {
     fn auto_cycle(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
         let mut events = Vec::new();
         if roll() < self.malfunction_chance() {
-            let kind = if roll() < 0.5 {
-                Malfunction::FailureToEject
+            // Stovepipes are the common one; double feeds need two rounds
+            // to jam together, failures to feed a magazine to slip.
+            let r = roll();
+            let feed = if self.magazine.is_some() {
+                self.rounds_in_feed()
             } else {
+                0
+            };
+            let kind = if r < 0.45 || feed == 0 {
+                Malfunction::FailureToEject
+            } else if r < 0.85 || feed < 2 {
                 Malfunction::FailureToFeed
+            } else {
+                Malfunction::DoubleFeed
             };
             match kind {
                 Malfunction::FailureToEject => {
                     // The case is stuck; the bolt rides on it, part open.
-                    self.bolt_travel = 0.2;
+                    self.bolt_travel = STOVEPIPE_AT;
                 }
                 Malfunction::FailureToFeed => {
                     self.chambers[0] = None;
                     events.push(Event::Ejected(Round::Spent));
+                    self.mag_unseated = true;
+                }
+                Malfunction::DoubleFeed => {
+                    // The case stays put; the next round rams into it.
+                    if self.take_from_feed() {
+                        self.in_transit = Some(Round::Live);
+                    }
+                    self.bolt_travel = DOUBLE_FEED_AT;
                 }
             }
             self.hammers_cocked[0] = true;
@@ -389,6 +440,9 @@ impl Firearm {
     }
 
     fn take_from_feed(&mut self) -> bool {
+        if self.mag_unseated {
+            return false;
+        }
         if let Some(mag) = &mut self.magazine {
             if mag.rounds > 0 {
                 mag.rounds -= 1;
@@ -415,8 +469,14 @@ impl Firearm {
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
             return events;
         }
-        let to = travel.clamp(0.0, 1.0);
+        let mut to = travel.clamp(0.0, 1.0);
         let from = self.bolt_travel;
+        if self.malfunction == Some(Malfunction::DoubleFeed) && self.magazine.is_some() {
+            // Wedged against the magazine's lips: the bolt comes back but
+            // nothing comes out, and it won't go home.
+            self.bolt_travel = to.max(DOUBLE_FEED_AT);
+            return Vec::new();
+        }
         if self.locked_back && to < 1.0 {
             // Tugging the slide back off the stop releases it.
             self.locked_back = false;
@@ -437,8 +497,11 @@ impl Firearm {
                 if let Some(round) = self.in_transit.take() {
                     events.push(Event::Ejected(round));
                 }
-                if self.malfunction.take().is_some() {
-                    // Racking clears both jams.
+                // Racking throws out a stovepipe's case and a double feed's
+                // pair (its magazine out). A slipped magazine stays a
+                // failure to feed until it's tapped home.
+                if !(self.malfunction == Some(Malfunction::FailureToFeed) && self.mag_unseated) {
+                    self.malfunction = None;
                 }
                 self.stroke_cleared = true;
             }
@@ -519,12 +582,25 @@ impl Firearm {
             return Err(mag);
         }
         self.magazine = Some(mag);
+        self.mag_unseated = false;
         Ok(vec![Event::MagazineInserted])
     }
 
     /// Presses the mag release.
     pub fn remove_magazine(&mut self) -> Option<Magazine> {
+        self.mag_unseated = false;
         self.magazine.take()
+    }
+
+    /// A palm slapped up on the magazine's floorplate: a slipped magazine
+    /// seats (the "tap" of tap-rack).
+    pub fn tap_magazine(&mut self) -> Vec<Event> {
+        if self.magazine.is_some() && self.mag_unseated {
+            self.mag_unseated = false;
+            vec![Event::MagazineInserted]
+        } else {
+            Vec::new()
+        }
     }
 
     /// Breaks a double open (true) or snaps it shut (false). Opening cocks
@@ -883,6 +959,95 @@ mod tests {
         rack(&mut gun);
         assert!(gun.malfunction.is_none());
         assert!(fired(&shoot(&mut gun)));
+    }
+
+    /// A worn gun, loaded and ready, whose next shot jams as `kind`: the
+    /// rolls pass the dud check, hit the jam roll, then pick the kind.
+    fn jam(kind_roll: f32) -> (Firearm, Vec<Event>) {
+        let mut gun = Firearm::new(rifle(), 0.0);
+        gun.fouling = 1.0;
+        gun.insert_magazine(Magazine {
+            family: "ak545".into(),
+            capacity: 30,
+            rounds: 10,
+        })
+        .unwrap();
+        rack(&mut gun);
+        gun.cycle_mode();
+        gun.cycle_mode(); // Semi
+        let mut seq = [0.99, 0.0, kind_roll].into_iter();
+        let mut r = move || seq.next().unwrap_or(0.99);
+        let mut ev = gun.update(0.016, true, &mut r);
+        ev.extend(gun.update(0.016, false, &mut r));
+        (gun, ev)
+    }
+
+    #[test]
+    fn a_stovepipe_holds_the_bolt_until_racked() {
+        let (mut gun, ev) = jam(0.1);
+        assert!(ev.contains(&Event::Malfunctioned(Malfunction::FailureToEject)));
+        assert!(!gun.is_closed(), "the case holds the bolt open");
+        assert!(!fired(&shoot(&mut gun)));
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::Ejected(Round::Spent)), "the case flies");
+        assert!(gun.malfunction.is_none());
+        assert!(fired(&shoot(&mut gun)));
+    }
+
+    #[test]
+    fn a_failure_to_feed_clicks_and_wants_a_tap_before_the_rack() {
+        let (mut gun, ev) = jam(0.6);
+        assert!(ev.contains(&Event::Malfunctioned(Malfunction::FailureToFeed)));
+        assert!(gun.is_closed());
+        // Rack to cock it (an AK isn't double action): click, no bang.
+        rack(&mut gun);
+        let ev = shoot(&mut gun);
+        assert!(ev.contains(&Event::DryFire), "click: {ev:?}");
+        // Racking alone doesn't feed from a slipped magazine.
+        let ev = rack(&mut gun);
+        assert!(!ev.contains(&Event::Chambered));
+        assert_eq!(gun.malfunction, Some(Malfunction::FailureToFeed));
+        // Tap, rack, bang.
+        assert_eq!(gun.tap_magazine(), vec![Event::MagazineInserted]);
+        assert!(gun.tap_magazine().is_empty(), "already home");
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::Chambered));
+        assert!(gun.malfunction.is_none());
+        assert!(fired(&shoot(&mut gun)));
+    }
+
+    #[test]
+    fn a_double_feed_clears_only_with_the_magazine_out() {
+        let (mut gun, ev) = jam(0.95);
+        assert!(ev.contains(&Event::Malfunctioned(Malfunction::DoubleFeed)));
+        let before = gun.live_rounds();
+        // Rack all you like with the magazine in: nothing comes out.
+        for _ in 0..3 {
+            assert!(rack(&mut gun).is_empty());
+        }
+        assert!(!gun.is_closed());
+        assert_eq!(gun.malfunction, Some(Malfunction::DoubleFeed));
+        let mag = gun.remove_magazine().unwrap();
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::Ejected(Round::Spent)));
+        assert!(ev.contains(&Event::Ejected(Round::Live)));
+        assert!(gun.malfunction.is_none());
+        assert!(gun.is_closed());
+        gun.insert_magazine(mag).unwrap();
+        assert!(rack(&mut gun).contains(&Event::Chambered));
+        assert!(fired(&shoot(&mut gun)));
+        assert_eq!(gun.live_rounds(), before - 2, "one thrown out, one fired");
+    }
+
+    #[test]
+    fn well_kept_guns_rarely_jam() {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        assert!(gun.malfunction_chance() < 0.002);
+        gun.condition = 0.5;
+        let half = gun.malfunction_chance();
+        assert!((0.02..0.06).contains(&half), "{half}");
+        gun.repair(0.45, 0.95);
+        assert!(gun.malfunction_chance() < half / 4.0, "the bench helps");
     }
 
     #[test]
