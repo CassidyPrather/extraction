@@ -519,6 +519,16 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: S,
+        note: "Stock terminal",
+        mentions: &[(M, "Bus depot"), (S, "The sorting ground")],
+    },
+    Lead {
+        map: S,
+        note: "Tower book",
+        mentions: &[(S, "Valve house"), (S, "Keeper's note")],
+    },
+    Lead {
+        map: S,
         note: "Shop note",
         mentions: &[(S, "New Sallow"), (S, "Keeper's note")],
     },

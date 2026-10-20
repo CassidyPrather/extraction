@@ -33,8 +33,12 @@ SPOTS = {
     "ranger_tower": [(0.3, 0.6)],
     "factory_hall": [(-12.6 + 0.4, 7.0)],
     "chapel": [(0.3, 14.0 * 0.5 - 1.6)],
+    # Sallow's (src/world/dam.rs): the tagging desk under the gantry, and
+    # the table in the draw-off tower's valve room at the bridge floor.
+    "sorting_gantry": [(-6.0, 0.0)],
+    "draw_off_tower": [(-1.0, 1.9)],
 }
-REACH = {"ranger_tower": 8.5}
+REACH = {"ranger_tower": 8.5, "draw_off_tower": 20.0}
 
 
 def world(at, rot, local):
@@ -532,6 +536,19 @@ CLOSED 14 OCT.
 
 (chalk) Culverts under the road are silted shut. The bed goes down,
 the arm comes up. Lower street's gone.""", "Toll board"),
+        ("sorting_gantry", (100.0, -82.0), "Terminal", [
+            "OVERFLOW STORE - SALLOW\nUNDER    DEPOT MARROW\nSTATUS   PENDING REVIEW\n\nBUSES              14\nBICYCLES          212\nREFUSE BINS       380\nPRAMS              31\n\nREVIEW DATE   (NOT SET)",
+            "BUSES - DEPOT MARROW\n\nNO. 1         KEPT\nNO. 2         KEPT\nNO. 3         KEPT\nNO. 4         NOT RECOVERED\nNO. 5         KEPT\nNO. 6         KEPT\nNO. 7         KEPT\nNO. 8         KEPT\nNO. 9         KEPT",
+            "BUSES - OTHER DEPOTS\n\nKETTLE         3   KEPT\nCINDER         3   KEPT\n\nSEARCH CONTINUES:\nMARROW NO. 4",
+        ], "Stock terminal"),
+        ("draw_off_tower", (-20.0, 102.5), "Note", """TOWER BOOK
+
+14 Oct. Both draw-offs shut, by order. Nobody downstream to drink it.
+
+2 Dec. The scours are opening by themselves. The wheels won't turn
+back. I've cut the chain off the big one and left it here.
+
+Somebody may want it shut again one day. - A.P.""", "Tower book"),
         ("shop", (-180.0, -222.0), "Note", """We were moved up here for the water, and now we're moved for this.
 Mrs Hlavac says she won't go twice. I've left her the shop key. Let her
 take what she needs.
