@@ -348,6 +348,24 @@ session, now only at the ends of the day). Try it twice in Marrow Creek:
 
 Which looked better in the headset, and did the shadow lines bother you?
 
+### 4e. Night (10 minutes)
+
+Night is now lit by the moon, and only when the sky lets it through.
+Try three nights in Marrow Creek:
+
+1. `cargo run --release -- --map marrow_creek --hour night --weather clearing --moon full`
+   - Can you walk the meadow and the road without a torch?
+   - Do the moon and the shadows tell you which way is north?
+2. The same with `--moon new`: the stars, with no moon.
+3. `--weather fog --moon full`: this should be truly black. Turn the
+   torch on.
+   - Does the beam's haze look right, or does it look like a cone?
+   - Does the truck's lamp read as a light to walk to?
+
+Also come in from a lit room or the truck bed into the dark. Does it
+take a few seconds before you see again, and does the brightness ever
+pump?
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
