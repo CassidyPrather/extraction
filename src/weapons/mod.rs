@@ -855,6 +855,8 @@ pub fn spawn_ejections(
                     "5.45x39" => "round_545",
                     "7.62x54R" => "round_762r",
                     "7.62x39" => "round_762x39",
+                    "7.62x38R" => "round_762x38r",
+                    "7.62x25" => "round_762x25",
                     "12ga" => "shell_12ga",
                     _ => continue,
                 };
