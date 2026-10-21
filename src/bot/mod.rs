@@ -128,7 +128,7 @@ pub enum Task {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Btn {
     /// A or X: the magazine release.
-    Primary,
+    Primary = 0,
     /// B or Y: the slide stop, or (one-handed) a rack.
     Secondary,
     /// The stick's click: the fire selector.
@@ -314,6 +314,13 @@ impl Bot {
         self.tasks.pop_front();
         self.restart();
         self.deferred = 0;
+    }
+
+    /// Holds one of the gun hand's buttons down (or lets it go), for a
+    /// scenario that presses it itself: the bot's driver writes the
+    /// buttons each frame, over the rig input.
+    pub fn hold(&mut self, button: Btn, down: bool) {
+        self.buttons[button as usize] = down;
     }
 
     /// A fresh start on whatever task is now first: for a director that
