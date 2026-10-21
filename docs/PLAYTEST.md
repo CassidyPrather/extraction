@@ -282,7 +282,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | MUSIC | rises with danger / off | the score |
 | GUN HAND | right / left | left: the holster and chest mount on the left, the watch on the right wrist, moving on the right stick and turning on the left, the gun hand's stick click the fire selector |
 | PLAYING | standing / seated | seated: the view and hands lifted to a standing eye (measured from how you sit, over a few seconds); the crouch button (right stick down, or the left with GUN HAND left) brings you down to the floor |
-| HANDS | two / one | one: bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands |
+| HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
 
