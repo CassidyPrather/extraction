@@ -149,6 +149,7 @@ pub fn spawn_spotter(commands: &mut Commands, zone: &Zone, at: Vec2) -> Entity {
             },
             super::Breed("spotter"),
             super::heavy::OwnLook,
+            super::heavy::NotOnPatrol,
             Spotter {
                 winch,
                 clock: 0.0,

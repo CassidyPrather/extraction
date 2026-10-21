@@ -171,6 +171,7 @@ pub fn spawn_plough(commands: &mut Commands, zone: &Zone, road: Vec<[f32; 2]>) -
             },
             super::Breed("plough"),
             super::heavy::OwnLook,
+            super::heavy::NotOnPatrol,
             Plough {
                 road,
                 run: Run::new(len),
