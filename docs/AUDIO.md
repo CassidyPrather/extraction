@@ -237,7 +237,7 @@ is what it did before.
 | A wet aegis biting its carrier (`anomaly::costs::ArtifactBite`, shock) | `bite.shock`, a synthesised electric crackle at the chest (`render_crackle`) | a kick in both hands (0.7/60 ms) | silent |
 | A shard's late glint (`ArtifactBite`, glint) | `bite.glint`, a faint glass tick | — | silent |
 | A hot stone held (`anomaly::harvest::Burned`) | `burn.sizzle`, a hiss at the hand for as long as it burns, gone when you let go | a tick in that hand every half second | silent |
-| Levering with the crowbar (`interact::tools::crowbar::Pried`), and it giving (`PriedFree`) | `tool.pry`, a strained creak every 0.6 s, higher and louder the harder you pull; `tool.pry_free`, the crack and the give | Hands' strain pulses and knock (`interact::tools`) | silent |
+| Levering with the crowbar (`interact::tools::crowbar::Pried`) | `tool.pry`, a strained creak every 0.6 s, higher and louder the harder you pull; when it gives, it's a break (`destruction::Broke`, below) | Hands' strain pulses and knock (`interact::tools`) | silent |
 | The bolt cutters biting through (`cutters::Cut`) | `tool.cut`, the snip, and `tool.cut_ping` | Hands' knock | silent |
 | Standing in a Hush (`anomaly::hush`) | everything 18 dB down and every placed sound (your own steps and shots too) muffled to 350 Hz, over a second; after 8 s a low pressure tone rises (`hush.tone`). A hushstone's 1.2 m: 4 dB and 3 kHz, all the time. Checked dull, not deaf: your footstep still clears the wind by +6.1 dB, a call at 2 m by +23 dB | — | nothing |
 | A squib: a reloaded round with too little powder (`FireEvent::Squib`) | `gun.squib`: the rifle's shot low-passed at 450 Hz and slowed, a weak dull pop 10 LU under a real shot up close, nothing cycling | 0.2/30 ms in the gun hand (`weapons::faults`) | the generic malfunction clack |
@@ -535,6 +535,8 @@ and the hound's makes sense.
 | lost you, giving up | one long note sinking away |
 | calling the others | three pulses rising to a held note |
 | answering a call | the call's top note, then a step down: "heard" |
+| flanking (working round to your side) | a quick low-high pair, twice, running on: "moving" |
+| retreating (breaking off, badly hurt) | a strained note that stumbles down in two steps |
 | hurt (a part hit it survives) | a stutter of rough notes, pitch thrown about |
 | dying | one long fall, slowing and breaking up |
 
@@ -663,6 +665,29 @@ wind, leaves your footstep clearing its masking (worst +12.8 dB, a pane
 going) and a robot's call 30 m off clearing its (worst +8.9 dB, the
 heavy's footfall); each break you hear about as far as robots do
 (0.6-1.6x).
+
+## Sallow Reservoir
+
+- **The dam slaps back** (`acoustics::slapback`, `slapbacks`): a shot,
+  a grenade, the heavy's footfall or blow, or a wall breached, with you
+  and the sound both in front of one of the dam's faces (the downstream
+  face, 22 m of masonry; the upstream wall, 21 m), comes back off it from
+  the sound's mirror image behind the face, after the extra path at
+  343 m/s, through 2.5 kHz. It is never occluded (it's behind the dam on
+  purpose). A shot fired 100 m out comes back 0.58 s later, 11 LU under
+  the shot and 5.5 dB over the wind; closer than ~10 m, the echo would
+  fuse with the shot, so there is none (`SLAP_AFTER`, 60 ms).
+- **The draw-off tower** (probed at its bridge from the crest): a hard
+  room, a 2.2 s tail at -12 dB wet: a tall concrete shaft. **The crest**
+  is open and dry, which is why the slapback matters. The dam's
+  inspection gallery has no reverb yet: it isn't built (Underground's).
+- **Wind** over the open bed is the mountain wind (`wind_mountain`,
+  Fourth valley's sounds block); **the river** below the dam is the
+  creek, which follows any valley's water.
+- **Still to come**, waiting on recordings (Freesound is out of reach
+  from this environment's network for now): the scour valves' drip and
+  gurgle, lapping water in New Sallow, the spillway, and silt underfoot
+  on the bed (the bed reads as mud only where the ground is wet).
 
 ## The night
 

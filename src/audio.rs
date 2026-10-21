@@ -236,6 +236,7 @@ impl Plugin for AudioPlugin {
                         anomaly_voices,
                         tool_sounds,
                         hush_world,
+                        slapbacks,
                     ),
                 ),
             )
@@ -2433,6 +2434,102 @@ fn flock_sounds(
                 0.1,
             );
         }
+    }
+}
+
+/// Loud sounds slapping back off Sallow's dam (`acoustics::slapback`):
+/// a shot, a grenade, the heavy's footfall or blow, a wall breached. Each
+/// face both the sound and you stand in front of sends back its image, a
+/// darkened copy (through 2.5 kHz, 4 dB down for what the stone takes)
+/// from the sound's mirror image behind the face, after the extra path:
+/// the dam's own voice, half a second after a shot from 90 m out.
+fn slapbacks(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    mut walls: Local<Option<Vec<crate::acoustics::Reflector>>>,
+    mut guns: MessageReader<GunEvent>,
+    mut grenades: MessageReader<crate::weapons::grenades::GrenadeEvent>,
+    mut heavies: MessageReader<crate::robots::heavy::HeavyEvent>,
+    mut broke: MessageReader<crate::destruction::Broke>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, &'static str, Vec3, f64)>>,
+) {
+    use crate::robots::heavy::HeavyAct;
+    let walls = walls.get_or_insert_with(|| {
+        let Some(zone) = zone.as_deref() else {
+            return Vec::new();
+        };
+        let placed: Vec<_> = zone
+            .map
+            .placements
+            .iter()
+            .map(|p| {
+                (
+                    p.prefab.clone(),
+                    crate::world::buildings::placement_transform(zone, p),
+                )
+            })
+            .collect();
+        crate::acoustics::reflectors(&placed)
+    });
+    let mut loud: Vec<(&'static str, Vec3, f64)> = Vec::new();
+    for g in guns.read() {
+        if matches!(g.event, FireEvent::Fired { .. }) {
+            loud.push((shot_set(&g.item), g.at, 1.0));
+        }
+    }
+    for g in grenades.read() {
+        if g.event == extraction_core::grenade::Event::Exploded {
+            loud.push(("explosions/grenade_heavy", g.at, 1.0));
+        }
+    }
+    for h in heavies.read() {
+        if matches!(h.what, HeavyAct::Step | HeavyAct::Slam { .. }) {
+            loud.push(("explosions/grenade_heavy", h.at, 0.6));
+        }
+    }
+    for b in broke.read() {
+        if b.size >= BREACH_SIZE {
+            loud.push(("impacts/concrete", b.at, 0.7));
+        }
+    }
+    let now = time.elapsed_secs();
+    if let Some(ear) = listener.iter().next().map(|g| g.translation()) {
+        for (set, at, speed) in loud {
+            for w in walls.iter() {
+                if let Some((image, delay)) = crate::acoustics::slapback(w, at, ear) {
+                    pending.push((now + delay, set, image, speed));
+                }
+            }
+        }
+    }
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, set, image, speed) in due {
+        let Some(sample) = bank.pick(set, &mut rng.0) else {
+            continue;
+        };
+        let cue = "echo.slap";
+        commands.spawn((
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+            PlaybackSettings::default().with_speed(speed),
+            Transform::from_translation(image),
+            // It comes from behind the dam on purpose: never occluded.
+            Occluded {
+                next: f32::INFINITY,
+            },
+            sample_effects![
+                mix::spatial(cue),
+                FastLowpassNode::<2> {
+                    cutoff_hz: 2_500.0,
+                    ..default()
+                },
+                reverb_send(cue)
+            ],
+        ));
     }
 }
 
