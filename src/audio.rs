@@ -818,6 +818,8 @@ fn shot_set(item: &str) -> &'static str {
         "mosin" => "guns/bolt_rifle_shot",
         "toz_double" => "guns/shotgun_shot",
         "mp133" => "guns/shotgun_shot",
+        "sks" | "rpk74" => "guns/rifle_shot",
+        "nagant" | "ppsh" => "guns/pistol_shot",
         "svd" => "guns/bolt_rifle_shot",
         "toz8" | "flare_pistol" | "crossbow" => "guns/pistol_shot",
         _ => "guns/rifle_shot",

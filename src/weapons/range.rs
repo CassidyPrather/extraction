@@ -28,7 +28,7 @@ pub enum Expect {
 }
 
 /// The guns on the range (catalog ids).
-pub const GUNS: [&str; 9] = [
+pub const GUNS: [&str; 11] = [
     "pm_pistol",
     "ak74",
     "mosin",
@@ -38,6 +38,8 @@ pub const GUNS: [&str; 9] = [
     "svd",
     "toz8",
     "rpk74",
+    "nagant",
+    "ppsh",
 ];
 
 /// The panels: a material and its thickness, as buildings use them.
@@ -62,6 +64,9 @@ pub fn expected(gun: &str, mat: Mat) -> Expect {
         // A .22 stops in tin.
         Stuff::Sheet if gun != "toz8" => Through,
         Stuff::Planks | Stuff::Plaster if rifle => Through,
+        // The PPSh's 7.62x25 is a hot, light, pointed bullet: through a
+        // plank wall where a pistol's stops.
+        Stuff::Planks if gun == "ppsh" => Through,
         Stuff::Logs if matches!(gun, "mosin" | "svd") => Through,
         _ => Stop,
     }

@@ -78,7 +78,9 @@ fn fit_out(
         commands.entity(add.entity).try_insert(Report(report));
     }
     if matches!(gun.firearm.def.cartridge.as_str(), "26mm" | "bolt") {
-        commands.entity(add.entity).try_insert(super::flares::Launcher);
+        commands
+            .entity(add.entity)
+            .try_insert(super::flares::Launcher);
     }
     if let Some((pivot, feet)) = bipod_of(id) {
         commands.entity(add.entity).try_insert(Bipod {
@@ -381,5 +383,92 @@ mod vr_tests {
             .deployed = false;
         r.vr.step(90);
         assert!(!braced(&mut r), "folded, nothing touches");
+    }
+}
+
+/// Every gun in the catalog has every piece a gun needs
+/// (`docs/ARMOURY.md`, "What a gun needs"): a gun that lands with one
+/// missing fails here, not in a playtest.
+#[cfg(test)]
+mod complete {
+    use extraction_core::ammo::Load;
+    use extraction_core::items::{Category, ItemCatalog, SizeClass};
+
+    #[test]
+    fn every_gun_has_everything_a_gun_needs() {
+        let cat = ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG).unwrap();
+        let loot =
+            extraction_core::loot::LootTables::from_ron(extraction_core::loot::BUILTIN_LOOT, &cat)
+                .unwrap();
+        let drills = include_str!("../bot/scenarios.rs");
+        let cache = include_str!("../items/loot.rs");
+        let sounds = include_str!("../audio.rs");
+        let mut missing = Vec::new();
+        for (_, def) in cat.iter() {
+            let Some(f) = &def.firearm else {
+                continue;
+            };
+            let id = def.id.as_str();
+            let mut lacks = |what: &str| missing.push(format!("{id}: {what}"));
+            if super::super::layout::layout(id).is_none() {
+                lacks("a layout");
+            }
+            let model = crate::asset_root_path().join(format!("models/guns/{id}.glb"));
+            if !model.exists() {
+                lacks("a model (models/guns/<id>.glb)");
+            }
+            if def.size == SizeClass::Bulky && super::super::sling::known_swivels(id).is_none() {
+                lacks("its sling swivels from the model (sling::known_swivels)");
+            }
+            if !loot.mentions(id) {
+                lacks("a place in the loot");
+            }
+            if !cache.contains(&format!("(\"{id}\", ")) {
+                lacks("a place in the dev cache");
+            }
+            if !drills.contains(&format!("s(\"{id}\")")) {
+                lacks("a bot drill");
+            }
+            if !sounds.contains(&format!("\"{id}\"")) {
+                lacks("a shot's sound (audio::shot_set)");
+            }
+            // Its ammunition, loose, and found somewhere: a box, a
+            // magazine, or the rounds themselves.
+            let cartridge = f.cartridge.as_str();
+            if super::super::loose_round(&cat, cartridge, Load::Standard).is_none() {
+                lacks("a loose round of its cartridge");
+            }
+            let found = cat.iter().any(|(_, d)| {
+                let feeds = d.cartridge.as_deref() == Some(cartridge)
+                    || d.magazine
+                        .as_ref()
+                        .is_some_and(|m| m.cartridge == cartridge);
+                feeds
+                    && matches!(d.category, Category::Ammo | Category::Magazine)
+                    && loot.mentions(&d.id)
+            });
+            if !found {
+                lacks("its ammunition in the loot");
+            }
+            if let Some(family) = &f.magazine_family {
+                let mag = cat
+                    .iter()
+                    .find(|(_, d)| d.magazine.as_ref().is_some_and(|m| &m.fits == family));
+                match mag {
+                    Some((_, d)) if loot.mentions(&d.id) => {}
+                    Some(_) => lacks("its magazine in the loot"),
+                    None => lacks("a magazine"),
+                }
+            }
+            // Bullet guns are on the range; a case they throw has a size.
+            let launcher = matches!(cartridge, "26mm" | "bolt");
+            if !launcher && !super::super::range::GUNS.contains(&id) {
+                lacks("a row on the range (range::GUNS)");
+            }
+            if !launcher && super::super::feel::case_size(cartridge) == (0.005, 0.03) {
+                lacks("its case's size (feel::case_size)");
+            }
+        }
+        assert!(missing.is_empty(), "{}", missing.join("\n"));
     }
 }
