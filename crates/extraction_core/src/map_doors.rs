@@ -288,9 +288,21 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
                 *q,
             );
         }
-        // The walkers' grid is open in front of it, and reached.
-        let k = (d.reach() / walk.cell).ceil() as i64 + 1;
-        let reached = walk.cell_of(d.stand()).is_some_and(|(ci, cj)| {
+        // The walkers' grid is open in front of it, and reached: on the way
+        // out, as far as it takes to clear the building's own blocked
+        // footprint (a chapel's steps lie inside its footprint, so its
+        // strip can be blocked cells all through, more so turned off the
+        // grid's axes).
+        let f = prefab_footprint(&p.prefab);
+        let margin = 0.6 + walk.cell;
+        let half = [f[0] * 0.5 + margin, f[2] * 0.5 + margin];
+        let mut out_to = d.reach();
+        while out_to < d.reach() + 30.0 && inside_rect(p.at, half, p.rot, d.point(out_to, 0.0)) {
+            out_to += 0.5;
+        }
+        let side = [-d.out[1], d.out[0]];
+        let k = (out_to / walk.cell).ceil() as i64 + 1;
+        let reached = walk.cell_of(d.face).is_some_and(|(ci, cj)| {
             let n = walk.n as i64;
             (-k..=k).any(|dj| {
                 (-k..=k).any(|di| {
@@ -299,9 +311,12 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
                         return false;
                     }
                     let c = j as usize * walk.n + i as usize;
+                    let q = geom::sub(walk.centre(i as usize, j as usize), d.face);
+                    let (s, t) = (geom::dot(q, d.out), geom::dot(q, side));
                     walk.cost[c] != BLOCKED
                         && seen[c]
-                        && d.strip(walk.centre(i as usize, j as usize)) < walk.cell
+                        && (-walk.cell..=out_to + walk.cell).contains(&s)
+                        && t.abs() < d.half_width() + walk.cell
                 })
             })
         });
@@ -341,6 +356,29 @@ mod tests {
             .filter(|f| f.rule == Rule::Door)
             .map(|f| f.what)
             .collect()
+    }
+
+    /// A chapel's steps lie inside its long footprint: turned off the
+    /// grid's axes, its door is still found reachable (the check looks out
+    /// past the building's own blocked cells, not just along the strip).
+    #[test]
+    fn a_turned_chapel_can_be_walked_up_to() {
+        for rot in [0.0, 75.0, 165.0, 255.0, 345.0] {
+            let mut map = MapDef::from_ron(TRAINING_YARD).unwrap();
+            map.placements.push(Placement {
+                prefab: "chapel".into(),
+                at: [-45.0, 30.0],
+                rot,
+                y: 0.0,
+                absolute: false,
+                tag: String::new(),
+            });
+            let found = door_findings(&map);
+            assert!(
+                !found.iter().any(|f| f.contains("walkers' grid")),
+                "rot {rot}: {found:?}"
+            );
+        }
     }
 
     /// A door turns with its building as the game turns it
