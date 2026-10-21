@@ -4663,6 +4663,7 @@ mod vault {
             let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
         };
+        let mut kg = 0.0;
         let heavy = {
             let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             // Two heavy cells and a fuel can in the pack.
@@ -4696,7 +4697,7 @@ mod vault {
                 ));
             }
             vr.step(10);
-            let kg = vr
+            kg = vr
                 .app
                 .world()
                 .get::<crate::player::Body>(vr.player)
@@ -4706,7 +4707,8 @@ mod vault {
             grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
         };
         assert!(light > 2.0, "unladen, up fast: {light}");
-        let most = 4.0 * pull_rate(44.0) + 0.1;
+        // (What the pack actually weighs, not a round number.)
+        let most = 4.0 * pull_rate(kg) + 0.05;
         assert!(heavy <= most, "laden, slow: {heavy} (at most {most})");
     }
 }

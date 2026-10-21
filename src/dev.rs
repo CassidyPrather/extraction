@@ -773,7 +773,7 @@ fn carry_for_gallery(
     state.0 += 1;
     let f = state.0;
     let local = |v: Vec3| Transform::from_translation(v);
-    let mut hand = |input: &mut crate::rig::RigInput, side: Side, at: Vec3| {
+    let hand = |input: &mut crate::rig::RigInput, side: Side, at: Vec3| {
         let h = input.hand_mut(side);
         h.pose = local(at);
         h.tracked = true;
