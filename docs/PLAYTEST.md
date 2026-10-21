@@ -328,6 +328,12 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   does the order make sense without a HUD? Load a box with every fourth
   a tracer and fire at dusk or in fog: can you walk your rounds onto a
   target by the streaks? Try a slug in the double at 50 m.
+- Looking through. Bring the PSO up and find the picture: how hard is it
+  to get your eye into the box? Move your head a little to the side:
+  does the black edge and the sliding picture tell you to centre? At
+  dusk, glass toward the sun and see whether a robot down the line
+  notices. Bring the AK's iron sights to your cheek: do they line up
+  without fiddling?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

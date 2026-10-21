@@ -48,6 +48,8 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
                 super::zero::aim_lenses,
                 super::zero::turn_drums,
+                super::optics::add_vignettes,
+                super::optics::vignette_lenses,
             ),
         )
         .add_plugins((
