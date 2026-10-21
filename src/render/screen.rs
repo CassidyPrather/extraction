@@ -250,14 +250,16 @@ fn build_screens(
                 Color::srgb(1.0, 0.68, 0.22),
                 true,
             ),
+            // Near-black ink on pale paper: lit only by the scene, paper
+            // under a grey sky came out grey on grey.
             ScreenStyle::Paper => (
-                Color::srgb(0.78, 0.75, 0.66),
-                Color::srgb(0.16, 0.15, 0.17),
+                Color::srgb(0.84, 0.81, 0.72),
+                Color::srgb(0.07, 0.065, 0.08),
                 false,
             ),
             ScreenStyle::Card => (
-                Color::srgb(0.8, 0.77, 0.66),
-                Color::srgb(0.14, 0.13, 0.15),
+                Color::srgb(0.85, 0.81, 0.69),
+                Color::srgb(0.06, 0.055, 0.07),
                 false,
             ),
             ScreenStyle::Crt => (
@@ -291,9 +293,11 @@ fn build_screens(
                 LinearRgba::BLACK
             },
             emissive_texture: emissive.then(|| handle.clone()),
-            // Matte: a glossy screen catches a lamp's highlight right over
-            // its words (the bench display under the canopy light did).
-            perceptual_roughness: if emissive { 0.7 } else { 0.95 },
+            // A screen's anti-glare coat: a glossy one caught the canopy
+            // lamp's highlight right over the bench display's words, and a
+            // rough one spread it into a wash over its black.
+            perceptual_roughness: if emissive { 0.6 } else { 0.95 },
+            reflectance: if emissive { 0.05 } else { 0.5 },
             ..default()
         });
         let mut view = ScreenView {

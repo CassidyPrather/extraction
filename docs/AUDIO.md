@@ -230,8 +230,21 @@ is what it did before.
 | A grenade's pin pulled | `grenade.pin` (a click) and `grenade.scrape` (the ring coming off) | click in the hand on the ring | silent |
 | Its spoon flying (thrown, or thumbed off to cook it) | `grenade.spoon`, a small metal ping | tick in the hand holding it down | silent |
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
+| A jam: failure to eject or feed, a double feed (`Malfunctioned`) | `gun.malfunction`, a dull wrong clack | each its own pulse in the gun hand (`weapons::faults`: 0.55/30 ms, 0.12/15 ms, 0.85/120 ms); the old generic 0.5 pulse in both hands is gone | a generic pulse as well |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| The sweep detector pointing at a loose stone (`anomaly::detector::StonePing`) | `detector.ping`: synthesised (`robot_voice::render_ping`), a soft sine at 1.76 kHz with its octave, sweeter than the click, played faster and higher the nearer the stone | — | silent |
+| A wet aegis biting its carrier (`anomaly::costs::ArtifactBite`, shock) | `bite.shock`, a synthesised electric crackle at the chest (`render_crackle`) | a kick in both hands (0.7/60 ms) | silent |
+| A shard's late glint (`ArtifactBite`, glint) | `bite.glint`, a faint glass tick | — | silent |
+| A hot stone held (`anomaly::harvest::Burned`) | `burn.sizzle`, a hiss at the hand for as long as it burns, gone when you let go | a tick in that hand every half second | silent |
+| Levering with the crowbar (`interact::tools::crowbar::Pried`), and it giving (`PriedFree`) | `tool.pry`, a strained creak every 0.6 s, higher and louder the harder you pull; `tool.pry_free`, the crack and the give | Hands' strain pulses and knock (`interact::tools`) | silent |
+| The bolt cutters biting through (`cutters::Cut`) | `tool.cut`, the snip, and `tool.cut_ping` | Hands' knock | silent |
+| Standing in a Hush (`anomaly::hush`) | everything 18 dB down and every placed sound (your own steps and shots too) muffled to 350 Hz, over a second; after 8 s a low pressure tone rises (`hush.tone`). A hushstone's 1.2 m: 4 dB and 3 kHz, all the time. Checked dull, not deaf: your footstep still clears the wind by +6.1 dB, a call at 2 m by +23 dB | — | nothing |
+| A squib: a reloaded round with too little powder (`FireEvent::Squib`) | `gun.squib`: the rifle's shot low-passed at 450 Hz and slowed, a weak dull pop 10 LU under a real shot up close, nothing cycling | 0.2/30 ms in the gun hand (`weapons::faults`) | the generic malfunction clack |
+| A bulge: a round fired into a squib's bullet (`Bulged`) | `gun.bulged` (the shot through 1.4 kHz: muffled, wrong) and `gun.bulged_ring`, the barrel ringing | 1.0/350 ms (`weapons::faults`), and it hurts you | — |
+| Rodding a stuck bullet out (`Rodded`) | `gun.rod_scrape` down the bore and `gun.rod_tink` as it drops | 0.3/40 ms | — |
+| A Mosin's bolt seized after the shot (`BoltStuck`), slapped free (`BoltFreed`) | `gun.bolt_stuck`, a dull clack through 1.8 kHz; `gun.bolt_freed`, a sharp metal smack, then the bolt opening | 0.6/80 ms, a grinding 0.3 tick while you lift against it; 0.4/20 ms | — |
+| A worn SKS slam-firing (`SlamFire`) | the bolt's close (a tick before), the shot on top of it, and `gun.slam_snap`, the floating pin | the shot's kick | — |
 | A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
@@ -298,6 +311,30 @@ goes past 0.6. Index controllers barely register under about 0.1 or
 10 ms, so nothing is below either. Pulses on one controller in the same
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
+
+**Haptic shapes** (`src/rig/shapes.rs`). A few pulses in a pattern, for
+things the hand should tell apart without looking. Each pulse is on the
+scale above. An empty hand meeting something (`interact::touch`, the
+physics hands) plays its material's shape, scaled 0.4-1.0 by how fast
+the hand was going (full from 2 m/s). Pulses that would come out under
+0.1 are dropped.
+
+| Shape | What | Pulses (start s, amplitude, length s) | How it feels |
+| --- | --- | --- | --- |
+| `WOOD` | planks, logs, timber doors and crates, trees, wooden items | (0, 0.42, 0.03) | one dull thud |
+| `METAL` | sheet and painted metal, robot armour, metal items | (0, 0.5, 0.012) (0.035, 0.25, 0.012) (0.07, 0.12, 0.012) | a sharp hit and a ring dying away |
+| `GLASS` | glass, glass items | (0, 0.3, 0.01) (0.025, 0.3, 0.01) | two quick light ticks |
+| `STONE` | brick, concrete, plaster, rock, the ground | (0, 0.6, 0.018) | hard and short, no give |
+| `SKIN` | a robot's soft parts (anything but its armour) | (0, 0.18, 0.025) (0.03, 0.26, 0.035) | soft, gives, then holds |
+| `WIRE` | fences, chain-link | four ticks 30 ms apart, 0.3 / 0.22 / 0.26 / 0.16 | a rattle |
+| `BOLT_HOME` | a gun's bolt closing or locking | (0, 0.6, 0.015) (0.03, 0.3, 0.025) | a slam, then it settles |
+| `MAG_SEAT` | a magazine seating | (0, 0.2, 0.02) (0.045, 0.55, 0.025) | the slide up the well, then the catch |
+| `CHAMBER` | a round chambered or loaded | (0, 0.3, 0.012) (0.025, 0.2, 0.012) | a double tick |
+
+The gun shapes play in the grip hand, and at half strength in a
+supporting hand. A hand going 1.5 m/s or faster strikes rather than
+touches. That writes `interact::touch::HandStruck { at, stuff, speed,
+side }` for a slap sound by material.
 
 ## Acoustics
 
@@ -504,7 +541,8 @@ and the hound's makes sense.
 **A voice per kind**: the drone a quick thin whistle chopped by its
 rotors; the walker a hollow mid voice; the grappler the walker's with a
 metal ring; the dirigible a slow deep horn; the crawler fast insect
-chirps; the hound a rough bark; the warden a low heavy walker. Pylons
+chirps; the hound a rough bark; the warden a low heavy walker; the heavy the
+deepest of all, a brassy horn of a voice. Pylons
 and sorters are mute. Every word is rendered at start-up, in the
 background on the compute pool (never on a frame: rendering on first
 use cost a 340 ms hitch when a walker first died), at the stream's
@@ -576,22 +614,74 @@ the information; the score is only the mood.
 - the score pass: with the score at full (ducked), every word keeps 90%
   of its range.
 
+## The heavy machine
+
+The heavy (`robots::heavy`, four metres of walker) is heard well before
+it's seen (`heavy_sounds`, `heavy_loops`):
+
+| What | Sound | Heard to (calm / downpour) |
+| --- | --- | --- |
+| A footfall (`HeavyAct::Step`) | `heavy.step`: a heavy explosion low-passed at 220 Hz and slowed to half, mostly under 100 Hz, a thud you feel; `heavy.foot`, its metal foot, over it up close. Its `WalkerStep` is skipped (it comes for the same foot) | 175 / 163 m |
+| The arm rising, the 1.2 s tell (`Raise`) | `heavy.raise`, a slow servo, and `heavy.hiss`, the hydraulics | 132 / 87 m |
+| The blow (`Slam`) | `heavy.slam`, a low boom through 600 Hz, `heavy.clank`, and stone if it hit | — |
+| A door torn off, a bolt shot out, something loose, a plate down | `heavy.tear` (creak, strain, splintering), `heavy.bolt` (a ping), `heavy.loose`, `heavy.plate` | — |
+| Steam vented, the stall's roar as it sinks, a well holding it, a cell pulled, the fall | `heavy.vent`, `heavy.stall`, `heavy.strain`, `heavy.cell`, a boom and a groan | — |
+| Idle | `heavy.idle`: the hum, slowed to 0.55, on it | 201 m |
+| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate | 705 / 658 m |
+
+Its mind speaks the robots' grammar in its own voice, the deepest
+(`VoiceKind::Heavy`, 65 Hz, a brassy saw through a 320 Hz formant, slow):
+within 1.4-3.8 LU of the other kinds for every word. Within 25 m its
+footfalls and blows are felt in both hands (Heavy's
+`heavy_look::footfall_pulse`, from a tick to just under a knock).
+Everything sudden is kept under your rifle up close (the horn 7.5 dB
+down from where it first measured, for anyone standing at the Gate).
+
+## Breaking things, and the birds
+
+**Breaks** (`destruction`, `break_sounds`), each levelled at its
+biggest so the audit sees the worst; the code only takes it down:
+
+| What | Sound | You hear it / robots do (m) |
+| --- | --- | --- |
+| A step on broken glass (`glass::Crunch`) | `break.crunch`, a pane's break quick and short (a recording of glass underfoot when one can be fetched) | 27 / 22 |
+| A pane (`Broke`, glass) | `break.glass`: a shop window lower and longer than a vent pane, quieter the smaller | 57 / 55 |
+| Wood (`Broke`, wood) | `break.wood` and `break.splinter`; a door coming down thuds (`break.wood_big`) | 28 / 36 |
+| A wall breached (`Broke` of 3 m²) | `break.breach`, masonry going, `break.rubble` pouring, and the boom | 46 / 40 |
+
+**Flocks** (`wildlife::Flushed`, `flock_sounds`): wings and the birds'
+calls, rooks (as crows), ravens or jackdaws by the flock's species; a
+burst of calls when alarmed, one softer call when it's only restless.
+The wings are a quick cloth flutter for now. Deer barking and bolting,
+dog packs and rats (`wildlife::herd::Startled`, `rats::Scurried`) wait
+on recordings: Freesound is out of reach from this environment's
+network for now.
+
+**Checked** (`scripts/audio_voices.py`): every sound breaking things,
+the birds and the heavy machine make, at its usual distance over the
+wind, leaves your footstep clearing its masking (worst +12.8 dB, a pane
+going) and a robot's call 30 m off clearing its (worst +8.9 dB, the
+heavy's footfall); each break you hear about as far as robots do
+(0.6-1.6x).
+
 ## The night
 
 After dark (`world::weather::Hour::Night`; half at dusk) the valley
 sounds different (`night_ambience`, `ambient_oneshots`):
 
 - **Insects** (`ambience/insects_night`: TRP's cricket chorus, Ontario,
-  CC0) everywhere outside, 12 dB down through walls, gone underground
-  and in rain. **They fall silent** when something big comes near (a
-  walker or its breeds, or the dirigible, within 60 m; a drone within
-  120 m) or a shot goes off within 150 m: silent in a second and a half,
-  and back over 15 s once it's been quiet for 6. They are the natural
-  tell: the crickets stopping is often the first you know of a machine.
+  CC0) outside, at the level Wildlife's chorus gives
+  (`wildlife::insects::Chorus`, crickets at dusk and night): silent
+  within 60 m of a walker, hound or the dirigible and 120 m of a drone,
+  knocked down by a shot, a flush or a bolt within 150 m, back over a
+  minute, thinned by rain and wind. 12 dB down through walls, gone
+  underground. The crickets stopping is often the first you know of a
+  machine.
 - **Wind in the leaves** (`ambience/rustle_leaves`, high-passed at
   250 Hz so it's the leaves and not the gusts on the microphone), louder
-  where it's overgrown (the zone's forest cover, until World models'
-  ivy says which buildings are overgrown).
+  the more overgrown it is round you: the ivy and weeds on the buildings
+  within 40 m (`world::overgrowth::amount`, nearer counting more), or
+  the forest's cover where there are none.
 - **The Surge's thunder**: the far thunder comes more often at night
   (every 35-90 s), deeper (0.78 speed), a little louder
   (`thunder.surge`).
@@ -603,7 +693,8 @@ heard. Over the night's beds every robot's word keeps 75% of its calm
 range (now 87-100%) and your footstep still clears them (+6.7 dB). A
 walker's step and a drone's rotor are warned of to the mix's own target
 (60 m, 120 m): the crickets would hide the rotor past 71 m and the
-step past 46 m, so the hush radii cover the rest.
+step past 46 m, so Wildlife's hush radii (`HUSH_NEAR`, `HUSH_NEAR_DRONE`,
+read by the audit, held at 60/120 by their test) cover the rest.
 
 ## The score
 

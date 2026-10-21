@@ -315,7 +315,22 @@ pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders, sky: bool) -> Mesh
         let hn = (n * h).abs().max_element();
         let wn = at.rotation * n;
         let centre = n * hn;
-        if occ.inside(world(centre) + wn * 0.02) {
+        // Dropped only when it's covered all over (its middle and its
+        // corners): a shelf's box against the middle of a wall hides only
+        // that much of it (and is drawn as a model, not a box).
+        let covered = [
+            (0.0, 0.0),
+            (-0.9, -0.9),
+            (0.9, -0.9),
+            (0.9, 0.9),
+            (-0.9, 0.9),
+        ]
+        .iter()
+        .all(|&(su, sv)| {
+            let p = centre + u * hu * su + v * hv * sv;
+            occ.inside(world(p) + wn * 0.02)
+        });
+        if covered {
             continue;
         }
         // The light a little in from a point of the face (a corner sits on

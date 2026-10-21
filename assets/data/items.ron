@@ -427,6 +427,48 @@
             tags: ["electronics"],
         ),
         (
+            id: "cassette_player", dims: Some((0.15, 0.09, 0.04)), name: "Cassette player",
+            description: "A portable tape recorder with chunky keys on top. Stop twice opens the door. Runs on a power cell.",
+            category: Gadget, size: Small, mass: 0.55, bulk: 0.45,
+            tags: ["electronics", "plastic"],
+        ),
+        (
+            id: "tape_practice", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: for Anna",
+            description: "A cassette, the label in a mother's hand: \"for Anna - practice\".",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_hymns", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: HARVEST HYMNS",
+            description: "A cassette in a chapel's careful capitals: HARVEST HYMNS.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_lodge", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Lodge dance",
+            description: "A cassette, the label smudged by a thumb: \"Lodge dance\". Taped off the wireless.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_duty", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: DUTY MIX 2",
+            description: "A cassette in block capitals: DUTY MIX 2. Dance tunes off the far station.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_birthday", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Our piano",
+            description: "A cassette, the label in a neat round hand: \"Our piano. Ruben's birthday.\"",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_bells", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Old Sallow bells",
+            description: "A cassette, the label in an old man's pencil: \"Old Sallow bells - from Dad's wire\".",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
             id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
             category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
             tags: ["glass", "metal"],
@@ -436,6 +478,18 @@
             description: "A survey clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
             category: Gadget, size: Small, mass: 0.35, bulk: 0.3,
             tags: ["metal", "electronics"],
+        ),
+        (
+            id: "work_boots", dims: Some((0.3, 0.16, 0.32)), name: "Work boots",
+            description: "A pair of black leather work boots, resoled more than once, laces knotted together. Good ones.",
+            category: Curio, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["leather"],
+        ),
+        (
+            id: "canary", dims: Some((0.16, 0.24, 0.16)), name: "Canary cage",
+            description: "A little brass cage with a bird-shaped flame-safety lamp in it, from the deep workings' landing. Carried, its glow goes amber, then red, as firedamp gathers near; too long in the gas and it goes out for good.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.5,
+            tags: ["metal"],
         ),
         (
             id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
@@ -599,6 +653,18 @@
             tags: ["metal"],
         ),
         (
+            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
+            category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["steel"],
+        ),
+        (
+            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
+            category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
@@ -614,6 +680,18 @@
         (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
         (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
+        (
+            id: "bus_panel", dims: Some((0.9, 0.6, 0.03)), name: "Bus panel",
+            description: "A side panel prised off a bus. Cream paint, a red stripe, rust.",
+            category: Material, size: Bulky, mass: 6.0, bulk: 10.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "car_door", dims: Some((1.0, 0.95, 0.12)), name: "Car door",
+            description: "A saloon's front door, the glass long gone. Good cover, for a while.",
+            category: Material, size: Bulky, mass: 16.0, bulk: 20.0,
+            tags: ["metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Robot parts
@@ -790,6 +868,28 @@
             id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",
             description: "An envelope, sealed, in a careful hand: For Lev, when he comes back for me.",
             category: Curio, size: Tiny, mass: 0.01, bulk: 0.01, tags: ["paper"],
+        ),
+        // The driver's contracts (`contracts`): what he hands you for
+        // them, and what one sends you for.
+        (
+            id: "relay_box", dims: Some((0.16, 0.1, 0.12)), name: "Relay box",
+            description: "A steel box with an aerial lead and one green lamp. Lev's soldering. Leave it where he said; it listens.",
+            category: Gadget, size: Small, mass: 1.1, bulk: 0.6, tags: ["electronics", "metal"],
+        ),
+        (
+            id: "camera", dims: Some((0.14, 0.09, 0.07)), name: "Zorki camera",
+            description: "A rangefinder camera, film loaded. Hold it up, line the subject in the middle, press.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
+        ),
+        (
+            id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",
+            description: "A plain steel watch on a worn strap. J. HOLM, 25 YEARS engraved on the back.",
+            category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"],
+        ),
+        (
+            id: "hajek_tin", dims: Some((0.09, 0.025, 0.06)), name: "Hajek's tin",
+            description: "A tobacco tin, scratched M.H. on the lid. Inside: a photograph, a ring on a string, a stub of pencil.",
+            category: Curio, size: Tiny, mass: 0.12, bulk: 0.03, tags: ["metal"],
         ),
         // What the driver's Recover jobs send you for (`progression`).
         (

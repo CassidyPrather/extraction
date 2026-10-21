@@ -67,7 +67,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // horizon is the fog's colour, the sky above it darker.
     let r = reflect(-v, n);
     let horizon = fog.base_color.rgb;
-    var refl = mix(horizon * 0.92, water.sky.rgb, smoothstep(0.15, 0.6, r.y));
+    // The sky overhead is the day's (`water.sky`), scaled by how bright
+    // the horizon is now against a day's: at night the creek was a pale
+    // ribbon under a near-black sky.
+    let dim = clamp(dot(horizon, vec3<f32>(0.2126, 0.7152, 0.0722)) / 0.24, 0.0, 1.3);
+    var refl = mix(horizon * 0.92, water.sky.rgb * dim, smoothstep(0.15, 0.6, r.y));
     // Low down it mirrors the banks and the tree line, not the horizon:
     // a creek or canal sits below its surroundings. (Without this, every
     // far stretch was a bright ribbon, read as snow.)

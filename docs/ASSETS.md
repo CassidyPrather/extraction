@@ -197,6 +197,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 16.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
+| `art/animals/rook.py` | `models/animals/rook.glb`: a rook in poses (sit, wingbeat up/mid/down, glide) and far stand-ins, swapped by `wildlife::visuals` (`docs/WILDLIFE.md`) | 0.33k a pose, 0.07-0.08k far |
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
 | `art/vehicles/bench.py` | `models/vehicles/bench.glb` (the bed's workbench) | 5.3k |
@@ -206,15 +207,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
 | `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench, chair, locker, pew | 0.1k to 1.8k |
 | `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet, hay_bale | 0.3k to 2.9k |
-| `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
+| `art/props/openings.py` | door_leaf, door_metal, window_sash, window_sash_broken (time's: `decay::weathered_sashes`), window_casing (stretched to their openings), window_board (three across a boarded sash, outside: `decay::boarded_sashes`, placed and broken by Destruction) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
 | `art/props/heroes.py` | hero landmarks, each with `_lod1` (past 60 m) and `_lod2` (the far stand-in): mill_race (Marrow Creek), ropeway_station, ropeway_pylon, ropeway_pylon_down (Kettle Pass: a broken aerial ropeway), blast_furnace (Cinder Works) | 14.4k / 2.8k / 1.2k (mill_race), 5.9k / 2.1k / 0.5k (station), 2.8k / 1.3k / 0.2k (pylon), 11.2k / 4.3k / 1.4k (furnace) |
+| `art/props/dam.py` | Sallow Reservoir's kept stock (`src/world/dam.rs`): kept_bus, kept_bicycle, wheelie_bin | 1.4k / 1.3k / 0.4k |
 | `art/props/ruins.py` | for the damaged and burnt houses (prefabs `<house>_damaged`, `<house>_burnt`): rubble_planks, rubble_brick, beam_fallen, beam_charred, bed_burnt, table_burnt, ash_heap | 0.2k to 2.3k |
+| (Rust only, `buildings::house_drowned`) | the drowned houses (`<house>_drowned`, Sallow): walls without roof, floors or doors, silt (`Mat::Silt`) to under the sills banked up to a breach doorway, timber `Mat::Sodden`, a tide line (`decay` `Stain::Tide`) | — |
 | `art/props/interiors.py` | the hero landmarks' insides: winch, rope_coil, drive_motor, gearbox, brake_drum, control_stand, mud_gun, bar_rack, pig_bed, gate_valve, tool_chest | 0.1k to 2.4k |
 | `art/props/clutter.py` | lived-in clutter, visual only, dressed by `world::clutter` by valley and ruin state: suitcase_open, suitcase_shut, bundle, belongings_box, coat_hook, picture_frame, boots, helmet_lamp, carbide_lamp, lunch_pail, jacket_hook, tally_board, dishes, jars, books, rug, broom, dishes_broken, books_charred, frame_charred, ash_film, dog_bowl, lead_hook, dog_collar (hung on the lead once `progression::Epilogue` is set), pigeonholes, ledger_open | 0.1k to 0.75k |
+| `art/props/residents.py` | who lived in a house (`world::clutter`'s `Resident`s, seeded): globe, exercise_books, slate_board (a teacher); cot, rocking_horse, small_boots (a family); traps_hook, hide_frame (a hunter); two_cups, reading_glasses, walking_stick (an old couple); sewing_machine, dress_form, cloth_pinned (a seamstress); radio_set, logbook (a radio ham); timetable, cap_hook (a railwayman) | 0.06k to 0.6k |
+| `art/props/named.py` | the people Story's notes name, where they lived (`world::clutter::named`): till, chit_spike, closed_card, axe_pegs, whetstone, barometer, kettle, horseshoe, signal_flags, waders, level_staff, antlers, bed_name_mirek, charcoal_sack, hymn_board, child_drawing, tin_empty, bow_saw, cup_one, photo_church, key_hook_empty, rods_rack, landing_net, stuffed_pike, armchair, peg_empty, slippers (its letters in `legibility::ART`) | 0.05k to 0.8k |
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
-| `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire (staged scenes) | 0.3k to 2.9k |
+| `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire, walker_wreck, flower_jars (staged scenes) | 0.3k to 4.0k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 5.1k each (palm 2.2k, plus the wrist display housing; fingers 2.7k) |
 | `art/kit/rig.py` | `models/kit/rig.glb` (harness_panel, harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
@@ -325,6 +330,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   box and doesn't stick out of it; anything flat or long has `dims`
   rather than a bulk cube (`every_item_model_fits_its_box` checks).
   `_kit.centred` moves a model's bounds onto the box.
+  Its lowest point sits within 6 mm of the box's floor: a tip poking
+  below it fails as surely as one sticking out.
+- **Budgets.** Guns 15-25k tris, magazines up to about 9k, items about 3k.
+  Spend it where a player's face and hands are.
+- **Item LODs.** An item's `<name>_lod1` node draws only beyond
+  `ITEM_LOD` (6 m), its other nodes only inside it
+  (`models::item_lod_range`). `check.py` doesn't count a node and its
+  `_lodN` stand-ins as z-fighting.
+- **Stamped text.** `text()`/`text_round()` heights are literal floats
+  (the legibility test reads argument 3 from the script), and a script
+  with letters is listed in `legibility::ART`.
+- **Sling points.** Long guns carry `pt_sling_front` and `pt_sling_rear`
+  empties at their swivels or slots.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.

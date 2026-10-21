@@ -31,9 +31,6 @@ pub const HAND_CENTRE: Vec3 = Vec3::new(0.0, 0.0, -0.01);
 /// to feel like your hand, slow enough not to punch through a wall.
 const MAX_SPEED: f32 = 8.0;
 const MAX_SPIN: f32 = 40.0;
-/// How far the hand you see may be from your real one before the ghost
-/// glove shows where your hand really is.
-pub const GHOST_GAP: f32 = 0.04;
 /// How long after letting go a hand leaves loose things alone, seconds.
 const QUIET: f32 = 0.4;
 /// How far past a door's leaf (its middle) a palm has to reach to push it.
@@ -93,6 +90,8 @@ fn spawn_hand_bodies(
                 Mass(2.0),
                 NoAutoMass,
                 SweptCcd::default(),
+                // What it meets, felt (`touch`).
+                CollisionEventsEnabled,
                 Collider::compound(vec![(
                     HAND_CENTRE,
                     Quat::IDENTITY,

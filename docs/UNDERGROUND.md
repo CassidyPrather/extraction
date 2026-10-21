@@ -8,6 +8,7 @@ torchlight, with the best loot behind the most risk.
 | Marrow Creek | `bunker_marrow` | Civil-defence shelter under the village: blast door, gas lock, decontamination, a spine corridor, dormitory, mess, filter plant, generator, command post, armoury, medical post, escape tunnel | 11 | Entrance stair; escape stair 60 m north |
 | Kettle Pass | `mine_kettle` | Mine gallery behind the mine office: shaft station, lamp room, main drive, crosscuts, a tall stope, explosives magazine, sump, refuge chamber, raise | 10 | Entrance incline; the raise's stair |
 | Cinder Works | `tunnel_cinder` | Service tunnel and pump room under the factory hall: stair hall, two tunnels, pump room, valve chamber, switch room, store, cable vault, workshop, overflow chamber | 10 | Entrance stair; a stair south of the hall |
+| Sallow Reservoir | `gallery_sallow` | The dam's inspection gallery: a landing under the toe, 44 m of gallery under the crest (seepage ankle deep), plumb-line chamber, weir chamber, gauge room, a passage under the bed to the draw-off tower | 6 | Entrance by the valve house; a stair up beside the tower on the bed |
 
 Plans: `docs/underground/<site>.svg` (regenerate with
 `PLAN_DIR=$PWD/docs/underground cargo test -p extraction_core plans_draw`).
@@ -202,7 +203,8 @@ corner.
 
 **What's there.**
 - *Your lost kit.* The latest 16 of `Memorial::lost`, by catalog name,
-  lie on the hall's crates and pallets (`LostKit`), for the taking
+  lie on the hall's crates and in its bins, filled with sacked kit to
+  a reach under the rim (`LostKit`), for the taking
   back (`the_lost_kit_lies_in_the_sorting_hall`).
 - *The kept.* Bay K-14's crates are closed props: Hana's long crate
   with her basket, the small one for the dog, Jan Holm's. Story places
@@ -241,3 +243,125 @@ is to come), the intake down the haul ramp (`d_intake`), the dark
 sorting hall (`d_hall`), the stacks and bay K-14 (`d_stacks`,
 `d_bay`), the flooded cistern (`d_cistern`), the service stair up
 (`d_stair`) and the hatch (`d_hatch`).
+
+## Signature sites
+
+One more site per valley, each built on a mechanic the others don't
+have. Layouts stay data (`assets/underground/*.ron`); each mechanic is
+a field or two in the layout and one small system, tested headless by a
+scenario that walks it end to end.
+
+### Marrow Creek: the pump station (`pump_marrow`)
+
+The village's sewage and storm pumping station, drowned since the
+pumps stopped. **The water level is the puzzle.**
+
+- *Levels, not floods.* A flood gets a `basin`: rooms and corridors
+  that share one water level, a height (site y) rather than a depth.
+  The level moves; every cell's water is `level - floor`, so a basin
+  can be chest deep in its upper rooms and over your head in its sump.
+- *Valves* (`valves: [(room, at, basin, to)]`): a wheel you turn (held
+  grip, a few seconds) opens a gravity drain from one basin into a lower
+  one, or out. A basin drains at a set rate until it reaches the valve's
+  `to` level or the lower basin's. Valves are loud (Noise r20, a
+  gurgle).
+- *The hand pump* (`pump: (room, at, basin, rate)`): a crank you work
+  (each press lifts a few litres; held, a steady rate) for the last
+  basin, the sump, which has nowhere to drain to.
+- *Order matters*: the inlet chamber drains into the screen room,
+  which only drains once its own valve (behind the inlet's water) is
+  reached; the sump needs the pump. The best loot (the operator's
+  locker, a weapons cache) is in the sump, under 2.4 m of water at the
+  start: swim for it (cold, slow, loud) or pump it down.
+- *Wading and swimming* as on the surface and in the floods; the water
+  surface follows the level (Visual design's water look).
+  Sound carries over water: noise made in or over a basin carries half
+  as far again (Audio).
+- *Residents*: crawlers that keep to the water's edge (Robot minds):
+  their round is recomputed as the level drops, along the cells just
+  dry.
+
+### Kettle Pass: the deep mine (`deep_kettle`)
+
+Below the existing mine, the old workings: **darkness and bad air**.
+
+- *Bad air* (`gas: [(room or link, kind)]`): firedamp pockets in the
+  low headings. A pocket hisses (Audio, looped, near it) and fills its
+  cells; standing in it slowly hurts and blurs. A spark ignites it: a
+  gunshot fired in or into it, a torch switched on in it, a grenade.
+  Ignition is an explosion through the pocket's cells (the grenades'
+  blast, scaled by the pocket's size) and then the air's clear.
+- *The canary* (`canary` item, Kit models): a caged detector you carry;
+  it chirps and its light goes amber, then red, as gas nears, and goes
+  quiet (dead) after long enough in it.
+- *The mine cart* (`carts: [(rail id, at)]`): a tub on a rail
+  (`rails: [[points]]`, along the corridors' legs). Push it (grab and
+  walk) or ride it (grab its rim and press: you're carried, like a
+  zipline grip) down the haulage; let it run into a doorway and it
+  blocks it (crawlers can't pass a blocked cell).
+- *Shoring* (`shoring: [(link, at)]`): timber sets that hold up a bad
+  roof. Shoot one out (two hits) and the roof comes down behind it,
+  rubble that blocks the corridor for good (a way closed behind you,
+  or ahead of a crawler).
+- *Light identity*: no emergency lamps at all; only your torch, the
+  canary's glow and the gas's faint shimmer.
+
+### Cinder Works: the furnace cellars (`cellars_cinder`)
+
+Under the furnace hall: flues, ash pits and the charging crane.
+
+- *Heat* (`heat: [(room or link, level)]`): hot passages hurt as a
+  Burner's edge does; over a level they're impassable. *Vents*
+  (`vents: [(room, at, heat zones)]`): open one (a lever) and its
+  passages cool over half a minute. Burner anomalies breed here: the
+  cycle's anomaly spawn favours hot cells.
+- *The crane* (`crane: (rail from, rail to, hook height, pit)`): a
+  travelling crane over the ash pit. A lever runs it along its rail;
+  its hook carries what hangs on it (loot crates hooked by the cellar's
+  workers) and you, if you grip the hook's chain (a moving rope grip).
+  The pit's floor is far below and hot: the crane is the way across.
+- *Light identity*: no lamps; the glow of the hot passages, dull red,
+  fading as they're vented.
+
+### Each site
+
+- A guard behaviour that suits it (Robot minds): edge-walkers at the
+  pump station; crawlers that avoid gas and are lured into it by noise
+  in the mine; in the cellars, crawlers that keep to the cool side and
+  wait for you at the vents.
+- A story beat placed with Story, a deep-job hook for Progression
+  (`underground_sites` already counts any site with a layout).
+- Tests: the layout validator (basins, valves, rails, gas, heat checked
+  for sense), a headless scenario per site (drain the station; cross
+  the gas; vent the cellar and ride the crane), a sim smoke (bots reach
+  and leave each), and Performance's budget underground.
+- Entrances: proposed to Map design with the report (scouted for rock
+  cover and a clear kiosk, as before).
+
+Built in that order: the pump station first (it extends the floods
+already there), then the mine, then the cellars.
+
+### As built
+
+| Site | Placed | Mechanic | Systems | End-to-end test |
+| - | - | - | - | - |
+| `pump_marrow` | Marrow (-173, 3), outfall (-173, 58) | three basins: inlet (valve in a dry gallery), screens (valve under the inlet's water), sump (hand pump only) | `underground::Levels`, `DrainControl`, `BasinDrained`, `site_water` reads live levels, basin surfaces follow | `the_pump_station_drains` |
+| `deep_kettle` | Kettle (-54, 106), incline (-54, 173) | firedamp in the old heading (and its corridor) and a dip; the canary; a cart on the haulage rail; shoring between heading and refuge | `world::workings`: `Gas`, `InGas`, `GasIgnited`, `Canary`, `MineCart`, `Shoring`, `Fall`, `RoofFell` | `crossing_the_gas_with_the_canary`, `the_cart_rolls_and_the_roof_falls` |
+| `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
+
+| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
+
+Models (Kit's): the cellars' crane bridge and hook block, the chain
+scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
+lever box on every vent and crane lever, a vent's arm swinging down as
+it opens (`c_vent.jpg`); the Depot ramp kiosk's Custodian front, from a
+portal's `facade` (`d_front.jpg`). No canary model yet: the canary is
+still the item's own.
+
+Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
+`shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a
+layout's `lamp_colour`, a round's `heavy` and `dormant`; each checked by
+`check` and drawn on the plans (`docs/underground/*.svg`). Light: the
+pump station's lamps cold green-white; the mine has none (the canary's
+glow, the gas's flash); the cellars' only light is the heat's dull red,
+fading as they're vented.

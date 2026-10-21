@@ -9,7 +9,9 @@ pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
+pub mod dam;
 pub mod decay;
+pub mod furnace;
 pub mod halos;
 pub mod impostors;
 pub mod notes;
@@ -20,6 +22,8 @@ pub mod rocks;
 pub mod scenes;
 pub mod shafts;
 pub mod sky;
+pub mod snow;
+pub mod storm;
 pub mod story;
 pub mod structures;
 pub mod surfaces;
@@ -28,6 +32,7 @@ pub mod trees;
 pub mod underground;
 pub mod water;
 pub mod weather;
+pub mod workings;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -132,6 +137,9 @@ pub enum Layer {
     Hand,
     /// Inside the backpack: items here collide with nothing.
     Stowed,
+    /// Shards and splinters (`destruction::debris`): they fall on the
+    /// world and nothing else, and no query looks for them.
+    Debris,
 }
 
 pub struct WorldPlugin;
@@ -140,6 +148,7 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             weather::WeatherPlugin,
+            snow::SnowPlugin,
             scenes::ScenesPlugin,
             underground::UndergroundPlugin,
         ))
@@ -240,6 +249,8 @@ impl Plugin for WorldVisualsPlugin {
             shafts::ShaftsPlugin,
             beams::BeamsPlugin,
             halos::HalosPlugin,
+            storm::StormPlugin,
+            snow::SnowVisualsPlugin,
         ));
     }
 }
@@ -263,8 +274,11 @@ mod tests {
             app.update();
         }
         let zone = app.world().resource::<Zone>().clone();
-        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
-        let spatial = state.get(app.world()).expect("spatial query");
+        let mut state = bevy::ecs::system::SystemState::<(
+            SpatialQuery,
+            Query<(), With<TerrainCollider>>,
+        )>::new(app.world_mut());
+        let (spatial, terrain) = state.get(app.world()).expect("spatial query");
         for (x, z) in [
             (40.0, 262.0),
             (-100.0, -200.0),
@@ -274,13 +288,15 @@ mod tests {
             (200.0, -190.0),
             (-60.0, 220.0),
         ] {
+            // The ground itself, not a rock or a trunk standing on it.
             let hit = spatial
-                .cast_ray(
+                .cast_ray_predicate(
                     Vec3::new(x, 200.0, z),
                     Dir3::NEG_Y,
                     500.0,
                     true,
                     &SpatialQueryFilter::default(),
+                    &|e| terrain.contains(e),
                 )
                 .expect("ray hits terrain");
             let y = 200.0 - hit.distance;

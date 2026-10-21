@@ -74,14 +74,18 @@ fn fog_cull(
 /// recompile; written when it has moved a little.)
 fn wet_with_weather(
     wet: Res<super::weather::Wetness>,
+    snow: Option<Res<super::snow::Snow>>,
     conditions: Res<super::weather::Conditions>,
     chunks: Query<&MeshMaterial3d<TerrainMaterial>, With<TerrainChunk>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
-    mut done: Local<Option<f32>>,
+    mut done: Local<Option<(f32, f32)>>,
 ) {
     // A little damp even dry: the Zone's ground never quite dries out.
     let want = 0.12 + 0.75 * wet.level;
-    if done.is_some_and(|d| (d - want).abs() < 0.01) && !conditions.is_changed() {
+    let lying = snow.as_ref().map_or(0.0, |s| s.cover);
+    if done.is_some_and(|(d, s)| (d - want).abs() < 0.01 && (s - lying).abs() < 0.004)
+        && !conditions.is_changed()
+    {
         return;
     }
     let Some(handle) = chunks.iter().next() else {
@@ -91,8 +95,12 @@ fn wet_with_weather(
         m.extension.params.wetness = want;
         m.extension.params.puddles = super::puddles::fill(wet.level);
         m.extension.params.rain = conditions.rain;
+        m.extension.params.snow = lying;
+        m.extension.params.snow_line = snow
+            .and_then(|s| s.line)
+            .unwrap_or(crate::render::fog::NO_SNOW);
     }
-    *done = Some(want);
+    *done = Some((want, lying));
 }
 
 fn spawn_terrain_meshes(
@@ -107,40 +115,166 @@ fn spawn_terrain_meshes(
         material.extension.params.burnt = 1.0;
     }
     let material = materials.add(material);
+    let canopy = Canopy::of(&zone);
     let hm = &zone.hm;
     let cells = hm.n - 1;
     let step = (CHUNK as f32 / hm.cell).round() as usize;
+    let mut spans = Vec::new();
     let mut j0 = 0;
     while j0 < cells {
         let mut i0 = 0;
         while i0 < cells {
             let i1 = (i0 + step).min(cells);
             let j1 = (j0 + step).min(cells);
-            for (lod, (spacing, _)) in LODS.iter().enumerate() {
-                let mesh = chunk_mesh(&zone, i0, j0, i1, j1, *spacing);
-                commands.spawn((
-                    Name::new("Terrain chunk"),
-                    TerrainChunk { lod },
-                    crate::render::centred(&mut meshes, mesh),
-                    MeshMaterial3d(material.clone()),
-                    lod_range(lod, FOG_CULL_DEFAULT),
-                    // Under this sky the land's own shadows are faint, and
-                    // the cascades are drawn per eye: it takes shadows
-                    // (trees, buildings) but casts none.
-                    bevy::light::NotShadowCaster,
-                ));
-            }
+            spans.push((i0, j0, i1, j1));
             i0 = i1;
         }
         j0 += step;
     }
+    // The chunks' meshes on every core (each is its own); spawned after.
+    let built: Vec<Vec<Mesh>> = bevy::tasks::ComputeTaskPool::get().scope(|scope| {
+        for &(i0, j0, i1, j1) in &spans {
+            let (zone, canopy) = (&zone, &canopy);
+            scope.spawn(async move {
+                LODS.iter()
+                    .map(|(spacing, _)| chunk_mesh(zone, canopy, i0, j0, i1, j1, *spacing))
+                    .collect()
+            });
+        }
+    });
+    for lods in built {
+        for (lod, mesh) in lods.into_iter().enumerate() {
+            commands.spawn((
+                Name::new("Terrain chunk"),
+                TerrainChunk { lod },
+                crate::render::centred(&mut meshes, mesh),
+                MeshMaterial3d(material.clone()),
+                lod_range(lod, FOG_CULL_DEFAULT),
+                // Under this sky the land's own shadows are faint, and
+                // the cascades are drawn per eye: it takes shadows
+                // (trees, buildings) but casts none.
+                bevy::light::NotShadowCaster,
+            ));
+        }
+    }
+}
+
+/// Where a reservoir was drained: its old water line (m), and the dam's
+/// upstream face (map z; the water stood north of it, at smaller z).
+/// Below the line and behind the dam the ground is bare silt and mud,
+/// with a damp band at the tide mark. Downstream, as low but never
+/// drowned, it isn't.
+#[derive(Clone, Copy, Debug)]
+pub struct Drowned {
+    pub line: f32,
+    pub dam_z: f32,
+}
+
+pub fn drowned_line(map: &str) -> Option<Drowned> {
+    match map {
+        // The dam's tide mark is at 49.8 m; its upstream face at z 132.
+        "Sallow Reservoir" => Some(Drowned {
+            line: 50.5,
+            dam_z: 132.0,
+        }),
+        _ => None,
+    }
+}
+
+impl Drowned {
+    /// (silt, damp) at a point: `drowned` behind the dam, nothing below it.
+    pub fn at(&self, p: [f32; 2], y: f32) -> (f32, f32) {
+        // A metre or two to blend at the dam's foot.
+        let behind = smooth(self.dam_z + 1.5, self.dam_z - 1.5, p[1]);
+        let (silt, damp) = drowned(self.line, y);
+        (silt * behind, damp * behind)
+    }
+}
+
+/// How drowned ground at height `y` is under the old water line `line`:
+/// (silt 0..1, damp 0..1 for the tide mark's band just under it).
+pub fn drowned(line: f32, y: f32) -> (f32, f32) {
+    let silt = smooth(line + 0.3, line - 0.8, y);
+    let damp = smooth(line - 3.0, line - 1.5, y) * smooth(line + 0.2, line - 0.3, y);
+    (silt, damp)
 }
 
 /// Splat weights packed into vertex colour: r = bare dirt/mud, g = rock,
 /// b = road gravel/asphalt, a = forest floor (needles, moss). Grass is
 /// whatever is left over. Road kind goes in UV1.x so the shader can pick
 /// asphalt vs gravel vs dirt.
-fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: usize) -> Mesh {
+/// Where the trees shade the ground: a coarse grid of how much canopy is
+/// over each point, from the trees' own positions. The forest floor
+/// (needles, litter) lies under the trees and fades out in the gaps
+/// between them; a sparse copse has a floor under its trees, not across
+/// its whole polygon. (Painted by polygon, small stands read as tan
+/// rectangles from the air.)
+pub struct Canopy {
+    origin: [f32; 2],
+    n: usize,
+    shade: Vec<f32>,
+}
+
+/// The canopy grid's cell (m).
+const CANOPY_CELL: f32 = 2.0;
+/// How far a tree's litter reaches from its trunk (m).
+const CANOPY_REACH: f32 = 7.0;
+
+impl Canopy {
+    pub fn of(zone: &Zone) -> Self {
+        let trees = extraction_core::forest::scatter_trees(&zone.map, &zone.hm);
+        let positions: Vec<[f32; 2]> = trees.iter().map(|t| [t.pos[0], t.pos[2]]).collect();
+        let hm = &zone.hm;
+        let lo = hm.pos(0, 0);
+        let hi = hm.pos(hm.n - 1, hm.n - 1);
+        Self::from_trees(lo, hi, &positions)
+    }
+
+    pub fn from_trees(lo: [f32; 2], hi: [f32; 2], trees: &[[f32; 2]]) -> Self {
+        let n = (((hi[0] - lo[0]).max(hi[1] - lo[1])) / CANOPY_CELL).ceil() as usize + 1;
+        let mut shade = vec![0.0f32; n * n];
+        let r = (CANOPY_REACH / CANOPY_CELL).ceil() as i64;
+        for t in trees {
+            let ci = ((t[0] - lo[0]) / CANOPY_CELL).round() as i64;
+            let cj = ((t[1] - lo[1]) / CANOPY_CELL).round() as i64;
+            for j in (cj - r).max(0)..=(cj + r).min(n as i64 - 1) {
+                for i in (ci - r).max(0)..=(ci + r).min(n as i64 - 1) {
+                    let x = lo[0] + i as f32 * CANOPY_CELL;
+                    let z = lo[1] + j as f32 * CANOPY_CELL;
+                    let d = ((x - t[0]).powi(2) + (z - t[1]).powi(2)).sqrt();
+                    let k = (1.0 - d / CANOPY_REACH).max(0.0);
+                    shade[j as usize * n + i as usize] += k * k;
+                }
+            }
+        }
+        Self {
+            origin: lo,
+            n,
+            shade,
+        }
+    }
+
+    /// How much of a forest floor `p` has, 0..1: full under the trees and
+    /// in a closed stand, none in a gap a few metres from any trunk.
+    pub fn floor(&self, p: [f32; 2]) -> f32 {
+        let i = ((p[0] - self.origin[0]) / CANOPY_CELL).round();
+        let j = ((p[1] - self.origin[1]) / CANOPY_CELL).round();
+        if i < 0.0 || j < 0.0 || i as usize >= self.n || j as usize >= self.n {
+            return 0.0;
+        }
+        smooth(0.1, 0.7, self.shade[j as usize * self.n + i as usize])
+    }
+}
+
+fn chunk_mesh(
+    zone: &Zone,
+    canopy: &Canopy,
+    i0: usize,
+    j0: usize,
+    i1: usize,
+    j1: usize,
+    spacing: usize,
+) -> Mesh {
     let hm = &zone.hm;
     // Sample rows and columns every `spacing` cells, always ending on the
     // chunk's edge.
@@ -151,6 +285,7 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
     };
     let (is, js) = (ticks(i0, i1), ticks(j0, j1));
     let (w, h) = (is.len(), js.len());
+    let line = drowned_line(&zone.map.name);
     let mut positions = Vec::with_capacity(w * h);
     let mut normals = Vec::with_capacity(w * h);
     let mut uvs = Vec::with_capacity(w * h);
@@ -187,14 +322,20 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
                 Some(RoadKind::Path) => 5.0,
                 None => 0.0,
             };
-            uv1.push([kind, hm.wet[hm.idx(i, j)]]);
+            let (silt, damp) = line.as_ref().map_or((0.0, 0.0), |d| d.at(p, y));
+            uv1.push([kind, hm.wet[hm.idx(i, j)].max(damp)]);
             let slope = hm.slope_deg(p);
             let rock = smooth(28.0, 42.0, slope);
             let wet = hm.wet[hm.idx(i, j)];
-            let forest = zone.forest_cover(p[0], p[1]);
+            let forest = zone.forest_cover(p[0], p[1]) * canopy.floor(p);
             // Hollows are muddy, and where puddles stand (`puddles`).
             let hollow = super::puddles::hollow(hm, p);
-            colors.push([wet.max(0.15 * rock).max(hollow), rock, road_w, forest]);
+            colors.push([
+                wet.max(0.15 * rock).max(hollow).max(silt),
+                rock,
+                road_w,
+                forest * (1.0 - silt),
+            ]);
         }
     }
     let mut indices = Vec::with_capacity((w - 1) * (h - 1) * 6);
@@ -296,7 +437,7 @@ mod tangent_tests {
     #[test]
     fn analytic_tangents_match_generated_ones_inside_a_chunk() {
         let zone = Zone::load("marrow_creek");
-        let mut mesh = chunk_mesh(&zone, 64, 64, 128, 128, 1);
+        let mut mesh = chunk_mesh(&zone, &Canopy::of(&zone), 64, 64, 128, 128, 1);
         let ours: Vec<[f32; 4]> = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
             Some(bevy::mesh::VertexAttributeValues::Float32x4(v)) => v.clone(),
             _ => panic!("tangents"),
@@ -331,6 +472,49 @@ mod tangent_tests {
         // (mikktspace averages faces; on steep cells it leans a few degrees.)
         assert!(worst > 0.95, "directions agree: worst cos {worst}");
         assert!(sum / count > 0.995, "on average: cos {}", sum / count);
+    }
+}
+
+#[cfg(test)]
+mod drowned_tests {
+    use super::*;
+
+    #[test]
+    fn the_forest_floor_lies_under_the_trees_not_across_the_gaps() {
+        // A sparse copse: three trees 20 m apart.
+        let trees = [[0.0, 0.0], [20.0, 0.0], [0.0, 20.0]];
+        let c = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &trees);
+        // A lone tree's litter is light; a stand's floor is full.
+        assert!(c.floor([0.0, 0.0]) > 0.6, "under a tree");
+        // Two trees 4 m apart share a floor between them.
+        let pair = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &[[0.0, 0.0], [4.0, 0.0]]);
+        assert!(pair.floor([2.0, 0.0]) > 0.8, "between a pair");
+        assert_eq!(c.floor([10.0, 12.0]), 0.0, "the gap between them");
+        assert_eq!(c.floor([200.0, 0.0]), 0.0, "off the grid");
+        // A closed stand, a tree every 4 m: floor all through.
+        let mut stand = Vec::new();
+        for i in 0..10 {
+            for j in 0..10 {
+                stand.push([i as f32 * 4.0, j as f32 * 4.0]);
+            }
+        }
+        let c = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &stand);
+        assert!(c.floor([18.0, 18.0]) > 0.99 && c.floor([2.0, 2.0]) > 0.99);
+    }
+
+    #[test]
+    fn the_reservoir_bed_is_silt_and_the_tide_mark_damp() {
+        let res = drowned_line("Sallow Reservoir").unwrap();
+        let line = res.line;
+        assert!(drowned_line("Marrow Creek").is_none());
+        // Behind the dam the bed is silt; below it, as low, it isn't.
+        assert_eq!(res.at([0.0, 60.0], 33.0).0, 1.0, "the bed");
+        assert_eq!(res.at([0.0, 200.0], 30.0), (0.0, 0.0), "downstream");
+        assert_eq!(drowned(line, 33.0).0, 1.0, "the bed");
+        assert_eq!(drowned(line, 52.0), (0.0, 0.0), "the crest");
+        let (_, band) = drowned(line, line - 1.2);
+        assert!(band > 0.9, "the tide mark: {band}");
+        assert_eq!(drowned(line, 40.0).1, 0.0, "the bed isn't a band");
     }
 }
 

@@ -49,15 +49,22 @@ pub const NAMES: &[&str] = &[
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
+    crate::robots::sentry::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
 /// - `second_hour`: a short career past the yard (`onboarding::second_hour`).
 /// - `safehouse`: claim Marrow Creek's cabin, sleep, see off the visit
 ///   (`progression::safehouse::scenario`).
+/// - `door_shot`: a walker shot through a shut plank door
+///   (`destruction::scenario`).
+/// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
+///   default (`bot::crossing`).
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
+    crate::destruction::scenario::SCENARIO,
+    super::crossing::SCENARIO,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -380,11 +387,36 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::sentry::SCENARIO => {
+            vec![
+                Log(s(
+                    "sentry cable: get behind a sentry, cut its cable, walk through its arc",
+                )),
+                Setup(crate::robots::sentry::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                // (The setup fills in where: past the sentry, through its arc.)
+                WalkTo {
+                    to: crate::robots::sentry::PAST_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(2.0),
+                Expect(super::Expect::HealthAtLeast(99.0)),
+                Expect(super::Expect::Alive),
+            ]
+        }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
+        crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
         crate::progression::safehouse::scenario::SCENARIO => {
             crate::progression::safehouse::scenario::opening()
         }
+        super::crossing::SCENARIO => super::crossing::opening(),
         _ => return None,
     })
 }

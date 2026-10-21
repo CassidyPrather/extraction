@@ -6775,7 +6775,7 @@
 <circle cx='294.0' cy='303.0' r='4' fill='#5a5650'/>
 <circle cx='339.6' cy='269.4' r='4' fill='#5a5650'/>
 <circle cx='339.6' cy='277.2' r='4' fill='#5a5650'/>
-<circle cx='330.0' cy='266.4' r='4' fill='#d4a017'/>
+<circle cx='325.2' cy='266.4' r='4' fill='#d4a017'/>
 <text x='312.0' y='285.0' fill='#1d1c1a' text-anchor='middle'>sump ~</text>
 <circle cx='132.0' cy='537.6' r='4' fill='#5a5650'/>
 <circle cx='160.8' cy='534.0' r='4' fill='#5a5650'/>
@@ -6783,5 +6783,5 @@
 <circle cx='163.2' cy='571.8' r='4' fill='#d4a017'/>
 <text x='144.0' y='549.0' fill='#1d1c1a' text-anchor='middle'>refuge *</text>
 <text x='216.0' y='645.0' fill='#1d1c1a' text-anchor='middle'>raise_foot</text>
-<text x='8' y='858' fill='#e8e2d0'>Mine gallery (mine_kettle): floor -6.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>
+<text x='8' y='858' fill='#e8e2d0'>Mine gallery (mine_kettle): floor -6.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

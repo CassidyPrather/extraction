@@ -233,6 +233,12 @@ pub struct Handling {
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
+    /// Iron sights brought to the eye: the turn about the front post that
+    /// lines the rear sight up with it (item space), eased.
+    pub sight_fix: Quat,
+    /// How far the eye is down behind the iron sights, 0..1, eased: the
+    /// front post goes soft as it rises (`optics`' post blur).
+    pub at_eye: f32,
 }
 
 impl Handling {
@@ -322,13 +328,14 @@ fn handle_guns(
     terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
     // Played one-handed, a gun rested on something is held as well as two
     // hands hold it: what the surface is for.
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
-    for (_, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -433,28 +440,85 @@ fn handle_guns(
         let yaw = handling.rise.y + sway.y;
         let pivot = gun.layout.grip.translation;
         let r = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch);
-        feel.offset = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
+        let kick = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
             .with_rotation(r);
+        // Iron sights at the cheek: a turn about the front post puts the
+        // rear sight on the eye's line to it. Worked out where the gun would
+        // be without it (so it settles rather than chasing itself).
+        let front = front_post(gun);
+        let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
+        let (want, lined) = match head {
+            Some(eye) if !scoped.iter().any(|m| m.0 == gun_e) => {
+                let eye_now = gt.affine().inverse().transform_point3(eye);
+                let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
+                (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
+            }
+            _ => (Quat::IDENTITY, false),
+        };
+        let ease = 1.0 - (-dt / SIGHT_EASE).exp();
+        handling.sight_fix = handling.sight_fix.slerp(want, ease);
+        handling.at_eye += (if lined { 1.0 } else { 0.0 } - handling.at_eye) * ease;
+        feel.offset = kick * about_front(handling.sight_fix);
         feel.lag = hold.lag(mass);
+    }
+}
+
+/// How near behind the rear sight (metres along the bore, and off its line)
+/// the eye must be for the sights to line up at the cheek, the most they
+/// turn the gun for it (radians), and how quickly (seconds).
+pub const SIGHT_DEPTH: (f32, f32) = (-0.02, 0.16);
+pub const SIGHT_OFF: f32 = 0.05;
+pub const SIGHT_MAX: f32 = 0.06;
+pub const SIGHT_EASE: f32 = 0.08;
+
+/// The front post, in gun space: on the sight line at the muzzle.
+pub fn front_post(gun: &Gun) -> Vec3 {
+    let s = gun.layout.sight.translation;
+    Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
+}
+
+/// Whether an eye at `eye` (gun space) is just behind the rear sight.
+pub fn at_sights(gun: &Gun, eye: Vec3) -> bool {
+    let rel = eye - gun.layout.sight.translation;
+    (SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
+}
+
+/// The turn about the front post (gun space) that puts the rear sight on
+/// the line from an eye at `eye` (gun space, the gun as held without it) to
+/// the front post: none unless the eye is just behind the rear sight.
+pub fn sight_fix(gun: &Gun, eye: Vec3) -> Quat {
+    if !at_sights(gun, eye) {
+        return Quat::IDENTITY;
+    }
+    let rear = gun.layout.sight.translation;
+    let front = front_post(gun);
+    let q = Quat::from_rotation_arc(
+        (rear - front).normalize(),
+        (eye - front).normalize_or((rear - front).normalize()),
+    );
+    let (axis, angle) = q.to_axis_angle();
+    if angle > SIGHT_MAX {
+        Quat::from_axis_angle(axis, SIGHT_MAX)
+    } else {
+        q
     }
 }
 
 /// Shots kick the gun that fired them, and start the bolt's stroke.
 pub fn kick_guns(
     mut events: MessageReader<GunEvent>,
-    mut guns: Query<(&Gun, &Item, &mut Handling)>,
+    mut guns: Query<(&mut Gun, &Item, &mut Handling)>,
     catalog: Res<Catalog>,
-    mut rng: ResMut<super::GunRng>,
 ) {
     for ev in events.read() {
         if !matches!(ev.event, FireEvent::Fired { .. }) {
             continue;
         }
-        let Ok((gun, item, mut handling)) = guns.get_mut(ev.gun) else {
+        let Ok((mut gun, item, mut handling)) = guns.get_mut(ev.gun) else {
             continue;
         };
         let mass = catalog.get(item.kind()).mass;
-        let yaw = rng.0.f32() * 2.0 - 1.0;
+        let yaw = gun.dice.f32() * 2.0 - 1.0;
         handling.kick(gun.firearm.def.recoil, mass, yaw);
         if gun.firearm.def.action == ActionKind::SemiAuto {
             handling.cycle = 1.0;
@@ -1050,38 +1114,33 @@ mod vr_tests {
         assert!(gun_mut(&mut r).firearm.handle_lift > 0.9, "and up");
     }
 
-    /// A worn, filthy SKS: rack it and the round can go off as the bolt
-    /// slams home, trigger untouched. A sound one never does.
+    /// A worn, filthy SKS: rack it and the round goes off as the bolt slams
+    /// home, trigger untouched (its dice set to roll low). A sound one
+    /// never does, whatever the roll.
     #[test]
     fn a_worn_sks_slam_fires_as_the_bolt_closes() {
+        #[derive(Resource, Default)]
+        struct Shots(usize);
         for worn in [true, false] {
             let mut r = hold("sks", false, false);
+            r.vr.app.init_resource::<Shots>().add_systems(
+                FixedPostUpdate,
+                |new: Query<(), Added<Projectile>>, mut n: ResMut<Shots>| n.0 += new.iter().count(),
+            );
             {
                 let mut g = gun_mut(&mut r);
                 g.firearm.condition = if worn { 0.1 } else { 0.9 };
                 g.firearm.fouling = 1.0;
                 g.firearm.internal_rounds = 10;
+                // Its own dice set so the bolt let go by hand rolls low (the
+                // worn gun's slam chance is 0.6; a sound one's is none).
+                g.firearm.fault_dice = (0u64..)
+                    .find(|s| extraction_core::noise::Rng::new(*s).f32() < 0.3)
+                    .unwrap();
             }
-            let mut shots = 0;
-            for _ in 0..6 {
-                let before: HashSet<Entity> = {
-                    let mut q =
-                        r.vr.app
-                            .world_mut()
-                            .query_filtered::<Entity, With<Projectile>>();
-                    q.iter(r.vr.app.world()).collect()
-                };
-                rack(&mut r);
-                r.vr.step(4);
-                let mut q =
-                    r.vr.app
-                        .world_mut()
-                        .query_filtered::<Entity, With<Projectile>>();
-                shots += q
-                    .iter(r.vr.app.world())
-                    .filter(|e| !before.contains(e))
-                    .count();
-            }
+            rack(&mut r);
+            r.vr.step(4);
+            let shots = r.vr.app.world().resource::<Shots>().0;
             if worn {
                 assert!(shots > 0, "a worn SKS slam-fired");
             } else {
@@ -1162,6 +1221,131 @@ mod vr_tests {
         assert_eq!(g.firearm.condition, 0.5, "the wear stays");
         let clean = g.firearm.spread_radians();
         assert!(clean < dirty * 0.8, "the spread closes: {dirty} -> {clean}");
+    }
+
+    /// A worn, dirty AK's burst: what happened to it, in order (shots,
+    /// jams, duds), with `loot` other guns lying about the yard and as many
+    /// bare entities spawned first.
+    fn worn_burst(loot: usize) -> Vec<String> {
+        #[derive(Resource, Default)]
+        struct Seen(Vec<String>);
+        let mut r = hold_after("ak74", false, false, loot);
+        for k in 0..loot {
+            let at = r.feet + Vec3::new(3.0 + k as f32, 0.3, 4.0);
+            let id = if k % 2 == 0 { "sks" } else { "ak74" };
+            let e = r.vr.spawn(id, Transform::from_translation(at));
+            r.vr.app.world_mut().get_mut::<Item>(e).unwrap().condition = 0.2;
+        }
+        let gun = r.gun;
+        r.vr.app.init_resource::<Seen>().add_systems(
+            FixedPostUpdate,
+            move |mut ev: MessageReader<GunEvent>, mut seen: ResMut<Seen>| {
+                seen.0.extend(
+                    ev.read()
+                        .filter(|e| e.gun == gun)
+                        .map(|e| format!("{:?}", e.event)),
+                );
+            },
+        );
+        load(&mut r, "ak545", 30, FireMode::Semi);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 0.3;
+            g.firearm.fouling = 0.6;
+        }
+        fire(&mut r, 20, true);
+        r.vr.app.world().resource::<Seen>().0.clone()
+    }
+
+    /// How a gun in your hands rolls is its own: guns lying about the
+    /// valley, and whatever else was spawned first, don't change a drill.
+    #[test]
+    fn a_drill_doesnt_hang_on_other_loot() {
+        let alone = worn_burst(0);
+        assert!(
+            alone.iter().any(|e| e.starts_with("Malfunctioned")),
+            "a worn gun jams: {alone:?}"
+        );
+        assert_eq!(worn_burst(4), alone, "with loot about");
+    }
+
+    /// The rear sight and front post of the held gun, in the world.
+    fn sights(r: &mut Range) -> (Vec3, Vec3, Quat) {
+        let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+        let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+        (
+            gt.transform_point(g.layout.sight.translation),
+            gt.transform_point(front_post(g)),
+            gt.rotation(),
+        )
+    }
+
+    /// Brought to the cheek with the eye a little high of the sight line,
+    /// an AK settles so the eye, the rear sight and the front post line up;
+    /// with the eye nowhere near, the sights are left alone.
+    #[test]
+    fn iron_sights_line_up_at_the_cheek() {
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        assert_eq!(
+            r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix,
+            Quat::IDENTITY,
+            "the eye nowhere near the sights"
+        );
+        let (rear, front, rot) = sights(&mut r);
+        let eye = rear + rot * Vec3::new(0.0, 0.012, 0.06);
+        let line_miss = |rear: Vec3, front: Vec3| {
+            let d = (rear - front).normalize();
+            let v = eye - front;
+            (v - d * v.dot(d)).length()
+        };
+        assert!(line_miss(rear, front) > 0.009, "starts off the line");
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        r.vr.head(eye - root);
+        r.vr.step(60);
+        let (rear, front, _) = sights(&mut r);
+        let miss = line_miss(rear, front);
+        assert!(miss < 0.004, "eye, rear sight, front post: {miss} m off");
+    }
+
+    /// Iron sights brought to the eye, the front post goes soft (the eye
+    /// is on the target), unless the comfort setting is off; taken down,
+    /// it's sharp again.
+    #[test]
+    fn the_front_post_softens_at_the_cheek() {
+        use crate::weapons::optics::{POST_BLUR, post_blur};
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        let at_eye = |r: &Range| r.vr.app.world().get::<Handling>(r.gun).unwrap().at_eye;
+        assert!(at_eye(&r) < 0.01, "the eye nowhere near: {}", at_eye(&r));
+        let (rear, _, rot) = sights(&mut r);
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        let away =
+            r.vr.app
+                .world()
+                .get::<crate::rig::RigInput>(r.vr.player)
+                .unwrap()
+                .head
+                .translation;
+        r.vr.head(rear + rot * Vec3::new(0.0, 0.01, 0.06) - root);
+        r.vr.step(60);
+        let a = at_eye(&r);
+        assert!(a > 0.95, "down behind the sights: {a}");
+        assert!((post_blur(a, true) - POST_BLUR).abs() < 0.05);
+        assert_eq!(post_blur(a, false), 0.0, "the comfort setting off");
+        r.vr.head(away);
+        r.vr.step(60);
+        assert!(at_eye(&r) < 0.05, "taken down: {}", at_eye(&r));
     }
 
     fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {

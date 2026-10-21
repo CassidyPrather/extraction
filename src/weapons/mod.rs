@@ -20,6 +20,7 @@ pub mod impacts;
 pub mod layout;
 pub mod melee;
 pub mod muzzle;
+pub mod optics;
 pub mod range;
 pub mod sling;
 pub mod tracers;
@@ -54,6 +55,23 @@ pub struct Gun {
     pub magwell: Option<Entity>,
     /// Last trigger value seen, for the trigger-part animation.
     pub trigger: f32,
+    /// The gun's own dice (jams, duds, spread, its kick's yaw), seeded from
+    /// what it is and where it first lay ([`gun_seed`]): what happens to
+    /// one gun never hangs on how many others are lying about, nor on the
+    /// order things were spawned in, and a drill replays.
+    pub dice: Rng,
+}
+
+/// A gun's seed: its kind and where it was first put (to the centimetre).
+pub fn gun_seed(id: &str, at: Vec3) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in id.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    for c in at.to_array() {
+        h = (h ^ ((c * 100.0).round() as i64 as u64)).wrapping_mul(0x0100_0000_01b3);
+    }
+    h
 }
 
 /// A magazine item: what it fits and holds. Rounds live in `Item.rounds`.
@@ -116,10 +134,6 @@ pub struct GunEvent {
     pub event: FireEvent,
     pub at: Vec3,
 }
-
-/// Seeded randomness for jams, duds and spread, so sims replay.
-#[derive(Resource)]
-pub struct GunRng(pub Rng);
 
 /// Where a player's right-hand gun puts its sight line and its handguard,
 /// in hand space: flat mode and bots use it to aim and to place the
@@ -185,7 +199,6 @@ pub struct WeaponsPlugin;
 impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<GunEvent>()
-            .insert_resource(GunRng(Rng::new(0x6A11)))
             .add_observer(setup_gun_items)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(AimHint::default());
@@ -199,6 +212,7 @@ impl Plugin for WeaponsPlugin {
                 ballistics::BallisticsPlugin,
                 zero::ZeroPlugin,
                 faults::FaultsPlugin,
+                optics::OpticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -227,12 +241,14 @@ fn setup_gun_items(
     add: On<Add, Item>,
     mut commands: Commands,
     items: Query<&Item>,
+    places: Query<&Transform>,
     catalog: Res<Catalog>,
 ) {
     let Ok(item) = items.get(add.entity) else {
         return;
     };
     let def = catalog.get(item.kind());
+    let first_at = places.get(add.entity).map_or(Vec3::ZERO, |t| t.translation);
     if let Some(mag) = &def.magazine {
         commands.entity(add.entity).insert(Mag {
             family: mag.fits.clone(),
@@ -244,7 +260,9 @@ fn setup_gun_items(
     let (Some(fdef), Some(layout)) = (&def.firearm, layout::layout(&def.id)) else {
         return;
     };
-    let firearm = Firearm::new(fdef.clone(), item.condition);
+    let seed = gun_seed(&def.id, first_at);
+    let mut firearm = Firearm::new(fdef.clone(), item.condition);
+    firearm.fault_dice = seed ^ 0xFA17;
     let mut points = vec![GrabPoint::new(layout.grip, GripRole::Primary, 0.12)];
     if let Some(s) = layout.support {
         points.push(GrabPoint::new(
@@ -298,6 +316,7 @@ fn setup_gun_items(
         layout,
         magwell,
         trigger: 0.0,
+        dice: Rng::new(seed),
     });
 }
 
@@ -654,6 +673,8 @@ fn buttons(
 ) {
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     racks.clear();
+    // Only guns in hand: every gun ever held stayed in here.
+    last.retain(|e, _| guns.contains(*e));
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -787,7 +808,6 @@ fn triggers(
     players: Query<&RigInput, With<Player>>,
     mut guns: Query<(Entity, &mut Gun, Option<&Held>, &GlobalTransform, &Item)>,
     time: Res<Time>,
-    mut rng: ResMut<GunRng>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut shots: MessageWriter<ballistics::Shot>,
@@ -800,7 +820,10 @@ fn triggers(
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
         gun.trigger = trigger;
-        let events = gun.firearm.update(dt, trigger > 0.55, &mut || rng.0.f32());
+        let events = {
+            let Gun { firearm, dice, .. } = &mut *gun;
+            firearm.update(dt, trigger > 0.55, &mut || dice.f32())
+        };
         let name = catalog.get(item.kind()).id.clone();
         for ev in &events {
             if let FireEvent::Fired { barrel } = ev {
@@ -820,7 +843,7 @@ fn triggers(
                     projectiles: def.projectiles,
                     spread: gun.firearm.spread_radians(),
                     recoil: def.recoil,
-                    seed: rng.0.next_u64(),
+                    seed: gun.dice.next_u64(),
                 });
             }
         }

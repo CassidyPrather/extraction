@@ -48,6 +48,10 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
                 super::zero::aim_lenses,
                 super::zero::turn_drums,
+                super::optics::add_vignettes,
+                super::optics::vignette_lenses,
+                super::optics::add_post_blurs,
+                super::optics::blur_posts,
             ),
         )
         .add_plugins((
@@ -506,6 +510,7 @@ mod tests {
                 layout: super::super::layout::layout("nagant").unwrap(),
                 magwell: None,
                 trigger: 0.0,
+                dice: extraction_core::noise::Rng::new(0),
             })
             .id();
         let node = |app: &mut App, name: String| {

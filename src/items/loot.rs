@@ -26,6 +26,7 @@ impl Plugin for LootPlugin {
             Startup,
             (
                 load_tables.before(LootSpawnSystems),
+                supply_crates,
                 (spawn_zone_loot, spawn_dev_cache)
                     .chain()
                     .in_set(LootSpawnSystems),
@@ -95,6 +96,87 @@ pub struct SupplyCrate;
 /// Its size: the lid at a standing reach.
 pub const SUPPLY_CRATE: Vec3 = Vec3::new(0.9, 0.78, 0.6);
 
+/// Where each note lies (as `world::notes` lays it) and which way it
+/// turns: loot rolled beside one is kept off its words.
+pub fn notes_lying(zone: &Zone) -> Vec<(Vec3, Quat)> {
+    zone.map
+        .markers
+        .iter()
+        .filter(|m| matches!(m.kind, MarkerKind::Note { .. }))
+        .map(|m| {
+            let y = crate::world::notes::rest_height(zone, m.at[0], m.at[1], 2.2 + m.y);
+            (
+                Vec3::new(m.at[0], y, m.at[1]),
+                Quat::from_rotation_y(-m.rot.to_radians()),
+            )
+        })
+        .collect()
+}
+
+/// How far a rolled item's middle stays from a note's paper.
+pub const CLEAR_OF_NOTE: f32 = 0.1;
+
+/// Where an item rolled at `at` lands, moved the least way off any note it
+/// would lie on (`docs/LEGIBILITY.md`: a torch on the pump log hid half of
+/// it).
+pub fn clear_of_notes(at: Vec3, notes: &[(Vec3, Quat)]) -> Vec3 {
+    let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(CLEAR_OF_NOTE);
+    let mut at = at;
+    for (note, rot) in notes {
+        let p = rot.inverse() * (at - *note);
+        if p.y.abs() > 0.4 || p.x.abs() >= half.x || p.z.abs() >= half.y {
+            continue;
+        }
+        let mut q = p;
+        if half.x - p.x.abs() < half.y - p.z.abs() {
+            q.x = half.x.copysign(p.x);
+        } else {
+            q.z = half.y.copysign(p.z);
+        }
+        at = *note + *rot * q;
+    }
+    at
+}
+
+/// The table a supply crate was packed from (broken open, it spills a
+/// roll of it: `destruction::wood`).
+#[derive(Component, Clone, Debug)]
+pub struct CrateLoot(pub String);
+
+/// The supply crates under the loot markers in the open. They're part of
+/// the place, not the loot: there whether the Zone was rolled or
+/// restored, and not doubled when the Surge rolls it again.
+pub fn spawn_supply_crates(commands: &mut Commands, zone: &Zone) {
+    for m in &zone.map.markers {
+        let MarkerKind::Loot { table } = &m.kind else {
+            continue;
+        };
+        if m.y >= 0.3 {
+            continue;
+        }
+        let ground = zone.on_ground(m.at[0], m.at[1]);
+        let yaw = (m.at[0] * 0.37 + m.at[1] * 0.11).sin() * 3.0;
+        commands.spawn((
+            Name::new(format!("Supply crate ({})", m.name)),
+            SupplyCrate,
+            CrateLoot(table.clone()),
+            Transform::from_translation(ground + Vec3::Y * SUPPLY_CRATE.y * 0.5)
+                .with_rotation(Quat::from_rotation_y(yaw)),
+            Visibility::default(),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(SUPPLY_CRATE.x, SUPPLY_CRATE.y, SUPPLY_CRATE.z),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+        ));
+    }
+}
+
+fn supply_crates(mut commands: Commands, zone: Res<Zone>) {
+    spawn_supply_crates(&mut commands, &zone);
+}
+
 fn spawn_marker_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -103,6 +185,7 @@ fn spawn_marker_loot(
     seed: u64,
 ) {
     let mut rng = Rng::new(seed ^ 0x100);
+    let notes = notes_lying(zone);
     for m in &zone.map.markers {
         let MarkerKind::Loot { table } = &m.kind else {
             continue;
@@ -111,20 +194,6 @@ fn spawn_marker_loot(
         // Loot isn't left on the ground for you to stoop for: a marker in
         // the open gets a supply crate, and the loot sits on its lid.
         let base = if m.y < 0.3 {
-            let yaw = (m.at[0] * 0.37 + m.at[1] * 0.11).sin() * 3.0;
-            commands.spawn((
-                Name::new(format!("Supply crate ({})", m.name)),
-                SupplyCrate,
-                Transform::from_translation(ground + Vec3::Y * SUPPLY_CRATE.y * 0.5)
-                    .with_rotation(Quat::from_rotation_y(yaw)),
-                Visibility::default(),
-                avian3d::prelude::RigidBody::Static,
-                avian3d::prelude::Collider::cuboid(SUPPLY_CRATE.x, SUPPLY_CRATE.y, SUPPLY_CRATE.z),
-                avian3d::prelude::CollisionLayers::new(
-                    crate::world::Layer::World,
-                    avian3d::prelude::LayerMask::ALL,
-                ),
-            ));
             ground + Vec3::Y * (SUPPLY_CRATE.y + 0.06)
         } else {
             ground + Vec3::Y * (m.y + 0.1)
@@ -135,23 +204,37 @@ fn spawn_marker_loot(
             .flat_map(|_| loot.0.roll(table, catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
-            let offset = Vec3::new(
-                (i as f32 * 0.37).sin() * 0.25,
-                0.05 * i as f32,
-                (i as f32 * 0.37).cos() * 0.18,
-            );
+            let offset = marker_roll(i);
             let e = spawn_item(
                 commands,
                 catalog,
                 SpawnItem {
                     kind: drop.kind,
-                    transform: Transform::from_translation(base + offset),
+                    transform: Transform::from_translation(clear_of_notes(base + offset, &notes)),
                     condition: drop.condition,
                 },
             );
             let _ = e;
         }
     }
+}
+
+/// Where a building spot's `i`th roll lands, from the spot.
+pub fn building_roll(i: usize) -> Vec3 {
+    Vec3::new(
+        (i as f32 * 1.7).sin() * 0.18,
+        0.04 + i as f32 * 0.06,
+        (i as f32 * 1.7).cos() * 0.12,
+    )
+}
+
+/// Where a loot marker's `i`th roll lands, from its base.
+pub fn marker_roll(i: usize) -> Vec3 {
+    Vec3::new(
+        (i as f32 * 0.37).sin() * 0.25,
+        0.05 * i as f32,
+        (i as f32 * 0.37).cos() * 0.18,
+    )
 }
 
 /// Loot rolls for a spot of this richness: the whole part, and the
@@ -172,23 +255,20 @@ fn spawn_building_loot(
 ) {
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
+    let notes = notes_lying(zone);
     for spot in &spots.0 {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| loot.0.roll(spot.table, catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
-            let off = Vec3::new(
-                (i as f32 * 1.7).sin() * 0.18,
-                0.04 + i as f32 * 0.06,
-                (i as f32 * 1.7).cos() * 0.12,
-            );
+            let at = clear_of_notes(spot.at + building_roll(i), &notes);
             spawn_item(
                 commands,
                 catalog,
                 SpawnItem {
                     kind: drop.kind,
-                    transform: Transform::from_translation(spot.at + off).with_rotation(
+                    transform: Transform::from_translation(at).with_rotation(
                         Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU)),
                     ),
                     condition: drop.condition,

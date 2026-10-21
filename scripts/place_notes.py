@@ -492,13 +492,9 @@ the water board's.""", "Sallow gate log"),
 I was seven when the water board moved us up the hill. We watched the
 water come over the bridge a hand a day.
 
-The second winter the machines opened the scours. I could have told
-them which wheel. They didn't ask. The bed came up a hand a day, the
-same.
-
-On the twentieth day the church came out. The clock had stopped at ten
-to four. Our house is the third from the bridge. The door's where it
-was.
+The second winter the machines opened the scours, and it went down a
+hand a day. On the twentieth day the church came out. Our house is the
+third from the bridge.
 
 Don't stand in the churchyard after rain. Things come up there that
 weren't buried.
@@ -506,11 +502,11 @@ weren't buried.
 - A. Pech, keeper""", "Keeper's note"),
         ("pump_station", (12.0, 172.0), "Terminal", [
             "SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED",
-            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n 8 DEC   24.0\n15 DEC   16.2\n22 DEC    9.8\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
+            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n15 DEC   16.2\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
         ], "Valve log"),
         ("pump_station", (100.0, 210.0), "Terminal", [
             "SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0",
-            "CINDER WORKS\nDEMAND RESUMED   3 NOV\nPURPOSE          FURNACE COOLING\nDEMAND CEASED   26 FEB\n\nNO OTHER DEMAND.",
+            "CINDER WORKS\n\nDEMAND FROM    3 NOV\nFOR   FURNACE COOLING\nCEASED        26 FEB\n\nNO OTHER DEMAND.",
         ], "Supply terminal"),
         ("pump_station", (245.0, -70.0), "Note", """CATCHWATER GAUGE - read Sundays
 
@@ -538,7 +534,7 @@ CLOSED 14 OCT.
 the arm comes up. Lower street's gone.""", "Toll board"),
         ("sorting_gantry", (100.0, -82.0), "Terminal", [
             "OVERFLOW STORE - SALLOW\nUNDER    DEPOT MARROW\nSTATUS   PENDING REVIEW\n\nBUSES              14\nBICYCLES          212\nREFUSE BINS       380\nPRAMS              31\n\nREVIEW DATE   (NOT SET)",
-            "BUSES - DEPOT MARROW\n\nNO. 1         KEPT\nNO. 2         KEPT\nNO. 3         KEPT\nNO. 4         NOT RECOVERED\nNO. 5         KEPT\nNO. 6         KEPT\nNO. 7         KEPT\nNO. 8         KEPT\nNO. 9         KEPT",
+            "BUSES - DEPOT MARROW\n\nNO. 1-3     KEPT\nNO. 4       NOT RECOVERED\nNO. 5-9     KEPT",
             "BUSES - OTHER DEPOTS\n\nKETTLE         3   KEPT\nCINDER         3   KEPT\n\nSEARCH CONTINUES:\nMARROW NO. 4",
         ], "Stock terminal"),
         ("draw_off_tower", (-20.0, 102.5), "Note", """TOWER BOOK
@@ -557,6 +553,79 @@ take what she needs.
 
 (another hand) She went in the end, in the spring, on her own feet.
 The shop's anyone's now. - A.P.""", "Shop note"),
+    ],
+    # The fifth valley (claude/polish-fifth-valley): skipped until its
+    # map is in.
+    "rime_fell": [
+        ("guard_booth", (0.0, 285.0), "Note", """SOUTH GATE, RIME FELL - DUTY LOG
+
+15 Oct. Coldharbour down on the funicular, last car 1600. Lorries from
+the valley station.
+
+16 Oct. The two at the observatory won't come down. Weather service
+says they're essential. Let them.
+
+2 Nov. Lights on the col all night. The observatory phoned it through
+an hour before we saw them.""", "Rime gate log"),
+        ("house_plank", (40.0, 252.0), "Note", """FUNICULAR - VALLEY STATION
+
+15 Oct. Last car down 1600, full. Sent the other up empty to hold the
+rope, both left on the brake. - F. Lukas, attendant
+
+(another hand) March. One car stopped at the loop. The rope's off the
+top drum, cut and wound away. Walk the stair. Don't ride it.""", "Funicular book"),
+        ("mast_hut", (-50.0, 145.0), "Note", """GRIT BOOK - roadmen
+
+12 Oct. Galleries one to three cleared. Plough on the hairpin.
+
+14 Oct. Forty sacks down for the buses.
+
+15 Oct. Last of it. We're off on the lorry. Plough's in the store,
+key on the nail.
+
+In a thaw, keep out from under the chutes. They run.""", "Grit book"),
+        ("house_brick", (20.0, 0.0), "Terminal", [
+            "RIME FELL MINE\nCONCENTRATE (SACKS)\n\n 9 OCT     212\n12 OCT     198\n14 OCT      64\n15 OCT       0\n\nAT TOP STATION  474",
+            "INVENTORY  3 NOV\n\nCONCENTRATE  474\nRAIL (M)    1380\nROPE (M)    2200\n\nSTATUS  PENDING REVIEW",
+        ], "Mine office terminal"),
+        ("shop", (-15.0, 5.0), "Note", """CANTEEN - COLDHARBOUR
+
+Soup Tuesdays and Thursdays. Bread up by the car.
+
+(pencil) 15 Oct. Pans washed, stove out. Back in three days.
+
+(another hand) The observatory two came down for flour in November
+and went back up. I told them stay down. They wouldn't.""", "Canteen note"),
+        ("cabin_log", (-60.0, 48.0), "Note", """Jana -
+
+We're staying with the station, Hedvika and me. The district needs its
+weather, and someone has to say what comes over the col.
+
+The car's still running. I'll be down Sundays. Keep the boys warm in
+town and don't let them fight.
+
+- Ota""", "Ota's letter"),
+        ("ranger_tower", (60.0, -170.0), "Note", """AVALANCHE WATCH
+
+Chute one loaded. Chute two loaded. Galleries open.
+
+(another hand, February) Chute two ran in the night. Gallery three
+held. Nobody left to clear the road.
+
+The machines walked over the slide in the morning as if it wasn't
+there. - H.S.""", "Watch log"),
+        ("mast_hut", (20.0, -245.0), "Note", """COL HUT BOOK
+
+30 Oct. Over to the cirque for the observatory: the tarn is lit up
+green at night. Something on the far side, building. - O.B.
+
+2 Nov. They came over the col in a line, one after another, and
+never looked at the hut. - H.S.
+
+(last) Phoned it down. Nobody answered at the gate.""", "Col hut book"),
+        ("pump_station", (240.0, -60.0), "Terminal", [
+            "COMPRESSOR HOUSE\nAIR TO ADIT\n\nCOMP 1    OFF  15 OCT\nCOMP 2    OFF  15 OCT\n\nADIT DOOR\nOPENED    4 NOV\nCARD      NONE",
+        ], "Compressor terminal"),
     ],
 }
 

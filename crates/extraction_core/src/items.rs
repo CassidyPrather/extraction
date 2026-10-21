@@ -34,6 +34,8 @@ pub enum Mount {
     Helmet,
     /// A plate carrier's pocket: armour plates.
     Plate,
+    /// A cassette player's well: cassettes.
+    Cassette,
 }
 
 /// How big a thing is, for pockets and slings. Bulk (a continuous volume) is
@@ -364,14 +366,21 @@ mod tests {
     }
 
     #[test]
-    fn bulky_things_are_long_guns() {
+    fn bulky_things_are_long_guns_parts_or_salvage() {
         let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         for (_, def) in cat.iter() {
             if def.size == SizeClass::Bulky {
-                assert!(matches!(
-                    def.category,
-                    Category::Firearm | Category::RobotPart
-                ));
+                // Long guns, robot parts, and salvage prised off wrecks
+                // (a bus panel, a car door).
+                assert!(
+                    matches!(
+                        def.category,
+                        Category::Firearm | Category::RobotPart | Category::Material
+                    ),
+                    "{} is bulky but a {:?}",
+                    def.id,
+                    def.category
+                );
             }
         }
     }

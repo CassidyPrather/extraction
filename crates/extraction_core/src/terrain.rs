@@ -174,6 +174,30 @@ impl Heightmap {
     fn underground(&mut self, map: &MapDef) {
         const BLEND: f32 = 8.0;
         let sites = crate::underground::placed(map);
+        // The other buildings' pads stay as they were levelled: how much a
+        // pad holds a point (1 on it, easing out over its blend). A kiosk's
+        // 8 m blend reached the factory hall's back door at Cinder and
+        // left a lip in the doorway.
+        let pads: Vec<_> = map
+            .placements
+            .iter()
+            .filter(|p| {
+                !p.absolute
+                    && crate::map::prefab_wants_pad(&p.prefab)
+                    && !crate::underground::is_site(&p.prefab)
+            })
+            .map(|p| {
+                let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+                (p.at, p.rot, w * 0.5 + 0.8, d * 0.5 + 0.8)
+            })
+            .collect();
+        let held = |q: P2| {
+            pads.iter().fold(0.0f32, |h, (at, rot, hw, hd)| {
+                let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
+                let out = ((l[0].abs() - hw).max(0.0)).hypot((l[1].abs() - hd).max(0.0));
+                h.max(1.0 - geom::smoothstep(0.0, 5.0, out))
+            })
+        };
         for site in &sites {
             let footing = self.footing(&site.id, site.at, site.rot);
             for (at, rot, portal) in site.exits() {
@@ -189,7 +213,10 @@ impl Heightmap {
                     let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
                     let out =
                         ((l[0].abs() - half_w).max(0.0)).hypot((l[1].abs() - half_d).max(0.0));
-                    let t = 1.0 - geom::smoothstep(0.0, BLEND, out);
+                    let mut t = 1.0 - geom::smoothstep(0.0, BLEND, out);
+                    if out > 0.0 {
+                        t *= 1.0 - held(q);
+                    }
                     hm.heights[k] += (target - hm.heights[k]) * t;
                 });
             }
@@ -314,7 +341,6 @@ impl Heightmap {
     /// The land from the noise and features; returns the natural relief's
     /// share of each cell, which `erode` takes back off round buildings.
     fn shape(&mut self, map: &MapDef) -> Vec<f32> {
-        let mut relief_h = vec![0.0; self.n * self.n];
         let nd = &map.noise;
         let splines: Vec<(Vec<P2>, &TerrainFeature)> = map
             .features
@@ -326,55 +352,77 @@ impl Heightmap {
                 _ => None,
             })
             .collect();
-        for j in 0..self.n {
-            for i in 0..self.n {
-                let p = self.pos(i, j);
-                let mut h = 0.0;
-                if nd.amplitude != 0.0 {
-                    h += nd.amplitude
-                        * noise::fbm(p[0] / nd.scale, p[1] / nd.scale, nd.seed, nd.octaves, 0.5);
-                }
-                let k = self.idx(i, j);
-                if nd.relief != 0.0 && nd.amplitude != 0.0 {
-                    relief_h[k] = nd.relief * nd.amplitude * relief(p, nd.seed);
-                    h += relief_h[k];
-                }
-                if nd.detail != 0.0 {
-                    h += nd.detail * noise::fbm(p[0] / 6.0, p[1] / 6.0, nd.seed ^ 0xABCD, 2, 0.5);
-                }
-                for f in &map.features {
-                    match f {
-                        TerrainFeature::Hill { at, radius, height } => {
-                            let d = geom::dist(p, *at) / radius.max(0.01);
-                            if d < 1.0 {
-                                // Smooth cosine bell.
-                                h += height * 0.5 * (1.0 + (d * std::f32::consts::PI).cos());
-                            }
-                        }
-                        TerrainFeature::Tilt { dir, rise_per_100m } => {
-                            let l = geom::len(*dir).max(1e-6);
-                            h += geom::dot(p, [dir[0] / l, dir[1] / l]) * rise_per_100m / 100.0;
-                        }
-                        _ => {}
-                    }
-                }
-                for (line, f) in &splines {
-                    let (d, _, _) = geom::polyline_closest(line, p);
-                    match f {
-                        TerrainFeature::Ridge { width, height, .. } => {
-                            let t = 1.0 - geom::smoothstep(0.0, *width * 0.5, d);
-                            h += height * t;
-                        }
-                        TerrainFeature::Channel { width, depth, .. } => {
-                            // Flat-ish bed, sloped banks.
-                            let t = 1.0 - geom::smoothstep(*width * 0.25, *width * 0.5, d);
-                            h -= depth * t;
-                        }
-                        _ => {}
-                    }
-                }
-                self.heights[k] += h;
+        // A cell's rise and its share of relief: from where it is alone.
+        let cell = |p: P2| -> (f32, f32) {
+            let mut h = 0.0;
+            let mut relief_h = 0.0;
+            if nd.amplitude != 0.0 {
+                h += nd.amplitude
+                    * noise::fbm(p[0] / nd.scale, p[1] / nd.scale, nd.seed, nd.octaves, 0.5);
             }
+            if nd.relief != 0.0 && nd.amplitude != 0.0 {
+                relief_h = nd.relief * nd.amplitude * relief(p, nd.seed);
+                h += relief_h;
+            }
+            if nd.detail != 0.0 {
+                h += nd.detail * noise::fbm(p[0] / 6.0, p[1] / 6.0, nd.seed ^ 0xABCD, 2, 0.5);
+            }
+            for f in &map.features {
+                match f {
+                    TerrainFeature::Hill { at, radius, height } => {
+                        let d = geom::dist(p, *at) / radius.max(0.01);
+                        if d < 1.0 {
+                            // Smooth cosine bell.
+                            h += height * 0.5 * (1.0 + (d * std::f32::consts::PI).cos());
+                        }
+                    }
+                    TerrainFeature::Tilt { dir, rise_per_100m } => {
+                        let l = geom::len(*dir).max(1e-6);
+                        h += geom::dot(p, [dir[0] / l, dir[1] / l]) * rise_per_100m / 100.0;
+                    }
+                    _ => {}
+                }
+            }
+            for (line, f) in &splines {
+                let (d, _, _) = geom::polyline_closest(line, p);
+                match f {
+                    TerrainFeature::Ridge { width, height, .. } => {
+                        let t = 1.0 - geom::smoothstep(0.0, *width * 0.5, d);
+                        h += height * t;
+                    }
+                    TerrainFeature::Channel { width, depth, .. } => {
+                        // Flat-ish bed, sloped banks.
+                        let t = 1.0 - geom::smoothstep(*width * 0.25, *width * 0.5, d);
+                        h -= depth * t;
+                    }
+                    _ => {}
+                }
+            }
+            (h, relief_h)
+        };
+        // Rows on every core: each cell is its own (and the same sums in the
+        // same order as one thread would do them). Most of a valley's load.
+        let n = self.n;
+        let mut out = vec![(0.0f32, 0.0f32); n * n];
+        let threads = std::thread::available_parallelism().map_or(1, |t| t.get());
+        let rows = n.div_ceil(threads.max(1));
+        let (origin, step) = (self.origin, self.cell);
+        std::thread::scope(|scope| {
+            for (c, chunk) in out.chunks_mut(rows * n).enumerate() {
+                let cell = &cell;
+                scope.spawn(move || {
+                    for (k, v) in chunk.iter_mut().enumerate() {
+                        let at = c * rows * n + k;
+                        let (i, j) = (at % n, at / n);
+                        *v = cell([origin + i as f32 * step, origin + j as f32 * step]);
+                    }
+                });
+            }
+        });
+        let mut relief_h = vec![0.0; n * n];
+        for (k, (h, r)) in out.into_iter().enumerate() {
+            self.heights[k] += h;
+            relief_h[k] = r;
         }
         relief_h
     }
@@ -987,6 +1035,8 @@ mod tests {
             regions: vec![],
             haze: None,
             ash: 0.0,
+            snow_line: None,
+            snow: 0.0,
             sounds: SoundsDef::default(),
         }
     }

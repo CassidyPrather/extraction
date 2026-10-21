@@ -194,7 +194,7 @@ impl Plugin for BallisticsPlugin {
     }
 }
 
-fn fire_shots(
+pub(crate) fn fire_shots(
     mut commands: Commands,
     mut shots: MessageReader<Shot>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
@@ -486,7 +486,7 @@ impl Struck<'_, '_> {
             .is_ok_and(|p| matches!(p.role, crate::robots::PartRole::Armour(_)))
     }
 
-    fn stuff(
+    pub(crate) fn stuff(
         &self,
         e: Entity,
         point: Vec3,

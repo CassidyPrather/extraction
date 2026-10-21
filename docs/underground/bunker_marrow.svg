@@ -6938,5 +6938,5 @@
 <circle cx='217.2' cy='532.2' r='4' fill='#d4a017'/>
 <text x='204.0' y='537.0' fill='#1d1c1a' text-anchor='middle'>medical</text>
 <text x='204.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>escape</text>
-<text x='8' y='882' fill='#e8e2d0'>Civil-defence shelter (bunker_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand); lamp * on, ~ flickering, x dead, + on the power</text>
+<text x='8' y='882' fill='#e8e2d0'>Civil-defence shelter (bunker_marrow): floor -7.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>
