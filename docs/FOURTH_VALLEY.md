@@ -238,9 +238,18 @@ the gauge house and out: 262 s.
   (-120.0, -5.0), name: "Old Sallow hush")` once their sixth kind is in.
 - World models' drowned houses and dressed stone (claude/polish-world-models,
   ae803ac and 2bd5791): Old Sallow's four `*_damaged` ruins and the
-  drowned cottage become `*_drowned`, and the dam's `Mat::Concrete`
+  drowned cottage become `*_drowned`, Old Sallow's church tower becomes
+  `chapel_drowned` (00e2ac6: the nave stripped and silted, the tower
+  standing; it needs room for its 10 x 23 m footprint by the font and the
+  mirror), and the dam's `Mat::Concrete`
   faces and tower `Mat::DressedStone` (then `python3
   scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
+- Underground's dam gallery (claude/polish-underground 810121c,
+  `gallery_sallow` at (-6, 172)): in by a kiosk beside the valve house,
+  44 m under the crest, out by a stair beside the draw-off tower (its
+  door held until the gauge room's breaker is thrown). The fourth way
+  through the dam, under cover. Then: its six test loops onto VALLEYS,
+  the lint, fit and sims again.
 - Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
