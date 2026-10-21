@@ -7,6 +7,8 @@
 //!   careless sprint past one tells the machines ([`Flushed`], and a
 //!   [`crate::robots::Noise`] at the flock).
 //! - [`perches`]: where birds can sit, from the buildings' own pieces.
+//! - [`bats`]: at dusk and at night, over the water and round the
+//!   buildings; off a light, and gone when a machine's near.
 //!
 //! Logic here runs headless (in [`WildlifePlugin`], part of `GamePlugin`)
 //! and is deterministic for a seed; what you see is in [`visuals`]
@@ -14,6 +16,8 @@
 
 use bevy::prelude::*;
 
+pub mod bat_look;
+pub mod bats;
 pub mod bodies;
 pub mod fish;
 pub mod flock;
@@ -157,7 +161,13 @@ impl Plugin for WildlifePlugin {
                 (
                     scene_perches,
                     gather_threats,
-                    (flock::flocks, herd::herds, fish::shoals, rats::rats),
+                    (
+                        flock::flocks,
+                        herd::herds,
+                        fish::shoals,
+                        rats::rats,
+                        bats::bats,
+                    ),
                 )
                     .chain()
                     .in_set(WildlifeSystems),
@@ -237,6 +247,36 @@ impl Plugin for WildlifeVisualsPlugin {
             visuals::VisualsPlugin,
             herd_look::HerdLookPlugin,
             small_look::SmallLookPlugin,
+            bat_look::BatLookPlugin,
         ));
+    }
+}
+
+#[cfg(test)]
+mod doc_tests {
+    /// docs/WILDLIFE.md stays a document: a script's bad edit once wrote one
+    /// paragraph into it thirteen thousand times (10 MB, every heading
+    /// gone), and nothing noticed until a reader did.
+    #[test]
+    fn the_wildlife_doc_is_whole() {
+        let text = std::fs::read_to_string(crate::asset_root_path().join("../docs/WILDLIFE.md"))
+            .expect("docs/WILDLIFE.md");
+        assert!(text.len() < 100_000, "{} bytes", text.len());
+        for h in [
+            "## Rooks",
+            "## Deer and dogs",
+            "## Fish",
+            "## Bats",
+            "## The chorus",
+            "## Checks",
+            "## Pacing",
+        ] {
+            assert_eq!(
+                text.matches(h).count(),
+                1,
+                "{h} appears {} times",
+                text.matches(h).count()
+            );
+        }
     }
 }
