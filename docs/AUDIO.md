@@ -230,8 +230,14 @@ is what it did before.
 | A grenade's pin pulled | `grenade.pin` (a click) and `grenade.scrape` (the ring coming off) | click in the hand on the ring | silent |
 | Its spoon flying (thrown, or thumbed off to cook it) | `grenade.spoon`, a small metal ping | tick in the hand holding it down | silent |
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
+| A jam: failure to eject or feed, a double feed (`Malfunctioned`) | `gun.malfunction`, a dull wrong clack | each its own pulse in the gun hand (`weapons::faults`: 0.55/30 ms, 0.12/15 ms, 0.85/120 ms); the old generic 0.5 pulse in both hands is gone | a generic pulse as well |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A squib: a reloaded round with too little powder (`FireEvent::Squib`) | `gun.squib`: the rifle's shot low-passed at 450 Hz and slowed, a weak dull pop 10 LU under a real shot up close, nothing cycling | 0.2/30 ms in the gun hand (`weapons::faults`) | the generic malfunction clack |
+| A bulge: a round fired into a squib's bullet (`Bulged`) | `gun.bulged` (the shot through 1.4 kHz: muffled, wrong) and `gun.bulged_ring`, the barrel ringing | 1.0/350 ms (`weapons::faults`), and it hurts you | — |
+| Rodding a stuck bullet out (`Rodded`) | `gun.rod_scrape` down the bore and `gun.rod_tink` as it drops | 0.3/40 ms | — |
+| A Mosin's bolt seized after the shot (`BoltStuck`), slapped free (`BoltFreed`) | `gun.bolt_stuck`, a dull clack through 1.8 kHz; `gun.bolt_freed`, a sharp metal smack, then the bolt opening | 0.6/80 ms, a grinding 0.3 tick while you lift against it; 0.4/20 ms | — |
+| A worn SKS slam-firing (`SlamFire`) | the bolt's close (a tick before), the shot on top of it, and `gun.slam_snap`, the floating pin | the shot's kick | — |
 | A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
@@ -504,7 +510,8 @@ and the hound's makes sense.
 **A voice per kind**: the drone a quick thin whistle chopped by its
 rotors; the walker a hollow mid voice; the grappler the walker's with a
 metal ring; the dirigible a slow deep horn; the crawler fast insect
-chirps; the hound a rough bark; the warden a low heavy walker. Pylons
+chirps; the hound a rough bark; the warden a low heavy walker; the heavy the
+deepest of all, a brassy horn of a voice. Pylons
 and sorters are mute. Every word is rendered at start-up, in the
 background on the compute pool (never on a frame: rendering on first
 use cost a 340 ms hitch when a walker first died), at the stream's
@@ -575,6 +582,29 @@ the information; the score is only the mood.
   of it with narrow;
 - the score pass: with the score at full (ducked), every word keeps 90%
   of its range.
+
+## The heavy machine
+
+The heavy (`robots::heavy`, four metres of walker) is heard well before
+it's seen (`heavy_sounds`, `heavy_loops`):
+
+| What | Sound | Heard to (calm / downpour) |
+| --- | --- | --- |
+| A footfall (`HeavyAct::Step`) | `heavy.step`: a heavy explosion low-passed at 220 Hz and slowed to half, mostly under 100 Hz, a thud you feel; `heavy.foot`, its metal foot, over it up close. Its `WalkerStep` is skipped (it comes for the same foot) | 175 / 163 m |
+| The arm rising, the 1.2 s tell (`Raise`) | `heavy.raise`, a slow servo, and `heavy.hiss`, the hydraulics | 132 / 87 m |
+| The blow (`Slam`) | `heavy.slam`, a low boom through 600 Hz, `heavy.clank`, and stone if it hit | — |
+| A door torn off, a bolt shot out, something loose, a plate down | `heavy.tear` (creak, strain, splintering), `heavy.bolt` (a ping), `heavy.loose`, `heavy.plate` | — |
+| Steam vented, the stall's roar as it sinks, a well holding it, a cell pulled, the fall | `heavy.vent`, `heavy.stall`, `heavy.strain`, `heavy.cell`, a boom and a groan | — |
+| Idle | `heavy.idle`: the hum, slowed to 0.55, on it | 201 m |
+| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate | 705 / 658 m |
+
+Its mind speaks the robots' grammar in its own voice, the deepest
+(`VoiceKind::Heavy`, 65 Hz, a brassy saw through a 320 Hz formant, slow):
+within 1.4-3.8 LU of the other kinds for every word. Within 25 m its
+footfalls and blows are felt in both hands (Heavy's
+`heavy_look::footfall_pulse`, from a tick to just under a knock).
+Everything sudden is kept under your rifle up close (the horn 7.5 dB
+down from where it first measured, for anyone standing at the Gate).
 
 ## The night
 

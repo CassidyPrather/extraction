@@ -229,6 +229,8 @@ impl Plugin for AudioPlugin {
                         epilogue_sounds,
                         night_ambience,
                         turret_sounds,
+                        heavy_sounds,
+                        heavy_loops,
                     ),
                 ),
             )
@@ -813,6 +815,83 @@ fn shot_set(item: &str) -> &'static str {
     }
 }
 
+/// A gun's faults, each its own (`weapons::faults`): true if it was one.
+///
+/// - A squib: a weak, dull pop. The rifle's shot low-passed hard and far
+///   down, no crack, nothing cycling: it must not sound like a shot.
+/// - A bulge: a round fired into a squib's bullet. A muffled, wrong bang
+///   with the barrel ringing after it.
+/// - Rodded: the cleaning rod's scrape down the bore, and the bullet's
+///   small tink as it drops out.
+/// - A stuck bolt: a dull clack as the handle won't come up. Freed: the
+///   slap's sharp metal smack, then the bolt opening.
+/// - A slam-fire: the bolt's close is already there (it comes a tick
+///   before the shot); a faint snap of the floating pin marks it wrong.
+fn fault_sounds(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    event: &FireEvent,
+    at: Vec3,
+) -> bool {
+    let layers: &[(&str, &str, f64, Option<f32>)] = match event {
+        FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
+        FireEvent::Bulged { .. } => &[
+            ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
+            ("impacts/metal", "gun.bulged_ring", 0.8, None),
+        ],
+        FireEvent::Rodded => &[
+            ("physical/handle_metal", "gun.rod_scrape", 0.8, None),
+            ("guns/casing", "gun.rod_tink", 1.35, None),
+        ],
+        FireEvent::BoltStuck => &[("guns/bolt_open", "gun.bolt_stuck", 0.6, Some(1800.0))],
+        FireEvent::BoltFreed => &[
+            ("impacts/metal", "gun.bolt_freed", 1.25, None),
+            ("guns/bolt_open", "gun.bolt_open", 1.0, None),
+        ],
+        FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        _ => return false,
+    };
+    for &(set, cue, speed, cutoff) in layers {
+        match cutoff {
+            Some(hz) => play_filtered(commands, bank, rng, set, at, cue, speed, hz),
+            None => play_at_speed(commands, bank, rng, set, Some(at), cue, 0.0, speed, 0.04),
+        }
+    }
+    true
+}
+
+/// A placed one-shot through its own low-pass (`hz`), for sounds that
+/// are some other sound with its edge taken off.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
+}
+
 fn gun_sounds(
     mut commands: Commands,
     mut events: MessageReader<GunEvent>,
@@ -828,6 +907,9 @@ fn gun_sounds(
         .map(|g| g.translation())
         .unwrap_or_default();
     for ev in events.read() {
+        if fault_sounds(&mut commands, &bank, &mut rng.0, &ev.event, ev.at) {
+            continue;
+        }
         let action = guns.get(ev.gun).map(|g| g.firearm.def.action).ok();
         use extraction_core::firearm::ActionKind::*;
         let (set, cue, offset) = match (&ev.event, action) {
@@ -2430,15 +2512,168 @@ fn attention_hum(
     }
 }
 
+/// The Gate's horn, synthesised with the voices (`robot_voice::render_horn`).
+const HORN_SET: &str = "voice/heavy/horn";
+/// How far from its middle a heavy's feet land, m (it's a walker at twice
+/// the size).
+const HEAVY_FEET: f32 = 4.0;
+
+/// The heavy machine (`robots::heavy`), heard before it's seen:
+///
+/// - each footfall a deep thud (a heavy explosion low-passed at 220 Hz and
+///   slowed: mostly below 100 Hz, carrying ~150 m) with the clank of its
+///   foot over it up close; Hands' footfall pulse is felt within 25 m
+///   (`robots::heavy_look`);
+/// - the arm rising: a hydraulic hiss and a slow servo, the 1.2 s tell
+///   before a blow; the blow a low boom and a clank (and stone if it hit);
+/// - a door torn off, a bolt shot out (a ping), something loose rattling,
+///   a plate clanging down, a vent of steam, the stall's roar as it sinks,
+///   the strain when a well holds it, a cell pulled, the fall;
+/// - the Gate's horn when the director calls it out, heard across the
+///   valley 20 s before it walks.
+fn heavy_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
+    mut called: MessageReader<crate::robots::heavy_mind::HeavyCalled>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::heavy::HeavyAct as A;
+    for e in events.read() {
+        let at = e.at;
+        // (set, cue, speed, low-pass)
+        let layers: &[(&str, &str, f64, Option<f32>)] = match e.what {
+            A::Step => &[
+                ("explosions/grenade_heavy", "heavy.step", 0.5, Some(220.0)),
+                ("footsteps/metal", "heavy.foot", 0.55, None),
+            ],
+            A::Raise => &[
+                ("machines/servo", "heavy.raise", 0.5, None),
+                ("physical/whoosh", "heavy.hiss", 0.4, None),
+            ],
+            A::Slam { hit: true } => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.7, Some(600.0)),
+                ("machines/clank", "heavy.clank", 0.7, None),
+                ("impacts/concrete", "heavy.clank", 0.6, None),
+            ],
+            A::Slam { hit: false } => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.7, Some(600.0)),
+                ("machines/clank", "heavy.clank", 0.7, None),
+            ],
+            A::Tore => &[
+                ("physical/door_creak", "heavy.tear", 0.6, None),
+                ("machines/groan", "heavy.strain", 0.9, None),
+                ("physical/drop_wood", "heavy.clank", 0.6, None),
+            ],
+            A::Bolt => &[("impacts/ricochet", "heavy.bolt", 1.3, None)],
+            A::Loose => &[("machines/clank", "heavy.loose", 1.2, None)],
+            A::PlateOff => &[
+                ("physical/drop_metal", "heavy.plate", 0.6, None),
+                ("machines/clank", "heavy.clank", 0.6, None),
+            ],
+            A::VentOut => &[("physical/whoosh", "heavy.vent", 0.45, None)],
+            A::Stall => &[
+                ("anomaly/burner_roar", "heavy.stall", 0.8, Some(2500.0)),
+                ("machines/groan", "heavy.strain", 0.6, None),
+            ],
+            A::Held => &[("machines/groan", "heavy.strain", 0.7, None)],
+            A::CellPulled => &[
+                ("machines/clank", "heavy.clank", 1.1, None),
+                ("physical/switch", "heavy.cell", 0.8, None),
+            ],
+            A::Fell => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.55, Some(400.0)),
+                ("machines/groan", "heavy.strain", 0.5, None),
+            ],
+        };
+        for &(set, cue, speed, cutoff) in layers {
+            match cutoff {
+                Some(hz) => {
+                    play_filtered(&mut commands, &bank, &mut rng.0, set, at, cue, speed, hz)
+                }
+                None => play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    set,
+                    Some(at),
+                    cue,
+                    0.0,
+                    speed,
+                    0.05,
+                ),
+            }
+        }
+    }
+    for c in called.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            HORN_SET,
+            Some(c.gate + Vec3::Y * 8.0),
+            "heavy.horn",
+            0.0,
+            1.0,
+            0.0,
+        );
+    }
+}
+
+/// A heavy's idle: a low hum and the tick of its systems, on it.
+#[derive(Component)]
+struct HeavyLoop;
+
+fn heavy_loops(
+    mut commands: Commands,
+    heavies: Query<
+        (Entity, &crate::robots::Robot, Option<&Children>),
+        With<crate::robots::heavy::Heavy>,
+    >,
+    loops: Query<Entity, With<HeavyLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, robot, children) in &heavies {
+        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match (existing, robot.wrecked) {
+            (None, false) => {
+                if let Some(sample) = bank.pick("machines/hum", &mut rng.0) {
+                    commands.spawn((
+                        HeavyLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("heavy.idle"))),
+                        PlaybackSettings::default().with_speed(0.55),
+                        Transform::from_xyz(0.0, 2.0, 0.0),
+                        Placed::new("heavy.idle"),
+                        ChildOf(e),
+                    ));
+                }
+            }
+            (Some(l), true) => commands.entity(l).despawn(),
+            _ => {}
+        }
+    }
+}
+
 /// A walker's foot coming down: a heavy metal footfall, and now and then
 /// the whine of its servos.
 fn walker_steps(
     mut commands: Commands,
     mut steps: MessageReader<crate::robots::walker::WalkerStep>,
+    heavies: Query<&GlobalTransform, With<crate::robots::heavy::Heavy>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     for s in steps.read() {
+        // A heavy's feet are its own (`heavy_sounds`).
+        if heavies
+            .iter()
+            .any(|h| h.translation().xz().distance(s.at.xz()) < HEAVY_FEET)
+        {
+            continue;
+        }
         play(
             &mut commands,
             &bank,
@@ -3187,6 +3422,9 @@ fn render_voices(
                 renders.tasks.push((rv::set_name(k, u), task));
             }
         }
+        let sr = rate.get() as f32;
+        let horn = pool.spawn(async move { vec![rv::render_horn(sr)] });
+        renders.tasks.push((HORN_SET.to_string(), horn));
     }
     renders.tasks.retain_mut(|(set, task)| {
         let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
