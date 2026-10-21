@@ -87,6 +87,9 @@ pub struct LaunchOptions {
     /// Dev: screenshot every text panel from where it's read, at the
     /// headset's pixels a degree, into this folder (`render::legibility`).
     pub legibility: Option<PathBuf>,
+    /// Dev: from the truck's stop and every rendezvous, shoot each landmark
+    /// in range with and without it, into this folder (`render::wayfind_shots`).
+    pub wayfind: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -136,6 +139,7 @@ impl Default for LaunchOptions {
             tour_only: None,
             tour_views: None,
             legibility: None,
+            wayfind: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -171,6 +175,7 @@ impl LaunchOptions {
         self.screenshot.is_some()
             || self.tour.is_some()
             || self.legibility.is_some()
+            || self.wayfind.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -262,6 +267,13 @@ impl LaunchOptions {
                 }
                 "--legibility" => {
                     o.legibility = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--wayfind" => {
+                    o.wayfind = Some(val().into());
                     o.robots = false;
                     o.flat = true;
                     o.camera

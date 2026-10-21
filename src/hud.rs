@@ -36,6 +36,7 @@ fn spawn_hud(mut commands: Commands, opts: Res<crate::launch::LaunchOptions>) {
         || opts.tour.is_some()
         || opts.capture.active()
         || opts.legibility.is_some()
+        || opts.wayfind.is_some()
     {
         return;
     }
