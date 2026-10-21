@@ -211,7 +211,7 @@ pub const FIRST_HOME_FROM: &[(&str, &str)] = &[
     ),
     (
         "rime_fell",
-        "Driver: \"Rime. Chains on the wheels, even in June. You're shaking.\"",
+        "Driver: \"Rime. Chains on in June up there. You're shaking.\"",
     ),
 ];
 
