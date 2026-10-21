@@ -36,14 +36,14 @@ impl SoundBank {
         self.sets.contains_key(set)
     }
 
-    fn pick(&self, set: &str, rng: &mut Rng) -> Option<Handle<AudioSample>> {
+    pub(crate) fn pick(&self, set: &str, rng: &mut Rng) -> Option<Handle<AudioSample>> {
         let v = self.sets.get(set)?;
         (!v.is_empty()).then(|| v[rng.below(v.len())].clone())
     }
 }
 
 #[derive(Resource)]
-struct AudioRng(Rng);
+pub(crate) struct AudioRng(pub(crate) Rng);
 
 /// A positioned, looping sound that follows its parent (drone rotors).
 #[derive(Component)]
@@ -647,7 +647,7 @@ pub(crate) fn reverb_send(cue: &str) -> SendNode {
 /// at the cue's gain (`audio_mix`) plus `offset_db`, falling off from the
 /// cue's reach.
 #[allow(clippy::too_many_arguments)]
-fn play(
+pub(crate) fn play(
     commands: &mut Commands,
     bank: &SoundBank,
     rng: &mut Rng,
@@ -662,7 +662,7 @@ fn play(
 
 /// [`play`], centred on `speed` (below 1 is lower and slower: heavier).
 #[allow(clippy::too_many_arguments)]
-fn play_at_speed(
+pub(crate) fn play_at_speed(
     commands: &mut Commands,
     bank: &SoundBank,
     rng: &mut Rng,
@@ -1077,7 +1077,7 @@ fn fault_sounds(
 
 /// [`play_filtered`] with a level offset (dB) against its cue.
 #[allow(clippy::too_many_arguments)]
-fn play_filtered_db(
+pub(crate) fn play_filtered_db(
     commands: &mut Commands,
     bank: &SoundBank,
     rng: &mut Rng,
@@ -1109,7 +1109,7 @@ fn play_filtered_db(
 /// A placed one-shot through its own low-pass (`hz`), for sounds that
 /// are some other sound with its edge taken off.
 #[allow(clippy::too_many_arguments)]
-fn play_filtered(
+pub(crate) fn play_filtered(
     commands: &mut Commands,
     bank: &SoundBank,
     rng: &mut Rng,
