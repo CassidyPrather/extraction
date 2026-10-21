@@ -84,6 +84,8 @@ struct Director {
     last_walk: f32,
     in_flight: usize,
     done: bool,
+    /// Seconds to the drone's next look round for a clearer sight.
+    look_round: f32,
     /// Seconds to the next position line in the log (`RUST_LOG=...=debug`).
     log_in: f32,
 }
@@ -340,6 +342,16 @@ fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
 #[derive(Component)]
 struct DroneCamera;
 
+/// The share of the sight line from `from` to `to` that passes through a
+/// tree's crown.
+fn blocked(trees: &super::cinematic::Trees, from: Vec3, to: Vec3) -> f32 {
+    let n = (from.distance(to) / 1.0).ceil().max(1.0) as usize;
+    let hit = (1..n)
+        .filter(|i| trees.hits(from.lerp(to, *i as f32 / n as f32), 1.5))
+        .count();
+    hit as f32 / n as f32
+}
+
 /// The player has no body a camera draws (in the headset you see your
 /// gloves and sleeves); its shadow comes from a proxy of capsules on a
 /// layer only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's
@@ -469,12 +481,28 @@ fn aim(
             d.t, body.translation, eye, at
         );
     }
-    // Drone: a slow circle over the canopy, eased behind; it climbs over
-    // any crown in its way.
-    d.drone_angle += dt * 7f32.to_radians();
-    let a = d.drone_angle;
-    let mut want = eye + Vec3::new(a.sin(), 0.0, a.cos()) * 18.0 + Vec3::Y * 30.0;
+    // Drone: a slow circle over the canopy, eased behind. Twice a second
+    // it looks round the circle for the clearest sight of the bot past
+    // the crowns and moves there if it's much better; it climbs over any
+    // crown in its way.
     let trees = trees.get_or_insert_with(|| super::cinematic::Trees::new(&zone));
+    let spot = |a: f32| eye + Vec3::new(a.sin(), 0.0, a.cos()) * 18.0 + Vec3::Y * 30.0;
+    d.drone_angle += dt * 7f32.to_radians();
+    d.look_round -= dt;
+    if d.look_round <= 0.0 {
+        d.look_round = 0.5;
+        let here = blocked(trees, spot(d.drone_angle), eye);
+        let best = (1..8)
+            .map(|k| d.drone_angle + k as f32 * std::f32::consts::FRAC_PI_4)
+            .map(|a| (a, blocked(trees, spot(a), eye)))
+            .min_by(|x, y| x.1.total_cmp(&y.1));
+        if let Some((a, b)) = best {
+            if b + 0.15 < here {
+                d.drone_angle = a;
+            }
+        }
+    }
+    let mut want = spot(d.drone_angle);
     while trees.hits(want, super::cinematic::CROWN + 2.0) && want.y < eye.y + 60.0 {
         want.y += 2.0;
     }
