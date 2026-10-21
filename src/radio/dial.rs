@@ -17,8 +17,9 @@ use crate::items::{Catalog, Item};
 
 /// The knob's id among the radio's grab points.
 pub const DIAL_HANDLE: u8 = 31;
-/// Where the knob is on the radio (its top, to the right of the aerial).
-pub const KNOB: Vec3 = Vec3::new(0.018, 0.107, 0.0);
+/// Where the knob is on the radio: the model's `dial` node, the larger
+/// top knob, turning about the radio's +Y (`art/items/gadgets.py`).
+pub const KNOB: Vec3 = Vec3::new(-0.0195, 0.023, 0.0017);
 /// How close the hand must come to take it (m).
 pub const KNOB_REACH: f32 = 0.05;
 /// kHz per radian of wrist turn: a quarter turn of the wrist is about

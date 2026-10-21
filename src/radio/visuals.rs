@@ -93,10 +93,42 @@ fn animate_decks(
     }
 }
 
+/// The radio's knob shows where its dial is: as far round as the wrists
+/// that turned it (`dial::KHZ_PER_RAD`), clockwise up the band.
+fn turn_knobs(
+    mut commands: Commands,
+    radios: Query<(Entity, &super::dial::Tuner)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&Rest>)>,
+) {
+    for (e, t) in &radios {
+        let turn = -(t.khz - super::dial::OFF) / super::dial::KHZ_PER_RAD;
+        for n in children.iter_descendants(e) {
+            let Ok((name, mut tf, rest)) = nodes.get_mut(n) else {
+                continue;
+            };
+            if name.as_str() != "dial" {
+                continue;
+            }
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(n).insert(Rest(*tf));
+                    *tf
+                }
+            };
+            let want = rest.rotation * Quat::from_rotation_y(turn);
+            if tf.rotation.angle_between(want) > 1e-4 {
+                tf.rotation = want;
+            }
+        }
+    }
+}
+
 pub struct MusicVisualsPlugin;
 
 impl Plugin for MusicVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, animate_decks);
+        app.add_systems(Update, (animate_decks, turn_knobs));
     }
 }
