@@ -93,60 +93,8 @@ impl Plugin for HooksPlugin {
             .add_message::<Cut>()
             .add_systems(
                 FixedUpdate,
-                (seat_crowbar, crowbar_gives, smash, pry, cut)
-                    .chain()
-                    .in_set(super::DestructionSystems),
+                (smash, pry, cut).in_set(super::DestructionSystems),
             );
-    }
-}
-
-/// How near the crowbar's claw must come to a seam to seat in it, m.
-pub const SEAT_RADIUS: f32 = 0.12;
-
-/// The crowbar (`interact::tools::crowbar`) seats on every seam here too:
-/// a board's end, a crate's lid, a shutter's hinge, a bus panel's edge.
-/// Not a door's: the crowbar has its own seat at a door's latch edge, to
-/// burst a jammed door open (breaking one down is for blows).
-#[allow(clippy::type_complexity)]
-fn seat_crowbar(
-    mut commands: Commands,
-    seams: Query<(Entity, &Pryable, Option<&ChildOf>), Added<Pryable>>,
-    doors: Query<(), With<crate::world::buildings::DoorLeaf>>,
-) {
-    for (e, p, parent) in &seams {
-        if parent.is_some_and(|c| doors.contains(c.parent())) || doors.contains(e) {
-            continue;
-        }
-        commands
-            .entity(e)
-            .insert(crate::interact::tools::crowbar::Pryable {
-                needs: p.needs,
-                seam: p.seam,
-                radius: SEAT_RADIUS,
-            });
-    }
-}
-
-/// The crowbar's strain held long enough on one of ours: it comes off.
-fn crowbar_gives(
-    mut commands: Commands,
-    mut free: MessageReader<crate::interact::tools::crowbar::PriedFree>,
-    mut seams: Query<(&Pryable, &mut Timber, &GlobalTransform)>,
-    mut broken: ResMut<Broken>,
-    mut out: MessageWriter<Broke>,
-) {
-    for f in free.read() {
-        if let Ok((seam, mut t, gt)) = seams.get_mut(f.target) {
-            come_off(
-                &mut commands,
-                f.target,
-                seam,
-                &mut t,
-                gt,
-                &mut broken,
-                &mut out,
-            );
-        }
     }
 }
 
