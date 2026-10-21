@@ -4562,6 +4562,18 @@ fn car_wreck(b: &mut Builder, model: &'static str) {
         Mat::RustyMetal,
         true,
     );
+    // What the shell stands on with its wheels gone: the floor pan's
+    // middle down to the ground, inside the track and between the axles
+    // (so it never touches a wheel), hidden under the body.
+    let pan = centre.y - size.y * 0.5;
+    if pan > 0.0 {
+        b.piece(
+            Shape::Box(Vec3::new(size.x * 0.4, pan, size.z * 0.44)),
+            Transform::from_xyz(centre.x, pan * 0.5, centre.z),
+            Mat::RustyMetal,
+            true,
+        );
+    }
     let to = b.geo.pieces.len();
     let body: &'static str = match model {
         "wreck_lada" => "wreck_lada#body",
