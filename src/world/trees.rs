@@ -932,14 +932,16 @@ struct TreeAssets {
     handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
 }
 
-/// Foliage's alpha: a test at `cutoff` by default; with soft leaves
-/// (the SMOOTHING card's "4x, soft leaves", `--a2c`) alpha to coverage,
-/// which lets MSAA smooth the cards' cut edges (an alpha-tested edge
-/// crawls in a headset as the head moves). Bevy keys coverage per view:
-/// with SMOOTHING off it's a plain test at the material's cut-off (0.5).
-/// Not the default until it's timed on the headset: in the software
-/// renderer it cost Marrow Creek's spruce view 63% of its frame at 4x.
-/// `EXTRACTION_A2C=1` / `=0` overrides either way.
+/// Foliage's alpha: alpha to coverage, which lets MSAA smooth the cards'
+/// cut edges (an alpha-tested edge crawls in a headset as the head
+/// moves). On hardware it's coverage from alpha, near free, where a test's
+/// discard costs early-Z; the software renderer's +63% on Marrow Creek's
+/// spruce view doesn't carry over. Bevy keys it per view: with SMOOTHING
+/// off it's a plain test at the material's cut-off (0.5). The SMOOTHING
+/// card's "hard leaves" (`--a2c 0`, `Comfort::soft_leaves`) makes it a
+/// test at `cutoff`, next launch; `EXTRACTION_A2C=1` / `=0` overrides.
+/// If the headset measures more than 0.5 ms an eye for it in the spruce
+/// view, hard leaves become the default (`docs/PLAYTEST.md`).
 pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
     static SOFT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let soft = *SOFT.get_or_init(|| match std::env::var("EXTRACTION_A2C").as_deref() {
