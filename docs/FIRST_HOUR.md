@@ -282,3 +282,48 @@ tone came at 8 s, the moment its harm starts. It now comes at 4 s.
 
 (In these first runs the bot kept walking its old route after going down,
 into the fight again. It stops now.)
+
+## First runs: the drone, the hush and the night
+
+| Machine | Newcomer | Tell to first hit | Outcome |
+| - | - | - | - |
+| drone | cautious | 4.2 s, from Noticed | down 28 s later |
+| drone | reckless | 5.1 s | down 15 s later |
+| drone | lost | 5.2 s | down 13 s later |
+| drone | hoarder | 5.1 s | down 16 s later |
+| drone | one-handed | 5.3 s | down 16 s later |
+| hush | all five | not hurt by it: each walked through inside its 8 s grace | |
+| night | cautious | never noticed: a walker in the dark at 25 m didn't see a crouched newcomer | |
+
+**The drone is told in time, but there's nowhere to go.** Every newcomer
+had four or five seconds between the drone noticing them and its first
+burst. Lev's "Get behind something" came with the lock. The Old farm road
+is open field, though: nothing to get behind within a sprint, and the
+drone fights from 20 m out and up high. The tell is fine; the place is
+the problem. A first drone should meet you where there's cover, or a
+newcomer should be told before setting out that the open is where drones
+find you. (Robot minds' 1.5 s look before the lock adds to the warning,
+not to the cover.)
+
+**The hush didn't hurt anyone.** Placed across the road, each newcomer
+walked through it inside its 8 s grace without knowing it was there. The
+tone now rises at 4 s (Audio), and Lev's new line says "Out of there,
+now", so someone who stops inside is told.
+
+**At night, the walker never saw the cautious newcomer.** The machines'
+sight falls to 0.4 at night, and a crouched newcomer 25 m off wasn't
+seen. That's the design (night is for sneaking); the reckless, who runs
+upright, is the one to watch in the rerun.
+
+(These runs' later deaths, long after each hush, and most of the night
+runs' stalls, were the bot's. It called the truck on whichever radio it
+found first, often one lying elsewhere in the valley, and walked off after
+it. It uses its own now.)
+
+Fixed since these runs, to be measured in the rerun:
+- **Robot minds:** a walker or drone spends 1.5 s looking at you before
+  its aim or lock begins, so the first round is no sooner than 2.2 s
+  (walker) or 2.4 s (drone). Going down makes every machine let you go.
+- **Audio:** the sentry chirps, and the hush's tone rises at 4 s.
+- **Here:** Lev warns of a walker's aim, a sentry's chirp and a hush, and
+  a line about danger now is said 1.5 s after the last, not 5 s.

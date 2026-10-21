@@ -78,6 +78,10 @@ pub struct NightVisit {
     pub delay: f32,
 }
 
+/// A survey drone isn't sent to a point of interest within this of a
+/// rendezvous (m).
+pub const SURVEY_CLEAR: f32 = 80.0;
+
 /// A night visit replaces the responses queued within this of it (m).
 pub const VISIT_CLEARS: f32 = 150.0;
 /// The visitors look for the sleeper this long before they give up (s).
@@ -341,10 +345,21 @@ fn run_director(
         return;
     }
     director.next_job = director.rng.range(50.0, 110.0);
+    // Not over the rendezvous: a survey drone doesn't loiter where you
+    // wait for the truck.
+    let rvs: Vec<Vec2> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .collect();
     let pois: Vec<[f32; 2]> = zone
         .map
         .markers_of(&MarkerKind::Poi)
         .map(|m| m.at)
+        .filter(|p| {
+            rvs.iter()
+                .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
+        })
         .collect();
     let sites: Vec<[f32; 2]> = zone
         .map

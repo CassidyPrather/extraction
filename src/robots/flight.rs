@@ -28,7 +28,14 @@ pub struct Flight {
     pub accel: Vec3,
     /// Seconds flown, for the hunting drift.
     pub age: f32,
+    /// Ice on the rotors, 0..1: it builds over a minute or so in the cold
+    /// (more in falling snow) and goes once it's warmer. It costs lift.
+    pub frost: f32,
 }
+
+/// What full frost costs a rotor of its top thrust: still enough to hover
+/// (thrust to weight 2.2 down to about 1.2), not to climb as it did.
+pub const FROST_COST: f32 = 0.45;
 
 pub struct FlightPlugin;
 
@@ -93,12 +100,18 @@ pub(crate) fn fly_drones(
     )>,
     targets: Query<&GlobalTransform>,
     zone: Res<Zone>,
+    snow: Option<Res<crate::world::snow::Snow>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let g = Vec3::new(0.0, -9.81, 0.0);
     for (mut d, mut fl, robot, t, aware, intent, stunned, mut forces) in &mut drones {
         let pos = t.translation;
+        let icing = snow
+            .as_ref()
+            .filter(|s| s.cold(pos.y))
+            .map_or(0.0, |s| 0.6 + 0.4 * s.falling);
+        fl.frost += (icing - fl.frost) * (1.0 - (-dt / 45.0).exp());
         let lin = LinearVelocity(forces.linear_velocity());
         let ang = AngularVelocity(forces.angular_velocity());
         let near_ground = pos.y - zone.ground(pos.x, pos.z) < 0.6;
@@ -177,7 +190,11 @@ pub(crate) fn fly_drones(
         };
         let torque_world = tilt_err * 9.0 - ang.0 * 2.2 + Vec3::Y * yaw_err * 2.0;
         let torque_body = t.rotation.inverse() * torque_world;
-        let f = mix(thrust_total, torque_body, d.rotor_alive);
+        let mut f = mix(thrust_total, torque_body, d.rotor_alive);
+        let cap = MAX_ROTOR_N * (1.0 - FROST_COST * fl.frost);
+        for fi in &mut f {
+            *fi = fi.min(cap);
+        }
         d.thrust = f;
         for (i, r) in ROTORS.iter().enumerate() {
             if f[i] > 0.0 {
@@ -331,6 +348,79 @@ mod tests {
                 assert!((z - torque.z).abs() < 0.05, "{alive:?}: pitch {z}");
             }
         }
+    }
+
+    /// How far a drone climbs in 3 s toward a goal 25 m up, warm or in
+    /// the cold with its rotors iced.
+    fn climb(iced: bool) -> f32 {
+        // Iced: up on Rime Fell's col, above its snow line, in the cold.
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: if iced { "rime_fell" } else { "training_yard" }.into(),
+                map_explicit: true,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        let site = if iced {
+            zone.on_ground(70.0, -262.0)
+        } else {
+            zone.on_ground(40.0, 200.0)
+        } + Vec3::Y * 8.0;
+        let drone = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::drone::spawn_drone(
+                &mut c,
+                site,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 999.0,
+                    exit: site,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..90 {
+            app.update();
+        }
+        if iced {
+            // (A minute's icing, rather than waiting it out.)
+            assert!(
+                app.world()
+                    .resource::<crate::world::snow::Snow>()
+                    .cold(site.y),
+                "it's cold up here"
+            );
+            app.world_mut().get_mut::<Flight>(drone).unwrap().frost = 1.0;
+        }
+        let y0 = app.world().get::<Transform>(drone).unwrap().translation.y;
+        app.world_mut().get_mut::<Drone>(drone).unwrap().goal = site + Vec3::Y * 25.0;
+        for _ in 0..(90 * 3) {
+            app.update();
+        }
+        app.world().get::<Transform>(drone).unwrap().translation.y - y0
+    }
+
+    /// Iced rotors in the cold cost a drone its climb (it still holds
+    /// itself up).
+    #[test]
+    fn frosted_rotors_climb_slower() {
+        let warm = climb(false);
+        let cold = climb(true);
+        assert!(warm > 3.0, "it climbs ({warm:.1} m)");
+        assert!(cold > 0.5, "iced, it still rises ({cold:.1} m)");
+        assert!(cold < warm * 0.85, "iced {cold:.1} m vs warm {warm:.1} m");
     }
 
     /// One rotor shot off: it sinks, listing and turning, rather than

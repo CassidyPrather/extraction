@@ -13,12 +13,13 @@ use extraction_core::map::prefab_footprint;
 use extraction_core::map_lint::LANDMARK_HEIGHT;
 
 use crate::world::buildings::{Building, Shape, prefab};
+use crate::world::halos::{Halo, HaloReach};
 
 pub struct LandmarkLampsPlugin;
 
 impl Plugin for LandmarkLampsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, light_landmarks);
+        app.add_systems(Update, (light_landmarks, day_glows));
     }
 }
 
@@ -26,9 +27,25 @@ impl Plugin for LandmarkLampsPlugin {
 /// mast's own is too small to carry past 150 m at night: it gets one too).
 const LIT: &[&str] = &[];
 
-/// The lamp's radius, and its halo's (m).
+/// The lamp's radius, and its halo's (m): a soft `world::halos::Halo`,
+/// fogged like every lamp's and shown after dark; a hard-edged sphere
+/// read as a marker stuck on the sky.
 const LAMP_R: f32 = 0.35;
-const HALO_R: f32 = 1.4;
+const HALO_R: f32 = 1.0;
+
+/// The halo's colour (linear; a lantern's core is 1) and how far off it
+/// still shows (m): the gauge shoots landmarks out to 320 m. The Halo
+/// shows only after dark; by day a soft glow facing the eye, fading to
+/// nothing at [`DAY_R`], keeps the lamp more than a few pixels at 200 m
+/// (the hunting lodge's only landmark in drizzle is the mast's lamp at
+/// 170 m).
+const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
+const HALO_REACH: f32 = 320.0;
+const DAY_R: f32 = 1.4;
+
+/// A lamp's daytime glow.
+#[derive(Component)]
+struct DayGlow;
 
 /// The highest point of a prefab, in its own frame: the top middle of its
 /// highest piece.
@@ -51,6 +68,7 @@ fn light_landmarks(
     buildings: Query<(Entity, &Building), Added<Building>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     mut made: Local<
         Option<(
             Handle<Mesh>,
@@ -67,7 +85,7 @@ fn light_landmarks(
         let Some(top) = top_of(&b.prefab) else {
             continue;
         };
-        let (lamp_mesh, lamp, halo_mesh, halo) = made
+        let (lamp_mesh, lamp, glow_mesh, glow) = made
             .get_or_insert_with(|| {
                 (
                     meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8)),
@@ -76,12 +94,16 @@ fn light_landmarks(
                         emissive: LinearRgba::rgb(120.0, 6.0, 2.0),
                         ..default()
                     }),
-                    meshes.add(Sphere::new(HALO_R).mesh().uv(12, 8)),
+                    meshes.add(Rectangle::new(DAY_R * 2.0, DAY_R * 2.0)),
                     materials.add(StandardMaterial {
-                        base_color: Color::srgba(1.0, 0.1, 0.05, 0.18),
-                        emissive: LinearRgba::rgb(3.0, 0.15, 0.05),
+                        base_color: Color::LinearRgba(LinearRgba::rgb(3.0, 0.15, 0.05)),
+                        base_color_texture: Some(images.add(falloff())),
                         unlit: true,
                         alpha_mode: AlphaMode::Add,
+                        // Fog on an added quad adds the fog's colour over
+                        // all of it: a pale square (or the old sphere's
+                        // flat pink coin).
+                        fog_enabled: false,
                         ..default()
                     }),
                 )
@@ -95,14 +117,81 @@ fn light_landmarks(
                 MeshMaterial3d(lamp),
                 Transform::from_translation(at),
                 NotShadowCaster,
-            ));
-            c.spawn((
-                Mesh3d(halo_mesh),
-                MeshMaterial3d(halo),
-                Transform::from_translation(at),
+                Halo {
+                    color: HALO,
+                    radius: HALO_R,
+                },
+                HaloReach(HALO_REACH),
+            ))
+            .with_child((
+                Name::new("Landmark lamp glow"),
+                DayGlow,
+                Mesh3d(glow_mesh),
+                MeshMaterial3d(glow),
+                Transform::default(),
                 NotShadowCaster,
             ));
         });
+    }
+}
+
+/// A disc of light fading from the middle to nothing at its edge (white;
+/// the material tints it).
+fn falloff() -> Image {
+    const N: u32 = 64;
+    let mut data = Vec::with_capacity((N * N * 4) as usize);
+    for y in 0..N {
+        for x in 0..N {
+            let d = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) / N as f32 * 2.0 - Vec2::ONE;
+            let a = (1.0 - d.length()).clamp(0.0, 1.0).powi(2);
+            let v = (a * 255.0) as u8;
+            data.extend_from_slice(&[v, v, v, 255]);
+        }
+    }
+    Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: N,
+            height: N,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8Unorm,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// The day glows face the eye, and give way to the Halo after dark.
+fn day_glows(
+    conditions: Res<crate::world::weather::Conditions>,
+    eyes: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    parents: Query<&GlobalTransform, Without<DayGlow>>,
+    mut glows: Query<(&mut Transform, &mut Visibility, &ChildOf), With<DayGlow>>,
+) {
+    let show = !crate::world::halos::halos_show(&conditions);
+    let eye = eyes
+        .iter()
+        .filter(|(_, c)| c.is_active)
+        .map(|(g, _)| g.translation())
+        .next();
+    for (mut t, mut v, parent) in &mut glows {
+        let want = if show {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *v != want {
+            *v = want;
+        }
+        let (Some(eye), Ok(p)) = (eye, parents.get(parent.parent())) else {
+            continue;
+        };
+        if !show {
+            continue;
+        }
+        let (_, rot, at) = p.to_scale_rotation_translation();
+        let face = Quat::from_rotation_arc(Vec3::Z, (eye - at).normalize_or(Vec3::Z));
+        t.rotation = rot.inverse() * face;
     }
 }
 

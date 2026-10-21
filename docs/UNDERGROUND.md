@@ -9,6 +9,7 @@ torchlight, with the best loot behind the most risk.
 | Kettle Pass | `mine_kettle` | Mine gallery behind the mine office: shaft station, lamp room, main drive, crosscuts, a tall stope, explosives magazine, sump, refuge chamber, raise | 10 | Entrance incline; the raise's stair |
 | Cinder Works | `tunnel_cinder` | Service tunnel and pump room under the factory hall: stair hall, two tunnels, pump room, valve chamber, switch room, store, cable vault, workshop, overflow chamber | 10 | Entrance stair; a stair south of the hall |
 | Sallow Reservoir | `gallery_sallow` | The dam's inspection gallery: a landing under the toe, 44 m of gallery under the crest (seepage ankle deep), plumb-line chamber, weir chamber, gauge room, a passage under the bed to the draw-off tower | 6 | Entrance by the valve house; a stair up beside the tower on the bed |
+| Rime Fell | `adit_rime` | Coldharbour's mine in the knoll over the ore mill: the stair foot by the adit house, the lamp room (breaker), the drift, a timbered stope, the powder magazine, the haulage south past a flooded sump to the ore bin | 8 | Entrance beside the adit house; a stair up onto the mill's back apron |
 
 Plans: `docs/underground/<site>.svg` (regenerate with
 `PLAN_DIR=$PWD/docs/underground cargo test -p extraction_core plans_draw`).
@@ -350,6 +351,7 @@ already there), then the mine, then the cellars.
 | `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
 
 | `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
+| `adit_rime` | Rime Fell (160, -55) turned 180, exit (121, -2) on the mill's back apron | not a signature site: the one warm place on the fell (any roof stops the Cold's chill, `world::cold`); a flooded sump on the loop; the lamp room's breaker lights the drift and opens the magazine | the layout's `floods` and `power` | `a_bot_goes_down_and_out_the_other_way` |
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron

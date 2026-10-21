@@ -1,0 +1,80 @@
+// Rime Fell: Coldharbour's mine in the knoll over the ore mill (format:
+// crates/extraction_core/src/underground.rs; design: docs/UNDERGROUND.md,
+// "The adit"). Placed turned 180: the layout's +z runs north. In by a stair beside the adit house, down under the knoll
+// to the drift, the stope and the magazine; south down the haulage to the
+// ore bin under the mill's back apron, and up onto it. Above freezing all
+// the way down: the one warm place on the fell.
+(
+    name: "The adit",
+    style: Mine,
+    floor: -12.5,
+    corridor_height: 2.6,
+    // A miner's carbide light: a hard white, a little green.
+    lamp_colour: Some((0.86, 0.95, 0.9)),
+    rooms: [
+        // The stair's foot: the lamp check and the shift board.
+        (id: "adit_foot", at: (0.0, 21.0), size: (6.0, 4.0), height: 3.0, lamp: Flicker, props: [
+            (kind: Barrel, at: (-2.3, -1.4)),
+            (kind: SmallCrate, at: (-0.6, 1.5), loot: Some("food_common")),
+        ]),
+        // The lamp room: the cap lamps on their racks, the breaker.
+        (id: "lamp_room", at: (-10.0, 21.0), size: (4.0, 4.0), height: 2.6, lamp: Steady, props: [
+            (kind: Shelf, at: (-1.6, -0.9), rot: 90.0, loot: Some("tools")),
+            (kind: Workbench, at: (0.3, 1.5), rot: 180.0, loot: Some("gadgets")),
+        ]),
+        // The main drift west under the knoll, the tub rail down it.
+        (id: "drift", at: (22.0, 21.0), size: (30.0, 3.0), height: 2.8, lamp: Powered, stage: 0, props: [
+            (kind: Cart, at: (-6.0, -0.6)),
+            (kind: Rubble, at: (9.0, 0.8)),
+        ]),
+        // The stope: the vein worked out overhead, timbered.
+        (id: "stope", at: (28.0, 36.0), size: (10.0, 12.0), height: 6.0, lamp: Dead, props: [
+            (kind: Crate, at: (3.6, 4.6), loot: Some("weapons_rare")),
+            (kind: Rubble, at: (-2.5, -3.5)),
+            (kind: SmallCrate, at: (-3.6, 4.7), loot: Some("ammo_common")),
+        ]),
+        // The powder magazine off the drift, behind its own door.
+        (id: "powder", at: (8.0, 33.0), size: (4.0, 4.0), height: 2.4, lamp: Dead, props: [
+            (kind: Shelf, at: (1.6, 0.6), rot: 270.0, loot: Some("ammo_common")),
+            (kind: SmallCrate, at: (-1.2, 1.4), loot: Some("tools")),
+        ]),
+        // The haulage south to the ore bin, the tubs' way to the mill.
+        (id: "haulage", at: (39.0, -12.0), size: (3.0, 54.0), height: 2.8, lamp: Dead, props: [
+            (kind: Cart, at: (-0.4, -8.0)),
+        ]),
+        // The sump off the haulage: meltwater gathers, never freezes.
+        (id: "sump", at: (26.0, -10.0), size: (6.0, 6.0), floor: Some(-13.5), height: 3.0, lamp: Dead, props: [
+            (kind: Crate, at: (-2.2, 2.2), loot: Some("cargo_pod")),
+        ]),
+        // The ore bin under the mill's back apron, where the tubs tipped.
+        (id: "ore_bin", at: (39.0, -44.0), size: (6.0, 4.0), height: 3.0, lamp: Flicker, props: [
+            (kind: Machine, at: (-2.0, 0.8)),
+            (kind: SmallCrate, at: (2.2, 1.2), loot: Some("workshop")),
+        ]),
+    ],
+    links: [
+        (from: "adit_foot", to: "drift", width: 2.0),
+        (from: "adit_foot", to: "lamp_room", doors: To),
+        (from: "drift", to: "stope", via: [(28.0, 21.0)]),
+        (from: "drift", to: "powder", via: [(8.0, 21.0)], doors: To),
+        (from: "drift", to: "haulage", via: [(39.0, 21.0)], width: 2.0),
+        (from: "haulage", to: "ore_bin", width: 2.0),
+        (from: "haulage", to: "sump", via: [(39.0, -10.0)]),
+        // The drainage way from the sump back up to the lamp room.
+        (from: "sump", to: "lamp_room", via: [(-10.0, -10.0)]),
+    ],
+    // The lamp room's breaker: the drift's lamps, and the magazine's door.
+    power: [(kind: Breaker, room: "lamp_room", at: (-1.75, 1.3), rot: 90.0, doors: ["powder"])],
+    // Meltwater: the sump's way to the haulage waist deep.
+    floods: [
+        (link: Some(("haulage", "sump")), depth: 1.0),
+    ],
+    patrol: ["adit_foot", "drift", "haulage", "drift"],
+    crawlers: 1,
+    portals: [
+        // Down from beside the adit house, north into the knoll.
+        (),
+        // Up onto the mill's back apron, west of the tub track.
+        (at: (39.0, -53.0), rot: 0.0, y: -7.5),
+    ],
+)

@@ -40,6 +40,14 @@ is shortened for the sim: same tick rate, same truck timings, same robots.
 `--sim-minutes` is the knob for shorter raids. Sims never touch the save (headless runs only
 save with `--save`).
 
+A sim replays from its seed: the same map, seed and personality play the
+same raid, event for event. That holds only single-threaded, so a
+`--sim-run` process runs every schedule on one thread and gives its task
+pool one thread (`single_threaded` in `src/lib.rs`; `EXTRACTION_THREADS=N`
+overrides the pool). On many threads, systems that touch the same things
+run in either order, and two runs of one seed part within half a minute.
+`sim::tests::a_seed_plays_the_same_raid_twice` holds it.
+
 Environment knobs for debugging: `SIM_STALK=1` lets the cautious creep up on walkers to throw a distraction (off by default: walkers spot them on open ground); `SIM_DEBUG=1` logs every plan the raider
 makes as a `plan` event; `SIM_DUMP_PLANS=1` writes each building's indoor
 grid as text to `<out>/plans/`; `SIM_NO_JOB=1` has the raider ignore

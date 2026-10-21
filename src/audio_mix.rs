@@ -115,6 +115,7 @@ pub const MIX: &[Cue] = &[
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
+    cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
     cue!("gun.shot_suppressed", "guns/rifle_shot", -5.0, 118.0, 0.5, Action),
@@ -187,6 +188,9 @@ pub const MIX: &[Cue] = &[
     cue!("animal.hooves", "footsteps/leaves", -6.0, 70.0, 20.0, Event, 10.0),
     cue!("animal.rats", "wildlife/rats", -14.0, 50.0, 3.0, Detail),
     cue!("animal.thump", "physical/body_hit", -6.0, 75.0, 15.0, Event, 8.0),
+    cue!("flock.duck", "wildlife/duck", -8.0, 75.0, 20.0, Event, 12.0),
+    cue!("flock.splash", "footsteps/water", -6.0, 70.0, 20.0, Event, 10.0),
+    cue!("animal.bats", "wildlife/bats", -7.0, 40.0, 5.0, Detail),
     cue!("flock.heron", "wildlife/heron", -4.0, 80.0, 30.0, Event, 20.0),
     cue!("flock.chough", "wildlife/chough", -6.0, 80.0, 30.0, Event, 20.0),
     cue!("body.breath", "body/breath", -24.0, 50.0, 0.3, Detail, 1.0),

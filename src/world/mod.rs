@@ -16,6 +16,7 @@ pub mod fell;
 pub mod furnace;
 pub mod halos;
 pub mod impostors;
+pub mod minefields;
 pub mod notes;
 pub mod overgrowth;
 pub mod puddles;
@@ -159,6 +160,7 @@ impl Plugin for WorldPlugin {
         ))
         .add_systems(PreStartup, init_zone)
         .add_systems(Update, buildings::swing_doors)
+        .add_systems(Update, minefields::lay_for_gallery)
         .add_systems(
             Startup,
             (
