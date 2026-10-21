@@ -384,6 +384,19 @@ pub fn prefab_base(id: &str) -> &str {
         .unwrap_or(id)
 }
 
+/// Walls a prefab builds out past its footprint, as centre and half
+/// extents (x, z) in the prefab's own frame, unrotated. They aren't
+/// footprint (the lint doesn't count them as standing anywhere), but the
+/// nav grid blocks them: nothing walks through a wall it can't see. The
+/// prefab's own tests check these agree with what it builds.
+pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
+    match prefab_base(id) {
+        // The face stair's retaining wall (world::dam::stair_wall).
+        "dam_face" => &[([72.5, 10.6], [60.0, 1.5])],
+        _ => &[],
+    }
+}
+
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
     match prefab_base(id) {
