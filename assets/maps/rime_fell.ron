@@ -263,6 +263,11 @@
         (prefab: "shed", at: (-25.0, -95.0), rot: 20.0, tag: "snow_survey"),
         (prefab: "ranger_tower", at: (60.0, -170.0), rot: 340.0, tag: "avalanche_watch"),
 
+        // The miners' barracks on the west slopes, by the miners' path:
+        // where the single men lived, out of the settlement.
+        (prefab: "house_brick", at: (-168.0, -50.0), rot: 90.0, tag: "barracks"),
+        (prefab: "shed", at: (-170.0, -32.0), rot: 90.0, tag: "barracks_store"),
+
         // The bivouac under the summit, on the miners' path.
         (prefab: "shed", at: (-94.0, -168.0), rot: 290.0, tag: "bivouac"),
 
@@ -308,6 +313,7 @@
         (kind: Poi, at: (60.0, -170.0), name: "Avalanche watch"),
         (kind: Poi, at: (20.0, -245.0), name: "The col"),
         (kind: Poi, at: (-94.0, -168.0), name: "The bivouac"),
+        (kind: Poi, at: (-160.0, -45.0), name: "The barracks"),
         (kind: Poi, at: (-208.0, -210.0), name: "The observatory"),
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
