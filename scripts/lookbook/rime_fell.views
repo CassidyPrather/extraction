@@ -2,7 +2,7 @@
 r01_gate         -10,0,255,10,6       # from the insertion: the rise, the funicular up the middle
 r02_station      52,0,228,0,8         # the valley station and the line going up
 r03_funicular    60,0,150,0,8         # half way up the stair, the car at the loop
-r04_gallery      -170,0,181,270,0     # under the lower gallery along the road
+r04_gallery      -132,0,179,268,2     # under the lower gallery, along the road
 r05_switchbacks  -60,0,150,280,-6     # from the hairpin hut over the switchbacks
 r06_coldharbour  -60,0,30,90,-2       # Coldharbour's street, the top station beyond
 r07_mill_front   135,0,62,0,8         # the mill's front, stepping up the knoll
