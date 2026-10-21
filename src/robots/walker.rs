@@ -395,6 +395,18 @@ fn walker_brain(
         .filter(|p| p.role == PartRole::Core)
         .map(|p| (p.robot, (p.hp / p.max_hp.max(1.0)).max(0.0)))
         .collect();
+    // Hounds hunting someone, for splitting up: (who, whom, seed).
+    let pack: Vec<(Entity, Entity, u64)> = walkers
+        .iter()
+        .filter_map(
+            |(e, _, brain, _, aware, _, robot, _, _, _, (_, _, _, _, hound, ..))| {
+                (hound.is_some() && !robot.wrecked && matches!(brain, Brain::Engage))
+                    .then_some(())
+                    .and(aware.target)
+                    .map(|p| (e, p, minds.get(e).map_or(e.to_bits(), |m| m.0)))
+            },
+        )
+        .collect();
     // Walkers fighting someone, for pairing up: (who, where, whom, seed).
     let fighting: Vec<(Entity, Vec3, Entity, u64)> = walkers
         .iter()
@@ -680,7 +692,15 @@ fn walker_brain(
                                 .and_then(|p| targets.get(p).ok())
                                 .map(|g| g.forward().as_vec3())
                                 .unwrap_or(Vec3::NEG_Z);
-                            Some(super::hound_mind::flank_point(pos, tp, facing))
+                            // Two on one: one comes round each side.
+                            let side = aware.target.and_then(|p| {
+                                let mut mates: Vec<&(Entity, Entity, u64)> =
+                                    pack.iter().filter(|m| m.1 == p).collect();
+                                mates.sort_by_key(|m| (m.2, m.0));
+                                let rank = mates.iter().position(|m| m.0 == e)?;
+                                (mates.len() > 1).then_some(if rank % 2 == 0 { 1.0 } else { -1.0 })
+                            });
+                            Some(super::hound_mind::flank_point_side(pos, tp, facing, side))
                         }
                     }
                     (None, Some(lk)) if lame => {

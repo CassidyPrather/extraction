@@ -231,7 +231,8 @@ through walls by the same rule the player's ears do (`acoustics`).
 **Hounds hunt by ear** (`robots/hound_mind.rs`). Poor eyes tuned to
 movement, the best ears in the Zone: a sound sends a hound running, the
 last stretch it stalks low, then noses round. Seen, it comes round to
-your side, crouches (the tell) and lunges to bite. The way to beat one is
+your side, crouches (the tell) and lunges to bite; a pair splits up, one
+round each side. The way to beat one is
 the opposite of a drone: keep still and quiet. The director answers
 gunfire with a pair of hounds a third of the time.
 
