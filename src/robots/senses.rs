@@ -146,6 +146,12 @@ pub const OCCLUDED: f32 = 0.45;
 /// Sound bends over a low rise: it counts as blocked only by what stands
 /// this high over its source (a wall, a hill; not a hump in a field) (m).
 pub const HEARD_OVER: f32 = 1.2;
+/// A robot that searched somewhere and found nothing pays no heed, this
+/// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
+/// gave up: a lure that keeps going wears out its welcome. (Sounds you
+/// make there still count.)
+pub const BORED_FOR: f32 = 120.0;
+pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
 pub const HEARD_FULL: f32 = 15.0;
@@ -378,9 +384,26 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
+    (mut gave_up, mut bored): (
+        MessageReader<super::search::LostYou>,
+        Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+    ),
 ) {
     let dt = time.delta_secs();
     let world = SpatialQueryFilter::from_mask([Layer::World]);
+    // Where each robot looked and found nothing lately: sounds nobody made
+    // there (a tape playing, a hum, a flare's crackle) it stops answering.
+    let now = time.elapsed_secs();
+    for g in gave_up.read() {
+        bored
+            .entry(g.robot)
+            .or_default()
+            .push((g.searched, now + BORED_FOR));
+    }
+    bored.retain(|e, spots| {
+        spots.retain(|(_, until)| *until > now);
+        !spots.is_empty() && robots.contains(*e)
+    });
     let mut sounds: Vec<Sound> = noises
         .read()
         .map(|n| Sound {
@@ -624,6 +647,13 @@ pub(crate) fn perceive(
         let ear = gt.translation();
         for s in &sounds {
             if s.source == Some(robot_e) {
+                continue;
+            }
+            let dull = s.source.is_none()
+                && bored.get(&robot_e).is_some_and(|spots| {
+                    spots.iter().any(|(at, _)| at.distance(s.at) < BORED_RADIUS)
+                });
+            if dull {
                 continue;
             }
             let d = s.at.distance(ear);
