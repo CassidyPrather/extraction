@@ -307,6 +307,12 @@ pub const ART: &[ArtText] = &[
         "the gun turned to the face",
     ),
     art(
+        "guns/mosin.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
         "mags/ak_mag.py",
         Need::Incidental,
         0.35,
@@ -603,13 +609,32 @@ mod tests {
                 14.2,
                 100.0,
                 true,
-                Some(&"The driver says something long enough to fill the screen. ".repeat(3)),
+                Some(crate::render::comfort::Said::Plain(
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
                 0,
             ),
             size: crate::render::comfort::WRIST_SIZE,
             style: ScreenStyle::Lcd,
         };
         check("wrist, full", &wrist, Some(TextSource::Wrist));
+        // Captioned: the speaker's line in place of one of the words'.
+        let wrist = ScreenText {
+            text: crate::render::comfort::wrist_text(
+                "SURGE 12M",
+                14.2,
+                100.0,
+                true,
+                Some(crate::render::comfort::Said::Captioned(
+                    "MACHINES AT 12",
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
+                0,
+            ),
+            size: crate::render::comfort::WRIST_SIZE,
+            style: ScreenStyle::Lcd,
+        };
+        check("wrist, captioned", &wrist, Some(TextSource::Wrist));
         let radio = ScreenText {
             text: crate::render::comfort::radio_text(
                 &[

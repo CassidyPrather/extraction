@@ -110,10 +110,12 @@ def radio():
     panel(window, "z", -0.023, 0.023, 0.009, 0.031, D / 2 - 0.0042, D / 2 + 0.0004, "Black",
           [(-0.02, 0.02, 0.012, 0.028, "Cream")])
     window.box((0.0012, 0.014, 0.0008), (0.006, 0.02, D / 2 + 0.0008), "LampRed")
-    # Knobs on top, the rubber antenna, push-to-talk on the side.
-    for x, r in ((-0.018, 0.007), (0.0, 0.0055)):
-        p.cyl(r, y1, y1 + 0.012, "Black", segs=14, xf=T(x, 0, 0) @ UP, chamfer=0.0015)
-        p.box((0.0015, 0.002, r * 1.6), (x, y1 + 0.0125, 0.0), "Cream")
+    # Knobs on top (the tuning one, `dial`, turns on its own node), the
+    # rubber antenna, push-to-talk on the side.
+    dial = Part("dial", origin=(-0.018, y1, 0.0))
+    for q, x, r in ((dial, -0.018, 0.007), (p, 0.0, 0.0055)):
+        q.cyl(r, y1, y1 + 0.012, "Black", segs=14, xf=T(x, 0, 0) @ UP, chamfer=0.0015)
+        q.box((0.0015, 0.002, r * 1.6), (x, y1 + 0.0125, 0.0), "Cream")
     p.cyl(0.007, y1, y1 + 0.012, "Black", segs=12, xf=T(0.019, 0, 0) @ UP)
     p.lathe([(0.0, 0.0), (0.0055, 0.0), (0.0045, 0.06), (0.0035, 0.07), (0.0, 0.072)], "Rubber",
             segs=10, xf=T(0.019, y1 + 0.012, 0) @ UP)
@@ -121,8 +123,13 @@ def radio():
     # Belt clip on the back.
     p.box((0.02, 0.06, 0.003), (0.0, 0.0, -D / 2 - 0.0035), "Steel", bevel=0.001, segs=1)
     p.box((0.02, 0.006, 0.005), (0.0, 0.028, -D / 2 - 0.002), "Steel")
-    # Its box takes in the aerial (`dims` in items.ron).
-    return centred([p, window])
+    # Its box takes in the aerial (`dims` in items.ron). Centring moves the
+    # geometry only, so the dial's origin follows it by hand.
+    p.bm.verts.ensure_lookup_table()
+    before = p.bm.verts[0].co.copy()
+    parts = centred([p, window, dial])
+    dial.origin += p.bm.verts[0].co - before
+    return parts
 
 
 # --- Binoculars ---------------------------------------------------------------------------

@@ -134,13 +134,19 @@ impl Plugin for SentryPlugin {
 
 /// The head's pose for a yaw and pitch, on the mast at `foot`.
 pub fn head_transform(foot: Vec3, yaw: f32, pitch: f32) -> Transform {
-    Transform::from_translation(foot + Vec3::Y * MAST).with_rotation(Quat::from_euler(
-        EulerRot::YXZ,
-        -yaw.to_radians(),
-        pitch.to_radians(),
-        0.0,
-    ))
+    Transform::from_translation(foot + Vec3::Y * MAST)
+        .with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            -yaw.to_radians(),
+            pitch.to_radians(),
+            0.0,
+        ))
+        .with_scale(Vec3::splat(HEAD_SCALE))
 }
+
+/// The head (and everything on it) at this size against its model: big
+/// enough to read on its mast from across a field.
+pub const HEAD_SCALE: f32 = 1.5;
 
 /// A sentry standing at `at` (x/z, on the ground), its arc centred on
 /// `centre` degrees and `arc` wide, its cable running to a junction box
@@ -836,5 +842,64 @@ pub(crate) mod tests {
             app.world().get::<Sentry>(e).unwrap().look.is_none(),
             "and goes back"
         );
+    }
+
+    /// A heavy lured between you and a sentry takes the rounds meant for
+    /// you: the sentry fires at you through it, and its rounds strike the
+    /// heavy.
+    #[test]
+    fn a_heavy_walks_into_its_fire() {
+        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        vr.app
+            .init_resource::<RobotHits>()
+            .add_systems(Update, count_robot_hits);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let at = Vec2::new(40.0, 230.0);
+        let (sentry, heavy) = {
+            let mut c = vr.app.world_mut().commands();
+            let s = spawn_sentry(&mut c, &zone, at, 0.0, 120.0, Vec2::new(48.0, 236.0));
+            let h_at = zone.on_ground(40.0, 220.0);
+            let h = super::super::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                h_at,
+                Job {
+                    kind: JobKind::Watch,
+                    site: h_at,
+                    duration: 999.0,
+                    exit: h_at,
+                },
+            );
+            c.entity(h).remove::<Senses>();
+            vr.app.world_mut().flush();
+            (s, h)
+        };
+        vr.stand(zone.on_ground(40.0, 208.0), 0.0);
+        vr.step(90 * 15);
+        let fired = vr
+            .app
+            .world()
+            .get::<Sentry>(sentry)
+            .unwrap()
+            .gun
+            .warned
+            .is_some();
+        let hits = vr.app.world().resource::<RobotHits>().0;
+        assert!(fired, "it opened up on you");
+        assert!(hits > 0, "and the heavy in the way took {hits} rounds");
+        let _ = heavy;
+    }
+
+    #[derive(Resource, Default)]
+    struct RobotHits(u32);
+
+    fn count_robot_hits(
+        mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+        parts: Query<&super::super::heavy::HeavyPart>,
+        mut n: ResMut<RobotHits>,
+    ) {
+        n.0 += hits.read().filter(|h| parts.contains(h.entity)).count() as u32;
     }
 }

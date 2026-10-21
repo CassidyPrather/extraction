@@ -175,8 +175,8 @@ fn spawn_forests(
             base_color: Color::srgb(0.55, 0.6, 0.55),
             perceptual_roughness: 0.9,
             reflectance: 0.15,
-            double_sided: true,
-            cull_mode: None,
+            // One-sided: standing in a spruce (only the trunk stops you),
+            // its core seen from inside was most of the view, black.
             ..default()
         });
         let card = |name: &str, tint: Color, materials: &mut Assets<StandardMaterial>| {

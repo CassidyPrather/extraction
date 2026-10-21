@@ -168,6 +168,7 @@ fn break_up(
             Option<&Drone>,
             Option<&super::anim::Gait>,
             Has<super::collector::Collector>,
+            Option<&super::RobotSeed>,
         ),
         // (The heavy falls in its own way and stays: `heavy`.)
         (Without<Broken>, Without<super::heavy::Heavy>),
@@ -181,12 +182,12 @@ fn break_up(
     velocities: Query<(&LinearVelocity, &AngularVelocity)>,
     mut ledger: ResMut<DebrisLedger>,
 ) {
-    for (e, robot, t, children, walker, poses, drone, gait, collector) in &robots {
+    for (e, robot, t, children, walker, poses, drone, gait, collector, seed) in &robots {
         // (The collector drops its cargo first, the tick it's wrecked.)
         if !robot.wrecked || collector {
             continue;
         }
-        let seed = e.index_u32();
+        let seed = seed.map_or(0, |s| s.low());
         // A smaller body (a crawler) breaks into smaller, lighter pieces.
         let size = gait.map_or(1.0, |g| g.size);
         let (m3, m5) = (size.powi(3), size.powi(5));
@@ -580,7 +581,17 @@ fn collapse(
 #[allow(clippy::type_complexity)]
 fn spiral(
     mut commands: Commands,
-    mut drones: Query<(Entity, &mut Spiral, &Transform, &Children, Forces), With<Drone>>,
+    mut drones: Query<
+        (
+            Entity,
+            &mut Spiral,
+            &Transform,
+            &Children,
+            Forces,
+            Option<&super::RobotSeed>,
+        ),
+        With<Drone>,
+    >,
     parts: Query<(&RobotPart, &GlobalTransform)>,
     zone: Res<crate::world::Zone>,
     time: Res<Time>,
@@ -588,7 +599,7 @@ fn spiral(
     mut ledger: ResMut<DebrisLedger>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut s, t, children, mut forces) in &mut drones {
+    for (e, mut s, t, children, mut forces, seed) in &mut drones {
         s.t += dt;
         let pos = t.translation;
         let above = pos.y - zone.ground(pos.x, pos.z);
@@ -599,7 +610,7 @@ fn spiral(
                 .remove::<Spiral>()
                 .insert(Settling::default());
             impacts.write(WreckImpact { at: pos, size: 0.5 });
-            let seed = e.index_u32();
+            let seed = seed.map_or(0, |s| s.low());
             let up = t.rotation * Vec3::Y;
             let mut ids = vec![spawn_piece(
                 &mut commands,
@@ -850,6 +861,64 @@ mod tests {
             Some(&RigidBody::Static),
             "at rest"
         );
+    }
+
+    /// How a walker at a fixed spot comes apart: its collapse seed and its
+    /// pieces' launch velocities, with `filler` entities spawned first (so
+    /// its entity id differs).
+    fn how_it_breaks(filler: usize) -> (u32, Vec<[i32; 3]>) {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        for _ in 0..filler {
+            app.world_mut().spawn_empty();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        app.update();
+        app.world_mut().get_mut::<Robot>(walker).unwrap().wrecked = true;
+        app.update();
+        let seed = app.world().get::<Collapse>(walker).unwrap().seed;
+        let mut kicks: Vec<[i32; 3]> = app
+            .world_mut()
+            .query_filtered::<&LinearVelocity, With<Debris>>()
+            .iter(app.world())
+            .map(|v| (v.0 * 100.0).round().as_ivec3().to_array())
+            .collect();
+        kicks.sort();
+        (seed, kicks)
+    }
+
+    /// A wreck comes apart the same way whatever its entity id: which legs
+    /// tear and how its pieces fly come from its own seed.
+    #[test]
+    fn a_wreck_breaks_the_same_whatever_its_id() {
+        let a = how_it_breaks(0);
+        assert!(!a.1.is_empty());
+        assert_eq!(how_it_breaks(37), a);
     }
 
     /// Wrecks come apart on joints; despawning them (a robot leaving, the

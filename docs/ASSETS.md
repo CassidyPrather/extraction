@@ -219,7 +219,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/residents.py` | who lived in a house (`world::clutter`'s `Resident`s, seeded): globe, exercise_books, slate_board (a teacher); cot, rocking_horse, small_boots (a family); traps_hook, hide_frame (a hunter); two_cups, reading_glasses, walking_stick (an old couple); sewing_machine, dress_form, cloth_pinned (a seamstress); radio_set, logbook (a radio ham); timetable, cap_hook (a railwayman) | 0.06k to 0.6k |
 | `art/props/named.py` | the people Story's notes name, where they lived (`world::clutter::named`): till, chit_spike, closed_card, axe_pegs, whetstone, barometer, kettle, horseshoe, signal_flags, waders, level_staff, antlers, bed_name_mirek, charcoal_sack, hymn_board, child_drawing, tin_empty, bow_saw, cup_one, photo_church, key_hook_empty, rods_rack, landing_net, stuffed_pike, armchair, peg_empty, slippers (its letters in `legibility::ART`) | 0.05k to 0.8k |
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
-| `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire, walker_wreck (staged scenes) | 0.3k to 4.0k |
+| `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire, walker_wreck, flower_jars (staged scenes) | 0.3k to 4.0k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 5.1k each (palm 2.2k, plus the wrist display housing; fingers 2.7k) |
 | `art/kit/rig.py` | `models/kit/rig.glb` (harness_panel, harness, holster, pouch, pocket, mount, flaps closed), `rig_open.glb` (flaps open), `backpack.glb` / `backpack_open.glb` | rig 2.7k (harness 1.3k; each slot piece 0.2k-0.4k, drawn on its slots), pack 1.3k |
 
@@ -330,6 +330,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   box and doesn't stick out of it; anything flat or long has `dims`
   rather than a bulk cube (`every_item_model_fits_its_box` checks).
   `_kit.centred` moves a model's bounds onto the box.
+  Its lowest point sits within 6 mm of the box's floor: a tip poking
+  below it fails as surely as one sticking out.
+- **Budgets.** Guns 15-25k tris, magazines up to about 9k, items about 3k.
+  Spend it where a player's face and hands are.
+- **Item LODs.** An item's `<name>_lod1` node draws only beyond
+  `ITEM_LOD` (6 m), its other nodes only inside it
+  (`models::item_lod_range`). `check.py` doesn't count a node and its
+  `_lodN` stand-ins as z-fighting.
+- **Stamped text.** `text()`/`text_round()` heights are literal floats
+  (the legibility test reads argument 3 from the script), and a script
+  with letters is listed in `legibility::ART`.
+- **Sling points.** Long guns carry `pt_sling_front` and `pt_sling_rear`
+  empties at their swivels or slots.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.

@@ -14,11 +14,15 @@ Writes assets/models/props/<name>.glb, one node `static` each:
                    middle.
 - `campfire`       a cold fire: a ring of stones 0.8 across, charred logs
                    and ash; origin on the ground at its middle.
-- `walker_wreck`   a Custodian walker lying where it stopped, its four legs
-                   folded under it, its eye socket empty, the turret gone
-                   from its back to a flat mount 0.7 up (jam jars of
-                   flowers stand on it): 1.0 x 0.7 x 1.5 (x, y, z), its
-                   visor -Z; origin on the ground at its middle.
+- `walker_wreck`   a Custodian walker slumped where it stopped: its orb
+                   tilted 20 degrees onto one side and sunk, a leg folded
+                   under, one snapped (its shin lying apart), its eye
+                   socket empty; a fallen panel lies level on its high
+                   shoulder, 0.7 up, where the jars stand: 1.0 x 0.7 x 1.5
+                   (x, y, z), its visor -Z; origin on the ground at its
+                   middle.
+- `flower_jars`    four jam jars of wild flowers (yarrow, harebells, long
+                   grass), 0.34 x 0.4 x 0.2; origin under their middle.
 
 Nothing here has a face or a wound: the playtester's rule is unease, not
 gore.
@@ -36,7 +40,7 @@ from mathutils import Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import UP, prop, rod  # noqa: E402
-from common import RY, Part, T, fillet  # noqa: E402
+from common import RY, RZ, Part, T, fillet  # noqa: E402
 
 
 def limb(p, a, b, r0, r1, mat, segs=10):
@@ -182,36 +186,90 @@ prop("campfire", campfire)
 
 def walker_wreck():
     p = Part("static")
-    R, cy = 0.4, 0.3
-    # The orb, low on its folded legs, a little sunk.
-    p.sphere(R, (0.0, cy, 0.0), "Shell", segs=24, rings=14)
-    # Panel seams round it.
+    R, cy = 0.4, 0.27
+    # The orb slumped 20 degrees onto its +X side and sunk a little; its
+    # parts go with it.
+    orb = T(0.0, cy, 0.0) @ RZ(-0.35)
+
+    def at(v):
+        return tuple(orb @ Vector(v))
+
+    p.sphere(R, (0.0, 0.0, 0.0), "Shell", segs=24, rings=14, xf=orb)
     for lat in (-0.35, 0.0, 0.35):
         r = R * math.cos(lat) + 0.004
         p.lathe([(r - 0.006, -0.004), (r, -0.004), (r, 0.004), (r - 0.006, 0.004)], "Dark",
-                segs=28, closed=True, xf=T(0.0, cy + R * math.sin(lat), 0.0) @ UP)
-    # The turret's mount, flat, its bolts: where the jars stand.
-    p.cyl(0.17, 0.0, 0.03, "Shell", segs=20, xf=T(0.0, cy + R - 0.03, 0.0) @ UP)
+                segs=28, closed=True, xf=orb @ T(0.0, R * math.sin(lat), 0.0) @ UP)
+    # The turret's mount, tilted with it, its bolts.
+    p.cyl(0.17, 0.0, 0.03, "Shell", segs=20, xf=orb @ T(0.0, R - 0.03, 0.0) @ UP)
     for k in range(6):
         a = k * math.pi / 3
         p.cyl(0.012, 0.0, 0.008, "Dark", segs=6,
-              xf=T(0.13 * math.cos(a), cy + R, 0.13 * math.sin(a)) @ UP)
+              xf=orb @ T(0.13 * math.cos(a), R, 0.13 * math.sin(a)) @ UP)
+    # A panel lying level on its high shoulder, where the jars stand (its
+    # top 0.7 up).
+    p.cyl(0.19, 0.0, 0.025, "Shell", segs=20, xf=T(0.0, 0.675, 0.0) @ UP)
     # The visor slit, its sensor gone: an empty socket.
-    p.box((0.32, 0.09, 0.05), (0.0, cy + 0.12, -R + 0.03), "Dark")
-    p.sphere(0.035, (0.0, cy + 0.12, -R + 0.005), "Black", segs=10, rings=6)
-    # Four legs folded under: hip, knee out and down on the ground, the
-    # shin folded back under the orb.
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            hip = (sx * 0.27, cy - 0.12, sz * 0.22)
-            knee = (sx * 0.44, 0.07, sz * 0.68)
-            foot = (sx * 0.2, 0.05, sz * 0.32)
-            limb(p, hip, knee, 0.075, 0.06, "Shell")
-            p.sphere(0.065, knee, "Dark", segs=12, rings=8)
-            limb(p, knee, foot, 0.055, 0.045, "Shell")
-            p.sphere(0.05, foot, "Dark", segs=10, rings=6)
+    p.box((0.32, 0.09, 0.05), (0.0, 0.12, -R + 0.03), "Dark", xf=orb)
+    p.sphere(0.035, (0.0, 0.12, -R + 0.005), "Black", segs=10, rings=6, xf=orb)
+    # The legs: one folded under the low side, one splayed, one snapped
+    # with its shin lying apart, one tucked under the high side.
+    hip = lambda sx, sz: at((sx * 0.27, -0.12, sz * 0.22))  # noqa: E731
+    for (h, knee, foot) in (
+            (hip(1, -1), (0.36, 0.05, -0.36), (0.12, 0.04, -0.16)),
+            (hip(-1, -1), (-0.44, 0.08, -0.6), (-0.28, 0.04, -0.7)),
+            (hip(1, 1), (0.4, 0.06, 0.4), (0.16, 0.04, 0.2))):
+        limb(p, h, knee, 0.075, 0.06, "Shell")
+        p.sphere(0.065, knee, "Dark", segs=12, rings=8)
+        limb(p, knee, foot, 0.055, 0.045, "Shell")
+        p.sphere(0.05, foot, "Dark", segs=10, rings=6)
+    # Snapped: the thigh's stub, splintered, and the shin on the ground.
+    stub = (-0.42, 0.18, 0.4)
+    limb(p, hip(-1, 1), stub, 0.075, 0.07, "Shell")
+    for k in range(4):
+        a = k * math.pi / 2 + 0.3
+        rod(p, stub, (stub[0] - 0.06 + 0.03 * math.cos(a), stub[1] - 0.02 + 0.03 * math.sin(a),
+                      stub[2] + 0.05), 0.012, "Dark", segs=4)
+    limb(p, (-0.2, 0.05, 0.66), (0.28, 0.045, 0.58), 0.055, 0.045, "Shell")
+    p.sphere(0.065, (-0.2, 0.06, 0.66), "Dark", segs=12, rings=8)
     return [p]
 
 
+def flower_jars():
+    """Four jam jars of wild flowers: yarrow, harebells and long grasses,
+    0.34 x 0.4 x 0.2 overall; origin under their middle."""
+    p = Part("static")
+    rng = random.Random(23)
+    for (x, z, h) in ((-0.11, 0.03, 0.11), (0.0, -0.05, 0.13), (0.1, 0.04, 0.1),
+                      (0.02, 0.06, 0.09)):
+        p.lathe([(0.0, 0.0), (0.04, 0.0), (0.042, 0.01), (0.042, h - 0.015), (0.034, h - 0.005),
+                 (0.034, h), (0.0, h)], "Glass", segs=14, xf=T(x, 0.0, z) @ UP)
+        p.cyl(0.039, 0.003, h * 0.6, "Dark", segs=12, xf=T(x, 0.0, z) @ UP)
+        # Stems out of the mouth, leaning.
+        for k in range(7):
+            a = rng.random() * 2 * math.pi
+            lean = rng.uniform(0.02, 0.07)
+            top = (x + lean * math.cos(a), rng.uniform(0.26, 0.37), z + lean * math.sin(a) * 0.6)
+            kind = rng.choice(("yarrow", "harebell", "grass", "grass"))
+            base = (x + rng.uniform(-0.02, 0.02), h * rng.uniform(0.3, 0.6),
+                    z + rng.uniform(-0.02, 0.02))
+            rod(p, base, top, 0.0025, "Olive", segs=4)
+            if kind == "yarrow":
+                # A flat head of tiny flowers, big enough to read at 5 m.
+                for j in range(7):
+                    b = j * 0.9
+                    r = 0.022 if j else 0.0
+                    p.sphere(0.013, (top[0] + r * math.cos(b), top[1] + 0.006,
+                                     top[2] + r * math.sin(b)), "Cream", segs=6, rings=4)
+            elif kind == "harebell":
+                for j in range(2):
+                    q = (top[0] + 0.012 * j, top[1] - 0.012 * j, top[2])
+                    p.lathe([(0.0, 0.0), (0.006, 0.0), (0.018, -0.028), (0.0, -0.025)], "Blue",
+                            segs=8, xf=T(*q) @ UP)
+            else:
+                rod(p, top, (top[0] + 0.03 * math.cos(a), top[1] + 0.04, top[2]), 0.002,
+                    "Olive", segs=3)
+    return [p]
+
 
 prop("walker_wreck", walker_wreck)
+prop("flower_jars", flower_jars)

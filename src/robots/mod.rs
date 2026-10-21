@@ -34,6 +34,7 @@ pub mod reel;
 pub mod search;
 pub mod senses;
 pub mod sentry;
+pub mod sentry_look;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;
@@ -239,7 +240,7 @@ pub struct RobotsPlugin;
 impl Plugin for RobotsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<PartDestroyed>()
-            .add_observer(seed_loot)
+            .add_observer(seed_robot)
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
@@ -348,14 +349,15 @@ fn damage_parts(
 #[derive(Component)]
 pub struct Salvaged;
 
-/// A robot's own dice for what it drops (its wreck, a dirigible's cargo
-/// pods), seeded from where and what it was when it came into the world:
-/// how many other robots there are, and the order a query meets them in,
-/// can't change one robot's rolls.
-#[derive(Component, Clone, Debug)]
-pub struct LootRng(pub extraction_core::noise::Rng);
+/// A robot's own seed, from where and what it was when it came into the
+/// world: whatever a robot's body does by chance (which legs tear off,
+/// where its pieces fly, how a plate falls) is drawn from this, not from
+/// entity ids or query order, so the same raid plays the same however many
+/// other things are about.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RobotSeed(pub u64);
 
-impl LootRng {
+impl RobotSeed {
     pub fn for_robot(kind: RobotKind, at: Vec3) -> Self {
         // To the centimetre: a spawn point is a spawn point.
         let q = |v: f32| (v * 100.0).round() as i64 as u64;
@@ -363,15 +365,28 @@ impl LootRng {
         for v in [q(at.x), q(at.y), q(at.z)] {
             h = (h ^ v).wrapping_mul(0x0100_0000_01B3);
         }
-        Self(extraction_core::noise::Rng::new(h))
+        Self(h)
+    }
+
+    /// 32 bits of it, for the small hashes (`wreck::jitter`).
+    pub fn low(self) -> u32 {
+        (self.0 ^ (self.0 >> 32)) as u32
     }
 }
 
-fn seed_loot(add: On<Add, Robot>, robots: Query<(&Robot, &Transform)>, mut commands: Commands) {
+/// A robot's own dice for what it drops (its wreck, a dirigible's cargo
+/// pods), seeded from where and what it was when it came into the world:
+/// how many other robots there are, and the order a query meets them in,
+/// can't change one robot's rolls.
+#[derive(Component, Clone, Debug)]
+pub struct LootRng(pub extraction_core::noise::Rng);
+
+fn seed_robot(add: On<Add, Robot>, robots: Query<(&Robot, &Transform)>, mut commands: Commands) {
     if let Ok((robot, t)) = robots.get(add.entity) {
+        let seed = RobotSeed::for_robot(robot.kind, t.translation);
         commands
             .entity(add.entity)
-            .try_insert(LootRng::for_robot(robot.kind, t.translation));
+            .try_insert((seed, LootRng(extraction_core::noise::Rng::new(seed.0))));
     }
 }
 
