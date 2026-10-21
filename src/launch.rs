@@ -90,8 +90,12 @@ pub struct LaunchOptions {
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
-    /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
+    /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `storm`,
+    /// `clearing`).
     pub weather: Option<String>,
+    /// Dev: snow falling now, this much lying already (0..1; only where
+    /// the valley has a snow line, `world::snow`).
+    pub snow: Option<f32>,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
     /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
@@ -148,6 +152,7 @@ impl Default for LaunchOptions {
             surge_in: None,
             gallery: None,
             weather: None,
+            snow: None,
             hour: None,
             moon: None,
             sun_elevation: 20.0,
@@ -206,6 +211,7 @@ impl LaunchOptions {
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--weather" => o.weather = Some(val()),
+                "--snow" => o.snow = val().parse::<f32>().ok().map(|s| s.clamp(0.0, 1.0)),
                 "--hour" => o.hour = Some(val()),
                 "--moon" => {
                     o.moon = match val().as_str() {

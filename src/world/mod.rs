@@ -22,6 +22,8 @@ pub mod rocks;
 pub mod scenes;
 pub mod shafts;
 pub mod sky;
+pub mod snow;
+pub mod storm;
 pub mod story;
 pub mod structures;
 pub mod surfaces;
@@ -146,6 +148,7 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             weather::WeatherPlugin,
+            snow::SnowPlugin,
             scenes::ScenesPlugin,
             underground::UndergroundPlugin,
         ))
@@ -246,6 +249,8 @@ impl Plugin for WorldVisualsPlugin {
             shafts::ShaftsPlugin,
             beams::BeamsPlugin,
             halos::HalosPlugin,
+            storm::StormPlugin,
+            snow::SnowVisualsPlugin,
         ));
     }
 }

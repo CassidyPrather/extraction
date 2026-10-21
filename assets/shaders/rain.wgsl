@@ -12,7 +12,8 @@
 struct RainParams {
     // x: intensity 0..1, y: fall speed m/s, z: streak length m, w: box size m
     params: vec4<f32>,
-    // xz: wind, m/s; y: 1 for ash (pale flakes that tumble); w: width m
+    // xz: wind, m/s; y: 1 for ash (pale flakes that tumble), 2 for snow
+    // (white, larger, floating); w: width m
     wind: vec4<f32>,
     // x: brightness against a day's (the hour's light).
     light: vec4<f32>,
@@ -100,6 +101,12 @@ fn vertex(v: Vertex) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let edge = 1.0 - abs(in.uv.x - 0.5) * 2.0;
+    if (in.ash > 1.5) {
+        // A snowflake: white, soft-edged.
+        let r = length(in.uv - vec2<f32>(0.5, 0.5)) * 2.0;
+        let a = 0.75 * in.fade * (1.0 - smoothstep(0.35, 1.0, r));
+        return vec4<f32>(vec3<f32>(0.9, 0.92, 0.96) * rain.light.x, a);
+    }
     if (in.ash > 0.5) {
         // A soft grey flake.
         let r = length(in.uv - vec2<f32>(0.5, 0.5)) * 2.0;

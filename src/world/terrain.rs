@@ -74,14 +74,18 @@ fn fog_cull(
 /// recompile; written when it has moved a little.)
 fn wet_with_weather(
     wet: Res<super::weather::Wetness>,
+    snow: Option<Res<super::snow::Snow>>,
     conditions: Res<super::weather::Conditions>,
     chunks: Query<&MeshMaterial3d<TerrainMaterial>, With<TerrainChunk>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
-    mut done: Local<Option<f32>>,
+    mut done: Local<Option<(f32, f32)>>,
 ) {
     // A little damp even dry: the Zone's ground never quite dries out.
     let want = 0.12 + 0.75 * wet.level;
-    if done.is_some_and(|d| (d - want).abs() < 0.01) && !conditions.is_changed() {
+    let lying = snow.as_ref().map_or(0.0, |s| s.cover);
+    if done.is_some_and(|(d, s)| (d - want).abs() < 0.01 && (s - lying).abs() < 0.004)
+        && !conditions.is_changed()
+    {
         return;
     }
     let Some(handle) = chunks.iter().next() else {
@@ -91,8 +95,12 @@ fn wet_with_weather(
         m.extension.params.wetness = want;
         m.extension.params.puddles = super::puddles::fill(wet.level);
         m.extension.params.rain = conditions.rain;
+        m.extension.params.snow = lying;
+        m.extension.params.snow_line = snow
+            .and_then(|s| s.line)
+            .unwrap_or(crate::render::fog::NO_SNOW);
     }
-    *done = Some(want);
+    *done = Some((want, lying));
 }
 
 fn spawn_terrain_meshes(
