@@ -268,7 +268,7 @@ pub const MIX: &[Cue] = &[
     cue!("heavy.cell", "physical/switch", 0.0, 60.0, 10.0, Detail),
     cue!("heavy.idle", "machines/hum", -10.0, 70.0, 20.0, Signal, 12.0),
     cue!("heavy.horn", "voice/heavy/horn", -10.0, 120.0, 300.0, Signal, 200.0),
-    cue!("sentry.chirp", "machines/drone_lock", -22.0, 85.0, 20.0, Signal, 25.0),
+    cue!("sentry.chirp", "machines/drone_lock", -30.0, 85.0, 20.0, Signal, 25.0),
     cue!("sentry.turn", "machines/servo", -10.0, 70.0, 15.0, Signal, 10.0),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
@@ -349,10 +349,10 @@ pub const MIX: &[Cue] = &[
     cue!("thunder.surge", "ambience/thunder_distant", -11.0, 80.0, 0.0, Event),
     // Music and broadcasts, synthesised (`radio`): a cassette player's
     // little speaker, a radio's, a gramophone's horn, a piano in a room.
-    cue!("tape.music", "music/tape", -12.0, 72.0, 0.6, Detail, 2.0),
-    cue!("tape.motor", "music/motor", -22.0, 50.0, 0.5, Detail),
-    cue!("radio.station", "music/station", -12.0, 70.0, 0.6, Detail, 2.0),
-    cue!("radio.hiss", "music/static", -20.0, 62.0, 0.6, Detail, 2.0),
+    cue!("tape.music", "music/tape", -17.0, 72.0, 0.6, Detail, 2.0),
+    cue!("tape.motor", "music/motor", -16.0, 50.0, 0.5, Detail),
+    cue!("radio.station", "music/station", -16.5, 70.0, 0.6, Detail, 2.0),
+    cue!("radio.hiss", "music/static", -15.0, 62.0, 0.6, Detail, 2.0),
     cue!("gramophone", "music/gramophone", -10.0, 75.0, 1.5, Detail, 3.0),
     cue!("piano.note", "music/piano", -8.0, 85.0, 1.0, Detail, 4.0),
     cue!("organ", "music/organ", -8.0, 90.0, 6.0, Detail, 10.0),
