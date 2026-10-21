@@ -232,11 +232,10 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
     #[test]
     fn rocks_break_up_the_ground_and_keep_off_roads() {
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let rocks = scatter_rocks(&map, &hm);
