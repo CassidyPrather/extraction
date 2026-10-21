@@ -35,6 +35,10 @@ const BODY_R: f32 = 0.19;
 /// Where the sleeve's hem sits on the unrolled glove: just past the cuff's
 /// end, over it, round the wrist's centre.
 const HEM: Vec3 = Vec3::new(0.0, -0.0034, 0.1);
+/// On the watch arm (not the gun hand's) the hem sits further back, clear of the wrist
+/// readout's elbow end (`render::comfort`, its panel to z 0.1015 on the
+/// cuff's housing): over it, the sleeve hid the start of its lines.
+const WATCH_HEM: Vec3 = Vec3::new(0.0, -0.0034, 0.112);
 const SLEEVE_WRIST_R: f32 = 0.047;
 const SLEEVE_ELBOW_R: f32 = 0.052;
 const SLEEVE_SHOULDER_R: f32 = 0.058;
@@ -262,7 +266,9 @@ fn pose_arms(
         (&mut Transform, &mut Visibility),
         (Or<(With<ArmPart>, With<ShadowPart>)>, Without<HandVisual>),
     >,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
+    let watch = comfort.map_or(crate::rig::Side::Left, |c| c.gun_side().other());
     for arm in &arms {
         let Ok((v, glove, glove_vis)) = gloves.get(arm.glove) else {
             continue;
@@ -281,7 +287,7 @@ fn pose_arms(
         shoulder.y = shoulder.y.min(head.translation.y - SHOULDER_BELOW_EYES);
         let hint = torso.rotation * Vec3::new(0.6 * s, -1.0, 0.3).normalize();
         let hem = glove.mul_transform(glove_frame(arm.side));
-        let wrist = hem.transform_point(HEM);
+        let wrist = hem.transform_point(if arm.side == watch { WATCH_HEM } else { HEM });
         let axis = Vec2::new(torso.translation.x, torso.translation.z);
         let (shoulder, elbow) = arm_joints(shoulder, wrist, hint, axis);
         let show = if *glove_vis == Visibility::Hidden {

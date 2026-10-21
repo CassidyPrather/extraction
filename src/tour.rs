@@ -436,8 +436,9 @@ fn ground_views(zone: &Zone, clear: &Clearance) -> Vec<View> {
 }
 
 /// `--tour-views FILE`: one view a line, `name x,y,z,yaw,pitch`, the
-/// same numbers as `--camera` (y 0 stands you there, eyes 1.7 m up; yaw 0
-/// looks toward -Z, 90 toward +X). `#` starts a comment.
+/// same numbers as `--camera` (y 0 stands you there, eyes 1.7 m up; `~h`
+/// puts you h metres over the ground; yaw 0 looks toward -Z, 90 toward
+/// +X). `#` starts a comment.
 pub fn scripted_views(zone: &Zone, file: &std::path::Path) -> Vec<View> {
     let text = std::fs::read_to_string(file).unwrap_or_else(|e| {
         error!("tour: can't read {}: {e}", file.display());
@@ -450,13 +451,24 @@ pub fn scripted_views(zone: &Zone, file: &std::path::Path) -> Vec<View> {
         let (Some(name), Some(cam)) = (parts.next(), parts.next()) else {
             continue;
         };
-        let v: Vec<f32> = cam.split(',').filter_map(|s| s.parse().ok()).collect();
+        // `~h` for the height: h metres over the ground; `=y` the world's
+        // height as given, under the ground too (an underground site).
+        let above = cam.split(',').nth(1).is_some_and(|y| y.starts_with('~'));
+        let exact = cam.split(',').nth(1).is_some_and(|y| y.starts_with('='));
+        let v: Vec<f32> = cam
+            .split(',')
+            .filter_map(|s| s.trim_start_matches(['~', '=']).parse().ok())
+            .collect();
         if v.len() < 5 {
             warn!("tour: bad view line {line:?}");
             continue;
         }
         let ground = zone.ground(v[0], v[2]);
-        let y = if v[1] <= 0.0 {
+        let y = if exact {
+            v[1]
+        } else if above {
+            ground + v[1].max(0.3)
+        } else if v[1] <= 0.0 {
             ground + 1.7
         } else {
             v[1].max(ground + 0.3)

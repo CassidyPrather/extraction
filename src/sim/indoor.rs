@@ -395,7 +395,20 @@ fn plan_site(
                         && !levels[c as usize * n + a as usize].is_nan()
                 })
             });
-            if clear {
+            // A pit's floor, or heat nothing crosses: not a way at all.
+            let p = grid.centre(i, j);
+            let barred = r.cell_of(p).is_some_and(|(a, c)| {
+                let k = c * r.nx + a;
+                r.pit[k]
+                    || r.heat[k].is_some_and(|z| {
+                        extraction_core::underground::layout(&b.prefab).is_some_and(|l| {
+                            l.heat[z as usize].level >= extraction_core::underground::SCORCHING
+                        })
+                    })
+            });
+            if barred {
+                grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
+            } else if clear {
                 // Wading is slow; deep enough to swim, slower.
                 let w = r.water_at(grid.centre(i, j));
                 grid.cost[j * n + i] = if w >= extraction_core::underground::DEEP {
@@ -692,6 +705,90 @@ mod tests {
         );
     }
 
+    /// A bot that starts right at a shut door, inside its leaf's swing,
+    /// steps back out of the swing before it opens it, then gets in (the
+    /// leaf used to swing into it and pin it in the doorway: Kettle's
+    /// gatekeeper's cottage, Marrow's bunker).
+    #[test]
+    fn a_bot_at_a_door_steps_back_before_opening_it() {
+        let opts = LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans = plans(&mut app);
+        let plan = plans
+            .iter()
+            .find(|p| p.name == "shop")
+            .expect("the map has a shop")
+            .clone();
+        let door = plan
+            .doors
+            .iter()
+            .find(|d| d.outside.is_some())
+            .expect("an outside door")
+            .clone();
+        let mid = (door.a + door.b) * 0.5;
+        let out = (door.outside.unwrap() - mid).normalize();
+        // Right at the door, 0.3 m out.
+        let start = plan.to_world(mid + out * 0.3);
+        let goal = Vec2::new(1.5, -1.5);
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let ground = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .ground(start.x, start.z);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = Vec3::new(start.x, ground.max(start.y) + 0.1, start.z);
+        app.update();
+        let pos = app.world().get::<Transform>(player).unwrap().translation;
+        let tasks = super::super::raider::indoor_route(&plan, pos, goal, 0.3).expect("a route");
+        let open = tasks
+            .iter()
+            .position(|t| matches!(t, crate::bot::Task::OpenDoor(_)))
+            .expect("it opens the door");
+        let stand = tasks[..open]
+            .iter()
+            .rev()
+            .find_map(|t| match t {
+                crate::bot::Task::WalkTo { to, .. } => Some(*to),
+                _ => None,
+            })
+            .expect("it steps somewhere first");
+        let stand = plan.to_local(Vec3::new(stand.x, 0.0, stand.y)).xz();
+        assert!(
+            stand.distance(mid) > 0.9,
+            "out of the leaf's swing to open it ({:.2} m from the doorway)",
+            stand.distance(mid)
+        );
+        app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+        for _ in 0..90 * 20 {
+            app.update();
+            if app.world().get::<Bot>(player).unwrap().done() {
+                break;
+            }
+        }
+        let t = app.world().get::<Transform>(player).unwrap().translation;
+        let local = plan.to_local(t).xz();
+        let bot = app.world().get::<Bot>(player).unwrap();
+        assert!(
+            local.distance(goal) < 0.8,
+            "and in: at {local:?}, door mid {mid:?}, left {:?}, log {:?}",
+            bot.tasks,
+            bot.log
+        );
+    }
+
     /// A step just inside every outside door, and one on every bridge
     /// deck, lands on something built (so it sounds like boards or
     /// concrete, not the grass under it).
@@ -766,6 +863,21 @@ mod tests {
         }
     }
 
+    /// A spot under a site in a room only its works open (heat vented, the
+    /// crane ridden): the raider's plans bar those, as the raider can't.
+    fn behind_the_works(plan: &BuildingPlan, spot: Vec3) -> bool {
+        let Some(l) = extraction_core::underground::layout(&plan.name) else {
+            return false;
+        };
+        let p = plan.to_local(spot);
+        let open = l.open_rooms();
+        l.rooms.iter().zip(open).any(|(r, open)| {
+            !open
+                && (p.x - r.at[0]).abs() <= r.size[0] * 0.5
+                && (p.z - r.at[1]).abs() <= r.size[1] * 0.5
+        })
+    }
+
     /// Every loot spot in every building can be reached from somewhere a
     /// bot can stand, along a clear line: a barn's open gaps join its floor
     /// to the outside, which once left nothing in a barn reachable, and a
@@ -792,7 +904,7 @@ mod tests {
             let mut tried = 0;
             for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
                 for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
-                    if !plan.reachable_height(*spot) {
+                    if !plan.reachable_height(*spot) || behind_the_works(plan, *spot) {
                         continue;
                     }
                     tried += 1;
@@ -962,7 +1074,7 @@ mod tests {
                 };
                 // A boxcar's floor is a climb up from the ground, which the
                 // indoor grid doesn't walk.
-                if plan.name == "boxcar" {
+                if plan.name == "boxcar" || behind_the_works(plan, at) {
                     continue;
                 }
                 let local = plan.to_local(at);

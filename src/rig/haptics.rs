@@ -71,6 +71,7 @@ impl Plugin for HapticsPlugin {
                     hurt_haptics,
                     step_haptics,
                     grenade_haptics,
+                    machine_tick,
                 ),
             );
     }
@@ -187,6 +188,36 @@ fn grenade_haptics(
             continue;
         };
         pulse(&mut out, if ring { grip.other() } else { grip }, p);
+    }
+}
+
+/// How near a machine turning certain of you is felt, m.
+pub const MACHINE_TICK_NEAR: f32 = 25.0;
+/// The tick: under a tick's usual strength, a whisper on the wrist.
+pub const MACHINE_TICK: (f32, f32) = (0.1, 0.012);
+
+/// A machine nearby turns certain (`robot_voice::Spoke` engaging): a
+/// faint tick on the watch wrist (the off hand: `Comfort::gun_side`'s
+/// other). Off with the comfort setting `machine_tick`.
+fn machine_tick(
+    mut spoke: MessageReader<crate::robot_voice::Spoke>,
+    players: Query<&GlobalTransform, With<LocalPlayer>>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut out: MessageWriter<Haptic>,
+) {
+    let on = comfort.as_deref().is_none_or(|c| c.machine_tick);
+    let wrist = comfort
+        .as_deref()
+        .map_or(Side::Left, |c| c.gun_side().other());
+    let Some(me) = players.iter().next().map(|g| g.translation()) else {
+        spoke.clear();
+        return;
+    };
+    let certain = spoke.read().any(|s| {
+        s.said == crate::robot_voice::Utterance::Engaging && s.at.distance(me) < MACHINE_TICK_NEAR
+    });
+    if on && certain {
+        pulse(&mut out, wrist, MACHINE_TICK);
     }
 }
 

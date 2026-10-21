@@ -1,0 +1,7 @@
+# Kettle Pass at night: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+# n02 looks up the sun's path, where the moon rides.
+n01_gate        120,0,255,345,-1
+n02_moon        120,0,255,345,28
+n03_row         0,0,175,0,-3
+n04_road        40,0,0,0,4
+n05_pines       180,0,-120,90,0

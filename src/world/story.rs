@@ -9,10 +9,6 @@
 
 use bevy::prelude::*;
 
-/// The three valleys a career moves between (the training yard has signs,
-/// not story).
-pub const VALLEYS: [&str; 3] = ["marrow_creek", "kettle_pass", "cinder_works"];
-
 /// A note or terminal (by its marker's name, in its map) and the places it
 /// speaks of: (map, name of a marker, region, road, river or wood there).
 pub struct Lead {
@@ -24,6 +20,7 @@ pub struct Lead {
 const M: &str = "marrow_creek";
 const K: &str = "kettle_pass";
 const C: &str = "cinder_works";
+const S: &str = "sallow_reservoir";
 
 pub const THREAD: &[Lead] = &[
     // Marrow Creek: where it started.
@@ -46,6 +43,21 @@ pub const THREAD: &[Lead] = &[
         map: M,
         note: "Credit book",
         mentions: &[(M, "Village"), (M, "Village note"), (M, "Survey log")],
+    },
+    Lead {
+        map: M,
+        note: "Cabin tally",
+        mentions: &[(M, "Logging camp"), (M, "Foreman's note")],
+    },
+    Lead {
+        map: K,
+        note: "Burner's note",
+        mentions: &[(K, "Charcoal hut")],
+    },
+    Lead {
+        map: C,
+        note: "Woodward's book",
+        mentions: &[(C, "Woodward's cabin")],
     },
     Lead {
         map: M,
@@ -148,9 +160,19 @@ pub const THREAD: &[Lead] = &[
     },
     Lead {
         map: M,
-        note: "Lev's note",
+        note: "Lev's fence note",
         mentions: &[
             (M, "Valley office copy"),
+            (M, "Gate log"),
+            (M, "South gate"),
+        ],
+    },
+    Lead {
+        map: M,
+        note: "Lev's note",
+        mentions: &[
+            (M, "Lev's fence note"),
+            (M, "Marek tag"),
             (M, "Rusty's note"),
             (M, "The well"),
         ],
@@ -433,6 +455,77 @@ pub const THREAD: &[Lead] = &[
         note: "Mast terminal",
         mentions: &[(K, "Mast terminal")],
     },
+    // The signature sites below (Underground's).
+    Lead {
+        map: M,
+        note: "Pump log, below",
+        mentions: &[(M, "Pumping station"), (M, "Pump station note")],
+    },
+    Lead {
+        map: K,
+        note: "Novakova's note",
+        mentions: &[(K, "The pass"), (K, "Mine yard")],
+    },
+    Lead {
+        map: C,
+        note: "Sorter's chit",
+        mentions: &[(C, "The works")],
+    },
+    // Sallow Reservoir: the water works, and the village it drowned.
+    Lead {
+        map: S,
+        note: "Sallow gate log",
+        mentions: &[(S, "New Sallow"), (S, "Keeper's cottages")],
+    },
+    Lead {
+        map: S,
+        note: "Keeper's note",
+        mentions: &[(S, "Old Sallow"), (S, "The churchyard")],
+    },
+    Lead {
+        map: S,
+        note: "Valve log",
+        mentions: &[
+            (S, "Draw-off tower"),
+            (S, "The causeway"),
+            (S, "The upper arm"),
+        ],
+    },
+    Lead {
+        map: S,
+        note: "Supply terminal",
+        mentions: &[(M, "Village"), (C, "The works")],
+    },
+    Lead {
+        map: S,
+        note: "Gauge book",
+        mentions: &[(S, "The catchwater"), (S, "Keeper's note")],
+    },
+    Lead {
+        map: S,
+        note: "Club notice",
+        mentions: &[(S, "The upper arm")],
+    },
+    Lead {
+        map: S,
+        note: "Toll board",
+        mentions: &[(S, "The causeway"), (S, "New Sallow")],
+    },
+    Lead {
+        map: S,
+        note: "Stock terminal",
+        mentions: &[(M, "Bus depot"), (S, "The sorting ground")],
+    },
+    Lead {
+        map: S,
+        note: "Tower book",
+        mentions: &[(S, "Valve house"), (S, "Keeper's note")],
+    },
+    Lead {
+        map: S,
+        note: "Shop note",
+        mentions: &[(S, "New Sallow"), (S, "Keeper's note")],
+    },
 ];
 
 /// One beat of the thread across the career (`docs/LORE.md`, "The arc"):
@@ -480,8 +573,15 @@ pub const BEATS: &[Beat] = &[
     },
     Beat {
         gate: Gate::Recalled,
-        scenes: &["Lev's chair"],
+        scenes: &["At the fence"],
         radio: lines::BEAT_RECALLED,
+        gift: None,
+    },
+    // The ending played (`raid::epilogue`): he's been down with you.
+    Beat {
+        gate: Gate::Ended,
+        scenes: &["Lev's chair"],
+        radio: lines::BEAT_ENDED,
         gift: None,
     },
 ];
@@ -574,25 +674,27 @@ const BEAT_FIRST: f32 = 12.0;
 pub fn tell_beats(
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
     progression: Option<Res<crate::progression::Progression>>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
     mut state: Local<(
-        Option<(u32, bool)>,
+        Option<(u32, bool, bool)>,
         std::collections::VecDeque<&'static str>,
         f32,
     )>,
 ) {
     let tier = progression.map_or(0, |p| p.0.tier);
-    let now = (tier, raid.recalled);
+    let now = (tier, raid.recalled, epilogue.is_some_and(|e| e.done));
     let (seen, queue, timer) = &mut *state;
     let before = *seen.get_or_insert(now);
     if before != now {
         *seen = Some(now);
         for beat in BEATS {
-            let at = |(tier, recalled): (u32, bool)| super::scenes::Standing {
+            let at = |(tier, recalled, ended): (u32, bool, bool)| super::scenes::Standing {
                 tier,
                 recalled,
                 visits: 0,
+                ended,
             };
             if beat.gate.open(at(now)) && !beat.gate.open(at(before)) {
                 info!("story beat: {:?}", beat.gate);
@@ -623,8 +725,13 @@ pub fn tell_beats(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel};
     use extraction_core::map::{MapDef, MarkerKind};
+
+    /// Every valley (the shared list: a new one is held to all of this).
+    fn valleys() -> Vec<&'static str> {
+        extraction_core::map::VALLEYS.map(|v| v.0).to_vec()
+    }
 
     fn map(name: &str) -> MapDef {
         let text = std::fs::read_to_string(
@@ -668,20 +775,20 @@ mod tests {
             .collect()
     }
 
-    /// Every note's and terminal page's letters are big enough to read
-    /// at a metre (fast: straight from the maps, no app).
+    /// Every note's and terminal page's letters clear the floor from where
+    /// they're read (fast: straight from the maps, no app).
     #[test]
     fn every_note_fits_its_paper() {
         let mut small = Vec::new();
-        for name in VALLEYS.iter().chain(&["training_yard"]) {
+        for name in valleys().into_iter().chain(["training_yard"]) {
             let mut panels = crate::world::notes::marker_panels(&map(name));
             for n in scene_notes(name) {
                 panels.push((n.name.clone(), crate::world::notes::note_panel(&n.text)));
             }
             for (what, panel) in panels {
-                let deg = (em_metres(&panel) / read_from(&panel)).atan().to_degrees();
-                if deg < MIN_EM_DEG {
-                    small.push(format!("{name}: {what}: {deg:.2} deg"));
+                let source = crate::render::legibility::marker_source(&what);
+                if let Err(e) = check_panel(&panel, source.unwrap_or(TextSource::Note)) {
+                    small.push(format!("{name}: {what}: {e}"));
                 }
             }
         }
@@ -707,7 +814,7 @@ mod tests {
                 );
             }
         }
-        for name in VALLEYS {
+        for name in valleys() {
             for m in &map(name).markers {
                 let MarkerKind::Terminal { pages } = &m.kind else {
                     continue;
@@ -730,7 +837,7 @@ mod tests {
     /// its map, and every place it names is there to be found.
     #[test]
     fn the_thread_points_at_real_places() {
-        let maps: Vec<(&str, MapDef)> = VALLEYS.iter().map(|n| (*n, map(n))).collect();
+        let maps: Vec<(&str, MapDef)> = valleys().into_iter().map(|n| (n, map(n))).collect();
         let get = |n: &str| &maps.iter().find(|(m, _)| *m == n).expect(n).1;
         let mut problems = Vec::new();
         for (name, m) in &maps {
@@ -741,7 +848,11 @@ mod tests {
                 }
             }
         }
-        for lead in THREAD {
+        let loaded = |n: &str| maps.iter().any(|(m, _)| *m == n);
+        for lead in THREAD
+            .iter()
+            .filter(|l| loaded(l.map) && l.mentions.iter().all(|(m, _)| loaded(m)))
+        {
             if !worded(lead.map, get(lead.map)).contains(&lead.note) {
                 problems.push(format!("{}: no note \"{}\"", lead.map, lead.note));
             }
@@ -764,7 +875,7 @@ mod tests {
     /// in another valley: finding the words is how you find the keys.
     #[test]
     fn every_key_is_written_down_twice() {
-        for name in VALLEYS {
+        for name in valleys() {
             for m in &map(name).markers {
                 if !matches!(m.kind, MarkerKind::ValleyKey { .. }) {
                     continue;
@@ -788,7 +899,7 @@ mod tests {
     #[test]
     fn no_game_words_in_the_zone() {
         const BANNED: [&str; 6] = ["loot", "quest", "spawn", "respawn", "hp", "xp"];
-        for name in VALLEYS {
+        for name in valleys() {
             let texts = map(name)
                 .markers
                 .iter()
@@ -829,6 +940,7 @@ mod tests {
             tier,
             recalled,
             visits,
+            ended: false,
         };
         let scenes = crate::world::scenes::all();
         let catalog =
@@ -848,6 +960,10 @@ mod tests {
                     .iter()
                     .map(|r| at(*r, false, 0))
                     .chain([at(TIERS.len() as u32, true, 0)])
+                    .chain([Standing {
+                        ended: true,
+                        ..at(TIERS.len() as u32, true, 0)
+                    }])
                     .collect(),
                 Some(_) => (0..=12).map(|v| at(0, false, v)).collect(),
             };
@@ -871,10 +987,11 @@ mod tests {
                 thread.name
             );
             if thread.map.is_none() {
-                for (rank, b) in ranks.iter().skip(1).zip(beats) {
+                for (rank, b) in ranks.iter().skip(1).zip(beats.iter().take(TIERS.len())) {
                     assert_eq!(b.gate, Gate::Tier(*rank), "one beat a rank");
                 }
-                assert_eq!(beats.last().unwrap().gate, Gate::Recalled);
+                assert_eq!(beats[beats.len() - 2].gate, Gate::Recalled);
+                assert_eq!(beats.last().unwrap().gate, Gate::Ended, "the ending last");
                 // The ladder's last job is the letter the third beat sets up.
                 assert!(
                     beats

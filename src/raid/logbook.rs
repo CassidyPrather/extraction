@@ -26,6 +26,8 @@ pub struct RaidEntry {
     pub items: usize,
     /// Artifacts among them, by name.
     pub artifacts: Vec<String>,
+    /// Nights slept out, in the safehouse.
+    pub nights: u32,
 }
 
 #[derive(Resource, Default, Debug)]
@@ -72,14 +74,16 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             crate::interact::Grabbable {
                 points: vec![crate::interact::GrabPoint::free()],
             },
-            avian3d::prelude::Collider::cuboid(0.34, 0.25, 0.03),
+            avian3d::prelude::Collider::cuboid(0.36, 0.3, 0.03),
             avian3d::prelude::CollisionLayers::new(
                 crate::world::Layer::Item,
                 avian3d::prelude::LayerMask::NONE,
             ),
+            crate::render::legibility::TextSource::Logbook,
+            crate::interact::read::Readable,
             ScreenText {
                 text: String::new(),
-                size: Vec2::new(0.34, 0.25),
+                size: Vec2::new(0.36, 0.3),
                 style: ScreenStyle::Card,
             },
             Transform::from_xyz(-1.12, FLOOR + 1.66, 0.8)
@@ -129,6 +133,7 @@ fn write_entries(
     players: Query<Entity, With<LocalPlayer>>,
     carried: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
+    house: Option<Res<crate::progression::safehouse::Safehouse>>,
     mut was: Local<Option<std::mem::Discriminant<Phase>>>,
 ) {
     let now = std::mem::discriminant(&raid.phase);
@@ -169,6 +174,7 @@ fn write_entries(
         wrecked: std::mem::take(&mut book.wrecked),
         items,
         artifacts,
+        nights: house.map_or(0, |h| h.nights_out),
     };
     book.written = Some(entry_text(&entry));
     book.last = Some(entry);
@@ -200,6 +206,13 @@ fn entry_text(e: &RaidEntry) -> String {
         if e.home { "HOME" } else { "LOST" },
         e.minutes.max(1.0)
     )];
+    if e.nights > 0 {
+        lines.push(if e.nights == 1 {
+            "1 night out".to_owned()
+        } else {
+            format!("{} nights out", e.nights)
+        });
+    }
     lines.push(format!("Wrecked {}", wreck_list(&e.wrecked)));
     if e.home {
         lines.push(format!("Brought home {} things", e.items));
@@ -232,6 +245,7 @@ fn card_text(
     raid: Res<Raid>,
     book: Res<Logbook>,
     progression: Res<crate::progression::Progression>,
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     memorial: Res<crate::persist::Memorial>,
     stashes: Query<&crate::interact::body::Backpack, With<super::truck::Stash>>,
     items: Query<&Item>,
@@ -250,7 +264,13 @@ fn card_text(
                 crate::capstone::KEYS.iter().any(|(k, _)| k == id)
             })
             .count();
-        let page = crate::progression::career_page(&progression.0, &raid, &memorial.0, keys_home);
+        let page = crate::progression::career_page(
+            &progression.0,
+            &raid,
+            &memorial.0,
+            keys_home,
+            epilogue.done,
+        );
         format!("{page}\n\n(press: last raid)")
     } else {
         let record = format!(

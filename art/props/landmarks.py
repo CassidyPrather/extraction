@@ -259,8 +259,10 @@ def signal_box():
     beam(p, (sx1 - 0.03, 1.0, z0 - 0.1), (sx1 - 0.03, top + 1.0, z1 + 0.1), 0.04, "Timber")
     p.box((0.9, 0.1, 1.2), ((sx0 + sx1) / 2, top - 0.01, z1 + 0.6), "Planks", bevel=0.005, segs=1)
     p.box((0.2, 0.1, 1.2), (hw + 0.1, top - 0.01, z1 + 0.6), "Timber")
+    # The landing's posts, set into the ground as deep as the stair's
+    # blockout ramp goes.
     for z in (z1 + 0.05, z1 + 1.15):
-        rod(p, (sx1 - 0.03, 0.0, z), (sx1 - 0.03, top + 1.0, z), 0.04, "Timber", segs=4)
+        rod(p, (sx1 - 0.03, -0.13, z), (sx1 - 0.03, top + 1.0, z), 0.04, "Timber", segs=4)
     rod(p, (sx1 - 0.03, top + 1.0, z1 + 0.05), (sx1 - 0.03, top + 1.0, z1 + 1.15), 0.03, "Timber",
         segs=4)
     p.box((0.05, 2.0, 0.85), (hw + 0.025, y0 + 1.0, z1 + 0.6), "Painted", bevel=0.005, segs=1)

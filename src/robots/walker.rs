@@ -330,6 +330,7 @@ fn walker_brain(
             Option<&super::anim::Gait>,
             Option<&mut super::hound_mind::HoundMind>,
             Option<&super::flee::Fleeing>,
+            (Has<super::indoor::Dormant>, Has<super::indoor::Warden>),
         ),
     )>,
     targets: Query<&GlobalTransform>,
@@ -365,9 +366,13 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait, mut hound, fleeing),
+        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden)),
     ) in &mut walkers
     {
+        // (The heavy thinks for itself: `heavy_mind`.)
+        if gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy) {
+            continue;
+        }
         let is_hound = hound.is_some();
         if let Some(h) = hound.as_deref_mut() {
             h.cooldown -= dt;
@@ -381,6 +386,13 @@ fn walker_brain(
         }
         let pos = t.translation;
         *intent = Intent::default();
+        // Asleep in its bay: still, low.
+        if dormant {
+            intent.low = true;
+            w.goal = None;
+            w.path.clear();
+            continue;
+        }
         // A live grenade it knows about: run, out past its reach.
         if let Some(f) = fleeing {
             intent.pace = 1.4;
@@ -443,7 +455,11 @@ fn walker_brain(
                 // On its rounds.
                 patrol.as_deref_mut().and_then(|p| {
                     let (go, look) = p.step(pos, dt, sweep);
-                    intent.pace = super::indoor::PATROL_PACE;
+                    intent.pace = if warden {
+                        super::indoor::WARDEN_PACE
+                    } else {
+                        super::indoor::PATROL_PACE
+                    };
                     intent.look = look;
                     go
                 })
@@ -459,11 +475,12 @@ fn walker_brain(
                 if is_hound {
                     let far = Vec2::new(pos.x - at.x, pos.z - at.z).length()
                         > super::hound_mind::STALK_WITHIN;
-                    intent.pace = if far {
-                        1.0
-                    } else {
-                        super::hound_mind::STALK_PACE
-                    };
+                    intent.pace = super::hound_mind::RUN
+                        * if far {
+                            1.0
+                        } else {
+                            super::hound_mind::STALK_PACE
+                        };
                     intent.low = !far;
                 }
                 indoors = Some(at);
@@ -489,7 +506,11 @@ fn walker_brain(
                 }
             }
             Brain::Search { .. } => {
-                intent.pace = if is_hound { 0.5 } else { 0.7 };
+                intent.pace = if is_hound {
+                    super::hound_mind::NOSE_PACE * super::hound_mind::RUN
+                } else {
+                    0.7
+                };
                 intent.low = grappler || is_hound;
                 match search::search_step(&mut brain, pos, 2.0, dt, sweep) {
                     Step::Go(p) => Some(p),
@@ -554,7 +575,8 @@ fn walker_brain(
                             None
                         } else if h.lunge > 0.0 {
                             h.lunge -= dt;
-                            intent.pace = 1.6;
+                            // Flat out (its gait holds it to what it can).
+                            intent.pace = super::hound_mind::RUN * 1.6;
                             if d < super::hound_mind::BITE_RANGE && !h.bit {
                                 h.bit = true;
                                 h.cooldown = super::hound_mind::BITE_COOLDOWN;
@@ -581,6 +603,7 @@ fn walker_brain(
                             let away = (pos - tp).with_y(0.0).normalize_or(Vec3::X);
                             Some(pos + away * 3.0)
                         } else {
+                            intent.pace = super::hound_mind::RUN;
                             let facing = aware
                                 .target
                                 .and_then(|p| targets.get(p).ok())

@@ -12,6 +12,7 @@
 
 pub mod armour;
 pub mod ballistics;
+pub mod faults;
 pub mod feel;
 pub mod flat;
 pub mod grenades;
@@ -21,7 +22,10 @@ pub mod melee;
 pub mod muzzle;
 pub mod range;
 pub mod sling;
+pub mod tracers;
 pub mod visuals;
+pub mod wear;
+pub mod zero;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -50,6 +54,23 @@ pub struct Gun {
     pub magwell: Option<Entity>,
     /// Last trigger value seen, for the trigger-part animation.
     pub trigger: f32,
+    /// The gun's own dice (jams, duds, spread, its kick's yaw), seeded from
+    /// what it is and where it first lay ([`gun_seed`]): what happens to
+    /// one gun never hangs on how many others are lying about, nor on the
+    /// order things were spawned in, and a drill replays.
+    pub dice: Rng,
+}
+
+/// A gun's seed: its kind and where it was first put (to the centimetre).
+pub fn gun_seed(id: &str, at: Vec3) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in id.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    for c in at.to_array() {
+        h = (h ^ ((c * 100.0).round() as i64 as u64)).wrapping_mul(0x0100_0000_01b3);
+    }
+    h
 }
 
 /// A magazine item: what it fits and holds. Rounds live in `Item.rounds`.
@@ -113,10 +134,6 @@ pub struct GunEvent {
     pub at: Vec3,
 }
 
-/// Seeded randomness for jams, duds and spread, so sims replay.
-#[derive(Resource)]
-pub struct GunRng(pub Rng);
-
 /// Where a player's right-hand gun puts its sight line and its handguard,
 /// in hand space: flat mode and bots use it to aim and to place the
 /// supporting hand.
@@ -137,13 +154,17 @@ fn update_aim_hints(
     )>,
 ) {
     for (mut hint, children) in &mut players {
-        let gun = children.iter().find_map(|c| {
-            hands
-                .get(c)
-                .ok()
-                .filter(|(rh, _)| rh.side == crate::rig::Side::Right)
-                .and_then(|(_, h)| h.holding)
-                .and_then(|e| guns.get(e).ok())
+        // The gun held by its grip, in either hand (a left-handed player's
+        // is in the left); the right's first if both hands hold one.
+        let gun = crate::rig::Side::BOTH.iter().rev().find_map(|side| {
+            children.iter().find_map(|c| {
+                hands
+                    .get(c)
+                    .ok()
+                    .filter(|(rh, h)| rh.side == *side && h.supporting.is_none())
+                    .and_then(|(_, h)| h.holding)
+                    .and_then(|e| guns.get(e).ok())
+            })
         });
         *hint = match gun {
             Some((ge, g, ggt)) => {
@@ -177,7 +198,6 @@ pub struct WeaponsPlugin;
 impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<GunEvent>()
-            .insert_resource(GunRng(Rng::new(0x6A11)))
             .add_observer(setup_gun_items)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(AimHint::default());
@@ -189,6 +209,8 @@ impl Plugin for WeaponsPlugin {
             .add_plugins((
                 armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
+                zero::ZeroPlugin,
+                faults::FaultsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -217,12 +239,14 @@ fn setup_gun_items(
     add: On<Add, Item>,
     mut commands: Commands,
     items: Query<&Item>,
+    places: Query<&Transform>,
     catalog: Res<Catalog>,
 ) {
     let Ok(item) = items.get(add.entity) else {
         return;
     };
     let def = catalog.get(item.kind());
+    let first_at = places.get(add.entity).map_or(Vec3::ZERO, |t| t.translation);
     if let Some(mag) = &def.magazine {
         commands.entity(add.entity).insert(Mag {
             family: mag.fits.clone(),
@@ -234,7 +258,9 @@ fn setup_gun_items(
     let (Some(fdef), Some(layout)) = (&def.firearm, layout::layout(&def.id)) else {
         return;
     };
-    let firearm = Firearm::new(fdef.clone(), item.condition);
+    let seed = gun_seed(&def.id, first_at);
+    let mut firearm = Firearm::new(fdef.clone(), item.condition);
+    firearm.fault_dice = seed ^ 0xFA17;
     let mut points = vec![GrabPoint::new(layout.grip, GripRole::Primary, 0.12)];
     if let Some(s) = layout.support {
         points.push(GrabPoint::new(
@@ -288,6 +314,7 @@ fn setup_gun_items(
         layout,
         magwell,
         trigger: 0.0,
+        dice: Rng::new(seed),
     });
 }
 
@@ -320,6 +347,7 @@ fn magwell_events(
                     family: mag.family.clone(),
                     capacity: mag.capacity,
                     rounds: it.rounds,
+                    loads: it.loads.clone(),
                 };
                 if gun.firearm.insert_magazine(m).is_ok() {
                     out.write(GunEvent {
@@ -346,6 +374,7 @@ fn magwell_events(
                 if let Some(m) = gun.firearm.remove_magazine() {
                     if let Ok((mut it, _, _)) = mags.get_mut(item) {
                         it.rounds = m.rounds;
+                        it.loads = m.loads;
                     }
                     out.write(GunEvent {
                         gun: owner.0,
@@ -381,6 +410,7 @@ fn sync_mag_rounds(
         {
             if it.rounds != m.rounds {
                 it.rounds = m.rounds;
+                it.loads = m.loads.clone();
             }
         }
     }
@@ -405,7 +435,8 @@ fn work_handles(
             .is_ok_and(|(_, hand)| hand.handle.map(|x| x.0) == Some(*g))
     });
     for (hand_e, hand) in &hands {
-        let Some((gun_e, _)) = hand.handle else {
+        // (A scope's turret is worked in `zero`.)
+        let Some((gun_e, 0)) = hand.handle else {
             continue;
         };
         let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
@@ -434,6 +465,13 @@ fn work_handles(
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
+                // A stuck bolt: only a palm slapped up under the handle
+                // breaks it free.
+                if gun.firearm.bolt_stuck
+                    && hand.velocity.dot(gt.rotation() * Vec3::Y) > faults::STICKY_SLAP
+                {
+                    ev.extend(gun.firearm.free_bolt());
+                }
                 if gun.firearm.bolt_travel < 0.05 {
                     let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
@@ -456,7 +494,7 @@ fn work_handles(
             }
         };
         let name = catalog.get(item.kind()).id.clone();
-        emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
 }
 
@@ -506,7 +544,7 @@ fn tap_magazines(
         if tapped {
             let events = gun.firearm.tap_magazine();
             let name = catalog.get(item.kind()).id.clone();
-            emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+            emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
         }
     }
 }
@@ -583,27 +621,32 @@ fn feed_by_hand(
             }
             entry.1 = entry.1.max(h);
             if entry.1 - h >= STRIP_PUSH {
-                let moved = gun.firearm.strip_clip(it.rounds);
+                let n = it.rounds;
+                let moved = gun.firearm.strip_clip_of(n, &mut it.loads);
                 it.rounds -= moved;
                 events.extend((0..moved).map(|_| FireEvent::RoundLoaded));
                 clips.remove(&hand_e);
             }
         } else if def.rounds <= 1 {
             // A loose round: thumbed in, out of the hand.
-            if gun.firearm.load_round() {
+            let load = it.loads.pop_or(1, def.load);
+            if gun.firearm.load_round_of(load) {
                 events.push(FireEvent::RoundLoaded);
                 hand.holding = None;
                 commands.entity(held).despawn();
             }
         } else if boxes.get(&hand_e).is_none_or(|t| now - t >= BOX_FEED) {
             // A box at the port: a round at a time, as fast as fingers.
-            if gun.firearm.load_round() {
+            let mut left = it.loads.clone();
+            let load = left.pop_or(it.rounds, def.load);
+            if gun.firearm.load_round_of(load) {
+                it.loads = left;
                 it.rounds -= 1;
                 events.push(FireEvent::RoundLoaded);
                 boxes.insert(hand_e, now);
             }
         }
-        emit(gun_e, &name, &gun, gt, events, &mut out, &mut ejected);
+        emit(gun_e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
 }
 
@@ -615,6 +658,7 @@ pub fn release_handle(gun: &mut Gun) -> Vec<FireEvent> {
 /// Face buttons and the selector, from the hand holding the gun.
 fn buttons(
     players: Query<&RigInput, With<Player>>,
+    mut macros: Query<&mut flat::GunMacro>,
     mut guns: Query<(Entity, &mut Gun, &Held, &GlobalTransform, &Item)>,
     mut hands: Query<&mut Hand>,
     mut last: Local<std::collections::HashMap<Entity, (bool, bool, bool)>>,
@@ -622,7 +666,11 @@ fn buttons(
     mut ejected: MessageWriter<Ejection>,
     mut drop_mag: MessageWriter<DropMagazine>,
     catalog: Res<Catalog>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut racks: Local<Vec<(Entity, Entity)>>,
 ) {
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
+    racks.clear();
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -659,6 +707,13 @@ fn buttons(
                 } else {
                     events.extend(gun.firearm.cock_hammer());
                 }
+            } else if one_handed
+                && !gun.firearm.locked_back
+                && gun.firearm.def.action != ActionKind::BreakAction
+            {
+                // One hand: the button racks it (there's no other hand for
+                // the slide); locked back, it lets the slide go as ever.
+                racks.push((held.player, e));
             } else {
                 events.extend(gun.firearm.release_slide_stop());
             }
@@ -671,9 +726,17 @@ fn buttons(
                 events.extend(gun.firearm.cycle_mode());
             }
         }
-        emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
         // A hand that let go of the handle this tick: spring return.
         let _ = &mut hands;
+    }
+    for (player, gun) in racks.drain(..) {
+        let (Ok(g), Ok(mut mac)) = (guns.get(gun), macros.get_mut(player)) else {
+            continue;
+        };
+        if !mac.busy() {
+            mac.start(gun, flat::macro_steps(flat::MacroKind::Rack, &g.1));
+        }
     }
 }
 
@@ -688,8 +751,32 @@ pub struct DropMagazine {
 pub struct Ejection {
     pub round: Round,
     pub cartridge: String,
+    /// A live round's load (which loose round it lands as).
+    pub load: extraction_core::ammo::Load,
     pub at: Vec3,
     pub velocity: Vec3,
+}
+
+/// The loose round of `cartridge` loaded with `load` (ball if there's no
+/// such round).
+pub fn loose_round(
+    catalog: &extraction_core::items::ItemCatalog,
+    cartridge: &str,
+    load: extraction_core::ammo::Load,
+) -> Option<extraction_core::items::ItemKind> {
+    let find = |load| {
+        catalog
+            .iter()
+            .find(|(_, d)| {
+                d.category == Category::Ammo
+                    && d.rounds == 1
+                    && d.magazine.is_none()
+                    && d.cartridge.as_deref() == Some(cartridge)
+                    && d.load == load
+            })
+            .map(|(k, _)| k)
+    };
+    find(load).or_else(|| find(extraction_core::ammo::Load::Standard))
 }
 
 /// Where a shot leaves from: the muzzle, unless something solid lies
@@ -717,7 +804,6 @@ fn triggers(
     players: Query<&RigInput, With<Player>>,
     mut guns: Query<(Entity, &mut Gun, Option<&Held>, &GlobalTransform, &Item)>,
     time: Res<Time>,
-    mut rng: ResMut<GunRng>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut shots: MessageWriter<ballistics::Shot>,
@@ -730,7 +816,10 @@ fn triggers(
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
         gun.trigger = trigger;
-        let events = gun.firearm.update(dt, trigger > 0.55, &mut || rng.0.f32());
+        let events = {
+            let Gun { firearm, dice, .. } = &mut *gun;
+            firearm.update(dt, trigger > 0.55, &mut || dice.f32())
+        };
         let name = catalog.get(item.kind()).id.clone();
         for ev in &events {
             if let FireEvent::Fired { barrel } = ev {
@@ -750,11 +839,11 @@ fn triggers(
                     projectiles: def.projectiles,
                     spread: gun.firearm.spread_radians(),
                     recoil: def.recoil,
-                    seed: rng.0.next_u64(),
+                    seed: gun.dice.next_u64(),
                 });
             }
         }
-        emit(e, &name, &gun, gt, events, &mut out, &mut ejected);
+        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
 }
 
@@ -762,7 +851,7 @@ fn triggers(
 fn emit(
     gun_e: Entity,
     name: &str,
-    gun: &Gun,
+    gun: &mut Gun,
     gt: &GlobalTransform,
     events: Vec<FireEvent>,
     out: &mut MessageWriter<GunEvent>,
@@ -771,9 +860,15 @@ fn emit(
     for ev in events {
         if let FireEvent::Ejected(round) = ev {
             let dir = gt.rotation() * gun.layout.eject.normalize_or_zero();
+            let load = if round == Round::Live && !gun.firearm.ejected.is_empty() {
+                gun.firearm.ejected.remove(0)
+            } else {
+                Default::default()
+            };
             ejected.write(Ejection {
                 round,
                 cartridge: gun.firearm.def.cartridge.clone(),
+                load,
                 at: gt.transform_point(gun.layout.port),
                 velocity: dir * 2.6,
             });
@@ -881,17 +976,7 @@ pub fn spawn_ejections(
                 }
             }
             Round::Live => {
-                let id = match ej.cartridge.as_str() {
-                    "9x18" => "round_9x18",
-                    "5.45x39" => "round_545",
-                    "7.62x54R" => "round_762r",
-                    "7.62x39" => "round_762x39",
-                    "7.62x38R" => "round_762x38r",
-                    "7.62x25" => "round_762x25",
-                    "12ga" => "shell_12ga",
-                    _ => continue,
-                };
-                let Some(kind) = catalog.kind(id) else {
+                let Some(kind) = loose_round(&catalog, &ej.cartridge, ej.load) else {
                     continue;
                 };
                 let e = spawn_item(
@@ -939,6 +1024,7 @@ pub fn drop_magazines(
         };
         if let Some(m) = removed {
             it.rounds = m.rounds;
+            it.loads = m.loads;
         }
         let world = gt.compute_transform();
         crate::interact::physics_on(
@@ -971,14 +1057,14 @@ pub fn handle_released(
     // Guns whose handle is held this tick.
     let held_handles: Vec<Entity> = hands
         .iter()
-        .filter_map(|h| h.handle.map(|(g, _)| g))
+        .filter_map(|h| h.handle.filter(|(_, id)| *id == 0).map(|(g, _)| g))
         .collect();
     for g in watching.clone() {
         if !held_handles.contains(&g) {
             if let Ok((e, mut gun, gt, item)) = guns.get_mut(g) {
                 let ev = release_handle(&mut gun);
                 let name = catalog.get(item.kind()).id.clone();
-                emit(e, &name, &gun, gt, ev, &mut out, &mut ejected);
+                emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
             }
         }
     }
@@ -1110,6 +1196,7 @@ mod casing_tests {
         app.world_mut().write_message(Ejection {
             round: Round::Spent,
             cartridge: "5.45x39".into(),
+            load: Default::default(),
             at: ground + Vec3::Y * 1.3,
             velocity: Vec3::new(2.0, 1.0, 0.0),
         });
@@ -1130,6 +1217,7 @@ mod casing_tests {
             app.world_mut().write_message(Ejection {
                 round: Round::Spent,
                 cartridge: "5.45x39".into(),
+                load: Default::default(),
                 at: ground + Vec3::new(i as f32 * 0.05, 1.3, 0.0),
                 velocity: Vec3::X,
             });

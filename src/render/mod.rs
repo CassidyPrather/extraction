@@ -10,6 +10,8 @@ pub mod fog;
 pub mod grade;
 pub mod kit;
 pub mod kitchen;
+pub mod legibility;
+pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
 pub mod materials;
@@ -22,6 +24,7 @@ pub mod screen;
 pub mod spikes;
 pub mod stats;
 pub mod terrain_material;
+pub mod tools;
 pub mod upgrades;
 pub mod warmup;
 pub mod water_material;
@@ -58,14 +61,23 @@ impl Plugin for RenderPlugin {
         ))
         .add_plugins(crate::raid::board::BoardVisualsPlugin)
         .add_plugins(crate::raid::lev::LevVisualsPlugin)
+        .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
+        .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
+        .add_plugins(tools::ToolVisualsPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
-        .add_systems(PostUpdate, grade::dim_indoors)
+        // After the underground's darkening, which takes whatever ambient it
+        // finds for the sky's: run before it, the room's dimming was taken
+        // for daylight and the light ran down to nothing indoors.
+        .add_systems(
+            PostUpdate,
+            grade::dim_indoors.after(crate::world::underground::go_dark),
+        )
         .add_systems(Update, attach_flat_camera)
         .add_systems(
             Update,

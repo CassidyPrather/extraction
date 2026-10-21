@@ -41,6 +41,14 @@ Somebody in town still pays for what's on them.\"\nStash it, press here."
     )
 }
 
+/// An expedition: a recover so deep in it takes a night out.
+pub fn ask_expedition(place: &str) -> String {
+    format!(
+        "\"Two days' walk, this one. A recorder, left {place}. Sleep at a cabin \
+on the way.\"\nStash it, press here."
+    )
+}
+
 /// A scout of `place`.
 pub fn ask_scout(place: &str) -> String {
     format!(
@@ -82,6 +90,8 @@ pub const ONE_A_RAID: &str = "Driver: \"One thing at a time. After your next run
 pub const IN_THE_YARD: &str = "Driver: \"Not in the yard. Out there, for real.\"";
 pub const NO_RECORDER: &str = "Driver: \"No recorder in the stash. Still out there, is it?\"";
 pub const NO_LEDGER: &str = "Driver: \"Not in the stash. Bay K-14. Under the Gate.\"";
+pub const EXPEDITION_NO_NIGHT: &str =
+    "Driver: \"That's not two days. Sleep out there, then bring it.\"";
 pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
@@ -154,6 +164,47 @@ pub fn gift(u: Upgrade) -> &'static str {
 pub fn fetch_swapped(name: &str) -> String {
     format!("Driver: \"Forget the {name}. Something else on the card.\"")
 }
+
+// --- After the epilogue (Lev has been into the depot) --------------------
+
+/// The career page's last line, once he has.
+pub const CAREER_AFTER: &str = "Lev drives in now. He parks by the well.";
+
+/// What he says he wants a fetch for, after: gentler (Story's); `None`
+/// keeps the usual why.
+pub fn why_after(item: &str) -> Option<&'static str> {
+    Some(match item {
+        "canned_stew" => "Something hot. We'll eat at the well.",
+        "field_dressing" => "Dressings. For my sister. She's asking after you.",
+        "matches" => "Matches. I light the lamp in her window.",
+        "tea_tin" => "Tea. Two cups, these days.",
+        "scrap_metal" => "Scrap. I'm mending her gate.",
+        "gun_oil" => "Oil. Her well's winch squeals.",
+        "electronics" => "Boards. The mast at the fence still talks to itself.",
+        "robot_parts" => "Their parts. Nobody's coming for them now.",
+        "sensor_eye" => "An eye. I want one on the shelf where I can see it.",
+        "servo" => "A servo. I'm making her gate open itself.",
+        _ => return None,
+    })
+}
+
+// --- Safehouse ----------------------------------------------------------------
+// (Placeholders for Story.)
+
+pub const SAFE_CLEARED: &str = "Empty now. Wedge the door, then light the stove.";
+pub const SAFE_BARRED: &str = "Door's wedged. Nothing gets in without you hearing.";
+pub const SAFE_LIT: &str = "The stove catches. Smoke and pine, and warm hands.";
+pub const SAFE_STOVE_LIT: &str = "The stove ticks as it warms.";
+pub const SAFE_NO_MATCHES: &str = "Nothing to light it with. You'll want matches.";
+pub const SAFE_CLAIMED: &str = "A crate, a bed, a radio. Somewhere to stop.";
+pub const SAFE_NOT_YET: &str = "Not yours yet. Clear it, wedge the door, light the stove.";
+pub const SAFE_WEDGE_FIRST: &str = "Not with the door loose. Wedge it first.";
+pub const SAFE_SURGE_CLOSE: &str = "The air's tight. Too near the Surge to sleep.";
+pub const SAFE_WOKE: &str = "Grey light under the door.";
+pub const SAFE_NIGHT_VISIT: &str = "The radio, low: machine talk, close. Something's at the door.";
+pub const SAFE_TRUCK_WAITS: &str = "Truck: \"I'll sleep in the cab at the RV. First light.\"";
+pub const SAFE_TRUCK_LEFT: &str = "Truck: \"Couldn't sit all night. Call me when you're up.\"";
+pub const SAFE_FOUND: &str = "Truck: \"You were loud out there. They'll have been at your cabin.\"";
 
 // --- Upkeep and orders (after the ladder) ---------------------------------
 
@@ -242,6 +293,21 @@ mod tests {
             back_in_order("cabinet"),
             ORDER_LATER.into(),
             ordered("Medicine"),
+            SAFE_CLEARED.into(),
+            SAFE_BARRED.into(),
+            SAFE_LIT.into(),
+            SAFE_STOVE_LIT.into(),
+            SAFE_NO_MATCHES.into(),
+            SAFE_CLAIMED.into(),
+            SAFE_NOT_YET.into(),
+            SAFE_WEDGE_FIRST.into(),
+            SAFE_SURGE_CLOSE.into(),
+            SAFE_WOKE.into(),
+            SAFE_NIGHT_VISIT.into(),
+            SAFE_TRUCK_WAITS.into(),
+            SAFE_TRUCK_LEFT.into(),
+            SAFE_FOUND.into(),
+            EXPEDITION_NO_NIGHT.into(),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(

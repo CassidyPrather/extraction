@@ -65,6 +65,8 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             },
             Collider::cuboid(0.3, 0.26, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
+            crate::interact::read::Readable,
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.26),
@@ -87,7 +89,15 @@ fn press_card(
     mut requests: ResMut<Requests>,
     mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
-    mut stashes: Query<&mut Backpack, With<Stash>>,
+    (stashes, mut bags, mut sockets): (
+        Query<Entity, With<Stash>>,
+        Query<&mut Backpack>,
+        Query<(
+            Entity,
+            &mut crate::interact::Socket,
+            &crate::interact::SocketOwner,
+        )>,
+    ),
     items: Query<&Item>,
     catalog: Res<Catalog>,
     loot: Option<Res<Loot>>,
@@ -95,6 +105,7 @@ fn press_card(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut done: MessageWriter<crate::progression::JobDone>,
+    logbook: Res<crate::raid::logbook::Logbook>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -119,15 +130,31 @@ fn press_card(
             raid.say(lines::IN_THE_YARD);
             continue;
         }
-        let Some(mut stash) = stashes.iter_mut().next() else {
+        let Some(stash) = stashes.iter().next() else {
             continue;
         };
-        let in_stash = |id: &str, n: u32, stash: &Backpack| -> Vec<Entity> {
-            stash
+        // What's in the stash, and in a bag or a mount of something in it (a
+        // stone sealed in its lead case counts): (the bag or socket that
+        // holds it, the item).
+        let in_stash = |id: &str, n: u32| -> Vec<(Entity, Entity)> {
+            let Ok(top) = bags.get(stash) else {
+                return Vec::new();
+            };
+            let in_bags = top
                 .contents
                 .iter()
-                .copied()
-                .filter(|e| {
+                .filter_map(|b| bags.get(*b).ok().map(|bag| (*b, bag)))
+                .flat_map(|(b, bag)| bag.contents.iter().map(move |e| (b, *e)));
+            let mounted = sockets
+                .iter()
+                .filter(|(_, _, owner)| top.contents.contains(&owner.0))
+                .filter_map(|(s, socket, _)| socket.occupant.map(|e| (s, e)));
+            top.contents
+                .iter()
+                .map(|e| (stash, *e))
+                .chain(in_bags)
+                .chain(mounted)
+                .filter(|(_, e)| {
                     items.get(*e).is_ok_and(|i| {
                         extraction_core::progression::fetch_takes(id, &catalog.get(i.kind()).id)
                     })
@@ -135,9 +162,9 @@ fn press_card(
                 .take(n as usize)
                 .collect()
         };
-        let handed: Vec<Entity> = match &job {
+        let handed: Vec<(Entity, Entity)> = match &job {
             Job::Fetch { item: id, n } => {
-                let have = in_stash(id, *n, &stash);
+                let have = in_stash(id, *n);
                 if (have.len() as u32) < *n {
                     raid.say(lines::fetch_short(
                         have.len(),
@@ -148,16 +175,22 @@ fn press_card(
                 }
                 have
             }
-            Job::Recover { .. } => {
-                let have = in_stash(RECOVER_ITEM, 1, &stash);
+            Job::Recover { overnight, .. } => {
+                let have = in_stash(RECOVER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_RECORDER);
+                    continue;
+                }
+                // An expedition counts when the raid it came home on had a
+                // night out in it.
+                if *overnight && !logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
+                    raid.say(lines::EXPEDITION_NO_NIGHT);
                     continue;
                 }
                 have
             }
             Job::Letter => {
-                let have = in_stash(LETTER_ITEM, 1, &stash);
+                let have = in_stash(LETTER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_LETTER);
                     continue;
@@ -165,7 +198,7 @@ fn press_card(
                 have
             }
             Job::Ledger => {
-                let have = in_stash(LEDGER_ITEM, 1, &stash);
+                let have = in_stash(LEDGER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_LEDGER);
                     continue;
@@ -180,8 +213,12 @@ fn press_card(
                 Vec::new()
             }
         };
-        stash.contents.retain(|e| !handed.contains(e));
-        for e in handed {
+        for (holder, e) in handed {
+            if let Ok(mut b) = bags.get_mut(holder) {
+                b.contents.retain(|x| *x != e);
+            } else if let Ok((_, mut socket, _)) = sockets.get_mut(holder) {
+                socket.occupant = None;
+            }
             commands.entity(e).despawn();
         }
         requests.number += 1;
@@ -247,7 +284,8 @@ fn place_cache(
         .0
         .iter()
         .map(|s| s.at)
-        .filter(|p| p.xz().distance(base) > CACHE_AWAY)
+        // The driver doesn't go below ground.
+        .filter(|p| p.xz().distance(base) > CACHE_AWAY && p.y >= zone.ground(p.x, p.z) - 1.5)
         .collect();
     if far.is_empty() {
         return None;
@@ -320,11 +358,15 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
                 .total_cmp(&extraction_core::geom::dist(b.at, here))
         });
     let place = match below {
-        Some(l) => format!("the {}", l.name.to_lowercase()),
+        Some(l) => {
+            let name = l.name.to_lowercase();
+            format!("the {}", name.trim_start_matches("the "))
+        }
         None => building.map_or("a spot".to_owned(), |b| format!("the {b}")),
     };
     let into = if below.is_some() { "down in" } else { "in" };
-    match landmark {
+    // Not "in the pump house by the Pump house".
+    match landmark.filter(|m| place != format!("the {}", m.name.to_lowercase())) {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
@@ -385,6 +427,7 @@ fn card_text(
     progression: Res<Progression>,
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
@@ -402,7 +445,7 @@ fn card_text(
         "DRIVER WANTS\n".to_owned()
     };
     match &p.job {
-        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map),
+        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done),
         None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {
@@ -598,5 +641,45 @@ pub(crate) mod tests {
         press_card(&mut app);
         assert_eq!(app.world().resource::<Progression>().0.done, 2);
         assert_eq!(stew(&mut app), before - 2, "handed over");
+    }
+
+    #[test]
+    fn a_stone_sealed_in_its_case_counts_for_the_fetch() {
+        let mut app = app();
+        home(&mut app);
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Fetch {
+            item: "art_hearth".into(),
+            n: 1,
+        });
+        stash(&mut app, "lead_case", 1);
+        app.update();
+        let st = one::<With<Stash>>(&mut app);
+        let case = *app
+            .world()
+            .get::<Backpack>(st)
+            .unwrap()
+            .contents
+            .last()
+            .unwrap();
+        let catalog = app.world().resource::<Catalog>().clone();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let stone = spawn_item(
+            &mut Commands::new(&mut queue, app.world()),
+            &catalog,
+            SpawnItem {
+                kind: catalog.kind("art_hearth").unwrap(),
+                transform: Transform::default(),
+                condition: 1.0,
+            },
+        );
+        queue.apply(app.world_mut());
+        app.update();
+        crate::persist::seat_in_mount(app.world_mut(), case, stone);
+        app.update();
+        let before = app.world().resource::<Progression>().0.done;
+        press_card(&mut app);
+        assert_eq!(app.world().resource::<Progression>().0.done, before + 1);
+        assert!(app.world().get_entity(stone).is_err(), "handed over");
+        assert!(app.world().get_entity(case).is_ok(), "the case stays");
     }
 }

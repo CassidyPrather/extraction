@@ -26,6 +26,7 @@ it. Thirty seconds now versus archaeology later.
 | `assets/textures/materials/boulder/` | ambientCG `Rock045` — <https://ambientcg.com/a/Rock045> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/red_brick/` | ambientCG `Bricks097` — <https://ambientcg.com/a/Bricks097> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/concrete_wet/` | Poly Haven `concrete_wall_007` — <https://polyhaven.com/a/concrete_wall_007> | Dario Barresi, Rico Cilliers, Charlotte Baglioni | CC0 1.0 | 2026-10 |
+| `assets/textures/materials/dressed_stone/` | Poly Haven `large_sandstone_blocks` — <https://polyhaven.com/a/large_sandstone_blocks> | Rob Tuytel | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/rusty_metal/` | Poly Haven `rusty_metal_04` — <https://polyhaven.com/a/rusty_metal_04> | Amal Kumar | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/painted_metal_peeling/` | ambientCG `PaintedMetal006` — <https://ambientcg.com/a/PaintedMetal006> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/corrugated_iron/` | Poly Haven `rusty_corrugated_iron` — <https://polyhaven.com/a/rusty_corrugated_iron> | Charlotte Baglioni | CC0 1.0 | 2026-10 |
@@ -181,6 +182,8 @@ it. Thirty seconds now versus archaeology later.
 | `assets/audio/ambience/raven_*.ogg` | Freesound "Raven_Caw.wav" — <https://freesound.org/s/274439/> | KiddoFish86 | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/raven_*.ogg` | Freesound "Raven call.wav" — <https://freesound.org/s/328846/> | deleted_user_958643 | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/jackdaw_*.ogg` | Freesound "Group of jackdaw" — <https://freesound.org/s/612814/> | GeniusKevin | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/insects_night_*.ogg` | Freesound "180808 Crickets night insects busy chorus NOTL.mp3" — <https://freesound.org/s/571079/> | TRP | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/rustle_leaves_*.ogg` | Freesound "Wind rustling leaves through tree Cardiff" — <https://freesound.org/s/848978/> | gsparrysound | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo noises" — <https://freesound.org/s/188821/> | peridactyloptrix | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Small servo (arduino)" — <https://freesound.org/s/520514/> | gpag1 | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo motor" — <https://freesound.org/s/322021/> | Burningmonkey | CC0 1.0 | 2026-10 |

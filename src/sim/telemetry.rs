@@ -339,6 +339,7 @@ pub fn finish(
     mut exit: MessageWriter<AppExit>,
     progression: Option<Res<crate::progression::Progression>>,
     zone: Res<crate::world::Zone>,
+    house: Option<Res<crate::progression::safehouse::Safehouse>>,
 ) {
     if log.finished {
         return;
@@ -403,11 +404,15 @@ pub fn finish(
             // The driver's scout job (`progression`), when there is one here.
             "job": progression.as_ref().and_then(|p| match &p.0.job {
                 Some(extraction_core::progression::Job::Scout { map, place, at, seen }) if *map == opts.map => {
-                    Some(json!({"kind": "scout", "place": place, "seen": seen,
+                    Some(json!({"kind": "scout", "place": place, "seen": seen, "tier": p.0.tier,
+                                "armour": std::env::var("SIM_ARMOUR").ok(),
                                 "danger": zone.map.region_at(*at).map(|r| r.danger)}))
                 }
                 _ => None,
             }),
+            // Nights slept in the safehouse (`SIM_OVERNIGHT`).
+            "nights": house.as_ref().map_or(0, |h| h.nights_out),
+            "night_visits": house.as_ref().map_or(0, |h| h.visits),
             "x": round(pos.x, 1),
             "z": round(pos.z, 1),
         }),

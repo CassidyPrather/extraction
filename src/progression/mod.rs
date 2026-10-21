@@ -54,6 +54,7 @@ pub struct ProgressionPlugin;
 
 impl Plugin for ProgressionPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(safehouse::SafehousePlugin);
         app.init_resource::<Progression>()
             .add_message::<JobDone>()
             .add_systems(
@@ -126,7 +127,7 @@ pub fn want_name(catalog: &Catalog, id: &str) -> String {
 }
 
 /// The job as the card says it.
-pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
+pub fn job_text(job: &Job, catalog: &Catalog, map: &str, epilogue: bool) -> String {
     let elsewhere = |m: &str| {
         if m == map {
             String::new()
@@ -137,18 +138,27 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str) -> String {
     match job {
         Job::Fetch { item, n } => {
             let name = want_name(catalog, item);
-            lines::ask_fetch(*n, &name, extraction_core::progression::why(item))
+            let why = epilogue
+                .then(|| lines::why_after(item))
+                .flatten()
+                .unwrap_or_else(|| extraction_core::progression::why(item));
+            lines::ask_fetch(*n, &name, why)
         }
         Job::Recover {
             map: m,
             region,
             place,
+            overnight,
             ..
         } => {
             let where_ = place
                 .clone()
                 .unwrap_or_else(|| format!("somewhere in the {region}."));
-            elsewhere(m) + &lines::ask_recover(&where_)
+            if *overnight {
+                elsewhere(m) + &lines::ask_expedition(&where_)
+            } else {
+                elsewhere(m) + &lines::ask_recover(&where_)
+            }
         }
         Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
         Job::Ledger => elsewhere(extraction_core::progression::LEDGER_MAP) + lines::ASK_LEDGER,
@@ -286,6 +296,7 @@ fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>)
             },
             Collider::cuboid(0.3, 0.12, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
             crate::raid::bench::ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.12),
@@ -393,7 +404,17 @@ fn job_done(
 }
 
 /// There's always a job on the card.
-fn offer_job(opts: Res<LaunchOptions>, raid: Res<Raid>, mut progression: ResMut<Progression>) {
+fn offer_job(
+    opts: Res<LaunchOptions>,
+    raid: Res<Raid>,
+    // Lev has been into the depot with you (Story's epilogue): the job
+    // card's asks ease off.
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
+    mut progression: ResMut<Progression>,
+) {
+    if progression.0.quiet != epilogue.done {
+        progression.0.quiet = epilogue.done;
+    }
     if progression.0.job.is_some() {
         return;
     }
@@ -448,6 +469,7 @@ fn place_recorder(
         region,
         at,
         place,
+        ..
     }) = &mut progression.0.job
     else {
         return;
@@ -474,10 +496,14 @@ fn place_recorder(
             p.xz().distance(Vec2::from_array(*at)) < UNDERGROUND_REACH
                 && p.y < zone.ground(p.x, p.z) - 1.5
         }
-        None => zone
-            .map
-            .region_at([p.x, p.z])
-            .is_some_and(|r| r.name == *region),
+        // A region's: above ground (a site under it is its own job).
+        None => {
+            p.y >= zone.ground(p.x, p.z) - 1.5
+                && zone
+                    .map
+                    .region_at([p.x, p.z])
+                    .is_some_and(|r| r.name == *region)
+        }
     };
     let mut candidates: Vec<Vec3> = spots
         .iter()
@@ -820,6 +846,7 @@ pub fn career_page(
     raid: &Raid,
     memorial: &extraction_core::save::Memorial,
     keys_home: usize,
+    epilogue: bool,
 ) -> String {
     let mut lines = vec![
         "CAREER".to_owned(),
@@ -882,10 +909,14 @@ pub fn career_page(
             memorial.lost.len()
         ));
     }
+    if epilogue {
+        lines.push(lines::CAREER_AFTER.to_owned());
+    }
     lines.join("\n")
 }
 
 pub mod lines;
+pub mod safehouse;
 
 #[cfg(test)]
 mod tests;

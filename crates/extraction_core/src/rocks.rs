@@ -8,7 +8,7 @@
 //! on roads or paths, in water, by buildings and markers, or round a tree.
 
 use crate::geom::{self, P2};
-use crate::map::{MapDef, prefab_clearance};
+use crate::map::{MapDef, MarkerKind, prefab_clearance};
 use crate::noise::Rng;
 use crate::terrain::Heightmap;
 
@@ -68,8 +68,17 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
     let clear: Vec<(P2, f32)> = map
         .placements
         .iter()
+        // (A site's kiosks are cleared after: see the end.)
+        .filter(|p| !crate::underground::is_site(&p.prefab))
         .map(|p| (p.at, prefab_clearance(&p.prefab) + 2.0))
-        .chain(map.markers.iter().map(|m| (m.at, 7.0)))
+        // Round a rendezvous, the whole way in to the truck's tailgate.
+        .chain(map.markers.iter().map(|m| {
+            let r = match m.kind {
+                MarkerKind::Rendezvous => crate::map_lint::TRUCK_APPROACH + 4.0,
+                _ => 7.0,
+            };
+            (m.at, r)
+        }))
         .collect();
     // Trees by 4 m cell, so a boulder doesn't grow round a trunk.
     let mut trees: std::collections::HashMap<(i32, i32), Vec<P2>> = Default::default();
@@ -219,17 +228,24 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
         }
         z += cell;
     }
+    // Off every site kiosk, the exits' too, after the scatter: skipping
+    // them in it would draw the rest of the map's rocks differently.
+    let kiosks = crate::underground::kiosk_clearings(map);
+    out.retain(|r| {
+        !kiosks
+            .iter()
+            .any(|(c, cr)| geom::dist(*c, [r.pos[0], r.pos[2]]) < cr + r.radius)
+    });
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
     #[test]
     fn rocks_break_up_the_ground_and_keep_off_roads() {
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let rocks = scatter_rocks(&map, &hm);

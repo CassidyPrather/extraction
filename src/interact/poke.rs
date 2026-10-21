@@ -55,6 +55,9 @@ pub(super) fn mount_button(
             | Pressable::Request
             | Pressable::Terminal
             | Pressable::Camp
+            // Gripped, it comes up to be read (`read`): its button turns
+            // the page.
+            | Pressable::Logbook
     ) && !matches!(
         camp,
         Some(crate::camp::CampCard::Title | crate::camp::CampCard::Career)

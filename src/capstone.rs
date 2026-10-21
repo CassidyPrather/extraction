@@ -160,6 +160,7 @@ fn build_lock(mut commands: Commands, zone: Option<Res<Zone>>, mut done: Local<b
             .id();
         commands.spawn((
             LockScreen,
+            crate::render::legibility::TextSource::LockScreen,
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.42, 0.3),
@@ -217,6 +218,8 @@ fn turn_lock(
             // The epilogue, left on the lock.
             commands.spawn((
                 Name::new("Epilogue"),
+                crate::render::legibility::TextSource::Epilogue,
+                crate::interact::read::readable(Vec2::new(0.24, 0.32)),
                 ScreenText {
                     text: crate::render::screen::wrap_lines(EPILOGUE, 26),
                     size: Vec2::new(0.24, 0.32),
@@ -252,7 +255,14 @@ fn quiet_valleys(
     mut commands: Commands,
     raid: Res<Raid>,
     director: Option<ResMut<crate::robots::director::Director>>,
-    robots: Query<Entity, With<crate::robots::Robot>>,
+    // Residents walk back to their bays and sleep there (robots::indoor).
+    robots: Query<
+        Entity,
+        (
+            With<crate::robots::Robot>,
+            Without<crate::robots::indoor::Resident>,
+        ),
+    >,
     time: Res<Time>,
     mut timer: Local<f32>,
 ) {

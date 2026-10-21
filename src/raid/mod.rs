@@ -12,8 +12,10 @@ pub mod bench;
 pub mod board;
 pub mod chatter;
 pub mod comfort_board;
+pub mod epilogue;
 pub mod kitchen;
 pub mod lev;
+pub mod lev_walk;
 pub mod lines;
 pub mod logbook;
 pub mod requests;
@@ -156,6 +158,7 @@ impl Plugin for RaidPlugin {
             requests::RequestsPlugin,
             board::BoardPlugin,
             lev::LevPlugin,
+            epilogue::EpiloguePlugin,
         ))
         .add_systems(
             Update,
@@ -294,7 +297,14 @@ pub(crate) fn tick_raid(
     mut raid: ResMut<Raid>,
     time: Res<Time>,
     zone: Res<Zone>,
-    mut healths: Query<(&mut Health, &GlobalTransform), With<LocalPlayer>>,
+    mut healths: Query<
+        (
+            &mut Health,
+            &GlobalTransform,
+            Option<&crate::anomaly::artifacts::ArtifactEffects>,
+        ),
+        With<LocalPlayer>,
+    >,
     spatial: avian3d::prelude::SpatialQuery,
 ) {
     let dt = time.delta_secs();
@@ -349,8 +359,9 @@ pub(crate) fn tick_raid(
         raid.say("It's passing. The air tastes of pennies.");
     }
     if after <= 0.0 && after > -SURGE_LENGTH {
-        for (mut h, gt) in &mut healths {
-            // Not survivable in the open; under a roof, barely.
+        for (mut h, gt, fx) in &mut healths {
+            // Not survivable in the open; under a roof, barely. A
+            // stormglass carried live is a roof of its own.
             let head = gt.translation() + Vec3::Y * 1.7;
             let roof = spatial
                 .cast_ray(
@@ -360,7 +371,8 @@ pub(crate) fn tick_raid(
                     true,
                     &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
                 )
-                .is_some();
+                .is_some()
+                || fx.is_some_and(|f| f.stormglass);
             h.hp -= if roof { 0.6 } else { 15.0 } * dt;
         }
     }

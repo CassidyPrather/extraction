@@ -11,6 +11,7 @@
 //! Because the handle position is continuous, VR hands, the flat-screen
 //! macros and the simulation bots all drive the same code.
 
+use crate::ammo::{Load, Loads};
 use serde::{Deserialize, Serialize};
 
 /// How the gun cycles.
@@ -87,6 +88,10 @@ pub struct FirearmDef {
     /// Fouling added per shot.
     #[serde(default = "default_fouling")]
     pub fouling_per_shot: f32,
+    /// A free-floating firing pin (an SKS): worn and dirty, it can fire the
+    /// round the bolt slams home on.
+    #[serde(default)]
+    pub floating_pin: bool,
 }
 
 const fn one() -> u32 {
@@ -136,11 +141,14 @@ impl Malfunction {
 }
 
 /// A detachable magazine as an inventory object.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Magazine {
     pub family: String,
     pub capacity: u32,
     pub rounds: u32,
+    /// What its rounds are loaded with, top last.
+    #[serde(default)]
+    pub loads: Loads,
 }
 
 /// Something that happened, for the game to show and play.
@@ -170,6 +178,23 @@ pub enum Event {
     RoundLoaded,
     Malfunctioned(Malfunction),
     ModeChanged(FireMode),
+    /// A squib: the primer popped, too little powder, and the bullet
+    /// stopped in barrel `barrel`. The action doesn't cycle.
+    Squib {
+        barrel: u32,
+    },
+    /// A round fired into a barrel a squib had blocked: it bulges.
+    Bulged {
+        barrel: u32,
+    },
+    /// A rod pushed down the bore knocked the squib's bullet out.
+    Rodded,
+    /// A dirty bolt stuck shut after the shot: slap the handle up.
+    BoltStuck,
+    BoltFreed,
+    /// The bolt slammed home and the floating pin fired the round (a
+    /// `Fired` follows).
+    SlamFire,
 }
 
 /// Bolt travel past which whatever is in the chamber is thrown out.
@@ -186,6 +211,11 @@ const HANDLE_DOWN_AT: f32 = 0.05;
 const STOVEPIPE_AT: f32 = 0.2;
 /// Where a double feed wedges the bolt: it won't come further forward.
 const DOUBLE_FEED_AT: f32 = 0.4;
+/// A re-packed round's chance of a squib, and of a dud on top of the gun's.
+pub const SQUIB_CHANCE: f32 = 0.04;
+pub const REPACK_DUD: f32 = 0.02;
+/// What a bulged barrel leaves of the gun's condition.
+pub const BULGE_KEEPS: f32 = 0.3;
 
 /// One gun's live state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -209,6 +239,40 @@ pub struct Firearm {
     pub magazine: Option<Magazine>,
     /// Rounds in a fixed internal magazine.
     pub internal_rounds: u32,
+    /// What those rounds are loaded with, top last.
+    #[serde(default)]
+    pub internal_loads: Loads,
+    /// What each live round in `chambers` is loaded with (by index).
+    #[serde(default)]
+    pub chamber_loads: Vec<Load>,
+    /// The round riding the bolt face's load.
+    #[serde(default)]
+    transit_load: Load,
+    /// The round last taken from the feed.
+    #[serde(default)]
+    fed: Load,
+    /// The load of the round last fired (for the shot it makes).
+    #[serde(default)]
+    pub last_fired: Load,
+    /// Loads of live rounds thrown clear, in the order their
+    /// [`Event::Ejected`] went out (drained by the game).
+    #[serde(default)]
+    pub ejected: Vec<Load>,
+    /// A squib's bullet stuck in this barrel.
+    #[serde(default)]
+    pub squib: Option<u32>,
+    /// A dirty turn-bolt stuck shut: its handle won't lift until slapped.
+    #[serde(default)]
+    pub bolt_stuck: bool,
+    /// The bolt slammed home on a round the floating pin will fire next
+    /// tick.
+    #[serde(default)]
+    slam_pending: bool,
+    /// The gun's own dice, for a bolt let go by hand (which has none
+    /// passed in): kept apart so a gun that can't slam-fire never draws
+    /// from anyone's rolls.
+    #[serde(default)]
+    pub fault_dice: u64,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
     /// The magazine has slipped down in the well (a failure to feed): the
@@ -259,6 +323,16 @@ impl Firearm {
             in_transit: None,
             magazine: None,
             internal_rounds: 0,
+            internal_loads: Loads::default(),
+            chamber_loads: vec![Load::Standard; chambers],
+            transit_load: Load::Standard,
+            fed: Load::Standard,
+            last_fired: Load::Standard,
+            ejected: Vec::new(),
+            squib: None,
+            bolt_stuck: false,
+            slam_pending: false,
+            fault_dice: 0,
             mode: 0,
             malfunction: None,
             mag_unseated: false,
@@ -316,6 +390,40 @@ impl Firearm {
             .map_or(self.internal_rounds, |m| m.rounds)
     }
 
+    /// What the round in chamber `c` is loaded with.
+    pub fn chamber_load(&self, c: usize) -> Load {
+        self.chamber_loads.get(c).copied().unwrap_or_default()
+    }
+
+    fn set_chamber_load(&mut self, c: usize, load: Load) {
+        if self.chamber_loads.len() < self.chambers.len() {
+            self.chamber_loads
+                .resize(self.chambers.len(), Load::Standard);
+        }
+        if let Some(l) = self.chamber_loads.get_mut(c) {
+            *l = load;
+        }
+    }
+
+    /// Takes what's in chamber `c`, noting a live round's load as thrown
+    /// clear.
+    fn eject_chamber(&mut self, c: usize) -> Option<Round> {
+        let r = self.chambers.get_mut(c)?.take();
+        if r == Some(Round::Live) {
+            self.note_ejected(self.chamber_load(c));
+        }
+        r
+    }
+
+    /// A live round of `load` thrown clear (only the latest few are kept:
+    /// a game drains them as it shows the ejections).
+    fn note_ejected(&mut self, load: Load) {
+        if self.ejected.len() >= 8 {
+            self.ejected.remove(0);
+        }
+        self.ejected.push(load);
+    }
+
     /// Total live rounds in the gun, chambers included.
     pub fn live_rounds(&self) -> u32 {
         let chambered = self
@@ -334,6 +442,21 @@ impl Firearm {
         self.cooldown = (self.cooldown - dt).max(-dt);
         self.rod = (self.rod - dt * 4.0).max(0.0);
         let mut events = Vec::new();
+        if self.slam_pending {
+            // The pin went in with the bolt: it fires whatever the trigger
+            // or the safety.
+            self.slam_pending = false;
+            if self.is_closed() && self.chambers[0] == Some(Round::Live) {
+                events.push(Event::SlamFire);
+                let load = self.chamber_load(0);
+                self.chambers[0] = Some(Round::Spent);
+                let (ev, cycles) = self.discharge(0, load, roll);
+                events.extend(ev);
+                if cycles && self.def.action == ActionKind::SemiAuto {
+                    events.extend(self.auto_cycle(roll));
+                }
+            }
+        }
         if trigger && !self.trigger_down {
             self.trigger_down = true;
             events.extend(self.pull(roll));
@@ -398,18 +521,33 @@ impl Firearm {
         };
         match self.chambers[c] {
             Some(Round::Live) => {
-                // Duds are rare and mostly the gun's fault (light strikes).
-                let dud_chance = 0.002 + 0.02 * (1.0 - self.condition);
+                let load = self.chamber_load(c);
+                // Duds are rare and mostly the gun's fault (light strikes);
+                // re-packed primers fail more.
+                let dud_chance = 0.002
+                    + 0.02 * (1.0 - self.condition)
+                    + if load == Load::Repacked {
+                        REPACK_DUD
+                    } else {
+                        0.0
+                    };
                 if roll() < dud_chance {
                     events.push(Event::Dud);
                     return events;
                 }
                 self.chambers[c] = Some(Round::Spent);
-                events.push(Event::Fired { barrel });
-                self.wear();
-                self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
-                if self.def.action == ActionKind::SemiAuto {
+                let (ev, cycles) = self.discharge(barrel, load, roll);
+                events.extend(ev);
+                if cycles && self.def.action == ActionKind::SemiAuto {
                     events.extend(self.auto_cycle(roll));
+                }
+                if cycles
+                    && self.def.action == ActionKind::BoltAction
+                    && self.sticky_chance() > 0.0
+                    && roll() < self.sticky_chance()
+                {
+                    self.bolt_stuck = true;
+                    events.push(Event::BoltStuck);
                 }
             }
             _ => events.push(Event::DryFire),
@@ -433,15 +571,23 @@ impl Firearm {
         if roll() < dud_chance {
             // A dud stays chambered under a closed bolt: rack it out.
             self.chambers[0] = Some(Round::Live);
+            self.set_chamber_load(0, self.fed);
             self.bolt_travel = 0.0;
             self.stroke_cleared = false;
             events.push(Event::Chambered);
             events.push(Event::Dud);
             return events;
         }
-        events.push(Event::Fired { barrel: 0 });
-        self.wear();
-        self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
+        let (ev, cycles) = self.discharge(0, self.fed, roll);
+        events.extend(ev);
+        if !cycles {
+            // A squib: no gas to blow the bolt back; it sits closed on the
+            // case.
+            self.chambers[0] = Some(Round::Spent);
+            self.bolt_travel = 0.0;
+            self.stroke_cleared = false;
+            return events;
+        }
         if roll() < self.malfunction_chance() {
             // Blowback catches the case: a stovepipe, the bolt short of
             // the sear.
@@ -455,6 +601,77 @@ impl Firearm {
         self.bolt_travel = 1.0;
         self.locked_back = true;
         events
+    }
+
+    /// A round of `load` goes off in `barrel`: a shot, a squib (the bullet
+    /// stays in the barrel), or a shot into a squib's bullet (the barrel
+    /// bulges and the gun's mostly ruined). Returns the events and whether
+    /// there was gas to work the action.
+    fn discharge(
+        &mut self,
+        barrel: u32,
+        load: Load,
+        roll: &mut impl FnMut() -> f32,
+    ) -> (Vec<Event>, bool) {
+        let mut events = Vec::new();
+        if self.squib == Some(barrel) {
+            self.squib = None;
+            self.condition *= BULGE_KEEPS;
+            events.push(Event::Bulged { barrel });
+        } else if load == Load::Repacked && roll() < SQUIB_CHANCE {
+            self.squib = Some(barrel);
+            events.push(Event::Squib { barrel });
+            return (events, false);
+        }
+        self.last_fired = load;
+        events.push(Event::Fired { barrel });
+        self.wear();
+        self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
+        (events, true)
+    }
+
+    /// A roll from the gun's own dice.
+    fn own_roll(&mut self) -> f32 {
+        let mut r = crate::noise::Rng::new(self.fault_dice);
+        let v = r.f32();
+        self.fault_dice = r.next_u64();
+        v
+    }
+
+    /// A rod pushed down the bore from the muzzle: a squib's bullet comes
+    /// out.
+    pub fn rod_through(&mut self) -> Vec<Event> {
+        if self.squib.take().is_some() {
+            vec![Event::Rodded]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Chance a turn-bolt sticks shut after a shot: none in a gun cleaned
+    /// lately, likely in a filthy one (fouling seizes the bolt's lugs).
+    pub fn sticky_chance(&self) -> f32 {
+        ((self.fouling - 0.4).max(0.0) * 1.5).min(0.9)
+    }
+
+    /// A palm slapped up hard under a stuck bolt's handle breaks it free.
+    pub fn free_bolt(&mut self) -> Vec<Event> {
+        if self.bolt_stuck {
+            self.bolt_stuck = false;
+            vec![Event::BoltFreed]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Chance a floating pin fires the round the bolt slams home on: never
+    /// in a gun in fair order, more as it wears and fouls.
+    pub fn slam_chance(&self) -> f32 {
+        if !self.def.floating_pin {
+            return 0.0;
+        }
+        let worn = (0.5 - self.condition).max(0.0) * 2.0;
+        (worn * (0.15 + 0.6 * self.fouling)).min(0.6)
     }
 
     /// The chamber at a revolver's loading gate.
@@ -517,8 +734,7 @@ impl Firearm {
         }
         self.rod = 1.0;
         let g = self.gate_chamber();
-        self.chambers[g]
-            .take()
+        self.eject_chamber(g)
             .map(Event::Ejected)
             .into_iter()
             .collect()
@@ -585,6 +801,7 @@ impl Firearm {
                     // The case stays put; the next round rams into it.
                     if self.take_from_feed() {
                         self.in_transit = Some(Round::Live);
+                        self.transit_load = self.fed;
                     }
                     self.bolt_travel = DOUBLE_FEED_AT;
                 }
@@ -599,7 +816,11 @@ impl Firearm {
         self.hammers_cocked[0] = true;
         if self.take_from_feed() {
             self.chambers[0] = Some(Round::Live);
+            self.set_chamber_load(0, self.fed);
             events.push(Event::Chambered);
+            if self.slam_chance() > 0.0 && roll() < self.slam_chance() {
+                self.slam_pending = true;
+            }
         } else if self.def.last_round_hold_open && (self.magazine.is_some() || self.fixed_feed()) {
             self.locked_back = true;
             self.bolt_travel = 1.0;
@@ -619,12 +840,14 @@ impl Firearm {
         }
         if let Some(mag) = &mut self.magazine {
             if mag.rounds > 0 {
+                self.fed = mag.loads.pop(mag.rounds);
                 mag.rounds -= 1;
                 return true;
             }
             return false;
         }
         if self.def.magazine_family.is_none() && self.internal_rounds > 0 {
+            self.fed = self.internal_loads.pop(self.internal_rounds);
             self.internal_rounds -= 1;
             return true;
         }
@@ -676,10 +899,13 @@ impl Firearm {
                 }
             }
             if to >= EJECT_AT {
-                if let Some(round) = self.chambers[0].take() {
+                if let Some(round) = self.eject_chamber(0) {
                     events.push(Event::Ejected(round));
                 }
                 if let Some(round) = self.in_transit.take() {
+                    if round == Round::Live {
+                        self.note_ejected(self.transit_load);
+                    }
                     events.push(Event::Ejected(round));
                 }
                 // Racking throws out a stovepipe's case and a double feed's
@@ -695,12 +921,17 @@ impl Firearm {
                 self.stroke_cleared = false;
                 if self.take_from_feed() {
                     self.in_transit = Some(Round::Live);
+                    self.transit_load = self.fed;
                 }
             }
             if to <= CLOSED_AT && from > CLOSED_AT {
                 if let Some(round) = self.in_transit.take() {
                     self.chambers[0] = Some(round);
+                    self.set_chamber_load(0, self.transit_load);
                     events.push(Event::Chambered);
+                    if self.slam_chance() > 0.0 && self.own_roll() < self.slam_chance() {
+                        self.slam_pending = true;
+                    }
                 }
                 events.push(Event::BoltClosed);
             }
@@ -778,6 +1009,9 @@ impl Firearm {
         if self.def.action != ActionKind::BoltAction || self.bolt_travel > CLOSED_AT {
             return events;
         }
+        if self.bolt_stuck {
+            return events;
+        }
         let to = lift.clamp(0.0, 1.0);
         if to >= 0.9 && self.handle_lift < 0.9 && !self.hammers_cocked[0] {
             self.hammers_cocked[0] = true;
@@ -847,7 +1081,7 @@ impl Firearm {
         if self.def.action == ActionKind::BreakAction && self.bolt_travel < 0.5 {
             return None;
         }
-        self.chambers.get_mut(barrel as usize)?.take()
+        self.eject_chamber(barrel as usize)
     }
 
     /// Thumbs one round into wherever loose rounds go on this gun: an open
@@ -855,11 +1089,17 @@ impl Firearm {
     /// open), or directly into an open chamber otherwise. Returns false if
     /// there is no room.
     pub fn load_round(&mut self) -> bool {
+        self.load_round_of(Load::Standard)
+    }
+
+    /// [`Self::load_round`] with a round of `load`.
+    pub fn load_round_of(&mut self, load: Load) -> bool {
         match self.def.action {
             ActionKind::Revolver => {
                 let c = self.gate_chamber();
                 if self.gate_open && self.chambers[c].is_none() {
                     self.chambers[c] = Some(Round::Live);
+                    self.set_chamber_load(c, load);
                     return true;
                 }
                 false
@@ -868,8 +1108,9 @@ impl Firearm {
                 if self.bolt_travel < 0.5 {
                     return false;
                 }
-                if let Some(slot) = self.chambers.iter_mut().find(|c| c.is_none()) {
-                    *slot = Some(Round::Live);
+                if let Some(c) = self.chambers.iter().position(|c| c.is_none()) {
+                    self.chambers[c] = Some(Round::Live);
+                    self.set_chamber_load(c, load);
                     return true;
                 }
                 false
@@ -879,6 +1120,7 @@ impl Firearm {
                     return false;
                 }
                 if self.internal_rounds < self.def.internal_capacity {
+                    self.internal_loads.push(self.internal_rounds, load);
                     self.internal_rounds += 1;
                     return true;
                 }
@@ -889,12 +1131,14 @@ impl Firearm {
                 {
                     return false;
                 }
+                self.internal_loads.push(self.internal_rounds, load);
                 self.internal_rounds += 1;
                 true
             }
             ActionKind::SemiAuto => {
                 if self.bolt_travel >= EJECT_AT && self.chambers[0].is_none() {
                     self.chambers[0] = Some(Round::Live);
+                    self.set_chamber_load(0, load);
                     return true;
                 }
                 false
@@ -905,12 +1149,19 @@ impl Firearm {
     /// Strips a clip of `n` rounds into an internal magazine through the open
     /// action. Returns how many went in.
     pub fn strip_clip(&mut self, n: u32) -> u32 {
+        self.strip_clip_of(n, &mut Loads::default())
+    }
+
+    /// [`Self::strip_clip`] from a clip of `n` rounds loaded as `loads`
+    /// (which lose the rounds that went in).
+    pub fn strip_clip_of(&mut self, n: u32, loads: &mut Loads) -> u32 {
         let clip_fed = self.def.action == ActionKind::BoltAction || self.fixed_feed();
         if !clip_fed || self.bolt_travel < EJECT_AT {
             return 0;
         }
         let room = self.def.internal_capacity - self.internal_rounds;
         let moved = room.min(n);
+        loads.move_to(n, &mut self.internal_loads, self.internal_rounds, moved);
         self.internal_rounds += moved;
         moved
     }
@@ -959,6 +1210,7 @@ mod tests {
             recoil: 1.0,
             wear_per_shot: 0.0,
             fouling_per_shot: 0.0,
+            floating_pin: false,
         }
     }
 
@@ -1001,10 +1253,132 @@ mod tests {
             family: family.into(),
             capacity: 8,
             rounds,
+            ..Default::default()
         }
     }
 
-    /// Never jams, never duds.
+    /// AP thumbed on top of ball comes out first; a live round racked out
+    /// is noted with its load.
+    #[test]
+    fn rounds_keep_their_loads_through_the_gun() {
+        let mut gun = Firearm::new(pistol(), 1.0);
+        gun.cycle_mode();
+        let mut m = mag("pm", 3);
+        m.loads.fill(1, Load::Ap, 2);
+        gun.insert_magazine(m).unwrap();
+        rack(&mut gun);
+        assert_eq!(gun.chamber_load(0), Load::Ap);
+        let ev = shoot(&mut gun);
+        assert!(fired(&ev));
+        assert_eq!(gun.last_fired, Load::Ap);
+        assert_eq!(gun.chamber_load(0), Load::Ap, "the second AP chambered");
+        gun.ejected.clear();
+        rack(&mut gun);
+        assert_eq!(gun.ejected, vec![Load::Ap], "racked out live");
+        shoot(&mut gun);
+        assert_eq!(gun.last_fired, Load::Standard, "then the ball");
+    }
+
+    /// Rolls in order, then lucky ones.
+    fn rolls(v: &[f32]) -> impl FnMut() -> f32 {
+        let mut it = v.to_vec().into_iter();
+        move || it.next().unwrap_or(0.99)
+    }
+
+    /// A re-packed round squibs: a pop, no shot, the bullet in the bore and
+    /// the action unmoved. Fire into it and the barrel bulges; rod it out
+    /// first and the next round fires clean.
+    #[test]
+    fn a_squib_blocks_the_bore_until_rodded() {
+        for rod_first in [false, true] {
+            let mut gun = Firearm::new(pistol(), 1.0);
+            gun.cycle_mode();
+            let mut m = mag("pm", 3);
+            m.loads.fill(0, Load::Repacked, 3);
+            gun.insert_magazine(m).unwrap();
+            rack(&mut gun);
+            // The dud roll, then the squib's.
+            let mut r = rolls(&[0.5, 0.01]);
+            let ev = gun.update(0.016, true, &mut r);
+            gun.update(0.016, false, &mut r);
+            assert!(ev.contains(&Event::Squib { barrel: 0 }), "{ev:?}");
+            assert!(!fired(&ev), "no shot");
+            assert_eq!(gun.squib, Some(0));
+            assert_eq!(gun.chambers[0], Some(Round::Spent), "the case stays");
+            assert!(gun.is_closed(), "no gas to cycle it");
+            rack(&mut gun);
+            if rod_first {
+                assert_eq!(gun.rod_through(), vec![Event::Rodded]);
+            }
+            let ev = shoot(&mut gun);
+            assert!(fired(&ev));
+            let bulged = ev.contains(&Event::Bulged { barrel: 0 });
+            assert_eq!(bulged, !rod_first, "{ev:?}");
+            if bulged {
+                assert!(gun.condition < 0.35, "ruined: {}", gun.condition);
+            }
+            assert_eq!(gun.squib, None);
+        }
+    }
+
+    /// A filthy Mosin's bolt sticks shut after the shot: the handle won't
+    /// lift until it's knocked free; a clean one never sticks.
+    #[test]
+    fn a_dirty_mosin_bolt_sticks() {
+        let mut gun = Firearm::new(mosin(), 1.0);
+        assert_eq!(gun.sticky_chance(), 0.0, "clean: never");
+        gun.condition = 0.1;
+        assert_eq!(gun.sticky_chance(), 0.0, "worn but clean: never");
+        gun.condition = 1.0;
+        gun.fouling = 1.0;
+        gun.set_handle_lift(1.0);
+        gun.set_bolt_travel(1.0);
+        assert!(gun.load_round());
+        gun.set_bolt_travel(0.0);
+        gun.set_handle_lift(0.0);
+        // The dud roll, then the stick's.
+        let mut r = rolls(&[0.5, 0.0]);
+        let ev = gun.update(0.016, true, &mut r);
+        assert!(fired(&ev));
+        assert!(ev.contains(&Event::BoltStuck), "{ev:?}");
+        gun.set_handle_lift(1.0);
+        assert_eq!(gun.handle_lift, 0.0, "it won't lift");
+        assert_eq!(gun.free_bolt(), vec![Event::BoltFreed]);
+        gun.set_handle_lift(1.0);
+        assert_eq!(gun.handle_lift, 1.0);
+    }
+
+    /// A worn, dirty SKS's floating pin fires the round the bolt slams home
+    /// on, trigger untouched and on safe; one in fair order never does.
+    #[test]
+    fn a_worn_sks_slam_fires() {
+        let sks = FirearmDef {
+            floating_pin: true,
+            ..rifle()
+        };
+        let mut good = Firearm::new(sks.clone(), 0.9);
+        good.fouling = 1.0;
+        assert_eq!(good.slam_chance(), 0.0);
+        let mut gun = Firearm::new(sks, 0.1);
+        gun.fouling = 1.0;
+        assert!(gun.slam_chance() > 0.3, "{}", gun.slam_chance());
+        assert_eq!(gun.fire_mode(), FireMode::Safe);
+        gun.insert_magazine(mag("ak545", 8)).unwrap();
+        // Racked until the bolt slams one home (better than even odds each
+        // time on its own dice).
+        let mut ev = Vec::new();
+        for _ in 0..10 {
+            rack(&mut gun);
+            ev = gun.update(0.016, false, &mut lucky());
+            if fired(&ev) {
+                break;
+            }
+        }
+        assert_eq!(ev.first(), Some(&Event::SlamFire), "{ev:?}");
+        assert!(fired(&ev), "it went off by itself");
+    }
+
+    /// Never jams, never duds.    /// Never jams, never duds.
     fn lucky() -> impl FnMut() -> f32 {
         || 0.99
     }
@@ -1081,6 +1455,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 30,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1116,6 +1491,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 1,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1201,6 +1577,7 @@ mod tests {
             family: "ak545".into(),
             capacity: 30,
             rounds: 10,
+            ..Default::default()
         })
         .unwrap();
         rack(&mut gun);
@@ -1429,6 +1806,7 @@ mod tests {
             family: "ppsh_drum".into(),
             capacity: 71,
             rounds: 71,
+            ..Default::default()
         })
         .unwrap();
         gun.cycle_mode(); // Auto

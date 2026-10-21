@@ -40,6 +40,7 @@ impl Plugin for SimPlugin {
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
             .add_systems(Startup, spawn_sim_kit)
             .add_systems(PostStartup, raider::attach_raider)
+            .add_systems(Update, armour_up)
             .add_systems(
                 Update,
                 (raider::think, telemetry::record, telemetry::finish).chain(),
@@ -116,6 +117,86 @@ mod tests {
         );
     }
 
+    /// A snare that catches a bot (even a reckless one, who walks through
+    /// anomalies it hasn't been hurt by) is never walked into again: it
+    /// steps out the way it came and goes round.
+    #[test]
+    fn a_bot_caught_by_a_snare_never_walks_into_it_again() {
+        use crate::bot::{Bot, Task};
+        use bevy::math::Vec3Swizzles;
+        let dir = std::env::temp_dir().join(format!("extraction-snare-{}", std::process::id()));
+        let opts = LaunchOptions {
+            sim_run: Some("snare".into()),
+            sim_out: Some(dir.clone()),
+            personality: Some("reckless".into()),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        // Kitted up and walking somewhere.
+        let mut target = None;
+        for _ in 0..90 * 90 {
+            app.update();
+            let walk = app
+                .world_mut()
+                .query::<&Bot>()
+                .iter(app.world())
+                .find_map(|b| {
+                    b.tasks.iter().find_map(|t| match t {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    })
+                });
+            let me = app
+                .world_mut()
+                .query_filtered::<&Transform, With<crate::rig::LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap()
+                .translation;
+            let stage_raid = app
+                .world_mut()
+                .query::<&raider::Raider>()
+                .iter(app.world())
+                .any(|r| r.stage == raider::Stage::Raid);
+            if let Some(to) = walk.filter(|to| stage_raid && to.distance(me.xz()) > 6.0) {
+                target = Some(to);
+                break;
+            }
+        }
+        let to = target.expect("it set off somewhere");
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(to.x, to.y);
+        crate::anomaly::spawn_anomaly(
+            app.world_mut(),
+            extraction_core::anomaly::AnomalyKind::Snare,
+            at,
+            2.5,
+            None,
+        );
+        for _ in 0..90 * 90 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<telemetry::SimLog>().flush();
+        let text = std::fs::read_to_string(dir.join("snare.jsonl")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let entries = text
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|e| e["ev"] == "anomaly_enter" && e["kind"] == "Snare")
+            .filter(|e| {
+                let p = Vec2::new(
+                    e["x"].as_f64().unwrap() as f32,
+                    e["z"].as_f64().unwrap() as f32,
+                );
+                p.distance(to) < 4.0
+            })
+            .count();
+        assert_eq!(entries, 1, "caught once, then kept clear: {entries}");
+    }
+
     /// The way into the truck from behind, at base and at every
     /// rendezvous: up the steps, into the bed.
     #[test]
@@ -185,4 +266,194 @@ mod tests {
             }
         }
     }
+
+    /// What a raider does at the end of a raid, at every rendezvous of
+    /// every valley: from where it lines up behind the waiting truck
+    /// (`raider::extract_step`), up into the bed and pull the bell, and the
+    /// raid ends.
+    #[test]
+    fn a_bot_leaves_from_every_rendezvous() {
+        use crate::bot::Bot;
+        use crate::raid::truck::{Pressable, rv_pose};
+        use crate::raid::{Phase, Raid};
+        use crate::rig::LocalPlayer;
+        use bevy::math::Vec3Swizzles;
+        // In the training yard the bell ends the practice instead.
+        for map in crate::test_maps()
+            .into_iter()
+            .filter(|m| m != crate::camp::TRAINING_YARD)
+        {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<Zone>().clone();
+            let names: Vec<String> = zone
+                .map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| m.name.clone())
+                .collect();
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let bell = app
+                .world_mut()
+                .query::<(Entity, &Pressable)>()
+                .iter(app.world())
+                .find(|(_, p)| **p == Pressable::BellPull)
+                .map(|(e, _)| e);
+            for (rv, name) in names.iter().enumerate() {
+                app.world_mut().resource_mut::<Raid>().phase =
+                    Phase::TruckWaiting { rv, left: 1.0e6 };
+                app.update();
+                let pose = rv_pose(&zone, rv);
+                let p = |z: f32| pose.transform_point(Vec3::new(0.0, 0.0, z)).xz();
+                let behind = p(8.0);
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation =
+                    Vec3::new(behind.x, zone.ground(behind.x, behind.y) + 0.05, behind.y);
+                app.update();
+                app.world_mut()
+                    .entity_mut(player)
+                    .insert(Bot::new(super::raider::board_tasks(p, bell)));
+                let mut left = false;
+                for _ in 0..90 * 20 {
+                    app.update();
+                    if matches!(
+                        app.world().resource::<Raid>().phase,
+                        Phase::Extracting { .. }
+                    ) {
+                        left = true;
+                        break;
+                    }
+                    if app.world().get::<Bot>(player).unwrap().done() {
+                        break;
+                    }
+                }
+                let at = app.world().get::<Transform>(player).unwrap().translation;
+                assert!(
+                    left,
+                    "{map} {name}: the bot got in and rang the bell (stood at {:.1?}, truck-local {:.2?})",
+                    at,
+                    pose.compute_affine().inverse().transform_point3(at)
+                );
+                // Back out for the next stop.
+                app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+                app.update();
+            }
+        }
+    }
 }
+
+/// `SIM_ARMOUR=late`: a bot on a job of the third tier or later (the late
+/// game) goes out in a plate carrier with a front plate, and a helmet, as
+/// a player that far up the ladder would. Seated straight into the body
+/// slots at the start, like the sim's kit cache; once.
+fn armour_up(world: &mut World) {
+    use crate::interact::body::BodySlot;
+    use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+    use extraction_core::inventory::SlotKind;
+    if std::env::var("SIM_ARMOUR").as_deref() != Ok("late") {
+        return;
+    }
+    let Some(tier) = world
+        .get_resource::<crate::progression::Progression>()
+        .filter(|p| p.0.job.is_some())
+        .map(|p| p.0.tier)
+    else {
+        return;
+    };
+    let Some(player) = world
+        .query_filtered::<Entity, (With<crate::rig::LocalPlayer>, With<raider::Raider>)>()
+        .iter(world)
+        .next()
+    else {
+        return;
+    };
+    if world.get::<ArmouredUp>(player).is_some() {
+        return;
+    }
+    world.entity_mut(player).insert(ArmouredUp);
+    if tier < 2 {
+        return;
+    }
+    let catalog = world.resource::<crate::items::Catalog>().clone();
+    let slot = |world: &mut World, kind: SlotKind| -> Option<Entity> {
+        world
+            .query::<(Entity, &Socket, &SocketOwner, &BodySlot)>()
+            .iter(world)
+            .find(|(_, s, o, _)| {
+                o.0 == player && s.kind == SocketKind::Body(kind) && s.occupant.is_none()
+            })
+            .map(|(e, ..)| e)
+    };
+    // Spawned already worn (in the socket, its body off), so physics never
+    // sees it loose.
+    let wear = |world: &mut World, id: &str, socket: Entity| -> Option<Entity> {
+        let kind = catalog.kind(id)?;
+        let seat = world.get::<Socket>(socket)?.seat;
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let e = {
+            let mut c = Commands::new(&mut queue, world);
+            let e = crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: 1.0,
+                },
+            );
+            c.entity(e).insert((
+                InSocket { socket },
+                avian3d::prelude::RigidBodyDisabled,
+                avian3d::prelude::ColliderDisabled,
+                ChildOf(socket),
+                seat,
+            ));
+            e
+        };
+        queue.apply(world);
+        world.flush();
+        world.get_mut::<Socket>(socket)?.occupant = Some(e);
+        Some(e)
+    };
+    if let Some(s) = slot(world, SlotKind::Vest) {
+        if let Some(vest) = wear(world, "vest", s) {
+            // Its pockets come with it; the plate goes in the front one.
+            let pocket = world
+                .query::<(
+                    Entity,
+                    &Socket,
+                    &SocketOwner,
+                    &crate::weapons::armour::PlatePocket,
+                )>()
+                .iter(world)
+                .find(|(_, _, o, p)| {
+                    o.0 == vest && p.0 == extraction_core::firearm_terminal::ArmourArea::Front
+                })
+                .map(|(e, ..)| e);
+            if let Some(pocket) = pocket {
+                wear(world, "steel_plate", pocket);
+            }
+        }
+    }
+    if let Some(s) = slot(world, SlotKind::Head) {
+        wear(world, "helmet", s);
+    }
+    info!("sim: armoured up for a tier-{tier} job");
+}
+
+/// [`armour_up`] has looked at this bot.
+#[derive(Component)]
+struct ArmouredUp;

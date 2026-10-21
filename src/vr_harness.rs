@@ -145,6 +145,25 @@ impl Vr {
         self.hand(side, world, rot, grip, trigger);
     }
 
+    /// A hand at `local` in the playspace (so it moves with the body, as a
+    /// real hand does while you climb), level, with its grip.
+    pub fn hand_local(&mut self, side: Side, local: Vec3, grip: f32) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(local);
+        h.tracked = true;
+        h.grip = grip;
+    }
+
+    /// Where the playspace (and the feet under the head) stands.
+    pub fn feet(&self) -> Vec3 {
+        self.root().translation
+    }
+
     pub fn grip(&mut self, side: Side, v: f32) {
         let mut input = self
             .app
@@ -181,6 +200,15 @@ impl Vr {
             .get_mut::<RigInput>(self.player)
             .unwrap();
         input.hand_mut(side).primary = down;
+    }
+
+    pub fn secondary(&mut self, side: Side, down: bool) {
+        let mut input = self
+            .app
+            .world_mut()
+            .get_mut::<RigInput>(self.player)
+            .unwrap();
+        input.hand_mut(side).secondary = down;
     }
 
     pub fn stick_click(&mut self, side: Side, down: bool) {
@@ -479,6 +507,7 @@ mod tests {
                 family: "pm".into(),
                 capacity: 8,
                 rounds: 8,
+                ..Default::default()
             })
             .unwrap();
             f.set_bolt_travel(1.0);
@@ -1058,70 +1087,6 @@ mod tests {
         assert!(clashes.is_empty(), "{clashes:#?}");
     }
 
-    /// Every panel's letters, as fitted to it, are big enough to read from
-    /// where you'd read it (`render::screen::read_from`): the first headset
-    /// session couldn't read the signs.
-    #[test]
-    fn every_panel_reads_from_where_you_stand() {
-        use crate::raid::bench::ScreenText;
-        use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
-        let mut small = Vec::new();
-        let mut seen = 0;
-        for map in [
-            "training_yard",
-            "marrow_creek",
-            "kettle_pass",
-            "cinder_works",
-        ] {
-            let dir =
-                std::env::temp_dir().join(format!("extraction-text-{map}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&dir);
-            let opts = crate::LaunchOptions {
-                robots: false,
-                map: map.into(),
-                data_dir: Some(dir.clone()),
-                ..Default::default()
-            };
-            let mut app = crate::headless_app(opts, false);
-            app.finish();
-            app.cleanup();
-            for _ in 0..60 {
-                app.update();
-            }
-            // Signs, notes and terminals are put up by the client: take them
-            // from the map.
-            let zone = app.world().resource::<crate::world::Zone>().clone();
-            let mut panels = crate::world::notes::marker_panels(&zone.map);
-            let mut q = app.world_mut().query::<(Option<&Name>, &ScreenText)>();
-            panels.extend(
-                q.iter(app.world())
-                    .map(|(name, s)| (name.map_or("panel".into(), |n| n.to_string()), s.clone())),
-            );
-            for (name, screen) in &panels {
-                if screen.text.trim().is_empty() {
-                    continue;
-                }
-                seen += 1;
-                let em = em_metres(screen);
-                let at = read_from(screen);
-                let deg = (em / at).atan().to_degrees();
-                if deg < MIN_EM_DEG {
-                    small.push(format!(
-                        "{map}: {} ({:.2}x{:.2} m): {:.1} cm letters, {deg:.2} deg at {at} m: {:?}",
-                        name,
-                        screen.size.x,
-                        screen.size.y,
-                        em * 100.0,
-                        screen.text.lines().next().unwrap_or("")
-                    ));
-                }
-            }
-            let _ = std::fs::remove_dir_all(&dir);
-        }
-        assert!(seen > 20, "panels seen: {seen}");
-        assert!(small.is_empty(), "too small to read:\n{}", small.join("\n"));
-    }
-
     /// A finger on the VIGNETTE card's button: held just short of the cap
     /// nothing happens; pushed in, it clicks once and the setting moves on.
     #[test]
@@ -1183,6 +1148,144 @@ mod tests {
             .map(|c| c.vignette);
         if before.is_some() {
             assert_ne!(before, after, "the setting moved on");
+        }
+    }
+
+    /// One-handed: the pistol's empty well brought down onto a magazine in a
+    /// pouch takes it, and the second button racks a round in; no second
+    /// hand anywhere. With two hands, the same move does nothing.
+    #[test]
+    fn one_handed_reload_from_a_pouch() {
+        for one_handed in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .one_handed = one_handed;
+            let feet = vr.root().translation;
+            vr.step(10);
+            // A loaded magazine into a pouch, with the one hand.
+            let mag = vr.spawn(
+                "pm_mag",
+                Transform::from_translation(feet + Vec3::new(0.2, 1.0, -0.4)),
+            );
+            vr.app
+                .world_mut()
+                .get_mut::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds = 8;
+            vr.app.world_mut().entity_mut(mag).insert(RigidBody::Static);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.2, 1.0, -0.4),
+                Quat::IDENTITY,
+                0.0,
+                0.0,
+            );
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(mag));
+            let pouch = {
+                let mut q = vr.app.world_mut().query::<(
+                    &crate::interact::Socket,
+                    &crate::interact::SocketOwner,
+                    &GlobalTransform,
+                )>();
+                q.iter(vr.app.world())
+                    .find(|(s, o, _)| {
+                        o.0 == vr.player
+                            && s.occupant.is_none()
+                            && s.kind
+                                == crate::interact::SocketKind::Body(
+                                    extraction_core::inventory::SlotKind::Pouch,
+                                )
+                    })
+                    .map(|(_, _, g)| g.translation())
+                    .expect("a pouch")
+            };
+            vr.move_hand(Side::Right, pouch);
+            vr.step(2);
+            vr.grip(Side::Right, 0.0);
+            vr.step(4);
+            assert!(
+                vr.app
+                    .world()
+                    .get::<crate::interact::InSocket>(mag)
+                    .is_some(),
+                "pouched"
+            );
+            // The pistol, empty, in the same hand.
+            let pistol = vr.spawn(
+                "pm_pistol",
+                Transform::from_translation(feet + Vec3::new(0.3, 1.0, -0.45)),
+            );
+            vr.app
+                .world_mut()
+                .entity_mut(pistol)
+                .insert(RigidBody::Static);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.3, 1.0, -0.45),
+                Quat::IDENTITY,
+                0.0,
+                0.0,
+            );
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(pistol));
+            vr.primary(Side::Right, true);
+            vr.step(3);
+            vr.primary(Side::Right, false);
+            vr.step(20);
+            let well = |vr: &mut Vr| {
+                let mut q = vr.app.world_mut().query::<(
+                    &crate::interact::Socket,
+                    &crate::interact::SocketOwner,
+                    &GlobalTransform,
+                )>();
+                q.iter(vr.app.world())
+                    .find(|(s, o, _)| {
+                        o.0 == pistol && matches!(s.kind, crate::interact::SocketKind::MagWell(_))
+                    })
+                    .map(|(s, _, g)| (s.occupant, g.translation()))
+                    .expect("a well")
+            };
+            assert_eq!(well(&mut vr).0, None, "empty to start");
+            // The well brought down onto the pouched magazine's top.
+            let mag_top = {
+                let g = *vr.app.world().get::<GlobalTransform>(mag).unwrap();
+                let h = vr
+                    .app
+                    .world()
+                    .get::<crate::weapons::Mag>(mag)
+                    .unwrap()
+                    .height;
+                g.transform_point(Vec3::Y * h * 0.5)
+            };
+            let hand_now = vr.hand_state(Side::Right).world.translation;
+            let off = well(&mut vr).1 - hand_now;
+            for k in 0..=10 {
+                let above = Vec3::Y * 0.15 * (1.0 - k as f32 / 10.0);
+                vr.move_hand(Side::Right, mag_top - off + above);
+                vr.step(1);
+            }
+            vr.step(3);
+            let seated = well(&mut vr).0 == Some(mag);
+            assert_eq!(seated, one_handed, "seated from the pouch: {seated}");
+            if !one_handed {
+                continue;
+            }
+            // The second button racks a round in.
+            let before = vr.app.world().get::<Gun>(pistol).unwrap().firearm.chambers[0].is_some();
+            assert!(!before, "nothing chambered yet");
+            vr.secondary(Side::Right, true);
+            vr.step(3);
+            vr.secondary(Side::Right, false);
+            vr.step(60);
+            let gun = vr.app.world().get::<Gun>(pistol).unwrap();
+            assert!(gun.firearm.chambers[0].is_some(), "racked: a round in");
         }
     }
 
@@ -1596,7 +1699,7 @@ mod tests {
     fn most_loot_in_the_zone_is_off_the_floor() {
         use bevy::ecs::system::RunSystemOnce;
         let mut report = Vec::new();
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let dir =
                 std::env::temp_dir().join(format!("extraction-loot-{map}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
@@ -2233,11 +2336,105 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        vr.primary(Side::Right, true);
-        vr.step(3);
-        vr.primary(Side::Right, false);
+        // Wound round the left forearm (`interact::first_aid`).
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        let centre = wrist + Vec3::Z * 0.12;
+        for i in 0..=48 {
+            let a = std::f32::consts::TAU * i as f32 / 24.0;
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+            );
+            vr.step(1);
+        }
         vr.step(3);
         assert!(done(&vr, Goal::Dressing), "the dressing counted");
+    }
+
+    /// Left-handed: the holster is on the left hip (a pistol let go there
+    /// from the left hand goes in it), and the watch is on the right wrist
+    /// (looking at the left one doesn't count).
+    #[test]
+    fn left_handed_holster_and_watch() {
+        let mut vr = Vr::first_run();
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .left_handed = true;
+        let feet = ground(&vr, [2.0, 8.0]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        let holster = {
+            let mut q = vr.app.world_mut().query::<(
+                Entity,
+                &crate::interact::Socket,
+                &crate::interact::SocketOwner,
+                &GlobalTransform,
+            )>();
+            q.iter(vr.app.world())
+                .find(|(_, s, o, _)| {
+                    o.0 == vr.player
+                        && s.kind
+                            == crate::interact::SocketKind::Body(
+                                extraction_core::inventory::SlotKind::Holster,
+                            )
+                })
+                .map(|(e, _, _, g)| (e, g.translation()))
+                .expect("a holster")
+        };
+        assert!(
+            holster.1.x < feet.x - 0.1,
+            "on the left hip: {:?}",
+            holster.1
+        );
+        let pistol = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(-0.25, 1.0, -0.4)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(pistol)
+            .insert(RigidBody::Static);
+        take(&mut vr, Side::Left, pistol);
+        let from = at(&vr, pistol);
+        for i in 0..=12 {
+            vr.move_hand(Side::Left, from.lerp(holster.1, i as f32 / 12.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::InSocket>(pistol)
+            .map(|s| s.socket);
+        assert_eq!(seated, Some(holster.0), "holstered on the left");
+
+        // The left wrist, looked at: nothing.
+        let look_at = |vr: &mut Vr, side: Side, x: f32| {
+            let hand_at = feet + Vec3::new(x, 1.35, -0.3);
+            let hand_rot = Quat::from_rotation_z(0.95 * side.sign());
+            vr.hand(side, hand_at, hand_rot, 0.0, 0.0);
+            vr.step(2);
+            let panel = Transform::from_translation(hand_at)
+                .with_rotation(hand_rot)
+                .transform_point(
+                    crate::onboarding::WRIST_PANEL * Vec3::new(-side.sign(), 1.0, 1.0),
+                );
+            let eye = feet + Vec3::new(0.0, 1.65, 0.0);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_translation(Vec3::new(0.0, 1.65, 0.0))
+                .looking_to(panel - eye, Vec3::Y);
+            vr.step(60);
+        };
+        look_at(&mut vr, Side::Left, -0.05);
+        assert!(!done(&vr, Goal::Wrist), "the gun hand's wrist has no watch");
+        look_at(&mut vr, Side::Right, 0.05);
+        assert!(done(&vr, Goal::Wrist), "the right wrist's watch");
     }
 
     /// The shimmer: a part thrown by hand (grip, swing, open) sets off the
@@ -2597,5 +2794,745 @@ mod onboarding {
         vr.step(3);
         vr.grip(Side::Right, 0.0);
         vr.step(3);
+    }
+}
+
+/// Climbing with your hands: a ladder up the face of a 3 m block, with
+/// its top to step onto, and a 1.1 m wall to mantle.
+mod climbing {
+    use super::*;
+    use crate::interact::hand_climb::Ladder;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn on_ground(vr: &Vr, x: f32, z: f32) -> Vec3 {
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(x, z)
+    }
+
+    /// A block of the world's, `h` tall and `deep` deep, its near face
+    /// `near` m in front of `feet`, 3 m wide.
+    fn block(vr: &mut Vr, feet: Vec3, near: f32, h: f32, deep: f32) {
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(3.0, h, deep),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, h * 0.5, -near - deep * 0.5)),
+        ));
+        vr.step(2);
+    }
+
+    /// The 3 m block with a ladder up its face, 0.35 m in front of you.
+    fn ladder(vr: &mut Vr, feet: Vec3) -> Entity {
+        block(vr, feet, 0.4, 3.0, 2.0);
+        let face = feet + Vec3::new(0.0, 0.0, -0.4);
+        let l = vr
+            .app
+            .world_mut()
+            .spawn(
+                Ladder {
+                    bottom: face + Vec3::Z * 0.05,
+                    top: face + Vec3::new(0.0, 3.0, 0.05),
+                    width: 0.45,
+                    out: Vec3::Z,
+                    over: Some(feet + Vec3::new(0.0, 3.0, -0.9)),
+                }
+                .bundle(),
+            )
+            .id();
+        vr.step(2);
+        l
+    }
+
+    /// One pull: take hold with `side` at shoulder height, let the other
+    /// go, and draw the hand down to the waist.
+    fn pull(vr: &mut Vr, side: Side) {
+        let x = if side == Side::Right { 0.15 } else { -0.15 };
+        vr.hand_local(side, Vec3::new(x, 1.55, -0.3), 1.0);
+        vr.step(2);
+        vr.hand_local(side.other(), Vec3::new(-x, 1.2, -0.15), 0.0);
+        vr.step(1);
+        for i in 1..=12 {
+            vr.hand_local(side, Vec3::new(x, 1.55 - 0.055 * i as f32, -0.3), 1.0);
+            vr.step(1);
+        }
+    }
+
+    /// Hand over hand up a 3 m ladder, and onto the top.
+    #[test]
+    fn climb_a_ladder_hand_over_hand() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        let mut side = Side::Right;
+        for _ in 0..12 {
+            pull(&mut vr, side);
+            side = side.other();
+            if vr.feet().y > feet.y + 2.9 {
+                break;
+            }
+        }
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 3.0)).abs() < 0.15 && now.z < feet.z - 0.5,
+            "on top of the block: feet {now} from {feet}"
+        );
+    }
+
+    /// Halfway up, let go with both hands: down you go.
+    #[test]
+    fn let_go_of_the_ladder_and_fall() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        pull(&mut vr, Side::Right);
+        pull(&mut vr, Side::Left);
+        // (The body catches up with the last pull.)
+        vr.step(10);
+        let up = vr.feet().y - feet.y;
+        assert!(up > 0.8, "climbing: up {up}");
+        // Holding still, it holds you.
+        vr.step(30);
+        let held = vr.feet().y - feet.y;
+        assert!((held - up).abs() < 0.05, "held at {up}, now {held}");
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(90);
+        let down = vr.feet().y - feet.y;
+        assert!(down < 0.1, "fell: {down} up");
+    }
+
+    /// Both palms on a 1.1 m wall, push down, and you're up on it.
+    #[test]
+    fn mantle_a_wall_with_both_palms() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        block(&mut vr, feet, 0.35, 1.1, 1.0);
+        let at = |y: f32| [Vec3::new(-0.2, y, -0.5), Vec3::new(0.2, y, -0.5)];
+        for (s, p) in [Side::Left, Side::Right].into_iter().zip(at(1.14)) {
+            vr.hand_local(s, p, 0.0);
+        }
+        vr.step(3);
+        for i in 1..=20 {
+            for (s, p) in [Side::Left, Side::Right]
+                .into_iter()
+                .zip(at(1.14 - 0.035 * i as f32))
+            {
+                vr.hand_local(s, p, 0.0);
+            }
+            vr.step(1);
+        }
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 1.1)).abs() < 0.15 && now.z < feet.z - 0.4,
+            "up on the wall: feet {now} from {feet}"
+        );
+    }
+
+    /// One palm on the wall doesn't lift you; and the comfort setting
+    /// puts you straight at the top of a ladder you grip.
+    #[test]
+    fn one_palm_holds_nothing_and_teleport_climbs_at_once() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        block(&mut vr, feet, 0.35, 1.1, 1.0);
+        vr.hand_local(Side::Right, Vec3::new(0.2, 1.14, -0.5), 0.0);
+        vr.step(3);
+        for i in 1..=20 {
+            vr.hand_local(
+                Side::Right,
+                Vec3::new(0.2, 1.14 - 0.035 * i as f32, -0.5),
+                0.0,
+            );
+            vr.step(1);
+        }
+        assert!(vr.feet().y < feet.y + 0.05, "one palm lifted you");
+
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .world_mut()
+            .insert_resource(crate::rig::comfort::Comfort {
+                climb_teleport: true,
+                ..Default::default()
+            });
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        ladder(&mut vr, feet);
+        vr.hand_local(Side::Right, Vec3::new(0.15, 1.55, -0.3), 1.0);
+        vr.step(4);
+        let now = vr.feet();
+        assert!(
+            (now.y - (feet.y + 3.0)).abs() < 0.15,
+            "teleported to the top: feet {now} from {feet}"
+        );
+    }
+}
+
+/// Tools worked with the hands.
+mod tools {
+    use super::*;
+    use crate::destruction::hooks::{PRY_HOLD, Pried, Pryable};
+    use crate::interact::tools::crowbar::{CLAW, GRIP, SHAFT};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn on_ground(vr: &Vr, x: f32, z: f32) -> Vec3 {
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(x, z)
+    }
+
+    /// The longest the torque on the block has stayed at 100 N·m or more
+    /// (seconds), as Destruction counts it toward giving.
+    #[derive(Resource, Default)]
+    struct Strain {
+        run: f32,
+        longest: f32,
+    }
+
+    fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
+        let hard = r.read().any(|p| p.torque >= 100.0);
+        s.run = if hard { s.run + time.delta_secs() } else { 0.0 };
+        s.longest = s.longest.max(s.run);
+    }
+
+    /// A crowbar taken up in both hands, its claw put to `seam` (world)
+    /// with the bar leaning back toward `back` (level, toward you), then
+    /// levered round the claw with the hands at `out` and `steady` metres up
+    /// the bar from it, 0.45 rad, and held there.
+    fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
+        let bar = vr.spawn(
+            "crowbar",
+            Transform::from_translation(
+                feet + Vec3::Y * 0.9 + (seam - feet).with_y(0.0) * 0.5 + Vec3::X * 0.3,
+            ),
+        );
+        vr.app.world_mut().entity_mut(bar).insert(RigidBody::Static);
+        let grip = vr.point(bar, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(bar)
+            .insert(RigidBody::Dynamic);
+        let shaft = vr.point(bar, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, shaft, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(4);
+        assert!(
+            vr.hand_state(Side::Left).supporting == Some(bar),
+            "the other hand steadies the bar"
+        );
+        // The claw to the seam: the bar along a line up and back from it.
+        let line = (back * 0.8 + Vec3::Y * 0.6).normalize();
+        let hands_at = |line: Vec3, a: f32, b: f32| (seam + line * a, seam + line * b);
+        let (r, l) = hands_at(line, (GRIP - CLAW).length(), (SHAFT - CLAW).length());
+        for i in 1..=20 {
+            let k = i as f32 / 20.0;
+            vr.move_hand(Side::Right, grip.lerp(r, k));
+            vr.move_hand(Side::Left, shaft.lerp(l, k));
+            vr.step(1);
+        }
+        vr.step(10);
+        let seat = vr
+            .app
+            .world()
+            .get::<crate::interact::tools::crowbar::Crowbar>(bar)
+            .unwrap()
+            .seated
+            .expect("the claw seats on the seam");
+        // From here the hands go round where it actually seated, on the
+        // line it seated along.
+        let (pivot, line) = (seat.pivot, seat.line);
+        let hands_at = |line: Vec3, a: f32, b: f32| (pivot + line * a, pivot + line * b);
+        // Slide the hands to where they'll lever from, then pull the
+        // handle round the claw, 0.45 rad, and hold it there.
+        let (r0, l0) = hands_at(line, out, steady);
+        vr.move_hand(Side::Right, r0);
+        vr.move_hand(Side::Left, l0);
+        vr.step(2);
+        // Only the lever counts (the claw may have seated on the way in).
+        *vr.app.world_mut().resource_mut::<Strain>() = Strain::default();
+        let bent = Quat::from_axis_angle(Vec3::Y.cross(back).normalize(), -0.45) * line;
+        for i in 1..=10 {
+            let k = i as f32 / 10.0;
+            let now = line.slerp(bent, k);
+            let (r, l) = hands_at(now, out, steady);
+            vr.move_hand(Side::Right, r);
+            vr.move_hand(Side::Left, l);
+            vr.step(1);
+        }
+        vr.step(40);
+    }
+
+    /// A crowbar in both hands, its claw to the seam on a block's face
+    /// 0.6 m ahead at waist height; then levered round the claw with the
+    /// hands at `out` and `steady` metres up the bar from it. Would it give
+    /// (100 N·m held for Destruction's PRY_HOLD)?
+    fn pry(out: f32, steady: f32) -> bool {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Strain>()
+            .add_systems(FixedUpdate, strain);
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let face = feet + Vec3::new(0.0, 1.0, -0.6);
+        let block = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(1.0, 1.0, 0.4),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(face - Vec3::Z * 0.2),
+                Pryable {
+                    needs: 100.0,
+                    seam: Vec3::new(0.0, 0.0, 0.23),
+                    along: Vec3::X,
+                    held: 0.0,
+                },
+            ))
+            .id();
+        work_bar(&mut vr, feet, face + Vec3::Z * 0.03, Vec3::Z, out, steady);
+        let _ = block;
+        vr.app.world().resource::<Strain>().longest >= PRY_HOLD
+    }
+
+    /// Levered from the end of the bar with both hands, the seam gives.
+    #[test]
+    fn a_crowbar_levered_from_its_end_prises_the_seam() {
+        assert!(pry(0.67, 0.4), "two hands at the end didn't move it");
+    }
+
+    /// A real seam: one of Marrow Creek's supply crates, its lid's edge
+    /// (Destruction's). Levered from the end of the bar, the lid gives and
+    /// the crate spills open.
+    #[test]
+    fn a_crowbar_prises_a_supply_crate_open() {
+        let mut vr = Vr::new("marrow_creek");
+        vr.app
+            .init_resource::<Strain>()
+            .add_systems(FixedUpdate, strain);
+        let (krate, gt, seam) = {
+            let mut q = vr.app.world_mut().query_filtered::<
+                (Entity, &GlobalTransform, &Pryable),
+                With<crate::items::loot::SupplyCrate>,
+            >();
+            let (e, gt, p) = q.iter(vr.app.world()).next().expect("a supply crate");
+            (e, *gt, *p)
+        };
+        // Stand off the lid's seam side, facing it.
+        let at = gt.transform_point(seam.seam);
+        let back = (gt.rotation() * Vec3::NEG_Z).with_y(0.0).normalize();
+        let feet = {
+            let p = at + back * 0.75;
+            on_ground(&vr, p.x, p.z)
+        };
+        vr.stand(feet, (-back.x).atan2(-back.z) + std::f32::consts::PI);
+        work_bar(&mut vr, feet, at + back * 0.02, back, 0.67, 0.4);
+        vr.step(30);
+        assert!(
+            vr.app.world().get_entity(krate).is_err(),
+            "the crate's lid held (longest strain {:.2} s)",
+            vr.app.world().resource::<Strain>().longest
+        );
+    }
+
+    /// Choked up by the claw, the same pull moves nothing.
+    #[test]
+    fn a_crowbar_held_short_moves_nothing() {
+        assert!(!pry(0.25, 0.12), "hands by the claw prised it");
+    }
+}
+
+/// Bolt cutters, worked with both hands.
+mod cutters {
+    use super::*;
+    use crate::destruction::hooks::Cuttable;
+    use crate::interact::tools::cutters::{ChainLink, JAWS, LEFT, Padlock};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Chain-link 0.6 m ahead (or a gate in it, padlocked). Cutters in both
+    /// hands (or only one), jaws to the wire (or the shackle), then the
+    /// hands squeezed together. Is the panel open?
+    fn cut(both: bool, locked: bool) -> bool {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let wire = feet + Vec3::new(0.0, 1.0, -0.6);
+        let panel = vr
+            .app
+            .world_mut()
+            .spawn((
+                ChainLink::default(),
+                RigidBody::Static,
+                Collider::cuboid(2.0, 2.0, 0.04),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(wire),
+            ))
+            .id();
+        let cuttable = Cuttable { needs: 0.0 };
+        let mut lock = None;
+        if locked {
+            lock = Some(
+                vr.app
+                    .world_mut()
+                    .spawn((
+                        Padlock { holds: panel },
+                        cuttable,
+                        Collider::cuboid(0.05, 0.07, 0.02),
+                        CollisionLayers::new(
+                            crate::world::Layer::Item,
+                            [crate::world::Layer::World],
+                        ),
+                        Transform::from_translation(wire),
+                    ))
+                    .id(),
+            );
+        } else {
+            vr.app.world_mut().entity_mut(panel).insert(cuttable);
+        }
+        vr.step(2);
+        let tool = vr.spawn(
+            "bolt_cutters",
+            Transform::from_translation(feet + Vec3::new(0.0, 0.9, -0.3)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let l = vr.point(tool, |r| *r == GripRole::Primary);
+        let r = vr.point(tool, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, l, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        if both {
+            vr.hand(Side::Right, r, Quat::IDENTITY, 1.0, 0.0);
+            vr.step(3);
+        }
+        // Handles spread, the jaws onto the wire.
+        let reach = (LEFT.z - JAWS.z) + 0.04;
+        let spread = 0.3;
+        let at = |s: f32| {
+            let back = wire + Vec3::Z * reach;
+            (back - Vec3::X * s * 0.5, back + Vec3::X * s * 0.5)
+        };
+        let (l1, r1) = at(spread);
+        for i in 1..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, l.lerp(l1, k));
+            if both {
+                vr.move_hand(Side::Right, r.lerp(r1, k));
+            }
+            vr.step(1);
+        }
+        vr.step(8);
+        // Squeeze.
+        for i in 1..=12 {
+            let (l2, r2) = at(spread - (spread - 0.1) * i as f32 / 12.0);
+            vr.move_hand(Side::Left, l2);
+            if both {
+                vr.move_hand(Side::Right, r2);
+            }
+            vr.step(1);
+        }
+        vr.step(4);
+        let w = vr.app.world();
+        // Cut, Destruction takes the cut thing away; a padlock's panel is
+        // left open.
+        match lock {
+            Some(lock) => {
+                w.get_entity(lock).is_err()
+                    && w.get::<ChainLink>(panel).unwrap().cut
+                    && w.get::<ColliderDisabled>(panel).is_some()
+            }
+            None => w.get_entity(panel).is_err(),
+        }
+    }
+
+    /// Both hands squeezing the handles cut through the wire: the panel is
+    /// a gap.
+    #[test]
+    fn bolt_cutters_squeezed_with_both_hands_cut_chain_link() {
+        assert!(cut(true, false), "the wire held");
+    }
+
+    /// One hand can't close them.
+    #[test]
+    fn bolt_cutters_in_one_hand_cut_nothing() {
+        assert!(!cut(false, false), "one hand cut the wire");
+    }
+
+    /// A padlocked gate: cut the shackle and the gate opens.
+    #[test]
+    fn bolt_cutters_through_a_padlock_open_its_gate() {
+        assert!(cut(true, true), "the padlock held");
+    }
+}
+
+/// First aid and food, with the hands.
+mod first_aid {
+    use super::*;
+    use crate::health::Health;
+    use crate::interact::first_aid::NEEDLE;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let mut h = vr.app.world_mut().get_mut::<Health>(vr.player).unwrap();
+        h.hp = 50.0;
+        h.bleeding = 1.0;
+        (vr, feet)
+    }
+
+    /// Take `id` in the right hand from in front of you.
+    fn take(vr: &mut Vr, feet: Vec3, id: &str) -> Entity {
+        let at = feet + Vec3::new(0.2, 1.1, -0.35);
+        let item = vr.spawn(id, Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(item),
+            "{id} in hand"
+        );
+        item
+    }
+
+    fn gone(vr: &Vr, e: Entity) -> bool {
+        vr.app.world().get_entity(e).is_err()
+    }
+
+    /// Wind a dressing round the left forearm (or only hold it there).
+    fn dress(turns: f32) -> (bool, f32, f32) {
+        let (mut vr, feet) = setup();
+        let d = take(&mut vr, feet, "field_dressing");
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        let centre = wrist + Vec3::Z * 0.12;
+        let steps = (turns * 24.0) as usize;
+        for i in 0..=steps.max(30) {
+            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 24.0);
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+            );
+            vr.step(1);
+        }
+        vr.step(3);
+        let h = vr.app.world().get::<Health>(vr.player).unwrap();
+        (gone(&vr, d), h.bleeding, h.hp)
+    }
+
+    /// Circled round the forearm, the dressing goes on and the bleeding
+    /// stops.
+    #[test]
+    fn a_dressing_wound_round_the_forearm_stops_the_bleeding() {
+        let (used, bleeding, hp) = dress(2.0);
+        assert!(
+            used && bleeding == 0.0 && hp > 50.0,
+            "{used} {bleeding} {hp}"
+        );
+    }
+
+    /// Only held against it, it doesn't.
+    #[test]
+    fn a_dressing_only_held_to_the_arm_does_nothing() {
+        let (used, bleeding, _) = dress(0.0);
+        assert!(!used && bleeding > 0.0, "{used} {bleeding}");
+    }
+
+    /// An injector's tip to the thigh (or out in front), and the trigger.
+    fn jab(thigh: bool) -> bool {
+        let (mut vr, feet) = setup();
+        let inj = take(&mut vr, feet, "regen_injector");
+        let to = if thigh {
+            let torso = {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+                *q.iter(vr.app.world()).next().unwrap()
+            };
+            torso.transform_point(Vec3::new(0.11, -0.62, -0.04))
+        } else {
+            feet + Vec3::new(0.2, 1.2, -0.5)
+        };
+        // The item sits on the hand as it was taken, so the hand goes
+        // where the tip must be, less the tip's place on the item.
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(inj).unwrap();
+            gt.transform_point(NEEDLE) - vr.hand_state(Side::Right).world.translation
+        };
+        vr.move_hand(Side::Right, to - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        gone(&vr, inj)
+    }
+
+    #[test]
+    fn an_injector_goes_in_at_the_thigh() {
+        assert!(jab(true), "the thigh took no injection");
+    }
+
+    #[test]
+    fn an_injector_in_the_air_does_nothing() {
+        assert!(!jab(false), "injected into the air");
+    }
+
+    /// Held at the mouth a moment, food is eaten; a bottle only drunk once
+    /// it's tipped up.
+    #[test]
+    fn food_at_the_mouth_is_eaten_and_a_bottle_drunk_tipped_up() {
+        for (id, tip, eaten) in [
+            ("canned_stew", false, true),
+            ("water_bottle", false, false),
+            ("water_bottle", true, true),
+        ] {
+            let (mut vr, feet) = setup();
+            let food = take(&mut vr, feet, id);
+            let mouth = feet + Vec3::new(0.0, 1.65 - 0.08, -0.07);
+            let rot = if tip {
+                Quat::from_rotation_x(1.4)
+            } else {
+                Quat::IDENTITY
+            };
+            vr.hand(Side::Right, mouth, rot, 1.0, 0.0);
+            vr.step(140);
+            assert_eq!(gone(&vr, food), eaten, "{id} tipped {tip}");
+        }
+    }
+}
+
+/// Gestures the world can read.
+mod gestures {
+    use super::*;
+    use crate::interact::gestures::{BREATH, Gestures, HUSHED};
+    use crate::robots::Noise;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Noises heard: whose, how far.
+    #[derive(Resource, Default)]
+    struct Heard(Vec<(Option<Entity>, f32)>);
+
+    fn listen(mut n: MessageReader<Noise>, mut heard: ResMut<Heard>) {
+        heard.0.extend(n.read().map(|n| (n.source, n.radius)));
+    }
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Heard>()
+            .add_systems(FixedUpdate, listen);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        (vr, feet)
+    }
+
+    /// Winded, you're heard breathing; a hand over your mouth cuts it.
+    #[test]
+    fn a_hand_over_the_mouth_quietens_hard_breathing() {
+        for over in [false, true] {
+            let (mut vr, feet) = setup();
+            let at = if over {
+                feet + Vec3::new(0.0, 1.65 - 0.08, -0.1)
+            } else {
+                feet + Vec3::new(0.3, 1.0, -0.2)
+            };
+            vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(3);
+            vr.app.world_mut().resource_mut::<Heard>().0.clear();
+            // Winded throughout.
+            for _ in 0..200 {
+                vr.app
+                    .world_mut()
+                    .get_mut::<crate::player::Body>(vr.player)
+                    .unwrap()
+                    .stamina = 0.0;
+                vr.step(1);
+            }
+            let hush = vr.app.world().get::<Gestures>(vr.player).unwrap().hush;
+            assert_eq!(hush, over, "a hand over the mouth: {over}");
+            let player = vr.player;
+            let loudest = vr
+                .app
+                .world()
+                .resource::<Heard>()
+                .0
+                .iter()
+                .filter(|(by, _)| *by == Some(player))
+                .map(|(_, r)| *r)
+                .fold(0.0, f32::max);
+            let want = if over { BREATH * HUSHED } else { BREATH };
+            assert!(
+                (loudest - want).abs() < 0.3,
+                "breathing heard {loudest} m, want {want} (hand over mouth {over})"
+            );
+        }
+    }
+
+    /// An open palm raised over the head reads as one; a raised fist
+    /// doesn't.
+    #[test]
+    fn a_raised_open_palm_is_read_and_a_fist_is_not() {
+        for open in [true, false] {
+            let (mut vr, feet) = setup();
+            let up = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
+            vr.hand(
+                Side::Right,
+                feet + Vec3::new(0.25, 1.85, -0.15),
+                up,
+                if open { 0.0 } else { 1.0 },
+                0.0,
+            );
+            vr.step(60);
+            let palm = vr.app.world().get::<Gestures>(vr.player).unwrap().palm;
+            assert_eq!(palm, open, "open hand {open}");
+        }
     }
 }

@@ -50,6 +50,8 @@ pub enum Step {
     Rotate,
     /// Push the case at the gate out with the rod.
     EjectGate,
+    /// Slap a stuck turn-bolt's handle up (a palm under it).
+    Slap,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -168,6 +170,8 @@ fn rack_steps(action: ActionKind) -> Vec<(f32, Step)> {
             (0.08, Step::ReleaseBolt),
         ],
         ActionKind::BoltAction => vec![
+            // A stuck bolt takes a slap first (nothing if it isn't).
+            (0.0, Step::Slap),
             (0.08, Step::Lift(1.0)),
             (0.08, Step::Bolt(0.5)),
             (0.06, Step::Bolt(1.0)),
@@ -277,6 +281,7 @@ fn run_macros(
             Step::Bolt(t) => gun.firearm.set_bolt_travel(t),
             Step::ReleaseBolt => gun.firearm.release_bolt(),
             Step::Lift(t) => gun.firearm.set_handle_lift(t),
+            Step::Slap => gun.firearm.free_bolt(),
             Step::Break(open) => gun.firearm.set_break_open(open),
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),
@@ -345,7 +350,7 @@ fn run_macros(
                 Vec::new()
             }
         };
-        emit(e, &name, &gun, gt, ev, &mut out, &mut ejected);
+        emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
         if matches!(step, Step::LoadRound) {
             commands.queue(move |world: &mut World| load_one_round(world, player_e, gun_e));
         }
@@ -391,14 +396,22 @@ fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
     let Some((ammo_e, _, socket, bag)) = mine.into_iter().min_by_key(|(_, r, _, _)| *r) else {
         return;
     };
+    let load = {
+        let base = catalog.get(world.get::<Item>(ammo_e).unwrap().kind()).load;
+        let it = world.get::<Item>(ammo_e).unwrap();
+        let mut left = it.loads.clone();
+        let load = left.pop_or(it.rounds, base);
+        (load, left)
+    };
     let loaded = world
         .get_mut::<Gun>(gun_e)
-        .is_some_and(|mut g| g.firearm.load_round());
+        .is_some_and(|mut g| g.firearm.load_round_of(load.0));
     if !loaded {
         return;
     }
     let empty = {
         let mut it = world.get_mut::<Item>(ammo_e).expect("ammo exists");
+        it.loads = load.1;
         it.rounds -= 1;
         it.rounds == 0
     };
@@ -450,11 +463,21 @@ pub fn apply_combines(
                 if dx.category == Category::Ammo && *cart == mag.cartridge {
                     let room = mag.capacity.saturating_sub(iy.rounds);
                     let moved = room.min(ix.rounds);
+                    // A round at a time off the ammo, on top of what's in.
+                    let mut taken = Vec::new();
                     if let Ok((mut a, _)) = items.get_mut(x) {
+                        for i in 0..moved {
+                            let n = a.rounds - i;
+                            taken.push(a.loads.pop_or(n, dx.load));
+                        }
                         a.rounds -= moved;
                     }
                     if let Ok((mut b, _)) = items.get_mut(y) {
-                        b.rounds += moved;
+                        for l in taken {
+                            let have = b.rounds;
+                            b.loads.push(have, l);
+                            b.rounds += 1;
+                        }
                     }
                     let _ = my;
                     if moved > 0 && dx.rounds == 1 && items.get(x).is_ok_and(|(a, _)| a.rounds == 0)
@@ -501,9 +524,12 @@ pub fn apply_combines(
 /// How close (m) a box of rounds and a magazine held in your two hands
 /// have to come for the rounds to go in.
 pub const TOUCH: f32 = 0.12;
+/// How close a cleaning kit, oil or parts must come to a gun's receiver.
+pub const TOUCH_GUN: f32 = 0.2;
 
 /// VR: bring a box of rounds to a magazine, one in each hand, and the rounds
-/// go in (what flat mode's C does). Without it a headset could never load a
+/// go in (what flat mode's C does); bring a cleaning kit, oil or spare
+/// parts to a gun's receiver and it's tended. Without it a headset could never load a
 /// magazine: the yard's sign said to, and nothing listened.
 fn touch_to_combine(
     driver: Res<crate::rig::RigDriver>,
@@ -536,10 +562,20 @@ fn touch_to_combine(
             ammo.category == Category::Ammo
                 && matches!((&ammo.cartridge, &mag.magazine), (Some(c), Some(m)) if *c == m.cartridge)
         };
-        if !(loads(da, db) || loads(db, da)) {
+        // A cleaning kit, oil or spare parts brought to a gun's receiver.
+        let tends = |tool: &extraction_core::items::ItemDef,
+                     gun: &extraction_core::items::ItemDef| {
+            gun.firearm.is_some()
+                && matches!(tool.id.as_str(), "cleaning_kit" | "gun_oil" | "spare_parts")
+        };
+        let reach = if loads(da, db) || loads(db, da) {
+            TOUCH
+        } else if tends(da, db) || tends(db, da) {
+            TOUCH_GUN
+        } else {
             continue;
-        }
-        if ga.translation().distance(gb.translation()) < TOUCH {
+        };
+        if ga.translation().distance(gb.translation()) < reach {
             now.insert((a, b));
             if !touching.contains(&(a, b)) {
                 combine.write(Combine { a, b });

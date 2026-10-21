@@ -314,6 +314,13 @@ fn gallery(
     }
 }
 
+/// Where `--gallery kit+armour` puts a piece of armour.
+#[derive(Clone, Copy)]
+enum KitPlace {
+    Body(extraction_core::inventory::SlotKind),
+    Pocket(Entity, extraction_core::firearm_terminal::ArmourArea),
+}
+
 /// `--gallery fp:WHAT`: the player's gloves as you'd see them, at eye
 /// height, held still: `fp:open` (both hands open), `fp:point` (the right
 /// index on the nearest push button), or `fp:<item id>` (a gun on its grip
@@ -405,12 +412,13 @@ fn first_person_hands(
         // The left wrist's display, as the game mounts it.
         if side == Side::Left {
             commands.spawn((
+                crate::render::legibility::TextSource::Dev,
                 crate::raid::bench::ScreenText {
-                    text: "SURGE 12m  14.2kg\nHP 100".into(),
-                    size: Vec2::new(0.075, 0.045),
+                    text: "SURGE 12M  14.2KG\nHP 100".into(),
+                    size: crate::render::comfort::WRIST_SIZE,
                     style: crate::raid::bench::ScreenStyle::Lcd,
                 },
-                crate::render::props::wrist_mount(),
+                crate::render::props::wrist_mount(crate::rig::Side::Left),
                 ChildOf(h),
             ));
         }
@@ -526,7 +534,8 @@ fn first_person_hands(
 /// `--gallery kit` fills the worn slots, to see the rig full: the pistol
 /// holstered, magazines in three of the four pouches, a clip in one hip
 /// pocket, the compass on the chest mount. `kit+pack` also hangs the pack
-/// open in front.
+/// open in front; `kit+armour` puts on the vest, with a plate in each
+/// pocket, and the helmet.
 fn wear_kit(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -536,11 +545,21 @@ fn wear_kit(
         &crate::interact::body::BodySlot,
         &mut crate::interact::Socket,
     )>,
+    mut pockets: Query<
+        (
+            Entity,
+            &crate::weapons::armour::PlatePocket,
+            &crate::interact::SocketOwner,
+            &mut crate::interact::Socket,
+        ),
+        Without<crate::interact::body::BodySlot>,
+    >,
     players: Query<Entity, With<crate::rig::LocalPlayer>>,
     mut events: MessageWriter<crate::interact::InteractEvent>,
     mut toggle: MessageWriter<crate::interact::body::ToggleBackpack>,
     mut stage: Local<u32>,
     mut pending: Local<Vec<(Entity, usize)>>,
+    mut armour: Local<Vec<(Entity, KitPlace)>>,
 ) {
     let Some(spec) = opts.gallery.as_deref() else {
         return;
@@ -573,7 +592,37 @@ fn wear_kit(
             );
             pending.push((e, slot));
         }
-        if rest == "+pack" {
+        if rest.contains("+armour") {
+            let mut spawn = |id: &str| {
+                catalog.kind(id).map(|kind| {
+                    crate::items::spawn_item(
+                        &mut commands,
+                        &catalog,
+                        crate::items::SpawnItem {
+                            kind,
+                            transform: Transform::default(),
+                            condition: 1.0,
+                        },
+                    )
+                })
+            };
+            if let (Some(vest), Some(helmet), Some(front), Some(back)) = (
+                spawn("vest"),
+                spawn("helmet"),
+                spawn("steel_plate"),
+                spawn("steel_plate"),
+            ) {
+                use extraction_core::firearm_terminal::ArmourArea;
+                use extraction_core::inventory::SlotKind;
+                armour.extend([
+                    (vest, KitPlace::Body(SlotKind::Vest)),
+                    (helmet, KitPlace::Body(SlotKind::Head)),
+                    (front, KitPlace::Pocket(vest, ArmourArea::Front)),
+                    (back, KitPlace::Pocket(vest, ArmourArea::Back)),
+                ]);
+            }
+        }
+        if rest.contains("+pack") {
             if let Some(player) = players.iter().next() {
                 toggle.write(crate::interact::body::ToggleBackpack { player });
             }
@@ -584,6 +633,28 @@ fn wear_kit(
         pending.retain(|&(item, slot)| {
             let Some((socket_e, _, mut socket)) = slots.iter_mut().find(|(_, s, _)| s.0 == slot)
             else {
+                return true;
+            };
+            crate::interact::seat_in_socket(&mut commands, item, socket_e, &mut socket);
+            events.write(crate::interact::InteractEvent::Socketed {
+                item,
+                socket: socket_e,
+            });
+            false
+        });
+        // The vest's pockets come with it, a frame after it's made.
+        armour.retain(|&(item, place)| {
+            let found = match place {
+                KitPlace::Body(kind) => slots
+                    .iter_mut()
+                    .find(|(_, _, s)| s.kind == crate::interact::SocketKind::Body(kind))
+                    .map(|(e, _, s)| (e, s)),
+                KitPlace::Pocket(vest, area) => pockets
+                    .iter_mut()
+                    .find(|(_, p, o, _)| o.0 == vest && p.0 == area)
+                    .map(|(e, _, _, s)| (e, s)),
+            };
+            let Some((socket_e, mut socket)) = found else {
                 return true;
             };
             crate::interact::seat_in_socket(&mut commands, item, socket_e, &mut socket);

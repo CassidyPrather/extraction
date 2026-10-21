@@ -26,10 +26,14 @@ pub const FOV: f32 = 120.0;
 /// movement: keep still and it makes out this share of you (a walker 0.55).
 pub const HEARING: f32 = 2.5;
 pub const STILL: f32 = 0.2;
+/// Its run, as an `Intent::pace` (its gait lopes at 1; `anim::Shape`).
+pub const RUN: f32 = 2.25;
 /// Running to a sound, it drops to a stalk within this of it (m)...
 pub const STALK_WITHIN: f32 = 15.0;
-/// ...at this share of its run.
+/// ...at this share of its run...
 pub const STALK_PACE: f32 = 0.4;
+/// ...and noses round at this one.
+pub const NOSE_PACE: f32 = 0.25;
 /// It comes round to your side from further than this (m)...
 pub const FLANK_FROM: f32 = 8.0;
 /// ...this far out to the side of you.

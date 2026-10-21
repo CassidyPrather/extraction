@@ -5,6 +5,7 @@
 //! here so it can be unit-tested in milliseconds and reused by the headless
 //! simulations, the client, and (eventually) a server or a VRChat port.
 
+pub mod ammo;
 pub mod anomaly;
 pub mod cooking;
 pub mod cover;
@@ -13,8 +14,10 @@ pub mod firearm;
 pub mod firearm_terminal;
 pub mod fit;
 pub mod forest;
+pub mod fracture;
 pub mod geom;
 pub mod grenade;
+pub mod heavy;
 pub mod inventory;
 pub mod items;
 pub mod loot;
@@ -27,7 +30,9 @@ pub mod nav;
 pub mod noise;
 pub mod progression;
 pub mod rocks;
+pub mod safehouse;
 pub mod save;
+pub mod sentry;
 pub mod terrain;
 pub mod underground;
 pub mod unity;

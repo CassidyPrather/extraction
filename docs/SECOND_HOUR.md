@@ -37,7 +37,8 @@ A bot plays three raids in Marrow Creek, plus the start of a fourth, in
 about four minutes of wall clock (headless). The scenario sets each moment
 up the way the drills set things up:
 - a rifle worn to 0.2;
-- a walker about its own business that hears a shot;
+- a walker about its own business, about 85 m off, that hears a shot
+  fired crouched (nearer, by day, it sees who fired, even crouched);
 - a drone, met by a house in the village (where most of the Zone's
   cover is);
 - a torch from the crate, its cell in, for the village bunker's stair;
@@ -53,10 +54,11 @@ The scenario isn't in `--scenario all`; run it by name. It also shortens
 the truck's drive to 10 seconds and clears its own robots after their
 moments.
 
-Last run (232 s):
+Last run (260 s, the merged tree with the bracing fix):
 
 | Moment | Raid | Bot did | Worked |
 | - | - | - | - |
+| Revealed | 1 | (a thrown thing showed one up) | yes |
 | Anomaly | 1 | go round it (a burner) | yes |
 | Worn | 1 | carry on; mend it at the bench later | yes |
 | Jam (failure to eject) | 1 | rack it | yes |
@@ -73,6 +75,12 @@ Last run (232 s):
 | Kit recovered | 4 | went back for it before the convoy | yes |
 
 ### What it found
+
+- **A held trigger keeps a rifle firing.** When the driver's line cut in
+  on a shot, the bot walked off with the trigger still held, and the
+  rifle kept firing: it gave away every move after being heard or
+  laming a walker. That was the run's own bug: the trigger is now let go
+  whenever the run cuts in.
 
 - **"Get low and keep still" fails after a gunshot.** A walker that heard
   your shot comes to where the shot was. A bot that kept still there was

@@ -215,9 +215,10 @@ pub const BEAT_LETTER: &[&str] = &[
     "Driver: \"Three keys stop them, the inspector told her. All three.\"",
     "Driver: \"Her photo's in the stash. Take it out there with you.\"",
 ];
+pub const BEAT_ENDED: &[&str] = &["Driver: \"Thank you. For walking down with me.\""];
 pub const BEAT_RECALLED: &[&str] = &[
     "Truck: \"They're walking home. All of them. I can see it from here.\"",
-    "Driver: \"I'm going in. First time. The house by the well.\"",
+    "Driver: \"Next time you go in, I'm coming. First time.\"",
 ];
 
 /// A machine close by has stopped looking for you
@@ -262,7 +263,7 @@ mod tests {
     /// Every name a rendezvous can have, in every map.
     fn rendezvous_names() -> Vec<String> {
         let mut out = vec!["gate".to_string()];
-        for map in crate::world::story::VALLEYS {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let text = std::fs::read_to_string(
                 crate::asset_root_path()
                     .join("maps")
@@ -284,7 +285,15 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 23] = [
+        let pools: [&[&str]; 26] = [
+            crate::raid::epilogue::FOUND,
+            BEAT_ENDED,
+            &[
+                crate::raid::epilogue::SETTING_OFF,
+                crate::raid::epilogue::GOING_DOWN,
+                crate::raid::epilogue::STACKS_SHUT,
+                crate::raid::epilogue::RELEASED,
+            ],
             CARGO_ARTIFACT,
             CARGO_EYE,
             CARGO_CELL,
