@@ -145,9 +145,10 @@ pub fn dress(
         return Vec::new();
     }
     let base = extraction_core::map::prefab_base(prefab);
-    // A drowned house's things went with the water.
+    // A drowned house was emptied sixty years before the water came: what
+    // the silt holds is old and sparse.
     if prefab.ends_with("_drowned") {
-        return Vec::new();
+        return plan(base).map_or_else(Vec::new, |(w, d)| silted(xf, prefab, w, d));
     }
     // Whom Story's notes name here, if anyone.
     let at = Vec2::new(xf.translation.x, xf.translation.z);
@@ -288,6 +289,26 @@ pub fn dress(
         out.extend(n.things);
     }
     clear_of_notes(map, xf, out)
+}
+
+/// What Old Sallow's silt holds in a drowned `w` x `d` house: two or three
+/// of an iron bedstead, a cart wheel, a mangle and broken crockery, from
+/// its seed, on the silt (`buildings::SILT` over the footing).
+fn silted(xf: &Transform, prefab: &str, w: f32, d: f32) -> Vec<(&'static str, Transform)> {
+    let at = Vec2::new(xf.translation.x, xf.translation.z);
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x5117);
+    let top = 0.05 + super::buildings::SILT;
+    let (x, z) = (w * 0.5, d * 0.5);
+    let all = [
+        on("bedstead_silted", Vec3::new(x * 0.45, top, z * 0.4), 0.05),
+        on("cart_wheel", Vec3::new(-x * 0.45, top, -z * 0.35), 0.8),
+        on("mangle", Vec3::new(x * 0.1, top, z * 0.7), 2.6),
+        on("dishes_broken", Vec3::new(-x * 0.1, top, -z * 0.6), 1.9),
+    ];
+    let mut all = all.to_vec();
+    rng.shuffle(&mut all);
+    all.truncate(2 + rng.usize(..2));
+    all
 }
 
 /// `things` less those within [`NOTE_CLEAR`] of a note or a terminal.
@@ -807,6 +828,30 @@ mod tests {
                     "{} at {:?}: {m}",
                     p.prefab,
                     p.at
+                );
+            }
+        }
+    }
+
+    /// Old Sallow's drowned houses hold two or three old things, no more.
+    #[test]
+    fn the_silt_holds_old_things_sparsely() {
+        let map = crate::world::load_map_def("marrow_creek");
+        for (k, id) in [
+            "house_plank_drowned",
+            "farmhouse_drowned",
+            "house_brick_drowned",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let xf = Transform::from_xyz(k as f32 * 31.0, 0.0, 7.0);
+            let things = dress(&map, id, "", &xf, false);
+            assert!((2..=3).contains(&things.len()), "{id}: {things:?}");
+            for (m, _) in &things {
+                assert!(
+                    ["bedstead_silted", "cart_wheel", "mangle", "dishes_broken"].contains(m),
+                    "{id}: {m}"
                 );
             }
         }

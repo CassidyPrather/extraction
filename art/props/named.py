@@ -16,6 +16,8 @@ bedroll); bow_saw (T. Veselý, the woodward).
 Sallow: cup_one, photo_church (Alois Pech); key_hook_empty (J. Rybář's
 shop); rods_rack, landing_net, stuffed_pike (the angling club);
 armchair, peg_empty, slippers (Mrs Hlavač).
+Old Sallow's silt, sixty years down: bedstead_silted, cart_wheel, mangle
+(and clutter.py's dishes_broken).
 
 Materials as clutter.py's. The letters (the card, the name, the hymn
 numbers) are `text`'s stencils, registered in `render::legibility::ART`.
@@ -434,6 +436,57 @@ def slippers():
     return [p]
 
 
+# --- Old Sallow's silt ---------------------------------------------------------------------------
+
+def bedstead_silted():
+    """An iron bedstead sunk to its rails in the silt, rusted: its head
+    and foot ends standing, 1.9 x 0.5 x 0.9 (its foot at y 0, the silt's
+    top)."""
+    p = Part("static")
+    for (z, h) in ((-0.95, 0.55), (0.95, 0.4)):
+        for sx in (-1, 1):
+            rod(p, (sx * 0.44, -0.15, z), (sx * 0.44, h, z), 0.018, "Rusty", segs=6)
+        rod(p, (-0.44, h, z), (0.44, h, z), 0.014, "Rusty", segs=6)
+        for k in range(5):
+            x = -0.3 + k * 0.15
+            rod(p, (x, -0.1, z), (x, h - 0.02, z), 0.007, "Rusty", segs=4)
+    for sx in (-1, 1):
+        rod(p, (sx * 0.44, 0.04, -0.95), (sx * 0.44, 0.02, 0.95), 0.012, "Rusty", segs=5)
+    return [p]
+
+
+def cart_wheel():
+    """A wooden cart wheel lying half in the silt, its iron tyre rusted:
+    1.0 across (its hub at the silt's top)."""
+    p = Part("static")
+    xf = T(0, 0.02, 0) @ RX(-1.45)
+    p.lathe([(0.46, -0.03), (0.5, -0.03), (0.5, 0.03), (0.46, 0.03)], "Rusty", segs=28,
+            closed=True, xf=xf)
+    p.lathe([(0.4, -0.035), (0.46, -0.035), (0.46, 0.035), (0.4, 0.035)], "Timber", segs=28,
+            closed=True, xf=xf)
+    p.cyl(0.08, -0.08, 0.08, "Timber", segs=12, xf=xf)
+    for k in range(10):
+        a = k * math.pi / 5
+        p.box((0.33, 0.04, 0.03), (0.0, 0.0, 0.0), "Timber",
+              xf=xf @ RZ(a) @ T(0.245, 0.0, 0.0))
+    return [p]
+
+
+def mangle():
+    """A cast-iron mangle on its legs, tipped over in the silt: 0.9 x 0.6 x
+    0.5 (lying)."""
+    p = Part("static")
+    tip = T(0, 0.25, 0) @ RZ(1.3) @ T(0, -0.25, 0)
+    for sx in (-1, 1):
+        p.prism([(-0.25, 0.0), (0.25, 0.0), (0.12, 0.9), (-0.12, 0.9)], sx * 0.3 - 0.02,
+                sx * 0.3 + 0.02, "Rusty", axis="x", xf=tip)
+    for y in (0.7, 0.8):
+        p.cyl(0.05, -0.28, 0.28, "Timber", segs=12, xf=tip @ T(0, y, 0) @ RY(math.pi / 2))
+    p.lathe([(0.2, -0.015), (0.23, -0.015), (0.23, 0.015), (0.2, 0.015)], "Rusty", segs=20,
+            closed=True, xf=tip @ T(0.34, 0.75, 0) @ RY(math.pi / 2))
+    return [p]
+
+
 for name, build in (("till", till), ("chit_spike", chit_spike), ("closed_card", closed_card),
                     ("axe_pegs", axe_pegs), ("whetstone", whetstone),
                     ("barometer", barometer), ("kettle", kettle), ("horseshoe", horseshoe),
@@ -445,5 +498,7 @@ for name, build in (("till", till), ("chit_spike", chit_spike), ("closed_card", 
                     ("cup_one", cup_one), ("photo_church", photo_church),
                     ("key_hook_empty", key_hook_empty), ("rods_rack", rods_rack),
                     ("landing_net", landing_net), ("stuffed_pike", stuffed_pike),
-                    ("armchair", armchair), ("peg_empty", peg_empty), ("slippers", slippers)):
+                    ("armchair", armchair), ("peg_empty", peg_empty), ("slippers", slippers),
+                    ("bedstead_silted", bedstead_silted), ("cart_wheel", cart_wheel),
+                    ("mangle", mangle)):
     prop(name, build)
