@@ -106,6 +106,40 @@ pub struct FirearmDef {
     /// again.
     #[serde(default)]
     pub rimfire: bool,
+    /// How its kick feels beside another gun's of the same momentum: the
+    /// game's handling reads it (`weapons::feel`).
+    #[serde(default)]
+    pub kick: Kick,
+}
+
+/// A gun's own kick, over what its momentum and shape say: the game works
+/// out the climb from the bore's height over where the gun bears, and these
+/// scale it.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Kick {
+    /// The muzzle's climb, against what its shape gives (a brake or a
+    /// compensator under 1).
+    pub climb: f32,
+    /// The push back along the bore, likewise.
+    pub push: f32,
+    /// Which way the muzzle walks, as a share of the shot's yaw: 1 always
+    /// left, -1 always right, 0 either way.
+    pub walk: f32,
+    /// How long the shot's shove lasts, seconds: 0 a rifle's snap, a
+    /// shotgun's or a flare's a longer push.
+    pub shove: f32,
+}
+
+impl Default for Kick {
+    fn default() -> Self {
+        Self {
+            climb: 1.0,
+            push: 1.0,
+            walk: 0.0,
+            shove: 0.0,
+        }
+    }
 }
 
 const fn one() -> u32 {
@@ -206,6 +240,11 @@ pub enum Event {
     },
     /// A rod pushed down the bore knocked the squib's bullet out.
     Rodded,
+    /// A self-loader's carrier slamming home after the shot (the game
+    /// times it from the cycle and sends it).
+    CarrierHome,
+    /// An open bolt slamming home on the round it fires (likewise).
+    OpenBoltSlam,
     /// A dirty bolt stuck shut after the shot: slap the handle up.
     BoltStuck,
     BoltFreed,
@@ -1346,6 +1385,7 @@ mod tests {
             floating_pin: false,
             report: 1.0,
             rimfire: false,
+            kick: Kick::default(),
         }
     }
 

@@ -485,6 +485,38 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   stiffest, with the body behind it. Fast fire from one hand stacks up.
   Ten rounds of automatic from a still AK group at about 5° (RMS) in one
   hand, 1° in two, 0.3° shouldered (a test holds this ordering).
+- **Each gun its own kick** (`shot_of`, `kick` in `items.ron`). The climb
+  goes with the bore's height over where the gun bears (the butt
+  shouldered, else the grip): a straight stock turns climb into push. A
+  gun's traits scale that: `climb`, `push`, `walk` (which way the muzzle
+  drifts) and `shove` (seconds the shot's push is spread over: a snap
+  or a shove). A self-loader's carrier adds a little more kick as it hits
+  the back of its travel (0.3 of the cycle) and a dip as it slams home
+  (0.75). An open bolt slams home first and dips the muzzle 8 ms before
+  the round goes. Each of these is a tick in the gun hand, and the slam
+  home is a sound (the `CarrierHome` and `OpenBoltSlam` events). A pump
+  or bolt worked against its stops jolts the gun, and on its deployed
+  bipod the RPK hops and drops back past its line before it settles.
+  - The SVD is a straight hard push (it climbs half as much as an SKS,
+    with twice the push).
+  - The PPSh climbs and walks left, chattering at 900 rpm.
+  - The AK's brake keeps its climb low; it walks a little right.
+  - The Mosin snaps up.
+  - The TOZ double climbs hard; the MP-133 shoves for 28 ms.
+  - The Nagant flips off its high bore; the PM is snappy.
+  - The flare pistol is a long, slow shove.
+  - The TOZ-8 .22 barely moves.
+- **Signatures**: a test, `weapons/signature.rs`, records each gun's
+  muzzle path. Each is held as a player would: two hands where there's
+  a place for the second, shouldered where there's a stock. The trigger
+  is held for half a second on its most automatic setting. The gauge:
+  - Each pair of guns must differ in peak rise and its timing, peak push,
+    the climb and walk left at the end, and shots, by at least 8.
+  - Each must stay under 0.14 rad of climb with two hands, or 0.4 for a
+    pistol in one.
+  - A single shot must be back within a third of its peak by the end.
+  - A new gun in the catalog is measured with the rest.
+  - `cargo test every_gun_has_its_own -- --nocapture` prints the table.
 - **Weight**: a held gun follows the controller with a lag of
   `mass x LAG_*` (an AK: 40 ms in one hand, 17 ms in two, 13 ms
   shouldered; a pistol under 10 ms), smoothed in the player's space
