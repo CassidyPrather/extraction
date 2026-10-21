@@ -3,6 +3,7 @@
 //! gramophone does to a sound on its way to you ([`media`]). The game has
 //! no soundtrack: everything here is played by something in the valleys.
 
+pub mod deck;
 pub mod media;
 pub mod mml;
 pub mod synth;
