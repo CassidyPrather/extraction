@@ -50,6 +50,12 @@ pub enum Mat {
     SootBrick,
     /// Plaster blackened by a fire.
     SootPlaster,
+    /// Dressed stone in courses (ashlar): a dam's face, a masonry tower.
+    DressedStone,
+    /// A reservoir's mud, dried at the top: what fills a drowned house.
+    Silt,
+    /// Timber sixty years under water: black-brown, slimed.
+    Sodden,
 }
 
 impl Mat {
@@ -147,6 +153,20 @@ impl Mat {
                 Color::srgb(0.18, 0.17, 0.16),
                 0.95,
             ),
+            // Blocks about 0.6 m high, six courses to a tile.
+            Mat::DressedStone => (
+                Some("dressed_stone"),
+                3.6,
+                Color::srgb(0.5, 0.49, 0.46),
+                0.85,
+            ),
+            Mat::Silt => (Some("concrete_wet"), 4.0, Color::srgb(0.33, 0.3, 0.25), 0.9),
+            Mat::Sodden => (
+                Some("weathered_planks"),
+                2.0,
+                Color::srgb(0.12, 0.11, 0.08),
+                0.7,
+            ),
         }
     }
 }
@@ -206,6 +226,10 @@ impl MaterialLibrary {
                 Mat::Charred => Color::srgb(0.3, 0.26, 0.23),
                 Mat::SootBrick => Color::srgb(0.45, 0.4, 0.38),
                 Mat::SootPlaster => Color::srgb(0.3, 0.28, 0.26),
+                // The concrete's pores as dried mud; the planks' grain
+                // under slime.
+                Mat::Silt => Color::srgb(0.62, 0.55, 0.43),
+                Mat::Sodden => Color::srgb(0.52, 0.5, 0.4),
                 _ => Color::WHITE,
             };
             m.base_color_texture = Some(load("albedo", true));

@@ -468,25 +468,24 @@ fn shoot_for_screenshot(
     ));
 }
 
-/// A building's crate, drawn on its own: its box until its model is in.
-/// Furniture's range (`buildings::dress_buildings`): drawn near, gone
-/// past 25-35 m, where the room's dark anyway (each mesh carries it: a
-/// range doesn't pass to children).
+/// A breakable thing drawn on its own (`wood::Drawn`: a building's crate,
+/// a board over a window): its box until its model is in. Each mesh
+/// carries its range (a range doesn't pass to children).
 fn dress_crates(
     mut commands: Commands,
-    crates: Query<(Entity, &super::wood::BuildingCrate, Option<&Children>), Without<CrateDressed>>,
+    things: Query<(Entity, &super::wood::Drawn, Option<&Children>), Without<CrateDressed>>,
     boxes: Query<(), With<CrateBox>>,
     mut props: crate::render::world_props::PropModels,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use crate::render::world_props::Resolved;
-    let range = || bevy::camera::visibility::VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: 25.0..35.0,
-        use_aabb: true,
-    };
-    for (e, c, children) in &crates {
+    for (e, c, children) in &things {
+        let range = || bevy::camera::visibility::VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: c.range.clone(),
+            use_aabb: true,
+        };
         let has_box = children.into_iter().flatten().any(|k| boxes.contains(*k));
         match props.resolve_all([c.model].into_iter()) {
             Resolved::Loading => {
@@ -494,9 +493,7 @@ fn dress_crates(
                     let planks = props.lib.get(Mat::Planks, &props.server, &mut materials);
                     commands.spawn((
                         CrateBox,
-                        Mesh3d(
-                            meshes.add(crate::render::materials::metric_box(Vec3::splat(c.size))),
-                        ),
+                        Mesh3d(meshes.add(crate::render::materials::metric_box(c.size))),
                         MeshMaterial3d(planks),
                         Transform::IDENTITY,
                         range(),
@@ -519,7 +516,7 @@ fn dress_crates(
                     commands.spawn((
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
-                        c.model_at * t,
+                        c.at * t,
                         range(),
                         ChildOf(e),
                     ));

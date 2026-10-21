@@ -681,6 +681,34 @@
           "bytes": 6502864
         }
       }
+    },
+    "ph:large_sandstone_blocks": {
+      "provider": "polyhaven",
+      "id": "large_sandstone_blocks",
+      "res": "2k",
+      "author": "Rob Tuytel",
+      "license": "CC0-1.0",
+      "page": "https://polyhaven.com/a/large_sandstone_blocks",
+      "files": {
+        "large_sandstone_blocks_diff_2k.jpg": {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/large_sandstone_blocks/large_sandstone_blocks_diff_2k.jpg",
+          "sha256": "0555a72f01754bb90d6ee8f5dffb92557cdf2dc13c4271e813e86114ce95cd87",
+          "bytes": 2700600
+        },
+        "large_sandstone_blocks_nor_gl_2k.jpg": {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/large_sandstone_blocks/large_sandstone_blocks_nor_gl_2k.jpg",
+          "sha256": "4e07f92c151c202914c33f329a8c1c6123a6158c5c3a23db4df03c2ab309d340",
+          "bytes": 2517711
+        },
+        "large_sandstone_blocks_arm_2k.jpg": {
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/large_sandstone_blocks/large_sandstone_blocks_arm_2k.jpg",
+          "sha256": "a66a309322f96558f58f9eb3162d8c025c4cc950ab643b11253a5c81017ed921",
+          "bytes": 2581346
+        }
+      }
     }
   },
   "terrain": {
@@ -854,6 +882,12 @@
       "boulder": {
         "source": "acg:Rock045",
         "note": "grey lichen rock (the terrain's rock layer), for boulders and outcrops"
+      },
+      "dressed_stone": {
+        "source": "ph:large_sandstone_blocks",
+        "saturation": 0.45,
+        "brightness": 0.9,
+        "note": "ashlar: big dressed blocks in courses, greyed (the dam's face, a masonry tower)"
       }
     }
   },

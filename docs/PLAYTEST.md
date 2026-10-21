@@ -118,11 +118,13 @@ What changed, and worth a comment each:
   comfort board takes you straight to the top instead. Mark it if you
   ever rise when you only meant to lean on a table.
 - **Crowbar.** Hold it by the end and steady it along the shaft with your
-  other hand. Put the claw to a robot's armour plate, or the latch edge
-  of a door a wedge has jammed, then pull the handle round. Two hands at
-  the end of the bar shift it; hands near the claw won't. Your hands feel
-  the strain build, then a knock as it gives.
-- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  other hand. Put the claw to the latch edge of a plank door, the lid
+  edge of a supply crate, or a robot's armour plate (the heavy machine's
+  give up a bolt at a time), then pull the handle round. Two hands at the
+  end of the bar shift it; hands near the claw won't. Your hands feel the
+  strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand: they spread as your hands do,
+  and the jaws open with them. Spread them, put the jaws on a
   padlock's shackle or on chain-link, and squeeze your hands together. A
   cut panel leaves a gap you can walk through.
 - **First aid and food.** Wind a dressing round your other forearm (one
