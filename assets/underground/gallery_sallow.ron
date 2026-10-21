@@ -1,0 +1,72 @@
+// Sallow Reservoir: the dam's inspection gallery (format:
+// crates/extraction_core/src/underground.rs; design: docs/UNDERGROUND.md,
+// "The dam gallery"). Placed turned 180 at the valve house's end of the
+// toe: the layout's +z runs north, under the downstream face and the
+// crest, and on under the bed to the draw-off tower's foot. Long, low,
+// wet and dark: the seepage stands ankle deep the length of it.
+(
+    name: "The inspection gallery",
+    style: Service,
+    floor: -4.0,
+    corridor_height: 2.4,
+    // Cold, grey-blue lamps: what's left of them.
+    lamp_colour: Some((0.72, 0.84, 0.98)),
+    rooms: [
+        // The stair's foot under the valley, by the valve house.
+        (id: "toe_landing", at: (0.0, 10.0), size: (5.0, 4.0), height: 2.8, lamp: Flicker, props: [
+            (kind: Barrel, at: (1.9, 1.4)),
+            (kind: SmallCrate, at: (-1.7, 1.3), loot: Some("food_common")),
+        ]),
+        // The plumb-line chamber at the gallery's east end: the shaft the
+        // plumb bob hangs down from the crest, and the reading desk.
+        (id: "plumb_chamber", at: (-12.0, 32.0), size: (6.0, 6.0), height: 4.0, lamp: Dead, props: [
+            (kind: Machine, at: (0.0, 0.0)),
+            (kind: Table, at: (-1.6, 2.2), loot: Some("tools")),
+            (kind: Shelf, at: (-2.6, -1.0), rot: 90.0, loot: Some("gadgets")),
+        ]),
+        // The gallery itself, along the dam under the crest: 44 m of it.
+        (id: "gallery", at: (16.0, 32.0), size: (44.0, 2.4), height: 2.4, lamp: Dead, props: [
+            (kind: Rubble, at: (6.0, 0.6)),
+            (kind: SmallCrate, at: (19.5, -0.7), loot: Some("ammo_common")),
+        ]),
+        // The weir chamber off its downstream side: the seepage gathered
+        // over a V-notch and measured.
+        (id: "weir_room", at: (8.0, 26.0), size: (5.0, 3.6), height: 2.6, lamp: Flicker, props: [
+            (kind: Machine, at: (1.4, -0.8)),
+            (kind: Shelf, at: (-2.15, 0.2), rot: 90.0, loot: Some("tools")),
+        ]),
+        // The gauge room at its west end: the seepage weirs' readings.
+        (id: "gauge_room", at: (44.0, 32.0), size: (6.0, 5.0), height: 2.6, lamp: Steady, props: [
+            (kind: Workbench, at: (2.4, 0.2), rot: 270.0, loot: Some("workshop")),
+            (kind: Shelf, at: (-0.8, 2.15), rot: 180.0, loot: Some("medical")),
+            (kind: Crate, at: (-2.2, -1.6), loot: Some("cargo_pod")),
+        ]),
+        // Under the bed at the tower's foot, the stair up beside it.
+        (id: "tower_foot", at: (25.0, 59.0), size: (5.0, 4.0), height: 2.6, lamp: Dead, props: [
+            (kind: Crate, at: (-1.7, -1.3), loot: Some("weapons_rare")),
+            (kind: SmallCrate, at: (1.8, -1.4), loot: Some("house")),
+        ]),
+    ],
+    links: [
+        (from: "toe_landing", to: "gallery", via: [(0.0, 32.0)], width: 2.0),
+        (from: "gallery", to: "plumb_chamber", doors: To),
+        (from: "gallery", to: "gauge_room", doors: To),
+        (from: "gallery", to: "weir_room", via: [(8.0, 32.0)], doors: To),
+        (from: "gallery", to: "tower_foot", via: [(25.0, 32.0)], doors: To),
+        // The drainage adit: from the plumb chamber's sump back down to
+        // the toe, the other way round.
+        (from: "plumb_chamber", to: "toe_landing", via: [(-12.0, 10.0)]),
+    ],
+    // The seepage, ankle deep the gallery's length.
+    basins: [
+        (id: "seepage", rooms: ["gallery"], level: -3.85),
+    ],
+    patrol: ["gallery", "gauge_room", "gallery", "plumb_chamber"],
+    crawlers: 1,
+    portals: [
+        (),
+        // Up beside the draw-off tower, on its west side, the door to the
+        // bed (the tower's own doorway is on its north side).
+        (at: (25.0, 69.5), rot: 180.0, y: 1.5),
+    ],
+)

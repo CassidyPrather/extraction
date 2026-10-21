@@ -2806,7 +2806,7 @@ mod tests {
     /// ground everywhere past the kiosks.
     #[test]
     fn no_daylight_in_the_rooms() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let mut app = app(map);
             let sites = sites_on(&app);
             assert!(!sites.is_empty(), "{map}: a site");
@@ -2878,7 +2878,7 @@ mod tests {
     /// steps, not the ground (the heightfield's cells are open there).
     #[test]
     fn the_ground_is_open_over_the_stairs() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let mut app = app(map);
             for (site, xf) in sites_on(&app) {
                 let r = ug::raster(&site.id).unwrap();
@@ -2932,7 +2932,7 @@ mod tests {
     fn crawlers_walk_their_rounds_in_the_dark() {
         use crate::robots::indoor::Crawler;
         use crate::robots::senses::Lighting;
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let opts = LaunchOptions {
                 robots: true,
                 map: map.to_string(),
@@ -3124,7 +3124,7 @@ mod tests {
         use crate::interact::InteractEvent;
         use crate::rig::Side;
         use crate::world::buildings::Door;
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let mut vr = crate::vr_harness::Vr::new(map);
             vr.step(3);
             let player = vr.player;
@@ -3260,7 +3260,7 @@ mod tests {
     /// deep water while the bots' plan only costs it.
     #[test]
     fn floods_wade_swim_and_keep_crawlers_out() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let mut app = app(map);
             app.update();
             let (site, xf) = sites_on(&app).remove(0);
@@ -3815,7 +3815,7 @@ mod tests {
         use crate::bot::Bot;
         use crate::rig::LocalPlayer;
         use crate::sim::indoor::{BuildingPlan, plan_buildings};
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in ["marrow_creek", "kettle_pass", "cinder_works", "sallow_reservoir"] {
             let mut app = app(map);
             let plans: Vec<BuildingPlan> = app
                 .world_mut()

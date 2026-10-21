@@ -385,6 +385,9 @@
         (prefab: "dam_back_end", at: (-157.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "dam_back", at: (2.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "draw_off_tower", at: (-20.0, 102.5), rot: 0.0, y: 31.5, absolute: true),
+        // The dam's inspection gallery, under the toe by the valve house,
+        // out beside the tower's foot on the bed (assets/underground).
+        (prefab: "gallery_sallow", at: (-6.0, 172.0), rot: 180.0),
 
         // The spillway keeper's hut on the east abutment.
         (prefab: "shed", at: (184.0, 106.0), rot: 270.0),
