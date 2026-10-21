@@ -228,6 +228,8 @@ pub const MIX: &[Cue] = &[
     cue!("heavy.cell", "physical/switch", 0.0, 60.0, 10.0, Detail),
     cue!("heavy.idle", "machines/hum", -10.0, 70.0, 20.0, Signal, 12.0),
     cue!("heavy.horn", "voice/heavy/horn", -10.0, 120.0, 300.0, Signal, 200.0),
+    cue!("sentry.chirp", "machines/drone_lock", -22.0, 85.0, 20.0, Signal, 25.0),
+    cue!("sentry.turn", "machines/servo", -10.0, 70.0, 15.0, Signal, 10.0),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),

@@ -399,7 +399,7 @@ impl Plugin for AudioPlugin {
                     room_acoustics,
                     binaural_switch,
                     score_drive,
-                    (animal_sounds, breath_sounds, water_sounds),
+                    (animal_sounds, breath_sounds, water_sounds, sentry_sounds),
                 ),
             )
             // After everything that plays, so a sound is placed the frame
@@ -2956,8 +2956,9 @@ const PRY_FULL: f32 = 400.0;
 /// hushstone (within its 1.2 m), a light 4 dB and 3 kHz, all the time.
 pub const HUSH_DEEP: (f32, f32) = (18.0, 350.0);
 pub const HUSH_LIGHT: (f32, f32) = (4.0, 3000.0);
-/// After this long inside, a pressure tone rises (s), to full over 10.
-pub const HUSH_TONE_AFTER: f32 = 8.0;
+/// After this long inside, a pressure tone rises (s), to full over 10:
+/// a warning well before the Hush starts to hurt (its grace, 8 s).
+pub const HUSH_TONE_AFTER: f32 = 4.0;
 
 /// The Hush right now, eased: dB down and the cutoff every placed sound
 /// is held under (`occlusion` applies it).
@@ -3313,6 +3314,49 @@ fn water_sounds(
                     0.1,
                 );
             }
+        }
+    }
+}
+
+/// A sentry (`robots::sentry`): its warning chirp, the second before it
+/// fires (the lock tone, quicker and higher: it must carry, so a
+/// newcomer looking elsewhere hears it coming); its shots; the servo as a
+/// decoy draws it; its power going (a whine winding down and a clank);
+/// its head shot through.
+fn sentry_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::robots::sentry::SentryEvent>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::sentry::SentryAct as A;
+    for e in events.read() {
+        let at = Some(e.at);
+        let layers: &[(&str, &str, f64)] = match e.what {
+            A::Chirp => &[("machines/drone_lock", "sentry.chirp", 1.3)],
+            A::Fire => &[("guns/pistol_shot", "robot.shot", 0.95)],
+            A::Drawn => &[("machines/servo", "sentry.turn", 1.2)],
+            A::PowerLost => &[
+                ("machines/servo", "sentry.turn", 0.45),
+                ("machines/clank", "robot.part", 1.1),
+            ],
+            A::Wrecked => &[
+                ("physical/glass_break", "robot.glass", 1.2),
+                ("machines/groan", "robot.wreck", 1.3),
+            ],
+        };
+        for &(set, cue, speed) in layers {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                at,
+                cue,
+                0.0,
+                speed,
+                0.05,
+            );
         }
     }
 }
