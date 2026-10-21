@@ -1468,3 +1468,43 @@ fn a_grenade_in_the_open_holes_nothing() {
             .is_empty()
     );
 }
+
+#[test]
+fn a_crate_gone_clears_its_space() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<super::Cleared>);
+    let mut app = app(None);
+    app.init_resource::<Seen>().add_systems(
+        FixedUpdate,
+        |mut c: MessageReader<super::Cleared>, mut s: ResMut<Seen>| s.0.extend(c.read().copied()),
+    );
+    let (c, t) = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SupplyCrate>>()
+        .iter(app.world())
+        .map(|(e, t)| (e, *t))
+        .next()
+        .unwrap();
+    for _ in 0..6 {
+        app.world_mut().write_message(Hit {
+            entity: c,
+            point: t.translation,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y,
+            damage: 40.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 2);
+    }
+    let seen = &app.world().resource::<Seen>().0;
+    assert!(
+        seen.iter().any(|c| {
+            let p = t.translation;
+            p.cmpge(c.min).all() && p.cmple(c.max).all()
+        }),
+        "its space is clear: {seen:?}"
+    );
+}
