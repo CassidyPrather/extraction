@@ -20,7 +20,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
-| bdb219a | 17:30 | | rechecks: 4 of 6 pass | full suite next |
+| bdb219a | 17:30 | | 781 passed, 10 failed (7 fixed by eb0bcd4) | |
 | 7505d1e | 16:50 | | stopped at 615/790: 6 FAILED | |
 | 5d2ad52 | 15:00 | 7/7 clean, five valleys (Rime Fell seeds 1-3 all extracted); Sallow seed 1 timed out stuck | stopped at 132 (main moved): `a_stormglass_is_a_roof_in_the_surge` FAILED | |
 | 3037c2b | 13:40 | 8/8 clean | not run (main moved) | marrow_creek seed 2 still dies early (now to the sentry) |
@@ -33,18 +33,21 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of bdb219a; det. = fails every time, alone too.
+As of eb0bcd4; det. = fails every time, alone too.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `robots::sentry::tests::a_heavy_walks_into_its_fire` ("it opened up on you") | det. | | Heavy machine | routed 17:30 |
-| `soak::physics::items_spawned_inside_things_are_not_launched` (grenade_pin, ppsh_drum, ammo_762r_repack, crossbow_bolt launched at 12-15 m/s) | det. | new items' colliders/masses | Armoury (Soak cc) | routed 17:30 |
-| Sims weren't reproducible from their seed (multi-threaded) | det. | system order / parallel physics | Verifier | fixed on this branch (f9d69960): sims run single-threaded; `a_seed_plays_the_same_raid_twice` |
+| `wildlife::bats::tests::bats_never_go_inside_anything_or_underground` ("rime_fell: no bats hunting Water") | det. | VALLEYS-wide gauges assume every valley has what the first four have | Wildlife (Fifth valley cc) | routed 19:50 |
+| `wildlife::ducks::tests::flushed_ducks_fly_off_and_land_on_water_again` ("rime_fell: came down 24 m from the fright") | det. | same | Wildlife (Fifth valley cc) | routed 19:50 |
+| `soak::physics::items_spawned_inside_things_are_not_launched`: now a walker_leg_actuator 0.2 m into a wall ends 5.1 m under the ground | det. | tunnelling | Soak | routed 19:50 |
+| Sim: Marrow Creek, 0 extractions in 11 raids across every sha so far (drones, the sentry, a crawler, a burner); Cinder 8/11, Kettle 6/11, Sallow 5/11, Rime Fell 3/3 | | balance | Map design / Heavy | re-measuring on eb0bcd4 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| underground ×5 on Rime Fell (no site), sentry `a_heavy_walks_into_its_fire` (the assert reads backwards: it fails when the sentry never fires), save fuzz's misfit magazine | eb0bcd4 | Underground, Heavy, Soak |
+| sims not reproducible from their seed | f1c4fd4 (single-threaded sims) | Verifier |
 | stormglass, destruction shutters, `no_prefab_fights_or_floats`, `heaps_settle` (failed on 7505d1e) | bdb219a | Anomalies, Destruction, World models, Soak |
 | the wreck parts, crawlers' rounds, birds, Soak's lint and save fuzz, the storm bolt, the perf flake | by bdb219a | Destruction, Underground, Wildlife, Soak + owners, Visual design, Performance |
 | `persist::tests::save_and_restore_round_trip` (radio's tapes doubled by each load) | 881fc3b | Radio |
