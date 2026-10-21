@@ -149,6 +149,43 @@ current between the bed and the surface; someone on the bank within 6 m
 12 s. Fish there means nobody's been by. They never leave water 0.3 m
 deep. Drawn within 30 m (`art/animals/fish.py`, 118 triangles).
 
+## Ducks
+
+Mallards on open water (`wildlife::ducks`): a tell across water. The
+valley's water is sampled every 2 m for places a raft can sit: at least
+0.25 m deep (enough to float), with deep water at least 3 m all round
+and nothing built within 3 m (bridges, the dam). Every valley has some,
+and gets one or two rafts of three to nine, drakes and hens, at places
+fixed by the map and the seed, the roomiest water likelier (the second
+at least 120 m from the first): Sallow Reservoir's upper arm (round
+(-180, -170), surface 47.6) nearly always has one, Marrow Creek, Kettle
+Pass and Cinder Works their creeks' wider stretches. None of the four
+valleys goes without; the Training Yard has no water.
+
+They paddle slowly about their place (0.3 m/s), keeping together by a
+few boids rules on the surface, and now and then one up-ends to dabble,
+tail to the sky. Someone within 25 m and they swim off, slowly
+(0.8 m/s), along the water away from them, keeping their distance;
+within 12 m, or running (3.5 m/s) within 25 m, or a shot within 0.6 of
+its reach, and they go up: a run of a few metres splashing along the
+surface, then low and fast (15 m/s, 3 m over water, 12 m over land and
+over anything built) to other open water 70 to 420 m off and 60 m from
+whatever scared them, more often onward than back past it, and down
+with a skid. Crouched you get 30% nearer; after a fright they're 30%
+warier for two minutes. Machines scare them the same. A raft a player
+flushes sends the flocks' `Flushed` (its `flock` is the raft's entity,
+`birds` its ducks; look for `ducks::Raft` to tell), with `alarm` at
+most once a minute a raft, so the robots hear it the way they hear
+rooks. On the water a duck is always at the surface of water deep
+enough and outside anything built; in the air never under the ground or
+the water.
+
+Drawn like the birds (`wildlife::duck_look`, `art/animals/duck.py`):
+one merged, vertex-coloured mesh a pose, drakes (green head, white
+collar, chestnut breast, grey flanks) and hens (browns) from the same
+model, a splash in the run-up's and the skid's poses, far stand-ins
+past 40 m and the whole raft in `visuals::FarParts` past 60 m.
+
 ## Moths
 
 At dusk and at night (not in heavy rain), seven moths flit round each of
@@ -194,8 +231,17 @@ wind thin it. When the insects stop, something is close.
 - `wildlife::fish::tests`: every valley has shoals; walking to the bank,
   wading in and shooting, no fish leaves deep water or the space between
   bed and surface, and they dart.
+- `wildlife::ducks::tests`: every valley has open water and one or two
+  rafts on it (Sallow Reservoir's upper arm for nearly every seed); four
+  minutes paddling, alone and with someone pacing 18 m off, keep every
+  duck at the surface of water deep enough, together, and dabbling;
+  walking at them they swim off inside 25 m and go up at 12 m, running
+  at 25 m, crouched not at 10 m, a walker at 11 m and a shot 120 m off
+  too; flushed again and again they never go inside anything built or
+  under the ground or the water, land on open water at least 48 m from
+  the fright, and raise the alarm at most once a minute; determinism.
 - The gauges (`render::budget`): everything far off is one mesh
-  (`visuals::FarParts`: flocks past 60 m, deer and dogs past 90 m), so
+  (`visuals::FarParts`: flocks and rafts of ducks past 60 m, deer and dogs past 90 m), so
   the animals cost a view one draw beyond the near ones.
 - The sim logs `flush` (`cause`, `birds`, `alarm`, `x`, `z`) and
   `bird_alarm` (a robot sent to look by an alarm: `robot`, `x`, `z`,
