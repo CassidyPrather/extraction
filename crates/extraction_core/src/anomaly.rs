@@ -519,12 +519,23 @@ pub fn surge_bloom_spot(
     None
 }
 
+/// Whether an anomaly reaching `reach` at `p` keeps off the walls (every
+/// building's footprint, every underground kiosk's, the exits' too) by
+/// `map_surge::WALL_CLEAR` and out of the strip in front of every door
+/// (`map_surge::anomaly_room`). `placeable`'s round clearance measures
+/// from a building's middle, so along a long hall's side wall it let a
+/// snare open 2 m from the wall; and it never knew the exit kiosks.
+pub fn clear_of_buildings(map: &MapDef, p: [f32; 2], reach: f32) -> bool {
+    crate::map_surge::anomaly_room(map, p).0 >= reach
+}
+
 /// Somewhere a run-time bloom (the director's, the Surge's) may open: the
 /// same ground as the Surge's own layout, `placeable` (dry, not steep,
-/// clear of every building by its footprint) and `clear_of_roads` for
-/// how far the kind reaches.
+/// clear of every building by its footprint), `clear_of_roads` and
+/// `clear_of_buildings` for how far the kind reaches.
 pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
-    placeable(map, hm, p) && clear_of_roads(hm, p, kind.danger_radius(radius))
+    let reach = kind.danger_radius(radius);
+    placeable(map, hm, p) && clear_of_roads(hm, p, reach) && clear_of_buildings(map, p, reach)
 }
 
 /// The anomalies of a Surge cycle.
@@ -544,7 +555,10 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
                 let kind = AnomalyKind::SURGE[rng.below(3)];
                 let (lo, hi) = kind.radius_range();
                 let radius = rng.range(lo, hi);
-                if !placeable(map, hm, p) || !clear_of_roads(hm, p, radius) || !fits(out, p, radius)
+                if !placeable(map, hm, p)
+                    || !clear_of_roads(hm, p, radius)
+                    || !fits(out, p, radius)
+                    || !clear_of_buildings(map, p, kind.danger_radius(radius))
                 {
                     continue;
                 }
@@ -818,6 +832,13 @@ mod tests {
                 assert!(
                     clear_of_roads(&hm, p, kind.danger_radius(r)),
                     "{}: {p:?} by a road",
+                    map.name
+                );
+                // Nor against a wall, a kiosk or in front of a door.
+                let (room, what) = crate::map_surge::anomaly_room(&map, p);
+                assert!(
+                    room >= kind.danger_radius(r),
+                    "{}: a {kind:?} bloom at {p:?} reaches {what}",
                     map.name
                 );
             }

@@ -60,6 +60,9 @@ pub enum Rule {
     Crate,
     /// A point of interest no road or path leads to.
     Funnel,
+    /// Caught out by the Surge: no roof in reach once it's called, or one
+    /// of its anomalies against a wall or a door (`map_surge`).
+    Surge,
 }
 
 #[derive(Clone, Debug)]
@@ -324,6 +327,9 @@ pub const RV_LEVEL: f32 = 12.0;
 pub const VIEW_RANGE: f32 = 150.0;
 pub const VIEW_MAX: usize = 16;
 
+/// Where a kiosk's door is checked for footing: this far out from it.
+pub const KIOSK_STEP: f32 = 2.0;
+
 /// A road's first and last metres may run up to a building's door.
 const ROAD_END: usize = 8;
 
@@ -343,14 +349,14 @@ const ON_ROADS: &[&str] = &[
 /// An oriented rectangle in map space: centre, half extents, yaw (as the
 /// walkers' nav grid reads a placement's `rot`).
 #[derive(Clone, Copy, Debug)]
-struct Rect {
-    at: P2,
-    half: P2,
-    yaw: f32,
+pub(crate) struct Rect {
+    pub(crate) at: P2,
+    pub(crate) half: P2,
+    pub(crate) yaw: f32,
 }
 
 impl Rect {
-    fn of(prefab: &str, at: P2, rot: f32) -> Self {
+    pub(crate) fn of(prefab: &str, at: P2, rot: f32) -> Self {
         let f = prefab_footprint(prefab);
         Self {
             at,
@@ -359,21 +365,21 @@ impl Rect {
         }
     }
 
-    fn local(&self, p: P2) -> P2 {
+    pub(crate) fn local(&self, p: P2) -> P2 {
         let d = geom::sub(p, self.at);
         let (s, c) = self.yaw.sin_cos();
         [d[0] * c + d[1] * s, -d[0] * s + d[1] * c]
     }
 
     /// Signed distance from `p` to the rectangle (negative inside).
-    fn sdf(&self, p: P2) -> f32 {
+    pub(crate) fn sdf(&self, p: P2) -> f32 {
         let l = self.local(p);
         let q = [l[0].abs() - self.half[0], l[1].abs() - self.half[1]];
         let out = [q[0].max(0.0), q[1].max(0.0)];
         geom::len(out) + q[0].max(q[1]).min(0.0)
     }
 
-    fn corners(&self) -> [P2; 4] {
+    pub(crate) fn corners(&self) -> [P2; 4] {
         let (s, c) = self.yaw.sin_cos();
         let w = |lx: f32, lz: f32| [self.at[0] + lx * c - lz * s, self.at[1] + lx * s + lz * c];
         let [hx, hz] = self.half;
@@ -381,7 +387,7 @@ impl Rect {
     }
 
     /// Points round the outline every `step` metres.
-    fn outline(&self, step: f32) -> Vec<P2> {
+    pub(crate) fn outline(&self, step: f32) -> Vec<P2> {
         let c = self.corners();
         let mut out = Vec::new();
         for k in 0..4 {
@@ -394,9 +400,18 @@ impl Rect {
         out
     }
 
+    /// A point `local` (x, z) in this rectangle's own frame, in the map.
+    pub(crate) fn world(&self, local: P2) -> P2 {
+        let (s, c) = self.yaw.sin_cos();
+        [
+            self.at[0] + local[0] * c - local[1] * s,
+            self.at[1] + local[0] * s + local[1] * c,
+        ]
+    }
+
     /// Distance between two rectangles (negative: they overlap by about
     /// that much).
-    fn gap(&self, other: &Rect) -> f32 {
+    pub(crate) fn gap(&self, other: &Rect) -> f32 {
         let a = self
             .outline(0.25)
             .into_iter()
@@ -409,6 +424,86 @@ impl Rect {
             .fold(f32::INFINITY, f32::min);
         a.min(b)
     }
+}
+
+/// Something solid standing on the surface: a placement, or an
+/// underground site's kiosk. A site's placement *is* its entrance kiosk
+/// (its footprint is the kiosk and apron), so only the exits are added,
+/// and nothing is counted twice.
+#[derive(Clone, Debug)]
+pub(crate) struct Solid {
+    /// What to call it in a finding: the prefab, or "<site> exit".
+    pub(crate) name: String,
+    /// The prefab id, for the prefab lists (a site's id for its exits).
+    pub(crate) prefab: String,
+    /// What it stands on: its footprint (a kiosk's with its apron).
+    pub(crate) rect: Rect,
+    /// A kiosk's shell, walls and all (its apron is open ground).
+    pub(crate) shell: Option<Rect>,
+}
+
+impl Solid {
+    pub(crate) fn kiosk(&self) -> bool {
+        self.shell.is_some()
+    }
+
+    /// A way indoors with a roof over it: a walk-in building (`ENTERABLE`)
+    /// or a kiosk's stair down.
+    pub(crate) fn enterable(&self) -> bool {
+        self.kiosk() || ENTERABLE.contains(&crate::map::prefab_base(&self.prefab))
+    }
+
+    /// Where a kiosk's door is, on the outside face of its -Z end (portal
+    /// space: the stair runs down +Z), and the way out of it.
+    pub(crate) fn kiosk_door(&self) -> Option<(P2, P2)> {
+        let shell = self.shell?;
+        let at = shell.world([0.0, -shell.half[1]]);
+        let out = geom::sub(shell.world([0.0, -shell.half[1] - 1.0]), at);
+        Some((at, out))
+    }
+}
+
+/// Every solid thing on the surface, placements first (in order: index
+/// `i < map.placements.len()` is placement `i`), then the sites' exit
+/// kiosks.
+pub(crate) fn solids(map: &MapDef) -> Vec<Solid> {
+    let kiosk = |at: P2, rot: f32| {
+        let f = crate::underground::FOOTPRINT;
+        (
+            Rect {
+                at,
+                half: [f[0] * 0.5, f[2] * 0.5],
+                yaw: rot.to_radians(),
+            },
+            Rect {
+                at,
+                half: crate::underground::SHELL_HALF,
+                yaw: rot.to_radians(),
+            },
+        )
+    };
+    let mut out: Vec<Solid> = map
+        .placements
+        .iter()
+        .map(|p| Solid {
+            name: p.prefab.clone(),
+            prefab: p.prefab.clone(),
+            rect: Rect::of(&p.prefab, p.at, p.rot),
+            shell: crate::underground::is_site(&p.prefab).then(|| kiosk(p.at, p.rot).1),
+        })
+        .collect();
+    for site in crate::underground::placed(map) {
+        for (at, rot, _) in site.exits() {
+            let (rect, shell) = kiosk(at, rot);
+            out.push(Solid {
+                name: format!("{} exit", site.id),
+                prefab: site.id.clone(),
+                rect,
+                shell: Some(shell),
+            });
+        }
+    }
+    out
 }
 
 /// Points bucketed on a coarse grid, for "anything within r of here?".
@@ -629,12 +724,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // Main routes keep to ground no steeper than a route may climb, as a
     // player picking the easy way would.
     let gentle = crate::map_nav::zone_grid(map, hm, ROUTE_GRADE);
-    let rects: Vec<(usize, Rect)> = map
-        .placements
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (i, Rect::of(&p.prefab, p.at, p.rot)))
-        .collect();
+    // Everything solid on the surface, the sites' exit kiosks too: `rects`
+    // indexes into it.
+    let solids = solids(map);
+    let rects: Vec<(usize, Rect)> = solids.iter().map(|s| s.rect).enumerate().collect();
     let inside_building = |p: P2| {
         rects
             .iter()
@@ -665,9 +758,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         targets.push((name, at, reach));
     }
     for (i, rc) in &rects {
-        let p = &map.placements[*i];
-        if ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)) {
-            targets.push((p.prefab.clone(), rc.at, geom::len(rc.half) + 3.0));
+        // A building you can walk into, or a kiosk's door: somewhere to go.
+        if solids[*i].enterable() {
+            targets.push((solids[*i].name.clone(), rc.at, geom::len(rc.half) + 3.0));
         }
     }
     let mut unreached = 0;
@@ -889,18 +982,13 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             )
         })
         .map(|m| m.at)
-        .chain(
-            map.placements
-                .iter()
-                .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
-                .map(|p| p.at),
-        )
+        .chain(solids.iter().filter(|s| s.enterable()).map(|s| s.rect.at))
         .collect();
-    let shelters: Vec<P2> = map
-        .placements
+    // A kiosk's stair down is a roof too.
+    let shelters: Vec<P2> = solids
         .iter()
-        .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
-        .map(|p| p.at)
+        .filter(|s| s.enterable())
+        .map(|s| s.rect.at)
         .collect();
     for route in &routes {
         let (gap, at) = longest_gap(&route.points, |p| {
@@ -1207,7 +1295,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     "{}'s crate is {:.1} m from the {}",
                     m.name,
                     rc.sdf(m.at),
-                    map.placements[*i].prefab
+                    solids[*i].name
                 ),
                 m.at,
             );
@@ -1252,12 +1340,54 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
+    // own placement is padded as any building), so what can go wrong is
+    // under the exits' pads, and where their doors open: onto water or a
+    // slope you can't walk up to the door over.
+    for s in solids.iter().filter(|s| s.kiosk()) {
+        let is_exit = !crate::underground::is_site(&s.name);
+        let wet = is_exit
+            && s.rect
+                .outline(1.0)
+                .into_iter()
+                .chain([s.rect.at])
+                .any(|q| hm.water_level(q).is_some());
+        if wet {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!("{} stands in water", s.name),
+                s.rect.at,
+            );
+        }
+        let (door, out) = s.kiosk_door().unwrap();
+        let step = geom::add(door, geom::scale(out, KIOSK_STEP));
+        if hm.water_level(step).is_some() {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!("{}'s door opens onto water", s.name),
+                step,
+            );
+        } else if hm.slope_deg(step) > COMFORT_SLOPE {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "{}'s door opens onto a {:.0}° slope",
+                    s.name,
+                    hm.slope_deg(step)
+                ),
+                step,
+            );
+        }
+    }
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
-            let (pa, pb) = (&map.placements[*a], &map.placements[*b]);
+            let (pa, pb) = (&solids[*a], &solids[*b]);
             if !solid(&pa.prefab) || !solid(&pb.prefab) {
                 continue;
             }
@@ -1265,28 +1395,27 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 continue;
             }
             let gap = ra.gap(rb);
+            // Between walls: a kiosk's apron is ground you walk over.
+            let walls = pa.shell.unwrap_or(*ra).gap(&pb.shell.unwrap_or(*rb));
             if gap < -0.05 {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!("{} and {} overlap by {:.1} m", pa.prefab, pb.prefab, -gap),
-                    pa.at,
+                    format!("{} and {} overlap by {:.1} m", pa.name, pb.name, -gap),
+                    ra.at,
                 );
-            } else if gap >= SEALED && gap < SQUEEZE {
+            } else if (SEALED..SQUEEZE).contains(&walls) {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!(
-                        "{:.1} m squeeze between {} and {}",
-                        gap, pa.prefab, pb.prefab
-                    ),
-                    pa.at,
+                    format!("{:.1} m squeeze between {} and {}", walls, pa.name, pb.name),
+                    ra.at,
                 );
             }
         }
     }
     for (i, rc) in &rects {
-        let p = &map.placements[*i];
+        let p = &solids[*i];
         if ON_ROADS.contains(&p.prefab.as_str()) || !solid(&p.prefab) {
             continue;
         }
@@ -1301,7 +1430,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!("{} is on the {}", p.prefab, map.roads[rl.road].name),
+                    format!("{} is on the {}", p.name, map.roads[rl.road].name),
                     *q,
                 );
             }
@@ -1616,10 +1745,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .chain(pois.iter().map(|p| p.1));
     let mut worst = (0, ins);
     for p in views {
-        let n = map
-            .placements
+        // A kiosk is a building to draw like any other.
+        let n = solids
             .iter()
-            .filter(|q| dist(q.at, p) <= VIEW_RANGE)
+            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE)
             .count();
         if n > worst.0 {
             worst = (n, p);
@@ -1637,6 +1766,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             worst.1,
         );
     }
+
+    // -- The Surge: a roof in reach, and its anomalies off the walls -------------
+    crate::map_surge::check(map, hm, &comfy, &comfy_seen, &routes, &targets, &mut r);
 
     r.routes = routes;
     r.findings.sort_by_key(|f| f.rule);
@@ -1727,6 +1859,60 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Reach && f.what.contains("house_plank")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Marrow Creek's depot exit: a kiosk 115 m from its site's placement.
+    fn marrow_exit() -> (MapDef, P2) {
+        let map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let exit = crate::underground::placed(&map)
+            .iter()
+            .find(|s| s.id == "depot_marrow")
+            .unwrap()
+            .exits()[0]
+            .0;
+        (map, exit)
+    }
+
+    #[test]
+    fn a_building_on_an_exit_kiosk_is_found() {
+        let (mut map, exit) = marrow_exit();
+        map.placements.push(crate::map::Placement {
+            prefab: "shed".into(),
+            at: [exit[0] + 2.0, exit[1]],
+            rot: 0.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings.iter().any(|f| f.rule == Rule::Overlap
+                && f.what.contains("depot_marrow exit")
+                && f.what.contains("shed")),
+            "{}",
+            r.text()
+        );
+    }
+
+    #[test]
+    fn an_exit_kiosk_in_the_water_is_found() {
+        let (mut map, exit) = marrow_exit();
+        map.water.push(crate::map::WaterDef {
+            name: "test ditch".into(),
+            points: vec![[exit[0] - 20.0, exit[1]], [exit[0] + 20.0, exit[1]]],
+            width: 6.0,
+            depth: 0.7,
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Footing && f.what.contains("depot_marrow exit")),
             "{}",
             r.text()
         );
