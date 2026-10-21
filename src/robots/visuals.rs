@@ -26,6 +26,7 @@ impl Plugin for RobotVisualsPlugin {
             super::fx::RobotFxPlugin,
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
+            super::sentry_look::SentryLookPlugin,
         ))
         .add_systems(
             Update,

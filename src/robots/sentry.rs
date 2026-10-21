@@ -134,13 +134,19 @@ impl Plugin for SentryPlugin {
 
 /// The head's pose for a yaw and pitch, on the mast at `foot`.
 pub fn head_transform(foot: Vec3, yaw: f32, pitch: f32) -> Transform {
-    Transform::from_translation(foot + Vec3::Y * MAST).with_rotation(Quat::from_euler(
-        EulerRot::YXZ,
-        -yaw.to_radians(),
-        pitch.to_radians(),
-        0.0,
-    ))
+    Transform::from_translation(foot + Vec3::Y * MAST)
+        .with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            -yaw.to_radians(),
+            pitch.to_radians(),
+            0.0,
+        ))
+        .with_scale(Vec3::splat(HEAD_SCALE))
 }
+
+/// The head (and everything on it) at this size against its model: big
+/// enough to read on its mast from across a field.
+pub const HEAD_SCALE: f32 = 1.5;
 
 /// A sentry standing at `at` (x/z, on the ground), its arc centred on
 /// `centre` degrees and `arc` wide, its cable running to a junction box

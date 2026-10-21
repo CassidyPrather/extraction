@@ -34,6 +34,7 @@ pub mod reel;
 pub mod search;
 pub mod senses;
 pub mod sentry;
+pub mod sentry_look;
 pub mod sorter;
 pub mod sorter_look;
 pub mod visuals;
