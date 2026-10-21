@@ -472,3 +472,46 @@ mod complete {
         assert!(missing.is_empty(), "{}", missing.join("\n"));
     }
 }
+
+/// Every object in a gun model is one the game draws: a top-level node
+/// whose name matches no motion (`visuals::moves_for`) is silently
+/// dropped, and the part simply isn't there in the game.
+#[cfg(test)]
+mod models {
+    #[test]
+    fn every_gun_model_node_is_drawn() {
+        let dir = crate::asset_root_path().join("models/guns");
+        let mut lost = Vec::new();
+        let mut seen = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "glb") {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            // glTF binary: a 12-byte header, then the JSON chunk.
+            let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+            let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+            let nodes = json["nodes"].as_array().unwrap();
+            let roots = json["scenes"][0]["nodes"].as_array().unwrap();
+            for r in roots {
+                let node = &nodes[r.as_u64().unwrap() as usize];
+                let name = node["name"].as_str().unwrap_or("");
+                // Empties (points, the magazine's seat) carry no mesh.
+                if node.get("mesh").is_none() {
+                    continue;
+                }
+                seen += 1;
+                if super::super::visuals::moves_for(name).is_none() {
+                    lost.push(format!("{}: {name}", path.display()));
+                }
+            }
+        }
+        assert!(seen > 30, "read the models: {seen} parts");
+        assert!(
+            lost.is_empty(),
+            "parts the game won't draw:\n{}",
+            lost.join("\n")
+        );
+    }
+}
