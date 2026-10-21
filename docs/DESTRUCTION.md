@@ -93,6 +93,14 @@ speed, skip, is_target)` walks a line through what's between by the
 rounds' own rules, without firing: for a robot deciding whether to shoot
 through a wall at what it heard (offered to Robot minds).
 
+## Blasts
+
+A grenade's blast is a blow to the wood it can see (`wood::blasts`): its
+blast harm by distance (`grenade::blast_at`) times `BLAST_ON_WOOD` (3.5:
+boards and nails give to a shock wave a body rides out), written as a
+`Hit`. A grenade at a door's foot blows it in; one four metres off
+rattles it. Panes within 7 m that it can see break (`glass::blasts`).
+
 ## Rounds through wood
 
 Ballistics already prices a material per millimetre
@@ -182,7 +190,8 @@ door's crash).
   torn, saved, reloaded and mended (plus `breach::tests` on the split);
   through the headset path (`vr_harness`): a knife in a tracked hand
   eased into a pane (holds) and driven through it (breaks), and stabbed
-  into a supply crate until it gives.
+  into a supply crate until it gives; and a grenade at a door's foot
+  blowing it in where one four metres off doesn't.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

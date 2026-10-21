@@ -64,7 +64,13 @@ impl Plugin for WoodPlugin {
             .add_observer(building_crate_gone)
             .add_systems(
                 FixedUpdate,
-                (fit_doors, fit_crates, fit_building_crates, take_hits)
+                (
+                    fit_doors,
+                    fit_crates,
+                    fit_building_crates,
+                    blasts,
+                    take_hits,
+                )
                     .chain()
                     .in_set(super::DestructionSystems),
             );
@@ -152,6 +158,73 @@ fn fit_building_crates(
 ) {
     for (b, t) in &buildings {
         spawn_building_crates(&mut commands, b, t, &broken);
+    }
+}
+
+/// A blast's harm to wood, against its harm to flesh: boards and nails
+/// give to a shock wave a body rides out (a door at a grenade's foot goes
+/// in; one five metres off rattles).
+pub const BLAST_ON_WOOD: f32 = 3.5;
+
+/// A grenade's blast is a blow to the wood it can see: written as a `Hit`
+/// on it, so it wears down like any other.
+#[allow(clippy::too_many_arguments)]
+fn blasts(
+    mut events: MessageReader<crate::weapons::grenades::GrenadeEvent>,
+    live: Query<&crate::weapons::grenades::Live>,
+    timber: Query<(Entity, &GlobalTransform, Option<&DoorLeaf>), With<Timber>>,
+    parents: Query<&ChildOf>,
+    spatial: avian3d::prelude::SpatialQuery,
+    mut hits: MessageWriter<Hit>,
+) {
+    use avian3d::prelude::SpatialQueryFilter;
+    for ev in events.read() {
+        if ev.event != extraction_core::grenade::Event::Exploded {
+            continue;
+        }
+        let (damage, radius) = live.get(ev.grenade).map_or((110.0, 5.0), |l| {
+            (l.grenade.def.blast_damage, l.grenade.def.blast_radius)
+        });
+        for (e, gt, leaf) in &timber {
+            // A door's middle, not its hinge.
+            let c = leaf.map_or(gt.translation(), |l| {
+                gt.transform_point(Vec3::new(l.0.width * 0.5, 1.0, 0.0))
+            });
+            let d = c.distance(ev.at);
+            if d > radius + 1.0 {
+                continue;
+            }
+            let k = (1.0 - d / radius).max(0.0);
+            if k <= 0.0 {
+                continue;
+            }
+            // Seen: nothing of the world between but the thing itself.
+            let mine = |h: Entity| h == e || parents.get(h).is_ok_and(|p| p.parent() == e);
+            let clear = Dir3::new(c - ev.at).ok().is_none_or(|dir| {
+                spatial
+                    .cast_ray(
+                        ev.at,
+                        dir,
+                        d,
+                        true,
+                        &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+                    )
+                    .is_none_or(|h| mine(h.entity) || h.distance > d - 0.6)
+            });
+            if !clear {
+                continue;
+            }
+            hits.write(Hit {
+                entity: e,
+                point: c,
+                normal: (ev.at - c).normalize_or(Vec3::Y),
+                velocity: (c - ev.at).normalize_or(Vec3::Y) * 6.0,
+                damage: damage * k * k * BLAST_ON_WOOD,
+                shooter: None,
+                mass_g: 0.0,
+                load: Default::default(),
+            });
+        }
     }
 }
 

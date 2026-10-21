@@ -1030,3 +1030,31 @@ fn shards_come_to_rest_and_sleep() {
         "{asleep} of {all} asleep after five seconds"
     );
 }
+
+#[test]
+fn a_grenade_at_a_doors_foot_blows_it_in_and_one_further_off_doesnt() {
+    use crate::weapons::grenades::GrenadeEvent;
+    let blast = |app: &mut App, at: Vec3| {
+        let g = app.world_mut().spawn_empty().id();
+        app.world_mut().write_message(GrenadeEvent {
+            grenade: g,
+            event: extraction_core::grenade::Event::Exploded,
+            at,
+        });
+        run(app, 3);
+    };
+    let mut app = app(None);
+    let (door, _, mid, n) = plank_door(&mut app);
+    // Four metres out: it rattles.
+    blast(&mut app, mid + n * 4.0 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_some(),
+        "a far blast leaves it"
+    );
+    // At its foot: in it goes.
+    blast(&mut app, mid + n * 0.5 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_none(),
+        "a near blast blows it in"
+    );
+}
