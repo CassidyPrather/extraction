@@ -24,7 +24,21 @@ name the walker's; the other kinds play at the cue's gain plus their
   range in calm, and your own footstep still clears the masking. A
   walker's step and a drone's rotor are warned of to the mix's own
   target (`RANGE_TARGETS`): by the sound itself, or, where the crickets
-  would hide it, by the crickets falling silent (`INSECTS_HUSH_*`).
+  would hide it, by the crickets falling silent (Wildlife's
+  `wildlife::insects::HUSH_NEAR`, `HUSH_NEAR_DRONE`).
+- **The world's new sounds hide nothing.** Each sound the destruction,
+  the wildlife and the heavy machine make, at its usual distance over
+  the wind, leaves your footstep and a robot's call 30 m off still
+  clearing their masking. And what robots hear a break to
+  (`destruction::noise_radius`, the crunch's `CRUNCH_HEARD`) your ears
+  hear to within `HEARD_RATIO` of it.
+- **The Hush is dull, not deaf.** Inside one everything is ducked
+  alike (so masking between sounds is unchanged) but placed sounds are
+  muffled to `HUSH_DEEP`'s cutoff while the beds aren't: your footstep
+  and a robot's call 2 m off, muffled so, still clear the wind's masking.
+- **The dam slaps back.** A shot fired 100 m out from Sallow's dam face
+  comes back (`echo.slap`, from its mirror image 200 m off) `SLAP_UNDER`
+  LU under the shot as you hear it, and still clears the wind.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -39,12 +53,15 @@ import audio_audit as aa
 import audio_mix as am
 
 ROOT = Path(__file__).resolve().parent.parent
-KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden"]
+KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden", "heavy"]
 MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
-         "calling", "answering", "hurt", "dying"]
+         "calling", "answering", "hurt", "dying", "flanking", "retreating"]
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
+HEARD_RATIO = (0.6, 1.6)  # a break heard by ears over robots' reach
+WORLD = ("break.", "flock.", "heavy.")
+SLAP_UNDER = (6.0, 20.0)  # LU the dam's echo sits under the shot
 NIGHT_KEPT = 0.75   # share of a warning's calm range kept over the night beds
 NIGHT_BED = [("wind", 0.0), ("insects", 0.0), ("rustle", 0.0)]
 
@@ -64,27 +81,30 @@ def add_sets(sets, out):
                         "robot_voice::tests::renders_for_the_audit"],
                        cwd=ROOT, check=True, capture_output=True)
         wavs = sorted(d.glob("*.wav"))
-    for k in KINDS:
-        for m in MINDS:
-            files = [aa.measure(p, "oneshot") for p in sorted(d.glob(f"{k}_{m}_*.wav"))]
-            if not files:
-                continue
-            loud = [f["momentary_max"] for f in files]
-            sets[f"voice/{k}/{m}"] = {
-                "type": "oneshot",
-                "variants": len(files),
-                "loudness": round(float(np.mean(loud)), 1),
-                "spread": round(float(max(loud) - min(loud)), 1),
-                "true_peak": max(f["true_peak"] for f in files),
-                "crest": round(float(np.mean([f["crest"] for f in files])), 1),
-                "onset_ms": max(f["onset_ms"] for f in files),
-                "clipped_runs": sum(f["clipped_runs"] for f in files),
-                "dc": max(abs(f["dc"]) for f in files),
-                "channels": [1],
-                "bands": [round(float(v), 1)
-                          for v in np.mean([f["bands"] for f in files], axis=0)],
-                "files": files,
-            }
+    groups = [(f"voice/{k}/{m}", f"{k}_{m}_*.wav") for k in KINDS for m in MINDS]
+    groups.append(("voice/heavy/horn", "horn.wav"))
+    groups.append(("device/stone_ping", "ping.wav"))
+    groups.append(("device/crackle", "crackle.wav"))
+    for name, pattern in groups:
+        files = [aa.measure(p, "oneshot") for p in sorted(d.glob(pattern))]
+        if not files:
+            continue
+        loud = [f["momentary_max"] for f in files]
+        sets[name] = {
+            "type": "oneshot",
+            "variants": len(files),
+            "loudness": round(float(np.mean(loud)), 1),
+            "spread": round(float(max(loud) - min(loud)), 1),
+            "true_peak": max(f["true_peak"] for f in files),
+            "crest": round(float(np.mean([f["crest"] for f in files])), 1),
+            "onset_ms": max(f["onset_ms"] for f in files),
+            "clipped_runs": sum(f["clipped_runs"] for f in files),
+            "dc": max(abs(f["dc"]) for f in files),
+            "channels": [1],
+            "bands": [round(float(v), 1)
+                      for v in np.mean([f["bands"] for f in files], axis=0)],
+            "files": files,
+        }
 
 
 def trims():
@@ -100,9 +120,10 @@ def trims():
 
 
 def hush_radii():
-    """`INSECTS_HUSH_*` from src/audio.rs, m."""
-    text = (ROOT / "src" / "audio.rs").read_text()
-    return {k: float(v) for k, v in re.findall(r"INSECTS_HUSH_(\w+): f32 = ([\d.]+)", text)}
+    """Wildlife's chorus hush (`wildlife::insects::HUSH_NEAR`, `_DRONE`), m."""
+    text = (ROOT / "src" / "wildlife" / "insects.rs").read_text()
+    near = dict(re.findall(r"pub const (HUSH_NEAR\w*): f32 = ([\d.]+)", text))
+    return {"BIG": float(near["HUSH_NEAR"]), "DRONE": float(near["HUSH_NEAR_DRONE"])}
 
 
 def heard_to():
@@ -181,6 +202,68 @@ def run(sets, out):
             lines.append("    " + ", ".join(row[i:i + 4]))
         lines.append(f"    your footstep clears the night by {step:+.1f} dB"
                      + ("" if step > 0 else "  (masked)"))
+    # The world's new sounds against your footstep and a robot's call.
+    lines.append("  The world's sounds (at their distance, over the wind) against your "
+                 "footstep and a call at 30 m:")
+    worst_world = {}
+    for c in mix:
+        if not c["name"].startswith(WORLD) or c["set"] not in sets:
+            continue
+        for target, tdist, every in (("step", None, 0.5), ("voice.calling", 30.0, None)):
+            scene = [("wind", "loop", None, 0.0, None),
+                     (c["name"], 0.4, None, 0.0, 0.5),
+                     (target, 0.5, tdist, 0.0, every)]
+            total, parts = am.render(scene, sets, mix, seconds=3.0)
+            sig = parts[f"2:{target}"]
+            margin, band = am.margin(sig, total - sig, 0.5, 0.5)
+            if target not in worst_world or margin < worst_world[target][0]:
+                worst_world[target] = (margin, c["name"], band)
+    for target, (margin, name, band) in worst_world.items():
+        bad = margin <= 0
+        flags += bad
+        lines.append(f"    {target:14s} {margin:+5.1f} dB at {band} Hz (worst: {name})"
+                     + ("  masked" if bad else ""))
+    # Breaks: ears against robots.
+    text = (ROOT / "src" / "destruction" / "mod.rs").read_text()
+    glass = re.search(r"Stuff::Glass => \(([\d.]+) \+ ([\d.]+) \* size\)\.min\(([\d.]+)\)", text)
+    wood = re.search(r"Stuff::Wood => \(([\d.]+) \+ ([\d.]+) \* size\)\.min\(([\d.]+)\)", text)
+    crunch = float(re.search(r"CRUNCH_HEARD: f32 = ([\d.]+)",
+                             (ROOT / "src" / "destruction" / "glass.rs").read_text()).group(1))
+    big = lambda m, size: min(float(m.group(1)) + float(m.group(2)) * size, float(m.group(3)))
+    breaks = {"break.glass": big(glass, 2.0), "break.wood": big(wood, 2.0),
+              "break.breach": big(wood, 3.0), "break.crunch": crunch}
+    row = []
+    for name, robots in breaks.items():
+        ears = am.audible_range(name, sets, mix, [("wind", 0.0)])
+        bad = not HEARD_RATIO[0] <= ears / robots <= HEARD_RATIO[1]
+        flags += bad
+        row.append(f"{name} {ears}/{robots:g}" + (" (!)" if bad else ""))
+    lines.append(f"  Breaks heard by you / by robots (m), wants {HEARD_RATIO[0]}..{HEARD_RATIO[1]}x: "
+                 + ", ".join(row))
+    # The Hush: muffled placed sounds against the (unmuffled) wind.
+    text = (ROOT / "src" / "audio.rs").read_text()
+    hush_fc = float(re.search(r"HUSH_DEEP: \(f32, f32\) = \(([\d.]+), ([\d.]+)\)", text).group(2))
+    row = []
+    for target, tdist in (("step", None), ("voice.calling", 2.0)):
+        total, parts = am.render([("wind", "loop", None, 0.0, None),
+                                  (target, 0.5, tdist, 0.0, None)], sets, mix, seconds=2.5)
+        sig = am.lowpass(parts[f"1:{target}"], hush_fc)
+        margin, band = am.margin(sig, total - parts[f"1:{target}"], 0.5, 0.5)
+        bad = margin <= 0
+        flags += bad
+        row.append(f"{target} {margin:+.1f} dB at {band} Hz" + (" (masked)" if bad else ""))
+    lines.append(f"  In a Hush (placed sounds muffled to {hush_fc:g} Hz): " + ", ".join(row))
+    # The dam's slapback against the shot itself.
+    if "echo.slap" in [c["name"] for c in mix]:
+        shot = next(c for c in mix if c["name"] == "gun.shot")
+        echo = dict(next(c for c in mix if c["name"] == "echo.slap"), dist=200.0)
+        under = am.heard(shot, sets) - am.heard(echo, sets)
+        clears = am.audible_margin("echo.slap", sets, mix, [("wind", 0.0)], 200.0)
+        bad = not SLAP_UNDER[0] <= under <= SLAP_UNDER[1] or clears <= 0
+        flags += bad
+        lines.append(f"  The dam's slapback (a shot 100 m out, the echo from 200 m): {under:.1f} LU "
+                     f"under the shot (wants {SLAP_UNDER[0]:g}-{SLAP_UNDER[1]:g}), clears the wind "
+                     f"by {clears:+.1f} dB" + (" (!)" if bad else ""))
     # Masking: each kind's every word at NEAR m, against your footstep
     # (over the wind) and your shot.
     worst = {}

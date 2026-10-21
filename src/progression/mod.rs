@@ -71,6 +71,9 @@ impl Plugin for ProgressionPlugin {
                     place_letter,
                     place_ledger,
                     scout,
+                    contracts::place_bring,
+                    contracts::watch_plant,
+                    contracts::photograph,
                     aerial_warning,
                     fit_props,
                     fit_stash,
@@ -78,7 +81,8 @@ impl Plugin for ProgressionPlugin {
                     stock_cabinet,
                 )
                     .chain(),
-            );
+            )
+            .add_systems(Update, contracts::scenario::direct);
     }
 }
 
@@ -158,6 +162,32 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str, epilogue: bool) -> Stri
                 elsewhere(m) + &lines::ask_expedition(&where_)
             } else {
                 elsewhere(m) + &lines::ask_recover(&where_)
+            }
+        }
+        Job::Bring {
+            map: m,
+            place,
+            item,
+            ..
+        } => elsewhere(m) + &lines::ask_bring(&want_name(catalog, item), place),
+        Job::Plant {
+            map: m,
+            place,
+            item,
+            planted,
+            ..
+        } => {
+            if *planted {
+                lines::planted(place) + "\nCome home and press here."
+            } else {
+                elsewhere(m) + &lines::ask_plant(&want_name(catalog, item), place)
+            }
+        }
+        Job::Photograph { subject, taken } => {
+            if *taken {
+                lines::photo_taken(subject.name()) + "\nGet it home, press here."
+            } else {
+                lines::ask_photo(subject.name())
             }
         }
         Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
@@ -372,7 +402,10 @@ fn job_done(
     catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
-        let fitted = progression.0.complete();
+        let (fitted, finished) = progression.0.complete_job();
+        if let Some(c) = finished {
+            contracts::pay(c, &mut raid, &mut handover);
+        }
         for u in fitted {
             raid.say(lines::fitted(*u));
             // He passes them back through the cab's hatch (`raid::lev`).
@@ -406,11 +439,12 @@ fn job_done(
 /// There's always a job on the card.
 fn offer_job(
     opts: Res<LaunchOptions>,
-    raid: Res<Raid>,
     // Lev has been into the depot with you (Story's epilogue): the job
     // card's asks ease off.
     epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut progression: ResMut<Progression>,
+    mut raid: ResMut<Raid>,
+    mut handover: MessageWriter<crate::raid::lev::HandOver>,
 ) {
     if progression.0.quiet != epilogue.done {
         progression.0.quiet = epilogue.done;
@@ -424,6 +458,31 @@ fn offer_job(
         .map(|(id, map)| Valley { id, map })
         .collect();
     let roll = |p: &Progress| extraction_core::progression::roll_job(p, opts.seed, &here, &valleys);
+    // `SIM_CONTRACT=<id>[:step]`: a sim bot on that contract's step, in
+    // its tier (its kit lies by the insertion: `sim`).
+    if let (Some(_), Ok(v)) = (&opts.sim_run, std::env::var("SIM_CONTRACT"))
+        && progression.0.done == 0
+    {
+        let mut it = v.split(':');
+        let id = it.next().unwrap_or_default();
+        let step: u32 = it.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        if let Some(c) = extraction_core::contracts::contract(id) {
+            progression.0.tier = match c.offered {
+                extraction_core::contracts::Offered::Tier { tier, .. } => tier,
+                extraction_core::contracts::Offered::Deep { .. } => {
+                    extraction_core::progression::TIERS.len() as u32
+                }
+            };
+            progression.0.done = 1 + 3 * progression.0.tier;
+            progression.0.contract = Some(extraction_core::contracts::Active {
+                id: c.id.to_owned(),
+                step,
+            });
+            progression.0.job = extraction_core::contracts::contract_job(&progression.0, &valleys);
+        }
+        info!("sim contract job: {:?}", progression.0.job);
+        return;
+    }
     if opts.sim_run.is_some() && progression.0.done == 0 {
         // A sim bot takes a scout job (the run's seed picks the tier), to
         // measure what a job pulls: the telemetry's `end` says whether it
@@ -445,7 +504,13 @@ fn offer_job(
         info!("sim job: {:?}", progression.0.job);
         return;
     }
-    let job = roll(&progression.0);
+    // A contract the driver has for you now starts with its kit.
+    if let Some(c) = progression.0.start_contract() {
+        info!("contract: {}", c.id);
+        contracts::hand_kit(c, &mut raid, &mut handover);
+    }
+    let job = extraction_core::contracts::contract_job(&progression.0, &valleys)
+        .unwrap_or_else(|| roll(&progression.0));
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);
     progression.0.job_raid = raid.raids;
@@ -790,9 +855,13 @@ fn fit_stash(
 
 fn fit_bench(progression: Res<Progression>, mut benches: Query<&mut crate::raid::bench::Bench>) {
     let tier = progression.0.bench_tier();
+    let taught = extraction_core::contracts::recipes(&progression.0);
     for mut b in &mut benches {
         if b.tier != tier {
             b.tier = tier;
+        }
+        if b.taught != taught {
+            b.taught = taught.clone();
         }
     }
 }
@@ -897,6 +966,26 @@ pub fn career_page(
             progress.order_def().name.to_lowercase()
         ));
     }
+    // The contracts: the one under way, and the trust they've earned.
+    if let Some(c) = progress
+        .contract
+        .as_ref()
+        .and_then(|a| extraction_core::contracts::contract(&a.id).map(|c| (a, c)))
+    {
+        lines.push(format!(
+            "Contract: {}, {} of {}",
+            c.1.name,
+            c.0.step + 1,
+            c.1.steps.len()
+        ));
+    }
+    if !progress.contracts_done.is_empty() {
+        lines.push(format!(
+            "Trust: {} ({} contracts done)",
+            progress.trust,
+            progress.contracts_done.len()
+        ));
+    }
     lines.push(if raid.recalled {
         "The machines are recalled.".to_owned()
     } else {
@@ -915,6 +1004,7 @@ pub fn career_page(
     lines.join("\n")
 }
 
+pub mod contracts;
 pub mod lines;
 pub mod safehouse;
 

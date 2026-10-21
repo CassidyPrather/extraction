@@ -385,6 +385,9 @@
         (prefab: "dam_back_end", at: (-157.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "dam_back", at: (2.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "draw_off_tower", at: (-20.0, 102.5), rot: 0.0, y: 31.5, absolute: true),
+        // The dam's inspection gallery, under the toe by the valve house,
+        // out beside the tower's foot on the bed (assets/underground).
+        (prefab: "gallery_sallow", at: (-6.0, 172.0), rot: 180.0),
 
         // The spillway keeper's hut on the east abutment.
         (prefab: "shed", at: (184.0, 106.0), rot: 270.0),
@@ -404,14 +407,16 @@
         (prefab: "shed", at: (-98.0, 85.0), rot: 45.0, tag: "boat_shed"),
 
         // Old Sallow, out of the silt.
-        (prefab: "steeple", at: (-72.0, -22.0), rot: 0.0),
-        (prefab: "house_brick_damaged", at: (-40.0, 2.0), rot: 15.0),
-        (prefab: "house_plank_damaged", at: (-100.0, 8.0), rot: 80.0),
-        (prefab: "house_brick_damaged", at: (-58.0, -52.0), rot: 200.0),
-        (prefab: "farmhouse_damaged", at: (-112.0, -38.0), rot: 100.0),
+        // The church: its nave silted and roofless, the bell tower standing,
+        // the west door open to the churchyard.
+        (prefab: "chapel_drowned", at: (-74.0, -25.0), rot: 270.0),
+        (prefab: "house_brick_drowned", at: (-40.0, 2.0), rot: 15.0),
+        (prefab: "house_plank_drowned", at: (-100.0, 8.0), rot: 80.0),
+        (prefab: "house_brick_drowned", at: (-58.0, -52.0), rot: 200.0),
+        (prefab: "farmhouse_drowned", at: (-112.0, -38.0), rot: 100.0),
 
         // A drowned cottage out in the bed, east of the old river.
-        (prefab: "house_plank_damaged", at: (112.0, 30.0), rot: 250.0),
+        (prefab: "house_plank_drowned", at: (112.0, 30.0), rot: 250.0),
 
         // The sorting ground: the Custodian's stock in rows.
         (prefab: "stock_buses", at: (55.0, -60.0), rot: 0.0),
@@ -424,6 +429,11 @@
         // The Custodian's gantry over the rows.
         (prefab: "sorting_gantry", at: (100.0, -82.0), rot: 0.0),
         (prefab: "stock_bins", at: (30.0, -130.0), rot: 90.0),
+        // More rows toward the haul ramp and the Gate: cover in clumps on
+        // the open east bed (the fifth sims lost four to drones out there).
+        (prefab: "stock_buses", at: (132.0, -40.0), rot: 20.0),
+        (prefab: "stock_bins", at: (80.0, -12.0), rot: 0.0),
+        (prefab: "stock_buses", at: (168.0, -150.0), rot: 330.0),
         (prefab: "stock_bins", at: (30.0, -140.0), rot: 90.0),
 
         // The causeway's toll hut.
@@ -460,9 +470,9 @@
         (kind: ArtifactField, at: (-105.0, -75.0), name: "The churchyard"),
         (kind: ArtifactField, at: (160.0, -250.0), name: "The silt fans"),
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (227.0, 215.0), name: "Spillway well"),
-        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-86.0, -30.0), name: "Churchyard mirror"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-94.0, -42.0), name: "Churchyard mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-120.0, -5.0), name: "Old Sallow hush"),
-        (kind: Offering, at: (-66.0, -12.0), name: "The drowned font"),
+        (kind: Offering, at: (-66.0, -13.0), name: "The drowned font"),
         (kind: Offering, at: (-195.0, -238.0), name: "The village pump"),
         (kind: WorkSite, at: (85.0, -125.0), name: "Sorting ground site"),
         (kind: WorkSite, at: (40.0, 40.0), name: "Bed site"),

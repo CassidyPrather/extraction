@@ -35,13 +35,16 @@ use crate::world::Zone;
 pub enum Kind {
     Deer,
     Dog,
+    /// Rime Fell's: a deer's ways on bare high ground, quicker over scree.
+    Chamois,
 }
 
 impl Kind {
     pub fn for_map(map: &str) -> Option<Self> {
         match map {
-            "marrow_creek" | "kettle_pass" => Some(Kind::Deer),
+            "marrow_creek" | "kettle_pass" | "sallow_reservoir" => Some(Kind::Deer),
             "cinder_works" => Some(Kind::Dog),
+            "rime_fell" => Some(Kind::Chamois),
             _ => None,
         }
     }
@@ -50,6 +53,7 @@ impl Kind {
     pub fn speeds(self) -> (f32, f32, f32) {
         match self {
             Kind::Deer => (10.0, 3.2, 0.5),
+            Kind::Chamois => (11.0, 3.6, 0.5),
             Kind::Dog => (9.0, 3.0, 0.9),
         }
     }
@@ -138,6 +142,8 @@ pub struct Beast {
     /// Where it's looking, if anywhere in particular.
     pub look: Option<Vec3>,
     timer: f32,
+    /// Dead and taken away (its carcass collected): nothing to draw.
+    pub gone: bool,
     /// Its place round the leader, running or ambling.
     slot: Vec2,
 }
@@ -190,9 +196,16 @@ pub fn open(nav: &NavGrid, zone: &Zone, p: Vec2) -> bool {
         && zone.hm.surface([p.x, p.y], false) != extraction_core::terrain::Surface::Water
 }
 
-/// A herd's home for a valley: open ground near a forest's edge, away from
-/// where the truck drops you, deterministic for the seed.
-pub fn pick_home(zone: &Zone, nav: &NavGrid, seed: u64) -> Option<Vec2> {
+/// A herd's home for a valley: open ground near a forest's edge (for
+/// chamois, the highest open ground), away from where the truck drops you,
+/// deterministic for the seed. A valley with no forest edge (bare fell)
+/// takes open ground anywhere.
+pub fn pick_home(zone: &Zone, nav: &NavGrid, seed: u64, kind: Kind) -> Option<Vec2> {
+    let edge = kind != Kind::Chamois;
+    home_where(zone, nav, seed, kind, edge).or_else(|| home_where(zone, nav, seed, kind, false))
+}
+
+fn home_where(zone: &Zone, nav: &NavGrid, seed: u64, kind: Kind, edge_only: bool) -> Option<Vec2> {
     let mut rng = Rng::new(seed ^ 0xDEE2_0BAD);
     let start = zone
         .marker(&extraction_core::map::MarkerKind::Insertion)
@@ -207,7 +220,7 @@ pub fn pick_home(zone: &Zone, nav: &NavGrid, seed: u64) -> Option<Vec2> {
         }
         // An edge: some forest, not deep in it; room round it.
         let edge = zone.forest_cover(p.x, p.y);
-        if !(0.05..0.6).contains(&edge) {
+        if edge_only && !(0.05..0.6).contains(&edge) {
             continue;
         }
         let room = (0..8)
@@ -216,7 +229,13 @@ pub fn pick_home(zone: &Zone, nav: &NavGrid, seed: u64) -> Option<Vec2> {
                 open(nav, zone, p + Vec2::new(a.cos(), a.sin()) * 15.0)
             })
             .count();
-        let score = room as f32 + rng.f32();
+        // Chamois: up high (a metre is worth a tenth of a point).
+        let high = if kind == Kind::Chamois {
+            zone.ground(p.x, p.y) * 0.1
+        } else {
+            0.0
+        };
+        let score = room as f32 + high + rng.f32();
         if room >= 6 && best.is_none_or(|(s, _)| score > s) {
             best = Some((score, p));
         }
@@ -226,7 +245,7 @@ pub fn pick_home(zone: &Zone, nav: &NavGrid, seed: u64) -> Option<Vec2> {
 
 pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
     let n = match kind {
-        Kind::Deer => 2 + rng.below(3),
+        Kind::Deer | Kind::Chamois => 2 + rng.below(3),
         Kind::Dog => 3 + rng.below(2),
     };
     let beasts = (0..n)
@@ -242,6 +261,7 @@ pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
                 head_up: 0.0,
                 look: None,
                 timer: rng.range(2.0, 10.0),
+                gone: false,
                 slot,
             }
         })
@@ -337,7 +357,7 @@ impl Herd {
                 let fresh = !matches!(s, State::Flee { .. });
                 if fresh {
                     out.push((Startle::Bolt, lead, who, false));
-                    if kind == Kind::Deer {
+                    if kind != Kind::Dog {
                         out.push((Startle::Bark, lead, who, false));
                     }
                     // Dogs bark at a hound as they go: and hounds hunt by
@@ -381,7 +401,7 @@ impl Herd {
                     let for_s = for_s + dt;
                     if coming && for_s > ALERT_PATIENCE {
                         out.push((Startle::Bolt, lead, None, false));
-                        if kind == Kind::Deer {
+                        if kind != Kind::Dog {
                             out.push((Startle::Bark, lead, None, false));
                         }
                         Some(State::Flee {
@@ -569,7 +589,7 @@ pub(crate) fn herds(
         *spawned = true;
         let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
         if let (Some(kind), false) = (Kind::for_map(&opts.map), off) {
-            if let Some(home) = pick_home(&zone, &nav.0, opts.seed) {
+            if let Some(home) = pick_home(&zone, &nav.0, opts.seed, kind) {
                 let mut rng = Rng::new(opts.seed ^ 0x4E2D);
                 let herd = new_herd(kind, home, &zone, &mut rng);
                 info!("{} {kind:?}s about {home:.0}", herd.beasts.len());
@@ -652,7 +672,8 @@ mod tests {
     fn every_valley_has_a_home_for_its_herd() {
         for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let (zone, nav) = valley(map);
-            let home = pick_home(&zone, &nav, 1).unwrap_or_else(|| panic!("{map}: no home"));
+            let home = pick_home(&zone, &nav, 1, Kind::for_map(map).unwrap())
+                .unwrap_or_else(|| panic!("{map}: no home"));
             assert!(open(&nav, &zone, home), "{map}");
         }
     }
@@ -670,7 +691,7 @@ mod tests {
 
     fn herd_in(map: &str, kind: Kind) -> (Zone, NavGrid, Herd) {
         let (zone, nav) = valley(map);
-        let home = pick_home(&zone, &nav, 1).unwrap();
+        let home = pick_home(&zone, &nav, 1, kind).unwrap();
         let mut rng = Rng::new(9);
         let herd = new_herd(kind, home, &zone, &mut rng);
         (zone, nav, herd)
@@ -683,9 +704,11 @@ mod tests {
                 let a = k as f32 / 12.0 * std::f32::consts::TAU;
                 Vec2::new(a.cos(), a.sin())
             })
+            // The longest unbroken open run out from the herd: the walker in
+            // stops at the first blocked step.
             .max_by_key(|d| {
-                (0..24)
-                    .filter(|i| open(nav, zone, home + *d * (*i as f32 * 5.0)))
+                (0..120)
+                    .take_while(|i| open(nav, zone, home + *d * *i as f32))
                     .count()
             })
             .unwrap()
