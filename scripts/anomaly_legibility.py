@@ -33,18 +33,27 @@ OUT = os.path.join(ROOT, "docs", "shots", "anomalies", "legibility")
 RAW = os.path.join(ROOT, "target", "legibility")
 BIN = os.path.join(ROOT, "target", "fast", "extraction")
 
-# Camera 20 m off each anomaly, eye height, aimed at a metre over its
-# centre: x,y,z,yaw,pitch (yaw 0 looks down -z, 90 down +x). Each from the
-# side with a clear line: no rise, trunk or other anomaly between, not on a
-# road, gentle ground (picked from the heightmap and the tree scatter).
-TARGETS = [
-    ("lift", "132.2,0,-36.6,135,-2"),     # Lift at (146.3, -22.5)
-    ("burner", "64.6,0,256.7,248,-3"),    # Burner at (46.1, 264.4)
-    ("snare", "225.9,0,-64.3,68,8"),      # Snare at (244.4, -72.0)
-    ("well", "143.9,0,7.1,45,-1"),        # Well at (158, -7)
-    ("mirror", "-144.0,0,-179.0,0,-6"),   # Mirror at (-144, -199)
-    ("hush", "136.0,0,13.0,0,-7"),        # Hush at (136, -7)
-]
+def targets() -> list:
+    """For each kind, a camera 20 m off one of its anomalies on Marrow (seed
+    1, cycle 0), on the side with a clear line: no rise, trunk or other
+    anomaly between, off roads, on gentle ground (`anomaly::view_of`, via
+    the anomaly-views tool), aimed at a metre over its centre."""
+    subprocess.run(
+        ["cargo", "build", "-q", "--profile", "fast", "-p", "extraction_core",
+         "--bin", "anomaly-views"],
+        cwd=ROOT, check=True,
+    )
+    out = subprocess.run(
+        [os.path.join(ROOT, "target", "fast", "anomaly-views"), "marrow_creek", "1", "0", "20"],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout
+    return [
+        (v["kind"].lower(), v["camera"])
+        for v in map(json.loads, out.splitlines())
+    ]
+
+
+TARGETS = targets()
 # Label: launch flags. Night is drizzle under a new moon, the darkest.
 CONDITIONS = {
     "fog": ["--weather", "fog"],
@@ -140,6 +149,14 @@ def main() -> int:
     kinds = [n for n, _ in TARGETS if n in words] or [n for n, _ in TARGETS]
     conds = [w for w in WEATHERS if w in words] or WEATHERS
     if "--measure" not in sys.argv:
+        # Shots kept from a run with other cameras are no use: start over.
+        cams = os.path.join(RAW, "cameras.json")
+        if os.path.exists(cams) and json.load(open(cams)) != [list(t) for t in TARGETS]:
+            import shutil
+            shutil.rmtree(RAW)
+        os.makedirs(RAW, exist_ok=True)
+        with open(cams, "w") as f:
+            json.dump(TARGETS, f)
         jobs = [
             (name, cam, w, hide, n)
             for name, cam in TARGETS
