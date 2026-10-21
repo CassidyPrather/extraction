@@ -50,6 +50,8 @@ const TAIL: f32 = 3.0;
 /// Seconds the cameras render before anything is kept: the valley streams
 /// its detail in round them (unfilmed frames draw nothing).
 const WARMUP: f32 = 6.0;
+/// Seconds of an encounter with a robot filmed before it's a fight.
+const COMPANY_MAX: f32 = 8.0;
 /// The share of the budget walking may take.
 const WALK_SHARE: f32 = 0.35;
 /// The drone films only while less than this share of its sight line to
@@ -93,6 +95,10 @@ struct Director {
     look_round: f32,
     /// The share of the drone's sight line to the bot in tree crowns.
     drone_blocked: f32,
+    /// When the current encounter with a robot began, and when one was
+    /// last near (an encounter ends 20 s after).
+    company_since: Option<f32>,
+    company_last: f32,
     /// Seconds to the next position line in the log (`RUST_LOG=...=debug`).
     log_in: f32,
 }
@@ -238,11 +244,19 @@ fn direct(
     if raider.is_some_and(|r| r.combat.is_some()) {
         d.want("fight", t + TAIL);
     }
-    if robots
+    // Company: the first seconds of an encounter (a fight is filmed
+    // whole, but a walker browsing nearby for a minute isn't a story).
+    let near = robots
         .iter()
-        .any(|(r, g)| !r.wrecked && g.translation().distance(me) < 30.0)
-    {
-        d.want("robot", t + TAIL);
+        .any(|(r, g)| !r.wrecked && g.translation().distance(me) < 30.0);
+    if near {
+        let since = *d.company_since.get_or_insert(t);
+        d.company_last = t;
+        if t - since < COMPANY_MAX {
+            d.want("robot", t + TAIL);
+        }
+    } else if t - d.company_last > 20.0 {
+        d.company_since = None;
     }
     if anomalies.iter().any(|(a, g)| {
         Vec2::new(g.translation().x - me.x, g.translation().z - me.z).length() < a.radius + 6.0
