@@ -386,6 +386,11 @@ fn mill(b: &mut Builder) {
     flotation_floor(b);
     ball_mill_floor(b);
     crusher_floor(b);
+    // Its gutters, downpipes and flashing, the ridge cap, the tub track out
+    // onto the bank and the tailings launder (`art/props/rime_works.py`):
+    // over nothing of its own, colliding with nothing.
+    let from = b.geo.pieces.len();
+    b.dress_structure(from, vec![("mill_exterior", Transform::IDENTITY)]);
 }
 
 /// One bay's footing, front wall, side walls and roof.

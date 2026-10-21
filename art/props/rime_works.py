@@ -435,6 +435,128 @@ def jaw_crusher():
     return [p]
 
 
+# --- The mill's outside -----------------------------------------------------------------------
+
+# fell.rs's measures (MILL_*, EAVE_*, HEAD_EAVE, WALL).
+MILL_FLOORS = (0.15, 4.15, 8.15, 12.15)
+MILL_HW, MILL_HD, MILL_BAY, MILL_WALL = 10.0, 20.0, 10.0, 0.3
+EAVE_FRONT, EAVE_BACK, HEAD_EAVE = 5.0, 6.6, 19.95
+
+
+def mill_roof_y(k, z):
+    z0 = -MILL_HD + MILL_BAY * k
+    return MILL_FLOORS[k] + EAVE_FRONT + (EAVE_BACK - EAVE_FRONT) * (z - z0) / MILL_BAY
+
+
+def downpipe(p, x, z, y0, y1, out):
+    """A downpipe from the gutter at `y0` down the wall to `y1`, a swan
+    neck at its head (the gutter `out` further from the wall) and a shoe
+    at its foot, bracketed."""
+    r = 0.045
+    rod(p, (x, y0 - 0.02, z + out), (x, y0 - 0.3, z), r, "Rusty", segs=8)
+    rod(p, (x, y0 - 0.3, z), (x, y1 + 0.15, z), r, "Rusty", segs=8)
+    rod(p, (x, y1 + 0.15, z), (x, y1 + 0.05, z + math.copysign(0.18, out)), r, "Rusty",
+        segs=8)
+    y = y0 - 0.8
+    while y > y1 + 0.4:
+        p.box((0.12, 0.04, 0.1), (x, y, z - math.copysign(0.03, out)), "Iron")
+        y -= 1.6
+
+
+def mill_exterior():
+    """The ore mill's outside, origin the prefab's: the gutters along each
+    bay's front eave and their downpipes (onto the roof of the bay below,
+    or the yard), the flashing where each roof meets the wall of the bay
+    above, the headhouse's ridge cap, the tub track out of the top bay's
+    back door onto the bank, and the tailings launder out of the shed's
+    west side down to the yard on its trestles."""
+    p = Part("static")
+    w = Wear(61)
+    for k in range(4):
+        f = MILL_FLOORS[k]
+        z0 = -MILL_HD + MILL_BAY * k
+        fz = z0 + MILL_WALL * 0.5 if k == 0 else z0
+        face = fz - MILL_WALL * 0.5
+        zf = face - 0.45
+        x0, x1 = (-2.0, MILL_HW + 0.3) if k == 3 else (-MILL_HW - 0.3, MILL_HW + 0.3)
+        yr = mill_roof_y(k, zf)
+        # The gutter: a half-round, hung under the eave on its brackets,
+        # one stretch sagging where a bracket's gone.
+        gz = zf - 0.1
+        sag = 4 + k
+        for j in range(10):
+            a, b = x0 + (x1 - x0) * j / 10, x0 + (x1 - x0) * (j + 1) / 10
+            dy = -0.06 if j == sag else 0.0
+            p.lathe([(0.075, 0.0), (0.085, 0.0), (0.085, b - a), (0.075, b - a)], "Rusty",
+                    segs=10, closed=True, sweep=180.0, start=0.0,
+                    xf=T(a, yr - 0.08 + dy, gz) @ ALONG_X @ RZ(math.pi))
+            if j != sag:
+                p.box((0.03, 0.12, 0.2), (a + 0.05, yr - 0.04, gz + 0.05), "Iron")
+        # The downpipes at its ends, down the front to the roof below (or
+        # the yard).
+        below = mill_roof_y(k - 1, face - 0.1) + 0.12 if k > 0 else 0.0
+        for x in ((x0 + 0.4, x1 - 0.5) if k < 3 else (x0 + 0.3, x1 - 0.5)):
+            downpipe(p, x, face - 0.07, yr - 0.08, below, -0.03)
+        # The flashing where this bay's roof runs into the next one's
+        # front wall: a strip down onto the sheets and up the wall.
+        if k < 3:
+            zr = z0 + MILL_BAY - MILL_WALL * 0.5
+            yb = mill_roof_y(k, zr) + 0.12
+            p.box((2 * MILL_HW + 0.5, 0.02, 0.35), (0.0, yb + 0.01, zr - 0.2), "Zinc",
+                  xf=T(0, yb + 0.01, zr - 0.2) @ RX(-math.atan(0.16)) @ T(0, -(yb + 0.01),
+                                                                         -(zr - 0.2)))
+            p.box((2 * MILL_HW + 0.5, 0.3, 0.02), (0.0, yb + 0.15, zr - 0.02), "Zinc")
+            # Snow-split sheets lifting along it, the odd one bent up.
+            for j in range(3):
+                x = -8.0 + j * 7.0 + w.j(1.0)
+                p.box((0.8, 0.012, 0.9), (0.0, 0.0, 0.0), "Corrugated",
+                      xf=T(x, yb + 0.06, zr - 0.6) @ RX(-0.35 + w.j(0.1)))
+    # The headhouse's ridge cap, along Z over its gable.
+    ridge = HEAD_EAVE + 4.0 * math.tan(math.radians(25.0)) + 0.06
+    zh0, zh1 = -MILL_HD + MILL_BAY * 3 - 0.35, MILL_HD - MILL_WALL * 0.5 + 0.35
+    for sx in (-1, 1):
+        p.box((0.3, 0.02, zh1 - zh0), (0.0, 0.0, 0.0), "Zinc",
+              xf=T(-6.0 + sx * 0.13, ridge + 0.04, (zh0 + zh1) / 2)
+              @ RZ(sx * -math.radians(25.0)))
+    # The tub track out of the back door onto the bank: rails on
+    # sleepers, sinking into the snow as it goes.
+    f3 = MILL_FLOORS[3]
+    for j in range(14):
+        z = MILL_HD + 0.3 + j * 0.6
+        p.box((1.1, 0.06, 0.18), (4.0 + w.j(0.05), f3 - 0.03 - j * 0.004, z), "Timber",
+              xf=None)
+    for x in (3.62, 4.38):
+        p.box((0.06, 0.07, 8.4), (x, f3 + 0.035 - 0.03, MILL_HD + 4.3), "Rusty")
+    # A tub left tipped off the end.
+    p.box((0.8, 0.6, 1.2), (0.0, 0.0, 0.0), "Rusty", bevel=0.02, segs=1,
+          xf=T(5.4, f3 + 0.3, MILL_HD + 8.4) @ RZ(1.2) @ RY(0.3))
+    # The tailings launder: a plank trough out of the shed's west wall
+    # under its high window, falling along -Z on trestles to the yard.
+    lx = -MILL_HW - 0.45
+    za, zc = -12.0, -26.0
+    ya, yc = 2.0, 0.5
+    n = 7
+    for j in range(n):
+        z_a = za + (zc - za) * j / n
+        z_b = za + (zc - za) * (j + 1) / n
+        y_a = ya + (yc - ya) * j / n
+        y_b = ya + (yc - ya) * (j + 1) / n
+        mid = ((z_a + z_b) / 2, (y_a + y_b) / 2)
+        ln = math.hypot(z_b - z_a, y_b - y_a) + 0.02
+        tilt = math.atan2(y_a - y_b, z_a - z_b)
+        R = T(lx, mid[1], mid[0]) @ RX(tilt)
+        p.box((0.4, 0.04, ln), (0.0, 0.0, 0.0), "Planks", xf=R)
+        for sx in (-1, 1):
+            p.box((0.04, 0.22, ln), (sx * 0.2, 0.09, 0.0), "Planks", xf=R)
+        if j % 2 == 0:
+            for sx in (-1, 1):
+                rod(p, (lx + sx * 0.3, 0.0, z_a), (lx + sx * 0.18, y_a - 0.04, z_a), 0.05,
+                    "Timber", segs=4)
+            p.box((0.5, 0.08, 0.08), (lx, y_a - 0.06, z_a), "Timber")
+    p.box((0.4, 0.3, 0.4), (lx + 0.1, ya + 0.15, za + 0.2), "Rusty")
+    return [p]
+
+
 # --- The observatory --------------------------------------------------------------------------
 
 DOME_R, DRUM_H = 2.0, 1.2
@@ -854,5 +976,6 @@ for name, build in (("mill_thickener", thickener), ("mill_flotation", flotation)
                     ("obs_screen", obs_screen), ("obs_anemometer", obs_anemometer),
                     ("obs_radio", obs_radio), ("obs_barometer", obs_barometer),
                     ("obs_bunk", obs_bunk), ("fun_bull_wheel", fun_bull_wheel),
-                    ("fun_rope_reel", fun_rope_reel), ("fun_car_frame", fun_car_frame)):
+                    ("fun_rope_reel", fun_rope_reel), ("fun_car_frame", fun_car_frame),
+                    ("mill_exterior", mill_exterior)):
     prop(name, build)
