@@ -196,6 +196,96 @@ pub fn pressable_kind(p: Pressable, readable: bool, fixture: bool, on_bench: boo
     }
 }
 
+/// What an entity is to the hand, from its components ([`kind_of`]).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Traits {
+    pub pressable: Option<Pressable>,
+    pub on_bench: bool,
+    pub grabbable: bool,
+    pub readable: bool,
+    pub item: bool,
+    pub ladder: bool,
+    pub rope: bool,
+    /// A breaker or a valve: a run-control with its own look.
+    pub fixture: bool,
+    pub cart: bool,
+    pub button: bool,
+    pub pack: bool,
+}
+
+/// Its kind, if it's an interactable at all; `Err` for something
+/// grabbable that isn't a known kind.
+pub fn kind_of(t: &Traits) -> Result<Option<Kind>, ()> {
+    Ok(Some(if t.button {
+        Kind::PushButton
+    } else if t.cart {
+        Kind::MineCart
+    } else if t.pack {
+        Kind::OwnPack
+    } else if let Some(p) = t.pressable {
+        pressable_kind(p, t.readable, t.fixture, t.on_bench)
+    } else if t.readable {
+        Kind::Readable
+    } else if t.ladder {
+        Kind::Ladder
+    } else if t.rope {
+        Kind::Rope
+    } else if t.item {
+        Kind::LooseItem
+    } else if t.grabbable {
+        return Err(());
+    } else {
+        return Ok(None);
+    }))
+}
+
+/// The traits of every entity in `world` that has any, with the entity.
+pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, Traits)> {
+    use bevy::prelude::*;
+    let benches: std::collections::HashSet<Entity> = world
+        .query_filtered::<Entity, With<crate::raid::bench::Bench>>()
+        .iter(world)
+        .collect();
+    let mut q = world.query::<(
+        Entity,
+        Option<&Pressable>,
+        Option<&ChildOf>,
+        Has<crate::interact::Grabbable>,
+        (
+            Has<crate::interact::read::Readable>,
+            Has<crate::items::Item>,
+            Has<crate::interact::hand_climb::Ladder>,
+            Has<crate::gadgets::climbing::Rope>,
+            Has<crate::world::underground::PowerSwitch>,
+            Has<crate::world::underground::DrainControl>,
+            Has<crate::world::workings::MineCart>,
+            Has<crate::interact::poke::PokeButton>,
+            Has<crate::interact::body::Backpack>,
+        ),
+    )>();
+    q.iter(world)
+        .map(|(e, p, parent, grabbable, f)| {
+            let (readable, item, ladder, rope, power, drain, cart, button, pack) = f;
+            (
+                e,
+                Traits {
+                    pressable: p.copied(),
+                    on_bench: parent.is_some_and(|c| benches.contains(&c.parent())),
+                    grabbable,
+                    readable,
+                    item,
+                    ladder,
+                    rope,
+                    fixture: power || drain,
+                    cart,
+                    button,
+                    pack,
+                },
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,7 +318,6 @@ mod tests {
     /// claims holds: the near ring finds it (item layer, grabbable).
     #[test]
     fn every_interactable_is_a_known_kind_with_true_cues() {
-        use crate::interact::Grabbable;
         use avian3d::prelude::CollisionLayers;
         let mut bad = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
@@ -258,29 +347,6 @@ mod tests {
                 app.update();
             }
             let w = app.world_mut();
-            let benches: std::collections::HashSet<Entity> = w
-                .query_filtered::<Entity, With<crate::raid::bench::Bench>>()
-                .iter(w)
-                .collect();
-            let mut q = w.query::<(
-                Entity,
-                Option<&Name>,
-                Option<&Pressable>,
-                Option<&Grabbable>,
-                Option<&CollisionLayers>,
-                Option<&ChildOf>,
-                (
-                    Has<crate::interact::read::Readable>,
-                    Has<crate::items::Item>,
-                    Has<crate::interact::hand_climb::Ladder>,
-                    Has<crate::gadgets::climbing::Rope>,
-                    Has<crate::world::underground::PowerSwitch>,
-                    Has<crate::world::underground::DrainControl>,
-                    Has<crate::world::workings::MineCart>,
-                    Has<crate::interact::poke::PokeButton>,
-                    Has<crate::interact::body::Backpack>,
-                ),
-            )>();
             // A collider's layers, on the entity or a child of it (hover
             // walks up from a collider to what it belongs to).
             let item_layer: std::collections::HashSet<Entity> = w
@@ -290,42 +356,23 @@ mod tests {
                 .flat_map(|(e, _, p)| [Some(e), p.map(|p| p.parent())])
                 .flatten()
                 .collect();
-            for (e, name, p, g, _, parent, flags) in q.iter(w) {
-                let (readable, item, ladder, rope, power, drain, cart, button, pack) = flags;
-                let kind = if button {
-                    Some(Kind::PushButton)
-                } else if cart {
-                    Some(Kind::MineCart)
-                } else if pack {
-                    Some(Kind::OwnPack)
-                } else if let Some(p) = p {
-                    let on_bench = parent.is_some_and(|c| benches.contains(&c.parent()));
-                    Some(pressable_kind(*p, readable, power || drain, on_bench))
-                } else if readable {
-                    Some(Kind::Readable)
-                } else if ladder {
-                    Some(Kind::Ladder)
-                } else if rope {
-                    Some(Kind::Rope)
-                } else if item {
-                    Some(Kind::LooseItem)
-                } else if g.is_some() {
-                    None
-                } else {
-                    continue;
-                };
-                let what = name.map_or(format!("{e}"), |n| n.to_string());
-                let Some(kind) = kind else {
-                    bad.push(format!("{map}: {what}: grabbable, but no affordance kind"));
-                    continue;
+            for (e, t) in traits(w) {
+                let what = w.get::<Name>(e).map_or(format!("{e}"), |n| n.to_string());
+                let kind = match kind_of(&t) {
+                    Ok(Some(k)) => k,
+                    Ok(None) => continue,
+                    Err(()) => {
+                        bad.push(format!("{map}: {what}: grabbable, but no affordance kind"));
+                        continue;
+                    }
                 };
                 seen.insert(kind);
-                if kind.spec().cues.contains(&Cue::Ring) {
-                    if !(item_layer.contains(&e) && (g.is_some() || ladder || rope)) {
-                        bad.push(format!(
-                            "{map}: {what} ({kind:?}): says the ring shows, but hover can't find it"
-                        ));
-                    }
+                if kind.spec().cues.contains(&Cue::Ring)
+                    && !(item_layer.contains(&e) && (t.grabbable || t.ladder || t.rope))
+                {
+                    bad.push(format!(
+                        "{map}: {what} ({kind:?}): says the ring shows, but hover can't find it"
+                    ));
                 }
             }
             let _ = std::fs::remove_dir_all(&dir);

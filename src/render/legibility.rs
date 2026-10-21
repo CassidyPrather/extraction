@@ -836,7 +836,6 @@ mod tests {
         use crate::items::loot::{building_roll, clear_of_notes, marker_roll, notes_lying};
         use extraction_core::map::MarkerKind;
         let mut bad = Vec::new();
-        let mut near = 0;
         let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(0.06);
         for map in [
             "marrow_creek",
@@ -877,10 +876,6 @@ mod tests {
             for (spot, at) in landings {
                 let landed = clear_of_notes(at, &notes);
                 for (note, rot) in &notes {
-                    let raw = rot.inverse() * (at - *note);
-                    if raw.y.abs() < 0.4 && raw.x.abs() < half.x && raw.z.abs() < half.y {
-                        near += 1;
-                    }
                     let p = rot.inverse() * (landed - *note);
                     if p.y.abs() < 0.4 && p.x.abs() < half.x && p.z.abs() < half.y {
                         bad.push(format!(
@@ -890,9 +885,23 @@ mod tests {
                 }
             }
         }
-        // The check has teeth: rolls would have landed on notes.
-        assert!(near > 10, "rolls over notes before keeping off: {near}");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+        // And the keeping-off itself, on a roll laid right on a turned
+        // note (loot spots are also moved off notes at the source,
+        // `world::buildings`, so the valleys may never give it one).
+        let note = (Vec3::new(3.0, 0.8, -2.0), Quat::from_rotation_y(0.7));
+        for off in [
+            Vec3::ZERO,
+            Vec3::new(0.05, 0.02, -0.1),
+            Vec3::new(-0.12, 0.0, 0.15),
+        ] {
+            let at = note.0 + note.1 * off;
+            let p = note.1.inverse() * (clear_of_notes(at, &[note]) - note.0);
+            assert!(
+                p.x.abs() >= half.x || p.z.abs() >= half.y,
+                "a roll at {off:?} on the note stayed on it: {p:?}"
+            );
+        }
     }
 
     /// Every signpost faces the way you come to it, so its words meet you
