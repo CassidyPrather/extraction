@@ -472,6 +472,18 @@ pub(super) fn direct_raid(
         super::second_hour::cut_in(&mut bot, vec![Task::DrawGun, Task::Engage { shots: 12 }]);
         return;
     }
+    // The truck's there: whatever the walk, to it now.
+    if state.leg == Leg::Rendezvous
+        && matches!(raid.phase, Phase::TruckWaiting { .. })
+        && !matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE)
+    {
+        state.note(now, Kind::Learned, "the truck's there");
+        bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
+        let t = world.go_home(here, &raid, 0);
+        super::second_hour::cut_in(&mut bot, t);
+        state.leg = Leg::Board;
+        return;
+    }
     let truck = view.trucks.iter().next().map(|t| t.compute_transform());
     let at_truck =
         |x: f32, z: f32| truck.map_or(here, |t| t.transform_point(Vec3::new(x, 0.0, z)).xz());
@@ -566,6 +578,19 @@ pub(super) fn direct_raid(
                     });
                 }
                 from = at_truck(0.0, 4.0);
+                // "Walk out through the gate": the drop point is on the
+                // far side of it.
+                if let Some(drop) = world
+                    .zone
+                    .map
+                    .markers
+                    .iter()
+                    .find(|m| m.kind == MarkerKind::Insertion)
+                    .map(|m| Vec2::from(m.at))
+                {
+                    tasks.extend(world.legs(from, drop));
+                    from = drop;
+                }
             }
             // Lost: off the wrong way first, until the map puts it right.
             if p.lost && !state.wrong_way_done {
@@ -651,7 +676,9 @@ pub(super) fn direct_raid(
                 };
                 state.rv = rv;
                 if let Some(rv) = rv {
-                    tasks.extend(world.legs(here, rv));
+                    // Near it, to wait: not on the spot itself.
+                    let near = rv + (here - rv).normalize_or(Vec2::Y) * 8.0;
+                    tasks.extend(world.legs(here, near));
                 }
                 state.leg = Leg::Rendezvous;
             } else if world.radio_in_hand() {
