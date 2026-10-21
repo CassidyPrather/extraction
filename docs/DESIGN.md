@@ -228,7 +228,18 @@ its square root, so dusk leaves about 0.6 of the day's, a room by day
 0.55, a full-moon night 0.28 and a black one 0.14. A torch lights you up wherever the sky doesn't, and its
 beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
 carries a shot a third as far. Robots hear round open doorways and
-through walls by the same rule the player's ears do (`acoustics`).
+through walls by the same rule the player's ears do (`acoustics`). A
+scope pointed into a low sun flashes, and robots see the flash further
+than they see a body: it places a still sniper roughly, where keeping
+still would otherwise have kept them unplaced.
+
+**Tracks in the snow** (`robots/tracks.rs`). A robot that can't see you
+and comes within sight of a fresh print of yours (12 m by day, less as
+light and weather close in) reads the trail on, about 15 m along while
+it's fresh, and goes to look there; arrived, it reads on. It walks your
+trail to you unless the snow has filled it in: fresh snow is the cover.
+A crate you break is gone for them too: where it stood is walkable again
+and no longer cover.
 
 **Hounds hunt by ear** (`robots/hound_mind.rs`). Poor eyes tuned to
 movement, the best ears in the Zone: a sound sends a hound running, the

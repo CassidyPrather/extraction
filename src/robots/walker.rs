@@ -142,10 +142,12 @@ impl Plugin for WalkerPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<WalkerStep>()
             .add_message::<WalkerAim>()
+            .init_resource::<NavGone>()
             .add_systems(
                 Startup,
                 build_nav.after(crate::world::trees::spawn_tree_colliders),
             )
+            .add_systems(FixedUpdate, reopen_nav.before(walker_brain))
             .add_systems(
                 FixedUpdate,
                 (
@@ -185,6 +187,66 @@ pub fn build_nav(
         started.elapsed().as_secs_f32() * 1000.0
     );
     commands.insert_resource(Nav(Arc::new(g)));
+}
+
+/// A placement no bigger than this across (m) that's cleared away (a crate
+/// burst: `destruction::Cleared`) comes off the grid...
+pub const GONE_SIZE: f32 = 3.0;
+
+/// ...these ones, by index in the map's placements; the grid is built again
+/// without them, off the main thread, and swapped in when it's ready.
+#[derive(Resource, Default)]
+pub struct NavGone {
+    pub placements: std::collections::HashSet<usize>,
+    dirty: bool,
+    building: Option<bevy::tasks::Task<extraction_core::nav::NavGrid>>,
+}
+
+/// Something solid is gone: what stood there that was a small placement
+/// comes off the grid, so walkers path through where it was and stop
+/// counting it as cover.
+fn reopen_nav(
+    mut cleared: MessageReader<crate::destruction::Cleared>,
+    zone: Res<Zone>,
+    mut gone: ResMut<NavGone>,
+    nav: Option<ResMut<Nav>>,
+) {
+    let Some(mut nav) = nav else {
+        cleared.clear();
+        return;
+    };
+    for c in cleared.read() {
+        for (i, p) in zone.map.placements.iter().enumerate() {
+            let f = extraction_core::map::prefab_footprint(&p.prefab);
+            let small = f[0].max(f[2]) <= GONE_SIZE;
+            let inside = p.at[0] >= c.min.x - 0.3
+                && p.at[0] <= c.max.x + 0.3
+                && p.at[1] >= c.min.z - 0.3
+                && p.at[1] <= c.max.z + 0.3;
+            if small && inside && gone.placements.insert(i) {
+                gone.dirty = true;
+            }
+        }
+    }
+    if let Some(task) = gone.building.as_mut() {
+        if task.is_finished() {
+            let task = gone.building.take().unwrap();
+            nav.0 = Arc::new(bevy::tasks::block_on(task));
+        }
+    }
+    if gone.dirty && gone.building.is_none() {
+        gone.dirty = false;
+        let mut map = (*zone.map).clone();
+        let mut k = 0;
+        map.placements.retain(|_| {
+            k += 1;
+            !gone.placements.contains(&(k - 1))
+        });
+        let hm = zone.hm.clone();
+        gone.building = Some(bevy::tasks::AsyncComputeTaskPool::get().spawn(async move {
+            extraction_core::map_nav::zone_grid(&map, &hm, extraction_core::map_nav::MAX_SLOPE)
+        }));
+    }
 }
 
 pub fn spawn_walker(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> Entity {
@@ -401,6 +463,7 @@ fn walker_brain(
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 1.1;
+    let mut paths_left = PATH_BUDGET;
     // How much core each robot has left (0..1).
     let cores: std::collections::HashMap<Entity, f32> = parts
         .iter()
@@ -882,16 +945,28 @@ fn walker_brain(
         }
         w.repath -= dt;
         if goal != w.goal || (goal.is_some() && w.repath <= 0.0 && w.path.is_empty()) {
-            w.goal = goal;
-            w.repath = 3.0;
-            w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
+            // A long search costs: only so many a tick across all walkers
+            // (when everyone's target jumps at once, say). Over budget, it
+            // keeps its old path and asks again next tick.
+            let long =
+                goal.is_some_and(|g| Vec2::new(g.x - pos.x, g.z - pos.z).length() > SHORT_PATH);
+            if !long || paths_left > 0 {
+                if long {
+                    paths_left -= 1;
+                }
+                w.goal = goal;
+                w.repath = 3.0;
+                w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
+            }
         }
     }
 }
 
-/// Somewhere to fight `target` from: walkable ground hard by an obstacle
-/// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
-/// line to it, not far from `pos`. Where it stands, if that will do.
+/// Long path searches (to a goal further than [`SHORT_PATH`] m) all the
+/// walkers may start in one tick; the rest wait a tick or two.
+pub const PATH_BUDGET: u32 = 3;
+pub const SHORT_PATH: f32 = 12.0;
+
 /// A walker with less than this share of its core left breaks off...
 pub const RETREAT_AT: f32 = 0.35;
 /// ...to cover about this much further from you (m).
@@ -942,6 +1017,9 @@ fn flank_role(
     Some(Vec3::new(tp.x + dir.x * d, pos.y, tp.z + dir.y * d))
 }
 
+/// Somewhere to fight `target` from: walkable ground hard by an obstacle
+/// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
+/// line to it, not far from `pos`. Where it stands, if that will do.
 fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> Option<Vec3> {
     let blocked = |p: Vec3| !nav.walkable(p);
     let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
