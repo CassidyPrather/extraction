@@ -103,7 +103,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "mp133", dims: Some((0.075, 0.2, 1.12)),
+            id: "mp133", dims: Some((0.045, 0.2, 1.13)),
             name: "MP-133 pump shotgun",
             description: "A Baikal pump: four shells in the tube under the barrel, thumbed in through the port underneath. Pump it back hard and forward again. A cocked hammer locks it shut: the button by the trigger guard lets it open.",
             category: Firearm, size: Bulky, mass: 3.4, bulk: 6.5,

@@ -307,6 +307,12 @@ pub const ART: &[ArtText] = &[
         "the gun turned to the face",
     ),
     art(
+        "guns/mp133.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
         "guns/rpk74.py",
         Need::Incidental,
         0.35,

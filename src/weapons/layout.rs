@@ -621,7 +621,7 @@ fn mp133() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.795),
         port: Vec3::new(0.022, 0.05, -0.12),
         eject: Vec3::new(1.0, 0.5, 0.1),
-        sight: at(0.0, 0.075, -0.04),
+        sight: at(0.0, 0.068, -0.03),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::Pump,
