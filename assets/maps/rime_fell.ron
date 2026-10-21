@@ -194,10 +194,10 @@
     forests: [
         // The last trees: the Bottoms' stunted spruce, thinning up the
         // slopes. Nothing grows over the switchbacks' second leg.
-        (name: "South boundary", seed: 151, density: 1.3, undergrowth: 0.4,
+        (name: "South boundary", seed: 151, density: 1.1, undergrowth: 0.4,
          mix: [(Spruce, 0.75), (Pine, 0.15), (Snag, 0.1)],
          polygon: [(-320.0, 320.0), (320.0, 320.0), (320.0, 286.0), (-320.0, 286.0)]),
-        (name: "Bottoms spruce west", seed: 152, density: 0.9, undergrowth: 0.4,
+        (name: "Bottoms spruce west", seed: 152, density: 1.5, undergrowth: 0.4,
          mix: [(Spruce, 0.8), (Snag, 0.2)],
          polygon: [(-282.0, 284.0), (-150.0, 284.0), (-120.0, 262.0), (-200.0, 248.0), (-282.0, 230.0)]),
         (name: "Bottoms spruce east", seed: 153, density: 0.8, undergrowth: 0.35,

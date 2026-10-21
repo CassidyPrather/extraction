@@ -59,7 +59,7 @@ impl Chill {
 
 fn give_chill(mut commands: Commands, new: Query<Entity, (With<Player>, Without<Chill>)>) {
     for e in &new {
-        commands.entity(e).insert(Chill::default());
+        commands.entity(e).try_insert(Chill::default());
     }
 }
 
