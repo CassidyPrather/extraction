@@ -1275,6 +1275,7 @@ impl Plugin for UndergroundPlugin {
                 spawn_kept_crates,
                 wire_drains,
                 work_drains.after(wire_drains),
+                regrid_residents.after(register_residents),
             ),
         )
         .add_plugins((
@@ -1282,6 +1283,7 @@ impl Plugin for UndergroundPlugin {
             super::furnace::FurnacePlugin,
         ))
         .init_resource::<Levels>()
+        .init_resource::<ResidentGrids>()
         .add_message::<BasinDrained>()
         .add_message::<DepotEntered>()
         .add_message::<CarriedOutOfDepot>();
@@ -1555,6 +1557,7 @@ pub fn register_residents(
     doors: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
     lighting: Option<ResMut<crate::robots::senses::Lighting>>,
     residents: Option<ResMut<crate::robots::indoor::IndoorSites>>,
+    mut grids: ResMut<ResidentGrids>,
     mut done: Local<bool>,
 ) {
     if *done {
@@ -1613,24 +1616,17 @@ pub fn register_residents(
             }
         }
         // Nor into deep water, as on the surface; nor a pit, nor heat
-        // nothing crosses.
-        for j in 0..grid.n {
-            for i in 0..grid.n {
-                let c = grid.centre(i, j);
-                let hot = r
-                    .heat_at(c)
-                    .is_some_and(|z| l.heat[z as usize].level >= ug::SCORCHING);
-                let pit = r.cell_of(c).is_some_and(|(a, b)| r.pit[b * r.nx + a]);
-                if r.water_at(c) >= ug::DEEP || hot || pit {
-                    grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
-                }
-            }
-        }
+        // nothing crosses: as the site stands now (`regrid_residents`
+        // follows it as it changes).
+        let base = grid.clone();
+        block_works(&mut grid, l, r, &Works::start(l));
+        let floors = std::sync::Arc::new(floors);
         let nav = crate::robots::indoor::LocalNav {
             grid: std::sync::Arc::new(grid),
             xf,
-            floors: Some(std::sync::Arc::new(floors)),
+            floors: Some(floors.clone()),
         };
+        let first = residents.sites.len();
         for round in rounds {
             let points: Vec<(&ug::Room, [f32; 2])> = match round.rooms {
                 // One room: round its quarters.
@@ -1667,6 +1663,159 @@ pub fn register_residents(
                 dormant: round.dormant,
             });
         }
+        grids.0.insert(
+            plan.entity,
+            ResidentGrid {
+                id: plan.name.clone(),
+                sites: (first..residents.sites.len()).collect(),
+                base,
+                works: Works::start(l),
+            },
+        );
+    }
+}
+
+/// Each site's residents' grid: which of [`crate::robots::indoor::IndoorSites`]
+/// are its rounds, the grid before its works are reckoned (the ground
+/// round the kiosks already shut), and the works as last reckoned.
+#[derive(Resource, Default)]
+pub struct ResidentGrids(pub HashMap<Entity, ResidentGrid>);
+
+pub struct ResidentGrid {
+    pub id: String,
+    pub sites: Vec<usize>,
+    pub base: extraction_core::nav::NavGrid,
+    pub works: Works,
+}
+
+/// What a site's works leave passable, as of now: each basin's level,
+/// each heat zone's level (vented down), where roofs have come down
+/// (site space: centre, yaw, half extents).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Works {
+    pub levels: Vec<f32>,
+    pub heat: Vec<f32>,
+    pub falls: Vec<(Vec3, f32, Vec2)>,
+}
+
+impl Works {
+    /// As the layout starts.
+    pub fn start(l: &Layout) -> Self {
+        Works {
+            levels: l.basins.iter().map(|b| b.level).collect(),
+            heat: l.heat.iter().map(|h| h.level).collect(),
+            falls: Vec::new(),
+        }
+    }
+
+    /// Near enough the same for the residents: levels to 5 cm, heat to a
+    /// twentieth.
+    fn same(&self, o: &Works) -> bool {
+        let close = |a: &[f32], b: &[f32], by: f32| {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x - y).abs() < by)
+        };
+        close(&self.levels, &o.levels, 0.05)
+            && close(&self.heat, &o.heat, 0.05)
+            && self.falls.len() == o.falls.len()
+    }
+}
+
+/// Shut a site's grid where its works make it impassable: deep water
+/// (a basin's at its level now), heat nothing crosses, a pit, a fallen
+/// roof.
+fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
+    for j in 0..grid.n {
+        for i in 0..grid.n {
+            let c = grid.centre(i, j);
+            let Some((a, b)) = r.cell_of(c) else {
+                continue;
+            };
+            let q = b * r.nx + a;
+            let depth = match r.basin[q] {
+                Some(k) => w.levels.get(k as usize).map_or(0.0, |lv| lv - r.floors[q]),
+                None => r.water[q],
+            };
+            let hot = r.heat[q].is_some_and(|z| {
+                w.heat
+                    .get(z as usize)
+                    .copied()
+                    .unwrap_or(l.heat[z as usize].level)
+                    >= ug::SCORCHING
+            });
+            let p = Vec3::new(c[0], r.floors[q], c[1]);
+            let fallen = w.falls.iter().any(|(at, yaw, half)| {
+                let d = Quat::from_rotation_y(-*yaw) * (p - *at);
+                d.x.abs() <= half.x && d.z.abs() <= half.y
+            });
+            if depth >= ug::DEEP || hot || r.pit[q] || fallen {
+                grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
+            }
+        }
+    }
+}
+
+/// Logic: as a site's works change (a basin drained, a flue vented, a
+/// roof brought down), its residents get the grid it leaves them.
+fn regrid_residents(
+    mut grids: ResMut<ResidentGrids>,
+    levels: Res<Levels>,
+    heat: Option<Res<super::furnace::Heat>>,
+    falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
+    mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
+    time: Res<Time>,
+    mut every: Local<f32>,
+) {
+    *every -= time.delta_secs();
+    if *every > 0.0 {
+        return;
+    }
+    *every = 0.5;
+    for (site, g) in grids.0.iter_mut() {
+        let Some((l, r)) = ug::layout(&g.id).zip(ug::raster(&g.id)) else {
+            continue;
+        };
+        let now = Works {
+            levels: levels
+                .0
+                .get(&g.id)
+                .cloned()
+                .unwrap_or_else(|| g.works.levels.clone()),
+            heat: l
+                .heat
+                .iter()
+                .enumerate()
+                .map(|(z, h)| {
+                    let share = heat
+                        .as_ref()
+                        .and_then(|hh| hh.0.get(site))
+                        .and_then(|v| v.get(z))
+                        .copied()
+                        .unwrap_or(1.0);
+                    h.level * share
+                })
+                .collect(),
+            falls: falls
+                .iter()
+                .filter(|(_, _, c)| c.parent() == *site)
+                .map(|(f, t, _)| {
+                    let yaw = t.rotation.to_euler(EulerRot::YXZ).0;
+                    (t.translation, yaw, Vec2::new((f.width + 0.2) * 0.5, 1.0))
+                })
+                .collect(),
+        };
+        if now.same(&g.works) {
+            continue;
+        }
+        let mut grid = g.base.clone();
+        block_works(&mut grid, l, r, &now);
+        let grid = std::sync::Arc::new(grid);
+        for &k in &g.sites {
+            out.write(crate::robots::indoor::SiteGrid {
+                site: k,
+                grid: grid.clone(),
+            });
+        }
+        g.works = now;
     }
 }
 
@@ -2724,6 +2873,70 @@ mod tests {
                 assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
             }
         }
+    }
+
+    /// As a site's works change, so does where its residents can go: the
+    /// pump station's basins pumped down open its flooded rooms to the
+    /// crawlers (`robots::indoor::SiteGrid`).
+    #[test]
+    fn the_residents_grid_follows_the_works() {
+        let opts = LaunchOptions {
+            robots: true,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..10 {
+            app.update();
+        }
+        let sites = app
+            .world()
+            .resource::<ResidentGrids>()
+            .0
+            .values()
+            .find(|g| g.id == "pump_marrow")
+            .expect("the pump station's residents")
+            .sites
+            .clone();
+        assert!(!sites.is_empty(), "it has rounds");
+        let shut = |app: &App| {
+            let s = app.world().resource::<crate::robots::indoor::IndoorSites>();
+            s.sites[sites[0]]
+                .nav
+                .grid
+                .cost
+                .iter()
+                .filter(|c| **c == extraction_core::nav::BLOCKED)
+                .count()
+        };
+        let before = shut(&app);
+        // Every basin pumped down to its floor.
+        let l = ug::layout("pump_marrow").unwrap();
+        let dry: Vec<f32> = l
+            .basins
+            .iter()
+            .map(|b| {
+                b.rooms
+                    .iter()
+                    .filter_map(|id| l.rooms.iter().find(|r| &r.id == id))
+                    .map(|r| l.floor_of(r))
+                    .fold(f32::INFINITY, f32::min)
+            })
+            .collect();
+        app.world_mut()
+            .resource_mut::<Levels>()
+            .0
+            .insert("pump_marrow".into(), dry);
+        for _ in 0..90 {
+            app.update();
+        }
+        let after = shut(&app);
+        assert!(
+            after < before,
+            "the drained rooms open to the crawlers ({before} -> {after} cells shut)"
+        );
     }
 
     fn app(map: &str) -> App {

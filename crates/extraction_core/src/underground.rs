@@ -1073,11 +1073,11 @@ impl Raster {
                                 .copied()
                         })
                         .min();
-                    if let Some(low) = low {
-                        if tread[&c] > low + 1 {
-                            tread.insert(c, low + 1);
-                            changed = true;
-                        }
+                    if let Some(low) = low
+                        && tread[&c] > low + 1
+                    {
+                        tread.insert(c, low + 1);
+                        changed = true;
                     }
                 }
                 if !changed {
@@ -2206,10 +2206,10 @@ mod tests {
                         (r.get(i, j), r.get(i + 1, j)),
                         (r.get(i, j), r.get(i, j + 1)),
                     ] {
-                        if let (Cell::Room(a), Cell::Room(b)) = (a, b) {
-                            if a != b {
-                                edges.insert((a.min(b) as usize, a.max(b) as usize));
-                            }
+                        if let (Cell::Room(a), Cell::Room(b)) = (a, b)
+                            && a != b
+                        {
+                            edges.insert((a.min(b) as usize, a.max(b) as usize));
                         }
                     }
                 }
