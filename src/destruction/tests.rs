@@ -856,6 +856,24 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     run(&mut a, 4);
     assert!(!blocked(&mut a), "a hole through it");
     assert_eq!(a.world().resource::<Breaches>().0.len(), 1);
+    // The robots know it for a way in: an open doorway facing out.
+    let holes = |app: &mut App| {
+        let marks: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<super::breach::BreachHole>>()
+            .iter(app.world())
+            .collect();
+        app.world()
+            .resource::<crate::robots::doors::Entrances>()
+            .doors
+            .iter()
+            .filter(|e| marks.contains(&e.door))
+            .map(|e| (e.mid, e.out))
+            .collect::<Vec<_>>()
+    };
+    let h = holes(&mut a);
+    assert_eq!(h.len(), 1, "the hole is in the doorway index");
+    assert!(h[0].1.dot(back) > 0.9, "facing out of the house");
     assert!(live_debris(&mut a) > 6, "its boards fly");
     // Saved, and back as it was.
     let save = crate::persist::snapshot(a.world_mut());
@@ -870,9 +888,11 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     let mut b = app(Some(path.clone()));
     run(&mut b, 3);
     assert!(!blocked(&mut b), "the hole is still there after a reload");
+    assert_eq!(holes(&mut b).len(), 1, "and still a way in");
     crate::persist::reset_zone(b.world_mut());
     run(&mut b, 3);
     assert!(blocked(&mut b), "the Surge mends the wall");
+    assert!(holes(&mut b).is_empty(), "and the way in is gone");
     assert!(b.world().resource::<Breaches>().0.is_empty());
     let _ = std::fs::remove_file(&path);
 }

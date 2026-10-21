@@ -71,7 +71,10 @@ rebuilt at once (`buildings::body`); the client drops the building's
 merged meshes and builds them again (`buildings::redress`;
 `dress_buildings` cuts the holes too). Holes are kept by their centres in
 the world (`breach::Breaches`), saved as `ZoneSave::breaches`, cut again
-when a restored building appears, and mended by the Surge. Robots' nav
+when a restored building appears, and mended by the Surge. Each hole is
+also a way in for the robots: a `breach::BreachHole` marker in their
+doorway index (`robots::doors::Entrances`), always open, facing out, so
+a robot hunting someone inside can come to it as to a door. Their nav
 grids don't know about holes yet.
 
 `EXTRACTION_BREACH=1` on a `--screenshot` run tears one where the view
