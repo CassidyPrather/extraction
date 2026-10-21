@@ -234,6 +234,32 @@ the floor, and you'll find it like that next time. The Surge ends a claim
 clear the cabin: the logging crew's tin under the Marrow bed, the
 woodward's matches by his stove in the Cinder wood.
 
+**Measured** (`SIM_OVERNIGHT=1`: the raider walks to the safehouse as a
+job, and once inside the claim is taken as read and it sleeps through the
+bed's press; the night, the visit and the morning are the game's). 36 raids
+on the current build, three valleys, seeds 31 and 32, every bot sleeping
+one night:
+
+| Valley | Home | Game clock a raid | Items home | Nights with a visit |
+| - | - | - | - | - |
+| Marrow Creek | 50% | 29 min | 17 | 2 of 12 |
+| Kettle Pass | 67% | 28 min | 24 | 5 of 12 |
+| Cinder Works | 67% | 30 min | 29 | 9 of 12 |
+
+A raid with a night in it is about 30 minutes of Zone clock against 6-10
+without (the night is 15), and brings home several times the loot. The bots
+that lay down loud enough for a visit died 5 times in 16, against 5 in 20
+for quiet nights: the visit costs, but doesn't decide the raid. Cinder's
+valley is loud enough that most nights there bring the walkers. (Before
+the raider counted only its waking time, bots that slept went home at once
+with nothing: the clock had spent their raid.)
+
+One thing to know: the night passes in a frame, and the visitors leave the
+Gate 20 s after the warning, so they arrive after you've woken, not while
+you sleep. It plays as being run out of the cabin at first light. If it
+should be a fight in the dark, the bed would have to hold you until they
+reach the door; that's a call for Robot minds and the coordinator.
+
 Cut from this: hunger (there still is none; food is the kitchen's and the
 offerings'), a sleep timer or a menu (you lie down; a night is a night),
 more than one safehouse a valley.
