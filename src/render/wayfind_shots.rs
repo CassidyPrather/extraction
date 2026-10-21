@@ -104,6 +104,13 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
         let Some(gt) = world.get::<GlobalTransform>(e) else {
             continue;
         };
+        // Not what's hidden for now (the order card until there's an order).
+        if world
+            .get::<InheritedVisibility>(e)
+            .is_some_and(|v| !v.get())
+        {
+            continue;
+        }
         let pose = gt.compute_transform();
         let size = world
             .get::<avian3d::prelude::ColliderAabb>(e)

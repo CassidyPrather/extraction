@@ -22,6 +22,7 @@ pub mod offering;
 #[cfg(test)]
 pub mod overdraw;
 pub mod props;
+pub mod pry_cue;
 pub mod screen;
 pub mod spikes;
 pub mod stats;
@@ -69,6 +70,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()
