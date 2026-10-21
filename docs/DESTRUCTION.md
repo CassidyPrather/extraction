@@ -115,10 +115,16 @@ the building is placed:
 | Fence panel | `fence_garden`, four between its posts | 100 | 150 | splinters |
 | Bus door | the depot's wrecked bus | crowbar only | 200 | drops scrap |
 | Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
+| Car door | a car wreck's doors (Kit's `wreck_*`, coming) | crowbar only | 180 | drops a `car_door` |
+| Car bonnet, boot | its bonnet, boot lid, tailgate | crowbar only | 140 | drops a `car_bonnet` |
+| Car wheel | its wheels | crowbar only | 160 | drops a `car_wheel` |
 
 Metal comes off only to a crowbar (`Pryable`): rounds hole sheet, they
 don't tear a door off. Wood breaks to rounds and blows as a board does.
-A part with no model is drawn as a box of its size in its material.
+A part with no model is drawn as a box of its size in its material. A
+model can name one node of a file, `wreck_lada#door_fl`: a car's parts
+are nodes of the car's model, in the car's space, and each is drawn on
+its own part where the car put it (`Part::model_at`).
 Anything else can place a part with `strip::spawn_part(commands, parts,
 broken, Part { .. })` (kept in `strip::Parts`). Gone, a part stays gone
 (`Broken`) until the Surge puts it back, from the buildings and `Parts`.
