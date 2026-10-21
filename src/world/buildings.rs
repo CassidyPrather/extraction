@@ -5299,9 +5299,13 @@ pub struct BuildingLoot(pub Vec<LootSpot>);
 pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> Transform {
     // Where the terrain was settled for it (the lowest corner of a rough
     // footprint, lifted as far as its foundation allows).
-    // Rolling stock pitches to follow the grade under its bogies.
+    // Rolling stock pitches to follow the grade under its bogies; a wreck
+    // pitches and rolls to the ground under its four wheels.
     let pitch = zone.hm.pitch(&p.prefab, p.at, p.rot);
-    let rot = Quat::from_rotation_y(-p.rot.to_radians()) * Quat::from_rotation_x(-pitch);
+    let roll = zone.hm.roll(&p.prefab, p.at, p.rot);
+    let rot = Quat::from_rotation_y(-p.rot.to_radians())
+        * Quat::from_rotation_x(-pitch)
+        * Quat::from_rotation_z(roll);
     let y = zone.hm.footing(&p.prefab, p.at, p.rot);
     let y = if p.absolute { p.y } else { y + p.y };
     Transform::from_xyz(p.at[0], y, p.at[1]).with_rotation(rot)
@@ -6134,7 +6138,8 @@ pub fn dress_buildings(
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;
             let gseed = super::overgrowth::seed(at, &b.prefab);
-            let mut growth = super::overgrowth::grow(&geo, &occluders, gseed, north);
+            let mut growth =
+                super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
             // Saplings through a ruin's floor, bushes at the walls' feet.
             let ruin = extraction_core::map::prefab_base(&b.prefab) != b.prefab;
             let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);
