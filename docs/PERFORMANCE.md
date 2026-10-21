@@ -285,13 +285,18 @@ wrecking, each kind of Surge bloom, the Depot's residents coming out, the
 truck's homecoming; and every frame of a valley loading.
 `render::spikes::tests::hitches_hold_their_ceiling` holds each event's
 worst frame to 3x the moment's median frame and loading's frames after
-the second to 10x (ratios in the same run, so a loaded machine moves
-both). It runs in a process of its own (Bevy's task pools are the
-process's: in the shared test binary its background work queued behind
-every other test's, 3 s frames that are no hitch of the game's), and a
-frame can still be lost to another process, so whatever is over is
-measured again and only what's over twice fails. With `SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it
-names the systems in each worst frame.
+the second to 10x (ratios in the same run). It's wall-clock, so it isn't
+in the default suite: on a busy machine (or a busy container) one long
+frame from anything else reads as a hitch, and it failed other sessions'
+suites that way. `scripts/hitches.sh` runs it per valley, in a process of
+its own (Bevy's task pools are the process's), best of three per event,
+and `scripts/bench.sh` calls it (`HITCHES=0` to skip). With
+`SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it names the
+systems in each worst frame. The suite holds the hitches it found by
+things that don't depend on the clock (`render::spikes::guards`): the
+collider trees are optimised in place, and a walker wrecked mid-stride on
+Kettle Pass's slope keeps its debris under 400 contact points a tick and
+25 m/s (uncapped: 1900 points, 1400 m/s).
 
 Marrow Creek, one thread, the moment's median 18 ms:
 
