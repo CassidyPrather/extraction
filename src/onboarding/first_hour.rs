@@ -806,8 +806,13 @@ pub(super) fn direct_raid(
             } else if world.radio_in_hand() {
                 tasks.extend([Task::Use(Side::Left), Task::Wait(1.0)]);
             } else {
-                let radio = world.items.iter().find(|(_, it, _, held, _, _)| {
-                    held.is_none() && world.catalog.get(it.kind()).id == "radio"
+                // Its own: on its body, not one lying about the valley.
+                let radio = world.items.iter().find(|(_, it, _, held, sock, _)| {
+                    held.is_none()
+                        && world.catalog.get(it.kind()).id == "radio"
+                        && sock.is_some_and(|s| {
+                            world.owners.get(s.socket).is_ok_and(|o| o.0 == player)
+                        })
                 });
                 match radio {
                     Some((e, ..)) => tasks.extend([
@@ -880,7 +885,6 @@ pub(super) fn direct_raid(
             return;
         }
     }
-    let _ = player;
     if !tasks.is_empty() {
         let idle = bot.tasks.pop_back();
         bot.tasks.extend(tasks);
