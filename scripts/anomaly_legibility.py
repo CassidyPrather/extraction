@@ -14,10 +14,10 @@ noise floor).
     scripts/anomaly_legibility.py --measure  # measures the shots already taken
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
     scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
+    scripts/anomaly_legibility.py --noise    # and a second shot without, for the noise floor
 
-Writes docs/shots/anomalies/legibility/<kind>_<weather>.png (the "with"
-shot), a contact sheet docs/shots/anomalies/legibility.png and
-legibility.json beside it. Exits non-zero when a kind falls under its
+Writes a contact sheet, docs/shots/anomalies/legibility.png, and the
+numbers, legibility.json beside it (the shots stay in target/legibility). Exits non-zero when a kind falls under its
 floor.
 """
 import concurrent.futures
@@ -34,18 +34,27 @@ OUT = os.path.join(ROOT, "docs", "shots", "anomalies", "legibility")
 RAW = os.path.join(ROOT, "target", "legibility")
 BIN = os.path.join(ROOT, "target", "fast", "extraction")
 
-# Camera 20 m off each anomaly, eye height, aimed at a metre over its
-# centre: x,y,z,yaw,pitch (yaw 0 looks down -z, 90 down +x). Each from the
-# side with a clear line: no rise, trunk or other anomaly between, not on a
-# road, gentle ground (picked from the heightmap and the tree scatter).
-TARGETS = [
-    ("lift", "132.2,0,-36.6,135,-2"),     # Lift at (146.3, -22.5)
-    ("burner", "64.6,0,256.7,248,-3"),    # Burner at (46.1, 264.4)
-    ("snare", "225.9,0,-64.3,68,8"),      # Snare at (244.4, -72.0)
-    ("well", "143.9,0,7.1,45,-1"),        # Well at (158, -7)
-    ("mirror", "-144.0,0,-179.0,0,-6"),   # Mirror at (-144, -199)
-    ("hush", "136.0,0,13.0,0,-7"),        # Hush at (136, -7)
-]
+def targets() -> list:
+    """For each kind, a camera 20 m off one of its anomalies on Marrow (seed
+    1, cycle 0), on the side with a clear line: no rise, trunk or other
+    anomaly between, off roads, on gentle ground (`anomaly::view_of`, via
+    the anomaly-views tool), aimed at a metre over its centre."""
+    subprocess.run(
+        ["cargo", "build", "-q", "--profile", "fast", "-p", "extraction_core",
+         "--bin", "anomaly-views"],
+        cwd=ROOT, check=True,
+    )
+    out = subprocess.run(
+        [os.path.join(ROOT, "target", "fast", "anomaly-views"), "marrow_creek", "1", "0", "20"],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout
+    return [
+        (v["kind"].lower(), v["camera"])
+        for v in map(json.loads, out.splitlines())
+    ]
+
+
+TARGETS = targets()
 # Label: launch flags. Night is drizzle under a new moon, the darkest.
 CONDITIONS = {
     "fog": ["--weather", "fog"],
@@ -53,6 +62,9 @@ CONDITIONS = {
     "night": ["--weather", "drizzle", "--hour", "night", "--moon", "new"],
 }
 WEATHERS = list(CONDITIONS)
+# A second shot without, for the noise floor. Shots of the same view come
+# out the same to the pixel (fixed steps), so it's off unless asked for.
+NOISE = "--noise" in sys.argv
 
 # The box the anomaly fills at 20 m, in a 1600x900 shot: about 7 m across
 # and 5 m up from the ground.
@@ -95,9 +107,11 @@ def luma(path: str) -> np.ndarray:
 def measure(name: str, weather: str) -> dict:
     on = luma(os.path.join(RAW, f"{name}_{weather}_on0.png"))
     off = luma(os.path.join(RAW, f"{name}_{weather}_off0.png"))
-    off2 = luma(os.path.join(RAW, f"{name}_{weather}_off1.png"))
     changed = float((np.abs(on - off) > STEP).mean())
-    noise = float((np.abs(off2 - off) > STEP).mean())
+    noise = 0.0
+    second = os.path.join(RAW, f"{name}_{weather}_off1.png")
+    if os.path.exists(second):
+        noise = float((np.abs(luma(second) - off) > STEP).mean())
     floor = FLOOR.get(name, DEFAULT_FLOOR)
     return {
         "kind": name,
@@ -111,12 +125,10 @@ def measure(name: str, weather: str) -> dict:
 
 
 def sheet(results: list) -> None:
-    os.makedirs(OUT, exist_ok=True)
     tiles = []
     for r in results:
         src = os.path.join(RAW, f"{r['kind']}_{r['weather']}_on0.png")
         im = Image.open(src).convert("RGB")
-        im.save(os.path.join(OUT, f"{r['kind']}_{r['weather']}.png"))
         x0, y0, x1, y1 = BOX
         pad = 80
         t = im.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad)).resize((320, 260))
@@ -143,24 +155,43 @@ def main() -> int:
     kinds = [n for n, _ in TARGETS if n in words] or [n for n, _ in TARGETS]
     conds = [w for w in WEATHERS if w in words] or WEATHERS
     if "--measure" not in sys.argv:
+        # Shots kept from a run with other cameras are no use: start over.
+        cams = os.path.join(RAW, "cameras.json")
+        if os.path.exists(cams) and json.load(open(cams)) != [list(t) for t in TARGETS]:
+            import shutil
+            shutil.rmtree(RAW)
+        os.makedirs(RAW, exist_ok=True)
+        with open(cams, "w") as f:
+            json.dump(TARGETS, f)
         jobs = [
             (name, cam, w, hide, n)
             for name, cam in TARGETS
             if name in kinds
             for w in conds
-            for hide, n in [(False, 0), (True, 0), (True, 1)]
+            for hide, n in [(False, 0), (True, 0)] + ([(True, 1)] if NOISE else [])
         ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             for out in pool.map(lambda j: shot(*j), jobs):
                 print("shot", os.path.relpath(out, ROOT), flush=True)
+    missing = [
+        f"{name} {w}"
+        for name, _ in TARGETS
+        if name in kinds
+        for w in conds
+        for k in ("on0", "off0")
+        if not os.path.exists(os.path.join(RAW, f"{name}_{w}_{k}.png"))
+    ]
+    if missing:
+        print("FAIL shots missing (the render failed?):", sorted(set(missing)))
+        return 2
     results = [
         measure(name, w)
         for name, _ in TARGETS
         for w in WEATHERS
-        if os.path.exists(os.path.join(RAW, f"{name}_{w}_off1.png"))
+        if os.path.exists(os.path.join(RAW, f"{name}_{w}_off0.png"))
     ]
     sheet(results)
-    with open(os.path.join(OUT, "legibility.json"), "w") as f:
+    with open(OUT + ".json", "w") as f:
         json.dump(results, f, indent=1)
     for r in results:
         print(

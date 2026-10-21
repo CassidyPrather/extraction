@@ -804,6 +804,7 @@ pub fn jam_visuals(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut mats: Local<Option<(Handle<StandardMaterial>, Handle<StandardMaterial>)>>,
+    mut hull: Local<Option<Handle<StandardMaterial>>>,
 ) {
     let (brass, copper) = mats
         .get_or_insert_with(|| {
@@ -820,9 +821,28 @@ pub fn jam_visuals(
         })
         .clone();
     for (e, gun) in &added {
-        if gun.firearm.def.action != ActionKind::SemiAuto {
+        // (A pump's short stroke jams a shell on the case: its double
+        // feed.)
+        if !matches!(
+            gun.firearm.def.action,
+            ActionKind::SemiAuto | ActionKind::Pump
+        ) {
             continue;
         }
+        let pump = gun.firearm.def.action == ActionKind::Pump;
+        // A shotgun's is a red plastic hull, not brass.
+        let shell = if pump {
+            hull.get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.55, 0.08, 0.06),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                })
+            })
+            .clone()
+        } else {
+            brass.clone()
+        };
         let (r, len) = case_size(&gun.firearm.def.cartridge);
         let case = meshes.add(Cylinder::new(r, len));
         let bullet = meshes.add(Cylinder::new(r * 0.75, len * 0.45));
@@ -843,7 +863,13 @@ pub fn jam_visuals(
         // Double feed: the case still in the chamber's mouth, the next
         // round tipped up into it from below.
         // Set into the port's opening, so it shows past the cover or slide.
-        let bore = Vec3::new(port.x * 0.6, port.y + r, port.z);
+        // (A shell is fat: it sits down in the port, under the receiver's
+        // top.)
+        let bore = Vec3::new(
+            port.x * 0.6,
+            if pump { port.y - r * 0.3 } else { port.y + r },
+            port.z,
+        );
         let pair = commands
             .spawn((
                 Name::new("Double feed"),
@@ -855,7 +881,7 @@ pub fn jam_visuals(
             .id();
         commands.spawn((
             Mesh3d(case.clone()),
-            MeshMaterial3d(brass.clone()),
+            MeshMaterial3d(shell.clone()),
             Transform::from_xyz(0.0, 0.0, -len * 0.3)
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, Vec3::NEG_Z)),
             ChildOf(pair),
@@ -864,18 +890,20 @@ pub fn jam_visuals(
         let round = commands
             .spawn((
                 Mesh3d(case),
-                MeshMaterial3d(brass.clone()),
+                MeshMaterial3d(shell.clone()),
                 Transform::from_xyz(0.0, -r * 0.5, len * 0.5)
                     .with_rotation(Quat::from_rotation_arc(Vec3::Y, tip)),
                 ChildOf(pair),
             ))
             .id();
-        commands.spawn((
-            Mesh3d(bullet),
-            MeshMaterial3d(copper.clone()),
-            Transform::from_xyz(0.0, len * 0.65, 0.0),
-            ChildOf(round),
-        ));
+        if !pump {
+            commands.spawn((
+                Mesh3d(bullet),
+                MeshMaterial3d(copper.clone()),
+                Transform::from_xyz(0.0, len * 0.65, 0.0),
+                ChildOf(round),
+            ));
+        }
     }
     for (prop, parent, mut vis) in &mut props {
         let on = guns

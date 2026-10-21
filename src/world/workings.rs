@@ -65,7 +65,14 @@ impl Plugin for WorkingsVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (canary_glow, timber_looks, fall_looks, cart_looks, gas_flash),
+            (
+                canary_glow,
+                canary_lamp,
+                timber_looks,
+                fall_looks,
+                cart_looks,
+                gas_flash,
+            ),
         );
     }
 }
@@ -640,11 +647,7 @@ fn canary_glow(
     mut lights: Query<&mut PointLight>,
 ) {
     for (e, c, children) in &canaries {
-        let colour = Color::srgb(
-            (c.alarm * 2.0).min(1.0),
-            (1.0 - (c.alarm - 0.5).max(0.0) * 2.0).max(0.0),
-            0.2 * (1.0 - c.alarm),
-        );
+        let colour = Color::from(lamp_colour(c.alarm));
         let intensity = if c.life > 0.0 { 900.0 } else { 0.0 };
         let mut found = false;
         for k in children.into_iter().flatten() {
@@ -668,6 +671,76 @@ fn canary_glow(
                 ChildOf(e),
             ));
         }
+    }
+}
+
+/// The bird lamp's flame: a calm warm white with no gas about, amber as
+/// it gathers, red near the pocket's heart.
+fn lamp_colour(alarm: f32) -> LinearRgba {
+    let calm = LinearRgba::rgb(1.0, 0.78, 0.45);
+    let amber = LinearRgba::rgb(1.0, 0.45, 0.08);
+    let red = LinearRgba::rgb(1.0, 0.08, 0.03);
+    let a = alarm.clamp(0.0, 1.0);
+    if a < 0.5 {
+        calm.mix(&amber, a * 2.0)
+    } else {
+        amber.mix(&red, (a - 0.5) * 2.0)
+    }
+}
+
+/// A canary's lamp window, its own material (Kit's `glow` node shares the
+/// library's `Lamp`).
+#[derive(Component)]
+struct CanaryLamp(Handle<StandardMaterial>);
+
+/// Client: the bird lamp's window glows with the canary's light, amber to
+/// red as the gas gathers, and goes dark when it's dead.
+fn canary_lamp(
+    mut commands: Commands,
+    canaries: Query<(Entity, Ref<Canary>, Option<&CanaryLamp>)>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    mut meshes: Query<&mut MeshMaterial3d<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, c, lamp) in &canaries {
+        let Some(lamp) = lamp else {
+            // Once its model's in: the `glow` node's meshes, a material
+            // of their own.
+            let Some(glow) = children
+                .iter_descendants(e)
+                .find(|d| names.get(*d).is_ok_and(|n| n.as_str() == "glow"))
+            else {
+                continue;
+            };
+            let parts: Vec<Entity> = std::iter::once(glow)
+                .chain(children.iter_descendants(glow))
+                .filter(|d| meshes.contains(*d))
+                .collect();
+            let Some(first) = parts.first() else {
+                continue;
+            };
+            let base = materials
+                .get(&meshes.get(*first).unwrap().0)
+                .cloned()
+                .unwrap_or_default();
+            let own = materials.add(base);
+            for d in parts {
+                if let Ok(mut m) = meshes.get_mut(d) {
+                    m.0 = own.clone();
+                }
+            }
+            commands.entity(e).insert(CanaryLamp(own));
+            continue;
+        };
+        if !c.is_changed() {
+            continue;
+        }
+        let Some(mut m) = materials.get_mut(&lamp.0) else {
+            continue;
+        };
+        let lit = if c.life > 0.0 { 3.0 } else { 0.0 };
+        m.emissive = lamp_colour(c.alarm) * lit;
     }
 }
 

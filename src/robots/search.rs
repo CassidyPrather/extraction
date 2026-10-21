@@ -183,7 +183,10 @@ impl Plugin for SearchPlugin {
             .add_message::<CalledOut>()
             .add_message::<MindShift>()
             .init_resource::<MindLog>()
-            .add_systems(FixedUpdate, call_out.after(super::perceive))
+            .add_systems(
+                FixedUpdate,
+                (call_out, forget_the_downed).after(super::perceive),
+            )
             .add_systems(FixedPostUpdate, announce)
             .add_systems(Update, wrist_lines);
     }
@@ -292,6 +295,32 @@ pub fn search_step(brain: &mut Brain, pos: Vec3, near: f32, dt: f32, sweep: f32)
 
 /// Nothing found: back to the job, cut short (so a robot that keeps being
 /// distracted does leave), or home if finding you was the job.
+/// A player who goes down is let go: every robot holding them forgets
+/// them and gives up (responders go home), so nobody is waiting at the
+/// truck when they come to.
+fn forget_the_downed(
+    mut downed: MessageReader<crate::health::Downed>,
+    mut robots: Query<(&mut Awareness, &mut Brain, &mut Job)>,
+) {
+    for d in downed.read() {
+        for (mut aware, mut brain, mut job) in &mut robots {
+            if aware.target != Some(d.player) {
+                continue;
+            }
+            aware.target = None;
+            aware.last_known = None;
+            aware.can_see_target = false;
+            aware.suspicion = 0.0;
+            if matches!(
+                *brain,
+                Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
+            ) {
+                give_up(&mut brain, &mut job);
+            }
+        }
+    }
+}
+
 pub fn give_up(brain: &mut Brain, job: &mut Job) {
     if matches!(job.kind, JobKind::Response) || job.duration < 20.0 {
         *brain = Brain::Leave { to: job.exit };

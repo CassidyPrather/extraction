@@ -105,7 +105,10 @@ def analyse(out, rec, grid):
             flags.append(("warn", f"{s:.1f} m along {k}, the map clears {f_:.1f} m"))
     if rec.get("blockouts"):
         flags.append(("error", f"{rec['blockouts']} blockout boxes still standing"))
-    if rec.get("floating"):
+    # animals/ hold pose sheets (each pose its own node, laid out side by
+    # side, one shown at a time): their flying poses aren't floating.
+    pose_sheet = rec["kind"] == "model" and rec["subject"].startswith("animals/")
+    if rec.get("floating") and not pose_sheet:
         names = sorted(set(rec["floating"]))
         flags.append(("warn", f"floating: {', '.join(names[:6])}" + (" ..." if len(names) > 6 else "")))
     return flags, stats

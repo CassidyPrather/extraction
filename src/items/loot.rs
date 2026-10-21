@@ -75,6 +75,7 @@ pub fn roll_zone_loot(world: &mut World) {
         if let Some(spots) = spots {
             spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
         }
+        crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map);
     }
     queue.apply(world);
     crate::anomaly::roll_artifacts(world);

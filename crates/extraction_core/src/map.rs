@@ -50,6 +50,15 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// How cold the valley is, 0..=1: up high in the wind a body chills
+    /// (`cold`). Most valleys aren't.
+    #[serde(default)]
+    pub cold: f32,
+    /// How much of the valley is scree, 0..=1: rock fields everywhere
+    /// rather than where the slow noise puts them (`rocks`). Bare high
+    /// ground is all stone.
+    #[serde(default)]
+    pub scree: f32,
     /// Where snow can lie (m): above it, falling weather comes as snow
     /// and lies on what faces up. None: the valley's too low
     /// (`world::snow`).
@@ -214,6 +223,14 @@ pub struct RoadDef {
     /// left alone and the game builds a bridge deck instead.
     #[serde(default)]
     pub bridges: Vec<BridgeDef>,
+    /// Spans where the road runs under an avalanche gallery: a concrete
+    /// roof on the uphill side's wall, open to the valley (on columns along
+    /// the downhill edge). Same form as `bridges`: centre `at` (snapped to
+    /// the road) and `length`. The road under it is graded as usual; the
+    /// gallery adds nothing to the nav grid (its wall stands on the cut
+    /// bank beyond the shoulder, its columns beyond the road's edge).
+    #[serde(default)]
+    pub galleries: Vec<BridgeDef>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -437,6 +454,10 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // The ranger tower's legs and stair, open on top under its survey
         // mast and beacon.
         "survey_tower" => [6.0, 16.6, 5.0],
+        // Kit's car wrecks (`art/vehicles/wrecks.py`).
+        "wreck_lada" => [1.8, 1.45, 4.3],
+        "wreck_uaz" => [1.9, 2.0, 4.1],
+        "wreck_lorry" => [2.6, 2.2, 6.4],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
@@ -474,6 +495,17 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "stock_bicycles" => [2.4, 1.2, 24.0],
         "stock_bins" => [1.6, 1.3, 20.0],
         "sorting_gantry" => [20.0, 14.0, 6.0],
+        // Rime Fell's (src/world/fell.rs): the ore mill stepped down the
+        // slope in four bays (its floors 4 m apart, climbing toward +z,
+        // the headhouse on the top one), the observatory on its summit
+        // (its radio mast to 20 m), the funicular's two stations (the
+        // platform along each one's -x face is inside; the track runs
+        // past outside it) and its car on the grade.
+        "ore_mill" => [20.0, 22.0, 40.0],
+        "observatory" => [12.0, 20.0, 10.0],
+        "funicular_lower" => [10.0, 8.0, 16.0],
+        "funicular_upper" => [12.0, 12.0, 14.0],
+        "funicular_car" => [3.2, 4.0, 8.0],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
@@ -699,6 +731,81 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 0.95,
             clear: 3.53,
         }],
+        // The mill's front door, the door onto each bay's terrace on the
+        // +x side (their floors at 0, 4, 8 and 12 m), the back door on
+        // the top bay.
+        "ore_mill" => &[
+            Entrance {
+                at: [-3.0, -20.0],
+                out: [0.0, -1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, -15.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, -5.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, 5.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, 15.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [4.0, 20.0],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+        ],
+        "observatory" => &[Entrance {
+            at: [0.0, -5.0],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 1.0,
+        }],
+        "funicular_lower" => &[
+            Entrance {
+                at: [1.6, 7.9],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.2,
+            },
+            Entrance {
+                at: [-1.8, 6.8],
+                out: [-1.0, 0.0],
+                width: 0.95,
+                clear: 1.2,
+            },
+        ],
+        "funicular_upper" => &[
+            Entrance {
+                at: [-3.2, 5.7],
+                out: [-1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [2.0, 7.0],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+        ],
         _ => &[],
     }
 }
@@ -712,6 +819,8 @@ pub fn prefab_foundation(id: &str) -> f32 {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
+        // Rime Fell's: stone footings and the stations' platforms.
+        "observatory" | "funicular_lower" | "funicular_upper" => 0.6,
         _ => 0.0,
     }
 }
@@ -731,11 +840,24 @@ pub fn prefab_clearance(id: &str) -> f32 {
 }
 
 /// Whether a prefab wants the ground levelled under it (buildings do;
-/// bridges, gates over roads and the anomaly don't).
+/// bridges, gates over roads and the anomaly don't, nor a garden fence:
+/// its posts follow the ground, and a pad levelled for a run that meets a
+/// house's back wall reached under the house and lifted its door off its
+/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)).
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
-        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar" | "target"
+        "footbridge"
+            | "anomaly_core"
+            | "quarantine_gate"
+            | "radio_mast"
+            | "boxcar"
+            | "target"
+            | "fence_garden"
+            // Stepped down its slope: the map terraces the ground for it.
+            | "ore_mill"
+            // On the line's grade.
+            | "funicular_car"
     )
 }
 
@@ -775,23 +897,44 @@ pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron
 pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.ron");
 /// The fourth (docs/FOURTH_VALLEY.md).
 pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_reservoir.ron");
+/// The fifth (docs/FIFTH_VALLEY.md).
+pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
 
 /// Every valley the truck drives to, (map id, map text), in the order a
 /// career meets them. Tests that hold "every valley" to something go over
 /// this list, so a new valley is checked by all of them; a test that a map
 /// file outside it fails keeps the list whole.
-pub const VALLEYS: [(&str, &str); 4] = [
+pub const VALLEYS: [(&str, &str); 5] = [
     ("marrow_creek", MARROW_CREEK),
     ("kettle_pass", KETTLE_PASS),
     ("cinder_works", CINDER_WORKS),
     ("sallow_reservoir", SALLOW_RESERVOIR),
+    ("rime_fell", RIME_FELL),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    /// A road's avalanche galleries read like its bridges, and a road
+    /// written before galleries existed has none.
+    #[test]
+    fn road_galleries_parse_and_default_empty() {
+        let road = |extra: &str| -> RoadDef {
+            ron::from_str(&format!(
+                "(kind: Gravel, points: [(0.0, 0.0), (100.0, 0.0)], width: 6.0{extra})"
+            ))
+            .unwrap()
+        };
+        assert!(road("").galleries.is_empty());
+        let r = road(", galleries: [(at: (50.0, 1.0), length: 40.0)]");
+        assert_eq!(r.galleries.len(), 1);
+        assert_eq!(r.galleries[0].at, [50.0, 1.0]);
+        assert_eq!(r.galleries[0].length, 40.0);
+        assert!(r.bridges.is_empty());
+    }
 
     /// Every map file but the Training Yard is a valley on [`VALLEYS`], and
     /// the list's text is the file's.
@@ -926,6 +1069,42 @@ mod tests {
                 // The truck stops on the far side of the dam.
                 assert!(m.at[1] < 100.0, "{} is below the dam", m.name);
             }
+        }
+    }
+
+    /// Rime Fell (docs/FIFTH_VALLEY.md): high and cold, climbing north the
+    /// whole way. The settlement's bench stands well over the Bottoms and
+    /// under the col; the observatory's summit is the valley's top; the
+    /// mill's levels step 4 m up the knoll.
+    #[test]
+    fn rime_fell_parses_and_builds() {
+        let map = MapDef::from_ron(RIME_FELL).expect("map parses");
+        assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
+        let hm = Heightmap::build(&map);
+        let gate = hm.height([-10.0, 266.0]);
+        let bench = hm.height([-30.0, 20.0]);
+        let col = hm.height([70.0, -262.0]);
+        let summit = hm.height([-208.0, -210.0]);
+        assert!(bench > gate + 30.0, "bench {bench} over the Bottoms {gate}");
+        assert!(col > bench + 30.0, "col {col} over the bench {bench}");
+        assert!(summit > col + 8.0, "summit {summit} over the col {col}");
+        for (k, z) in [45.0, 25.0, 15.0, 5.0].into_iter().enumerate() {
+            let h = hm.height([125.0, z]);
+            let want = 90.0 + 4.0 * k as f32;
+            assert!(
+                (h - want).abs() < 0.3,
+                "mill terrace {k} at {h}, not {want}"
+            );
+        }
+        assert!(hm.water_level([168.0, -185.0]).is_some(), "the tarn");
+        for m in map.markers.iter().filter(|m| {
+            matches!(
+                m.kind,
+                MarkerKind::Insertion | MarkerKind::Rendezvous | MarkerKind::Offering
+            )
+        }) {
+            assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
+            assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
         }
     }
 

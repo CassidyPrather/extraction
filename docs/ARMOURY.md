@@ -20,7 +20,6 @@ militia store, a signal box, a collapsed police post.
 | TOZ-8M | `toz8` | **Quiet and cheap**: a single-shot .22 bolt rifle. Robots hear it at about a third of a pistol's reach, and a box of fifty weighs nothing. Useless against plate, good for an eye, a joint, a rook. Rimfire misfires: lift the bolt and drop it to strike again. | common in Marrow Creek (hunting country) |
 | SPSh-44 signal pistol | `flare_pistol` | **Light and a lure**: a 26 mm break-open flare gun. A white star lights the ground under it for eight seconds as it sinks; a red or green one is a signal. Robots look at a burning flare and go to where it falls; a flare to the face dazzles. It lights you too. | signal boxes, rail and works sites: Cinder Works, the reservoir |
 | RPK-74 | `rpk74` | **Resting on cover**: a long, heavy-barrelled AK with a folding bipod. Swing the legs down and set them on a wall top, a sill or the ground, and the gun lies still and soaks up its recoil. Takes AK magazines, and its own 45. | rare; Cinder Works and the militia posts |
-
 | Home-made crossbow | `crossbow` | **Silent, and its ammunition comes back**: a leaf-spring prod on a plank, drawn by hand to a gate-latch nut. A bolt flies slow and drops, lies where it lands, and can be picked up and shot again; the bench files new ones from scrap, and with the vice builds the bow itself. The most "nothing is bought" gun there is. | rare; Marrow Creek's poachers |
 
 ## What a gun needs
@@ -126,6 +125,9 @@ lies burning.
   look. A flare is a lure.
 - A star that strikes a robot burns it (20) and dazzles it
   (`robots::Stunned`, 3 s).
+- Its fault is the cartridge's: paper-cased, a damp one misfires (6% on
+  top of the gun's own) and stays in the barrel. Break it, take it out,
+  put in another.
 - The cartridges are told apart by touch in the dark: the white wad is
   smooth, the red has one bump, the green two.
 - The bench (with the vice) packs two white stars from powder, brass and
@@ -140,7 +142,8 @@ them down (or up) to swing them out (or fold them); they swing about
 the clamp's pivot (-1.279 rad, `BIPOD_DEPLOY`). Deployed, the feet are a
 rest probe for `feel`'s bracing that counts the bare ground too: set the
 feet on a wall top, a sill or the earth and the gun lies still, with
-bracing's recoil and sway.
+bracing's recoil and sway. Flat mode and bots: `L` swings the legs
+(`MacroKind::Bipod`); the `lmg_drill` fires off them.
 
 ### Home-made crossbow (`crossbow`)
 
@@ -190,8 +193,8 @@ the common table plus a few things of its own:
 ## Shots
 
 `docs/shots/armoury/`: each gun in the gallery (`--gallery <id>+open`
-works the action and swings a bipod down; give it 60 frames so the
-model has loaded):
+works the action and swings a bipod down, `+jam` puts it in a double
+feed; give it 60 frames so the model has loaded):
 
 ```bash
 EXTRACTION_BIN=target/fast/extraction scripts/shot.sh docs/shots/armoury/rpk74_open.png \

@@ -8,9 +8,11 @@ pub mod beams;
 pub mod bridges;
 pub mod buildings;
 pub mod clutter;
+pub mod cold;
 pub mod cover;
 pub mod dam;
 pub mod decay;
+pub mod fell;
 pub mod furnace;
 pub mod halos;
 pub mod impostors;
@@ -18,6 +20,7 @@ pub mod notes;
 pub mod overgrowth;
 pub mod puddles;
 pub mod rain;
+pub mod roadworks;
 pub mod rocks;
 pub mod scenes;
 pub mod shafts;
@@ -151,6 +154,8 @@ impl Plugin for WorldPlugin {
             snow::SnowPlugin,
             scenes::ScenesPlugin,
             underground::UndergroundPlugin,
+            roadworks::RoadworksPlugin,
+            cold::ColdPlugin,
         ))
         .add_systems(PreStartup, init_zone)
         .add_systems(Update, buildings::swing_doors)
@@ -251,7 +256,8 @@ impl Plugin for WorldVisualsPlugin {
             halos::HalosPlugin,
             storm::StormPlugin,
             snow::SnowVisualsPlugin,
-        ));
+        ))
+        .add_plugins(roadworks::RoadworksVisualsPlugin);
     }
 }
 

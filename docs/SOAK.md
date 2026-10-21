@@ -148,11 +148,211 @@ minute).
   after a save and load). The Surge reset now lays the leftovers for the
   new cycle (`safehouse::relay_leftovers`). Found by the round trip after
   going down, which ran after a Surge.
-- **Saved past the Surge's coming.** The game opens at base, where the
-  Surge has been and gone, so the Zone re-rolls on load. That is by
-  design, and what you own comes through whole. Quitting mid-raid also
-  puts you back at base with everything you carried. That is a design
-  question (a save-quit escape), not a bug, and is left to the
-  coordinator.
+- **Quitting mid-raid was an escape.** Closing the game out in the Zone
+  (or in the Surge) reopened at base with everything you carried, so
+  quitting got you out of any danger without extracting. The rule now,
+  because VR crashes and flat headset batteries are common and the
+  honest player should lose nothing:
+
+  - A save made out in the Zone records the raid (`ZoneSave::raid`):
+    where you stood and which way you faced, and the phase. That covers
+    out, the truck on its way (with its arrival time), the truck waiting
+    (with how long it will wait), and down.
+  - Loading it resumes the raid there. It's the same valley and the same
+    raid (not counted again), with your carried kit on you and what was
+    in your hands at your feet. The Zone is as saved (loot, remains,
+    breakages) and the clock carries on, so a Surge that was raging
+    still is.
+  - You're nudged inside the map, and up onto the ground if more than
+    40 m under it (the underground sites are shallower). Robots aren't
+    saved: the director sends its own.
+  - Down is down: the convoy's order goes out as it would have.
+  - At base, or pulling out with the truck, there's nothing to resume:
+    it opens at base.
+
+  Tests: `persist::tests::quitting_mid_raid_resumes_where_you_stood`,
+  and the round trips in `every_item_is_saved_once_through_a_raids_awkward_moments`
+  (saving in the Surge comes back still in it).
 - **Relocating** (`relocating_keeps_every_item`): the career is saved
   pointed at the new valley, and the kit arrives whole.
+
+## Chaos monkey
+
+`src/soak/chaos.rs`: a seeded bot at the headset's controls. It writes
+poses, grip, trigger and buttons into `RigInput` through the VR harness
+(`vr_harness::Vr`), so what the hand finds, reach and collision are all in
+play, and does random but plausible things: walks, sprints, jumps and
+turns; teleports to doors, ladders, the water's edge, items or anywhere
+inside the fence; grabs whatever grab point is in reach (items, doors,
+ladders, a held gun's slide, by grip or trigger); waves both hands
+through walls and floors; throws at 1-40 m/s, often at the floor; drops;
+stows into pouches, the holster and the pack (sometimes dropping the
+magazine first: holstering mid-reload); takes things back out; pulls the
+pack over the shoulder; pulls triggers and presses the magazine release
+and slide stop; pulls the magazine with the other hand while still
+firing; brings a held magazine to the other hand's gun; sits, kneels and
+crouches; flips comfort settings (seated, left-handed, one-handed,
+smooth turn, climb teleport, finger grab) mid-raid; pokes the truck's
+buttons; climbs ladders hand over hand and lets go halfway; spawns a few
+random catalog items to play with; and fakes tracking glitches (a hand
+jumping up to 60 m for a frame or two, holding something or not).
+
+After every action it checks:
+
+- nothing has a non-finite `Transform` or velocity;
+- no loose item is off the map, more than 0.6 m under the ground (or an
+  underground site's floor), or flying faster than 45 m/s;
+- an item is in one place at a time: a hand's `holding` and the item's
+  `Held` agree, nothing is both held and socketed or stowed, every socket
+  and its occupant's `InSocket` agree, every pack's list and its items'
+  `InBackpack` agree, and no socket or pack lists a despawned item;
+- guns, magazines, tools and artifacts are never despawned (food and
+  ammunition may be used up);
+- a hand that opened lets go within 20 frames;
+- the player stays over the ground, and doesn't go nowhere on six walks
+  in a row.
+
+Each finding prints the last two dozen actions. `chaos_monkey_short`
+(three seeds, 30 s each, yard and Marrow Creek with robots) is in the
+suite. The long run:
+
+```bash
+CHAOS_SEEDS=1-20 CHAOS_SECS=600 CHAOS_MAP=all cargo test --lib \
+    chaos_monkey_long -- --ignored --nocapture
+```
+
+`CHAOS_MAP` takes a map, a comma list or `all`; `CHAOS_ROBOTS=1` turns
+robots on; `CHAOS_TRACE=<entity index>` prints that entity every frame
+and anything moving faster than 50 m/s. A debug build runs about real
+time (a two-minute seed in 35-75 s).
+
+### What it found
+
+Run on every valley, seeds 1-6 for two minutes each without robots and
+11-14 with them (about 40 game-minutes of monkey):
+
+- **Thrown and dropped items left at hundreds of m/s** (up to 1,800 m/s,
+  off the map) after a tracking jump or a teleport of the playspace with
+  something in hand: a hand's velocity is measured in the world, so a
+  jump of the hand or the body is a throw. Fixed with the release cap
+  (`interact::MAX_THROW`, Physics edge cases below); the monkey's
+  glitch action keeps it covered.
+- **Curios spawned inside the slag heaps' hill** at Cinder Works and fell
+  through it: the anomaly prefab sits on its lowest corner over a
+  hilltop, 0.5 m under the ground at its centre, where its loot spot is.
+  Every building loot spot is now put on or over the ground
+  (`buildings::loot_spot_at`); gauge
+  `every_loot_spot_is_over_the_ground` checks every spot on every map.
+- **A pack listed an EMP grenade that had gone off inside it.** Nothing
+  took a despawned item out of its pack's list (or its socket). Observers
+  on `Despawn` now do, whatever despawned it; test
+  `a_despawned_item_leaves_its_pack_and_pouch`.
+- **A cleaning rod went off like a shell**, three times in ~70 runs
+  (280-450 m/s): a 1 cm by 60 cm rod (`dims` 0.008 x 0.008 x 0.6, the
+  collider floored at 1 cm) with almost no inertia about its length.
+  Open: wants a thicker collider floor for items (2 cm) and a speed cap
+  on loose items like the robots' bodies have (Physics edge cases).
+- **Items lying in tunnels the underground rasters don't know**: things
+  dropped in Marrow's civil-defence bunker (at (-8, 82), 6 m down) and
+  the Depot's intake ramp (at (-245, -152), 21 m down) lay still on a
+  floor where `underground::floor_under` says there is only rock; later
+  runs found the same near Kettle's mine (items at (-104, 34), 5 m down)
+  and Cinder's tunnel (the player at (-19, 100), 7 m down). Stranger:
+  on Sallow Reservoir, which has no underground site, items lay still 5 m
+  under the ground at (-9, 83) and (-231, -225), Marrow's bunker and
+  Depot ramp positions, as if Marrow's underground floors were built
+  in every valley. Anything
+  that uses it to tell "in a site" from "through the ground" (the lost
+  items' rescue, the monkey's own check) gets those wrong. Underground
+  has since widened `floor_under` to count a point as in a site up to its
+  room's own roof (not a flat 4.5 m) and given Sallow its own site (the
+  gallery at (-6, 172)). On their tree the same seeds found no "under"
+  finding near any site; what's left clusters at the maps' ±329 m edges
+  (things thrown over the rim falling away, which the lost items' rescue
+  brings back). They couldn't reproduce Marrow's floors in Sallow. The
+  long run plays several maps in one process (`CHAOS_MAP=all`), so a
+  stale cache from the map before would explain it. Re-run after the
+  merge, and send Underground the seed, frame and item if it shows again.
+- Small items (rounds, ammunition boxes, a pistol) still go through the
+  terrain now and then at 5-15 m/s, mostly dropped from a hand pushed
+  into the ground; the lost items' rescue brings them back. Open:
+  Physics edge cases.
+
+## Physics edge cases
+
+`src/soak/physics.rs` throws, heaps, buries and shoves things on Marrow
+Creek and watches every tick. Its rule for tunnelling: a body's middle
+never touches a surface (resting on one, it stays this side), so a
+middle whose path between two ticks passes through anything static has
+gone through it (`crossings`, `watch`). Final positions alone misled:
+items and the player that slid along a wall into a doorway, or skipped
+over a log pile, looked as if they'd gone through.
+
+| Test | What | Holds |
+| - | - | - |
+| `thrown_items_never_tunnel` | every catalog item at 10, 25 and 50 m/s at 60 outside walls (upright from 0.6 to 1.6 m, clear air in front), 60 spots of open ground and 30 of water | no NaN, nothing still flying at 20 m/s after 1.5 s, at most `THROUGH_ALLOWED` (5) of ~1,600 through anything |
+| `long_things_thrown_into_the_ground_stay_on_it` | rod, crowbar, rifles, knife, a round, spinning at 15 rad/s, into the ground at every angle | at most 2 of 96 through it |
+| `heaps_settle` | 60 items dropped in a column on three buildings' floors and the steepest hillside near the insertion | none under the floor, nothing thrown out faster than 8 m/s (12 on the hill), at most 3 still moving after 8 s |
+| `items_spawned_inside_things_are_not_launched` | items half and deep into walls, half into the ground, ten in one spot, in the truck | pushed out under `LAUNCH` (12 m/s; ten in one spot reach 10), never left under the ground |
+| `the_player_cant_be_pushed_through_walls` | sprint into 24 walls for 3 s, straight and glancing (0.6 rad either way), then walk 1.5 m on into them in the room | the capsule's middle never passes through anything |
+| `items_under_the_world_come_back` | an item shoved 6 m under the ground, one spawned 5 m under, one on an underground site's floor | back where it last rested; up on the ground; left where it is |
+| `a_tracking_jump_doesnt_launch_what_you_let_go` | the hand's tracking jumps 3 m in a frame while holding something, then lets go | it leaves at no more than `MAX_THROW` |
+
+### What it found
+
+- **A tracking glitch fired what you held at 80 m/s.** A hand's velocity
+  is smoothed from its pose each frame; a pose that jumps (tracking lost
+  and found, the playspace moved) gave a release of 80 m/s from one 3 m
+  jump. Release is capped at `interact::MAX_THROW` (25 m/s, a hard
+  overarm throw; spin at 40 rad/s), and so is the velocity a grab
+  starts with. (`src/interact/mod.rs`, the coordinator's.)
+- **Thin things went under the ground.** A cleaning rod (8 mm) or a loose
+  round thrown at the terrain slipped under its heightfield a third to a
+  half of the time, even at 10 m/s, and fell for ever: under a
+  heightfield there's nothing to push it back up. Swept CCD (on for
+  items) didn't stop it; a thicker collider helped (24 in 48 rounds down
+  to 2) but not for rods, and would float small things off the ground.
+- **Small fast things went through plank walls.** One 5.45 or 7.62
+  round in four thrown at a shed's or a house's wall at 50 m/s.
+- **A rod struck end-on blew up.** Its inertia along its length is
+  tiny: it spun up to 360 rad/s on impact and once left at 2,100 m/s.
+  Items now cap their speed at 60 m/s and spin at 60 rad/s
+  (`items::physical_bundle`; nothing the game does moves one faster).
+- **Whatever left the world stayed gone and kept falling.** The save
+  skipped items below -50 m, but the item was simulated, falling, for the
+  rest of the session.
+
+The fix for the last three is `src/items/lost.rs`, three backstops
+after each physics step:
+
+1. `no_tunnelling`: a loose item that moved more than 5 cm in a tick,
+   as fast as its speed says (a teleport isn't a flight), has its
+   middle's path ray-cast against static colliders; through one, it goes
+   back to where it struck, off the face by its half thickness, with a
+   little bounce and half its slide.
+2. `ground_skin`: a moving item more than 15 cm under the terrain (and
+   not down an underground site) is lifted back onto it.
+3. `recover_lost_items` (4 times a second): an item more than 1 m under
+   the ground and not over a site's floor (under its ceiling), or not
+   finite, goes back to where it last lay at rest, or onto the ground
+   over where it is.
+
+Throws through something: 47 of ~1,600 before, 4 after.
+
+### Open
+
+- (Closed: not a hole.) A water tower's face (Marrow Creek, about
+  (231, 21, -194)). Models: world checked it: the colliders are solid
+  cylinders a little proud of the model. The two "crossings" were small
+  rounds sinking a few millimetres into the curved foot and shaft on
+  contact, and both came to rest on the near side. The crossing check
+  now ignores a step that ends within 2 cm past a face (`SHALLOW`).
+- A sliver (an old photo, a letter) thrown at the ground at 25-50 m/s
+  now and then passes the terrain's surface for a tick before
+  `ground_skin` has it back up; a cleaning rod thrown end-on, spinning,
+  once in a hundred.
+- Ten items spawned in exactly one spot fly apart at up to 10 m/s
+  (Avian pushes each overlapping pair apart at up to 4 m/s). Loot spreads
+  what it spawns, so the game doesn't do this.
+- Doors (kinematic) aren't in `no_tunnelling`'s static set; nothing
+  showed going through one.

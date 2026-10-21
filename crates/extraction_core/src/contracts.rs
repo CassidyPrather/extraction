@@ -100,6 +100,8 @@ pub struct Contract {
     pub pay: &'static [(&'static str, u32)],
     pub trust: u32,
     pub unlocks: &'static [Unlock],
+    /// What he says when it's done ("" for the usual thanks).
+    pub done: &'static str,
 }
 
 /// Within this of a planted thing's place (m).
@@ -129,6 +131,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("field_dressing", 1), ("matches", 2)],
         trust: 1,
         unlocks: &[],
+        done: "",
     },
     Contract {
         id: "mast_relay",
@@ -156,6 +159,28 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("power_cell", 2), ("ammo_545", 2)],
         trust: 1,
         unlocks: &[Unlock::Recipe("pack_545_ap")],
+        done: "",
+    },
+    Contract {
+        id: "annas_tape",
+        name: "Anna's tape",
+        giver: "Anna",
+        says: &["Anna asked about a tape. Her playing, years ago. Mum's house."],
+        offered: Offered::Tier { tier: 1, at: 2 },
+        raided_all: false,
+        after: &[],
+        steps: &[Step::Bring {
+            map: "marrow_creek",
+            place: "Village",
+            item: "tape_practice",
+            // Hana's house by the well (Radio lays the tape there).
+            near: Some([-17.3, 93.7]),
+        }],
+        kit: &[],
+        pay: &[("canned_stew", 2), ("tea_tin", 1)],
+        trust: 1,
+        unlocks: &[],
+        done: "Driver: \"She'll cry. Good crying.\"",
     },
     Contract {
         id: "hajek_tin",
@@ -184,6 +209,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("regen_injector", 1), ("field_dressing", 2)],
         trust: 2,
         unlocks: &[Unlock::Recipe("pack_762x39_ap")],
+        done: "",
     },
     Contract {
         id: "walker_portrait",
@@ -209,6 +235,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("pu_scope", 1), ("ammo_762r", 2)],
         trust: 2,
         unlocks: &[Unlock::Recipe("pack_762r_ap")],
+        done: "",
     },
     Contract {
         id: "the_overflow",
@@ -236,6 +263,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("fuel_can", 1), ("radio", 1)],
         trust: 2,
         unlocks: &[Unlock::Valley("sallow_reservoir")],
+        done: "",
     },
     Contract {
         id: "scour_key",
@@ -265,6 +293,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("emp_trap", 1), ("ammo_545_ap", 2)],
         trust: 2,
         unlocks: &[],
+        done: "",
     },
     Contract {
         id: "the_heavy",
@@ -288,6 +317,7 @@ pub const CONTRACTS: &[Contract] = &[
         pay: &[("emp_grenade", 2), ("steel_plate", 1)],
         trust: 3,
         unlocks: &[],
+        done: "",
     },
 ];
 
@@ -485,6 +515,7 @@ mod tests {
             [
                 "post_counter",
                 "mast_relay",
+                "annas_tape",
                 "hajek_tin",
                 "walker_portrait",
                 "the_overflow",

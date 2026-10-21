@@ -31,6 +31,26 @@ struct Sway {
     // them plants are parted (0: not pushing).
     hand_a: vec4<f32>,
     hand_b: vec4<f32>,
+    // Snow lying (world::snow): x how much, y the line (m).
+    snow: vec4<f32>,
+    // Robots among the plants: xyz where, w how far round (0: none).
+    robot_a: vec4<f32>,
+    robot_b: vec4<f32>,
+    robot_c: vec4<f32>,
+    robot_d: vec4<f32>,
+}
+
+// How far a plant here sinks into lying snow (m): with the snow's depth,
+// above the line, by a little noise of its own; one plant in ten stands
+// out of it as a dry stalk. (Standing through it, the grass made a
+// snowfield read as a frosted lawn.)
+fn buried(world: vec3<f32>, phase: f32) -> f32 {
+    if (sway.snow.x <= 0.002) {
+        return 0.0;
+    }
+    let above = smoothstep(sway.snow.y - 3.0, sway.snow.y + 4.0, world.y);
+    let depth = sway.snow.x * above * (0.7 + 0.5 * fract(phase * 7.31));
+    return select(depth, depth * 0.35, fract(phase * 13.7) < 0.1);
 }
 
 // Parted round a hand: leaning away from it, more the nearer.
@@ -67,6 +87,8 @@ fn offset(world: vec3<f32>, weight: f32, phase: f32) -> vec3<f32> {
         o += vec3<f32>(out2.x, -0.5, out2.y) * near * 0.25 * weight;
     }
     o += parted(world, sway.hand_a, weight) + parted(world, sway.hand_b, weight);
+    o += parted(world, sway.robot_a, weight) + parted(world, sway.robot_b, weight)
+        + parted(world, sway.robot_c, weight) + parted(world, sway.robot_d, weight);
     return o;
 }
 
@@ -89,7 +111,8 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     );
 #ifdef VERTEX_UVS_B
     out.world_position = vec4<f32>(
-        out.world_position.xyz + offset(out.world_position.xyz, vertex.uv_b.x, vertex.uv_b.y),
+        out.world_position.xyz + offset(out.world_position.xyz, vertex.uv_b.x, vertex.uv_b.y)
+            - vec3<f32>(0.0, buried(out.world_position.xyz, vertex.uv_b.y), 0.0),
         1.0
     );
 #endif
