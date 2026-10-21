@@ -1934,7 +1934,8 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
     let h = 2.7;
     let thick = 0.18;
     let (x, z) = (w * 0.5, d * 0.5);
-    b.plinth(w, d, f, Mat::Concrete, Mat::Silt);
+    // Its footing banked in silt too (where the bed fell away from it).
+    b.plinth(w, d, f, Mat::Silt, Mat::Silt);
     let doorway = 1.1;
     b.shell(
         w,
@@ -2048,7 +2049,8 @@ fn chapel_drowned(b: &mut Builder) {
         top: 3.6,
         kind: OpeningKind::Window,
     };
-    b.plinth(w, d, f, Mat::Concrete, Mat::Silt);
+    // Its footing banked in silt too (where the bed fell away from it).
+    b.plinth(w, d, f, Mat::Silt, Mat::Silt);
     let doorway = 1.4;
     b.shell(
         w,
