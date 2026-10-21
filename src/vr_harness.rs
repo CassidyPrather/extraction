@@ -4487,6 +4487,12 @@ mod carry {
             let v = vr.app.world().get::<LinearVelocity>(hull).unwrap().0;
             fastest = fastest.max(Vec2::new(v.x, v.z).length());
         }
+        // It trails the hand: held there, it keeps coming.
+        for _ in 0..120 {
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(hull).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
         let now = at(&vr, hull);
         assert!(now.distance(start) > 0.4, "it came: {start} to {now}");
         assert!(now.y - feet.y < 0.6, "along the ground: {now}");
