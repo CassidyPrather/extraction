@@ -947,6 +947,8 @@ fn dress_gloves(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut bindposes: ResMut<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
 ) {
     for (e, v, parts, mut glove_mat) in &mut gloves {
         let path = glove_model(v.side);
@@ -996,11 +998,67 @@ fn dress_gloves(
             own.push((name.to_owned(), h.clone()));
             h
         };
-        crate::models::spawn_primitives(&mut commands, parts.model, palm, &mut mat);
+        // Every piece with the joint it rides on: the palm, then each
+        // finger segment.
+        let mut on: Vec<(Entity, &crate::models::ModelNode)> = vec![(parts.model, palm)];
         for &((finger, joint), j) in &parts.joints {
             match find_node(&model, &format!("finger_{finger}_{joint}")) {
-                Some(node) => crate::models::spawn_primitives(&mut commands, j, node, &mut mat),
+                Some(node) => on.push((j, node)),
                 None => warn!("{path} has no finger_{finger}_{joint}"),
+            }
+        }
+        // One skinned mesh per material, its vertices each riding their
+        // own joint: a glove is three draws, not one per segment (80 for
+        // the pair was 6.7% of the draw budget). The pieces are built in
+        // their joints' spaces, so every bind pose is the identity.
+        let joints: Vec<Entity> = on.iter().map(|(j, _)| *j).collect();
+        let mut by_mat: Vec<(String, Vec<(u16, Handle<Mesh>)>)> = Vec::new();
+        for (i, (_, node)) in on.iter().enumerate() {
+            for p in &node.primitives {
+                let name = p.material.clone().unwrap_or_else(|| "Glove".into());
+                match by_mat.iter_mut().find(|(n, _)| *n == name) {
+                    Some((_, v)) => v.push((i as u16, p.mesh.clone())),
+                    None => by_mat.push((name, vec![(i as u16, p.mesh.clone())])),
+                }
+            }
+        }
+        let skinned: Option<Vec<(String, Mesh)>> = by_mat
+            .iter()
+            .map(|(name, pieces)| {
+                let got: Option<Vec<(u16, &Mesh)>> = pieces
+                    .iter()
+                    .map(|(j, h)| meshes.get(h).map(|m| (*j, m)))
+                    .collect();
+                got.and_then(|g| skin(&g)).map(|m| (name.clone(), m))
+            })
+            .collect();
+        match skinned {
+            Some(skinned) => {
+                let poses = bindposes.add(bevy::mesh::skinning::SkinnedMeshInverseBindposes::from(
+                    vec![Mat4::IDENTITY; joints.len()],
+                ));
+                for (name, mesh) in skinned {
+                    commands.spawn((
+                        Mesh3d(meshes.add(mesh)),
+                        MeshMaterial3d(mat(Some(&name))),
+                        bevy::mesh::skinning::SkinnedMesh {
+                            inverse_bindposes: poses.clone(),
+                            joints: joints.clone(),
+                        },
+                        // A hand is always near; its bounds move with
+                        // every finger.
+                        bevy::camera::visibility::NoFrustumCulling,
+                        Transform::IDENTITY,
+                        Visibility::Inherited,
+                        ChildOf(parts.model),
+                    ));
+                }
+            }
+            None => {
+                // A mesh not there to merge: each piece on its joint.
+                for (j, node) in &on {
+                    crate::models::spawn_primitives(&mut commands, *j, node, &mut mat);
+                }
             }
         }
         for b in &parts.boxes {
@@ -1008,6 +1066,61 @@ fn dress_gloves(
         }
         glove_mat.0 = own.into_iter().map(|(_, h)| h).collect();
     }
+}
+
+/// Merges meshes, each riding one joint (its index into a skinned mesh's
+/// joints), into one: every vertex weighted wholly to its own joint, in
+/// that joint's space. `None` if a piece has no positions.
+pub(crate) fn skin(pieces: &[(u16, &Mesh)]) -> Option<Mesh> {
+    use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues as V};
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut uv: Vec<[f32; 2]> = Vec::new();
+    let mut tan: Option<Vec<[f32; 4]>> = Some(Vec::new());
+    let mut joints: Vec<[u16; 4]> = Vec::new();
+    let mut weights: Vec<[f32; 4]> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    for (j, m) in pieces {
+        let Some(V::Float32x3(p)) = m.attribute(Mesh::ATTRIBUTE_POSITION) else {
+            return None;
+        };
+        let base = pos.len() as u32;
+        let n = p.len();
+        pos.extend_from_slice(p);
+        match m.attribute(Mesh::ATTRIBUTE_NORMAL) {
+            Some(V::Float32x3(v)) => nrm.extend_from_slice(v),
+            _ => nrm.extend(std::iter::repeat_n([0.0, 1.0, 0.0], n)),
+        }
+        match m.attribute(Mesh::ATTRIBUTE_UV_0) {
+            Some(V::Float32x2(v)) => uv.extend_from_slice(v),
+            _ => uv.extend(std::iter::repeat_n([0.0, 0.0], n)),
+        }
+        match (&mut tan, m.attribute(Mesh::ATTRIBUTE_TANGENT)) {
+            (Some(t), Some(V::Float32x4(v))) => t.extend_from_slice(v),
+            _ => tan = None,
+        }
+        joints.extend(std::iter::repeat_n([*j, 0, 0, 0], n));
+        weights.extend(std::iter::repeat_n([1.0, 0.0, 0.0, 0.0], n));
+        match m.indices() {
+            Some(Indices::U16(i)) => idx.extend(i.iter().map(|k| base + *k as u32)),
+            Some(Indices::U32(i)) => idx.extend(i.iter().map(|k| base + k)),
+            None => idx.extend(base..base + n as u32),
+        }
+    }
+    let mut out = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, V::Uint16x4(joints))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, weights)
+    .with_inserted_indices(Indices::U32(idx));
+    if let Some(t) = tan {
+        out.insert_attribute(Mesh::ATTRIBUTE_TANGENT, t);
+    }
+    Some(out)
 }
 
 /// A finger pointed: the index out, bent a little so its tip comes in line
@@ -1629,6 +1742,34 @@ mod glove_tests {
     /// The right wrist's display is the left's mirrored across the hand's
     /// X (a left-handed player's watch), its text turned so it reads the
     /// right way round, not as a mirror image.
+    /// Merged into one skinned mesh, every piece keeps its vertices and
+    /// triangles, each vertex wholly on its piece's joint.
+    #[test]
+    fn skinning_merges_the_pieces_onto_their_joints() {
+        use bevy::mesh::VertexAttributeValues as V;
+        let a = Mesh::from(Cuboid::new(0.1, 0.1, 0.1));
+        let b = Mesh::from(Sphere::new(0.05).mesh().uv(8, 4));
+        let (na, nb) = (a.count_vertices(), b.count_vertices());
+        let ia = a.indices().unwrap().len();
+        let ib = b.indices().unwrap().len();
+        let m = skin(&[(0, &a), (3, &b)]).expect("skinned");
+        assert_eq!(m.count_vertices(), na + nb);
+        assert_eq!(m.indices().unwrap().len(), ia + ib);
+        let Some(V::Uint16x4(j)) = m.attribute(Mesh::ATTRIBUTE_JOINT_INDEX) else {
+            panic!("no joints");
+        };
+        assert!(j[..na].iter().all(|j| *j == [0, 0, 0, 0]));
+        assert!(j[na..].iter().all(|j| *j == [3, 0, 0, 0]));
+        // The second piece's triangles index its own vertices.
+        assert!(
+            m.indices()
+                .unwrap()
+                .iter()
+                .skip(ia)
+                .all(|i| (na..na + nb).contains(&i))
+        );
+    }
+
     #[test]
     fn the_right_wrist_display_is_the_left_mirrored_and_reads() {
         let m = |v: Vec3| Vec3::new(-v.x, v.y, v.z);
