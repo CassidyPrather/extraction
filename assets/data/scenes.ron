@@ -795,7 +795,7 @@
         rot: 0.0,
         pieces: [
             Prop(model: "walker_wreck", at: (0.0, 0.0, 0.0), rot: 30.0, size: (1.0, 0.7, 1.5)),
-            Prop(model: "jars", at: (0.0, 0.7, 0.0), rot: 30.0, size: (0.45, 0.18, 0.1), collide: false),
+            Prop(model: "flower_jars", at: (0.0, 0.7, 0.0), rot: 30.0, size: (0.34, 0.4, 0.2), collide: false),
             Chair(at: (1.5, 0.7), rot: 250.0),
             Crate(at: (-1.5, 0.6), size: 0.5),
         ],
