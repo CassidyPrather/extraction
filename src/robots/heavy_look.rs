@@ -13,7 +13,7 @@ use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
 use extraction_core::heavy::{STALL_AT, Slot};
 
-use super::heavy::{Arm, Heavy, HeavyPart, LegPiece, SHOULDER, SIZE, ThrownDoor, arm_elbow};
+use super::heavy::{Arm, Heavy, HeavyPart, LegPiece, SHOULDER, SIZE, arm_elbow};
 use super::walker::{LOWER, LegPoses, UPPER};
 use super::{Robot, RobotPart};
 use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes};
@@ -33,7 +33,6 @@ impl Plugin for HeavyLookPlugin {
                 dress_heavies,
                 pose_limbs,
                 light_heavies,
-                dress_doors,
                 gallery,
                 felt_footfalls,
                 scorch_wrecks,
@@ -439,29 +438,6 @@ fn light_heavies(
                 m.emissive = want;
             }
         }
-    }
-}
-
-/// A door it tore off: a slab of planks.
-fn dress_doors(
-    mut commands: Commands,
-    doors: Query<(Entity, &ThrownDoor), Added<ThrownDoor>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut lib: ResMut<MaterialLibrary>,
-    server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    for (e, d) in &doors {
-        let mat = lib.get(
-            crate::render::materials::Mat::Planks,
-            &server,
-            &mut materials,
-        );
-        commands.spawn((
-            Mesh3d(meshes.add(Cuboid::new(d.half.x * 2.0, d.half.y * 2.0, d.half.z * 2.0))),
-            MeshMaterial3d(mat),
-            ChildOf(e),
-        ));
     }
 }
 

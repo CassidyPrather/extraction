@@ -56,6 +56,7 @@ const ALBEDO: &[(&str, [f32; 3])] = &[
     ("asphalt", [0.108, 0.108, 0.099]),
     ("timber", [0.143, 0.062, 0.032]),
     ("boulder", [0.271, 0.258, 0.195]),
+    ("dressed_stone", [0.089, 0.086, 0.078]),
 ];
 
 /// What a material looks like from far off: its tint times its albedo

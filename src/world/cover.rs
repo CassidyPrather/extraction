@@ -445,6 +445,7 @@ fn stream_cover(
     let pool = bevy::tasks::AsyncComputeTaskPool::get();
     let detail = opts.detail;
     let burnt = assets.cover.burnt;
+    let drowned = super::terrain::drowned_line(&zone.map.name);
     for (key, _) in wanted.into_iter().take(6) {
         let cover = assets.cover.clone();
         let hm = zone.hm.clone();
@@ -456,6 +457,16 @@ fn stream_cover(
             for s in &plants {
                 // Lower detail keeps fewer plants (by rank, so the same ones).
                 if s.rank > detail {
+                    continue;
+                }
+                // A drained reservoir's silt grows sedge, and grass only
+                // here and there where it's coming back.
+                if s.kind == CoverKind::Grass
+                    && s.rank > 0.15
+                    && drowned
+                        .as_ref()
+                        .is_some_and(|d| d.at([s.pos[0], s.pos[2]], s.pos[1]).0 > 0.5)
+                {
                     continue;
                 }
                 match s.kind {

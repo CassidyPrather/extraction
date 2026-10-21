@@ -422,5 +422,16 @@ something real (main at 43940f8, fetched foliage):
   of 11.5), Training Yard 0.90 (aerial shadow draws), Cinder 0.86 (gate
   shadows). The hands are 80 draws in every view (each finger a mesh);
   merged, they'd give every view 6% back, Marrow's aerial included.
+- **Forest detail around the impostor rigs.** The forest streamed near
+  trees (cards, cores) round every 3D camera, the impostors' capture rigs
+  included: rigs 4 km down under x = 0-480, which in the gauges' GPU-less
+  harness never get their picture back and stay. Near trees stood round
+  them (by horizontal distance), and the views near them counted those.
+  In the game the rigs go once their picture's read back, a few frames
+  into the load, so only the gauges were wrong; the forest now streams
+  for the cameras that don't draw into an image. Marrow Creek: aerial
+  1150 > 1003 draws, spruce 1097 > 844, summit 715 > 460, creek 502 >
+  249 (on main, where wildlife and the new scatter took the aerial to
+  1211, expect about 1064).
 - The hitch gauge's wall-clock test is out of the default suite
   (`scripts/hitches.sh`), its finds held by counts (see "Hitches").

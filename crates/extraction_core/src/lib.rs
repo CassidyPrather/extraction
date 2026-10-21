@@ -33,6 +33,7 @@ pub mod progression;
 pub mod rocks;
 pub mod safehouse;
 pub mod save;
+pub mod sentry;
 pub mod terrain;
 pub mod underground;
 pub mod unity;
