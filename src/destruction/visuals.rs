@@ -142,6 +142,8 @@ fn glaze_buildings(
     mut waiting: Local<Vec<Entity>>,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
+    // A building gone (the zone left), or its glass: forget them.
+    drawn.retain(|(b, _), e| commands.get_entity(*b).is_ok() && commands.get_entity(*e).is_ok());
     let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
     dirty.append(&mut waiting);
     if dirty.is_empty() {

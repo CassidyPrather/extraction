@@ -140,8 +140,10 @@ struct Record {
     blockouts: usize,
     /// Meshes touching no other mesh and off the floor, by name.
     floating: Vec<String>,
-    /// A prefab's footprint as the map knows it (x, y, z), for comparing.
-    footprint: Option<[f32; 3]>,
+    /// The radius the map clears round a prefab on the surface (trees,
+    /// rocks, other prefabs kept out), for comparing with how far it
+    /// reaches. None underground, where there's nothing to clear.
+    clearance: Option<f32>,
     /// Frames it took to load.
     load_frames: u32,
     /// Meshes spawned with it outside its hierarchy (a building's crates,
@@ -830,8 +832,10 @@ fn record(
         meshes,
         blockouts,
         floating,
-        footprint: match s {
-            Subject::Prefab(p) => Some(crate::world::structures::footprint(p).to_array()),
+        clearance: match s {
+            Subject::Prefab(p) if !crate::world::underground::ids().any(|u| u == p.as_str()) => {
+                Some(extraction_core::map::prefab_clearance(p))
+            }
             _ => None,
         },
         load_frames,

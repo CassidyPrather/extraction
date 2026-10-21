@@ -970,6 +970,27 @@ mod tests {
         assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
+    /// Every note's building is there to lay it on: a building moved or
+    /// replaced in a map fails here, not later in the note script
+    /// (`scripts/place_notes.py --check`).
+    #[test]
+    fn every_note_has_its_building() {
+        let script = crate::asset_root_path().join("../scripts/place_notes.py");
+        let Ok(out) = std::process::Command::new("python3")
+            .arg(&script)
+            .arg("--check")
+            .output()
+        else {
+            eprintln!("no python3: skipped");
+            return;
+        };
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     /// Each valley key is named by at least two notes, at least one of them
     /// in another valley: finding the words is how you find the keys.
     #[test]

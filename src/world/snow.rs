@@ -278,8 +278,11 @@ fn tread(
     snow: Res<Snow>,
     mut steps: MessageReader<crate::player::Footstep>,
     mut tracks: ResMut<Tracks>,
+    alive: Query<()>,
     mut last: Local<Vec<(Entity, Vec3, bool)>>,
 ) {
+    // Walkers that are gone are forgotten.
+    last.retain(|l| alive.contains(l.0));
     for s in steps.read() {
         let prev = last.iter_mut().find(|l| l.0 == s.entity);
         let (dir, left) = match prev {

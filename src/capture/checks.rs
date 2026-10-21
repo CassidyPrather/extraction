@@ -12,6 +12,9 @@
 //!   sinks or swamps the room once the boxes are gone.
 //! - **No outside images**: a model's textures are inside the file, or a
 //!   missing one renders as flat grey.
+//! - **Held together**: every part of a model touches another part or the
+//!   ground; a nail over its loop or a board in mid-air shows from across
+//!   a room.
 
 use bevy::math::Vec3;
 
@@ -177,6 +180,91 @@ pub fn outside_images() -> Vec<String> {
         .collect()
 }
 
+/// Folders whose models aren't one piece: animals are pose sheets (each
+/// pose its own node, side by side, one shown at a time), robots and the
+/// open rig are kits of parts the game places itself.
+fn assembled_in_game(folder: &str, name: &str) -> bool {
+    matches!(folder, "animals" | "robots") || (folder == "kit" && name == "rig_open")
+}
+
+/// How far a part may stand off the rest before it counts as loose,
+/// metres: crumbs a few millimetres off a charred beam don't show; a nail
+/// two centimetres over its loop does.
+pub const LOOSE_GAP: f32 = 0.01;
+
+/// A model's parts more than [`LOOSE_GAP`] from any other part and from
+/// its lowest point's level, as `node/material` with the gap to the
+/// nearest grounded part (metres). A part is a node's triangles in one
+/// material, bounded by its box; boxes are generous, so this can miss a
+/// part floating near another, never flag one that touches.
+pub fn loose_parts(path: &std::path::Path) -> Result<Vec<(String, f32)>, String> {
+    let mut parts: Vec<(String, Vec3, Vec3)> = Vec::new();
+    for t in glb::triangles(path)?
+        .into_iter()
+        .filter(|t| !t.node.contains("_lod"))
+    {
+        let key = format!("{}/{}", t.node, t.material);
+        let (lo, hi) = (
+            t.p[0].min(t.p[1]).min(t.p[2]),
+            t.p[0].max(t.p[1]).max(t.p[2]),
+        );
+        match parts.iter_mut().find(|p| p.0 == key) {
+            Some(p) => {
+                p.1 = p.1.min(lo);
+                p.2 = p.2.max(hi);
+            }
+            None => parts.push((key, lo, hi)),
+        }
+    }
+    let Some(floor) = parts.iter().map(|p| p.1.y).reduce(f32::min) else {
+        return Ok(Vec::new());
+    };
+    // Grown so boxes within LOOSE_GAP of each other, or of the floor,
+    // touch.
+    let grow = Vec3::splat((LOOSE_GAP - super::sweep::TOUCH) * 0.5);
+    let boxes: Vec<(usize, Vec3, Vec3)> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (i, p.1 - grow, p.2 + grow))
+        .collect();
+    let loose = super::sweep::floating(&boxes, floor + grow.y);
+    let gap = |a: &(String, Vec3, Vec3), b: &(String, Vec3, Vec3)| {
+        (b.1 - a.2).max(a.1 - b.2).max_element()
+    };
+    Ok(loose
+        .iter()
+        .map(|&i| {
+            let near = (0..parts.len())
+                .filter(|j| !loose.contains(j))
+                .map(|j| gap(&parts[i], &parts[j]))
+                .fold(f32::MAX, f32::min);
+            (parts[i].0.clone(), near)
+        })
+        .collect())
+}
+
+/// Every model with a loose part, one line each.
+pub fn loose_findings() -> Vec<String> {
+    let mut bad = Vec::new();
+    for (folder, name, path) in glb::all_models() {
+        if assembled_in_game(&folder, &name) {
+            continue;
+        }
+        match loose_parts(&path) {
+            Ok(l) if l.is_empty() => {}
+            Ok(l) => {
+                let parts: Vec<String> = l
+                    .iter()
+                    .map(|(p, g)| format!("{p} {:.0} mm off", g * 1000.0))
+                    .collect();
+                bad.push(format!("{folder}/{name}: {}", parts.join(", ")));
+            }
+            Err(e) => bad.push(format!("{folder}/{name}: unreadable: {e}")),
+        }
+    }
+    bad
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,6 +285,40 @@ mod tests {
             bad.join("\n")
         );
     }
+
+    /// Prints every loose part (`-- --nocapture`) and fails on any not in
+    /// `LOOSE_KNOWN`.
+    #[test]
+    fn models_hold_together() {
+        let all = loose_findings();
+        for l in &all {
+            println!("{l}");
+        }
+        let bad: Vec<&String> = all
+            .iter()
+            .filter(|b| !LOOSE_KNOWN.iter().any(|k| b.starts_with(k)))
+            .collect();
+        assert!(
+            bad.is_empty(),
+            "models with parts in the air:\n{}",
+            bad.iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    /// Loose parts waiting on their owners (Models: world), by the start
+    /// of their line. Take one out when it's fixed.
+    const LOOSE_KNOWN: &[&str] = &[
+        "props/brake_drum:",
+        "props/fence_panel:",
+        "props/hide_frame:",
+        "props/lev:",
+        "props/sewing_machine:",
+        "props/signal_box:",
+        "props/snowshoes:",
+    ];
 
     /// Prints every furniture group's fit (`-- --nocapture`), and holds
     /// them to standing on their boxes' floor and being about their size.

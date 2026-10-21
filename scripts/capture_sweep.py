@@ -10,7 +10,7 @@ subject hidden (`_empty`):
 - fallback colours: magenta in the subject (an engine's missing texture);
 - blank views: a view where the subject covers almost nothing;
 - size: a model's size against its folder's range, a prefab's against the
-  footprint the map clears for it;
+  radius the map clears round it;
 - blockouts left standing (a model that never loaded) and pieces whose
   boxes touch nothing (floating), from sweep.json.
 
@@ -98,17 +98,25 @@ def analyse(out, rec, grid):
         a, b = SIZE.get(folder, (0.01, 60.0))
         if not a <= size.max() <= b:
             flags.append(("error", f"{size.max():.2f} m across, outside {a}-{b} m for {folder}"))
-    elif rec.get("footprint"):
-        fp = np.array(rec["footprint"])
-        over = [(k, size[i], fp[i]) for i, k in ((0, "x"), (2, "z")) if size[i] > fp[i] * 1.25 + 1.0]
-        for k, s, f_ in over:
-            flags.append(("warn", f"{s:.1f} m along {k}, the map clears {f_:.1f} m"))
+    elif rec["kind"] == "prefab":
+        # How far it reaches from its footing against the circle the map
+        # clears round it: past that it pokes into trees, rocks and its
+        # neighbours. (Sites underground have nothing cleared.)
+        clear = rec.get("clearance")
+        if clear is not None:
+            reach = float(np.hypot(max(abs(lo[0]), abs(hi[0])), max(abs(lo[2]), abs(hi[2]))))
+            if reach > clear + 1.0:
+                flags.append(("warn", f"reaches {reach:.1f} m from its footing, the map clears {clear:.1f} m"))
     if rec.get("blockouts"):
         flags.append(("error", f"{rec['blockouts']} blockout boxes still standing"))
     # animals/ hold pose sheets (each pose its own node, laid out side by
     # side, one shown at a time): their flying poses aren't floating.
-    pose_sheet = rec["kind"] == "model" and rec["subject"].startswith("animals/")
-    if rec.get("floating") and not pose_sheet:
+    # Robots and the open rig are kits of parts the game places itself.
+    # (`capture::checks::assembled_in_game`.)
+    kit = rec["kind"] == "model" and (
+        rec["subject"].split("/")[0] in ("animals", "robots") or rec["subject"] == "kit/rig_open"
+    )
+    if rec.get("floating") and not kit:
         names = sorted(set(rec["floating"]))
         flags.append(("warn", f"floating: {', '.join(names[:6])}" + (" ..." if len(names) > 6 else "")))
     return flags, stats
