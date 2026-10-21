@@ -120,13 +120,15 @@ pub struct SentryPlugin;
 
 impl Plugin for SentryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<SentryEvent>().add_systems(
-            FixedUpdate,
-            (sentry_power, sentry_mind, sentry_report)
-                .chain()
-                .after(super::perceive)
-                .before(PhysicsSystems::First),
-        );
+        app.add_message::<SentryEvent>()
+            .add_systems(
+                FixedUpdate,
+                (sentry_power, sentry_mind, sentry_report)
+                    .chain()
+                    .after(super::perceive)
+                    .before(PhysicsSystems::First),
+            )
+            .add_systems(FixedUpdate, stage_scenario);
     }
 }
 
@@ -553,6 +555,99 @@ fn sentry_report(
             director.queue_response(delay, at.translation());
             s.report = rules::REPORT_EVERY;
             info!("sentry: reported someone at {:.0}", at.translation());
+        }
+    }
+}
+
+/// The `sentry_cable` scenario (`bot::scenarios`): a sentry ahead of the
+/// bot, looking away from it, its cable running back toward the bot
+/// through its blind sector to a junction box; bolt cutters at the bot's
+/// feet. Laid out along whichever way from the bot is open ground.
+pub const SCENARIO: &str = "sentry_cable";
+/// How far ahead the sentry stands, and where it's walked to after.
+pub const STAGE_AHEAD: f32 = 18.0;
+pub const STAGE_PAST: f32 = 14.0;
+/// The scenario's walk past the sentry, before the setup knows where:
+/// `stage_scenario` fills it in on the bot's task list.
+pub const PAST_PLACEHOLDER: Vec2 = Vec2::new(-1.0e6, -1.0e6);
+
+/// Where the scenario's sentry stands for a bot at `at` facing `dir`, and
+/// its junction box.
+pub fn stage_layout(at: Vec3, dir: Vec3) -> (Vec2, Vec2) {
+    let side = Vec3::new(-dir.z, 0.0, dir.x);
+    let foot = at + dir * STAGE_AHEAD;
+    let power = at + dir * 7.0 + side * 6.0;
+    (Vec2::new(foot.x, foot.z), Vec2::new(power.x, power.z))
+}
+
+fn stage_scenario(
+    mut commands: Commands,
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    zone: Res<Zone>,
+    nav: Res<super::walker::Nav>,
+    catalog: Res<crate::items::Catalog>,
+    mut bots: Query<&mut crate::bot::Bot>,
+    anomalies: Query<(&crate::anomaly::Anomaly, &GlobalTransform)>,
+) {
+    // Clear of anomalies (a burner by the junction box is no test of a
+    // sentry).
+    let clear = |p: Vec3| {
+        anomalies.iter().all(|(a, g)| {
+            let c = g.translation();
+            Vec2::new(p.x - c.x, p.z - c.z).length() > a.kind.reach(a.radius) + 3.0
+        })
+    };
+    for s in setups.read() {
+        if s.name != SCENARIO {
+            continue;
+        }
+        let f = Vec3::new(s.facing.x, 0.0, s.facing.z).normalize_or(Vec3::NEG_Z);
+        let open = |d: Vec3| {
+            let side = Vec3::new(-d.z, 0.0, d.x);
+            (2..=((STAGE_AHEAD + STAGE_PAST) as usize + 2))
+                .step_by(2)
+                .all(|m| {
+                    let p = s.at + d * m as f32;
+                    nav.0.walkable([p.x, p.z]) && clear(p)
+                })
+                && (0..=6).all(|m| {
+                    let p = s.at + d * 7.0 + side * m as f32;
+                    nav.0.walkable([p.x, p.z]) && clear(p)
+                })
+        };
+        let dir = (0..16)
+            .map(|k| Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * f)
+            .find(|d| open(*d))
+            .unwrap_or(f);
+        let (foot, power) = stage_layout(s.at, dir);
+        // Its arc faces away from the bot: the bot starts in its blind back.
+        let centre = rules::bearing([s.at.x, s.at.z], [foot.x, foot.y]);
+        info!("scenario: a sentry at {foot:.0}, its box at {power:.0}");
+        let past = foot + Vec2::new(dir.x, dir.z) * STAGE_PAST;
+        for mut bot in &mut bots {
+            for t in bot.tasks.iter_mut() {
+                if let crate::bot::Task::WalkTo { to, .. } = t {
+                    if *to == PAST_PLACEHOLDER {
+                        *to = past;
+                    }
+                }
+            }
+        }
+        spawn_sentry(&mut commands, &zone, foot, centre, 200.0, power);
+        if let Some(kind) = catalog.kind("bolt_cutters") {
+            let side = Vec3::new(-dir.z, 0.0, dir.x);
+            let p = s.at + side * 0.7 + dir * 0.5;
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(
+                        zone.on_ground(p.x, p.z) + Vec3::Y * 0.1,
+                    ),
+                    condition: 1.0,
+                },
+            );
         }
     }
 }
