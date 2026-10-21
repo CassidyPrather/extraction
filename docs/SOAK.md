@@ -238,7 +238,11 @@ Run on every valley, seeds 1-6 for two minutes each without robots and
   the Depot's intake ramp (at (-245, -152), 21 m down) lay still on a
   floor where `underground::floor_under` says there is only rock; later
   runs found the same near Kettle's mine (items at (-104, 34), 5 m down)
-  and Cinder's tunnel (the player at (-19, 100), 7 m down). Anything
+  and Cinder's tunnel (the player at (-19, 100), 7 m down). Stranger:
+  on Sallow Reservoir, which has no underground site, items lay still 5 m
+  under the ground at (-9, 83) and (-231, -225), Marrow's bunker and
+  Depot ramp positions, as if Marrow's underground floors were built
+  in every valley. Anything
   that uses it to tell "in a site" from "through the ground" (the lost
   items' rescue, the monkey's own check) gets those wrong. Open, for
   Underground.
