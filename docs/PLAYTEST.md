@@ -202,11 +202,19 @@ What changed, and worth a comment each:
   next to the frame times, where the GPU's time went (`gpu: ... ms a
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
-  and how it feels. If there's time, play a minute each with
-  `EXTRACTION_PERF=msaa=2` and `EXTRACTION_PERF=msaa=1` set and note the
-  `gpu:` lines and how the edges look: 4x MSAA is the dearest thing the
-  software renderer can measure, and only the headset can say what it
-  costs there (`docs/PERFORMANCE.md`).
+  and how it feels.
+- **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
+  the dearest per-eye cost the software renderer can measure; only the
+  headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
+  raid as it comes (the **SMOOTHING** card on the truck wall says 4x), then
+  press the card to 2x (or start with `--msaa 2`) and play the same valley
+  again. For each, note:
+  - the `gpu:` and `frames:` lines in the log;
+  - how the edges look: fence wires, grass, the trees' leaves, the gun's
+    sights and front post.
+
+  Whether 2x reads the same at the Beyond 2's sharpness decides the
+  default.
 
 ## Marks
 
@@ -308,6 +316,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | VIGNETTE | off to 90% | darkening the edges while the stick moves you |
 | SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
 | SHARPNESS | auto, 50–100% | render size per eye (next launch) |
+| SMOOTHING | 4x / 2x / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades |
 | GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
 | HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
 | MUSIC | rises with danger / off | the score |
@@ -550,6 +559,7 @@ pump?
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
+| `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |
