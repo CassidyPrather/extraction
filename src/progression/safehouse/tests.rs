@@ -231,8 +231,17 @@ fn a_loud_raid_brings_them_to_the_door_and_into_the_cabin() {
             v.0.extend(r.read().copied())
         },
     );
+    let clock = app.world().resource::<Raid>().clock;
+    let hour = app.world().resource::<HourShift>().0;
     press(&mut app, SafehouseThing::Bed);
     app.update();
+    // Woken in the dark, part way through the night, as they set out.
+    let slept = app.world().resource::<Raid>().clock - clock;
+    assert!(
+        (slept - NIGHT * WOKEN_AT).abs() < 1.0,
+        "woken {slept:.0} s into the night"
+    );
+    assert_eq!(app.world().resource::<HourShift>().0, hour, "still night");
     let visits = &app.world().resource::<Visits>().0;
     assert_eq!(visits.len(), 1, "a team sent to the door");
     assert_eq!(Some(visits[0].door), house(&app).door);

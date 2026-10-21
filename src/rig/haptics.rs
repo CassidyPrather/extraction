@@ -144,7 +144,6 @@ fn gun_haptics(
             FireEvent::BoltClosed | FireEvent::BoltLocked => (0.45, 0.03, 0.25),
             FireEvent::Chambered | FireEvent::Cocked | FireEvent::RoundLoaded => (0.25, 0.02, 0.0),
             FireEvent::ModeChanged(_) => (0.2, 0.015, 0.0),
-            FireEvent::Malfunctioned(_) => (0.5, 0.05, 0.3),
             _ => continue,
         };
         out.write(Haptic {

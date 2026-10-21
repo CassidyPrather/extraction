@@ -30,7 +30,8 @@ struct Haze {
     shape: vec4<f32>,
     wave: vec4<f32>,
     tint: vec4<f32>,
-    // x: colour drained from what's seen through it, y: how much dimmed.
+    // x: colour drained from what's seen through it, y: how much dimmed,
+    // z: rim brightening, w: rim pulse (rad/s).
     drain: vec4<f32>,
 }
 
@@ -154,6 +155,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let disc = 1.0 - smoothstep(0.82, 0.95, length(q));
     behind = mix(behind, vec3<f32>(grey), haze.drain.x * disc)
         * (1.0 - haze.drain.y * disc);
+    // Its rim: a bright band about 0.06 of the card across (~20 cm on a
+    // Hush), slowly breathing. Brightness, not colour, and wide enough not
+    // to shimmer as the head moves.
+    let l = length(q);
+    let band = smoothstep(0.84, 0.88, l) * (1.0 - smoothstep(0.93, 0.97, l));
+    let breathe = 0.65 + 0.35 * sin(t * haze.drain.w);
+    behind *= 1.0 + haze.drain.z * band * breathe;
     // The heart's glow: a soft spot, never the card's outline.
     let glow = haze.tint.a * pow(max(0.0, 1.0 - length(q)), 3.0) * select(1.0, 0.0, mode == 2);
     behind += haze.tint.rgb * glow * (0.85 + 0.15 * sin(t * 7.0)) * view.exposure;

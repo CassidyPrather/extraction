@@ -39,7 +39,7 @@ impl Plugin for TrailerPlugin {
                 Update,
                 (direct, aim).chain().after(crate::sim::raider::think),
             )
-            .add_systems(Update, (show_body, dress_body));
+            .add_systems(Update, (show_body, dress_body, quiet_head));
     }
 }
 
@@ -49,7 +49,12 @@ const STEP: f32 = 1.0 / 30.0;
 const TAIL: f32 = 3.0;
 /// Seconds the cameras render before anything is kept: the valley streams
 /// its detail in round them (unfilmed frames draw nothing).
-const WARMUP: f32 = 8.0;
+const WARMUP: f32 = 6.0;
+/// The share of the budget walking may take.
+const WALK_SHARE: f32 = 0.35;
+/// The drone films only while less than this share of its sight line to
+/// the bot is in tree crowns.
+const DRONE_BLOCKED: f32 = 0.2;
 /// Shortest clip worth keeping, seconds.
 const MIN_CLIP: f32 = 2.5;
 
@@ -84,6 +89,12 @@ struct Director {
     last_walk: f32,
     in_flight: usize,
     done: bool,
+    /// Seconds to the drone's next look round for a clearer sight.
+    look_round: f32,
+    /// The share of the drone's sight line to the bot in tree crowns.
+    drone_blocked: f32,
+    /// Seconds to the next position line in the log (`RUST_LOG=...=debug`).
+    log_in: f32,
 }
 
 impl Director {
@@ -172,6 +183,7 @@ fn direct(
                 Name::new("Drone camera"),
                 crate::render::OffscreenCamera,
                 DroneCamera,
+                super::ClearAir(2.5),
                 crate::render::camera_bundle(&weather),
                 Camera {
                     order: -1,
@@ -183,6 +195,14 @@ fn direct(
             ))
             .id();
         d.drone = Some((cam, image));
+        // The chase camera, in the window. (No `--camera`: that would place
+        // the bot where it stands rather than in the truck.)
+        commands.spawn((
+            Name::new("Chase camera"),
+            FreeCamera,
+            crate::render::camera_bundle(&weather),
+            Transform::from_xyz(0.0, 100.0, 0.0),
+        ));
         d.budget = opts
             .capture
             .trailer
@@ -202,6 +222,7 @@ fn direct(
     let me = body.translation;
     // What's worth seeing.
     if t < WARMUP {
+        d.next_frame = t;
         // Rendering, so the detail streams in, but nothing kept.
         if let Ok(mut c) = cams.single_mut() {
             c.is_active = true;
@@ -234,8 +255,9 @@ fn direct(
         Phase::Down { .. } => d.want("down", t + 6.0),
         _ => {}
     }
-    // A stretch of the walk now and then.
-    if t - d.last_walk > 75.0 {
+    // A stretch of the walk now and then, while the budget lasts for
+    // better things.
+    if t - d.last_walk > 75.0 && d.used < d.budget * WALK_SHARE {
         d.last_walk = t;
         d.want("walk", t + 6.0);
     }
@@ -244,12 +266,30 @@ fn direct(
         write_manifest(d, &opts, &out);
     }
     let rolling = d.open.is_some();
+    // Only the camera the cut will use renders: the one for now, and the
+    // one for a moment ahead, so a camera has drawn a frame or two before
+    // its first saved one.
+    // The drone only when it can see the bot: in a closed wood it films
+    // needles.
+    let drone_ok = d.drone_blocked < DRONE_BLOCKED;
+    let pick = |reason: &str, s: f32| match camera_for(reason, s) {
+        View::Drone if !drone_ok => View::Chase,
+        v => v,
+    };
+    let (now, soon) = d.open.as_ref().map_or((None, None), |c| {
+        let lead = 2.5 * time.delta_secs();
+        (
+            Some(pick(&c.reason, t - c.start)),
+            Some(pick(&c.reason, t - c.start + lead)),
+        )
+    });
+    let on = |v: View| now == Some(v) || soon == Some(v);
     if let Ok(mut c) = cams.single_mut() {
-        c.is_active = rolling;
+        c.is_active = on(View::Chase);
     }
     if let Some((e, _)) = &d.drone {
         if let Ok(mut c) = drone_cams.get_mut(*e) {
-            c.is_active = rolling;
+            c.is_active = on(View::Drone);
         }
     }
     // The raid's over (the sim closes its telemetry and quits) or the
@@ -277,7 +317,11 @@ fn direct(
         d.next_frame = t;
         return;
     }
-    // A frame every STEP of raid time.
+    // A frame every STEP of raid time (never catching up on time spent
+    // not filming).
+    if d.next_frame < t - STEP {
+        d.next_frame = t;
+    }
     if t + 1e-4 < d.next_frame {
         return;
     }
@@ -288,23 +332,53 @@ fn direct(
     if let Some(c) = &mut d.open {
         c.last = d.frame;
     }
-    d.in_flight += 2;
+    d.in_flight += 1;
     let name = format!("f{n:05}.png");
-    let mut save = save_to_disk(out.join("chase").join(&name));
-    commands.spawn(Screenshot::primary_window()).observe(
-        move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
-            save(shot);
-            d.in_flight = d.in_flight.saturating_sub(1);
-        },
-    );
-    let (_, image) = d.drone.clone().unwrap();
-    let mut save = save_to_disk(out.join("drone").join(&name));
-    commands.spawn(Screenshot::image(image)).observe(
-        move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
-            save(shot);
-            d.in_flight = d.in_flight.saturating_sub(1);
-        },
-    );
+    let view = now.unwrap_or(View::Chase);
+    let mut save = save_to_disk(out.join(view.dir()).join(&name));
+    let done = move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
+        save(shot);
+        d.in_flight = d.in_flight.saturating_sub(1);
+    };
+    match view {
+        View::Chase => {
+            commands.spawn(Screenshot::primary_window()).observe(done);
+        }
+        View::Drone => {
+            let (_, image) = d.drone.clone().unwrap();
+            commands.spawn(Screenshot::image(image)).observe(done);
+        }
+    }
+}
+
+/// Which camera films a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum View {
+    Chase,
+    Drone,
+}
+
+impl View {
+    fn dir(self) -> &'static str {
+        match self {
+            View::Chase => "chase",
+            View::Drone => "drone",
+        }
+    }
+}
+
+/// The cut, decided as it's filmed: which camera has a clip `s` seconds
+/// in. A fight cuts back and forth every 2.5 s, starting close; company
+/// arriving is seen from above first; walking, the truck and the ride out
+/// from above; the rest close.
+fn camera_for(reason: &str, s: f32) -> View {
+    match reason {
+        "fight" if (s / 2.5) as u32 % 2 == 1 => View::Drone,
+        "fight" => View::Chase,
+        "robot" | "down" if s < 3.0 => View::Drone,
+        "walk" | "truck" | "extract" => View::Drone,
+        _ => View::Chase,
+    }
 }
 
 fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
@@ -330,6 +404,16 @@ fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
 #[derive(Component)]
 struct DroneCamera;
 
+/// The share of the sight line from `from` to `to` that passes through a
+/// tree's crown.
+fn blocked(trees: &super::cinematic::Trees, from: Vec3, to: Vec3) -> f32 {
+    let n = (from.distance(to) / 1.0).ceil().max(1.0) as usize;
+    let hit = (1..n)
+        .filter(|i| trees.hits(from.lerp(to, *i as f32 / n as f32), 1.5))
+        .count();
+    hit as f32 / n as f32
+}
+
 /// The player has no body a camera draws (in the headset you see your
 /// gloves and sleeves); its shadow comes from a proxy of capsules on a
 /// layer only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's
@@ -346,6 +430,16 @@ fn show_body(
                 0,
                 SHADOW_ONLY,
             ]));
+    }
+}
+
+/// The flat driver gives the bot's head a camera; the chase camera has
+/// the window.
+fn quiet_head(mut heads: Query<&mut Camera, (With<RigHead>, Without<FreeCamera>)>) {
+    for mut c in &mut heads {
+        if c.is_active {
+            c.is_active = false;
+        }
     }
 }
 
@@ -381,8 +475,8 @@ fn dress_body(
 
 /// Points the cameras: the chase camera eases to a spot behind and above
 /// the bot's shoulder (pulled in where a wall or the ground is in the
-/// way), looking a little ahead of it; the drone circles 20 m up and
-/// 16 m out, looking down at it.
+/// way), looking a little ahead of it; the drone circles 30 m up and
+/// 18 m out (higher over a crown), looking down at it.
 #[allow(clippy::too_many_arguments)]
 fn aim(
     mut dir: ResMut<Director>,
@@ -399,6 +493,7 @@ fn aim(
         &mut Transform,
         (With<DroneCamera>, Without<FreeCamera>, Without<LocalPlayer>),
     >,
+    mut trees: Local<Option<super::cinematic::Trees>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -440,10 +535,41 @@ fn aim(
     if let Ok(mut c) = chase.single_mut() {
         *c = Transform::from_translation(at).looking_at(eye + flat * 5.0 - Vec3::Y * 0.4, Vec3::Y);
     }
-    // Drone: a slow circle, eased behind.
+    d.log_in -= dt;
+    if d.log_in <= 0.0 {
+        d.log_in = 5.0;
+        debug!(
+            "trailer: t {:.1} body {:.1} eye {:.1} chase {:.1}",
+            d.t, body.translation, eye, at
+        );
+    }
+    // Drone: a slow circle over the canopy, eased behind. Twice a second
+    // it looks round the circle for the clearest sight of the bot past
+    // the crowns and moves there if it's much better; it climbs over any
+    // crown in its way.
+    let trees = trees.get_or_insert_with(|| super::cinematic::Trees::new(&zone));
+    let spot = |a: f32| eye + Vec3::new(a.sin(), 0.0, a.cos()) * 18.0 + Vec3::Y * 30.0;
     d.drone_angle += dt * 7f32.to_radians();
-    let a = d.drone_angle;
-    let want = eye + Vec3::new(a.sin(), 0.0, a.cos()) * 16.0 + Vec3::Y * 20.0;
+    d.look_round -= dt;
+    if d.look_round <= 0.0 {
+        d.look_round = 0.5;
+        let here = blocked(trees, spot(d.drone_angle), eye);
+        d.drone_blocked = here;
+        let best = (1..8)
+            .map(|k| d.drone_angle + k as f32 * std::f32::consts::FRAC_PI_4)
+            .map(|a| (a, blocked(trees, spot(a), eye)))
+            .min_by(|x, y| x.1.total_cmp(&y.1));
+        if let Some((a, b)) = best {
+            if b + 0.15 < here {
+                d.drone_angle = a;
+                d.drone_blocked = b;
+            }
+        }
+    }
+    let mut want = spot(d.drone_angle);
+    while trees.hits(want, super::cinematic::CROWN + 2.0) && want.y < eye.y + 60.0 {
+        want.y += 2.0;
+    }
     let k = 1.0 - (-dt / 1.2).exp();
     let at = d.drone_at.map_or(want, |p| p.lerp(want, k));
     let at = Vec3::new(at.x, at.y.max(zone.ground(at.x, at.z) + 8.0), at.z);
@@ -476,6 +602,17 @@ mod tests {
         assert!(d.advance(11.0, None));
         assert!(d.open.is_none());
         assert_eq!(d.clips.len(), 2);
+    }
+
+    #[test]
+    fn the_cut_is_decided_as_it_is_filmed() {
+        assert_eq!(camera_for("fight", 0.5), View::Chase);
+        assert_eq!(camera_for("fight", 3.0), View::Drone);
+        assert_eq!(camera_for("fight", 5.5), View::Chase);
+        assert_eq!(camera_for("robot", 1.0), View::Drone);
+        assert_eq!(camera_for("robot", 4.0), View::Chase);
+        assert_eq!(camera_for("walk", 4.0), View::Drone);
+        assert_eq!(camera_for("leaving", 4.0), View::Chase);
     }
 
     #[test]

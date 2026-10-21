@@ -15,6 +15,7 @@
 //! | `ease` | share of the time spent speeding up and slowing down at each end (default 0.25; 0 is linear) |
 //! | `fov` | vertical field of view, degrees (default 55) |
 //! | `pitch` | down-tilt when the shot has no `look` points (default 6) |
+//! | `clear` | fog visibility times this, on the shot's camera only (aerials: 2.5) |
 //! | `hour`, `weather` | as `--hour` and `--weather`, for this shot (others keep the launch's) |
 //! | `settle` | frames to let the scene settle at the first pose before recording (default 40) |
 //! | `gen` | make the key points instead of listing them: `orbit`, `road`, `river`, `rise` (see [`generate`]) |
@@ -61,6 +62,8 @@ pub struct Shot {
     pub flight: Flight,
     pub frames: u32,
     pub fov: f32,
+    /// Fog visibility times this for the shot (`clear=`, default 1).
+    pub clear: f32,
     pub hour: Option<String>,
     pub weather: Option<String>,
     pub settle: u32,
@@ -119,6 +122,7 @@ pub fn load(zone: &Zone, file: &std::path::Path, fps: u32) -> Result<Vec<Shot>, 
                     flight,
                     frames: 1,
                     fov: STILL_FOV,
+                    clear: 1.0,
                     hour: None,
                     weather: None,
                     settle: STILL_SETTLE,
@@ -190,6 +194,7 @@ pub fn build(zone: &Zone, trees: &Trees, spec: &ShotSpec, fps: u32) -> Result<Sh
         flight,
         frames: (dur * fps as f32).round() as u32,
         fov: spec.num("fov", 55.0),
+        clear: spec.num("clear", 1.0),
         hour: spec.get("hour").map(str::to_string),
         weather: spec.get("weather").map(str::to_string),
         settle: spec.num("settle", 40.0) as u32,
@@ -409,7 +414,7 @@ fn fly(
     mut opts: ResMut<LaunchOptions>,
     zone: Option<Res<Zone>>,
     mut cine: ResMut<Cine>,
-    mut cams: Query<(&mut Transform, &mut Projection), With<FreeCamera>>,
+    mut cams: Query<(Entity, &mut Transform, &mut Projection), With<FreeCamera>>,
     mut time: ResMut<Time<Virtual>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
@@ -457,7 +462,7 @@ fn fly(
         cine.shots = Some(shots);
         cine.started = Some(std::time::Instant::now());
     }
-    let Ok((mut cam, mut proj)) = cams.single_mut() else {
+    let Ok((cam_e, mut cam, mut proj)) = cams.single_mut() else {
         return;
     };
     // Frames in flight are waited out with time stopped (see below), so
@@ -517,6 +522,7 @@ fn fly(
             if let Projection::Perspective(p) = &mut *proj {
                 p.fov = shot.fov.to_radians();
             }
+            commands.entity(cam_e).insert(super::ClearAir(shot.clear));
             let n = if cine.cur == 0 {
                 opts.frames.max(shot.settle)
             } else {

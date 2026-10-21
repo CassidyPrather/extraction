@@ -324,8 +324,12 @@ impl LaunchOptions {
             o.flat = true;
             o.headless = false;
             o.robots &= !o.capture.still();
-            o.camera
-                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            // A camera override also places the player (as screenshots
+            // want); a trailer's bot starts in the truck, as in any sim.
+            if o.capture.still() {
+                o.camera
+                    .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            }
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {

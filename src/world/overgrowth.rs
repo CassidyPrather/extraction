@@ -185,6 +185,11 @@ pub fn grow(geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
             let low = f.point(0.0, -f.hv * 0.5) + f.n * 0.03;
             let shade = 1.0 - occ.light(low, f.n);
             let sky = occ.sky(f.point(0.0, f.hv * 0.9) + f.n * 0.05, Vec3::Y);
+            // Not indoors (a roof over it): ivy is outside, or where a
+            // ruin's roof has gone.
+            if sky < 0.2 {
+                continue;
+            }
             let north_w = f.n.dot(north).max(0.0);
             let w = (0.35 + shade * 1.2 + sky * 0.4 + north_w * 0.9) * f.hu.min(3.0);
             cands.push((f, w));

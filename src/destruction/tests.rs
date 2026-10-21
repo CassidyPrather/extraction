@@ -1128,7 +1128,13 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
             )
         })
         .unwrap();
-    // Its first window boarded (World models decides which, in the game).
+    // Its first window boarded (World models decides which, in the game;
+    // these are ours on top of those).
+    let before: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<WindowBoard>>()
+        .iter(app.world())
+        .collect();
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let mut c = Commands::new(&mut queue, app.world());
@@ -1140,6 +1146,7 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
         .world_mut()
         .query_filtered::<(Entity, &GlobalTransform), With<WindowBoard>>()
         .iter(app.world())
+        .filter(|(e, _)| !before.contains(e))
         .map(|(e, g)| (e, *g))
         .collect();
     assert_eq!(boards.len(), 3, "three boards across the window");
@@ -1208,4 +1215,135 @@ fn a_hole_in_a_doorless_building_puts_it_in_the_robots_index() {
         entrances.shells.iter().any(|s| s.building == e),
         "the building has a box to be inside"
     );
+}
+
+/// Not a check: where Marrow Creek's boarded windows are, for the shots.
+#[test]
+#[ignore]
+fn list_boards() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for g in app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<super::boards::WindowBoard>>()
+        .iter(app.world())
+    {
+        let out = g.rotation() * Vec3::NEG_Z;
+        println!("board at {:.2} out {:.2}", g.translation(), out);
+    }
+}
+
+#[test]
+fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{Part, Parts, Strippable, spawn_part};
+    let mut app = app(None);
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0) + Vec3::Y * 1.0;
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut parts = Parts::default();
+        let mut c = Commands::new(&mut queue, app.world());
+        spawn_part(
+            &mut c,
+            &mut parts,
+            &Broken::default(),
+            Part {
+                at: Transform::from_translation(at),
+                size: Vec3::new(0.95, 1.85, 0.04),
+                mat: crate::render::materials::Mat::DarkMetal,
+                yields: vec![("scrap_metal".into(), 3)],
+                pry: 200.0,
+                model: None,
+            },
+        );
+    }
+    queue.apply(app.world_mut());
+    run(&mut app, 2);
+    let door = app
+        .world_mut()
+        .query_filtered::<Entity, With<Strippable>>()
+        .iter(app.world())
+        .next()
+        .unwrap();
+    // Rounds hole it; they don't tear it off.
+    for _ in 0..5 {
+        shoot(&mut app, at + Vec3::Z * 3.0, at, 715.0, 7.9, 40.0);
+        run(&mut app, 2);
+    }
+    assert!(
+        app.world().get_entity(door).is_ok(),
+        "rounds don't strip a wreck"
+    );
+    let scrap = |app: &mut App| {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("scrap_metal").unwrap();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = scrap(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: 240.0,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(scrap(&mut app), before + 3, "for its scrap");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+}
+
+#[test]
+fn a_door_gone_leaves_nothing_in_its_frame() {
+    // Nothing of the leaf (its collider, its knobs, its hinges) stays
+    // standing in the doorway once it's broken: its children go with it,
+    // and what flies is debris on its own layer.
+    let mut app = app(None);
+    let (door, collider, mid, n) = plank_door(&mut app);
+    let kids: Vec<Entity> = app
+        .world()
+        .get::<Children>(door)
+        .map(|c| c.iter().collect())
+        .unwrap_or_default();
+    for _ in 0..12 {
+        app.world_mut().write_message(Hit {
+            entity: collider,
+            point: mid,
+            normal: n,
+            velocity: -n * 6.0,
+            damage: 60.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 3);
+    assert!(app.world().get_entity(door).is_err(), "the door went");
+    for k in kids {
+        assert!(app.world().get_entity(k).is_err(), "and all of its parts");
+    }
+    // The doorway, from knee to head height, holds no world collider.
+    let world = app.world_mut();
+    let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+    let spatial = state.get(world).unwrap();
+    for dy in [-0.6, 0.0, 0.5] {
+        let hits = spatial.shape_intersections(
+            &Collider::sphere(0.15),
+            mid + Vec3::Y * dy,
+            Quat::IDENTITY,
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        );
+        assert!(
+            hits.is_empty(),
+            "something stands in the doorway at {dy}: {hits:?}"
+        );
+    }
 }

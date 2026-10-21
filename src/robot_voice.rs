@@ -67,10 +67,12 @@ pub enum VoiceKind {
     Crawler,
     Hound,
     Warden,
+    /// The heavy machine (`robots::heavy`): four metres of walker.
+    Heavy,
 }
 
 impl VoiceKind {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Drone,
         Self::Walker,
         Self::Grappler,
@@ -78,6 +80,7 @@ impl VoiceKind {
         Self::Crawler,
         Self::Hound,
         Self::Warden,
+        Self::Heavy,
     ];
 
     pub fn name(self) -> &'static str {
@@ -89,6 +92,7 @@ impl VoiceKind {
             Self::Crawler => "crawler",
             Self::Hound => "hound",
             Self::Warden => "warden",
+            Self::Heavy => "heavy",
         }
     }
 }
@@ -345,6 +349,17 @@ pub fn timbre(kind: VoiceKind) -> Timbre {
             buzz_depth: 0.4,
             pace: 0.75,
         },
+        VoiceKind::Heavy => Timbre {
+            base: 65.0,
+            harmonics: SAW,
+            formant: 320.0,
+            q: 2.5,
+            colour: 0.6,
+            noise: 0.05,
+            buzz: 0.0,
+            buzz_depth: 0.0,
+            pace: 1.6,
+        },
         VoiceKind::Warden => Timbre {
             base: 130.0,
             harmonics: SAW,
@@ -516,6 +531,39 @@ impl Bandpass {
     }
 }
 
+/// The Gate's horn calling the heavy out (`robots::heavy_mind::
+/// HeavyCalled`): two long low tones a fifth apart (D1 and A1) with a
+/// brassy stack of harmonics, swelling in over a second, held, and dying
+/// over two; levelled like the words.
+pub const HORN_SECONDS: f32 = 6.0;
+
+pub fn render_horn(sample_rate: f32) -> Vec<f32> {
+    let n = (HORN_SECONDS * sample_rate) as usize;
+    let mut out = vec![0.0f32; n];
+    let mut bp = Bandpass::new(260.0, 1.8, sample_rate);
+    let mut rng = Rng::new(0x407);
+    let (f1, f2) = (36.71, 55.0);
+    let (mut p1, mut p2) = (0.0f32, 0.0f32);
+    for (i, s) in out.iter_mut().enumerate() {
+        let t = i as f32 / sample_rate;
+        // A slow, uneven waver, as a big horn has.
+        let waver = 1.0 + 0.004 * (TAU * 0.37 * t).sin();
+        p1 = (p1 + f1 * waver / sample_rate).fract();
+        p2 = (p2 + f2 * waver / sample_rate).fract();
+        let mut tone = 0.0;
+        for h in 1..=12 {
+            let w = 1.0 / (h as f32).powf(0.7);
+            tone += w * ((TAU * p1 * h as f32).sin() + 0.8 * (TAU * p2 * h as f32).sin());
+        }
+        let breath = (rng.f32() * 2.0 - 1.0) * 0.05;
+        let env = (t / 1.2).min(1.0).powi(2) * ((HORN_SECONDS - t) / 2.0).clamp(0.0, 1.0);
+        let dry = tone * 0.1 + breath;
+        *s = (dry * 0.5 + bp.run(dry) * 1.5) * env;
+    }
+    level(&mut out);
+    out
+}
+
 /// How long an utterance lasts, s (for spacing them).
 pub fn duration(kind: VoiceKind, u: Utterance) -> f32 {
     let end = phrase(u).iter().map(|n| n.at + n.len).fold(0.0, f32::max);
@@ -530,10 +578,12 @@ pub fn voice_of(
     crawler: bool,
     grappler: bool,
     heavy: bool,
+    giant: bool,
 ) -> Option<VoiceKind> {
     Some(match kind {
         RobotKind::Drone => VoiceKind::Drone,
         RobotKind::Dirigible => VoiceKind::Dirigible,
+        RobotKind::Walker if giant => VoiceKind::Heavy,
         RobotKind::Walker if hound => VoiceKind::Hound,
         RobotKind::Walker if crawler => VoiceKind::Crawler,
         RobotKind::Walker if grappler => VoiceKind::Grappler,
@@ -618,12 +668,13 @@ type Kinds<'w, 's> = Query<
         Has<crate::robots::indoor::Crawler>,
         Has<crate::robots::grappler::Grappler>,
         Has<crate::robots::indoor::Warden>,
+        Has<crate::robots::heavy::Heavy>,
     ),
 >;
 
 fn kind_of(robots: &Kinds, e: Entity) -> Option<VoiceKind> {
-    let (r, h, c, g, w) = robots.get(e).ok()?;
-    voice_of(r.kind, h, c, g, w)
+    let (r, h, c, g, w, giant) = robots.get(e).ok()?;
+    voice_of(r.kind, h, c, g, w, giant)
 }
 
 /// What the minds say they're doing (`robots::search::MindShift`), one
@@ -1150,14 +1201,21 @@ mod tests {
     /// Pylons and sorters don't speak.
     #[test]
     fn some_machines_are_mute() {
-        assert_eq!(voice_of(RobotKind::Pylon, false, false, false, false), None);
         assert_eq!(
-            voice_of(RobotKind::Sorter, false, false, false, false),
+            voice_of(RobotKind::Pylon, false, false, false, false, false),
             None
         );
         assert_eq!(
-            voice_of(RobotKind::Walker, true, false, false, false),
+            voice_of(RobotKind::Sorter, false, false, false, false, false),
+            None
+        );
+        assert_eq!(
+            voice_of(RobotKind::Walker, true, false, false, false, false),
             Some(VoiceKind::Hound)
+        );
+        assert_eq!(
+            voice_of(RobotKind::Walker, false, false, false, false, true),
+            Some(VoiceKind::Heavy)
         );
     }
 
@@ -1256,6 +1314,7 @@ mod tests {
                 }
             }
         }
+        write_wav(&dir.join("horn.wav"), &render_horn(SR), SR as u32);
     }
 
     fn write_wav(path: &std::path::Path, x: &[f32], sr: u32) {
