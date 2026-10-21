@@ -442,19 +442,18 @@ fn handle_guns(
 /// Shots kick the gun that fired them, and start the bolt's stroke.
 pub fn kick_guns(
     mut events: MessageReader<GunEvent>,
-    mut guns: Query<(&Gun, &Item, &mut Handling)>,
+    mut guns: Query<(&mut Gun, &Item, &mut Handling)>,
     catalog: Res<Catalog>,
-    mut rng: ResMut<super::GunRng>,
 ) {
     for ev in events.read() {
         if !matches!(ev.event, FireEvent::Fired { .. }) {
             continue;
         }
-        let Ok((gun, item, mut handling)) = guns.get_mut(ev.gun) else {
+        let Ok((mut gun, item, mut handling)) = guns.get_mut(ev.gun) else {
             continue;
         };
         let mass = catalog.get(item.kind()).mass;
-        let yaw = rng.0.f32() * 2.0 - 1.0;
+        let yaw = gun.dice.f32() * 2.0 - 1.0;
         handling.kick(gun.firearm.def.recoil, mass, yaw);
         if gun.firearm.def.action == ActionKind::SemiAuto {
             handling.cycle = 1.0;
@@ -1054,34 +1053,25 @@ mod vr_tests {
     /// slams home, trigger untouched. A sound one never does.
     #[test]
     fn a_worn_sks_slam_fires_as_the_bolt_closes() {
+        #[derive(Resource, Default)]
+        struct Shots(usize);
         for worn in [true, false] {
             let mut r = hold("sks", false, false);
+            r.vr.app.init_resource::<Shots>().add_systems(
+                FixedPostUpdate,
+                |new: Query<(), Added<Projectile>>, mut n: ResMut<Shots>| n.0 += new.iter().count(),
+            );
             {
                 let mut g = gun_mut(&mut r);
                 g.firearm.condition = if worn { 0.1 } else { 0.9 };
                 g.firearm.fouling = 1.0;
                 g.firearm.internal_rounds = 10;
             }
-            let mut shots = 0;
             for _ in 0..6 {
-                let before: HashSet<Entity> = {
-                    let mut q =
-                        r.vr.app
-                            .world_mut()
-                            .query_filtered::<Entity, With<Projectile>>();
-                    q.iter(r.vr.app.world()).collect()
-                };
                 rack(&mut r);
                 r.vr.step(4);
-                let mut q =
-                    r.vr.app
-                        .world_mut()
-                        .query_filtered::<Entity, With<Projectile>>();
-                shots += q
-                    .iter(r.vr.app.world())
-                    .filter(|e| !before.contains(e))
-                    .count();
             }
+            let shots = r.vr.app.world().resource::<Shots>().0;
             if worn {
                 assert!(shots > 0, "a worn SKS slam-fired");
             } else {
@@ -1162,6 +1152,52 @@ mod vr_tests {
         assert_eq!(g.firearm.condition, 0.5, "the wear stays");
         let clean = g.firearm.spread_radians();
         assert!(clean < dirty * 0.8, "the spread closes: {dirty} -> {clean}");
+    }
+
+    /// A worn, dirty AK's burst: what happened to it, in order (shots,
+    /// jams, duds), with `loot` other guns lying about the yard and as many
+    /// bare entities spawned first.
+    fn worn_burst(loot: usize) -> Vec<String> {
+        #[derive(Resource, Default)]
+        struct Seen(Vec<String>);
+        let mut r = hold_after("ak74", false, false, loot);
+        for k in 0..loot {
+            let at = r.feet + Vec3::new(3.0 + k as f32, 0.3, 4.0);
+            let id = if k % 2 == 0 { "sks" } else { "ak74" };
+            let e = r.vr.spawn(id, Transform::from_translation(at));
+            r.vr.app.world_mut().get_mut::<Item>(e).unwrap().condition = 0.2;
+        }
+        let gun = r.gun;
+        r.vr.app.init_resource::<Seen>().add_systems(
+            FixedPostUpdate,
+            move |mut ev: MessageReader<GunEvent>, mut seen: ResMut<Seen>| {
+                seen.0.extend(
+                    ev.read()
+                        .filter(|e| e.gun == gun)
+                        .map(|e| format!("{:?}", e.event)),
+                );
+            },
+        );
+        load(&mut r, "ak545", 30, FireMode::Semi);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 0.3;
+            g.firearm.fouling = 0.6;
+        }
+        fire(&mut r, 20, true);
+        r.vr.app.world().resource::<Seen>().0.clone()
+    }
+
+    /// How a gun in your hands rolls is its own: guns lying about the
+    /// valley, and whatever else was spawned first, don't change a drill.
+    #[test]
+    fn a_drill_doesnt_hang_on_other_loot() {
+        let alone = worn_burst(0);
+        assert!(
+            alone.iter().any(|e| e.starts_with("Malfunctioned")),
+            "a worn gun jams: {alone:?}"
+        );
+        assert_eq!(worn_burst(4), alone, "with loot about");
     }
 
     fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
