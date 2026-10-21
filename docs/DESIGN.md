@@ -568,6 +568,20 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Optics**: the scope moves the sight line to its eyepiece and
   magnifies when your eye is on it: in the headset, a picture-in-picture
   lens (with a PU reticle in the scope); flat mode zooms the camera.
+- **Looking through it** (`weapons/optics.rs`):
+  - *Eye box*: a scope shows its picture only with your eye about 7 cm
+    behind the eyepiece and on its axis. Drift a few millimetres off and
+    a black edge closes in from the side you moved away from; lean back
+    or crowd it and the picture shrinks to black.
+  - *Parallax*: off the axis, the picture slides against the reticle, so
+    the reticle on a target only holds true with your eye centred.
+  - *Glint*: at dawn and dusk, a scope facing the low sun flashes back
+    along its line. A robot it points at, out to 400 m, sees the flash
+    like a torch beam in the dark. Don't glass a valley into the sun.
+  - *Iron sights* line up at the cheek: bring a gun without a scope up
+    with your eye just behind the rear sight, and it settles (at most
+    about 3 degrees, about the front post) so your eye, the rear sight
+    and the post are in line.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one
