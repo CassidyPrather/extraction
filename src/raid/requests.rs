@@ -88,7 +88,15 @@ fn press_card(
     mut requests: ResMut<Requests>,
     mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
-    mut stashes: Query<&mut Backpack, With<Stash>>,
+    (stashes, mut bags, mut sockets): (
+        Query<Entity, With<Stash>>,
+        Query<&mut Backpack>,
+        Query<(
+            Entity,
+            &mut crate::interact::Socket,
+            &crate::interact::SocketOwner,
+        )>,
+    ),
     items: Query<&Item>,
     catalog: Res<Catalog>,
     loot: Option<Res<Loot>>,
@@ -121,15 +129,31 @@ fn press_card(
             raid.say(lines::IN_THE_YARD);
             continue;
         }
-        let Some(mut stash) = stashes.iter_mut().next() else {
+        let Some(stash) = stashes.iter().next() else {
             continue;
         };
-        let in_stash = |id: &str, n: u32, stash: &Backpack| -> Vec<Entity> {
-            stash
+        // What's in the stash, and in a bag or a mount of something in it (a
+        // stone sealed in its lead case counts): (the bag or socket that
+        // holds it, the item).
+        let in_stash = |id: &str, n: u32| -> Vec<(Entity, Entity)> {
+            let Ok(top) = bags.get(stash) else {
+                return Vec::new();
+            };
+            let in_bags = top
                 .contents
                 .iter()
-                .copied()
-                .filter(|e| {
+                .filter_map(|b| bags.get(*b).ok().map(|bag| (*b, bag)))
+                .flat_map(|(b, bag)| bag.contents.iter().map(move |e| (b, *e)));
+            let mounted = sockets
+                .iter()
+                .filter(|(_, _, owner)| top.contents.contains(&owner.0))
+                .filter_map(|(s, socket, _)| socket.occupant.map(|e| (s, e)));
+            top.contents
+                .iter()
+                .map(|e| (stash, *e))
+                .chain(in_bags)
+                .chain(mounted)
+                .filter(|(_, e)| {
                     items.get(*e).is_ok_and(|i| {
                         extraction_core::progression::fetch_takes(id, &catalog.get(i.kind()).id)
                     })
@@ -137,9 +161,9 @@ fn press_card(
                 .take(n as usize)
                 .collect()
         };
-        let handed: Vec<Entity> = match &job {
+        let handed: Vec<(Entity, Entity)> = match &job {
             Job::Fetch { item: id, n } => {
-                let have = in_stash(id, *n, &stash);
+                let have = in_stash(id, *n);
                 if (have.len() as u32) < *n {
                     raid.say(lines::fetch_short(
                         have.len(),
@@ -151,7 +175,7 @@ fn press_card(
                 have
             }
             Job::Recover { overnight, .. } => {
-                let have = in_stash(RECOVER_ITEM, 1, &stash);
+                let have = in_stash(RECOVER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_RECORDER);
                     continue;
@@ -165,7 +189,7 @@ fn press_card(
                 have
             }
             Job::Letter => {
-                let have = in_stash(LETTER_ITEM, 1, &stash);
+                let have = in_stash(LETTER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_LETTER);
                     continue;
@@ -173,7 +197,7 @@ fn press_card(
                 have
             }
             Job::Ledger => {
-                let have = in_stash(LEDGER_ITEM, 1, &stash);
+                let have = in_stash(LEDGER_ITEM, 1);
                 if have.is_empty() {
                     raid.say(lines::NO_LEDGER);
                     continue;
@@ -188,8 +212,12 @@ fn press_card(
                 Vec::new()
             }
         };
-        stash.contents.retain(|e| !handed.contains(e));
-        for e in handed {
+        for (holder, e) in handed {
+            if let Ok(mut b) = bags.get_mut(holder) {
+                b.contents.retain(|x| *x != e);
+            } else if let Ok((_, mut socket, _)) = sockets.get_mut(holder) {
+                socket.occupant = None;
+            }
             commands.entity(e).despawn();
         }
         requests.number += 1;
@@ -607,5 +635,45 @@ pub(crate) mod tests {
         press_card(&mut app);
         assert_eq!(app.world().resource::<Progression>().0.done, 2);
         assert_eq!(stew(&mut app), before - 2, "handed over");
+    }
+
+    #[test]
+    fn a_stone_sealed_in_its_case_counts_for_the_fetch() {
+        let mut app = app();
+        home(&mut app);
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Fetch {
+            item: "art_hearth".into(),
+            n: 1,
+        });
+        stash(&mut app, "lead_case", 1);
+        app.update();
+        let st = one::<With<Stash>>(&mut app);
+        let case = *app
+            .world()
+            .get::<Backpack>(st)
+            .unwrap()
+            .contents
+            .last()
+            .unwrap();
+        let catalog = app.world().resource::<Catalog>().clone();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let stone = spawn_item(
+            &mut Commands::new(&mut queue, app.world()),
+            &catalog,
+            SpawnItem {
+                kind: catalog.kind("art_hearth").unwrap(),
+                transform: Transform::default(),
+                condition: 1.0,
+            },
+        );
+        queue.apply(app.world_mut());
+        app.update();
+        crate::persist::seat_in_mount(app.world_mut(), case, stone);
+        app.update();
+        let before = app.world().resource::<Progression>().0.done;
+        press_card(&mut app);
+        assert_eq!(app.world().resource::<Progression>().0.done, before + 1);
+        assert!(app.world().get_entity(stone).is_err(), "handed over");
+        assert!(app.world().get_entity(case).is_ok(), "the case stays");
     }
 }

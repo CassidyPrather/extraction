@@ -222,19 +222,20 @@ fn a_loud_raid_brings_them_to_the_door_and_into_the_cabin() {
     let player = one::<With<LocalPlayer>>(&mut app);
     app.world_mut().get_mut::<Attention>(player).unwrap().noise = 2.0;
     app.update();
-    let director_had = app
-        .world()
-        .get_resource::<crate::robots::director::Director>()
-        .map(|d| d.responses.len());
+    // The visit goes to Robot minds' director as a `NightVisit` at the door.
+    #[derive(Resource, Default)]
+    struct Visits(Vec<crate::robots::director::NightVisit>);
+    app.init_resource::<Visits>().add_systems(
+        Update,
+        |mut r: MessageReader<crate::robots::director::NightVisit>, mut v: ResMut<Visits>| {
+            v.0.extend(r.read().copied())
+        },
+    );
     press(&mut app, SafehouseThing::Bed);
-    if let Some(had) = director_had {
-        let now = app
-            .world()
-            .resource::<crate::robots::director::Director>()
-            .responses
-            .len();
-        assert!(now > had, "a team sent to the door");
-    }
+    app.update();
+    let visits = &app.world().resource::<Visits>().0;
+    assert_eq!(visits.len(), 1, "a team sent to the door");
+    assert_eq!(Some(visits[0].door), house(&app).door);
     let log: Vec<String> = app
         .world()
         .resource::<Raid>()
@@ -308,4 +309,31 @@ fn an_expedition_counts_only_after_a_night_out() {
         .last = Some(entry(1));
     press_card(&mut app);
     assert_eq!(done(&app), 1, "a night out does");
+}
+
+#[test]
+fn the_leftovers_lie_there_once_however_often_you_load() {
+    let path = temp_save("leftovers");
+    let beans = |app: &mut App| {
+        let catalog = app.world().resource::<Catalog>().clone();
+        app.world_mut()
+            .query::<&Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "canned_beans")
+            .count()
+    };
+    let mut a = app_with_save(&path);
+    let first = beans(&mut a);
+    assert!(first >= 1, "the crew's tin is under the bed");
+    a.world_mut().write_message(crate::persist::SaveNow);
+    a.update();
+    for _ in 0..2 {
+        let mut b = app_with_save(&path);
+        for _ in 0..5 {
+            b.update();
+        }
+        assert_eq!(beans(&mut b), first, "no more beans for loading again");
+        b.world_mut().write_message(crate::persist::SaveNow);
+        b.update();
+    }
 }

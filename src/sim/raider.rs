@@ -607,9 +607,17 @@ pub struct Scene<'w, 's> {
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
+    house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
 }
 
 impl Scene<'_, '_> {
+    /// The raid's clock less the nights slept in it: a morning in the
+    /// safehouse is a fresh start, not a raid gone late.
+    fn awake(&self) -> f32 {
+        let nights = self.house.as_ref().map_or(0, |h| h.nights_out);
+        self.raid.clock - nights as f32 * extraction_core::safehouse::NIGHT
+    }
+
     fn hand(&self, children: &Children, side: Side) -> Option<Entity> {
         children.iter().find_map(|c| {
             self.hands
@@ -929,7 +937,7 @@ fn time_to_go(
     health: &Health,
     gun: Option<Entity>,
 ) -> Option<&'static str> {
-    if scene.raid.clock > r.traits.minutes * 60.0 {
+    if scene.awake() > r.traits.minutes * 60.0 {
         return Some("time");
     }
     let (used, cap) = scene.pack_use(me);
@@ -2318,7 +2326,7 @@ fn kind_name(k: SiteKind) -> &'static str {
 /// Picks the next site: worth, distance, and the pull of the far side as
 /// the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
-    let late = (scene.raid.clock / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
+    let late = (scene.awake() / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;
     let mut best: Option<(f32, usize)> = None;
@@ -2329,6 +2337,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let pull = match s.kind {
             // The driver's scout job: a player goes for it, as long as
             // they're fit to.
+            // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
+            _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
