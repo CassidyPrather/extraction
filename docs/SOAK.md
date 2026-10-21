@@ -156,3 +156,91 @@ minute).
   coordinator.
 - **Relocating** (`relocating_keeps_every_item`): the career is saved
   pointed at the new valley, and the kit arrives whole.
+
+## Chaos monkey
+
+`src/soak/chaos.rs`: a seeded bot at the headset's controls. It writes
+poses, grip, trigger and buttons into `RigInput` through the VR harness
+(`vr_harness::Vr`), so what the hand finds, reach and collision are all in
+play, and does random but plausible things: walks, sprints, jumps and
+turns; teleports to doors, ladders, the water's edge, items or anywhere
+inside the fence; grabs whatever grab point is in reach (items, doors,
+ladders, a held gun's slide, by grip or trigger); waves both hands
+through walls and floors; throws at 1-40 m/s, often at the floor; drops;
+stows into pouches, the holster and the pack (sometimes dropping the
+magazine first: holstering mid-reload); takes things back out; pulls the
+pack over the shoulder; pulls triggers and presses the magazine release
+and slide stop; pulls the magazine with the other hand while still
+firing; brings a held magazine to the other hand's gun; sits, kneels and
+crouches; flips comfort settings (seated, left-handed, one-handed,
+smooth turn, climb teleport, finger grab) mid-raid; pokes the truck's
+buttons; climbs ladders hand over hand and lets go halfway; spawns a few
+random catalog items to play with; and fakes tracking glitches (a hand
+jumping up to 60 m for a frame or two, holding something or not).
+
+After every action it checks:
+
+- nothing has a non-finite `Transform` or velocity;
+- no loose item is off the map, more than 0.6 m under the ground (or an
+  underground site's floor), or flying faster than 45 m/s;
+- an item is in one place at a time: a hand's `holding` and the item's
+  `Held` agree, nothing is both held and socketed or stowed, every socket
+  and its occupant's `InSocket` agree, every pack's list and its items'
+  `InBackpack` agree, and no socket or pack lists a despawned item;
+- guns, magazines, tools and artifacts are never despawned (food and
+  ammunition may be used up);
+- a hand that opened lets go within 20 frames;
+- the player stays over the ground, and doesn't go nowhere on six walks
+  in a row.
+
+Each finding prints the last two dozen actions. `chaos_monkey_short`
+(three seeds, 30 s each, yard and Marrow Creek with robots) is in the
+suite. The long run:
+
+```bash
+CHAOS_SEEDS=1-20 CHAOS_SECS=600 CHAOS_MAP=all cargo test --lib \
+    chaos_monkey_long -- --ignored --nocapture
+```
+
+`CHAOS_MAP` takes a map, a comma list or `all`; `CHAOS_ROBOTS=1` turns
+robots on; `CHAOS_TRACE=<entity index>` prints that entity every frame
+and anything moving faster than 50 m/s. A debug build runs about real
+time (a two-minute seed in 35-75 s).
+
+### What it found
+
+Run on every valley, seeds 1-6 for two minutes each without robots and
+11-14 with them (about 40 game-minutes of monkey):
+
+- **Thrown and dropped items left at hundreds of m/s** (up to 1,800 m/s,
+  off the map) after a tracking jump or a teleport of the playspace with
+  something in hand: a hand's velocity is measured in the world, so a
+  jump of the hand or the body is a throw. Fixed with the release cap
+  (`interact::MAX_THROW`, Physics edge cases below); the monkey's
+  glitch action keeps it covered.
+- **Curios spawned inside the slag heaps' hill** at Cinder Works and fell
+  through it: the anomaly prefab sits on its lowest corner over a
+  hilltop, 0.5 m under the ground at its centre, where its loot spot is.
+  Every building loot spot is now put on or over the ground
+  (`buildings::loot_spot_at`); gauge
+  `every_loot_spot_is_over_the_ground` checks every spot on every map.
+- **A pack listed an EMP grenade that had gone off inside it.** Nothing
+  took a despawned item out of its pack's list (or its socket). Observers
+  on `Despawn` now do, whatever despawned it; test
+  `a_despawned_item_leaves_its_pack_and_pouch`.
+- **A cleaning rod went off like a shell**, three times in ~70 runs
+  (280-450 m/s): a 1 cm by 60 cm rod (`dims` 0.008 x 0.008 x 0.6, the
+  collider floored at 1 cm) with almost no inertia about its length.
+  Open: wants a thicker collider floor for items (2 cm) and a speed cap
+  on loose items like the robots' bodies have (Physics edge cases).
+- **Items lying in tunnels the underground rasters don't know**: things
+  dropped in Marrow's civil-defence bunker (at (-8, 82), 6 m down) and
+  the Depot's intake ramp (at (-245, -152), 21 m down) lay still on a
+  floor where `underground::floor_under` says there is only rock. Anything
+  that uses it to tell "in a site" from "through the ground" (the lost
+  items' rescue, the monkey's own check) gets those wrong. Open, for
+  Underground.
+- Small items (rounds, ammunition boxes, a pistol) still go through the
+  terrain now and then at 5-15 m/s, mostly dropped from a hand pushed
+  into the ground; the lost items' rescue brings them back. Open:
+  Physics edge cases.
