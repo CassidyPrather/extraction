@@ -84,13 +84,23 @@ meets a wall, twenty frames before the capture (`breach.png`).
 ## Boarded windows
 
 World models picks which sashes are boarded (`world::decay::boarded_sashes`,
-read by `boards::boarded_sashes`; a stub here until their branch is on
-main) and draws the board (`window_board`). Each of a boarded window's
+read by `boards::boarded_sashes`) and draws the board (`window_board`). Each of a boarded window's
 three boards is its own breakable entity (`boards::WindowBoard`): a
 plank to a round, `Timber` 60, a `Pryable` seam at its end, drawn by its
 model at the building's range, splintering when it goes, saved broken and
 nailed back up by the Surge. A boarded sash is always a weathered one, so
 there's no glass behind to draw.
+
+## Wrecks you can strip
+
+`strip::spawn_part(commands, parts, broken, Part { at, size, mat, yields,
+pry, model })` puts a part on a wreck: a bus's folding door, a panel, a
+seat. A metal part comes off only to a crowbar (`Pryable`, `pry` N·m:
+rounds hole sheet, they don't tear a door off); a wooden one breaks too.
+Off, it drops what it yields (item ids and counts: scrap now, a panel you
+can carry once Kit has one) and stays off until the Surge puts the wreck
+back together (`strip::Parts` keeps every part placed). Whoever places
+wrecks (World models) calls it; nothing in the valleys does yet.
 
 ## Broken by the years
 
@@ -232,7 +242,9 @@ Shots in `docs/shots/destruction/`: `teeth.png` (a window shot out, the
 teeth left in its sashes), `door_down.png` (a plank door shot down, its
 splinters in the doorway), `litter.png` (glass glittering on the ground
 under a window broken from inside), `breach.png` (a hole torn in a plank
-house's back wall, its boards on the ground).
+house's back wall, its boards on the ground), `boarded.png` (a boarded
+window over the years' broken sash) and `board_off.png` (its middle board
+shot off, splinters falling).
 
 ## Next
 
