@@ -133,10 +133,36 @@ pub struct LoadoutSave {
 pub struct Memorial {
     /// Convoys that got away with someone's kit.
     pub convoys: u32,
-    /// Names of everything they took, oldest first.
+    /// Names of what they took, oldest first: the latest [`LOST_KEPT`]
+    /// (the board shows the newest few, the Depot's bins sixteen).
     pub lost: Vec<String>,
     /// Bodies recovered before the convoy got them out.
     pub recovered: u32,
+    /// Everything they ever took, counted (older saves: `lost`'s length).
+    #[serde(default)]
+    pub lost_total: u32,
+}
+
+/// How many of the convoys' takings a career keeps by name. A long career
+/// dying often kept every name for good: the save only grew (`docs/SOAK.md`).
+pub const LOST_KEPT: usize = 250;
+
+impl Memorial {
+    /// The convoy got away with these.
+    pub fn lose(&mut self, names: impl IntoIterator<Item = String>) {
+        let total = self.total_lost();
+        let before = self.lost.len();
+        self.lost.extend(names);
+        let gained = (self.lost.len() - before) as u32;
+        self.lost_total = total.saturating_add(gained);
+        let over = self.lost.len().saturating_sub(LOST_KEPT);
+        self.lost.drain(..over);
+    }
+
+    /// Everything the convoys ever took.
+    pub fn total_lost(&self) -> u32 {
+        self.lost_total.max(self.lost.len() as u32)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -844,10 +870,16 @@ mod tests {
     fn a_newer_career_is_known_by_its_version() {
         let mut c = rich_career();
         c.version = SAVE_VERSION + 3;
-        let text = c.to_ron().unwrap().replace("stash:", "stash_v9: Shiny(1), stash:");
+        let text = c
+            .to_ron()
+            .unwrap()
+            .replace("stash:", "stash_v9: Shiny(1), stash:");
         assert!(Career::from_ron(&text).is_err());
         assert_eq!(career_version(&text), Some(SAVE_VERSION + 3));
-        assert_eq!(career_version(&rich_career().to_ron().unwrap()), Some(SAVE_VERSION));
+        assert_eq!(
+            career_version(&rich_career().to_ron().unwrap()),
+            Some(SAVE_VERSION)
+        );
         assert_eq!(career_version("garbage"), None);
     }
 
@@ -911,5 +943,23 @@ mod tests {
             c.progress,
             "every valley"
         );
+    }
+
+    /// A career that dies often keeps a count of all the convoys took, and
+    /// the names of only the latest: the save stops growing.
+    #[test]
+    fn the_memorial_keeps_a_count_not_every_name() {
+        // An older save: names only.
+        let mut m = Memorial {
+            lost: vec!["ak74".into(); 10],
+            ..Default::default()
+        };
+        assert_eq!(m.total_lost(), 10);
+        for i in 0..1000 {
+            m.lose([format!("thing {i}"), "ak_mag".into()]);
+        }
+        assert_eq!(m.total_lost(), 2010);
+        assert_eq!(m.lost.len(), LOST_KEPT);
+        assert_eq!(m.lost.last().unwrap(), "ak_mag", "newest kept");
     }
 }

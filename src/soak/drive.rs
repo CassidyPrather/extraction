@@ -398,3 +398,50 @@ pub fn cli(args: impl Iterator<Item = String>) -> AppExit {
         AppExit::error()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Raid, Surge, down, home, the Zone reset, three times over: each time
+    /// it's back at base after a reset the world holds no more than it did
+    /// the time before (entities, bodies, items, contact pairs), and the
+    /// gauge finds nothing piling up. The hours-long version is
+    /// `extraction soak` (`docs/SOAK.md`).
+    #[test]
+    fn each_zone_reset_puts_the_world_back() {
+        // No director: what robots happen to be out differs from one
+        // reset to the next. (The CLI runs have them.)
+        let mut app = app(crate::LaunchOptions {
+            robots: false,
+            ..options("marrow_creek", 3, None)
+        });
+        let mut raids = Raids::new(25.0);
+        let rec = census::soak(&mut app, 140.0, 1.0, |app, _| raids.drive(app), |_| {});
+        assert!(raids.raids >= 3, "{} raids", raids.raids);
+        // The last census at base after each reset.
+        let mut at_base: Vec<&Census> = Vec::new();
+        for c in &rec.censuses {
+            if c.phase == "AtBase" {
+                match at_base.last() {
+                    Some(l) if l.raids == c.raids => *at_base.last_mut().unwrap() = c,
+                    _ => at_base.push(c),
+                }
+            }
+        }
+        assert!(at_base.len() >= 2, "{at_base:?}");
+        let (a, b) = (at_base[1], at_base[at_base.len() - 1]);
+        let grew = |what: &str, x: usize, y: usize, slack: usize| {
+            assert!(
+                y <= x + slack,
+                "{what} grew from one reset to the next: {x} -> {y}\n{}",
+                rec.report()
+            );
+        };
+        grew("entities", a.entities, b.entities, 60);
+        grew("bodies", a.bodies, b.bodies, 10);
+        grew("items", a.items, b.items, 10);
+        grew("contact pairs", a.contacts, b.contacts, 80);
+        assert!(rec.leaks().is_empty(), "{}", rec.report());
+    }
+}
