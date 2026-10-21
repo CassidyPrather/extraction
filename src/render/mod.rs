@@ -103,6 +103,22 @@ pub struct OffscreenCamera;
 #[derive(Component)]
 pub struct FreeCamera;
 
+/// The 3D cameras that might be a player's eyes, as a query filter: see
+/// [`eyes`].
+pub type EyeCamera = (With<Camera3d>, Without<OffscreenCamera>);
+
+/// The player's eyes (or the flat camera): what distance-based detail
+/// (near trees, shadows) is for. Not a camera drawing into an image (an
+/// impostor capture's rig, 4 km down, while it waits on its picture; in
+/// the GPU-less gauges it waits for ever).
+pub fn eyes<'a>(
+    cams: &'a Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), EyeCamera>,
+) -> impl Iterator<Item = &'a GlobalTransform> {
+    cams.iter()
+        .filter(|(_, t)| !matches!(t, Some(bevy::camera::RenderTarget::Image(_))))
+        .map(|(g, _)| g)
+}
+
 /// In flat mode the local player's head is a camera. (The XR driver adds
 /// its own per-eye cameras instead.)
 fn attach_flat_camera(
