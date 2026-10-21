@@ -108,6 +108,11 @@ reformatting their code.
 | Heavy machine | `src/robots/heavy*.rs`, `art/robots/heavy*`; uses Robot bodies' and Robot minds' machinery |
 | Capture | `src/capture/`, `scripts/capture_*.sh`, `docs/CAPTURE.md`, `docs/shots/showcase/` |
 | Legibility | text and fine symbols everywhere: the size floors, `docs/LEGIBILITY.md`, the text registry and its gauges; may resize, move or re-light text in any area, telling the owner |
+| Verifier | `docs/HEALTH.md`; runs smoke, sims and the full suite on every main push and routes failures to owners; small test fixes anywhere, telling the owner |
+| Armoury | new guns: their models, mechanisms, ammo and data entries, `docs/ARMOURY.md`; builds on Weapon feel's shared systems |
+| Soak and fuzz | long-run and chaos testing: soak gauges, the monkey bot, save fuzzing, `docs/SOAK.md`; small fixes anywhere, telling the owner |
+| Fifth valley | the fifth valley's map, dressing, notes and lookbook |
+| Radio and music | tapes and the player, radio stations, playable instruments, in their own module; Audio keeps `audio.rs` and the mix |
 
 ### Session ids
 
@@ -137,6 +142,11 @@ Message another workstream directly with `mcp__claude-code-remote__send_message`
 | Heavy machine | `session_01UYS29AKspvCeepAatEb31x` |
 | Capture | `session_01G4MW4GWrhGGDH6D1ThFCZE` |
 | Legibility | `session_01EFDRQ8jB3YUANXu8qAPEXH` |
+| Verifier | `session_01Tmqhk8YG6KUsseHgNkDPkU` |
+| Armoury | `session_01Pcna4kNziHpEDndBEj4GTb` |
+| Soak and fuzz | `session_01Nm7HSNcuHgsHr4QL6jw8nB` |
+| Fifth valley | `session_01L5XmuUL97zCb1TRgnsgR8P` |
+| Radio and music | `session_018GL2nTVupUUChfoiri2RKz` |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.
