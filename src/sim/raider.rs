@@ -310,6 +310,9 @@ pub struct Raider {
     heat: f32,
     /// Crouched since (raid seconds), when it is.
     crouched_since: Option<f32>,
+    /// Gone to vent a flue: the lever, and the way on (to the loot and
+    /// taking it) once it's open.
+    after_vent: Option<(Entity, Vec<Task>)>,
     /// When it last froze for a searching robot, or threw a distraction.
     froze_at: f32,
     distracted_at: f32,
@@ -368,6 +371,7 @@ pub fn attach_raider(
     buildings: Query<(Entity, &Building, &Transform)>,
     doors: Query<(Entity, &DoorLeaf, &ChildOf)>,
     loot: Option<Res<BuildingLoot>>,
+    vents: Query<&crate::world::furnace::VentLever>,
     mut log: ResMut<SimLog>,
 ) {
     let Some(run) = &opts.sim_run else {
@@ -381,7 +385,12 @@ pub fn attach_raider(
     if let Some(m) = opts.sim_minutes {
         traits.minutes = m;
     }
-    let plans = plan_buildings(&buildings, &doors);
+    let mut plans = plan_buildings(&buildings, &doors);
+    // Flues already vented are a way.
+    vent_plans(
+        &mut plans,
+        vents.iter().filter(|v| v.open).map(|v| (v.site, v.vent)),
+    );
     let mut sites: Vec<Site> = Vec::new();
     let mut site_of_plan = vec![None; plans.len()];
     let spots: Vec<Vec3> = loot
@@ -503,6 +512,7 @@ pub fn attach_raider(
                 kg: 0.0,
                 heat: 0.0,
                 crouched_since: None,
+                after_vent: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
@@ -643,6 +653,9 @@ pub struct Scene<'w, 's> {
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
+    /// The bots' sockets by entity (`Task::Draw` counts them in entity
+    /// order).
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -797,15 +810,7 @@ pub fn think(
     for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
         // A flue vented: its heat's cells are a way again.
-        for (site, vent) in &vented {
-            for plan in r.plans.iter_mut().filter(|p| p.entity == *site) {
-                let zones = extraction_core::underground::layout(&plan.name)
-                    .and_then(|l| l.vents.get(*vent))
-                    .map(|v| v.zones.clone())
-                    .unwrap_or_default();
-                plan.vent(&zones);
-            }
-        }
+        vent_plans(&mut r.plans, vented.iter().copied());
         if r.stage == Stage::Done || health.down {
             continue;
         }
@@ -905,6 +910,14 @@ pub fn think(
         }
 
         // --- Plan. -----------------------------------------------------
+        // Back from a vent lever: on through, if it did open.
+        if let Some((lever, rest)) = r.after_vent.take()
+            && r.combat.is_none()
+            && scene.vent_levers.get(lever).is_ok_and(|(_, v, _)| v.open)
+        {
+            bot.replace(rest);
+            continue;
+        }
         if let Some(target) = r.combat.as_ref().map(|c| c.target) {
             // Between bursts: a dressing if it's bad, else keep at it.
             if let Some(tasks) = heal(me, r, &scene, health, children, &mut log, true) {
@@ -2532,33 +2545,60 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
         return None;
     }
     let relay = *scene.carried(me, item).first()?;
+    let spot = Vec2::from_array(*at);
+    // As the contract scenarios plant (`progression::contracts::scenario`):
+    // close, the gun slung so the right hand's free, the relay into it from
+    // its body slot (drawn) or the pack, a look at the spot, let go.
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
-        // Well inside the plant's radius, if there's footing that close.
         Task::WalkTo {
-            to: Vec2::from_array(*at),
-            within: 2.5,
+            to: spot,
+            within: 1.0,
         },
+        Task::Stow(Side::Right),
     ];
-    // The hand free first (it may be holding the last thing picked up),
-    // then the relay into it from wherever it's carried (a grab takes it
-    // out of its body slot or the open pack).
-    let packed = scene.items.get(relay).is_ok_and(|(.., bag)| bag.is_some());
-    t.push(Task::Stow(Side::Left));
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.6)]);
-    }
-    t.extend([
-        Task::GrabFromHere {
+    let (socket, packed) = scene
+        .items
+        .get(relay)
+        .map(|(.., so, bag)| (so.map(|s| s.socket), bag.is_some()))
+        .unwrap_or_default();
+    let mut mine: Vec<Entity> = scene
+        .owned_sockets
+        .iter()
+        .filter(|(_, o)| o.0 == me)
+        .map(|(e, _)| e)
+        .collect();
+    mine.sort();
+    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
+        Some(slot) => t.extend([
+            Task::Draw {
+                slot,
+                side: Side::Right,
+            },
+            Task::Wait(0.5),
+        ]),
+        None if packed => t.extend([
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
+                item: relay,
+                side: Side::Right,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.5),
+        ]),
+        None => t.push(Task::Grab {
             item: relay,
-            side: Side::Left,
-        },
-        Task::Wait(0.5),
-    ]);
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.5)]);
+            side: Side::Right,
+        }),
     }
-    t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
+    let y = scene.zone.ground(spot.x, spot.y);
+    t.extend([
+        Task::Wait(0.5),
+        Task::LookAt(Vec3::new(spot.x, y, spot.y)),
+        Task::Release(Side::Right),
+        Task::Wait(1.5),
+    ]);
     Some((relay, t))
 }
 
@@ -2655,13 +2695,33 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
     }
 }
 
+/// Vents opened (site, vent): their zones' cells walked again in those
+/// sites' plans.
+fn vent_plans(plans: &mut [BuildingPlan], opened: impl Iterator<Item = (Entity, usize)>) {
+    for (site, vent) in opened {
+        for plan in plans.iter_mut().filter(|p| p.entity == site) {
+            let zones = extraction_core::underground::layout(&plan.name)
+                .and_then(|l| l.vents.get(vent))
+                .map(|v| v.zones.clone())
+                .unwrap_or_default();
+            plan.vent(&zones);
+        }
+    }
+}
+
 /// How long to give a vented flue to cool before going through (s): it's
 /// past scorching in five, and gentle by twenty.
 const VENT_WAIT: f32 = 20.0;
 
-/// To a local point a site's heat shuts off: the way by one of its vent
-/// levers (closed still), pulled, a wait while it cools, then on through.
-fn vent_first(scene: &Scene, plan: &BuildingPlan, pos: Vec3, goal: Vec2) -> Option<Vec<Task>> {
+/// To a local point a site's heat shuts off: by one of its vent levers
+/// (closed still): the lever, the way to it, pulled and a wait while the
+/// flue cools; and the way on through from it.
+fn vent_first(
+    scene: &Scene,
+    plan: &BuildingPlan,
+    pos: Vec3,
+    goal: Vec2,
+) -> Option<(Entity, Vec<Task>, Vec<Task>)> {
     if plan.hot.is_empty() {
         return None;
     }
@@ -2685,8 +2745,7 @@ fn vent_first(scene: &Scene, plan: &BuildingPlan, pos: Vec3, goal: Vec2) -> Opti
         };
         tasks.push(Task::Press(lever));
         tasks.push(Task::Wait(VENT_WAIT));
-        tasks.extend(on);
-        return Some(tasks);
+        return Some((lever, tasks, on));
     }
     None
 }
@@ -2898,7 +2957,15 @@ fn take_item(
                 }
                 // Behind heat nothing crosses: vent it first (it clangs),
                 // unless careful.
-                None if r.traits.name != "cautious" => vent_first(scene, plan, pos, goal)?,
+                None if r.traits.name != "cautious" => {
+                    // To the lever and pull it; the way on waits till it's
+                    // open (`think`), not walked into the heat regardless.
+                    let (lever, pre, on) = vent_first(scene, plan, pos, goal)?;
+                    let mut rest = on;
+                    rest.extend(grab);
+                    r.after_vent = Some((lever, rest));
+                    return Some(pre);
+                }
                 None => return None,
             };
             // Behind a door on an underground site's power: throw the

@@ -860,8 +860,61 @@ impl Plugin for AnimPlugin {
             (
                 knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
                 haul_lines.after(super::perceive),
+                kick_loose,
             ),
         );
+    }
+}
+
+/// How far round a footfall reaches for loose things, metres.
+const KICK_REACH: f32 = 0.32;
+/// What a footfall gives them: an impulse, N·s (a light thing skitters, a
+/// crate barely shifts), and the most it may add to a speed.
+const KICK: f32 = 2.4;
+const KICK_MAX: f32 = 2.5;
+
+/// A foot coming down among loose things kicks them aside: away from
+/// where it landed and a little up, harder the lighter they are. (Held
+/// and seated things are out of the world, on the Stowed layer or
+/// switched off.)
+fn kick_loose(
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    spatial: SpatialQuery,
+    mut bodies: Query<
+        (
+            &RigidBody,
+            &GlobalTransform,
+            &ComputedMass,
+            &mut LinearVelocity,
+        ),
+        (
+            Without<RigidBodyDisabled>,
+            Without<crate::interact::Held>,
+            Without<super::RobotPart>,
+        ),
+    >,
+) {
+    let filter = SpatialQueryFilter::from_mask([Layer::Item]);
+    for step in steps.read() {
+        let foot = step.at + Vec3::Y * 0.08;
+        let near = spatial.shape_intersections(
+            &Collider::sphere(KICK_REACH),
+            foot,
+            Quat::IDENTITY,
+            &filter,
+        );
+        for e in near {
+            let Ok((rb, gt, mass, mut v)) = bodies.get_mut(e) else {
+                continue;
+            };
+            if !rb.is_dynamic() {
+                continue;
+            }
+            let off = gt.translation() - foot;
+            let away = Vec3::new(off.x, 0.0, off.z).normalize_or(Vec3::X);
+            let dv = (KICK * mass.inverse()).min(KICK_MAX);
+            v.0 += (away + Vec3::Y * 0.4).normalize() * dv;
+        }
     }
 }
 
@@ -1308,6 +1361,100 @@ mod tests {
             w.feet.iter().all(|f| f.alive && f.t >= 1.0),
             "standing on its feet"
         );
+    }
+
+    /// Loose things in a walker's way get kicked aside as its feet come
+    /// down among them: some move, none goes flying.
+    #[test]
+    fn feet_kick_loose_things_aside() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("cleaning_kit").unwrap();
+        let at = zone.on_ground(40.0, 230.0);
+        let mut items = Vec::new();
+        for k in 0..12 {
+            let p = Vec3::new(
+                at.x + 1.0 + 0.35 * k as f32,
+                0.0,
+                at.z + if k % 2 == 0 { 0.45 } else { -0.45 },
+            );
+            let p = zone.on_ground(p.x, p.z) + Vec3::Y * 0.1;
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            items.push(crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(p),
+                    condition: 1.0,
+                },
+            ));
+            q.apply(app.world_mut());
+        }
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        // Let the things come to rest first.
+        for _ in 0..90 {
+            app.update();
+        }
+        let start: Vec<Vec3> = items
+            .iter()
+            .map(|e| {
+                app.world()
+                    .get::<GlobalTransform>(*e)
+                    .unwrap()
+                    .translation()
+            })
+            .collect();
+        app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+            vec![Vec3::new(at.x + 7.0, 0.0, at.z)];
+        for _ in 0..(90 * 8) {
+            app.update();
+        }
+        let mut moved = 0;
+        for (e, s0) in items.iter().zip(&start) {
+            let p = app
+                .world()
+                .get::<GlobalTransform>(*e)
+                .unwrap()
+                .translation();
+            assert!(p.is_finite());
+            let d = p.xz().distance(s0.xz());
+            assert!(d < 6.0, "a kit flew {d:.1} m");
+            if d > 0.1 {
+                moved += 1;
+            }
+        }
+        assert!(moved >= 2, "{moved} of 12 moved");
     }
 
     /// Underground, below the terrain, footing is the floor the ray finds,

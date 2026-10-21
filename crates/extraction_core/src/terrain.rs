@@ -667,6 +667,10 @@ impl Heightmap {
         if let Some((a, b)) = self.bogies(prefab, at, rot_deg) {
             return (a + b) * 0.5;
         }
+        // The funicular's car is built on the grade through its middle.
+        if prefab == "funicular_car" {
+            return self.height(at);
+        }
         let [w, _, d] = crate::map::prefab_footprint(prefab);
         let (s, c) = rot_deg.to_radians().sin_cos();
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
@@ -1035,6 +1039,8 @@ mod tests {
             regions: vec![],
             haze: None,
             ash: 0.0,
+            cold: 0.0,
+            scree: 0.0,
             snow_line: None,
             snow: 0.0,
             sounds: SoundsDef::default(),
@@ -1083,6 +1089,7 @@ mod tests {
             shoulder: 3.0,
             smoothing: 20.0,
             bridges: vec![],
+            galleries: vec![],
         });
         let hm = Heightmap::build(&map);
         // Cross-slope across the road is gentle.
@@ -1137,6 +1144,7 @@ mod tests {
                 shoulder,
                 smoothing,
                 bridges: vec![],
+                galleries: vec![],
             });
         }
         let hm = Heightmap::build(&map);

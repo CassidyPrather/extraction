@@ -670,7 +670,10 @@ def block(map_name, placements):
 
 
 def main():
-    for map_name in NOTES:
+    # `place_notes.py rime_fell` re-lays only the named valleys.
+    import sys
+
+    for map_name in sys.argv[1:] or NOTES:
         path = ROOT / "assets" / "maps" / f"{map_name}.ron"
         if not path.exists():
             print(f"{map_name}: no map yet, skipped")

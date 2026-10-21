@@ -209,6 +209,10 @@ pub const FIRST_HOME_FROM: &[(&str, &str)] = &[
         "sallow_reservoir",
         "Driver: \"Sallow. We swam there as boys. They say it's dry now.\"",
     ),
+    (
+        "rime_fell",
+        "Driver: \"Rime. Chains on in June up there. You're shaking.\"",
+    ),
 ];
 
 /// The drive-home line: his story when it's that homecoming; Anna's tape

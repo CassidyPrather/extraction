@@ -93,15 +93,48 @@ pub fn current(opts: &LaunchOptions) -> Option<&'static Persona> {
     PERSONAS.iter().find(|p| p.name == name)
 }
 
-/// The newcomers a `--scenario` name asks for, if it's a first-hour one.
-pub fn chain(scenario: &str) -> Option<Vec<&'static Persona>> {
+/// The first fights: each newcomer's first raid with one machine on the
+/// route (`first_fight`, or `first_fight_<encounter>` for one kind).
+pub const FIGHT: &str = "first_fight";
+/// The machines a first fight can be with.
+pub const ENCOUNTERS: [&str; 5] = ["walker", "drone", "hush", "sentry", "night"];
+
+/// What a first-hour or first-fight `--scenario` asks for: the newcomers,
+/// and the encounters (none: the plain first hour, yard and raid).
+pub struct Chain {
+    pub personas: Vec<&'static Persona>,
+    pub encounters: Vec<&'static str>,
+}
+
+/// The chain a `--scenario` name asks for, if it's one of these.
+pub fn chain(scenario: &str) -> Option<Chain> {
+    let all = || PERSONAS.iter().collect::<Vec<_>>();
     if scenario == SCENARIO {
-        return Some(PERSONAS.iter().collect());
+        return Some(Chain {
+            personas: all(),
+            encounters: vec![],
+        });
+    }
+    if scenario == FIGHT {
+        return Some(Chain {
+            personas: all(),
+            encounters: ENCOUNTERS.to_vec(),
+        });
+    }
+    if let Some(kind) = scenario.strip_prefix("first_fight_") {
+        let e = ENCOUNTERS.iter().find(|e| **e == kind)?;
+        return Some(Chain {
+            personas: all(),
+            encounters: vec![e],
+        });
     }
     PERSONAS
         .iter()
         .find(|p| p.scenario == scenario)
-        .map(|p| vec![p])
+        .map(|p| Chain {
+            personas: vec![p],
+            encounters: vec![],
+        })
 }
 
 /// Where a newcomer's two sessions keep the career.
@@ -110,8 +143,13 @@ fn folder(p: &Persona) -> PathBuf {
 }
 
 /// Runs each newcomer's two sessions, a fresh career each, and says how
-/// each went.
-pub fn run_chain(personas: &[&'static Persona]) -> AppExit {
+/// each went; or, for first fights, each newcomer's raid against each
+/// encounter, from a fresh career that's done the yard.
+pub fn run_chain(chain: &Chain) -> AppExit {
+    if !chain.encounters.is_empty() {
+        return run_fights(chain);
+    }
+    let personas = &chain.personas;
     let exe = std::env::current_exe().expect("own executable");
     // Everything else on the command line goes to both sessions.
     let passthrough: Vec<String> = std::env::args()
@@ -159,6 +197,70 @@ pub fn run_chain(personas: &[&'static Persona]) -> AppExit {
         AppExit::Success
     } else {
         println!("first hour: FAILED for {failed:?}");
+        AppExit::error()
+    }
+}
+
+fn passthrough() -> Vec<String> {
+    std::env::args()
+        .skip(1)
+        .scan(false, |skip, a| {
+            let keep = !*skip && a != "--scenario";
+            *skip = a == "--scenario";
+            Some(keep.then_some(a))
+        })
+        .flatten()
+        .collect()
+}
+
+fn run_fights(chain: &Chain) -> AppExit {
+    let exe = std::env::current_exe().expect("own executable");
+    let pass = passthrough();
+    let mut failed = Vec::new();
+    for e in &chain.encounters {
+        for p in &chain.personas {
+            let dir = PathBuf::from("target/first_fight").join(e).join(p.name);
+            let _ = std::fs::remove_dir_all(&dir);
+            let _ = std::fs::create_dir_all(&dir);
+            // Through the yard already.
+            let _ = std::fs::write(dir.join("trained"), "yes\n");
+            let dir_s = dir.to_string_lossy().to_string();
+            let save = dir.join("career.ron").to_string_lossy().to_string();
+            let mut cmd = std::process::Command::new(&exe);
+            cmd.args(&pass)
+                .args([
+                    "--scenario",
+                    RAID,
+                    "--personality",
+                    p.name,
+                    "--encounter",
+                    e,
+                ])
+                .args([
+                    "--data-dir",
+                    &dir_s,
+                    "--save",
+                    &save,
+                    "--map",
+                    "marrow_creek",
+                ]);
+            if p.one_handed {
+                cmd.arg("--one-handed");
+            }
+            if *e == "night" {
+                cmd.args(["--hour", "night"]);
+            }
+            println!("first fight: {} meets the {e}", p.name);
+            if !cmd.status().is_ok_and(|s| s.success()) {
+                failed.push(format!("{}/{e}", p.name));
+            }
+        }
+    }
+    if failed.is_empty() {
+        println!("first fight: every newcomer came through");
+        AppExit::Success
+    } else {
+        println!("first fight: FAILED for {failed:?}");
         AppExit::error()
     }
 }
@@ -332,6 +434,7 @@ pub(super) fn direct_raid(
     view: RaidView,
     raid: Res<Raid>,
     mut met: MessageReader<FirstMet>,
+    fight: Option<Res<Fight>>,
     mut state: Local<Newcomer>,
     time: Res<Time>,
 ) {
@@ -415,7 +518,14 @@ pub(super) fn direct_raid(
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
         if h.hp < state.hp - 5.0 {
-            let warned = now - state.said_at < 30.0;
+            // Warned: the driver said something lately, or a machine
+            // showed its tell (`first_fight`).
+            // In a fight, warned is the machine's own tell; else something
+            // said lately.
+            let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
+                Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
+                None => now - state.said_at < 30.0,
+            };
             let kind = if warned {
                 Kind::Hurt
             } else {
@@ -452,6 +562,10 @@ pub(super) fn direct_raid(
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
         state.leg = Leg::Done;
+        // That's this first hour over: nothing left of the walk.
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
 
     let idle_only =
@@ -509,12 +623,16 @@ pub(super) fn direct_raid(
             state.leg = Leg::Kit;
         }
         Leg::Kit => {
-            let in_crate: Vec<(Entity, String)> = view
+            let mut in_crate: Vec<(Entity, String)> = view
                 .stash
                 .iter()
                 .flat_map(|b| b.contents.iter().copied())
                 .filter_map(|e| world.id(e).map(|id| (e, id.to_string())))
                 .collect();
+            // What the yard used first, to the pockets; anything more after
+            // (a hoarder's radio went to the bottom of the pack, out of
+            // reach of a hand).
+            in_crate.sort_by_key(|(_, id)| !KIT.contains(&id.as_str()));
             for (e, id) in in_crate {
                 if p.hoards || KIT.contains(&id.as_str()) {
                     tasks.push(Task::Grab {
@@ -734,6 +852,29 @@ pub(super) fn direct_raid(
         Leg::Done => {
             if !state.reported {
                 state.reported = true;
+                // The fight, if there was one: each tell, and the first hit
+                // against them.
+                if let Some(f) = fight.as_ref().filter(|f| f.machine.is_some()) {
+                    for (t, what) in &f.tells {
+                        state
+                            .moments
+                            .push((*t, Kind::Learned, format!("tell: {what}")));
+                    }
+                    match (f.first_hit, f.tells.first()) {
+                        (Some(hit), Some((t, what))) if *t < hit => state.moments.push((
+                            hit,
+                            Kind::Hurt,
+                            format!("first hit, {:.1} s after {what}", hit - t),
+                        )),
+                        (Some(hit), _) => state.moments.push((
+                            hit,
+                            Kind::HurtUnwarned,
+                            "first hit, before any tell".into(),
+                        )),
+                        (None, _) => {}
+                    }
+                    state.moments.sort_by(|a, b| a.0.total_cmp(&b.0));
+                }
                 report(&mut bot, p, &state.moments);
             }
             return;
@@ -776,5 +917,215 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
             p.name,
             if home { "" } else { "never got home; " }
         ));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The first fight: one machine on the route, its tells, the first hit.
+
+/// What the fight's watcher has seen: each kind of tell the first time it
+/// came, and the first hit.
+#[derive(Resource, Default, Debug)]
+pub struct Fight {
+    seeded: bool,
+    pub tells: Vec<(f32, String)>,
+    pub first_hit: Option<f32>,
+    reacted: bool,
+    hp: f32,
+    /// What was put on the route, and where.
+    pub machine: Option<(String, Vec2)>,
+}
+
+impl Fight {
+    /// The last tell, if any.
+    pub fn last_tell(&self) -> Option<f32> {
+        self.tells.last().map(|(t, _)| *t)
+    }
+
+    fn tell(&mut self, now: f32, what: &str) -> bool {
+        if self.tells.iter().any(|(_, w)| w == what) {
+            return false;
+        }
+        info!("first fight: {now:.1}s tell: {what}");
+        self.tells.push((now, what.to_string()));
+        true
+    }
+}
+
+#[derive(bevy::ecs::system::SystemParam)]
+pub(super) struct Tells<'w, 's> {
+    noticed: MessageReader<'w, 's, crate::robots::Noticed>,
+    aims: MessageReader<'w, 's, crate::robots::walker::WalkerAim>,
+    locks: MessageReader<'w, 's, crate::robots::drone::DroneLock>,
+    sentries: MessageReader<'w, 's, crate::robots::sentry::SentryEvent>,
+    hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
+}
+
+/// Where along the way to the first job the machine is met: the drop to
+/// the Old farm, a little short of halfway.
+fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
+    let drop = zone
+        .map
+        .markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Insertion)
+        .map_or(Vec2::ZERO, |m| Vec2::from(m.at));
+    let farm = zone
+        .map
+        .markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
+        .map_or(drop + Vec2::new(100.0, -100.0), |m| Vec2::from(m.at));
+    let at = drop.lerp(farm, 0.45);
+    (at, (farm - drop).normalize_or(Vec2::NEG_Y))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn first_fight(
+    opts: Res<LaunchOptions>,
+    mut commands: Commands,
+    zone: Res<crate::world::Zone>,
+    raid: Res<Raid>,
+    mut fight: ResMut<Fight>,
+    mut tells: Tells,
+    mut bots: Query<(&mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
+    health: Query<&crate::health::Health, With<LocalPlayer>>,
+    time: Res<Time>,
+) {
+    let Some(kind) = opts.encounter.as_deref() else {
+        return;
+    };
+    let Some(p) = current(&opts) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    // Put it there once the newcomer's out.
+    if !fight.seeded && raid.phase == Phase::Out {
+        fight.seeded = true;
+        let (at, ahead) = on_the_way(&zone);
+        let side = ahead.perp();
+        let job = |site: Vec3| crate::robots::Job {
+            kind: crate::robots::JobKind::Watch,
+            site,
+            duration: 1800.0,
+            exit: site + Vec3::new(0.0, 0.0, -300.0),
+        };
+        let placed = match kind {
+            // On its rounds, a little off the way.
+            "walker" | "night" => {
+                let p = at + side * 25.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::walker::spawn_walker(&mut commands, &zone, site, job(site));
+                p
+            }
+            "drone" => {
+                let p = at + side * 30.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::drone::spawn_drone(&mut commands, site + Vec3::Y * 22.0, job(site));
+                p
+            }
+            // Right across the way: nothing to see but still dust.
+            "hush" => {
+                let site = zone.on_ground(at.x, at.y);
+                commands.queue(move |w: &mut World| {
+                    crate::anomaly::spawn_anomaly(
+                        w,
+                        extraction_core::anomaly::AnomalyKind::Hush,
+                        site,
+                        7.0,
+                        None,
+                    );
+                });
+                at
+            }
+            // Off to the side, sweeping across the way.
+            "sentry" => {
+                let p = at + side * 22.0;
+                let to_way = at - p;
+                let centre = to_way.x.atan2(-to_way.y).to_degrees();
+                crate::robots::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    p,
+                    centre,
+                    140.0,
+                    p + side * 6.0,
+                );
+                p
+            }
+            _ => at,
+        };
+        info!("first fight: a {kind} at {placed:.0} for the {}", p.name);
+        fight.machine = Some((kind.to_string(), placed));
+    }
+    // The tells, as they come.
+    let mut came = Vec::new();
+    for _ in tells.noticed.read() {
+        came.push("a machine noticed you (its eye brightens)");
+    }
+    for _ in tells.aims.read() {
+        came.push("a walker's gun settling (clank, servo)");
+    }
+    for _ in tells.locks.read() {
+        came.push("a drone's lock-on (the chirp)");
+    }
+    for s in tells.sentries.read() {
+        if s.what == crate::robots::sentry::SentryAct::Chirp {
+            came.push("a sentry's chirp (its lens flares)");
+        }
+    }
+    if !tells.hushed.is_empty() {
+        came.push("inside a hush (the sound goes dull)");
+    }
+    let mut first_tell = None;
+    for what in came {
+        if fight.tell(now, what) && first_tell.is_none() {
+            first_tell = Some(what);
+        }
+    }
+    // The first hit.
+    if let Ok(h) = health.single() {
+        if fight.hp > 0.0 && h.hp < fight.hp - 0.5 && fight.first_hit.is_none() {
+            fight.first_hit = Some(now);
+            info!("first fight: {now:.1}s first hit");
+        }
+        fight.hp = h.hp;
+    }
+    // What the newcomer does about it.
+    let Some(what) = first_tell.filter(|_| !fight.reacted) else {
+        return;
+    };
+    let Ok((mut bot, root, mut input)) = bots.single_mut() else {
+        return;
+    };
+    fight.reacted = true;
+    let here = root.translation.xz();
+    let from = fight.machine.as_ref().map_or(here, |(_, at)| *at);
+    let away = (here - from).normalize_or(Vec2::Y);
+    let hush = what.contains("hush");
+    let answer: Vec<Task> = if p.reckless && !hush {
+        vec![Task::DrawGun, Task::Engage { shots: 12 }]
+    } else if p.lost {
+        // Off, anywhere.
+        vec![Task::WalkTo {
+            to: here + away * 25.0,
+            within: 2.0,
+        }]
+    } else if p.hoards && !hush {
+        // Carries on.
+        vec![]
+    } else {
+        // Down, out of its line, and still a while.
+        input.crouch = true;
+        vec![
+            Task::WalkTo {
+                to: here + away.perp() * 12.0 + away * 6.0,
+                within: 1.5,
+            },
+            Task::Wait(12.0),
+        ]
+    };
+    if !answer.is_empty() {
+        super::second_hour::cut_in(&mut bot, answer);
     }
 }

@@ -148,12 +148,31 @@ minute).
   after a save and load). The Surge reset now lays the leftovers for the
   new cycle (`safehouse::relay_leftovers`). Found by the round trip after
   going down, which ran after a Surge.
-- **Saved past the Surge's coming.** The game opens at base, where the
-  Surge has been and gone, so the Zone re-rolls on load. That is by
-  design, and what you own comes through whole. Quitting mid-raid also
-  puts you back at base with everything you carried. That is a design
-  question (a save-quit escape), not a bug, and is left to the
-  coordinator.
+- **Quitting mid-raid was an escape.** Closing the game out in the Zone
+  (or in the Surge) reopened at base with everything you carried, so
+  quitting got you out of any danger without extracting. The rule now,
+  because VR crashes and flat headset batteries are common and the
+  honest player should lose nothing:
+
+  - A save made out in the Zone records the raid (`ZoneSave::raid`):
+    where you stood and which way you faced, and the phase. That covers
+    out, the truck on its way (with its arrival time), the truck waiting
+    (with how long it will wait), and down.
+  - Loading it resumes the raid there. It's the same valley and the same
+    raid (not counted again), with your carried kit on you and what was
+    in your hands at your feet. The Zone is as saved (loot, remains,
+    breakages) and the clock carries on, so a Surge that was raging
+    still is.
+  - You're nudged inside the map, and up onto the ground if more than
+    40 m under it (the underground sites are shallower). Robots aren't
+    saved: the director sends its own.
+  - Down is down: the convoy's order goes out as it would have.
+  - At base, or pulling out with the truck, there's nothing to resume:
+    it opens at base.
+
+  Tests: `persist::tests::quitting_mid_raid_resumes_where_you_stood`,
+  and the round trips in `every_item_is_saved_once_through_a_raids_awkward_moments`
+  (saving in the Surge comes back still in it).
 - **Relocating** (`relocating_keeps_every_item`): the career is saved
   pointed at the new valley, and the kit arrives whole.
 
@@ -244,8 +263,16 @@ Run on every valley, seeds 1-6 for two minutes each without robots and
   Depot ramp positions, as if Marrow's underground floors were built
   in every valley. Anything
   that uses it to tell "in a site" from "through the ground" (the lost
-  items' rescue, the monkey's own check) gets those wrong. Open, for
-  Underground.
+  items' rescue, the monkey's own check) gets those wrong. Underground
+  has since widened `floor_under` to count a point as in a site up to its
+  room's own roof (not a flat 4.5 m) and given Sallow its own site (the
+  gallery at (-6, 172)). On their tree the same seeds found no "under"
+  finding near any site; what's left clusters at the maps' ±329 m edges
+  (things thrown over the rim falling away, which the lost items' rescue
+  brings back). They couldn't reproduce Marrow's floors in Sallow. The
+  long run plays several maps in one process (`CHAOS_MAP=all`), so a
+  stale cache from the map before would explain it. Re-run after the
+  merge, and send Underground the seed, frame and item if it shows again.
 - Small items (rounds, ammunition boxes, a pistol) still go through the
   terrain now and then at 5-15 m/s, mostly dropped from a hand pushed
   into the ground; the lost items' rescue brings them back. Open:
@@ -314,9 +341,12 @@ Throws through something: 47 of ~1,600 before, 4 after.
 
 ### Open
 
-- A water tower's face (Marrow Creek, about (231, 21, -194)): a round and
-  an artifact shard thrown at it end up behind it. Not looked into: the
-  tower's colliders are Models: world's.
+- (Closed: not a hole.) A water tower's face (Marrow Creek, about
+  (231, 21, -194)). Models: world checked it: the colliders are solid
+  cylinders a little proud of the model. The two "crossings" were small
+  rounds sinking a few millimetres into the curved foot and shaft on
+  contact, and both came to rest on the near side. The crossing check
+  now ignores a step that ends within 2 cm past a face (`SHALLOW`).
 - A sliver (an old photo, a letter) thrown at the ground at 25-50 m/s
   now and then passes the terrain's surface for a tick before
   `ground_skin` has it back up; a cleaning rod thrown end-on, spinning,

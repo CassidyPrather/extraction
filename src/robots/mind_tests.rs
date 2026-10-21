@@ -2219,3 +2219,103 @@ fn a_repath_storm_is_spread_over_ticks() {
         "all of them repathed ({ticks} updates)"
     );
 }
+
+/// An armed walker at `post`, at its post.
+fn armed_walker_at(app: &mut App, zone: &Zone, post: Vec3) -> Entity {
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            zone,
+            post,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..90 {
+        app.update();
+    }
+    w
+}
+
+/// A walker that's just picked a fight looks before it shoots: its first
+/// round comes no sooner than SIGHT_BEAT + AIM_TIME after it starts.
+#[test]
+fn a_walker_looks_before_it_shoots() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let start = app.world().resource::<Time>().elapsed_secs();
+    for _ in 0..90 * 6 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let first = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .find(|(e, _)| *e == w)
+        .map(|(_, t)| *t - start)
+        .expect("it fired in the end");
+    assert!(
+        first >= super::walker::SIGHT_BEAT + super::walker::AIM_TIME - 0.05,
+        "it looked first: first round {first:.2} s in"
+    );
+}
+
+/// Go down and they let you go: a walker fighting you forgets you and
+/// gives up, so it isn't waiting when you come to.
+#[test]
+fn going_down_lets_you_go() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    app.update();
+    app.world_mut()
+        .write_message(crate::health::Downed { player, at: me });
+    app.update();
+    app.update();
+    let a = app.world().get::<Awareness>(w).unwrap();
+    assert_eq!(a.target, None, "it forgot you");
+    assert!(
+        !matches!(
+            app.world().get::<Brain>(w).unwrap(),
+            Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
+        ),
+        "and gave up: {:?}",
+        app.world().get::<Brain>(w).unwrap()
+    );
+}

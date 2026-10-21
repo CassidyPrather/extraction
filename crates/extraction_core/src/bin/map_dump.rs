@@ -48,6 +48,51 @@ fn main() {
         .collect();
     write_f32("slope.f32", &slope);
 
+    // Debug: the main routes' 16-degree grid as costs (0 blocked), and the
+    // cells reached from the insertion over it.
+    if std::env::var("DUMP_GENTLE").is_ok() {
+        let g =
+            extraction_core::map_nav::zone_grid(&map, &hm, extraction_core::map_lint::ROUTE_GRADE);
+        let ins = map
+            .markers_of(&extraction_core::map::MarkerKind::Insertion)
+            .next()
+            .unwrap()
+            .at;
+        let n = g.n;
+        let mut seen = vec![0.0f32; n * n];
+        let i0 = ((ins[0] - g.origin) / g.cell) as usize;
+        let j0 = ((ins[1] - g.origin) / g.cell) as usize;
+        let mut st: Vec<(usize, usize)> =
+            (0..25).map(|q| (i0 + q % 5 - 2, j0 + q / 5 - 2)).collect();
+        while let Some((i, j)) = st.pop() {
+            let k = j * n + i;
+            if seen[k] > 0.0 || g.cost[k] == extraction_core::nav::BLOCKED {
+                continue;
+            }
+            seen[k] = 1.0;
+            for (di, dj) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                let (a, b) = (i as i32 + di, j as i32 + dj);
+                if a >= 0 && b >= 0 && (a as usize) < n && (b as usize) < n {
+                    st.push((a as usize, b as usize));
+                }
+            }
+        }
+        let cost: Vec<f32> = g
+            .cost
+            .iter()
+            .map(|c| {
+                if *c == extraction_core::nav::BLOCKED {
+                    0.0
+                } else {
+                    *c as f32
+                }
+            })
+            .collect();
+        write_f32("gentle_cost.f32", &cost);
+        write_f32("gentle_seen.f32", &seen);
+        eprintln!("gentle grid n={n} cell={} origin={}", g.cell, g.origin);
+    }
+
     // Metadata as hand-rolled JSON (core has no JSON dependency).
     let pts = |ps: &[[f32; 2]]| {
         ps.iter()

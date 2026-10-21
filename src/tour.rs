@@ -66,6 +66,7 @@ fn has_inside(prefab: &str) -> bool {
             | "robot_gate"
             | "quarantine_gate"
             | "footbridge"
+            | "funicular_car"
     )
 }
 
@@ -164,12 +165,16 @@ pub fn views(zone: &Zone) -> Vec<View> {
             let footing = zone.hm.footing(&p.prefab, p.at, p.rot);
             let floor = match p.prefab.as_str() {
                 "ranger_tower" | "survey_tower" => 9.1,
+                // The ore mill's top bay, at the back.
+                "ore_mill" => 12.1,
                 _ => 0.4,
             };
-            let (cx, cz) = if matches!(p.prefab.as_str(), "ranger_tower" | "survey_tower") {
-                (1.6, 1.6)
-            } else {
-                (f.x * 0.5 - 0.6, f.z * 0.5 - 0.6)
+            let (cx, cz) = match p.prefab.as_str() {
+                "ranger_tower" | "survey_tower" => (1.6, 1.6),
+                "ore_mill" => (9.0, 19.0),
+                // Inside its thick stone walls.
+                "observatory" => (4.3, 3.8),
+                _ => (f.x * 0.5 - 0.6, f.z * 0.5 - 0.6),
             };
             let corner = Vec3::new(p.at[0], 0.0, p.at[1]) + rot * Vec3::new(cx, 0.0, cz);
             let eye = Vec3::new(corner.x, footing + floor + 1.6, corner.z);

@@ -223,6 +223,8 @@ fn animate_gramophones(
     mut crank: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
+    arm.retain(|e, _| grams.contains(*e));
+    crank.retain(|e, _| grams.contains(*e));
     for (e, g) in &grams {
         let a = arm.entry(e).or_default();
         let want = if g.arm_down { 0.55 } else { 0.0 };

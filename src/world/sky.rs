@@ -134,6 +134,9 @@ pub struct SkyParams {
     pub glow: Vec4,
     /// Lightning: toward the strike (xyz), how bright (w; `world::storm`).
     pub flash: Vec4,
+    /// x: how far you see (m; the fog's visibility), for the sky's own
+    /// fog.
+    pub air: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -177,6 +180,7 @@ fn spawn_sky(
                 cloud: Vec4::new(1.0, 1.0, 0.0, 0.0),
                 glow: Vec4::ZERO,
                 flash: Vec4::ZERO,
+                air: Vec4::new(weather.visibility, 0.0, 0.0, 0.0),
             },
         })),
         Transform::IDENTITY,
@@ -297,6 +301,7 @@ fn surge_atmosphere(
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
             mat.params.sun_dir.w = (1.0 - 0.9 * s) * weather.sun_through;
+            mat.params.air.x = weather.visibility * (1.0 - 0.4 * s);
         }
     }
     for mut fog in &mut fogs {
@@ -434,6 +439,7 @@ fn apply_weather(
             mat.params.horizon = Vec4::new(h.red, h.green, h.blue, 1.0);
             mat.params.zenith = Vec4::new(z.red, z.green, z.blue, 1.0);
             mat.params.sun_dir = (-weather.sun_dir).extend(weather.sun_through);
+            mat.params.air.x = weather.visibility;
             // At night the glow's strength is the moon's in the air.
             mat.params.glow = if weather.night > 0.0 {
                 Vec4::new(0.0, 0.0, 0.0, weather.moon)
@@ -582,6 +588,10 @@ fn valley_air(
         // (Based at 40, everything under it was at full density: the valley
         // below the dam is as low, and the dam vanished from the gate.)
         "Sallow Reservoir" => (1.1, 32.0, 0.0, 0.0),
+        // High and cold: thin ground fog in the Bottoms (51 m), the cloud
+        // cap down on the summit and the col (136-152 m) with the bench
+        // (93 m) under it.
+        "Rime Fell" => (0.7, 54.0, 0.011, 50.0),
         _ => (1.0, 16.0, 0.0, 0.0),
     };
     let (k, dz) = match conditions.kind {

@@ -38,7 +38,8 @@ pub struct CoverPlugin;
 impl Plugin for CoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SwayMaterial>::default())
-            .add_systems(Update, (stream_cover, blow));
+            .init_resource::<RobotPushers>()
+            .add_systems(Update, (stream_cover, blow, push_by_robots));
     }
 }
 
@@ -60,6 +61,52 @@ pub struct Sway {
     pub hand_a: Vec4,
     #[uniform(100)]
     pub hand_b: Vec4,
+    /// Snow lying (`world::snow`): x how much, y the line (m). Plants
+    /// above it sink into it as it deepens.
+    #[uniform(100)]
+    pub snow: Vec4,
+    /// Robots among the plants (`RobotPushers`): xyz where, w how far
+    /// round them plants part (0: none).
+    #[uniform(100)]
+    pub robot_a: Vec4,
+    #[uniform(100)]
+    pub robot_b: Vec4,
+    #[uniform(100)]
+    pub robot_c: Vec4,
+    #[uniform(100)]
+    pub robot_d: Vec4,
+}
+
+/// Up to four robots pushing through ground cover and low branches:
+/// xyz where (an orb, a foot), w how far round them plants part (0:
+/// none). The robots write it (the nearest to the eye, within a couple of
+/// dozen metres, and only when one has moved a few centimetres: each
+/// write re-extracts the plants); the sway shaders part round them as
+/// round the player's hands.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct RobotPushers {
+    pub spots: [Vec4; 4],
+}
+
+/// The robots' pushes, to the ground cover and the trees, when they
+/// change.
+fn push_by_robots(
+    pushers: Res<RobotPushers>,
+    mut cover: ResMut<Assets<SwayMaterial>>,
+    mut trees: ResMut<Assets<super::trees::TreeSwayMaterial>>,
+) {
+    if !pushers.is_changed() {
+        return;
+    }
+    let [a, b, c, d] = pushers.spots;
+    for (_, m) in cover.iter_mut() {
+        (m.extension.robot_a, m.extension.robot_b) = (a, b);
+        (m.extension.robot_c, m.extension.robot_d) = (c, d);
+    }
+    for (_, m) in trees.iter_mut() {
+        (m.extension.robot_a, m.extension.robot_b) = (a, b);
+        (m.extension.robot_c, m.extension.robot_d) = (c, d);
+    }
 }
 
 impl bevy::pbr::MaterialExtension for Sway {
@@ -75,7 +122,9 @@ fn blow(
     mut materials: ResMut<Assets<SwayMaterial>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    snow: Option<Res<crate::world::snow::Snow>>,
     mut last: Local<Option<(f32, Vec3)>>,
+    mut last_snow: Local<Option<Vec4>>,
 ) {
     let Some(assets) = assets else {
         return;
@@ -89,7 +138,21 @@ fn blow(
     // re-specialised: ~500 meshes of cover), so only when the wind changes
     // or the feet have moved a few centimetres. (The gusts themselves run
     // on the shader's clock.)
-    if last.is_some_and(|(s, f)| s == strength && f.distance_squared(feet) < 0.05 * 0.05) {
+    let lying = snow.as_ref().map_or(Vec4::ZERO, |s| {
+        Vec4::new(
+            s.cover,
+            s.line.unwrap_or(crate::render::fog::NO_SNOW),
+            0.0,
+            0.0,
+        )
+    });
+    let snow_moved = !last_snow.is_some_and(|l| (l.x - lying.x).abs() < 0.02 && l.y == lying.y);
+    if snow_moved {
+        *last_snow = Some(lying);
+    }
+    if !snow_moved
+        && last.is_some_and(|(s, f)| s == strength && f.distance_squared(feet) < 0.05 * 0.05)
+    {
         return;
     }
     *last = Some((strength, feet));
@@ -97,6 +160,7 @@ fn blow(
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.wind = Vec4::new(0.8, 0.6, strength, 0.8);
             m.extension.pusher = feet.extend(0.6);
+            m.extension.snow = lying;
         }
     }
 }
