@@ -54,6 +54,10 @@ pub struct Drone {
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something.
 pub const LOCK_TIME: f32 = 0.9;
+/// Its rounds scatter this much more (radians) per m/s its target runs
+/// across its line: sprint across open ground and it mostly misses (at
+/// 25 m, a sprint throws them about 3 m wide; a walk about 1).
+pub const CROSSING_SPREAD: f32 = 0.025;
 
 /// A drone began locking on (audio chirps; the eye flares).
 #[derive(Message, Clone, Copy, Debug)]
@@ -435,6 +439,7 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
+    bodies: Query<&crate::player::Body>,
 ) {
     let dt = time.delta_secs();
     fighting_since.retain(|e, _| {
@@ -497,6 +502,14 @@ fn drone_guns(
         if d.burst_left == 0 {
             d.burst_left = 3;
         }
+        // Someone running across its line is hard to hit from up here.
+        let crossing = aware
+            .target
+            .and_then(|p| bodies.get(p).ok())
+            .map_or(0.0, |b| {
+                let v = Vec3::new(b.velocity.x, 0.0, b.velocity.z);
+                (v - to * v.dot(to)).length()
+            });
         *seed = super::senses::shot_seed(&minds, e, &time);
         shots.write(Shot {
             gun: e,
@@ -506,7 +519,7 @@ fn drone_guns(
             speed: 380.0,
             damage: 9.0,
             projectiles: 1,
-            spread: 0.035,
+            spread: 0.035 + CROSSING_SPREAD * crossing,
             recoil: 0.0,
             seed: *seed,
         });
