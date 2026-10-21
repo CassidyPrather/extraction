@@ -296,7 +296,11 @@ with nothing: the clock had spent their raid.)
 
 Those numbers are from when a visit came after you'd slept the whole night
 (the walkers arrived at first light). Since then a loud night wakes you in
-the dark as they set out (above); see the rerun below.
+the dark as they set out (above). Rerun on the same seeds (30 raids of 36;
+the batch was cut short): a raid with a night is 24-26 minutes of clock (a
+woken night is 9), 17-29 items home, and the visit is now the dangerous
+night it should be: bots woken by one died 5 times in 11, against 6 in 19
+on quiet nights (Cinder's loud valley: 3 of 5 visited bots died).
 
 Cut from this: hunger (there still is none; food is the kitchen's and the
 offerings'), a sleep timer or a menu (you lie down; a night is a night),
