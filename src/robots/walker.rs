@@ -317,16 +317,19 @@ pub fn spawn_walker_sized(
 
 fn walker_parts_destroyed(
     mut events: MessageReader<PartDestroyed>,
-    mut walkers: Query<(&mut Walker, &mut Robot)>,
+    mut walkers: Query<(&mut Walker, &mut Robot, Has<super::heavy::Heavy>)>,
 ) {
     for ev in events.read() {
-        let Ok((mut w, mut robot)) = walkers.get_mut(ev.robot) else {
+        let Ok((mut w, mut robot, heavy)) = walkers.get_mut(ev.robot) else {
             continue;
         };
         match ev.role {
             PartRole::Leg(i) => {
                 w.feet[i as usize].alive = false;
-                if w.feet.iter().filter(|f| !f.alive).count() >= 2 {
+                // On two it crawls (`anim`); on one it's done. (The heavy
+                // can't crawl: two knees out and it's down for good.)
+                let lost = w.feet.iter().filter(|f| !f.alive).count();
+                if lost >= if heavy { 2 } else { 3 } {
                     w.collapsed = true;
                     robot.wrecked = true;
                 }
