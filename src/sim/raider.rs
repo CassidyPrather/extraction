@@ -636,7 +636,7 @@ pub struct Scene<'w, 's> {
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
     /// The bots' sockets by entity (`Task::Draw` counts them in entity
     /// order).
-    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner)>,
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
