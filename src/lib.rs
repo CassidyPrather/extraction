@@ -7,8 +7,10 @@
 pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
+pub mod audio_kit;
 pub mod audio_mix;
 pub mod audio_score;
+pub mod audio_underground;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
