@@ -1718,6 +1718,8 @@ pub struct Works {
     pub levels: Vec<f32>,
     pub heat: Vec<f32>,
     pub falls: Vec<(Vec3, f32, Vec2)>,
+    /// Each gas pocket, still there.
+    pub gas: Vec<bool>,
 }
 
 impl Works {
@@ -1727,6 +1729,7 @@ impl Works {
             levels: l.basins.iter().map(|b| b.level).collect(),
             heat: l.heat.iter().map(|h| h.level).collect(),
             falls: Vec::new(),
+            gas: vec![true; l.gas.len()],
         }
     }
 
@@ -1739,12 +1742,16 @@ impl Works {
         close(&self.levels, &o.levels, 0.05)
             && close(&self.heat, &o.heat, 0.05)
             && self.falls.len() == o.falls.len()
+            && self.gas == o.gas
     }
 }
 
 /// Shut a site's grid where its works make it impassable: deep water
 /// (a basin's at its level now), heat nothing crosses, a pit, a fallen
-/// roof.
+/// roof. And make dear what its residents keep out of but can be drawn
+/// into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a noise in
+/// it still brings them, and their sparks set it off), and heat short of
+/// scorching (they keep to the cool side).
 fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
     for j in 0..grid.n {
         for i in 0..grid.n {
@@ -1769,12 +1776,37 @@ fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster,
                 let d = Quat::from_rotation_y(-*yaw) * (p - *at);
                 d.x.abs() <= half.x && d.z.abs() <= half.y
             });
+            let k = j * grid.n + i;
             if depth >= ug::DEEP || hot || r.pit[q] || fallen {
-                grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
+                grid.cost[k] = extraction_core::nav::BLOCKED;
+                continue;
+            }
+            if grid.cost[k] == extraction_core::nav::BLOCKED {
+                continue;
+            }
+            let gassy = r.gas[q].is_some_and(|g| w.gas.get(g as usize).copied().unwrap_or(true));
+            let warm = r.heat[q].is_some_and(|z| {
+                w.heat
+                    .get(z as usize)
+                    .copied()
+                    .unwrap_or(l.heat[z as usize].level)
+                    > WARM
+            });
+            if gassy {
+                grid.cost[k] = grid.cost[k].max(GAS_COST);
+            } else if warm {
+                grid.cost[k] = grid.cost[k].max(WARM_COST);
             }
         }
     }
 }
+
+/// What a resident's step costs in live firedamp, and in heat over
+/// [`WARM`] (a plain floor's is 1).
+const GAS_COST: u8 = 20;
+const WARM_COST: u8 = 10;
+/// Heat a resident would rather go round.
+const WARM: f32 = 0.3;
 
 /// Logic: as a site's works change (a basin drained, a flue vented, a
 /// roof brought down), its residents get the grid it leaves them.
@@ -1782,6 +1814,7 @@ fn regrid_residents(
     mut grids: ResMut<ResidentGrids>,
     levels: Res<Levels>,
     heat: Option<Res<super::furnace::Heat>>,
+    gas: Option<Res<super::workings::Gas>>,
     falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
     mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
     time: Res<Time>,
@@ -1824,6 +1857,11 @@ fn regrid_residents(
                     (t.translation, yaw, Vec2::new((f.width + 0.2) * 0.5, 1.0))
                 })
                 .collect(),
+            gas: gas
+                .as_ref()
+                .and_then(|g| g.live.get(site))
+                .cloned()
+                .unwrap_or_else(|| vec![true; l.gas.len()]),
         };
         if now.same(&g.works) {
             continue;
@@ -4257,4 +4295,3 @@ mod tests {
         }
     }
 }
-
