@@ -506,6 +506,7 @@ mod tests {
                 layout: super::super::layout::layout("nagant").unwrap(),
                 magwell: None,
                 trigger: 0.0,
+                dice: extraction_core::noise::Rng::new(0),
             })
             .id();
         let node = |app: &mut App, name: String| {
