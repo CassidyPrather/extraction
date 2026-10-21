@@ -5685,6 +5685,23 @@ pub fn dress_buildings(
                     lods: None,
                 });
             }
+            // Its yard (`clutter::yard`), out in the sun.
+            let hm = &zone.hm;
+            let ground = |p: Vec2| {
+                let p = [p.x, p.y];
+                hm.water_level(p).is_none().then(|| hm.height(p))
+            };
+            let models = super::clutter::yard(&zone.map, &b.prefab, tag, xf, &ground);
+            if !models.is_empty() {
+                let n = geo.pieces.len();
+                geo.props.push(PropDef {
+                    models,
+                    pieces: n..n,
+                    inside: false,
+                    shadow: true,
+                    lods: None,
+                });
+            }
         }
         wait.0 += 1;
         let bake = bakes.entry(bake_key).or_insert_with(|| {
@@ -5934,6 +5951,17 @@ pub fn dress_buildings(
             super::overgrowth::seed(Vec2::new(xf.translation.x, xf.translation.z), &b.prefab);
         let bnorth = xf.rotation.inverse() * Vec3::NEG_Z;
         if decay {
+            // The timber houses' boards in their faded paint, each its own
+            // (not a ruin's: soot, or the water, took it).
+            if matches!(b.prefab.as_str(), "house_plank" | "farmhouse") {
+                let boards = props.lib.get(Mat::Planks, &props.server, &mut materials);
+                let paint = super::decay::paint(bseed);
+                for (mat, m) in &mut outer {
+                    if *mat == boards {
+                        super::decay::tint(m, paint);
+                    }
+                }
+            }
             for (_, m) in &mut outer {
                 super::decay::moss(m, bnorth, bseed);
             }

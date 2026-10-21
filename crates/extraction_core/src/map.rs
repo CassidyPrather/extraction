@@ -932,11 +932,7 @@ mod tests {
     #[test]
     #[ignore = "prints water depths"]
     fn water_depths() {
-        for (name, src) in [
-            ("marrow", MARROW_CREEK),
-            ("kettle", KETTLE_PASS),
-            ("cinder", CINDER_WORKS),
-        ] {
+        for (name, src) in VALLEYS {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut deepest: f32 = 0.0;

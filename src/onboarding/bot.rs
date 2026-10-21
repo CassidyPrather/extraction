@@ -152,7 +152,8 @@ pub(super) fn direct(
     if state.tries > 0 {
         bot.log.push(format!("  again ({})", state.tries + 1));
     }
-    bot.sprint = persona.is_none_or(|p| p.sprint);
+    // (Anyone runs when the board says to.)
+    bot.sprint = persona.is_none_or(|p| p.sprint) || goal == Goal::Run;
     let here = Vec2::new(root.translation.x, root.translation.z);
     let mut tasks = Vec::new();
     // A newcomer's habits, at each new station.

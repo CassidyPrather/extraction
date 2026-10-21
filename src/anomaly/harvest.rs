@@ -23,6 +23,11 @@ use crate::interact::Held;
 use crate::items::{Catalog, Item};
 use crate::world::Zone;
 
+/// How long a hand holds a hot stone before it lets go, seconds.
+pub const HOT_GRIP: f32 = 1.5;
+/// What's said when it does.
+pub const TOO_HOT: &str = "Too hot to hold: you drop it. Let it cool, or pocket it.";
+
 /// A stone hot from a burner's coals: seconds since it left them.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Hot {
@@ -60,6 +65,9 @@ pub fn heat(
     zone: Res<Zone>,
     time: Res<Time>,
     mut burned: MessageWriter<Burned>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut raid: Option<ResMut<crate::raid::Raid>>,
+    mut gripped: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
     let coals: Vec<(Vec3, f32)> = burners
@@ -97,6 +105,22 @@ pub fn heat(
                     && let Ok(mut hp) = players.get_mut(held.player)
                     && !hp.down
                 {
+                    // Nobody holds on to something burning: a moment, and
+                    // the hand lets go (someone new, told to take the
+                    // stone, held it to death otherwise).
+                    let t = gripped.entry(e).or_default();
+                    *t += dt;
+                    if *t > HOT_GRIP {
+                        gripped.remove(&e);
+                        actions.write(crate::interact::HandAction::Release {
+                            player: held.player,
+                            side: held.side,
+                            throw: 0.0,
+                        });
+                        if let Some(raid) = raid.as_mut() {
+                            raid.say(TOO_HOT);
+                        }
+                    }
                     hp.hp -= HOT_BURN * h.heat().max(0.3) * dt;
                     hp.since_hit = 0.0;
                     burned.write(Burned {
@@ -263,6 +287,40 @@ mod tests {
             app.update();
         }
         assert!(app.world().get::<Hot>(stone).is_none(), "cool after twenty");
+    }
+
+    /// Held on to, a hot stone is let go of in a moment, with a word why:
+    /// it burns, but nobody holds it till it kills them.
+    #[test]
+    fn a_hot_stone_is_let_go_of() {
+        let mut vr = Vr::new("marrow_creek");
+        let (_, at, _) = find(vr.app.world_mut(), AnomalyKind::Burner);
+        let feet = vr
+            .app
+            .world()
+            .resource::<Zone>()
+            .on_ground(at.x + 8.0, at.z);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        let hand = feet + Vec3::new(0.25, 1.1, -0.35);
+        let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
+        vr.app
+            .world_mut()
+            .entity_mut(stone)
+            .insert((RigidBody::Static, Hot { out: 0.0 }));
+        vr.hand(Side::Right, hand, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(stone), "took it");
+        // Still squeezing.
+        vr.step(270);
+        assert_ne!(vr.hand_state(Side::Right).holding, Some(stone), "let go");
+        let said = &vr.app.world().resource::<crate::raid::Raid>().log;
+        assert!(said.iter().any(|(l, _)| l == TOO_HOT), "and why: {said:?}");
+        vr.step(630);
+        let hp = vr.app.world().get::<Health>(vr.player).unwrap().hp;
+        assert!(hp > 70.0, "a burn, not the end of you: {hp:.0}");
     }
 
     #[test]
