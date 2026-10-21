@@ -681,10 +681,19 @@ fn footsteps(
     spatial: SpatialQuery,
     built: Query<(&GlobalTransform, &Surfaces)>,
     wetness: Option<Res<crate::world::weather::Wetness>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let wet = wetness.map_or(0.0, |w| w.level);
     for s in steps.read() {
-        let set = ground_set(&zone, &trucks, &spatial, &built, s.position, wet);
+        let set = ground_set(
+            &zone,
+            &trucks,
+            &spatial,
+            &built,
+            s.position,
+            wet,
+            snow.as_deref(),
+        );
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
@@ -698,6 +707,9 @@ fn footsteps(
         );
     }
 }
+
+/// How deep snow must lie (`world::snow::Snow::lies`) to crunch underfoot.
+const SNOW_UNDERFOOT: f32 = 0.25;
 
 /// How much standing water (`world::puddles::puddle_at`) a step must land
 /// in to splash.
@@ -896,6 +908,7 @@ fn ground_set(
     built: &Query<(&GlobalTransform, &Surfaces)>,
     at: Vec3,
     wet: f32,
+    snow: Option<&crate::world::snow::Snow>,
 ) -> &'static str {
     let p = [at.x, at.z];
     let in_truck = trucks
@@ -908,6 +921,10 @@ fn ground_set(
         footstep_set(m)
     } else if wet > 0.0 && crate::world::puddles::puddle_at(&zone.hm, p, wet) > PUDDLE_SPLASH {
         "footsteps/water"
+    } else if snow.is_some_and(|s| s.lies(at.y) > SNOW_UNDERFOOT) {
+        // Snow lying (`world::snow`): a crunch; gravel's until a recording
+        // of snow can be fetched.
+        "footsteps/gravel"
     } else if crate::world::terrain::drowned_line(&zone.map.name)
         .is_some_and(|d| d.at(p, at.y).0 > 0.5)
     {
@@ -933,6 +950,7 @@ fn landing_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     wetness: Option<Res<crate::world::weather::Wetness>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let wet = wetness.map_or(0.0, |w| w.level);
     for (e, body, gt) in &bodies {
@@ -944,7 +962,7 @@ fn landing_sounds(
             continue;
         }
         let at = gt.translation();
-        let set = ground_set(&zone, &trucks, &spatial, &built, at, wet);
+        let set = ground_set(&zone, &trucks, &spatial, &built, at, wet, snow.as_deref());
         let hard = ((-vy - 2.5) / 6.0).clamp(0.0, 1.0);
         for _ in 0..2 {
             play_at_speed(
