@@ -520,11 +520,12 @@ pub(super) fn direct_raid(
         if h.hp < state.hp - 5.0 {
             // Warned: the driver said something lately, or a machine
             // showed its tell (`first_fight`).
-            let warned = now - state.said_at < 30.0
-                || fight
-                    .as_ref()
-                    .and_then(|f| f.last_tell())
-                    .is_some_and(|t| now - t < 15.0);
+            // In a fight, warned is the machine's own tell; else something
+            // said lately.
+            let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
+                Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
+                None => now - state.said_at < 30.0,
+            };
             let kind = if warned {
                 Kind::Hurt
             } else {
@@ -561,6 +562,10 @@ pub(super) fn direct_raid(
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
         state.leg = Leg::Done;
+        // That's this first hour over: nothing left of the walk.
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
 
     let idle_only =
