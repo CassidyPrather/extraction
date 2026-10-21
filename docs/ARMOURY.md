@@ -52,6 +52,15 @@ checklist for the next one.
    (`assets/data/loot.ron`), the dev cache.
 9. **The range** (`weapons::range`): every gun fires at every material.
 
+`weapons::armoury::complete::every_gun_has_everything_a_gun_needs`
+holds the list: every firearm in the catalog has a layout, a model, the
+model's sling swivels (long guns), a place in the loot and the dev cache,
+a bot drill, a shot's sound, a loose round and ammunition in the loot,
+its magazine in the loot, a row on the range and its case's size. When
+it went in it found the Nagant and the PPSh playing a rifle's report,
+and the Nagant and the PPSh missing from the range (the PPSh's 7.62x25
+goes through a plank wall, as the real one does).
+
 ## How each one works
 
 ### MP-133 pump (`mp133`)
