@@ -109,14 +109,25 @@ What changed, and worth a comment each:
   Say if that ever keeps hold of something you meant to drop.
 - **Solid hands.** Your gloves stop at walls, tables and doors instead of
   going through. When your real hand goes further, a faint ghost glove
-  shows where it is. Push a door open with your palm. A gun pushed into
-  a wall can't shoot through it.
+  shows where it is, fading in the deeper your hand goes. Push a door
+  open with your palm. A gun pushed into a wall can't shoot through it.
+  An open hand parts grass and ferns, and branches when you reach up into
+  a tree.
+- **What your hands feel.** Touch something and its material comes
+  through the controller: a dull thud for wood, a ringing hit for metal,
+  two light ticks for glass, a hard knock for stone or the ground, a soft
+  give for a robot's skin, a rattle for a fence. The harder you hit, the
+  stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
+  slamming home, a magazine seating and a round chambering each feel
+  different now. Say if any two materials feel the same to you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
-  hand. Let go with both hands and you fall. To get up onto a wall or a
-  ledge about waist to chest high, press both open palms on its top and
-  push down. If climbing makes you queasy, the **CLIMBING** card on the
-  comfort board takes you straight to the top instead. Mark it if you
-  ever rise when you only meant to lean on a table.
+  hand. Let go with both hands and you fall. To get up onto a wall, a
+  ledge or a window sill (waist to head high), press both open palms on
+  its top and pull down: one pull and you're over. Through a window you
+  end up inside. If climbing makes you queasy, the **CLIMBING** card on
+  the comfort board takes you straight to the top instead, with a quick
+  blink rather than a jump. Mark it if you ever rise when you only meant
+  to lean on a table.
 - **Crowbar.** Hold it by the end and steady it along the shaft with your
   other hand. Put the claw to the latch edge of a plank door, the lid
   edge of a supply crate, or a robot's armour plate (the heavy machine's
