@@ -1,8 +1,9 @@
 //! Climbing with your hands, as in Into the Radius. Grip a ladder anywhere
 //! and the hand holds there: move it down and the body goes up, hand over
 //! hand; at the top you're over onto what it leads to. Press both palms
-//! down on a ledge or a low wall within reach and push, and you rise; once
-//! its top is at your thighs you're up on it (or over it, if it's thin).
+//! down on a ledge, a low wall or a window's sill (waist to head high) and
+//! push, and you rise; once its top is at your waist you're up on it (or
+//! over it and down the far side, if it's thin).
 //! Let go with both hands, or lift your palms, and you fall.
 //!
 //! The comfort setting `climb_teleport` skips the pulling for those it
@@ -34,8 +35,12 @@ const ON_TOP: f32 = 0.07;
 /// Tops you can mantle: this far over your feet.
 pub const LEDGE_LOW: f32 = 0.5;
 pub const LEDGE_HIGH: f32 = 1.9;
-/// Pushed up until the top is this far over your feet, you're on it.
-const OVER: f32 = 0.55;
+/// Pushed up until the top is at your waist (this far over your feet),
+/// you're on it: one pull from a ledge at head height gets you there.
+const OVER: f32 = 1.0;
+/// ...but only once you've actually pushed yourself up this far since both
+/// palms went down: leaning on a table doesn't put you on it.
+const RISE: f32 = 0.12;
 /// How far past the hands you land on a top (or beyond a thin wall).
 const MANTLE_IN: f32 = 0.35;
 /// A planted palm lifts off once it's this far above where it was put, or
@@ -47,7 +52,7 @@ pub struct HandClimbPlugin;
 
 impl Plugin for HandClimbPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_message::<ClimbedOver>().add_systems(
             FixedUpdate,
             (plant_palms, climb_with_hands)
                 .chain()
@@ -110,9 +115,21 @@ pub enum Hold {
     Ledge { top: f32 },
 }
 
-/// Climbing on hand holds (as against a rope), so it's ours to end.
+/// Climbing on hand holds (as against a rope), so it's ours to end; and
+/// how high the feet were when it began.
 #[derive(Component)]
-struct OnHands;
+struct OnHands {
+    from: f32,
+}
+
+/// Over the top: onto what a ladder leads to, or up onto a ledge.
+/// `teleport` when the comfort setting put you there at once (the view
+/// blinks: `render::blink`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ClimbedOver {
+    pub player: Entity,
+    pub teleport: bool,
+}
 
 /// An empty, open hand pressed on a level top within mantling height
 /// plants there; it lifts when raised or slid off, or when it grips.
@@ -190,19 +207,22 @@ fn climb_with_hands(
             &mut Body,
             &mut Transform,
             &Children,
-            Has<OnHands>,
+            Option<&OnHands>,
         ),
         With<Player>,
     >,
     hands: Query<(Entity, &Hand, Option<&HandHold>, Has<RopeGrip>), With<RigHand>>,
     ladders: Query<&Ladder>,
     comfort: Option<Res<Comfort>>,
+    mut over: MessageWriter<ClimbedOver>,
     spatial: SpatialQuery,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
     let teleport = comfort.is_some_and(|c| c.climb_teleport);
-    for (player, input, mut body, mut root, children, on_hands) in &mut players {
+    for (player, input, mut body, mut root, children, held) in &mut players {
+        let on_hands = held.is_some();
+        let risen = held.map_or(0.0, |h| root.translation.y - h.from);
         let mut ladder: Option<(Entity, &Hand, HandHold)> = None;
         let mut ledge: Vec<(&Hand, HandHold)> = Vec::new();
         let mut roped = false;
@@ -245,8 +265,9 @@ fn climb_with_hands(
                 commands.entity(hand_e).insert(HandHold { at, ..hold });
             }
             let at_top = at.y > l.top.y - 0.3 && root.translation.y > l.top.y - 1.7;
-            if let (true, Some(over)) = (teleport || at_top, l.over) {
-                stand_at(&mut root, input, over);
+            if let (true, Some(to)) = (teleport || at_top, l.over) {
+                stand_at(&mut root, input, to);
+                over.write(ClimbedOver { player, teleport });
                 body.velocity = Vec3::ZERO;
                 let_go(&mut commands);
                 end(&mut commands, player, on_hands, roped);
@@ -261,7 +282,7 @@ fn climb_with_hands(
                     _ => f32::MIN,
                 })
                 .fold(f32::MIN, f32::max);
-            if teleport || root.translation.y > top - OVER {
+            if teleport || (risen >= RISE && root.translation.y > top - OVER) {
                 let mid = ledge.iter().map(|(_, h)| h.at).sum::<Vec3>() / ledge.len() as f32;
                 let head = root.transform_point(input.head.translation);
                 let inward = (mid - head).with_y(0.0).normalize_or_zero();
@@ -279,6 +300,7 @@ fn climb_with_hands(
                     )
                     .map_or(land.with_y(top), |h| from - Vec3::Y * h.distance);
                 stand_at(&mut root, input, ground + Vec3::Y * 0.02);
+                over.write(ClimbedOver { player, teleport });
                 body.velocity = Vec3::ZERO;
                 let_go(&mut commands);
                 end(&mut commands, player, on_hands, roped);
@@ -296,7 +318,12 @@ fn climb_with_hands(
             continue;
         };
         if !on_hands {
-            commands.entity(player).insert((OnHands, Climbing));
+            commands.entity(player).insert((
+                OnHands {
+                    from: root.translation.y,
+                },
+                Climbing,
+            ));
         }
         body.velocity = pull.clamp_length_max(MAX_PULL);
         body.airborne = 0.0;
