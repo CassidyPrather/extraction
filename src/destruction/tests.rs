@@ -1694,3 +1694,63 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+#[test]
+fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
+    use super::strip::{FENCE_HP, Strippable};
+    use bevy::ecs::system::RunSystemOnce;
+    let mut app = app(None);
+    run(&mut app, 3);
+    // No valley has one yet (Map design's): stand one in a clearing.
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0);
+    app.world_mut().spawn((
+        crate::world::buildings::Building {
+            prefab: "fence_garden".into(),
+        },
+        Transform::from_translation(at),
+    ));
+    run(&mut app, 3);
+    let panels = |app: &mut App| -> Vec<(Entity, Vec3)> {
+        app.world_mut()
+            .query_filtered::<(Entity, &GlobalTransform, &Timber), With<Strippable>>()
+            .iter(app.world())
+            .filter(|(_, g, t)| t.max == FENCE_HP && g.translation().distance(at) < 6.0)
+            .map(|(e, g, _)| (e, g.translation()))
+            .collect()
+    };
+    let up = panels(&mut app);
+    assert_eq!(up.len(), 4, "four panels between five posts");
+    // Rifle rounds through the boards: a panel splinters, and its posts
+    // (the building's) still stand.
+    let (p, c) = up[1];
+    let debris = live_debris(&mut app);
+    let out = app.world().get::<GlobalTransform>(p).unwrap().rotation() * Vec3::NEG_Z;
+    let mut shots = 0;
+    while app.world().get_entity(p).is_ok() && shots < 6 {
+        shoot(&mut app, c + out * 3.0, c, 715.0, 7.9, 40.0);
+        run(&mut app, 3);
+        shots += 1;
+    }
+    assert!(app.world().get_entity(p).is_err(), "the panel broke");
+    assert!(
+        shots >= 2,
+        "a fence panel takes more than one round ({shots})"
+    );
+    assert!(live_debris(&mut app) > debris, "in splinters");
+    assert_eq!(panels(&mut app).len(), 3, "the others stand");
+    // The gap is clear to walk through: nothing solid where it stood.
+    let spatial = app
+        .world_mut()
+        .run_system_once(|s: avian3d::prelude::SpatialQuery| {
+            s.point_intersections(
+                c,
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+            )
+        })
+        .unwrap();
+    assert!(spatial.is_empty(), "nothing solid in the gap");
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    assert_eq!(panels(&mut app).len(), 4, "the Surge puts it back");
+}
