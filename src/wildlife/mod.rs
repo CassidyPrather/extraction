@@ -14,6 +14,7 @@
 
 use bevy::prelude::*;
 
+pub mod bodies;
 pub mod fish;
 pub mod flock;
 pub mod herd;
@@ -144,7 +145,8 @@ pub struct WildlifePlugin;
 
 impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Flushed>()
+        app.add_plugins(bodies::BodiesPlugin)
+            .add_message::<Flushed>()
             .add_message::<herd::Startled>()
             .add_message::<rats::Scurried>()
             .init_resource::<Threats>()

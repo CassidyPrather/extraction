@@ -95,6 +95,16 @@ pub enum BirdState {
     Flying,
     /// Coming down onto perch `n` of the site it's landing on.
     Landing(u16),
+    /// Shot: it falls, and lies where it fell (`bodies`).
+    Dead,
+    /// Its carcass was taken away: nothing left to draw.
+    Gone,
+}
+
+impl BirdState {
+    pub fn alive(self) -> bool {
+        !matches!(self, BirdState::Dead | BirdState::Gone)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -206,9 +216,24 @@ impl Flock {
             .count()
     }
 
-    /// Where the birds are, on average.
+    /// Birds still alive.
+    pub fn alive(&self) -> usize {
+        self.birds.iter().filter(|b| b.state.alive()).count()
+    }
+
+    /// Where the living birds are, on average (where the flock was, if
+    /// none are).
     pub fn mean(&self) -> Vec3 {
-        self.birds.iter().map(|b| b.pos).sum::<Vec3>() / self.birds.len().max(1) as f32
+        let alive: Vec<Vec3> = self
+            .birds
+            .iter()
+            .filter(|b| b.state.alive())
+            .map(|b| b.pos)
+            .collect();
+        if alive.is_empty() {
+            return self.orbit.0;
+        }
+        alive.iter().sum::<Vec3>() / alive.len() as f32
     }
 }
 
@@ -384,6 +409,11 @@ pub struct Flush {
 impl Flock {
     /// One tick: frights, decisions and flight.
     pub fn tick(&mut self, ctx: &Ctx, dt: f32) -> Option<Flush> {
+        // Every bird shot: only the falling to see to.
+        if self.alive() == 0 {
+            fly(self, ctx.perches, ctx.obstacles, ctx.zone, dt);
+            return None;
+        }
         self.wary = (self.wary - dt).max(0.0);
         self.alarm_cool = (self.alarm_cool - dt).max(0.0);
         let mut flushed = None;
@@ -583,7 +613,12 @@ fn decide(flock: &mut Flock, perches: &Perches, threats: &[Threat], occupied: &[
             if Vec2::new(m.x - site.centre.x, m.z - site.centre.z).length() < 35.0 {
                 // Each bird to a perch of its own.
                 let spots = shuffled(site.spots.len(), &mut flock.rng);
-                for (b, &s) in flock.birds.iter_mut().zip(spots.iter()) {
+                for (b, &s) in flock
+                    .birds
+                    .iter_mut()
+                    .filter(|b| b.state.alive())
+                    .zip(spots.iter())
+                {
                     b.state = BirdState::Landing(s as u16);
                     b.delay = flock.rng.range(0.0, 2.5);
                 }
@@ -591,7 +626,7 @@ fn decide(flock: &mut Flock, perches: &Perches, threats: &[Threat], occupied: &[
             }
         }
         Phase::Landing { to } => {
-            if flock.sitting() == flock.birds.len() {
+            if flock.sitting() == flock.alive() {
                 flock.site = to;
                 flock.phase = Phase::Settled;
             }
@@ -665,10 +700,40 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
     let snapshot: Vec<(Vec3, Vec3, bool)> = flock
         .birds
         .iter()
-        .map(|b| (b.pos, b.vel, !matches!(b.state, BirdState::Sitting(_))))
+        .map(|b| {
+            (
+                b.pos,
+                b.vel,
+                matches!(b.state, BirdState::Flying | BirdState::Landing(_)),
+            )
+        })
         .collect();
     for i in 0..n {
         let b = &mut flock.birds[i];
+        match b.state {
+            // Falling to whatever's under it, and lying there.
+            BirdState::Dead => {
+                let floor = obstacles
+                    .below(b.pos + Vec3::Y * 0.05)
+                    .unwrap_or(f32::MIN)
+                    .max(zone.ground(b.pos.x, b.pos.z));
+                if b.pos.y > floor + 0.01 {
+                    b.vel = (b.vel + Vec3::NEG_Y * 9.8 * dt) * (1.0 - dt * 0.5);
+                    b.pos += b.vel * dt;
+                    if b.pos.y <= floor {
+                        b.pos.y = floor;
+                        b.vel = Vec3::ZERO;
+                    }
+                } else {
+                    b.pos.y = floor;
+                    b.vel = Vec3::ZERO;
+                }
+                b.flap = 0.0;
+                continue;
+            }
+            BirdState::Gone => continue,
+            _ => {}
+        }
         if b.delay > 0.0 {
             b.delay -= dt;
             if matches!(b.state, BirdState::Sitting(_)) {

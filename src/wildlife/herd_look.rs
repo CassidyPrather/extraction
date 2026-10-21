@@ -430,6 +430,16 @@ pub(crate) fn pose_beasts(
             continue;
         };
         let b = build(herd.kind);
+        // Taken away: its parts out of sight (under the ground), and not
+        // in the far mesh.
+        if beast.gone {
+            for p in v.parts {
+                if let Ok(mut t) = parts.get_mut(p) {
+                    t.translation = beast.pos - Vec3::Y * 50.0;
+                }
+            }
+            continue;
+        }
         let speed = beast.vel.xz().length();
         let dead = beast.state == State::Dead;
         let rot = facing(beast.yaw);

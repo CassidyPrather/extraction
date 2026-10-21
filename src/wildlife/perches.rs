@@ -230,6 +230,21 @@ impl Obstacles {
             .map(|&i| &self.solids[i as usize])
     }
 
+    /// The top of whatever built thing is straight under `p`, if any.
+    pub fn below(&self, p: Vec3) -> Option<f32> {
+        self.cells
+            .get(&cell_of(p.x, p.z))
+            .into_iter()
+            .flatten()
+            .map(|&i| &self.solids[i as usize])
+            .filter(|s| {
+                p.x >= s.lo.x && p.x <= s.hi.x && p.z >= s.lo.z && p.z <= s.hi.z && s.lo.y < p.y
+            })
+            .filter_map(|s| s.ray(p, Vec3::NEG_Y))
+            .map(|(t, _)| p.y - t)
+            .fold(None, |a: Option<f32>, y| Some(a.map_or(y, |a| a.max(y))))
+    }
+
     /// The top of anything built within `r` (horizontally) of `p`, if any.
     pub fn top_near(&self, p: Vec3, r: f32) -> Option<f32> {
         let (a, b) = (cell_of(p.x - r, p.z - r), cell_of(p.x + r, p.z + r));

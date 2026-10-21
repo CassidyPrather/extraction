@@ -138,6 +138,8 @@ pub struct Beast {
     /// Where it's looking, if anywhere in particular.
     pub look: Option<Vec3>,
     timer: f32,
+    /// Dead and taken away (its carcass collected): nothing to draw.
+    pub gone: bool,
     /// Its place round the leader, running or ambling.
     slot: Vec2,
 }
@@ -242,6 +244,7 @@ pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
                 head_up: 0.0,
                 look: None,
                 timer: rng.range(2.0, 10.0),
+                gone: false,
                 slot,
             }
         })
