@@ -294,8 +294,7 @@ for sx in (-1, 1):
                segs=1)
 rcut = Part("cut")
 # The angles' sides cut away over the prod and the cheek blocks.
-rcut.box((0.06, 0.0205, 0.0604), (0.0, 0.0335 + 0.0099, -0.380), "Steel")
-rcut.box((0.039 - 0.0001, 0.03, 0.07), (0.0, 0.04, -0.380), "Steel")
+rcut.box((0.06, 0.0211, 0.0604), (0.0, 0.0435, -0.380), "Steel")
 rail.cut(rcut)
 # Screws along both angles' sides.
 for z in (-0.44, -0.30, -0.20, -0.15, -0.04):
@@ -334,8 +333,8 @@ for a, b in zip(spts, spts[1:]):
     while acc < seg:
         q = a + d * (acc / seg)
         rot = Vector((0, 0, 1)).rotation_difference(d.normalized()).to_matrix().to_4x4()
-        ring(kit, 0.0052, 0.0009, "Iron", xf=T(*q) @ rot @ RX(0.3), segs=10, sides=4)
-        acc += 0.011
+        ring(kit, 0.0052, 0.0007, "Iron", xf=T(*q) @ rot @ RX(0.3), segs=10, sides=4)
+        acc += 0.009
     acc -= seg
 for sx in (-1, 1):
     ring(kit, 0.0072, 0.0028, "Iron", xf=T(sx * 0.0225, 0.022, -0.442) @ RY(math.pi / 2),
@@ -427,8 +426,8 @@ NOCK_BACK = LATCH_Z - 0.0019 + NOCK_DEPTH
 add_bolt(rb_body, rb_vanes, rb_cut, T(0.0, AXIS, NOCK_BACK - HALF))
 rb_body.cut(rb_cut)
 
-join("static", stock, nose, grip, pad, rail, latch, prod, kit, screws, worn={"mats": ("Iron",)})
 screws.cut(slots)
+join("static", stock, nose, grip, pad, rail, latch, prod, kit, screws)
 for p in (cradle, rest, drawn, trig):
     make(p)
 join("static_rail_bolt", rb_body, rb_vanes)
