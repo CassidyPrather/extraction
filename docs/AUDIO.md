@@ -299,6 +299,30 @@ goes past 0.6. Index controllers barely register under about 0.1 or
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
+**Haptic shapes** (`src/rig/shapes.rs`). A few pulses in a pattern, for
+things the hand should tell apart without looking. Each pulse is on the
+scale above. An empty hand meeting something (`interact::touch`, the
+physics hands) plays its material's shape, scaled 0.4-1.0 by how fast
+the hand was going (full from 2 m/s). Pulses that would come out under
+0.1 are dropped.
+
+| Shape | What | Pulses (start s, amplitude, length s) | How it feels |
+| --- | --- | --- | --- |
+| `WOOD` | planks, logs, timber doors and crates, trees, wooden items | (0, 0.42, 0.03) | one dull thud |
+| `METAL` | sheet and painted metal, robot armour, metal items | (0, 0.5, 0.012) (0.035, 0.25, 0.012) (0.07, 0.12, 0.012) | a sharp hit and a ring dying away |
+| `GLASS` | glass, glass items | (0, 0.3, 0.01) (0.025, 0.3, 0.01) | two quick light ticks |
+| `STONE` | brick, concrete, plaster, rock, the ground | (0, 0.6, 0.018) | hard and short, no give |
+| `SKIN` | a robot's soft parts (anything but its armour) | (0, 0.18, 0.025) (0.03, 0.26, 0.035) | soft, gives, then holds |
+| `WIRE` | fences, chain-link | four ticks 30 ms apart, 0.3 / 0.22 / 0.26 / 0.16 | a rattle |
+| `BOLT_HOME` | a gun's bolt closing or locking | (0, 0.6, 0.015) (0.03, 0.3, 0.025) | a slam, then it settles |
+| `MAG_SEAT` | a magazine seating | (0, 0.2, 0.02) (0.045, 0.55, 0.025) | the slide up the well, then the catch |
+| `CHAMBER` | a round chambered or loaded | (0, 0.3, 0.012) (0.025, 0.2, 0.012) | a double tick |
+
+The gun shapes play in the grip hand, and at half strength in a
+supporting hand. A hand going 1.5 m/s or faster strikes rather than
+touches. That writes `interact::touch::HandStruck { at, stuff, speed,
+side }` for a slap sound by material.
+
 ## Acoustics
 
 Spaces sound like their size (`src/acoustics.rs`).

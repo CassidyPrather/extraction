@@ -129,20 +129,43 @@ fn gun_haptics(
     )>,
     locals: Query<(), With<LocalPlayer>>,
     mut out: MessageWriter<Haptic>,
+    mut shapes: MessageWriter<super::shapes::HapticShape>,
 ) {
+    use super::shapes::{BOLT_HOME, CHAMBER, HapticShape, MAG_SEAT};
     for ev in events.read() {
         let Some((grip, support)) = hands_on(ev.gun, &held, &locals) else {
             continue;
         };
+        // The three moments of loading have shapes of their own
+        // (`rig::shapes`), the supporting hand feeling them fainter.
+        let shape = match ev.event {
+            FireEvent::MagazineInserted => Some(MAG_SEAT),
+            FireEvent::BoltClosed | FireEvent::BoltLocked => Some(BOLT_HOME),
+            FireEvent::Chambered | FireEvent::RoundLoaded => Some(CHAMBER),
+            _ => None,
+        };
+        if let Some(shape) = shape {
+            shapes.write(HapticShape {
+                side: grip,
+                shape,
+                scale: 1.0,
+            });
+            if let Some(s) = support {
+                shapes.write(HapticShape {
+                    side: s,
+                    shape,
+                    scale: 0.5,
+                });
+            }
+            continue;
+        }
         let (a, t, support_a) = match ev.event {
             FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
                 shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
             }),
             FireEvent::DryFire | FireEvent::Dud => (0.35, 0.02, 0.0),
-            FireEvent::MagazineInserted => (0.55, 0.04, 0.3),
             FireEvent::MagazineRemoved => (0.3, 0.03, 0.0),
-            FireEvent::BoltClosed | FireEvent::BoltLocked => (0.45, 0.03, 0.25),
-            FireEvent::Chambered | FireEvent::Cocked | FireEvent::RoundLoaded => (0.25, 0.02, 0.0),
+            FireEvent::Cocked => (0.25, 0.02, 0.0),
             FireEvent::ModeChanged(_) => (0.2, 0.015, 0.0),
             FireEvent::Malfunctioned(_) => (0.5, 0.05, 0.3),
             _ => continue,

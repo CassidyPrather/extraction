@@ -12,6 +12,7 @@ pub mod fingers;
 pub mod flat;
 pub mod haptics;
 pub mod runtime;
+pub mod shapes;
 #[cfg(feature = "xr")]
 pub mod xr;
 
@@ -142,6 +143,7 @@ impl Plugin for RigPlugin {
         let args: Vec<String> = std::env::args().collect();
         app.register_type::<RigInput>()
             .add_plugins(haptics::HapticsPlugin)
+            .add_plugins(shapes::ShapesPlugin)
             .insert_resource(RigDriver::Flat)
             .insert_resource(comfort::Comfort::load(&args))
             .add_systems(

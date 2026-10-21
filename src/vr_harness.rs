@@ -3604,3 +3604,111 @@ mod gestures {
         }
     }
 }
+
+/// What a hand feels meeting things.
+mod touch {
+    use super::*;
+    use crate::interact::touch::{HandStruck, Stuff};
+    use crate::rig::shapes::{HapticShape, METAL, STONE, WIRE};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    #[derive(Resource, Default)]
+    struct Felt {
+        shapes: Vec<HapticShape>,
+        struck: Vec<HandStruck>,
+    }
+
+    fn feel(
+        mut s: MessageReader<HapticShape>,
+        mut h: MessageReader<HandStruck>,
+        mut felt: ResMut<Felt>,
+    ) {
+        felt.shapes.extend(s.read().copied());
+        felt.struck.extend(h.read().copied());
+    }
+
+    /// A wall 0.5 m ahead (of the world's, metal if asked, or a fence); the
+    /// right hand brought into it from 0.3 m back at `speed` m/s. What did
+    /// the hand feel, and was it heard?
+    fn meet(what: Option<crate::render::materials::Mat>, fence: bool, speed: f32) -> Felt {
+        let mut vr = Vr::new("training_yard");
+        vr.app.init_resource::<Felt>().add_systems(Update, feel);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let mut wall = vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(3.0, 3.0, 0.2),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, 1.2, -0.6)),
+        ));
+        if let Some(m) = what {
+            wall.insert(crate::world::surfaces::Surfaces(vec![(
+                Vec3::new(1.5, 1.5, 0.1),
+                Transform::IDENTITY,
+                m,
+            )]));
+        }
+        if fence {
+            wall.insert(crate::world::structures::Fence);
+        }
+        vr.step(2);
+        let from = feet + Vec3::new(0.2, 1.2, -0.15);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(20);
+        vr.app.world_mut().resource_mut::<Felt>().shapes.clear();
+        let per_tick = speed / 90.0;
+        let steps = (0.45 / per_tick).ceil() as usize;
+        for i in 1..=steps {
+            vr.move_hand(Side::Right, from - Vec3::Z * per_tick * i as f32);
+            vr.step(1);
+        }
+        vr.step(10);
+        std::mem::take(&mut *vr.app.world_mut().resource_mut::<Felt>())
+    }
+
+    /// A slow hand on stone: its shape, light, and not heard.
+    #[test]
+    fn a_slow_touch_on_stone_is_felt_lightly_and_quiet() {
+        let f = meet(None, false, 0.3);
+        let s = f
+            .shapes
+            .iter()
+            .find(|s| s.side == Side::Right && s.shape == STONE)
+            .unwrap_or_else(|| panic!("stone felt: {:?}", f.shapes));
+        assert!(s.scale < 0.6, "a touch, not a blow: {}", s.scale);
+        assert!(f.struck.is_empty(), "a touch was heard");
+    }
+
+    /// A slap on a metal wall: the ring, full, and heard as metal.
+    #[test]
+    fn a_slap_on_metal_rings_and_is_heard() {
+        let f = meet(Some(crate::render::materials::Mat::RustyMetal), false, 4.0);
+        let s = f
+            .shapes
+            .iter()
+            .find(|s| s.side == Side::Right && s.shape == METAL)
+            .unwrap_or_else(|| panic!("metal felt: {:?}", f.shapes));
+        assert!(s.scale > 0.8, "a blow: {}", s.scale);
+        assert!(
+            f.struck.iter().any(|h| h.stuff == Stuff::Metal),
+            "heard: {:?}",
+            f.struck
+        );
+    }
+
+    /// A fence rattles in the hand.
+    #[test]
+    fn a_fence_rattles() {
+        let f = meet(None, true, 1.0);
+        assert!(
+            f.shapes.iter().any(|s| s.shape == WIRE),
+            "wire felt: {:?}",
+            f.shapes
+        );
+    }
+}
