@@ -1355,7 +1355,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 42] = [
+pub const PREFABS: [&str; 43] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1398,6 +1398,7 @@ pub const PREFABS: [&str; 42] = [
     "house_plank_drowned",
     "farmhouse_drowned",
     "house_brick_drowned",
+    "chapel_drowned",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1423,6 +1424,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
                 "house_plank" => house_drowned(&mut b, 8.0, 7.0, Mat::Planks),
                 "farmhouse" => house_drowned(&mut b, 10.0, 8.0, Mat::Planks),
                 "house_brick" => house_drowned(&mut b, 10.0, 8.0, Mat::Brick),
+                "chapel" => chapel_drowned(&mut b),
                 _ => return None,
             }
             return Some(b.finish());
@@ -1924,7 +1926,9 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
         Mat::Sodden,
         true,
     );
-    b.loot(Vec3::new(x * 0.4, top + 0.05, -z * 0.45), "house");
+    // What someone left on a crate since the water went down (loot off
+    // the floor).
+    b.crate_box(Vec3::new(x * 0.4, top, -z * 0.45), 0.55, Some("house"));
     // Sixty years under water: the timber sodden, the paint and plaster
     // gone to the brick and the iron rusted.
     for p in &mut b.geo.pieces[start..] {
@@ -1935,6 +1939,111 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
             m => m,
         };
     }
+}
+
+/// The chapel under the reservoir (`chapel_drowned`): the nave's walls
+/// standing with their plaster gone to the stone, no roof, its pews up to
+/// their seats in silt, the altar table and a shelf standing out of it;
+/// the doorway's frame gone, silt banked up to it. The bell tower stood
+/// above the water, as it was.
+fn chapel_drowned(b: &mut Builder) {
+    let start = b.geo.pieces.len();
+    let (w, d, f, h) = (10.0, 14.0, 0.05, 4.5);
+    let thick = 0.35;
+    let (x, z) = (w * 0.5, d * 0.5);
+    let tall = |c: f32| Opening {
+        centre: c,
+        width: 1.0,
+        bottom: 1.5,
+        top: 3.6,
+        kind: OpeningKind::Window,
+    };
+    b.plinth(w, d, f, Mat::Concrete, Mat::Silt);
+    let doorway = 1.4;
+    b.shell(
+        w,
+        d,
+        f,
+        h,
+        thick,
+        Mat::Plaster,
+        [
+            &[breach(w * 0.5, doorway, 0.0, 3.2)],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+            &[],
+            &[tall(3.0), tall(7.0), tall(11.0)],
+        ],
+    );
+    b.geo.skylights.push((
+        Vec3::new(0.0, f + h, 0.0),
+        Vec2::new(x - thick * 0.5, z - thick * 0.5),
+    ));
+    let top = f + SILT;
+    b.bx(
+        Vec3::new(w - thick, SILT, d - thick),
+        Vec3::new(0.0, f + SILT * 0.5, 0.0),
+        Mat::Silt,
+    );
+    b.bx(
+        Vec3::new(doorway, SILT, thick + 0.02),
+        Vec3::new(0.0, f + SILT * 0.5, -z),
+        Mat::Silt,
+    );
+    let reach = b.door_steps(
+        Vec2::new(-x, -z),
+        Vec2::X,
+        Quat::IDENTITY,
+        x,
+        doorway,
+        top,
+        Mat::Silt,
+    );
+    let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+    b.geo.entrances.push(extraction_core::map::Entrance {
+        at: [0.0, r(-z - thick * 0.5)],
+        out: [0.0, -1.0],
+        width: doorway,
+        clear: r((reach - thick * 0.5).max(0.0) + 1.0),
+    });
+    // The pews to their seats in it, a few gone, the rest knocked askew.
+    for k in 0..5 {
+        let pz = -z + 3.0 + k as f32 * 1.1;
+        for (i, px) in [-2.6f32, 2.6].into_iter().enumerate() {
+            if (k + i) % 4 == 3 {
+                continue;
+            }
+            let skew = [0.05, -0.12, 0.0, 0.18, -0.06][(k + 2 * i) % 5];
+            b.pew(Vec3::new(px, top - 0.3, pz), std::f32::consts::PI + skew);
+        }
+    }
+    // Loot off the floor: on the altar table and the shelf.
+    b.table(Vec3::new(0.0, top - 0.3, z - 1.6), 0.08, Some("house"));
+    b.shelf(
+        Vec3::new(-x + 0.45, top - 0.25, z - 1.0),
+        std::f32::consts::FRAC_PI_2,
+        Some("medical"),
+    );
+    for p in &mut b.geo.pieces[start..] {
+        p.mat = match p.mat {
+            Mat::Planks | Mat::Shingles | Mat::WoodFloor | Mat::Timber => Mat::Sodden,
+            Mat::Plaster => Mat::DressedStone,
+            Mat::Corrugated | Mat::PaintedMetal => Mat::RustyMetal,
+            m => m,
+        };
+    }
+    // The bell tower, as the chapel's.
+    let at = Vec3::new(0.0, 0.0, z + 0.175 + 2.0);
+    b.bx(Vec3::new(4.2, 1.5, 4.2), at - Vec3::Y * 0.75, Mat::Concrete);
+    let from = b.geo.pieces.len();
+    let mut tower = Builder::default();
+    steeple(&mut tower);
+    let turn =
+        Transform::from_translation(at).with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
+    for mut p in tower.geo.pieces {
+        p.at = turn * p.at;
+        b.geo.pieces.push(p);
+    }
+    b.dress_structure(from, vec![("steeple", turn)]);
 }
 
 fn cabin(b: &mut Builder) {

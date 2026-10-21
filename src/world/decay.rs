@@ -803,6 +803,7 @@ mod tests {
             "house_plank_drowned",
             "farmhouse_drowned",
             "house_brick_drowned",
+            "chapel_drowned",
         ] {
             let geo = crate::world::buildings::prefab(id).unwrap();
             let occ = crate::world::buildings::occluders(&geo);

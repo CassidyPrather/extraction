@@ -458,9 +458,16 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
         }
         const PLANK: [Entrance; 1] = [door(-3.59)];
         const WIDE: [Entrance; 1] = [door(-4.09)];
+        const CHAPEL: [Entrance; 1] = [Entrance {
+            at: [0.0, -7.18],
+            out: [0.0, -1.0],
+            width: 1.4,
+            clear: 4.13,
+        }];
         return match base {
             "house_plank" => &PLANK,
             "farmhouse" | "house_brick" => &WIDE,
+            "chapel" => &CHAPEL,
             _ => &[],
         };
     }
