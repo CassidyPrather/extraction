@@ -279,17 +279,31 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
     for _ in 0..30 {
         app.update();
     }
-    let (herd_e, deer) = app
+    let herd_e = app
         .world_mut()
-        .query::<(Entity, &Herd)>()
+        .query_filtered::<Entity, With<Herd>>()
         .iter(app.world())
         .next()
-        .map(|(e, h)| (e, h.beasts[0].pos))
         .expect("Marrow Creek has its deer");
-    // From 10 m off, at chest height, at the deer's middle.
-    let target = deer + Vec3::Y * 0.6;
-    let from = target + Vec3::new(10.0, 0.5, 0.0);
-    let hit = {
+    let deer: Vec<Vec3> = app
+        .world()
+        .get::<Herd>(herd_e)
+        .unwrap()
+        .beasts
+        .iter()
+        .map(|b| b.pos)
+        .collect();
+    let bodies: Vec<(Entity, AnimalBody)> = app
+        .world_mut()
+        .query::<(Entity, &AnimalBody)>()
+        .iter(app.world())
+        .map(|(e, b)| (e, *b))
+        .collect();
+    // A clear line to a deer, as a shooter would find one: 6 to 12 m off,
+    // round it, at chest height, the first ray down the ballistics' own
+    // filter that finds a deer's body (a rise, a rock or a trunk in the way
+    // is the map's business, not this test's).
+    let (body, target) = {
         let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
         let spatial = q.get(app.world()).unwrap();
         let filter = SpatialQueryFilter::from_mask([
@@ -298,15 +312,35 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
             crate::world::Layer::Robot,
             crate::world::Layer::Player,
         ]);
-        spatial
-            .cast_ray(from, Dir3::new(target - from).unwrap(), 20.0, true, &filter)
-            .map(|h| h.entity)
+        let mut found = None;
+        'look: for &at in &deer {
+            let target = at + Vec3::Y * 0.6;
+            for d in [6.0, 9.0, 12.0] {
+                for k in 0..16 {
+                    let a = k as f32 / 16.0 * std::f32::consts::TAU;
+                    let from = target + Vec3::new(a.cos() * d, 0.5, a.sin() * d);
+                    let Some(h) = spatial.cast_ray(
+                        from,
+                        Dir3::new(target - from).unwrap(),
+                        d + 2.0,
+                        true,
+                        &filter,
+                    ) else {
+                        continue;
+                    };
+                    if bodies
+                        .iter()
+                        .any(|(e, b)| *e == h.entity && b.owner == herd_e)
+                    {
+                        found = Some((h.entity, target));
+                        break 'look;
+                    }
+                }
+            }
+        }
+        found.expect("no clear line to any deer: a bullet can't find one")
     };
-    let body = hit.expect("the ray found nothing");
-    assert!(
-        app.world().get::<AnimalBody>(body).is_some(),
-        "the ray hit something else"
-    );
+    let index = app.world().get::<AnimalBody>(body).unwrap().index;
     app.world_mut()
         .write_message(crate::weapons::ballistics::Hit {
             entity: body,
@@ -323,7 +357,7 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
         app.update();
     }
     assert_eq!(
-        app.world().get::<Herd>(herd_e).unwrap().beasts[0].state,
+        app.world().get::<Herd>(herd_e).unwrap().beasts[index].state,
         State::Dead
     );
     let carcass = app
@@ -339,7 +373,7 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
         app.update();
     }
     let h = app.world().get::<Herd>(herd_e).unwrap();
-    assert!(h.beasts[0].gone, "its body is still there");
+    assert!(h.beasts[index].gone, "its body is still there");
     assert!(
         app.world().get_entity(body).is_err(),
         "its collider is still there"
