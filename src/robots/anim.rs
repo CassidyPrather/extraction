@@ -171,6 +171,52 @@ pub struct Gait {
     fall: Vec3,
     /// Getting up: seconds left, feet first, then the body rises on them.
     pub rising: f32,
+    /// How far each planted foot has slid on ice since it came down.
+    slid: [f32; LEGS],
+}
+
+/// Ice: steeper than this (rise over run) a planted foot creeps downhill
+/// on it, faster the steeper; once one has gone this far it stumbles.
+pub const ICE_GRIP: f32 = 0.25;
+pub const SLIP_SPEED: f32 = 1.6;
+pub const STUMBLE_AFTER: f32 = 0.12;
+
+/// Feet on ice: `downhill(p)` is the slope under a point as a horizontal
+/// vector (rise over run, pointing down it), or none where there's no ice.
+/// A planted foot on a slope past `ICE_GRIP` slides down it; one that
+/// has slid `STUMBLE_AFTER` jolts the body and steps afresh.
+pub fn slip_feet(
+    w: &mut Walker,
+    g: &mut Gait,
+    dt: f32,
+    downhill: impl Fn(Vec3) -> Option<Vec3>,
+    ground: &mut impl FnMut(Vec3) -> f32,
+) {
+    for i in 0..LEGS {
+        let f = &mut w.feet[i];
+        if !f.alive || f.t < 1.0 {
+            g.slid[i] = 0.0;
+            continue;
+        }
+        let Some(slope) = downhill(f.planted) else {
+            g.slid[i] = 0.0;
+            continue;
+        };
+        let steep = slope.length() - ICE_GRIP;
+        if steep <= 0.0 {
+            continue;
+        }
+        let step = slope.normalize_or_zero() * SLIP_SPEED * steep * dt;
+        let p = f.planted + step;
+        f.planted = Vec3::new(p.x, ground(p), p.z);
+        g.slid[i] += step.length();
+        if g.slid[i] > STUMBLE_AFTER {
+            g.slid[i] = 0.0;
+            // A lurch toward the slipping foot; it'll step from where it is.
+            g.wobble_vel += Vec3::Y.cross(slope.normalize_or_zero()) * 0.9;
+            g.dazed += 0.15;
+        }
+    }
 }
 
 /// Damage that knocks a walker off its feet in one hit (or two quick
@@ -214,6 +260,7 @@ impl Default for Gait {
             floored: 0.0,
             fall: Vec3::ZERO,
             rising: 0.0,
+            slid: [0.0; LEGS],
         }
     }
 }
@@ -779,6 +826,7 @@ pub(crate) fn walk(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut steps: MessageWriter<WalkerStep>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let dt = time.delta_secs();
     // Feet land on what's lying about too: rubble and shards
@@ -832,6 +880,19 @@ pub(crate) fn walk(
             steps.write(WalkerStep { at });
         };
         step_walker(&mut w, &mut g, &mut t, &drive, dt, &mut ground, &mut landed);
+        if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
+            // Lying snow packs to ice under it: steep ground is treacherous.
+            let ice = |p: Vec3| {
+                if snow.lies(p.y) < 0.3 {
+                    return None;
+                }
+                let e = 0.4;
+                let dx = zone.ground(p.x + e, p.z) - zone.ground(p.x - e, p.z);
+                let dz = zone.ground(p.x, p.z + e) - zone.ground(p.x, p.z - e);
+                Some(-Vec3::new(dx, 0.0, dz) / (2.0 * e))
+            };
+            slip_feet(&mut w, &mut g, dt, ice, &mut ground);
+        }
         poses.0 = leg_poses(&w, &g, &t);
         // Leg colliders follow the lower segments (local to the root).
         // Built from parts rather than a matrix, so the scale stays exactly
@@ -1739,6 +1800,59 @@ mod tests {
                 "{dead:?}: it crawled {went:.2} m in 10 s"
             );
         }
+    }
+
+    /// On an icy slope its planted feet creep downhill and it stumbles;
+    /// on a gentle one, or without ice, they hold.
+    #[test]
+    fn feet_slip_on_ice_slopes() {
+        let run = |grade: f32, icy: bool| {
+            let hill = move |p: Vec3| -grade * p.x;
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &hill);
+            let start: Vec<Vec3> = w.feet.iter().map(|f| f.planted).collect();
+            let mut wobbled = 0.0f32;
+            for _ in 0..(3 * 90) {
+                let drive = Drive {
+                    desired: Vec3::ZERO,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                let dt = 1.0 / 90.0;
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    dt,
+                    &mut |p| hill(p),
+                    &mut |_| {},
+                );
+                let ice = |_: Vec3| icy.then_some(Vec3::new(grade, 0.0, 0.0));
+                slip_feet(&mut w, &mut g, dt, ice, &mut |p| hill(p));
+                wobbled = wobbled.max(g.wobble.length());
+                for f in w.feet.iter().filter(|f| f.t >= 1.0) {
+                    assert!(
+                        (f.planted.y - hill(f.planted)).abs() < 1e-3,
+                        "a foot off the slope"
+                    );
+                }
+            }
+            let slid = w
+                .feet
+                .iter()
+                .zip(&start)
+                .map(|(f, s)| f.planted.x - s.x)
+                .fold(f32::MIN, f32::max);
+            (slid, wobbled)
+        };
+        let (slid, wobbled) = run(0.45, true);
+        assert!(slid > 0.1, "it slid {slid:.2} m down the ice");
+        assert!(wobbled > 0.02, "it stumbled ({wobbled:.3})");
+        assert!(run(0.45, false).0 < 0.05, "dry, it holds");
+        assert!(run(0.15, true).0 < 0.05, "a gentle icy slope holds");
     }
 
     /// Turning on the spot, it steps round rather than skating its feet.

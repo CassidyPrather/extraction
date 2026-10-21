@@ -351,6 +351,9 @@ pub enum MarkerKind {
         #[serde(default)]
         power: Option<P2>,
     },
+    /// A spotter's winch (`robots::spotter`): a balloon on a tether over
+    /// it, watching the ground round about and calling in the others.
+    Spotter,
 }
 
 fn sentry_arc() -> f32 {
@@ -429,6 +432,27 @@ pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
 }
 
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.
+/// Whether a prefab is a vehicle (a wreck, rolling stock): ivy doesn't
+/// climb it as it does a ruin's walls (`world::overgrowth`).
+pub fn prefab_is_vehicle(id: &str) -> bool {
+    prefab_wheels(id).is_some() || matches!(id, "boxcar" | "funicular_car")
+}
+
+/// Where a wreck's wheels meet the ground, (x, z) in car space (front-left,
+/// front-right, rear-left, rear-right; its front to -Z), from Kit's models
+/// (`art/vehicles/wrecks.py`; the lorry's rear twins at their middle). Its
+/// tyres' bottoms are 2 cm under its origin. `None` for anything without
+/// wheels.
+pub fn prefab_wheels(id: &str) -> Option<[[f32; 2]; 4]> {
+    let (front, rear, fz, rz) = match id {
+        "wreck_lada" => (0.68, 0.68, -1.21, 1.21),
+        "wreck_uaz" => (0.72, 0.72, -1.19, 1.19),
+        "wreck_lorry" => (0.8, 0.86, -1.65, 1.65),
+        _ => return None,
+    };
+    Some([[-front, fz], [front, fz], [-rear, rz], [rear, rz]])
+}
+
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
     match prefab_base(id) {
         "quarantine_gate" => [12.0, 4.0, 3.0],
@@ -843,7 +867,10 @@ pub fn prefab_clearance(id: &str) -> f32 {
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
 /// house's back wall reached under the house and lifted its door off its
-/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)).
+/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)),
+/// nor a car wreck: a car left on a verge sits on the verge as it is (a
+/// pad would cut a terrace into the bank beside the road); `map_lint` holds its
+/// ground to [`WRECK_RISE`](crate::map_lint::WRECK_RISE).
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
@@ -858,6 +885,9 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "ore_mill"
             // On the line's grade.
             | "funicular_car"
+            | "wreck_lada"
+            | "wreck_uaz"
+            | "wreck_lorry"
     )
 }
 

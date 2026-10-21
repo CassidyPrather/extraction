@@ -40,6 +40,7 @@ impl Plugin for RobotFxPlugin {
                 drift_puffs,
                 charge_emitters,
                 zap_arcs,
+                splash_steps,
             )
                 .chain(),
         );
@@ -55,6 +56,8 @@ struct FxAssets {
     soot: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
+    /// Water thrown up by a foot.
+    water: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -91,6 +94,13 @@ fn assets(
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
             unlit: true,
+            ..default()
+        }),
+        water: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.72, 0.78, 0.82, 0.55),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 0.15,
+            reflectance: 0.6,
             ..default()
         }),
     };
@@ -704,5 +714,93 @@ fn shell_marks(
                 }
             }
         }
+    }
+}
+
+/// A foot landing this far under standing water (m), or in a puddle at
+/// least this full (`world::puddles`), throws water.
+const SPLASH_DEPTH: f32 = 0.02;
+const SPLASH_PUDDLE: f32 = 0.4;
+
+/// Whether a foot coming down at height `y` splashes: in water whose
+/// surface is at `water`, or in a puddle this full.
+fn splashes(y: f32, water: Option<f32>, puddle: f32) -> bool {
+    water.is_some_and(|w| w > y + SPLASH_DEPTH) || puddle >= SPLASH_PUDDLE
+}
+
+/// A walker's foot in a stream or a puddle throws a spray of water.
+#[allow(clippy::too_many_arguments)]
+fn splash_steps(
+    mut commands: Commands,
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    zone: Option<Res<crate::world::Zone>>,
+    wet: Option<Res<crate::world::weather::Wetness>>,
+    levels: Option<Res<crate::world::underground::Levels>>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let Some(zone) = zone else {
+        steps.clear();
+        return;
+    };
+    let wet = wet.map_or(0.0, |w| w.level);
+    let mut n = sparks.iter().len();
+    let mut a = None;
+    for step in steps.read() {
+        if n >= MAX_SPARKS {
+            break;
+        }
+        let p = [step.at.x, step.at.z];
+        let puddle = if wet > 0.0 {
+            crate::world::puddles::puddle_at(&zone.hm, p, wet)
+        } else {
+            0.0
+        };
+        let water = crate::world::underground::site_water(&zone, levels.as_deref(), step.at)
+            .unwrap_or_else(|| zone.hm.water_level(p));
+        if !splashes(step.at.y, water, puddle) {
+            continue;
+        }
+        let a =
+            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let at = Vec3::new(
+            step.at.x,
+            water.unwrap_or(step.at.y).max(step.at.y),
+            step.at.z,
+        );
+        for _ in 0..8 {
+            let out = Vec3::new(dice.f() - 0.5, 0.0, dice.f() - 0.5).normalize_or(Vec3::X);
+            let vel = (Vec3::Y * 1.6 + out * 0.9) * (0.7 + 0.6 * dice.f());
+            commands.spawn((
+                Spark {
+                    vel,
+                    life: 0.25 + dice.f() * 0.25,
+                },
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(a.water.clone()),
+                Transform::from_translation(at).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+            n += 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod splash_tests {
+    use super::*;
+
+    /// A foot splashes in a stream over it or in a full puddle, not on
+    /// dry ground or in water below it (a bridge over a stream).
+    #[test]
+    fn feet_splash_where_the_water_is() {
+        assert!(splashes(10.0, Some(10.2), 0.0), "in a stream");
+        assert!(splashes(10.0, None, 0.8), "in a puddle");
+        assert!(!splashes(10.0, None, 0.1), "damp ground");
+        assert!(!splashes(10.0, Some(6.0), 0.0), "over the water");
+        assert!(!splashes(10.0, None, 0.0), "dry");
     }
 }

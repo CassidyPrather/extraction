@@ -108,6 +108,26 @@ fn doors_of(s: &Solid) -> Vec<(P2, P2, f32)> {
         .collect()
 }
 
+/// Every door's strip on the map, the kiosks' too: what it is, and the
+/// strip [`DOOR_STRIP`] out from the face with a shoulder either side (as
+/// [`anomaly_room`] keeps anomalies off them).
+pub(crate) fn door_strips(map: &MapDef) -> Vec<(String, Rect)> {
+    let mut out = Vec::new();
+    for s in solids(map) {
+        for (at, out_dir, width) in doors_of(&s) {
+            out.push((
+                format!("the {}'s door", s.name),
+                Rect {
+                    at: geom::add(at, geom::scale(out_dir, DOOR_STRIP * 0.5)),
+                    half: [width * 0.5 + 0.5, DOOR_STRIP * 0.5],
+                    yaw: (-out_dir[0]).atan2(out_dir[1]),
+                },
+            ));
+        }
+    }
+    out
+}
+
 /// Every shelter on the map: roofed buildings by their doors (an open
 /// shed with no doors, the sawmill, from anywhere round it), and every
 /// kiosk by its door.

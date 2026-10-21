@@ -38,6 +38,19 @@ fn parted(world: vec3<f32>, hand: vec4<f32>, free: f32) -> vec3<f32> {
     return normalize(away + vec3<f32>(0.0, 1e-3, 0.0)) * near * 0.3 * (0.3 + 0.7 * free);
 }
 
+// Branches pushed aside by a robot walking under them: its spot is low
+// (at its feet), so it's a column, by distance across the ground, from
+// its feet up to about its height.
+fn shouldered(world: vec3<f32>, robot: vec4<f32>, free: f32) -> vec3<f32> {
+    if (robot.w <= 0.0 || world.y < robot.y - 0.3 || world.y > robot.y + 2.5) {
+        return vec3<f32>(0.0);
+    }
+    let away = world.xz - robot.xz;
+    let near = 1.0 - smoothstep(0.05, robot.w, length(away));
+    let out2 = away / max(length(away), 1e-3);
+    return vec3<f32>(out2.x, 0.15, out2.y) * near * 0.3 * (0.3 + 0.7 * free);
+}
+
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> sway: Sway;
 
 fn offset(world: vec3<f32>, local: vec3<f32>, origin: vec3<f32>) -> vec3<f32> {
@@ -57,10 +70,10 @@ fn offset(world: vec3<f32>, local: vec3<f32>, origin: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(dir.x, 0.0, dir.y) * push * 0.35 * weight
         + parted(world, sway.hand_a, out)
         + parted(world, sway.hand_b, out)
-        + parted(world, sway.robot_a, out)
-        + parted(world, sway.robot_b, out)
-        + parted(world, sway.robot_c, out)
-        + parted(world, sway.robot_d, out);
+        + shouldered(world, sway.robot_a, out)
+        + shouldered(world, sway.robot_b, out)
+        + shouldered(world, sway.robot_c, out)
+        + shouldered(world, sway.robot_d, out);
 }
 
 @vertex

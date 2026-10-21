@@ -201,8 +201,23 @@ fn reel(
                 .into_iter()
                 .enumerate()
                 {
-                    let p = eye + flat * d + right * x;
-                    let at = zone.on_ground(p.x, p.z);
+                    // Swung round (up to 25°) until the ground between
+                    // doesn't hide it: any map, any camera.
+                    let at = (0..=20)
+                        .map(|i| {
+                            (if i % 2 == 0 { 1.0 } else { -1.0 }) * (i / 2 + i % 2) as f32 * 2.5
+                        })
+                        .map(|deg: f32| {
+                            let b = (x / d).atan() + deg.to_radians();
+                            let dir = flat * b.cos() + right * b.sin();
+                            let p = eye + dir * d;
+                            zone.on_ground(p.x, p.z)
+                        })
+                        .find(|at| in_sight(&zone, eye, *at + Vec3::Y * 1.1))
+                        .unwrap_or_else(|| {
+                            let p = eye + flat * d + right * x;
+                            zone.on_ground(p.x, p.z)
+                        });
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
                     commands
                         .entity(w)
@@ -508,4 +523,12 @@ fn reel(
             }
         },
     );
+}
+
+/// Whether the ground between `eye` and `to` leaves it in view.
+fn in_sight(zone: &Zone, eye: Vec3, to: Vec3) -> bool {
+    (1..40).all(|i| {
+        let p = eye.lerp(to, i as f32 / 40.0);
+        zone.ground(p.x, p.z) < p.y - 0.2
+    })
 }

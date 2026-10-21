@@ -672,9 +672,10 @@ pitched, buzzy burst through a dog's formants; a drip a droplet's
 rising chirp; a breath shaped noise through the mouth), deterministic,
 rendered with the robots' words at start-up and audited like any set.
 They are: the deer's bark, dogs' barks and yelp, rats, the chough, the
-heron, the chamois, your breath, drips and lapping; and ducks and bats,
-rendered but waiting for Wildlife's rafts and bats to land before
-anything plays them. Each
+heron, the chamois, ducks, bats, your breath, drips and lapping. A
+raft of mallards going up quacks and splashes across the water in its
+run-up; bats at dusk and night are a quiet high flicker from the
+nearest one hunting within 15 m. Each
 yields to a recording of the same name the moment the bank has one
 (`render_voices` skips a stand-in whose set exists). Layered from
 recordings meanwhile: wings (cloth), hooves (leaves, quick), glass
