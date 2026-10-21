@@ -155,7 +155,11 @@ elevation alternately. This happens under three lights:
 - dusk;
 - night, with a lamp to one side.
 
-Each picture is saved as `<light>/<subject>.png`. FILTER is `all`,
+A building stands at its footing, its foundation under the floor. An
+underground site sits on the floor like a model; seen from outside, it
+shows only its entrances and fittings, since its walls face in. The
+cameras see through eight times the weather's haze. Each picture is saved
+as `<light>/<subject>.png`. FILTER is `all`,
 `models`, `prefabs`, or text that a subject's name must contain
 (`props/bed,prefab:barn`). Set `LIGHTS=day` to shoot only the day.
 
@@ -174,10 +178,7 @@ the sky. Z-fighting is found from the geometry instead (below).
 
 - **missing textures**: magenta on the subject;
 - **blank views**: the subject covers almost nothing in one or more views;
-- **odd size**: a model's largest side against its folder's range, or how
-  far a prefab reaches from its footing against the radius the map clears
-  round it (`prefab_clearance`; past it, it pokes into trees and its
-  neighbours). Sites underground have nothing cleared and aren't checked;
+- **odd size**: a model's largest side against its folder's range;
 - **blockouts left standing**: a model that never loaded;
 - **floating pieces**: meshes whose boxes touch no other mesh and not the
   floor. The test is generous: it never flags a piece that touches
@@ -207,6 +208,13 @@ top face.
 - **Every model against itself** (`fighting`): its nodes against each
   other, as `art/check.py` checks in Blender, here in `cargo test` too.
 
+- **Inside its clearance**: how far each surface prefab reaches from its
+  footing, as drawn, against the radius the map clears round it
+  (`prefab_clearance`). Past that radius it stands in the trees and rocks
+  the map put just outside. This is measured on the geometry: the
+  sweep's bounding boxes overstate a roof's corners by a couple of
+  metres. Ropeways are left out, since their cables run on to the next
+  pylon.
 - **Believable size**: every model's bounds against its folder's range
   (`checks::size_range`). This catches a model exported in centimetres, or
   a gun 4 m long.

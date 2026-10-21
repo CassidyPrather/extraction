@@ -338,6 +338,18 @@
         (prefab: "fence_garden", at: (-189.90, 211.85), rot: 90.0),
         (prefab: "fence_garden", at: (-185.75, 216.20), rot: 0.0),
         (prefab: "fence_garden", at: (-177.25, 216.20), rot: 0.0),
+
+        // Car wrecks (Destruction strips their doors, bonnets, boots and
+        // wheels): cover on the verges, never on the road.
+        // Lorry 12, stuck on the third bend with the keys in (the driver's
+        // note is in the road-menders' hut): on the inside of the bend,
+        // its nose up the next leg.
+        (prefab: "wreck_lorry", at: (0.8, -38.5), rot: 68.0),
+        // Left on the climb to the pass by those who walked over it.
+        (prefab: "wreck_lada", at: (18.8, -187.6), rot: 1.0),
+        (prefab: "wreck_uaz", at: (24.2, -217.2), rot: 356.0),
+        // The low farm's car, in its yard between the barn and the house.
+        (prefab: "wreck_lada", at: (-191.0, 178.0), rot: 120.0),
     ],
 
     markers: [

@@ -843,7 +843,10 @@ pub fn prefab_clearance(id: &str) -> f32 {
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
 /// house's back wall reached under the house and lifted its door off its
-/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)).
+/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)),
+/// nor a car wreck: a car left on a verge sits on the verge as it is (a
+/// pad would cut a terrace into the bank beside the road); `map_lint` holds its
+/// ground to [`WRECK_RISE`](crate::map_lint::WRECK_RISE).
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
@@ -858,6 +861,9 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "ore_mill"
             // On the line's grade.
             | "funicular_car"
+            | "wreck_lada"
+            | "wreck_uaz"
+            | "wreck_lorry"
     )
 }
 

@@ -78,6 +78,11 @@ fn plate_transform(kind: RobotKind, i: usize) -> Transform {
     }
 }
 
+/// A robot that wears the plates `fit_plates` gave it (not a machine
+/// with armour parts of its own: the heavy, `heavy::OwnLook`).
+#[derive(Component)]
+pub struct Plated;
+
 /// Below this a plate has lost all but one bolt: it hangs from it.
 pub const HANGING_BELOW: f32 = 0.35;
 
@@ -104,8 +109,8 @@ fn hang_plates(
         &mut Transform,
         Option<&mut Hanging>,
     )>,
-    // (The heavy's plates are its own, on bolts: `heavy`.)
-    robots: Query<(&Robot, &GlobalTransform), Without<super::heavy::Heavy>>,
+    // (Only the plates fitted here: other machines' armour is their own.)
+    robots: Query<(&Robot, &GlobalTransform), With<Plated>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -198,6 +203,7 @@ fn fit_plates(
         let Ok(mut ec) = commands.get_entity(e) else {
             continue;
         };
+        ec.insert(Plated);
         ec.with_children(|c| {
             for i in 0..n {
                 c.spawn((
