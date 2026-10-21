@@ -128,10 +128,126 @@ fn turn_knobs(
     }
 }
 
+/// Props drawn from their model (`models/props/<name>.glb`): the
+/// gramophone and the piano. Their nodes are what moves.
+fn dress_props(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    grams: Query<Entity, Added<super::gramophone::Gramophone>>,
+    pianos: Query<Entity, Added<super::piano::Piano>>,
+) {
+    for (e, name) in grams
+        .iter()
+        .map(|e| (e, "gramophone"))
+        .chain(pianos.iter().map(|e| (e, "upright_piano")))
+    {
+        let scene = server.load(
+            bevy::gltf::GltfAssetLabel::Scene(0).from_asset(format!("models/props/{name}.glb")),
+        );
+        commands.spawn((SceneRoot(scene), Transform::IDENTITY, ChildOf(e)));
+    }
+}
+
+/// The platter turns with the spring, the arm swings over the record when
+/// it's down, the crank turns a little each push.
+fn animate_gramophones(
+    mut commands: Commands,
+    grams: Query<(Entity, &super::gramophone::Gramophone)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&Rest>)>,
+    time: Res<Time>,
+    mut arm: Local<std::collections::HashMap<Entity, f32>>,
+    mut crank: Local<std::collections::HashMap<Entity, f32>>,
+) {
+    let dt = time.delta_secs();
+    for (e, g) in &grams {
+        let a = arm.entry(e).or_default();
+        let want = if g.arm_down { 0.55 } else { 0.0 };
+        *a += (want - *a) * (dt * 4.0).min(1.0);
+        let a = *a;
+        // The crank shows the spring: a turn per push's worth.
+        let c = crank.entry(e).or_default();
+        let target = g.spring / super::gramophone::PER_TURN * std::f32::consts::TAU;
+        *c += (target - *c) * (dt * 6.0).min(1.0);
+        let c = *c;
+        for n in children.iter_descendants(e) {
+            let Ok((name, mut t, rest)) = nodes.get_mut(n) else {
+                continue;
+            };
+            let name = name.as_str();
+            if !matches!(name, "platter" | "tonearm" | "crank") {
+                continue;
+            }
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(n).insert(Rest(*t));
+                    *t
+                }
+            };
+            match name {
+                // 78 turns a minute at full speed.
+                "platter" => t.rotate_local_y(-g.speed * 78.0 / 60.0 * std::f32::consts::TAU * dt),
+                "tonearm" => t.rotation = rest.rotation * Quat::from_rotation_y(a),
+                _ => t.rotation = rest.rotation * Quat::from_rotation_x(c),
+            }
+        }
+    }
+}
+
+/// Keys go down under the fingers that push them, pivoting at the back.
+fn animate_pianos(
+    mut commands: Commands,
+    pianos: Query<(Entity, &super::piano::Piano)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&Rest>)>,
+) {
+    for (e, p) in &pianos {
+        for n in children.iter_descendants(e) {
+            let Ok((name, mut t, rest)) = nodes.get_mut(n) else {
+                continue;
+            };
+            let Some(key) = name
+                .as_str()
+                .strip_prefix("key_")
+                .and_then(|k| k.parse::<u8>().ok())
+            else {
+                continue;
+            };
+            let depth = p
+                .depth
+                .get(key.wrapping_sub(super::piano::LOW) as usize)
+                .copied()
+                .unwrap_or(0.0);
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(n).insert(Rest(*t));
+                    *t
+                }
+            };
+            // The front goes down: about the back pivot, front at -Z.
+            let want = rest.rotation * Quat::from_rotation_x(-depth / 0.15);
+            if t.rotation.angle_between(want) > 1e-4 {
+                t.rotation = want;
+            }
+        }
+    }
+}
+
 pub struct MusicVisualsPlugin;
 
 impl Plugin for MusicVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (animate_decks, turn_knobs));
+        app.add_systems(
+            Update,
+            (
+                animate_decks,
+                turn_knobs,
+                dress_props,
+                animate_gramophones,
+                animate_pianos,
+            ),
+        );
     }
 }

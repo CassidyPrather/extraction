@@ -326,7 +326,7 @@ def cassette():
 
 # --- 78 rpm record -------------------------------------------------------------------------
 
-def record():
+def record(colour="Red"):
     R, RL, RH = 0.127, 0.0435, 0.0036
     t = 0.001
     disc = Part("disc")
@@ -342,7 +342,7 @@ def record():
     prof = [(r, -h) for r, h in face] + [(r, h) for r, h in reversed(face)]
     disc.lathe(prof, "Rotor", segs=64, closed=True)
     lab = Part("label")
-    rings = [(RH, 0.026, "Red"), (0.026, 0.0275, "Cream"), (0.0275, RL, "Red")]
+    rings = [(RH, 0.026, colour), (0.026, 0.0275, "Cream"), (0.0275, RL, colour)]
     for r0, r1, mat in rings:
         lab.lathe([(r0, -t - 0.0001), (r1, -t - 0.0001), (r1, t + 0.0001), (r0, t + 0.0001)],
                   mat, segs=32, closed=True)
@@ -373,5 +373,16 @@ if __name__ == "__main__":
               f" cassette seat ({SEAT[0] + d.x:+.4f}, {SEAT[1] + d.y:+.4f}, {SEAT[2] + d.z:+.4f})")
     if wanted("cassette"):
         write("cassette", cassette())
+    # Each tape you find is a cassette (the game's item ids,
+    # extraction_core::music::tapes).
+    for tid in ("tape_practice", "tape_hymns", "tape_lodge", "tape_duty", "tape_birthday",
+                "tape_bells"):
+        if wanted(tid):
+            write(tid, cassette())
     if wanted("record"):
         write("record", record())
+    # The records you find: one label colour each.
+    for rid, colour in (("record_augustin", "Red"), ("record_entertainer", "Blue"),
+                        ("record_susanna", "Olive")):
+        if wanted(rid):
+            write(rid, record(colour))
