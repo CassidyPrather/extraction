@@ -229,7 +229,7 @@ def ammo_545(label="5.45", tip_of=lambda k: None, stripe=None):
     p.box((0.0016, 0.0015, 0.0365), (0.0, 0.0174, 0.0125), "Rope")
     # A paper slip under the string with the calibre on it.
     p.box((0.03, 0.0004, 0.022), (-0.008, 0.0171, 0.0125), "Paper", xf=RY(0.04))
-    text(p, label, 0.0075 if len(label) <= 4 else 0.006, "Black",
+    text(p, label, 0.006, "Black",
          T(-0.008, 0.0174, 0.0125) @ ON_TOP, depth=0.0004)
     if stripe:
         # The type's stripe across the slip's foot.
@@ -368,7 +368,7 @@ def ammo_762r(label="54R", band="Red"):
     text(p, "7.62", 0.008, "Black", T(0.0, sy / 2 - 0.0005, -0.033) @ ON_TOP,
          depth=0.0004)
     for sx_ in (-1, 1):
-        text(p, label, 0.007 if len(label) <= 3 else 0.0055, "Black",
+        text(p, label, 0.0055, "Black",
              T(sx_ * (sx / 2 - 0.0005), 0.0, -0.032) @ RY(sx_ * math.pi / 2), depth=0.0004)
     return [p]
 
@@ -488,10 +488,12 @@ def repack_box(dims, c, calibre, shells=False):
         y0 = -sy / 2
         wall = 0.0012
         carton(p, sx, sy - 0.002, sz, y0, "Straw", wall=wall)
-        # The lid flap, hinged at the back's top edge and folded back.
-        hinge = (0.0, y0 + sy - 0.002, sz / 2)
-        p.box((sx, wall, sz), (0.0, hinge[1], 0.0), "Straw", bevel=0.0004, segs=1,
-              xf=RX(math.radians(-115), about=hinge))
+        # What's left of the lid: a flap hanging down the back from its fold
+        # (torn short, so it stays inside the item's box).
+        flap = sy - 0.006
+        # (Hanging out past the string, clear of the wall's plane.)
+        p.box((sx, flap, wall), (0.0, y0 + sy - 0.002 - flap / 2, sz / 2 + 0.0034 + wall / 2),
+              "Straw", bevel=0.0004, segs=1)
         top = y0 + sy - 0.006
         p.box((sx - 0.004, 0.002, sz - 0.004), (0.0, top - 0.003, 0.0), "Black", segs=1)
         r = 0.0099 if shells else max(rr for rr, _ in c[0])
@@ -519,6 +521,9 @@ def repack_box(dims, c, calibre, shells=False):
                     case_end = min(z_ for _, z_ in c[0])
                     zf = case_end + show
                     base = min(top - 0.003 + case_end + show, top + 0.004 - c[2])
+                    # ...and never through the box's floor (a long round in a
+                    # shallow box stands a little proud instead).
+                    base = max(base, y0 + 0.002 + zf)
                     nose(p, c, zf, T(x, base, z) @ RX(math.pi / 2), segs=7, brass="Tarnish",
                          seat=SEATS[k % len(SEATS)])
                 k += 1
@@ -534,11 +539,9 @@ def repack_box(dims, c, calibre, shells=False):
         for sx_ in (-1, 1):
             p.box((0.0016, 0.0016, sz + 0.009), (sx_ * (sx / 2 + 0.0009), ys, -0.0014), "Rope",
                   segs=1)
-        h1 = min(0.006, lw / 5.5)
-        text(p, "REPACK", h1, "Dark", lab @ T(0.0, lh * 0.2, -0.0006) @ RY(math.pi),
-             depth=0.0003)  # smallest: 0.006 (the 40 mm box)
-        # smallest: 0.0048 (the 40 mm box: render::legibility reads this)
-        text(p, calibre, h1 * 0.8, "Dark", lab @ T(0.0, -lh * 0.25, -0.0006) @ RY(math.pi),
+        text(p, "REPACK", 0.006, "Dark", lab @ T(0.0, lh * 0.2, -0.0006) @ RY(math.pi),
+             depth=0.0003)
+        text(p, calibre, 0.0048, "Dark", lab @ T(0.0, -lh * 0.25, -0.0006) @ RY(math.pi),
              depth=0.0003)
         return [p]
     return build
