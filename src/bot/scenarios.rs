@@ -593,9 +593,12 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 },
                 Stow(Side::Left),
                 Gun(MacroKind::Reload),
+                Expect(super::Expect::GunRounds(20, 31)),
+                // Off safe.
+                Gun(MacroKind::Mode),
                 Support,
                 // Till it's there and welding.
-                Wait(15.0),
+                Wait(8.0),
             ];
             if shoot {
                 t.extend([
@@ -604,8 +607,10 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                         shots: 30,
                     },
                     Wait(20.0),
+                    Expect(super::Expect::RobotHits(1)),
                     Expect(super::Expect::Wrecked(1)),
-                    Expect(super::Expect::Counter(md::WELDED, 0, 60)),
+                    // Shot off before it's done (left to it, it welds 130 or so).
+                    Expect(super::Expect::Counter(md::WELDED, 0, 80)),
                 ]);
             } else {
                 t.extend([

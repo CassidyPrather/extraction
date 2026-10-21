@@ -39,7 +39,9 @@ pub const TORCH: Vec3 = Vec3::new(0.0, -0.38, -0.45);
 /// The lowest it can hang over the ground (`flight` holds drones off it),
 /// and how far its arc reaches from there, m.
 pub const HOVER_MIN: f32 = 2.7;
-pub const ARC_REACH: f32 = 3.2;
+pub const ARC_REACH: f32 = 3.6;
+/// How far out from the part it hangs (clear of the machine's body).
+pub const HANG_OUT: f32 = 2.2;
 /// Seconds with nothing to mend before it goes home.
 pub const IDLE_HOME: f32 = 45.0;
 /// Counters a scenario reads: hit points welded back (whole ones).
@@ -58,6 +60,9 @@ pub struct Mender {
     pub idle: f32,
     /// Where it goes home to.
     pub home: Vec3,
+    /// The side of its patient it welds from (x/z, set when it picks
+    /// one: the way it came).
+    pub side: Vec2,
     /// Weld not yet counted whole.
     pub owed: f32,
     pub looted: bool,
@@ -127,6 +132,7 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
             Mender {
                 patient: None,
                 welding: None,
+                side: Vec2::X,
                 rethink: 0.0,
                 idle: 0.0,
                 home,
@@ -260,6 +266,12 @@ fn mender_mind(
                     .min_by(|a, b| (a.1 / a.2).total_cmp(&(b.1 / b.2)))
                     .map(|p| (r, p.0))
             });
+            if let Some((r, _)) = m.patient.filter(|p| Some(p.0) != was) {
+                if let Ok((_, _, g)) = robots.get(r) {
+                    let to = g.translation();
+                    m.side = Vec2::new(here.x - to.x, here.z - to.z).normalize_or(Vec2::X);
+                }
+            }
             if m.patient.is_some() && m.patient.map(|p| p.0) != was {
                 out.write(MenderEvent {
                     mender: e,
@@ -299,14 +311,15 @@ fn mender_mind(
         // Over it at its height, then down beside the part, on the side it
         // came from.
         let flat = Vec2::new(here.x - at.x, here.z - at.z);
-        let side = flat.normalize_or(Vec2::X);
+        let side = m.side;
         let ground = zone.ground(here.x, here.z);
         // (It can't hover lower than its flight lets it: `flight` keeps
         // it off the ground. Its arc reaches down.)
-        let mut beside = at + Vec3::new(side.x, 0.0, side.y) * rules::WELD_REACH + Vec3::Y * 0.5;
+        let mut beside = at + Vec3::new(side.x, 0.0, side.y) * HANG_OUT + Vec3::Y * 0.5;
         beside.y = beside.y.max(zone.ground(beside.x, beside.z) + HOVER_MIN);
-        d.goal = if flat.length() > 8.0 {
-            Vec3::new(at.x, (ground + rules::CRUISE).max(at.y + 3.0), at.z)
+        let over = at + Vec3::new(side.x, 0.0, side.y) * 6.0;
+        d.goal = if flat.length() > 10.0 {
+            Vec3::new(over.x, (ground + rules::CRUISE).max(at.y + 3.0), over.z)
         } else {
             beside
         };
@@ -454,7 +467,10 @@ fn stage_scenario(
                 }
             }
         });
-        let from = site + dir * 60.0 + Vec3::Y * rules::CRUISE;
+        // From the side: it welds on the side it came from, in the bot's
+        // clear view (not behind the pylon).
+        let side = Vec3::new(-dir.z, 0.0, dir.x);
+        let from = site + side * 60.0 - dir * 6.0 + Vec3::Y * rules::CRUISE;
         let mender = spawn_mender(&mut commands, from, from);
         info!("scenario: a hurt pylon at {site:.0}, a mender on its way");
         for mut bot in &mut bots {
@@ -470,7 +486,7 @@ fn stage_scenario(
             if let Some(kind) = catalog.kind(id) {
                 let side = Vec3::new(-dir.z, 0.0, dir.x);
                 let p = s.at + side * (0.7 + k as f32 * 0.4) - dir * 0.5;
-                crate::items::spawn_item(
+                let it = crate::items::spawn_item(
                     &mut commands,
                     &catalog,
                     crate::items::SpawnItem {
@@ -481,6 +497,14 @@ fn stage_scenario(
                         condition: 1.0,
                     },
                 );
+                if id == "ak_mag" {
+                    // (A magazine comes empty; this one's full.)
+                    commands.queue(move |w: &mut World| {
+                        if let Some(mut i) = w.get_mut::<crate::items::Item>(it) {
+                            i.rounds = 30;
+                        }
+                    });
+                }
             }
         }
     }
