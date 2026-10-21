@@ -254,6 +254,71 @@ pub fn scout_forgotten(place: &str) -> String {
 /// Over a carried radio, with the aerial fitted.
 pub const AERIAL_SURGE: &str = "Truck: \"Aerial's hissing. Surge in ten minutes, maybe less.\"";
 
+// --- Contracts (`contracts`) ------------------------------------------------
+
+pub fn ask_bring(name: &str, place: &str) -> String {
+    format!(
+        "\"{name}. By {}, or in it. Bring it home.\"\nStash it, press here.",
+        the(place)
+    )
+}
+
+pub fn ask_plant(name: &str, place: &str) -> String {
+    format!(
+        "\"Leave the {} by {}. On the ground's fine.\"\nThen come home and press here.",
+        name.to_lowercase(),
+        the(place)
+    )
+}
+
+pub fn ask_photo(subject: &str) -> String {
+    format!(
+        "\"A photograph of {subject}. Hold the camera up, it in the middle, press. Then home.\""
+    )
+}
+
+/// The card's head while a contract's under way.
+pub fn contract_head(name: &str, giver: &str, step: u32, steps: usize) -> String {
+    format!(
+        "CONTRACT: {} - {} OF {steps}\nFor {giver}.\n",
+        name.to_uppercase(),
+        step + 1
+    )
+}
+
+pub const CONTRACT_KIT: &str = "Driver: \"Here, through the hatch. For the contract.\"";
+pub fn not_brought(name: &str) -> String {
+    format!("Driver: \"No {} in the stash yet.\"", name.to_lowercase())
+}
+pub fn not_planted(place: &str) -> String {
+    format!("Driver: \"It's not by {} yet.\"", the(place))
+}
+pub fn planted(place: &str) -> String {
+    format!("Left by {}. Its lamp blinks green.", the(place))
+}
+pub const NO_PHOTO: &str = "Driver: \"No picture yet. Hold it up, press.\"";
+pub fn photo_taken(subject: &str) -> String {
+    format!("Click. {}, in the frame.", cap(subject))
+}
+pub const PHOTO_EMPTY: &str = "Click. Nothing in the frame worth the film.";
+pub const PHOTO_SPOILT: &str = "The film's spoilt in the fall. Another, then.";
+pub fn contract_done(name: &str) -> String {
+    format!("Driver: \"{name}. Done. I won't forget it.\"")
+}
+pub fn recipe_taught(name: &str) -> String {
+    format!("Bench: you can make {name} now.")
+}
+pub fn valley_opened(name: &str) -> String {
+    format!("Driver: \"{name}. It's on the route card now.\"")
+}
+
+fn cap(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +373,17 @@ mod tests {
             SAFE_TRUCK_LEFT.into(),
             SAFE_FOUND.into(),
             EXPEDITION_NO_NIGHT.into(),
+            CONTRACT_KIT.into(),
+            not_brought("Hajek's tin"),
+            not_planted(place),
+            planted(place),
+            NO_PHOTO.into(),
+            photo_taken("a heavy"),
+            PHOTO_EMPTY.into(),
+            PHOTO_SPOILT.into(),
+            contract_done("A walker's portrait"),
+            recipe_taught("Re-pack 7.62x54R AP (box of 10)"),
+            valley_opened("Sallow Reservoir"),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
         assert_eq!(

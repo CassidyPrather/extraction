@@ -815,6 +815,23 @@
             description: "An envelope, sealed, in a careful hand: For Lev, when he comes back for me.",
             category: Curio, size: Tiny, mass: 0.01, bulk: 0.01, tags: ["paper"],
         ),
+        // The driver's contracts (`contracts`): what he hands you for
+        // them, and what one sends you for.
+        (
+            id: "relay_box", dims: Some((0.16, 0.1, 0.12)), name: "Relay box",
+            description: "A steel box with an aerial lead and one green lamp. Lev's soldering. Leave it where he said; it listens.",
+            category: Gadget, size: Small, mass: 1.1, bulk: 0.6, tags: ["electronics", "metal"],
+        ),
+        (
+            id: "camera", dims: Some((0.14, 0.09, 0.07)), name: "Zorki camera",
+            description: "A rangefinder camera, film loaded. Hold it up, line the subject in the middle, press.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
+        ),
+        (
+            id: "hajek_tin", dims: Some((0.09, 0.025, 0.06)), name: "Hajek's tin",
+            description: "A tobacco tin, scratched M.H. on the lid. Inside: a photograph, a ring on a string, a stub of pencil.",
+            category: Curio, size: Tiny, mass: 0.12, bulk: 0.03, tags: ["metal"],
+        ),
         // What the driver's Recover jobs send you for (`progression`).
         (
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
