@@ -2599,7 +2599,14 @@ pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
         let local = site.to_site([p.x, p.z]);
         let Some(f) = r.floor_at(local) else { continue };
         let floor = footing + f;
-        if p.y > floor - 0.5 && p.y < floor + 4.5 && floor < zone.ground(p.x, p.z) - 0.5 {
+        // Up to its roof: a tall room's (the ash pit's 10 m, with you on
+        // the crane over it) as well as a corridor's.
+        let roof = r
+            .cell_of(local)
+            .map_or(0.0, |(i, j)| r.ceil[j * r.nx + i])
+            .max(4.0)
+            + 0.5;
+        if p.y > floor - 0.5 && p.y < floor + roof && floor < zone.ground(p.x, p.z) - 0.5 {
             return Some((site.id, floor));
         }
     }
@@ -4250,3 +4257,4 @@ mod tests {
         }
     }
 }
+
