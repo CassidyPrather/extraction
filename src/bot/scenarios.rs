@@ -341,6 +341,8 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Stow(Side::Left),
             Gun(MacroKind::Reload),
             Expect(super::Expect::GunRounds(45, 45)),
+            // The legs down (bots fire it off them as they would a rest).
+            Gun(MacroKind::Bipod),
             Support,
             Gun(MacroKind::Mode),
             Fire { at: t1, shots: 10 },
