@@ -38,7 +38,8 @@ impl Plugin for TrailerPlugin {
             .add_systems(
                 Update,
                 (direct, aim).chain().after(crate::sim::raider::think),
-            );
+            )
+            .add_systems(Update, (show_body, dress_body));
     }
 }
 
@@ -46,6 +47,9 @@ impl Plugin for TrailerPlugin {
 const STEP: f32 = 1.0 / 30.0;
 /// How long a reason keeps the cameras rolling after it ends, seconds.
 const TAIL: f32 = 3.0;
+/// Seconds the cameras render before anything is kept: the valley streams
+/// its detail in round them (unfilmed frames draw nothing).
+const WARMUP: f32 = 8.0;
 /// Shortest clip worth keeping, seconds.
 const MIN_CLIP: f32 = 2.5;
 
@@ -197,7 +201,17 @@ fn direct(
     };
     let me = body.translation;
     // What's worth seeing.
-    if t < 14.0 {
+    if t < WARMUP {
+        // Rendering, so the detail streams in, but nothing kept.
+        if let Ok(mut c) = cams.single_mut() {
+            c.is_active = true;
+        }
+        if let Some(Ok(mut c)) = d.drone.as_ref().map(|(e, _)| drone_cams.get_mut(*e)) {
+            c.is_active = true;
+        }
+        return;
+    }
+    if t < WARMUP + 12.0 {
         d.want("leaving", t + 0.1);
     }
     if raider.is_some_and(|r| r.combat.is_some()) {
@@ -316,6 +330,55 @@ fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
 #[derive(Component)]
 struct DroneCamera;
 
+/// The player has no body a camera draws (in the headset you see your
+/// gloves and sleeves); its shadow comes from a proxy of capsules on a
+/// layer only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's
+/// cameras see that layer too: the bot as a figure.
+fn show_body(
+    mut commands: Commands,
+    cams: Query<Entity, (With<Camera>, Or<(Added<FreeCamera>, Added<DroneCamera>)>)>,
+) {
+    use crate::render::arms::SHADOW_ONLY;
+    for e in &cams {
+        commands
+            .entity(e)
+            .insert(bevy::camera::visibility::RenderLayers::from_layers(&[
+                0,
+                SHADOW_ONLY,
+            ]));
+    }
+}
+
+/// And dressed: the proxy's plain white in a field jacket's drab.
+fn dress_body(
+    mut commands: Commands,
+    parts: Query<
+        (Entity, &bevy::camera::visibility::RenderLayers),
+        (Added<bevy::camera::visibility::RenderLayers>, With<Mesh3d>),
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut drab: Local<Option<Handle<StandardMaterial>>>,
+) {
+    use crate::render::arms::SHADOW_ONLY;
+    for (e, layers) in &parts {
+        if !layers.intersects(&bevy::camera::visibility::RenderLayers::layer(SHADOW_ONLY))
+            || layers.intersects(&bevy::camera::visibility::RenderLayers::layer(0))
+        {
+            continue;
+        }
+        let m = drab
+            .get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.24, 0.26, 0.19),
+                    perceptual_roughness: 0.9,
+                    ..default()
+                })
+            })
+            .clone();
+        commands.entity(e).insert(MeshMaterial3d(m));
+    }
+}
+
 /// Points the cameras: the chase camera eases to a spot behind and above
 /// the bot's shoulder (pulled in where a wall or the ground is in the
 /// way), looking a little ahead of it; the drone circles 20 m up and
@@ -364,7 +427,8 @@ fn aim(
             Dir3::new(to).unwrap_or(Dir3::NEG_Z),
             to.length(),
             true,
-            &SpatialQueryFilter::default().with_excluded_entities([me]),
+            // The world only: the bot's own body and hands are colliders too.
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
         )
         .map_or(to.length(), |hit| (hit.distance - 0.3).max(0.4));
     let want = eye + to.normalize_or(Vec3::NEG_Z) * clear;

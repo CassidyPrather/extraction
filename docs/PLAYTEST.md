@@ -117,6 +117,23 @@ What changed, and worth a comment each:
   push down. If climbing makes you queasy, the **CLIMBING** card on the
   comfort board takes you straight to the top instead. Mark it if you
   ever rise when you only meant to lean on a table.
+- **Crowbar.** Hold it by the end and steady it along the shaft with your
+  other hand. Put the claw to a robot's armour plate, or the latch edge
+  of a door a wedge has jammed, then pull the handle round. Two hands at
+  the end of the bar shift it; hands near the claw won't. Your hands feel
+  the strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  padlock's shackle or on chain-link, and squeeze your hands together. A
+  cut panel leaves a gap you can walk through.
+- **First aid and food.** Wind a dressing round your other forearm (one
+  and a half turns). Put the injector's tip to your thigh and pull the
+  trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
+  The A/X button no longer does these in the headset, except medicine
+  with the one-handed comfort setting.
+- **Gestures.** A hand over your mouth quietens your breathing when
+  you're winded (robots nearby can hear it). An open palm raised over
+  your head is a gesture robots can read, though nothing reacts to it
+  yet. Mark it if either triggers when you didn't mean it.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to

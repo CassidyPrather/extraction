@@ -197,6 +197,7 @@ impl Plugin for AudioPlugin {
                     splash_sounds,
                     lock_sounds,
                     drop_sounds,
+                    break_sounds,
                 ),
             )
             .add_systems(
@@ -2187,6 +2188,73 @@ fn night_ambience(
             } else {
                 Volume::Decibels(mix::db(cue) + 20.0 * level.log10() - 12.0 * walls)
             };
+        }
+    }
+}
+
+/// Glass going and wood giving way (`destruction`): a shop window crashes
+/// lower and longer than a vent pane tinkles; a door coming down thuds.
+fn break_sounds(
+    mut commands: Commands,
+    mut broke: MessageReader<crate::destruction::Broke>,
+    mut crunches: MessageReader<crate::destruction::glass::Crunch>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    // A step on broken glass: a short, bright grind.
+    for c in crunches.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/glass_break",
+            Some(c.at),
+            "hit.glass",
+            -12.0,
+            1.6,
+            0.15,
+        );
+    }
+    for b in broke.read() {
+        match b.stuff {
+            crate::destruction::Stuff::Glass => {
+                let speed = (1.25 - b.size * 0.6).clamp(0.8, 1.25) as f64;
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/glass_break",
+                    Some(b.at),
+                    "hit.glass",
+                    (b.size * 6.0 - 2.0).clamp(-3.0, 3.0),
+                    speed,
+                    0.1,
+                );
+            }
+            crate::destruction::Stuff::Wood => {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "impacts/wood",
+                    Some(b.at),
+                    "door.blow",
+                    0.0,
+                    0.15,
+                );
+                if b.size > 1.0 {
+                    play(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "physical/door_close",
+                        Some(b.at),
+                        "door.broken",
+                        0.0,
+                        0.2,
+                    );
+                }
+            }
         }
     }
 }

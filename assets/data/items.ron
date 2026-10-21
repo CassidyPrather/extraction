@@ -611,6 +611,18 @@
             tags: ["metal"],
         ),
         (
+            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
+            category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["steel"],
+        ),
+        (
+            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
+            category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,

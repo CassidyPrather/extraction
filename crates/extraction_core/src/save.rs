@@ -79,6 +79,13 @@ pub struct ZoneSave {
     /// left, things you dropped).
     pub items: Vec<PlacedItem>,
     pub remains: Vec<RemainsSave>,
+    /// What's been broken (panes, doors, crates) and stays broken until
+    /// the Surge: each by where it stood, centimetres.
+    #[serde(default)]
+    pub broken: Vec<[i32; 3]>,
+    /// Holes torn in walls, by their centres, centimetres.
+    #[serde(default)]
+    pub breaches: Vec<[i32; 3]>,
     /// The valley's safehouse (`safehouse`), once you've started on it.
     #[serde(default)]
     pub safehouse: Option<crate::safehouse::SafehouseSave>,

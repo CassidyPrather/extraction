@@ -287,6 +287,18 @@ fn load_save(
     let save = career.game(&opts.map);
     commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;
+    if zone {
+        commands.insert_resource(crate::destruction::Broken(
+            save.zone.broken.iter().copied().collect(),
+        ));
+        commands.insert_resource(crate::destruction::breach::Breaches(
+            save.zone
+                .breaches
+                .iter()
+                .map(|c| Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32) / 100.0)
+                .collect(),
+        ));
+    }
     raid.raids = save.stats.raids;
     raid.extractions = save.stats.extractions;
     raid.deaths = save.stats.deaths;
@@ -732,6 +744,14 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.zone.cycle = raid.cycle;
     }
     save.zone.rolled = true;
+    if let Some(b) = world.get_resource::<crate::destruction::Broken>() {
+        let mut keys: Vec<[i32; 3]> = b.0.iter().copied().collect();
+        keys.sort();
+        save.zone.broken = keys;
+    }
+    if let Some(b) = world.get_resource::<crate::destruction::breach::Breaches>() {
+        save.zone.breaches = b.0.iter().map(|p| crate::destruction::key(*p)).collect();
+    }
     save.memorial = world.resource::<Memorial>().0.clone();
     save.logbook = world
         .get_resource::<crate::raid::logbook::Logbook>()
@@ -1039,6 +1059,7 @@ pub fn reset_zone(world: &mut World) {
         raid.say("The Surge has passed. The Zone is different now.");
         raid.cycle
     };
+    crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
