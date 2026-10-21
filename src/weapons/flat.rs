@@ -52,6 +52,8 @@ pub enum Step {
     EjectGate,
     /// Slap a stuck turn-bolt's handle up (a palm under it).
     Slap,
+    /// Press a pump's action release.
+    ReleaseAction,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -91,7 +93,9 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             if action == ActionKind::BreakAction {
                 let open = gun.firearm.bolt_travel < 0.5;
                 steps.push((0.1, Step::Break(open)));
-            } else if gun.firearm.malfunction == Some(Malfunction::DoubleFeed) {
+            } else if gun.firearm.malfunction == Some(Malfunction::DoubleFeed)
+                && action != ActionKind::Pump
+            {
                 // Strip the magazine, rack the pair out, reload, rack.
                 steps.push((0.05, Step::DropMag));
                 steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.25, s)));
@@ -133,7 +137,8 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             ActionKind::BoltAction => {
                 steps.push((0.1, Step::Lift(1.0)));
                 steps.push((0.1, Step::Bolt(1.0)));
-                for _ in 0..gun.firearm.def.internal_capacity {
+                // A single-shot takes its one round into the chamber.
+                for _ in 0..gun.firearm.def.internal_capacity.max(1) {
                     steps.push((0.35, Step::LoadRound));
                 }
                 steps.push((0.15, Step::Bolt(0.0)));
@@ -145,6 +150,18 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
                     steps.push((0.5, Step::LoadRound));
                 }
                 steps.push((0.3, Step::Break(false)));
+            }
+            ActionKind::Pump => {
+                // Thumb the tube full; pump one up if the chamber's empty
+                // and top the tube up again.
+                let f = &gun.firearm;
+                for _ in f.internal_rounds..f.def.internal_capacity {
+                    steps.push((0.4, Step::LoadRound));
+                }
+                if f.chambers[0].is_none() {
+                    steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.1, s)));
+                    steps.push((0.4, Step::LoadRound));
+                }
             }
             ActionKind::Revolver => {
                 // Round the cylinder at the gate: rod out the case, thumb a
@@ -181,6 +198,14 @@ fn rack_steps(action: ActionKind) -> Vec<(f32, Step)> {
         ],
         ActionKind::BreakAction => vec![(0.1, Step::Break(true))],
         ActionKind::Revolver => vec![(0.1, Step::Cock)],
+        // The release (nothing if the hammer's down), back hard, forward.
+        ActionKind::Pump => vec![
+            (0.0, Step::ReleaseAction),
+            (0.06, Step::Bolt(0.5)),
+            (0.05, Step::Bolt(1.0)),
+            (0.1, Step::Bolt(0.4)),
+            (0.05, Step::Bolt(0.0)),
+        ],
     }
 }
 
@@ -282,6 +307,7 @@ fn run_macros(
             Step::ReleaseBolt => gun.firearm.release_bolt(),
             Step::Lift(t) => gun.firearm.set_handle_lift(t),
             Step::Slap => gun.firearm.free_bolt(),
+            Step::ReleaseAction => gun.firearm.release_action(),
             Step::Break(open) => gun.firearm.set_break_open(open),
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),

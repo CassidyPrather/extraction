@@ -172,10 +172,25 @@ fn touching(
     layout: &super::GunLayout,
     rest_at: Vec3,
     mag_foot: Option<Vec3>,
+    bipod_feet: Option<Vec3>,
     checks: &mut BraceChecks,
 ) -> bool {
     use avian3d::prelude::{Collider, ColliderAabb, SpatialQueryFilter};
     checks.looked += 1;
+    // A deployed bipod's feet rest on anything, the bare ground too: it's
+    // what they're for (`armoury::Bipod`).
+    if bipod_feet.is_some_and(|feet| {
+        !spatial
+            .shape_intersections(
+                &Collider::sphere(BRACE_REACH),
+                feet,
+                Quat::IDENTITY,
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+            )
+            .is_empty()
+    }) {
+        return true;
+    }
     let (lo, hi) = layout.bounds();
     // A hand-driven gun stops a little short of what it's pressed onto,
     // so "resting" allows the same reach as the handguard.
@@ -314,6 +329,7 @@ fn handle_guns(
         &mut HoldFeel,
         Option<&Held>,
         Option<&Supported>,
+        Option<&super::armoury::Bipod>,
     )>,
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     bodies: Query<&Body>,
@@ -335,7 +351,7 @@ fn handle_guns(
     // Played one-handed, a gun rested on something is held as well as two
     // hands hold it: what the surface is for.
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
-    for (gun_e, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support, bipod) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -375,6 +391,9 @@ fn handle_guns(
             &gun.layout,
             rest_at,
             mag_foot,
+            bipod
+                .filter(|b| b.swing >= 1.0)
+                .map(|b| gt.transform_point(b.feet_now())),
             &mut checks,
         );
         let was_braced = handling.hold.braced;
@@ -541,6 +560,8 @@ pub(crate) fn case_size(cartridge: &str) -> (f32, f32) {
         "7.62x38R" => (0.0049, 0.0385),
         "7.62x25" => (0.0049, 0.025),
         "7.62x54R" => (0.0062, 0.054),
+        "22lr" => (0.0029, 0.0156),
+        "26mm" => (0.0135, 0.078),
         _ => (0.005, 0.03),
     }
 }
@@ -727,7 +748,7 @@ mod tests {
 
 /// Through the headset path: poses, grip and trigger into `RigInput`.
 #[cfg(test)]
-mod vr_tests {
+pub(crate) mod vr_tests {
     use super::*;
     use crate::interact::GripRole;
     use crate::rig::Side;
@@ -740,22 +761,22 @@ mod vr_tests {
     const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
     const EYE: Vec3 = Vec3::new(0.0, 1.65, 0.0);
 
-    struct Range {
-        vr: Vr,
-        gun: Entity,
-        feet: Vec3,
+    pub(crate) struct Range {
+        pub(crate) vr: Vr,
+        pub(crate) gun: Entity,
+        pub(crate) feet: Vec3,
     }
 
     /// Stand in the open with `id` in the right hand, held out in front
     /// at chest height (or with the stock to the cheek), the left hand on
     /// the handguard if `two`.
-    fn hold(id: &str, two: bool, shoulder: bool) -> Range {
+    pub(crate) fn hold(id: &str, two: bool, shoulder: bool) -> Range {
         hold_after(id, two, shoulder, 0)
     }
 
     /// [`hold`], with `extra` bare entities spawned first (whatever else a
     /// game spawns shifts every entity's index).
-    fn hold_after(id: &str, two: bool, shoulder: bool, extra: usize) -> Range {
+    pub(crate) fn hold_after(id: &str, two: bool, shoulder: bool, extra: usize) -> Range {
         let mut vr = Vr::new("training_yard");
         for _ in 0..extra {
             vr.app.world_mut().spawn(Transform::IDENTITY);
@@ -805,12 +826,12 @@ mod vr_tests {
         Range { vr, gun, feet }
     }
 
-    fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {
+    pub(crate) fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {
         r.vr.app.world_mut().get_mut::<Gun>(r.gun).unwrap()
     }
 
     /// A full magazine in the mechanism, a round chambered, on `mode`.
-    fn load(r: &mut Range, family: &str, rounds: u32, mode: FireMode) {
+    pub(crate) fn load(r: &mut Range, family: &str, rounds: u32, mode: FireMode) {
         let mut g = gun_mut(r);
         let f = &mut g.firearm;
         f.insert_magazine(Magazine {
@@ -831,7 +852,7 @@ mod vr_tests {
 
     /// Holds the trigger until `n` shots are out (or a few seconds pass),
     /// returning each projectile's direction as it left.
-    fn fire(r: &mut Range, n: usize, pulse: bool) -> Vec<Vec3> {
+    pub(crate) fn fire(r: &mut Range, n: usize, pulse: bool) -> Vec<Vec3> {
         // Rounds already in the air aren't this burst's.
         let mut seen: HashSet<Entity> = {
             let mut q =
@@ -861,7 +882,7 @@ mod vr_tests {
     }
 
     /// Takes `id` from where it lies into the `side` hand.
-    fn take_in(r: &mut Range, side: Side, id: &str, at: Vec3) -> Entity {
+    pub(crate) fn take_in(r: &mut Range, side: Side, id: &str, at: Vec3) -> Entity {
         let e = r.vr.spawn(id, Transform::from_translation(at));
         r.vr.app
             .world_mut()
@@ -1348,7 +1369,7 @@ mod vr_tests {
         assert!(at_eye(&r) < 0.05, "taken down: {}", at_eye(&r));
     }
 
-    fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
+    pub(crate) fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
         for i in 1..=steps {
             r.vr.move_hand(side, a.lerp(b, i as f32 / steps as f32));
             r.vr.step(1);
@@ -1441,7 +1462,7 @@ mod vr_tests {
 
     /// Grabs `gun`'s handle with the left trigger and pulls it through its
     /// travel and lets it go.
-    fn rack(r: &mut Range) {
+    pub(crate) fn rack(r: &mut Range) {
         let slide = r.vr.point(r.gun, |p| matches!(p, GripRole::Handle(_)));
         r.vr.hand(Side::Left, slide, Quat::IDENTITY, 0.0, 0.0);
         r.vr.step(2);
@@ -1491,7 +1512,7 @@ mod vr_tests {
     }
 
     /// A real magazine of `id` with `rounds`, seated in the gun's well.
-    fn seat_mag(r: &mut Range, id: &str, rounds: u32) -> Entity {
+    pub(crate) fn seat_mag(r: &mut Range, id: &str, rounds: u32) -> Entity {
         let mag = r.vr.spawn(
             id,
             Transform::from_translation(r.feet + Vec3::new(-0.3, 1.0, -0.3)),
@@ -1516,7 +1537,7 @@ mod vr_tests {
     }
 
     /// Takes `id` from the air into the left hand.
-    fn take(r: &mut Range, id: &str, rounds: u32) -> Entity {
+    pub(crate) fn take(r: &mut Range, id: &str, rounds: u32) -> Entity {
         let at = r.feet + Vec3::new(-0.35, 1.0, -0.3);
         let e = r.vr.spawn(id, Transform::from_translation(at));
         r.vr.app.world_mut().get_mut::<Item>(e).unwrap().rounds = rounds;
@@ -1537,14 +1558,14 @@ mod vr_tests {
     }
 
     /// The gun's load port and its up, in the world.
-    fn load_port(r: &mut Range) -> (Vec3, Vec3) {
+    pub(crate) fn load_port(r: &mut Range) -> (Vec3, Vec3) {
         let port = gun_mut(r).layout.load_port;
         let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
         (gt.transform_point(port), gt.up().as_vec3())
     }
 
     /// Glides the left hand from `a` to `b`.
-    fn glide(r: &mut Range, a: Vec3, b: Vec3, steps: usize) {
+    pub(crate) fn glide(r: &mut Range, a: Vec3, b: Vec3, steps: usize) {
         for i in 0..=steps {
             r.vr.move_hand(Side::Left, a.lerp(b, i as f32 / steps as f32));
             r.vr.step(1);
@@ -1704,7 +1725,7 @@ mod vr_tests {
     }
 
     /// A gun-hand button for one press (the headset's B is `secondary`).
-    fn press(r: &mut Range, which: &str) {
+    pub(crate) fn press(r: &mut Range, which: &str) {
         for down in [true, false] {
             {
                 let mut input =

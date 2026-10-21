@@ -186,6 +186,7 @@ fn spawn_marker_loot(
 ) {
     let mut rng = Rng::new(seed ^ 0x100);
     let notes = notes_lying(zone);
+    let valley = extraction_core::loot::valley_key(&zone.map.name);
     for m in &zone.map.markers {
         let MarkerKind::Loot { table } = &m.kind else {
             continue;
@@ -201,7 +202,7 @@ fn spawn_marker_loot(
         // A marker is a place someone meant to leave something: never bare.
         let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng).max(1);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll(table, catalog, &mut rng))
+            .flat_map(|_| loot.0.roll_in(table, Some(&valley), catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let offset = marker_roll(i);
@@ -256,10 +257,11 @@ fn spawn_building_loot(
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
     let notes = notes_lying(zone);
+    let valley = extraction_core::loot::valley_key(&zone.map.name);
     for spot in &spots.0 {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll(spot.table, catalog, &mut rng))
+            .flat_map(|_| loot.0.roll_in(spot.table, Some(&valley), catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let at = clear_of_notes(spot.at + building_roll(i), &notes);
@@ -339,6 +341,16 @@ fn spawn_dev_cache(
         ("ppsh", 0),
         ("ppsh_drum", 71),
         ("ammo_762x25", 70),
+        ("mp133", 0),
+        ("svd", 0),
+        ("svd_mag", 10),
+        ("toz8", 0),
+        ("ammo_22lr", 50),
+        ("rpk74", 0),
+        ("rpk_mag", 45),
+        ("flare_pistol", 0),
+        ("flare_white", 1),
+        ("flare_red", 1),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {

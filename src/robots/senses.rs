@@ -299,6 +299,7 @@ pub(crate) fn gunshot_noise(
     mut noise: MessageWriter<Noise>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
     hounds: Query<(), With<super::hound::Hound>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     for s in shots.read() {
         if hounds.contains(s.gun) {
@@ -308,7 +309,7 @@ pub(crate) fn gunshot_noise(
             crate::gadgets::SUPPRESSED_REACH
         } else {
             1.0
-        };
+        } * reports.get(s.gun).map_or(1.0, |r| r.0);
         noise.write(Noise {
             at: s.origin,
             radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
@@ -363,7 +364,7 @@ pub(crate) fn perceive(
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints): (
+    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
         Query<&crate::world::buildings::Door>,
         Res<crate::gadgets::Cloaks>,
@@ -372,6 +373,7 @@ pub(crate) fn perceive(
         Res<super::doors::Entrances>,
         Option<Res<crate::anomaly::hush::Hushes>>,
         Option<Res<crate::weapons::optics::Glints>>,
+        Option<Res<crate::weapons::flares::Starlight>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
@@ -480,12 +482,14 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
-                // Your torch lights you when the sky doesn't.
+                // Your torch lights you when the sky doesn't; so does a
+                // white star overhead (`weapons::flares`).
                 light: if torch.is_some() {
                     conditions.light_at(indoors).max(TORCH)
                 } else {
                     conditions.light_at(indoors)
-                },
+                }
+                .max(starlight.as_ref().map_or(0.0, |s| s.at(head))),
                 dark,
                 torch,
             }

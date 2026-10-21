@@ -28,7 +28,17 @@ pub enum Expect {
 }
 
 /// The guns on the range (catalog ids).
-pub const GUNS: [&str; 5] = ["pm_pistol", "ak74", "mosin", "sks", "toz_double"];
+pub const GUNS: [&str; 9] = [
+    "pm_pistol",
+    "ak74",
+    "mosin",
+    "sks",
+    "toz_double",
+    "mp133",
+    "svd",
+    "toz8",
+    "rpk74",
+];
 
 /// The panels: a material and its thickness, as buildings use them.
 pub const PANELS: [(Mat, f32); 9] = [
@@ -46,11 +56,13 @@ pub const PANELS: [(Mat, f32); 9] = [
 /// Head on: does `gun` get through `mat`?
 pub fn expected(gun: &str, mat: Mat) -> Expect {
     use Expect::*;
-    let rifle = matches!(gun, "ak74" | "mosin" | "sks");
+    let rifle = matches!(gun, "ak74" | "mosin" | "sks" | "svd" | "rpk74");
     match super::impacts::stuff_of(mat) {
-        Stuff::Glass | Stuff::Sheet => Through,
+        Stuff::Glass => Through,
+        // A .22 stops in tin.
+        Stuff::Sheet if gun != "toz8" => Through,
         Stuff::Planks | Stuff::Plaster if rifle => Through,
-        Stuff::Logs if gun == "mosin" => Through,
+        Stuff::Logs if matches!(gun, "mosin" | "svd") => Through,
         _ => Stop,
     }
 }

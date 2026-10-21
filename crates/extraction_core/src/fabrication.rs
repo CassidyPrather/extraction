@@ -240,6 +240,17 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 12.0,
     },
     Recipe {
+        id: "pack_flare",
+        name: "Pack two signal cartridges (white)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 1),
+            (Need::Item("polymer"), 1),
+        ],
+        makes: Make::Items(&[("flare_white", 2)]),
+        seconds: 12.0,
+    },
+    Recipe {
         id: "repair_gun_fine",
         name: "Strip and rebuild a worn gun",
         needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
