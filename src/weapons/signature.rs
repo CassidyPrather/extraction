@@ -1,6 +1,6 @@
 //! Each gun's recoil signature: how its muzzle moves over the half second
 //! after the trigger goes down, held as a competent player holds it (two
-//! hands where it has a place for the second, shouldered where it has a
+//! hands, a handgun's cupped under its grip; shouldered where it has a
 //! stock), trigger held on its most automatic setting. A gauge holds every
 //! gun to being its own (each pair's features differ by at least
 //! [`DISTINCT`]) and
@@ -27,8 +27,10 @@ pub const DISTINCT: f32 = 8.0;
 /// The most the muzzle may climb (or swing) within the half second with
 /// two hands, radians.
 pub const CONTROL_RISE: f32 = 0.14;
-/// A pistol, in the one hand the game gives it: the same, by this.
+/// A pistol in one hand: the same, by this.
 pub const CONTROL_RISE_ONE: f32 = 0.4;
+/// A handgun's cup takes at least this share off its peak.
+pub const CUP_TAMES: f32 = 0.5;
 /// A gun that fired once is back within this share of its peak rise by
 /// the end of the half second.
 pub const SETTLED: f32 = 0.35;
@@ -194,14 +196,19 @@ fn ready(r: &mut Range) {
     f.fouling = 0.0;
 }
 
-/// Records `id`'s signature.
+/// Records `id`'s signature in the standard hold: two hands (a handgun's
+/// cupped), shouldered where it has a stock.
 pub fn record(id: &str) -> Signature {
-    let (two, shoulder) = {
+    let shoulder = {
         let probe = hold(id, false, false);
         let g = probe.vr.app.world().get::<Gun>(probe.gun).unwrap();
-        let two = g.layout.support.is_some();
-        (two, two && crate::weapons::feel::butt(g).is_some())
+        g.layout.support.is_some() && crate::weapons::feel::butt(g).is_some()
     };
+    record_held(id, true, shoulder)
+}
+
+/// Records `id`'s signature held so.
+pub fn record_held(id: &str, two: bool, shoulder: bool) -> Signature {
     let mut r = hold(id, two, shoulder);
     ready(&mut r);
     r.vr.step(30);
@@ -273,6 +280,47 @@ mod tests {
 
     fn handling(r: &Range) -> &Handling {
         r.vr.app.world().get::<Handling>(r.gun).unwrap()
+    }
+
+    /// A handgun with the other palm cupped under its grip counts as two
+    /// hands and kicks at most half as far as in one; the cup doesn't
+    /// turn it (the gun hand still aims).
+    #[test]
+    fn a_cupped_handgun_kicks_less_and_still_aims_from_the_gun_hand() {
+        for id in ["pm_pistol", "nagant"] {
+            let one = record_held(id, false, false);
+            let two = record_held(id, true, false);
+            assert_eq!((one.hands, two.hands), (1, 2), "{id}");
+            assert!(
+                two.peak() < CUP_TAMES * one.peak(),
+                "{id}: cupped {:.0} of {:.0} mrad",
+                two.peak(),
+                one.peak()
+            );
+        }
+        // Cupped, the bore points where it did in the gun hand alone.
+        let mut r = hold("pm_pistol", false, false);
+        r.vr.step(30);
+        let bore = |r: &Range| {
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(r.gun)
+                .unwrap()
+                .rotation()
+                * Vec3::NEG_Z
+        };
+        let alone = bore(&r);
+        // A palm cups a little off the point, as hands do.
+        let cup = r.vr.point(r.gun, |p| *p == GripRole::Support) + Vec3::new(-0.03, 0.0, 0.02);
+        r.vr.hand(Side::Left, cup, Quat::IDENTITY, 1.0, 0.0);
+        r.vr.step(30);
+        assert_eq!(
+            r.vr.hand_state(Side::Left).supporting,
+            Some(r.gun),
+            "cupped"
+        );
+        let turned = bore(&r).angle_between(alone).to_degrees();
+        assert!(turned < 2.0, "the cup turned the gun {turned}°");
     }
 
     /// Working the MP-133's pump hard shoves the gun in the hands: back

@@ -89,6 +89,15 @@ pub const SWAY_MOMENT: f32 = 0.012;
 /// Extra sway when out of breath (stamina empty), radians, any hold;
 /// shared by a second hand and halved again by a shoulder.
 pub const SWAY_TIRED: f32 = 0.006;
+/// Held out from the body: sway per kg of gun at arm's length, radians,
+/// growing from nothing tucked in ([`TUCKED`], the grip's distance from
+/// the chest, metres) to all of it at [`ARMS_LENGTH`]. A second hand halves
+/// it; a stock against the shoulder bears it.
+pub const SWAY_REACH: f32 = 0.0016;
+pub const TUCKED: f32 = 0.3;
+pub const ARMS_LENGTH: f32 = 0.65;
+/// The chest, below the eyes, metres.
+pub const CHEST_DROP: f32 = 0.25;
 /// Resting on something: the spring's frequency, the mass it lends, and
 /// what's left of sway, droop and lag.
 pub const RECOVER_BRACED: f32 = 45.0;
@@ -428,6 +437,12 @@ impl Handling {
         }
     }
 
+    /// A knock from outside (the gun met something): these rates of rise
+    /// and yaw, rad/s.
+    pub fn knock(&mut self, rates: Vec2) {
+        self.rise_rate += rates;
+    }
+
     /// The action worked hard against a stop: `back` toward the stock, or
     /// home (forward, the muzzle dipping).
     pub fn jolt(&mut self, gun_mass: f32, back: bool) {
@@ -659,11 +674,24 @@ fn handle_guns(
         } else {
             1.0
         };
+        // Held out: the further from the chest, the more its weight tells.
+        let out = match head {
+            Some(eye) if !hold.shouldered => {
+                let chest = eye - Vec3::Y * CHEST_DROP;
+                let reach = gt
+                    .transform_point(gun.layout.grip.translation)
+                    .distance(chest);
+                let k = ((reach - TUCKED) / (ARMS_LENGTH - TUCKED)).clamp(0.0, 1.0);
+                SWAY_REACH * mass * k * if hold.hands >= 2 { 0.5 } else { 1.0 }
+            }
+            _ => 0.0,
+        };
         let amp = if one_handed {
             SWAY_BASE + SWAY_MOMENT * m
         } else {
             0.0
-        } + SWAY_TIRED * tired.clamp(0.0, 1.0) * share;
+        } + out
+            + SWAY_TIRED * tired.clamp(0.0, 1.0) * share;
         let amp = amp * hold.steadiness();
         let t = handling.clock;
         let sway = Vec2::new(
@@ -1622,6 +1650,48 @@ pub(crate) mod vr_tests {
         r.vr.head(away);
         r.vr.step(60);
         assert!(at_eye(&r) < 0.05, "taken down: {}", at_eye(&r));
+    }
+
+    /// RMS angle of the bore from its mean over `ticks`, radians.
+    fn bore_wander(r: &mut Range, ticks: usize) -> f32 {
+        let mut dirs = Vec::new();
+        for _ in 0..ticks {
+            r.vr.step(1);
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            dirs.push(gt.rotation() * Vec3::NEG_Z);
+        }
+        group(&dirs)
+    }
+
+    /// An AK in two hands, not shouldered: held out at arm's length its
+    /// weight tells in sway; tucked in to the chest it's steady.
+    #[test]
+    fn a_gun_held_out_sways_more_than_one_tucked_in() {
+        let mut sway = Vec::new();
+        for ahead in [0.15, 0.62] {
+            let mut r = hold("ak74", true, false);
+            let grip = r.vr.hand_state(Side::Right).world.translation;
+            let support = r.vr.hand_state(Side::Left).world.translation;
+            // Both hands brought in or out together, the eyes still.
+            let chest = r.feet + EYE - Vec3::Y * CHEST_DROP;
+            let shift = Vec3::new(0.0, chest.y - grip.y, chest.z - ahead - grip.z);
+            for i in 1..=20 {
+                let k = i as f32 / 20.0;
+                r.vr.move_hand(Side::Right, grip + shift * k);
+                r.vr.move_hand(Side::Left, support + shift * k);
+                r.vr.step(1);
+            }
+            r.vr.step(60);
+            let h = r.vr.app.world().get::<Handling>(r.gun).unwrap().hold;
+            assert_eq!((h.hands, h.shouldered), (2, false), "{h:?}");
+            sway.push(bore_wander(&mut r, 270).to_degrees());
+        }
+        assert!(
+            sway[1] > 2.0 * sway[0].max(0.005),
+            "tucked {:.3}°, held out {:.3}°",
+            sway[0],
+            sway[1]
+        );
     }
 
     pub(crate) fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
