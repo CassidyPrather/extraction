@@ -636,7 +636,7 @@ pub struct Scene<'w, 's> {
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
     /// The bots' sockets by entity (`Task::Draw` counts them in entity
     /// order).
-    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner)>,
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -2274,7 +2274,12 @@ fn raid_step(
                     );
                     r.act = Act::Search(s);
                     if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
-                        log.event("plant", json!({"site": r.sites[s].name}));
+                        let how = t.iter().find_map(|t| match t {
+                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
+                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
+                            _ => None,
+                        });
+                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
                         return t;
                     }
                     continue;
@@ -2519,7 +2524,9 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
             within: 1.5,
         },
     ];
-    // Out of the body slot it was stowed in (drawn), or the pack.
+    // The hand free first (it may be holding the last thing picked up),
+    // then out of the body slot it was stowed in (drawn), or the pack.
+    t.push(Task::Stow(Side::Left));
     let socket = scene
         .items
         .get(relay)

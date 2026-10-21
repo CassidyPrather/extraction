@@ -69,9 +69,10 @@ fn put(app: &mut App, player: Entity, at: Vec3) {
 /// walkable ground `away` metres off to one side: the flock, where it sits,
 /// and that ground.
 fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
+    // The ducks too: their flushes count as birds'.
     let old: Vec<Entity> = app
         .world_mut()
-        .query_filtered::<Entity, With<Flock>>()
+        .query_filtered::<Entity, Or<(With<Flock>, With<super::ducks::Raft>)>>()
         .iter(app.world())
         .collect();
     for e in old {
@@ -163,7 +164,18 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
             log.flushed.clear();
         }
         if flush {
-            let spot = centre + side * 2.0;
+            // The first open ground out from the middle of the roof (toward
+            // the walker's side, where the ground's open): right beside the
+            // building, whichever way it's turned.
+            let nav = app
+                .world()
+                .resource::<crate::robots::walker::Nav>()
+                .0
+                .clone();
+            let spot = (4..16)
+                .map(|k| centre - side * (k as f32 * 0.5))
+                .find(|p| nav.walkable([p.x, p.z]))
+                .expect("open ground beside the building");
             put(&mut app, player, zone.on_ground(spot.x, spot.z));
         }
         for _ in 0..90 * 6 {

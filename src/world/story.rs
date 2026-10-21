@@ -474,6 +474,11 @@ pub const THREAD: &[Lead] = &[
         note: "Sorter's chit",
         mentions: &[(C, "The works")],
     },
+    Lead {
+        map: S,
+        note: "Plumb book",
+        mentions: &[(S, "The dam"), (S, "Keeper's note")],
+    },
     // Set pieces.
     Lead {
         map: M,

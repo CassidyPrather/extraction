@@ -138,12 +138,20 @@ fn dress_props(
     mut commands: Commands,
     server: Res<AssetServer>,
     grams: Query<Entity, Added<super::gramophone::Gramophone>>,
-    pianos: Query<Entity, Added<super::piano::Piano>>,
+    pianos: Query<(Entity, &super::piano::Piano), Added<super::piano::Piano>>,
 ) {
     for (e, name) in grams
         .iter()
         .map(|e| (e, "gramophone"))
-        .chain(pianos.iter().map(|e| (e, "upright_piano")))
+        .chain(pianos.iter().map(|(e, p)| {
+            (
+                e,
+                match p.keyboard.voice {
+                    super::piano::Voice::Piano => "upright_piano",
+                    super::piano::Voice::Reed => "harmonium",
+                },
+            )
+        }))
     {
         commands
             .entity(e)
