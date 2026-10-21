@@ -174,8 +174,10 @@ the sky. Z-fighting is found from the geometry instead (below).
 
 - **missing textures**: magenta on the subject;
 - **blank views**: the subject covers almost nothing in one or more views;
-- **odd size**: a model's largest side against its folder's range, or a
-  prefab's visual width against the footprint the map clears for it;
+- **odd size**: a model's largest side against its folder's range, or how
+  far a prefab reaches from its footing against the radius the map clears
+  round it (`prefab_clearance`; past it, it pokes into trees and its
+  neighbours). Sites underground have nothing cleared and aren't checked;
 - **blockouts left standing**: a model that never loaded;
 - **floating pieces**: meshes whose boxes touch no other mesh and not the
   floor. The test is generous: it never flags a piece that touches
@@ -216,6 +218,13 @@ top face.
   must not stop short of them, which leaves a gap under it on a slope.
   Rubble lies however it fell. Known findings are in `KNOWN`.
 - **No outside images**: a model carries its own textures.
+- **Held together**: every part of a model (a node's triangles in one
+  material) touches another part or its lowest point's level. Otherwise
+  it hangs in the air: a nail over its loop, a board beside a wall
+  (`checks::loose_parts`, the sweep's floating test run on the glb).
+  Animals (pose sheets), robots and the open rig are left out: they're
+  kits whose parts the game places itself. `LOOSE_KNOWN` lists those
+  waiting on their owners.
 
 Item models are already held to their collider boxes by
 `models::tests::every_item_model_fits_its_box`, and model materials to the
