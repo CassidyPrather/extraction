@@ -355,14 +355,6 @@ mod tests {
     /// Loose parts waiting on their owners, by the start of their line.
     /// Take one out when it's fixed.
     const LOOSE_KNOWN: &[&str] = &[
-        // Fixed on Models: world's branch (03d21d8); out once merged.
-        "props/brake_drum:",
-        "props/fence_panel:",
-        "props/hide_frame:",
-        "props/sewing_machine:",
-        "props/snowshoes:",
-        // Fixed on Models: kit's branch (e2e241b); out once merged.
-        "props/lev:",
         // Not loose in game: the name board hangs on the brick shell the
         // building code draws round the prop.
         "props/signal_box:",
