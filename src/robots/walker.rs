@@ -32,6 +32,36 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Fire through a wall: a walker that lost sight of you under a roof
+/// moments ago (at least [`BLIND_AFTER`], at most [`BLIND_WITHIN`]
+/// seconds), and knows within [`BLIND_SURE`] m where you are, within
+/// [`BLIND_RANGE`] m, settles its turret [`BLIND_TELL`] s (the same tell
+/// as a shot) and fires [`BLIND_ROUNDS`] through it, if a round would get
+/// through (`destruction::through`): once each time it loses you.
+pub const BLIND_AFTER: f32 = 0.3;
+pub const BLIND_WITHIN: f32 = 4.0;
+pub const BLIND_SURE: f32 = 3.0;
+pub const BLIND_RANGE: f32 = 12.0;
+pub const BLIND_TELL: f32 = 0.4;
+pub const BLIND_ROUNDS: u8 = 3;
+/// Seconds between them, and their spread (wider than aimed fire).
+const BLIND_EVERY: f32 = 0.25;
+const BLIND_SPREAD: f32 = 0.06;
+/// A walker round, for the check: 8 g at the turret's 450 m/s.
+const ROUND_G: f32 = 8.0;
+const ROUND_SPEED: f32 = 450.0;
+
+/// Where a walker is in a burst through a wall.
+#[derive(Debug, Default, Clone, Copy)]
+struct Blind {
+    /// Settling (the tell), then firing.
+    tell: f32,
+    left: u8,
+    /// Done (or not worth it) for this loss of sight.
+    spent: bool,
+    /// Where it fires.
+    at: Vec3,
+}
 /// Lamer than this (`anim::Gait::limp`), a walker fights from where it
 /// stands and doesn't chase.
 pub const LAME: f32 = 0.5;
@@ -804,26 +834,111 @@ fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> O
     best.map(|(p, _)| p)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walker_guns(
     mut walkers: Query<(Entity, &mut Walker, &Brain, &Awareness, &Robot, &Children)>,
     turrets: Query<(&GlobalTransform, &RobotPart), With<WalkerTurret>>,
+    parts: Query<&RobotPart>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut shots: MessageWriter<Shot>,
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
+    (entrances, path, mut blind): (
+        Res<super::doors::Entrances>,
+        crate::destruction::through::RoundPath,
+        Local<std::collections::HashMap<Entity, Blind>>,
+    ),
 ) {
     let dt = time.delta_secs();
+    blind.retain(|e, _| walkers.contains(*e));
     for (e, mut w, brain, aware, robot, children) in &mut walkers {
         w.gun_cooldown -= dt;
         if robot.wrecked || !matches!(brain, Brain::Engage) {
             w.aim = 0.0;
+            blind.remove(&e);
             continue;
+        }
+        if aware.can_see_target {
+            // A new loss of sight may earn a new burst.
+            blind.remove(&e);
         }
         if !aware.can_see_target {
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
                 w.aim = 0.0;
+            }
+            // Through the wall, if it's thin and you're close behind it.
+            let Some((gt, part)) = children.iter().find_map(|c| turrets.get(c).ok()) else {
+                continue;
+            };
+            if !part.alive() || aware.unseen < BLIND_AFTER {
+                continue;
+            }
+            let muzzle = gt.translation() + Vec3::Y * 0.05;
+            let b = blind.entry(e).or_default();
+            if b.spent {
+                continue;
+            }
+            if b.left == 0 {
+                // Worth it? Close, sure, under a roof, and a round gets there.
+                let Some(lk) = aware.last_known else {
+                    b.spent = true;
+                    continue;
+                };
+                let at = lk + Vec3::Y * 1.0;
+                let near = muzzle.distance(at) < BLIND_RANGE;
+                let sure = aware.uncertainty < BLIND_SURE;
+                let soon = aware.unseen < BLIND_WITHIN;
+                let roofed = entrances.building_at(lk).is_some();
+                // Aimed a little short: the check can't tell you from a wall.
+                let short = at - (at - muzzle).normalize_or_zero() * 0.6;
+                let own = |x: Entity| x == e || parts.get(x).is_ok_and(|p| p.robot == e);
+                if !(near && sure && soon && roofed) {
+                    if !soon {
+                        b.spent = true;
+                    }
+                    continue;
+                }
+                if !path.would_reach(muzzle, short, ROUND_G, ROUND_SPEED, &own) {
+                    b.spent = true;
+                    continue;
+                }
+                *b = Blind {
+                    tell: 0.0,
+                    left: BLIND_ROUNDS,
+                    spent: false,
+                    at,
+                };
+                aims.write(WalkerAim {
+                    walker: e,
+                    at: muzzle,
+                });
+            }
+            b.tell += dt;
+            if b.tell < BLIND_TELL || w.gun_cooldown > 0.0 {
+                continue;
+            }
+            *seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let dir = (b.at - muzzle).normalize_or(Vec3::NEG_Z);
+            shots.write(Shot {
+                gun: e,
+                shooter: Some(e),
+                origin: muzzle + dir * 0.3,
+                direction: dir,
+                speed: ROUND_SPEED,
+                damage: 14.0,
+                projectiles: 1,
+                spread: BLIND_SPREAD,
+                recoil: 0.0,
+                seed: *seed,
+            });
+            w.gun_cooldown = BLIND_EVERY;
+            b.left -= 1;
+            if b.left == 0 {
+                b.spent = true;
             }
             continue;
         }

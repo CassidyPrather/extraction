@@ -1584,3 +1584,117 @@ fn the_sorter_rings_winds_up_throws_then_gropes_and_calms() {
         "back to its work"
     );
 }
+
+/// A player behind a plank house's door; an armed walker 6 m out that has
+/// just lost them, believing them `inside` (else out by the door). The
+/// times (s after it lost them) of its shots before it sees them again.
+fn blind_fire(inside: bool) -> Vec<f32> {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    app.update();
+    let ent = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .iter()
+        .find(|e| {
+            app.world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| b.prefab == "house_plank")
+        })
+        .expect("a house door");
+    let hide = ent.mid - ent.out * 2.0;
+    put(&mut app, player, hide.with_y(ent.mid.y - 1.15));
+    let post = ent.mid + ent.out * 6.0;
+    // Armed (the helper's walkers aren't).
+    let walker = {
+        let mut queue = CommandQueue::default();
+        let post = zone.on_ground(post.x, post.z);
+        let w = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                post,
+                Job {
+                    kind: JobKind::Watch,
+                    site: post,
+                    duration: 999.0,
+                    exit: post,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..90 {
+            app.update();
+        }
+        w
+    };
+    app.update();
+    let lost = app.world().resource::<Time>().elapsed_secs();
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(walker).unwrap();
+        // (Out in the open, nobody to follow: its eyes would put you back.)
+        a.target = inside.then_some(player);
+        a.last_known = Some(if inside {
+            hide.with_y(ent.mid.y - 1.15)
+        } else {
+            zone.on_ground(post.x + ent.out.z * 4.0, post.z - ent.out.x * 4.0)
+        });
+        a.uncertainty = 0.5;
+        a.suspicion = 1.0;
+        a.unseen = 0.0;
+        a.can_see_target = false;
+    }
+    *app.world_mut().get_mut::<Brain>(walker).unwrap() = Brain::Engage;
+    // (Until it sees you again: it opens the door, then it's aimed fire.)
+    let mut sighted = f32::INFINITY;
+    for _ in 0..90 * 6 {
+        app.update();
+        if app.world().get::<Awareness>(walker).unwrap().can_see_target {
+            sighted = sighted.min(app.world().resource::<Time>().elapsed_secs() - lost);
+        }
+    }
+    let fired: Vec<f32> = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .filter(|(e, _)| *e == walker)
+        .map(|(_, t)| *t - lost)
+        .filter(|t| *t < sighted)
+        .collect();
+    fired
+}
+
+/// Behind a plank door, close: the walker that lost you there settles its
+/// turret (the tell), then fires a short burst through it, once.
+#[test]
+fn a_walker_fires_through_a_plank_door_once() {
+    let fired = blind_fire(true);
+    assert!(!fired.is_empty(), "it fired through the door");
+    assert!(
+        fired.len() <= super::walker::BLIND_ROUNDS as usize,
+        "a short burst, once: {fired:?}"
+    );
+    assert!(
+        fired[0] >= super::walker::BLIND_AFTER + super::walker::BLIND_TELL - 0.05,
+        "after the tell: {fired:?}"
+    );
+}
+
+/// Lost out in the open (no roof to be under), it doesn't fire blind.
+#[test]
+fn a_walker_does_not_fire_blind_in_the_open() {
+    let fired = blind_fire(false);
+    assert!(fired.is_empty(), "no blind fire: {fired:?}");
+}
