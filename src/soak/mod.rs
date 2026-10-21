@@ -113,6 +113,7 @@ mod tests {
             ("src/render/props.rs", "made", "keyed by hand"),
             ("src/weapons/faults.rs", "last", "keyed by hand"),
             ("src/weapons/mod.rs", "boxes", "keyed by hand"),
+            ("src/weapons/mod.rs", "clips", "keyed by hand"),
             ("src/interact/touch.rs", "last", "keyed by hand"),
             ("src/destruction/breach.rs", "geos", "buildings"),
             ("src/world/snow.rs", "last", "players' footsteps"),
@@ -186,13 +187,12 @@ mod tests {
                     }
                 }
                 let body = &src[open..close];
-                let forgets = [".retain(", ".remove(", ".clear()", ".drain(", " = "]
-                    .iter()
-                    .any(|op| {
-                        body.contains(&format!("{name}{op}"))
-                            || body.contains(&format!("*{name}{op}"))
-                    })
-                    || body.contains(&format!("&mut *{name}"));
+                // (Not `.remove(`: removing one case, as a hand lets go, says
+                // nothing of entities despawned while in there; Destruction's
+                // glazing map hid behind one.)
+                let forgets = [".retain(", ".clear()", ".drain(", " = "].iter().any(|op| {
+                    body.contains(&format!("{name}{op}")) || body.contains(&format!("*{name}{op}"))
+                }) || body.contains(&format!("&mut *{name}"));
                 if !forgets {
                     let line = src[..at].matches('\n').count() + 1;
                     bad.push(format!("{file}:{line} `{name}`"));
