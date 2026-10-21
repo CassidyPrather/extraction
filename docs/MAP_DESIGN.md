@@ -34,9 +34,19 @@ are printed for the onboarding work, which owns it.
   road cell costs a third of grass), as players do. Routes are what a
   first-timer walks; the rules about pacing, cover and landmarks are
   rules about them.
-- **Landmarks**: placements 12 m tall or more (`LANDMARK_HEIGHT`): masts,
-  chimneys, towers, the robot Gate. Trees are 10-20 m; a landmark has to
-  stand over them or on high ground.
+- **Landmarks**: structures 12 m tall or more (`LANDMARK_HEIGHT`): masts,
+  chimneys, towers, the robot Gate, Sallow's dam. Trees are 10-20 m; a
+  landmark has to stand over them or on high ground. The lint sees them
+  as a player does (`map_landmarks`): a sight line goes to the top of a
+  tall part where the game builds it (on its settled ground plus `y`, or
+  at `y` if `absolute`), a long wall's top every 20 m along it
+  (`TOP_STEP`), a chapel at its bell tower, a blast furnace at its stack
+  and its chimney; one part in sight is enough. Pieces of one kind within
+  30 m of each other are one landmark (`JOIN`): the dam's four faces are
+  the dam. A kind is what it looks like from afar: a chapel's tower is a
+  steeple, a drowned chapel a chapel. Heights are `map::prefab_footprint`'s;
+  a prefab missing there is 3 m tall and never a landmark, so list every
+  tall one.
 
 ## Landmarks and orientation
 
@@ -48,25 +58,56 @@ most of the work.
 - From most of every main route a landmark is in sight over the land in
   ordinary weather: at least 70% of the way (`LANDMARK_SHARE`), never
   more than 200 m blind (`BLIND_GAP`).
-- Each landmark is one of a kind within sight: two of the same prefab
-  closer than `CLEAR_SIGHT` and you can't tell which is which. Masts,
-  chimneys, towers: one of each in any view.
+- Each landmark is one of a kind within sight: two of a kind closer than
+  `CLEAR_SIGHT` and you can't tell which is which. Masts, chimneys,
+  towers: one of each in any view. A ropeway's pylons are a line to
+  follow, not twins (`SERIES`). The lint also measures, per route, how
+  much of it has two of a kind in one view however far apart they are
+  (only Marrow Creek has any: its two ranger towers, 366 m apart, both in
+  sight from 21-41% of each route).
 - Every region you go to has something of its own: a structure at least
-  6 m tall (`REGION_MARK`), or a landmark within fog range of its middle.
-  A crater or a pit is a place, but you can't see it until you're in it.
+  6 m tall standing in it (any corner of its footprint or any top inside
+  the region: a dam whose middle is over the line still counts), or a
+  landmark's top within fog range of its middle (`REGION_MARK`). A crater
+  or a pit is a place, but you can't see it until you're in it.
 - Put landmarks on high ground or at the far end of long views (the
   mast on its hill, the chimney over a flat valley, the tower on a
   summit), and give each valley one that's visible from nearly
   everywhere. Water runs downhill and roads follow valleys: the creek and
   the road are landmarks too, and a map should let you find one.
 - The rendezvous should be where a landmark is (a tower, a depot, a
-  pass), so "head for the mast" is a plan.
+  pass), so "head for the mast" is a plan: from every rendezvous a
+  landmark is in sight within 200 m (`RV_LANDMARK`). Within fog range
+  (150 m) is the aim, and measured: five of the twelve rendezvous miss it
+  (Marrow's Bus depot, Kettle's Hunting lodge, Cinder's North sidings and
+  Works yard, Sallow's Inflow bridge), between 151 and 183 m off.
+- Only structures count. The heavy machine has no ground of its own (it
+  walks out of the Gate to where you are and goes home), so its mark is
+  the Gate; staged scenes are furniture at points of interest; the pylons
+  the walkers raise come and go. None of them is something to steer by.
 - Signs face the way you walk up to them: a Sign marker within 25 m of
   a road or path turns its board within 60° of the road 10 m back
   toward the insertion (or toward the insertion itself, away from
   roads). The board stands at eye height by construction. This is
   checked by `render::legibility::tests::every_sign_faces_its_approach`,
   not by the map lint.
+
+What each valley steers by, as measured (the lint prints, per route, the
+share in sight in drizzle and in fog, the longest blind stretch, and each
+landmark's share and where along the route it shows):
+
+| Valley | Landmarks | Routes: in sight (in fog), longest blind |
+| - | - | - |
+| Marrow Creek | mill race, radio mast, water tower, two ranger towers (the survey post, the RV's), the Gate | 100% (58-70%), 0 m |
+| Kettle Pass | headframe, ropeway station and its pylons, chapel, radio mast, ranger tower, chimney, the Gate | 100% (95-100%), 0 m |
+| Cinder Works | blast furnace, chimney, ranger tower, the Gate | 100% (80-89%), 0 m |
+| Sallow Reservoir | the dam, draw-off tower, church tower (steeple), water tower, radio mast, ranger tower, sorting gantry, the Gate | 93-100% (90-100%), 48 m |
+
+Every valley reads in drizzle. Fog is where they differ: Marrow Creek's
+routes are blind in fog for a third of the way (south of the creek
+nothing tall stands within 150 m: the insertion sees nothing in fog, the
+mill race is 235 m off), and `map_sight`'s hero-site search says where a
+tower would help most.
 
 ## Routes and choices
 

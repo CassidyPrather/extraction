@@ -253,6 +253,9 @@ pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
+/// From every rendezvous a landmark is in sight within this, metres, so
+/// "head for the mast" is a plan.
+pub const RV_LANDMARK: f32 = 200.0;
 
 // ---- Cover -----------------------------------------------------------------
 
@@ -935,19 +938,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
 
     // -- Landmarks -------------------------------------------------------------
-    let marks: Vec<(String, P2, f32)> = map
-        .placements
-        .iter()
-        .filter_map(|p| {
-            let h = prefab_footprint(&p.prefab)[1];
-            (h >= LANDMARK_HEIGHT).then(|| (p.prefab.clone(), p.at, h))
-        })
-        .collect();
-    let in_sight = |p: P2, range: f32| {
-        marks
-            .iter()
-            .any(|(_, at, h)| dist(p, *at) <= range && sees(hm, p, *at, *h))
-    };
+    // Whole structures, seen at the tops of their tall parts
+    // (`map_landmarks`).
+    let marks = crate::map_landmarks::landmarks(map, hm);
+    let in_sight = |p: P2, range: f32| crate::map_landmarks::in_sight(&marks, hm, p, range);
     for route in &routes {
         let seen = route
             .points
@@ -968,6 +962,29 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             seen * 100.0,
             fog * 100.0
         ));
+        let sight = crate::map_landmarks::along(&marks, hm, &route.points, CLEAR_SIGHT, FOG_SIGHT);
+        let each: Vec<String> = sight
+            .each
+            .iter()
+            .map(|(name, c, f, a, b)| {
+                format!(
+                    "{name} {:.0}% ({:.0}% in fog, {a:.0}-{b:.0} m)",
+                    c * 100.0,
+                    f * 100.0
+                )
+            })
+            .collect();
+        r.measures
+            .push(format!("route to {} sees: {}", route.to, each.join(", ")));
+        for (which, kind, share, _) in &sight.twins {
+            if !SERIES.contains(&kind.as_str()) {
+                r.measures.push(format!(
+                    "route to {}: two {kind}s in one view {:.0}% of the way ({which})",
+                    route.to,
+                    share * 100.0
+                ));
+            }
+        }
         if seen < LANDMARK_SHARE {
             find(
                 &mut r,
@@ -990,15 +1007,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
     }
     // Two of the same kind in sight at once and you can't tell which is
-    // which.
-    for (i, (ka, pa, _)) in marks.iter().enumerate() {
-        for (kb, pb, _) in marks.iter().skip(i + 1) {
-            if ka == kb && !SERIES.contains(&ka.as_str()) && dist(*pa, *pb) < CLEAR_SIGHT {
+    // which. A structure of several pieces is one landmark.
+    for (i, a) in marks.iter().enumerate() {
+        for b in marks.iter().skip(i + 1) {
+            let apart = a.apart(b);
+            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < CLEAR_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,
-                    format!("two {ka}s {:.0} m apart", dist(*pa, *pb)),
-                    *pa,
+                    format!("two {}s {apart:.0} m apart", a.kind),
+                    a.at(),
                 );
             }
         }
@@ -1006,13 +1024,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for reg in map.regions.iter().filter(|g| g.danger > 0) {
         let (lo, hi) = geom::bounds(&reg.polygon);
         let mid = geom::scale(geom::add(lo, hi), 0.5);
-        let own = map
-            .placements
+        let own = crate::map_landmarks::tallest_in(map, hm, &reg.polygon);
+        let near = marks
             .iter()
-            .filter(|p| geom::point_in_polygon(&reg.polygon, p.at))
-            .map(|p| prefab_footprint(&p.prefab)[1])
-            .fold(0.0, f32::max);
-        let near = marks.iter().any(|(_, at, _)| dist(*at, mid) <= FOG_SIGHT);
+            .any(|m| m.tops.iter().any(|(at, _)| dist(*at, mid) <= FOG_SIGHT));
         if own < REGION_MARK && !near {
             find(
                 &mut r,
@@ -1022,6 +1037,30 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     reg.name
                 ),
                 mid,
+            );
+        }
+    }
+    // The rendezvous is where a landmark is: one in sight within
+    // RV_LANDMARK, and (measured) one within fog range.
+    for m in map.markers_of(&MarkerKind::Rendezvous) {
+        let seen = crate::map_landmarks::seen_from(&marks, hm, m.at, CLEAR_SIGHT);
+        let fog = seen.iter().any(|s| s.1 <= FOG_SIGHT);
+        r.measures.push(format!(
+            "rendezvous {}: nearest landmark in sight {}{}",
+            m.name,
+            seen.first()
+                .map_or("none".into(), |(n, d)| format!("{n} {d:.0} m")),
+            if fog { "" } else { " (none in fog)" }
+        ));
+        if seen.first().is_none_or(|s| s.1 > RV_LANDMARK) {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!(
+                    "no landmark in sight within {RV_LANDMARK:.0} m of {}",
+                    m.name
+                ),
+                m.at,
             );
         }
     }
@@ -1691,6 +1730,47 @@ mod tests {
         for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
             assert_eq!(r.count(rule), 0, "{}", r.text());
         }
+    }
+
+    /// Landmarks are whole structures of a kind: a chapel's tower and a
+    /// steeple in one view are two you can't tell apart, two masts side by
+    /// side are one; and a rendezvous with a landmark by it is found.
+    #[test]
+    fn landmarks_are_structures_and_rendezvous_have_one() {
+        let mut map = MapDef::from_ron(TRAINING_YARD).unwrap();
+        let lone = lint(&map, &Heightmap::build(&map));
+        assert!(
+            lone.findings
+                .iter()
+                .any(|f| f.rule == Rule::Landmark && f.what.contains("North post")),
+            "{}",
+            lone.text()
+        );
+        for (prefab, at) in [
+            ("chapel", [-60.0, 0.0]),
+            ("steeple", [60.0, 0.0]),
+            ("radio_mast", [-20.0, -60.0]),
+            ("radio_mast", [-30.0, -60.0]),
+        ] {
+            map.placements.push(crate::map::Placement {
+                prefab: prefab.into(),
+                at,
+                rot: 0.0,
+                y: 0.0,
+                absolute: false,
+                tag: String::new(),
+            });
+        }
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        let landmark = |s: &str| {
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Landmark && f.what.contains(s))
+        };
+        assert!(landmark("two steeples"), "{}", r.text());
+        assert!(!landmark("two radio_masts"), "{}", r.text());
+        assert!(!landmark("within 200 m of North post"), "{}", r.text());
     }
 
     #[test]

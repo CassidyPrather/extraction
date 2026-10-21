@@ -22,6 +22,7 @@ pub mod inventory;
 pub mod items;
 pub mod loot;
 pub mod map;
+pub mod map_landmarks;
 pub mod map_lint;
 pub mod map_nav;
 pub mod map_sight;
