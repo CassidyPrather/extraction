@@ -31,9 +31,16 @@ pub struct StormPlugin;
 
 impl Plugin for StormPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<SheetMaterial>::default())
-            .add_systems(Startup, spawn_sheets)
-            .add_systems(Update, (lightning, sheets).after(WeatherLook));
+        app.add_plugins((
+            MaterialPlugin::<SheetMaterial>::default(),
+            MaterialPlugin::<BoltMaterial>::default(),
+        ))
+        .init_resource::<BoltNow>()
+        .add_systems(Startup, (spawn_sheets, spawn_bolt))
+        .add_systems(
+            Update,
+            (lightning, show_bolt, sheets).chain().after(WeatherLook),
+        );
     }
 }
 
@@ -108,6 +115,7 @@ struct StormState {
     /// Toward the bolt from the eye, and how bright this one is.
     toward: Vec3,
     strength: f32,
+
     sun_lux: Added,
     ambient: Added,
     clear: AddedRgb,
@@ -174,6 +182,7 @@ fn lightning(
     domes: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut sky_mats: ResMut<Assets<SkyMaterial>>,
     mut strikes: MessageWriter<Lightning>,
+    mut bolt_now: ResMut<BoltNow>,
     mut st: Local<StormState>,
 ) {
     let dt = time.delta_secs();
@@ -194,13 +203,22 @@ fn lightning(
             } else {
                 250.0 + 2400.0 * rng.f32().powi(2)
             };
-            let a = rng.range(0.0, std::f32::consts::TAU);
+            let a = if held {
+                // In view, a little off to the side (for the shot).
+                let f = cams.iter().next().map_or(Vec3::NEG_Z, |g| g.forward().as_vec3());
+                f.z.atan2(f.x) + 0.25
+            } else {
+                rng.range(0.0, std::f32::consts::TAU)
+            };
             let at_xz = Vec2::new(eye.x, eye.z) + Vec2::new(a.cos(), a.sin()) * d;
             let at = zone.on_ground(at_xz.x, at_xz.y);
             // The channel stands a few hundred metres up into the cloud.
             let bolt = at + Vec3::Y * 650.0;
             st.toward = (bolt - eye).normalize_or(Vec3::Y);
             st.strength = strike_strength(d);
+            let rng = st.rng.as_mut().unwrap();
+            bolt_now.channel = Some(bolt_path(rng, bolt, at));
+            bolt_now.distance = d;
             strikes.write(Lightning {
                 at,
                 distance: d,
@@ -229,6 +247,9 @@ fn lightning(
         f = 0.0;
     }
     let k = f * st.strength;
+    if (bolt_now.lit - f).abs() > 1e-4 {
+        bolt_now.lit = f;
+    }
     let toward = st.toward;
 
     // The light: the sun's swung round to come from the bolt.
@@ -279,6 +300,190 @@ fn lightning(
             }
         }
     }
+}
+
+/// A bolt's channel from the cloud (`top`) to the ground (`at`): a
+/// jagged line that wanders less near the ground, and a fork off it
+/// partway down that dies in the air.
+pub fn bolt_path(rng: &mut Rng, top: Vec3, at: Vec3) -> (Vec<Vec3>, Vec<Vec3>) {
+    const STEPS: usize = 24;
+    let mut main = Vec::with_capacity(STEPS + 1);
+    let mut off = Vec2::ZERO;
+    for i in 0..=STEPS {
+        let t = i as f32 / STEPS as f32;
+        // Wanders as it comes down, pinned to the strike at the end.
+        off += Vec2::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)) * 28.0 * (1.0 - t);
+        let p = top.lerp(at, t) + Vec3::new(off.x, 0.0, off.y) * (1.0 - t * t);
+        main.push(p);
+    }
+    let from = rng.range(0.3, 0.6);
+    let start = main[(from * STEPS as f32) as usize];
+    let mut fork = vec![start];
+    let mut dir = Vec3::new(rng.range(-1.0, 1.0), -1.2, rng.range(-1.0, 1.0)).normalize();
+    let mut p = start;
+    for _ in 0..8 {
+        dir = (dir + Vec3::new(rng.range(-0.4, 0.4), -0.1, rng.range(-0.4, 0.4))).normalize();
+        p += dir * 22.0;
+        fork.push(p);
+    }
+    (main, fork)
+}
+
+#[derive(Clone, Copy, Debug, ShaderType, Reflect)]
+pub struct BoltParams {
+    pub color: Vec4,
+    pub size: Vec4,
+}
+
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct BoltMaterial {
+    #[uniform(0)]
+    pub params: BoltParams,
+}
+
+impl Material for BoltMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/bolt.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/bolt.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Add
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout.0.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_NORMAL.at_shader_location(1),
+            Mesh::ATTRIBUTE_UV_0.at_shader_location(2),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+/// The ribbon's quads along a channel (`main` at full width, the fork
+/// thinner), the segment's direction in the normal.
+fn bolt_mesh(main: &[Vec3], fork: &[Vec3]) -> Mesh {
+    let mut pos = Vec::new();
+    let mut axis = Vec::new();
+    let mut uv = Vec::new();
+    let mut idx = Vec::new();
+    for (line, w) in [(main, 1.0), (fork, 0.0)] {
+        for seg in line.windows(2) {
+            let d = (seg[1] - seg[0]).normalize_or(Vec3::NEG_Y);
+            let b = pos.len() as u32;
+            for (p, u) in [(seg[0], 0.0), (seg[0], 1.0), (seg[1], 1.0), (seg[1], 0.0)] {
+                pos.push(p.to_array());
+                axis.push(d.to_array());
+                uv.push([u, w]);
+            }
+            idx.extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, axis)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
+
+#[derive(Component)]
+struct Bolt {
+    mesh: Handle<Mesh>,
+    material: Handle<BoltMaterial>,
+}
+
+fn spawn_bolt(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<BoltMaterial>>,
+) {
+    let mesh = meshes.add(bolt_mesh(&[], &[]));
+    let material = materials.add(BoltMaterial {
+        params: BoltParams {
+            color: Vec4::new(0.85, 0.85, 1.0, 0.0),
+            size: Vec4::new(2.5, 0.0, 0.0, 0.0),
+        },
+    });
+    commands.spawn((
+        Name::new("Lightning bolt"),
+        Bolt {
+            mesh: mesh.clone(),
+            material: material.clone(),
+        },
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::IDENTITY,
+        Visibility::Hidden,
+        NoFrustumCulling,
+        NotShadowCaster,
+        NotShadowReceiver,
+    ));
+}
+
+/// The bolt shows on the flash's frames: brightest close to, lost in the
+/// rain far off (past about three times the sight distance, nothing).
+fn show_bolt(
+    conditions: Res<Conditions>,
+    now: Res<BoltNow>,
+    mut q: Query<(&Bolt, &mut Visibility)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<BoltMaterial>>,
+    mut built: Local<Option<Vec3>>,
+) {
+    if !now.is_changed() {
+        return;
+    }
+    let Ok((b, mut vis)) = q.single_mut() else {
+        return;
+    };
+    let through = (-now.distance / (conditions.visibility * 3.0)).exp();
+    let k = now.lit * through;
+    vis.set_if_neq(if k > 0.01 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    });
+    if let Some((main, fork)) = &now.channel {
+        if *built != main.first().copied() {
+            *built = main.first().copied();
+            if let Some(mut m) = meshes.get_mut(&b.mesh) {
+                *m = bolt_mesh(main, fork);
+            }
+        }
+    }
+    if let Some(m) = materials.get(&b.material) {
+        if (m.params.color.w - k).abs() > 1e-3 {
+            if let Some(mut m) = materials.get_mut(&b.material) {
+                m.params.color.w = k;
+                // Wider far off, so it's more than a hair.
+                m.params.size.x = 1.5 + now.distance * 0.004;
+            }
+        }
+    }
+}
+
+/// The strike as the bolt wants it (written by `lightning`): the
+/// channel, cloud to ground, and its fork (`bolt_path`), new with each
+/// strike; how lit it is now, and how far off.
+#[derive(Resource, Default)]
+pub struct BoltNow {
+    channel: Option<(Vec<Vec3>, Vec<Vec3>)>,
+    lit: f32,
+    distance: f32,
 }
 
 #[derive(Clone, Copy, Debug, ShaderType, Reflect)]
@@ -462,6 +667,31 @@ mod tests {
         let pour = Conditions::compose(WeatherKind::Downpour, Hour::Day, 1);
         assert!(sheet_rain(&pour.stormy()) > sheet_rain(&pour));
         assert!(sheet_rain(&pour) > 0.0);
+    }
+
+    #[test]
+    fn a_bolt_comes_down_to_where_it_struck() {
+        let mut rng = Rng::new(8);
+        let (top, at) = (
+            Vec3::new(100.0, 700.0, -50.0),
+            Vec3::new(100.0, 30.0, -50.0),
+        );
+        let (main, fork) = bolt_path(&mut rng, top, at);
+        assert!(main.first().unwrap().distance(top) < 1.0);
+        assert!(
+            main.last().unwrap().distance(at) < 1e-3,
+            "pinned to the strike"
+        );
+        assert!(
+            main.iter().any(|p| p.xz().distance(at.xz()) > 10.0),
+            "it wanders"
+        );
+        assert!(
+            fork.len() > 2 && fork.last().unwrap().y > at.y,
+            "the fork dies in the air"
+        );
+        let m = bolt_mesh(&main, &fork);
+        assert_eq!(m.count_vertices(), 4 * (main.len() - 1 + fork.len() - 1));
     }
 
     #[test]
