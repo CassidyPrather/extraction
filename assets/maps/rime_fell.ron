@@ -68,6 +68,10 @@
         // Avalanche chutes off the west wall, across the switchbacks.
         Channel(points: [(-285.0, 20.0), (-210.0, 90.0), (-140.0, 175.0), (-110.0, 215.0)], width: 30.0, depth: 2.5),
         Channel(points: [(-290.0, 160.0), (-240.0, 200.0), (-200.0, 240.0)], width: 26.0, depth: 2.0),
+        // The banks over the galleries: the chutes' shoulders, steep where
+        // the snow comes down onto the road.
+        Ridge(points: [(-185.0, 160.0), (-150.0, 163.0), (-115.0, 160.0)], width: 30.0, height: 9.0),
+        Ridge(points: [(-200.0, 97.0), (-175.0, 98.0), (-150.0, 96.0)], width: 26.0, height: 8.0),
         // The crown hole: the old stope fallen in, on the upper slopes.
         Hill(at: (-55.0, -115.0), radius: 22.0, height: -6.0),
 
@@ -100,7 +104,7 @@
                      (-228.0, 212.0), (-215.0, 192.0), (-150.0, 182.0), (-80.0, 170.0), (-58.0, 158.0),
                      (-66.0, 140.0), (-130.0, 128.0), (-200.0, 118.0), (-226.0, 100.0), (-212.0, 80.0),
                      (-150.0, 68.0), (-90.0, 52.0), (-40.0, 30.0)],
-            galleries: [(at: (-150.0, 180.0), length: 44.0), (at: (-185.0, 121.0), length: 50.0)],
+            galleries: [(at: (-150.0, 180.0), length: 44.0), (at: (-175.0, 122.0), length: 46.0)],
         ),
         // The funicular: track and service stair straight up the slope from
         // the valley station to the top station.
