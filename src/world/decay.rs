@@ -37,6 +37,35 @@ fn noise(p: Vec3, seed: u64) -> f32 {
     (v * 0.5 + 0.5).clamp(0.0, 1.0)
 }
 
+/// The paint a timber house's boards were last given, long faded: blue,
+/// green, ochre, oxblood, or none (bare grey boards), from its seed: a
+/// multiplier on the boards' colours.
+pub fn paint(seed: u64) -> Vec3 {
+    let mut rng = fastrand::Rng::with_seed(seed ^ 0x9a17);
+    let colour = match rng.usize(..6) {
+        0 => Vec3::new(0.62, 0.78, 1.0),
+        1 => Vec3::new(0.72, 0.92, 0.7),
+        2 => Vec3::new(1.0, 0.86, 0.55),
+        3 => Vec3::new(0.95, 0.62, 0.55),
+        _ => return Vec3::ONE,
+    };
+    Vec3::ONE.lerp(colour, 0.55 + 0.3 * rng.f32())
+}
+
+/// Tint a mesh's baked colours by `tint` (its AO and sky kept).
+pub fn tint(mesh: &mut Mesh, tint: Vec3) {
+    if tint == Vec3::ONE {
+        return;
+    }
+    if let Some(VertexAttributeValues::Float32x4(col)) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
+        for c in col.iter_mut() {
+            c[0] *= tint.x;
+            c[1] *= tint.y;
+            c[2] *= tint.z;
+        }
+    }
+}
+
 /// How mossy a building is, 0..1, from its seed.
 pub fn mossiness(seed: u64) -> f32 {
     let mut rng = fastrand::Rng::with_seed(seed ^ 0x0b55);
@@ -777,6 +806,32 @@ pub(super) fn weathered(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The timber houses come in several faded paints and bare boards,
+    /// each the same every time, none brighter than the boards.
+    #[test]
+    fn houses_are_painted_variously() {
+        let paints: Vec<Vec3> = (0..64).map(paint).collect();
+        assert_eq!(paints, (0..64).map(paint).collect::<Vec<_>>());
+        assert!(
+            paints
+                .iter()
+                .all(|p| p.max_element() <= 1.0 && p.min_element() > 0.5)
+        );
+        assert!(paints.contains(&Vec3::ONE), "no bare boards");
+        // Fading keeps a paint's direction away from white: its colour.
+        let mut kinds: Vec<_> = paints
+            .iter()
+            .filter(|p| **p != Vec3::ONE)
+            .map(|p| {
+                ((Vec3::ONE - *p).normalize() * 10.0)
+                    .round()
+                    .as_ivec3()
+                    .to_array()
+            })
+            .collect();
+        assert!(kinds.len() >= 4, "too few paints: {kinds:?}");
+    }
 
     /// The same building stains the same, and its stains lie on its walls'
     /// outsides.
