@@ -417,7 +417,12 @@ pub const ART: &[ArtText] = &[
     art("items/music.py", Need::Incidental, 0.35, "held in the hand"),
     // The piano's and harmonium's names on their name rails: standing at
     // the keys.
-    art("props/music.py", Need::Incidental, 0.7, "standing at the keys"),
+    art(
+        "props/music.py",
+        Need::Incidental,
+        0.7,
+        "standing at the keys",
+    ),
 ];
 
 /// Text baked into a texture.
