@@ -88,7 +88,6 @@ pub struct Run {
     walker: Option<Entity>,
     /// When it last put a dressing on.
     dressed: f32,
-    dbg_hp: f32,
     /// Things it's gone for in the pack step.
     tried: Vec<Entity>,
     /// Salvage set down for the pack step.
@@ -136,19 +135,6 @@ pub(super) fn direct(
         bot.tasks.push_back(Task::Wait(IDLE));
     }
     let raid_no = raid.raids;
-    if run
-        .pending
-        .iter()
-        .any(|(r, _)| run.rows[*r].response == COVER)
-        && (now * 2.0).fract() < time.delta_secs() * 2.0
-    {
-        info!(
-            "DBG cover at {:.2} task {:?} input {:?}",
-            root.translation,
-            bot.tasks.front(),
-            input.locomotion
-        );
-    }
     // Lamed, it limps round to look: keep the kiosk between, from where
     // it is now.
     let hiding = run
@@ -175,32 +161,6 @@ pub(super) fn direct(
             }
         }
     }
-    if let Ok(h) = world.health.get(player) {
-        if (h.hp - run.dbg_hp).abs() > 3.0 {
-            let an = world
-                .nearest_anomaly(here)
-                .map(|(a, at)| (a.kind, a.radius, at.xz().distance(here)));
-            let l = world
-                .holding(Side::Left)
-                .and_then(|e| world.id(e))
-                .map(str::to_string);
-            let r = world
-                .holding(Side::Right)
-                .and_then(|e| world.id(e))
-                .map(str::to_string);
-            info!(
-                "DBG hp {:.0} -> {:.0} bleeding {:.2} at {:.1} step {:?} anomaly {an:?} hands {l:?} {r:?} surge_in {:.0}",
-                run.dbg_hp,
-                h.hp,
-                h.bleeding,
-                root.translation,
-                run.step,
-                raid.surge_in()
-            );
-            run.dbg_hp = h.hp;
-        }
-    }
-
     // The radio: each first time met gets the bot's answer, now.
     for FirstMet(f) in met.read() {
         let (response, tasks): (&'static str, Vec<Task>) = match f {
@@ -304,7 +264,6 @@ pub(super) fn direct(
                             within: 1.5,
                         });
                     }
-                    info!("DBG cover tasks {t:?}");
                     (COVER, t)
                 }
                 None => ("fight it (no cover)", vec![Task::Engage { shots: 30 }]),
@@ -872,13 +831,6 @@ pub(super) fn direct(
                 }));
                 tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
             } else if let Some(leg) = leg {
-                info!(
-                    "DBG lamed try {} clear {:?} mode {:?} rounds {:?}",
-                    run.tries,
-                    world.gun_clear(player),
-                    world.mode(player),
-                    world.rounds(player)
-                );
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
                     tasks.push(Gun(MacroKind::Rack));

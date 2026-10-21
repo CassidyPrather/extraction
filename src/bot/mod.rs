@@ -230,7 +230,6 @@ pub struct Bot {
     reach_low: bool,
     /// The gun it last had in hand: the one to draw back.
     last_gun: Option<Entity>,
-    dbg_held: Option<String>,
 }
 
 impl Bot {
@@ -257,7 +256,6 @@ impl Bot {
             well_off: None,
             reach_low: false,
             last_gun: None,
-            dbg_held: None,
         }
     }
 
@@ -561,14 +559,6 @@ struct TaskExtras<'w, 's> {
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
     socketed: Query<'w, 's, (Entity, &'static InSocket, &'static GlobalTransform)>,
-    door_at: Query<
-        'w,
-        's,
-        (
-            &'static crate::world::buildings::Door,
-            &'static GlobalTransform,
-        ),
-    >,
     seats: Query<'w, 's, &'static crate::rig::seated::Seat>,
     sockets: Query<
         'w,
@@ -579,16 +569,6 @@ struct TaskExtras<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
-}
-
-impl TaskExtras<'_, '_> {
-    fn door_states(&self, near: Vec3) -> Vec<(bool, f32, f32)> {
-        self.door_at
-            .iter()
-            .filter(|(_, g)| g.translation().distance(near) < 4.0)
-            .map(|(d, g)| (d.open, d.angle, g.translation().distance(near)))
-            .collect()
-    }
 }
 
 /// Advances each bot's current task.
@@ -665,10 +645,6 @@ fn run_tasks(
             let held_id = held
                 .and_then(|e| items.get(e).ok())
                 .map(|i| catalog.get(i.kind()).id.clone());
-            if held_id != bot.dbg_held {
-                info!("DBG hand now {held_id:?} (task {task:?})");
-                bot.dbg_held = held_id.clone();
-            }
             match one_hand(task, gun_side, held, held_id, gun_held) {
                 OneHand::Do(t) => t,
                 OneHand::First(tasks) if bot.deferred < 4 => {
@@ -733,33 +709,6 @@ fn run_tasks(
                 }
             }
             Task::WalkTo { to, within } => {
-                if bot.elapsed > 10.0 && bot.elapsed - dt <= 10.0 {
-                    let held: Vec<_> = Side::BOTH
-                        .iter()
-                        .map(|s| {
-                            hand(*s)
-                                .and_then(|h| h.holding)
-                                .and_then(|e| items.get(e).ok())
-                                .map(|i| catalog.get(i.kind()).id.clone())
-                        })
-                        .collect();
-                    let near: Vec<_> = loose
-                        .iter()
-                        .filter(|(_, _, g)| g.translation().distance(root.translation) < 2.0)
-                        .map(|(_, it, g)| (catalog.get(it.kind()).id.clone(), g.translation()))
-                        .collect();
-                    info!(
-                        "DBG near {near:?} queue {:?}",
-                        bot.tasks.iter().take(8).collect::<Vec<_>>()
-                    );
-                    info!(
-                        "DBG stuck walking to {to:?} at {:.2} body h {:.2} held {held:?} carried {:.1} doors {:?}",
-                        root.translation,
-                        body.height,
-                        body.carried_kg,
-                        ext.door_states(root.translation)
-                    );
-                }
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
                 if pos.distance(to) <= within {
@@ -796,14 +745,6 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
-                    if bot.retry > 1.9 {
-                        info!(
-                            "DBG reach rel_y {:.2} lift {lift:?} hand {:?} crouch {}",
-                            at.y - root.translation.y,
-                            hand(side).map(|h| h.world.translation - root.translation),
-                            bot.reach_low
-                        );
-                    }
                     if (!bot.pending || bot.retry > 2.0)
                         && bot.within_seated_reach(at.y - root.translation.y, lift)
                     {
@@ -980,20 +921,6 @@ fn run_tasks(
                     let Some((m, _, mgt)) = pouched else {
                         // Out of magazines: as a reload macro with none, it
                         // stays empty.
-                        let slots: Vec<_> = ext
-                            .sockets
-                            .iter()
-                            .filter(|(_, o, _)| o.0 == player)
-                            .map(|(so, _, _)| {
-                                (
-                                    so.kind.clone(),
-                                    so.occupant
-                                        .and_then(|e| items.get(e).ok())
-                                        .map(|i| (catalog.get(i.kind()).id.clone(), i.rounds)),
-                                )
-                            })
-                            .collect();
-                        info!("DBG slots {slots:?} family {family}");
                         bot.note("no loaded magazine in a pouch".into());
                         bot.next();
                         continue;
@@ -1177,14 +1104,6 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
-                    if bot.retry > 1.9 {
-                        info!(
-                            "DBG reach rel_y {:.2} lift {lift:?} hand {:?} crouch {}",
-                            at.y - root.translation.y,
-                            hand(side).map(|h| h.world.translation - root.translation),
-                            bot.reach_low
-                        );
-                    }
                     if (!bot.pending || bot.retry > 2.0)
                         && bot.within_seated_reach(at.y - root.translation.y, lift)
                     {
