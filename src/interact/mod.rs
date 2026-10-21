@@ -443,6 +443,13 @@ fn seat_from_body(
     }
 }
 
+/// The fastest anything leaves a hand, m/s: a hard overarm throw. A
+/// controller's tracking jumping (or the playspace moving) while it holds
+/// something would otherwise let go of it at hundreds of m/s.
+pub const MAX_THROW: f32 = 25.0;
+/// And the fastest it spins, rad/s.
+pub const MAX_THROW_SPIN: f32 = 40.0;
+
 /// How near a pouched magazine's top the gun's well has to come, one-handed.
 pub const BODY_SEAT: f32 = 0.06;
 
@@ -912,7 +919,8 @@ fn apply_hand_actions(
                         let offset = Transform::from_matrix(offset.into());
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
-                        physics_on(&mut commands, item, world, hand.velocity, Vec3::ZERO, false);
+                        let v = hand.velocity.clamp_length_max(MAX_THROW);
+                        physics_on(&mut commands, item, world, v, Vec3::ZERO, false);
                         commands.entity(item).insert(Held {
                             player,
                             hand: hand_e,
@@ -946,8 +954,9 @@ fn apply_hand_actions(
                 let Some(item) = hand.holding.take() else {
                     continue;
                 };
-                let velocity = hand.velocity + hand_world.forward() * throw;
-                let angular = hand.angular_velocity;
+                let velocity =
+                    (hand.velocity + hand_world.forward() * throw).clamp_length_max(MAX_THROW);
+                let angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
                 commands.entity(item).remove::<(Held, Supported)>();
                 // Any other hand supporting it lets go too.
                 for (_, _, mut h) in &mut hands {
