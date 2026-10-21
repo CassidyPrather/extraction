@@ -212,6 +212,38 @@ Reservoir's shallows).
 
 ## Pacing
 
+Bot raids with animals and without (`EXTRACTION_WILDLIFE=off`), the same
+seeds, four a valley:
+
+| Valley | Animals | Extracted | Flushes | Alarms | Robots sent | Engagements | Mean raid (s) |
+| - | - | - | - | - | - | - | - |
+| Marrow Creek | with | 2 of 4 | 55 | 8 | 0 | 28 | 779 |
+| | without | 3 of 4 | | | | 19 | 756 |
+| Kettle Pass | with | 3 of 4 | 43 | 5 | 0 | 19 | 497 |
+| | without | 2 of 4 | | | | 13 | 502 |
+| Cinder Works | with | 1 of 4 | 33 | 2 | 0 | 26 | 462 |
+| | without | 1 of 4 | | | | 13 | 449 |
+| Sallow Reservoir | with | 1 of 4 | 39 | 8 | 0 | 21 | 442 |
+| | without | 2 of 4 | | | | 31 | 525 |
+
+Extraction 7 of 16 with, 8 of 16 without; raid times the same. Bots set
+off a flock every minute or so and raise the alarm once or twice a raid,
+but no robot was ever sent by birds: a robot has to be within 60 m of the
+flock you put up, and a careful raider isn't. Engagements went up in
+three valleys and down in one (noise, at four raids); Cinder's doubling
+could be the dogs' barks, which these runs didn't log (the sim now logs
+`startled`, and robots a bark sends count in `bird_alarm`), so Cinder is
+being run again at eight raids each way.
+
+## Shots
+
+`docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
+Creek), `flock_up.png` (the same house a few seconds after they went up),
+`deer_grazing.png`, `dogs.png` (Cinder Works), `heron.png` (Sallow
+Reservoir's shallows).
+
+## Pacing
+
 A first batch of bot raids on Marrow Creek, four with animals and four
 without (`EXTRACTION_WILDLIFE=off`), the same seeds; one run in each crashed
 in Avian (`Neither body ... is in an island`, with or without animals):
