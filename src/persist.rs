@@ -101,6 +101,8 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
     match &opts.save {
         Some(p) => Some(p.clone()),
         None if opts.scenario.is_some()
+            // Sims never touch the save, rendered (a trailer) or not.
+            || opts.sim_run.is_some()
             || opts.screenshot.is_some()
             || opts.camera.is_some()
             || !owns_profile(opts)
