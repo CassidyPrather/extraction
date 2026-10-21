@@ -471,6 +471,22 @@ pub const THREAD: &[Lead] = &[
         note: "Sorter's chit",
         mentions: &[(C, "The works")],
     },
+    // Set pieces.
+    Lead {
+        map: M,
+        note: "Luggage notice",
+        mentions: &[(M, "Bus depot")],
+    },
+    Lead {
+        map: K,
+        note: "Fiala's card",
+        mentions: &[(K, "Hunting lodge"), (K, "Lodge book")],
+    },
+    Lead {
+        map: C,
+        note: "Charge chit",
+        mentions: &[(C, "The works"), (C, "Lookout log")],
+    },
     // Sallow Reservoir: the water works, and the village it drowned.
     Lead {
         map: S,
