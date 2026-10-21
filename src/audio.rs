@@ -253,7 +253,42 @@ impl Plugin for AudioPlugin {
             .add_systems(
                 PostUpdate,
                 occlude.after(bevy::transform::TransformSystems::Propagate),
-            );
+            )
+            .add_systems(Last, retire_voices);
+    }
+}
+
+/// At most this many one-shot sounds at once; past it the oldest go.
+pub const VOICE_CAP: usize = 256;
+/// No one-shot in the bank runs longer than a minute (the sirens), even
+/// slowed: one still "playing" after this never will.
+pub const ONE_SHOT_MAX: f32 = 90.0;
+
+/// Retires one-shot voices that outlive any sound, and the oldest past
+/// [`VOICE_CAP`]. A one-shot despawns itself when it finishes playing, but
+/// with no output device (none plugged in, or the headset's audio gone
+/// mid-session) nothing ever finishes: every footstep, shot and creak
+/// stayed as an entity, a few dozen a second (soak finding, `docs/SOAK.md`).
+pub(crate) fn retire_voices(
+    mut commands: Commands,
+    voices: Query<(Entity, &SamplePlayer)>,
+    time: Res<Time<Real>>,
+    mut born: Local<HashMap<Entity, f32>>,
+) {
+    let now = time.elapsed_secs();
+    born.retain(|e, _| voices.contains(*e));
+    let mut once: Vec<(f32, Entity)> = voices
+        .iter()
+        .filter(|(_, p)| matches!(p.repeat_mode, RepeatMode::PlayOnce))
+        .map(|(e, _)| (*born.entry(e).or_insert(now), e))
+        .collect();
+    once.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let over = once.len().saturating_sub(VOICE_CAP);
+    for (i, (t, e)) in once.into_iter().enumerate() {
+        if i < over || now - t > ONE_SHOT_MAX {
+            born.remove(&e);
+            commands.entity(e).try_despawn();
+        }
     }
 }
 
