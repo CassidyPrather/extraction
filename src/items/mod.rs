@@ -46,52 +46,12 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Catalog::load())
-            .add_plugins((
-                loot::LootPlugin,
-                usage::UsagePlugin,
-                impacts::ImpactPlugin,
-                lost::LostItemsPlugin,
-            ))
-            .add_systems(FixedUpdate, settle_items);
-    }
-}
-
-/// An item's speed limit while it settles after it appears, m/s: one
-/// spawned overlapping something (a heap of loot on one spot, a crate's
-/// lid, a wall) is pushed clear gently instead of thrown. Thin and light
-/// things (a pin, a bolt) were flung at 12-15 m/s.
-pub const SETTLE_SPEED: f32 = 4.0;
-/// Seconds it settles for.
-pub const SETTLE_TIME: f32 = 0.6;
-/// An item's speed limit once it has settled.
-pub const ITEM_MAX_SPEED: f32 = 60.0;
-
-/// A freshly spawned item, settling (see [`SETTLE_SPEED`]).
-#[derive(Component, Debug)]
-pub struct Settling {
-    left: f32,
-    first: bool,
-}
-
-/// Settling items get their full speed back after [`SETTLE_TIME`]; one
-/// that was sent off on purpose (thrown out of a port, dropped from a
-/// hand) gets it at once.
-fn settle_items(
-    mut commands: Commands,
-    mut items: Query<(Entity, &mut Settling, Option<&LinearVelocity>)>,
-    time: Res<Time>,
-) {
-    for (e, mut s, v) in &mut items {
-        let sent = s.first && v.is_some_and(|v| v.0.length() > SETTLE_SPEED * 0.5);
-        s.first = false;
-        s.left -= time.delta_secs();
-        if sent || s.left <= 0.0 {
-            commands
-                .entity(e)
-                .try_insert(MaxLinearSpeed(ITEM_MAX_SPEED))
-                .try_remove::<Settling>();
-        }
+        app.insert_resource(Catalog::load()).add_plugins((
+            loot::LootPlugin,
+            usage::UsagePlugin,
+            impacts::ImpactPlugin,
+            lost::LostItemsPlugin,
+        ));
     }
 }
 
@@ -119,13 +79,6 @@ pub fn spawn_item(commands: &mut Commands, catalog: &ItemCatalog, req: SpawnItem
             },
         ))
         .insert(physical_bundle(def))
-        .insert((
-            Settling {
-                left: SETTLE_TIME,
-                first: true,
-            },
-            MaxLinearSpeed(SETTLE_SPEED),
-        ))
         .id()
 }
 
@@ -146,7 +99,7 @@ pub fn physical_bundle(def: &ItemDef) -> impl Bundle {
         // Nothing the game does moves an item faster (a hand lets go at
         // 25 m/s at most); a thin thing (a cleaning rod) struck end-on
         // spun up to hundreds of rad/s and blew up to 2 km/s without these.
-        MaxLinearSpeed(ITEM_MAX_SPEED),
+        MaxLinearSpeed(60.0),
         MaxAngularSpeed(60.0),
     )
 }
