@@ -136,6 +136,15 @@ fn leaves_of(
 /// (`weapons::optics`).
 const LIVE: [&str; 2] = ["Muzzle crown", "Vignette"];
 
+/// What a merged mesh shares: its material and how it casts the sun's
+/// shadow.
+#[derive(Clone, PartialEq)]
+struct Shade {
+    mat: Handle<StandardMaterial>,
+    reach: Option<u32>,
+    caster: bool,
+}
+
 /// A merged stand-in mesh (so a rest isn't merged into the next).
 #[derive(Component)]
 pub struct RestMesh;
@@ -225,7 +234,13 @@ fn rest_idle(
     >,
     merged: Query<(), With<RestMesh>>,
     names: Query<&Name>,
-    leaf_info: Query<(&GlobalTransform, &Visibility, Option<&VisibilityRange>)>,
+    leaf_info: Query<(
+        &GlobalTransform,
+        &Visibility,
+        Option<&VisibilityRange>,
+        Option<&super::budget::ShadowReach>,
+        Has<bevy::light::NotShadowCaster>,
+    )>,
 ) {
     settling.retain(|e, _| guns.contains(*e));
     let mut done = 0;
@@ -255,7 +270,10 @@ fn rest_idle(
             continue;
         }
         let to_gun = gun_gt.affine().inverse();
-        let mut groups: Vec<(Handle<StandardMaterial>, Vec<(AssetId<Mesh>, Mat4)>)> = Vec::new();
+        // By material and by how the leaf casts the sun's shadow (small
+        // parts only near the eye, `budget::small_shadows`): merged, a
+        // drum's rounds would cast at any distance.
+        let mut groups: Vec<(Shade, Vec<(AssetId<Mesh>, Mat4)>)> = Vec::new();
         let mut taken: Vec<(Entity, Visibility)> = Vec::new();
         let mut range = None;
         for e in leaves {
@@ -265,7 +283,7 @@ fn rest_idle(
             if !inherited.get() {
                 continue;
             }
-            let Ok((gt, v, r)) = leaf_info.get(e) else {
+            let Ok((gt, v, r, reach, no_shadow)) = leaf_info.get(e) else {
                 continue;
             };
             let Some(m) = mesh_assets.get(&mesh.0) else {
@@ -283,9 +301,15 @@ fn rest_idle(
             if !scale.is_finite() || scale.abs().min_element() < 1e-6 {
                 continue;
             }
-            match groups.iter_mut().find(|(h, _)| *h == mat.0) {
+            let shade = Shade {
+                mat: mat.0.clone(),
+                reach: reach.map(|r| r.0.to_bits()),
+                // (A small part's flag is `ShadowReach`'s to set.)
+                caster: reach.is_some() || !no_shadow,
+            };
+            match groups.iter_mut().find(|(k, _)| *k == shade) {
                 Some((_, l)) => l.push((mesh.0.id(), local)),
-                None => groups.push((mat.0.clone(), vec![(mesh.0.id(), local)])),
+                None => groups.push((shade, vec![(mesh.0.id(), local)])),
             }
             taken.push((e, *v));
         }
@@ -294,7 +318,7 @@ fn rest_idle(
             continue;
         }
         let mut stand_ins = Vec::new();
-        for (mat, parts) in &groups {
+        for (shade, parts) in &groups {
             let key = {
                 use std::hash::{Hash, Hasher};
                 let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -337,12 +361,21 @@ fn rest_idle(
                 Name::new("Gun at rest"),
                 RestMesh,
                 Mesh3d(handle),
-                MeshMaterial3d(mat.clone()),
+                MeshMaterial3d(shade.mat.clone()),
                 Transform::IDENTITY,
                 ChildOf(gun),
             ));
             if let Some(r) = &range {
                 ec.insert(r.clone());
+            }
+            match shade.reach {
+                Some(bits) => {
+                    ec.insert(super::budget::ShadowReach(f32::from_bits(bits)));
+                }
+                None if !shade.caster => {
+                    ec.insert(bevy::light::NotShadowCaster);
+                }
+                None => {}
             }
             stand_ins.push(ec.id());
         }
