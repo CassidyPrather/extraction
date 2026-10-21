@@ -255,6 +255,30 @@ impl Obstacles {
     pub fn inside(&self, p: Vec3, pad: f32) -> bool {
         self.near(p).any(|s| s.contains(p, pad))
     }
+
+    /// Is anything built straight over `p` (under a roof, a deck, a
+    /// gantry: in a building, not round it)?
+    pub fn roofed(&self, p: Vec3) -> bool {
+        self.cells
+            .get(&cell_of(p.x, p.z))
+            .into_iter()
+            .flatten()
+            .map(|&i| &self.solids[i as usize])
+            .filter(|s| {
+                s.hi.y > p.y && p.x >= s.lo.x && p.x <= s.hi.x && p.z >= s.lo.z && p.z <= s.hi.z
+            })
+            .any(|s| s.ray(p, Vec3::Y).is_some())
+    }
+}
+
+/// A placement's footprint: the middle of its bounds (x, z), how far its
+/// corners reach from there, and its top. `None` for what has no pieces.
+pub fn footprint(zone: &Zone, p: &extraction_core::map::Placement) -> Option<(Vec2, f32, f32)> {
+    let solids = solids_of(zone, p);
+    let lo = solids.iter().map(|s| s.lo).reduce(Vec3::min)?;
+    let hi = solids.iter().map(|s| s.hi).reduce(Vec3::max)?;
+    let mid = (lo + hi).xz() * 0.5;
+    Some((mid, (hi - lo).xz().length() * 0.5, hi.y))
 }
 
 /// A building's perches.

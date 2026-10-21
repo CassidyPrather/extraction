@@ -7,6 +7,8 @@
 //!   careless sprint past one tells the machines ([`Flushed`], and a
 //!   [`crate::robots::Noise`] at the flock).
 //! - [`perches`]: where birds can sit, from the buildings' own pieces.
+//! - [`bats`]: at dusk and at night, over the water and round the
+//!   buildings; off a light, and gone when a machine's near.
 //!
 //! Logic here runs headless (in [`WildlifePlugin`], part of `GamePlugin`)
 //! and is deterministic for a seed; what you see is in [`visuals`]
@@ -14,6 +16,8 @@
 
 use bevy::prelude::*;
 
+pub mod bat_look;
+pub mod bats;
 pub mod fish;
 pub mod flock;
 pub mod herd;
@@ -155,7 +159,13 @@ impl Plugin for WildlifePlugin {
                 (
                     scene_perches,
                     gather_threats,
-                    (flock::flocks, herd::herds, fish::shoals, rats::rats),
+                    (
+                        flock::flocks,
+                        herd::herds,
+                        fish::shoals,
+                        rats::rats,
+                        bats::bats,
+                    ),
                 )
                     .chain()
                     .in_set(WildlifeSystems),
@@ -235,6 +245,7 @@ impl Plugin for WildlifeVisualsPlugin {
             visuals::VisualsPlugin,
             herd_look::HerdLookPlugin,
             small_look::SmallLookPlugin,
+            bat_look::BatLookPlugin,
         ));
     }
 }
