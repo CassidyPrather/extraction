@@ -171,6 +171,10 @@ PATH, or `BLENDER=/path/to/blender`; written against Blender 5.2). The
 `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]` option puts a gun (with its
 magazine seated), any other item by id, `guns`, `drone`, `walker`,
 `dirigible`, `grappler` or `pod` in front of the `--camera`, held still.
+`scopeview:pso_scope,SIDE,RELIEF` holds a scope to the eye, SIDE mm off
+its axis and RELIEF mm behind the eyepiece (the eye box). `sights:ak74`
+brings a gun's iron sights to the eye, with the front post soft
+(`--no-post-blur` for sharp). Give these 60 frames so the world loads.
 At the camera above, the ground is at y = 17.6. The truck is parked at the
 south gate: truck space (x, y, z) is world (40 - x, 23.7 + y, 300 - z),
 standing level on a slope.

@@ -648,7 +648,10 @@ let go, as with magazines. Use on a gun switches everything on it.
     post goes soft as it comes up: a dark, soft-edged disc about 12 mm
     across that fades in round the post. It's an approximation of focus,
     not a depth-of-field pass. Comfort setting `post_blur`, or
-    `--no-post-blur`, turns it off.
+    `--no-post-blur`, turns it off. Shots are in `docs/shots/weapon-feel/`
+    (`eyebox_*.png`, `iron_sights_at_the_cheek.png` and
+    `post_blur_on_off_zoom.png`). The blur barely shows, since the rear
+    notch hides most of the post.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one
