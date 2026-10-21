@@ -589,8 +589,12 @@ fn items_spawned_inside_things_are_not_launched() {
     let mut bad = Vec::new();
     for (i, (what, e)) in cases.iter().enumerate() {
         let p = pos(&app, *e);
-        let g = app.world().resource::<Zone>().ground(p.x, p.z);
-        if !p.is_finite() || fastest[i] > LAUNCH || p.y < g - 0.2 {
+        let zone = app.world().resource::<Zone>();
+        let g = zone.ground(p.x, p.z);
+        // Spawned half in a wall, it may come out of either face: inside an
+        // underground site's kiosk, down the stair is where it belongs.
+        let down = crate::items::lost::down_a_site(zone, p, 0.5);
+        if !p.is_finite() || fastest[i] > LAUNCH || (p.y < g - 0.2 && !down) {
             bad.push(format!(
                 "{what}: went {:.1} m/s, ended {:.2} m over the ground",
                 fastest[i],

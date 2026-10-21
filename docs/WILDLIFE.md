@@ -100,7 +100,11 @@ times as often as a building.
 The high fell has alpine choughs (the rook, smaller and blacker, flocks of
 8 to 16) on its ore mill, observatory and funicular, and chamois (the
 deer's ways, a little quicker, a dark coat) on the highest open ground. A
-herd's home needs no forest edge in a valley without one.
+herd's home needs no forest edge in a valley without one. No ducks: the
+tarn, 37 m across and frozen at its edges, gives a flushed raft nowhere to
+go (a valley's rafts need water reaching at least 70 m, the shortest hop,
+`ducks::extent`). Its bats keep to the buildings: none hunt water above a
+valley's snow line (`snow::snow_line`), where nothing hatches.
 
 ### The heron
 
@@ -190,7 +194,7 @@ Mallards on open water (`wildlife::ducks`): a tell across water. The
 valley's water is sampled every 2 m for places a raft can sit: at least
 0.25 m deep (enough to float), with deep water at least 3 m all round
 and nothing built within 3 m (bridges, the dam). Every valley has some,
-and gets one or two rafts of three to nine, drakes and hens, at places
+and, where it reaches 70 m, gets one or two rafts of three to nine, drakes and hens, at places
 fixed by the map and the seed, the roomiest water likelier (the second
 at least 120 m from the first): Sallow Reservoir's upper arm (round
 (-180, -170), surface 47.6) nearly always has one, Marrow Creek, Kettle
@@ -298,13 +302,14 @@ wind thin it. When the insects stop, something is close.
 - `wildlife::bats::tests`: out only at dusk and at night (and in the
   whole game: bats on Marrow Creek's creek at dusk and night, none by
   day); four minutes per valley of someone walking round the groups with
-  a torch on them, shooting now and then, and a walker coming by: no bat
+  a torch on them, shooting now and then, and a walker coming by (bats
+  over the water wherever there are 8 cells of it below the snow line): no bat
   ever inside or under anything built or below 2 m, none faster than
   9 m/s, and they scatter, leave and come back; with a torch pointed
   across their beat they keep further from its beam than in the dark;
   determinism.
 - `wildlife::ducks::tests`: every valley has open water and one or two
-  rafts on it (Sallow Reservoir's upper arm for nearly every seed); four
+  rafts on it, but Rime Fell, whose tarn is too small (Sallow Reservoir's upper arm for nearly every seed); four
   minutes paddling, alone and with someone pacing 18 m off, keep every
   duck at the surface of water deep enough, together, and dabbling;
   walking at them they swim off inside 25 m and go up at 12 m, running

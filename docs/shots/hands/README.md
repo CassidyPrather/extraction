@@ -48,3 +48,22 @@ workbench panel.
 ghost fades with the gap. With the hand only just at the wall, the glove
 rests on the rail and there is no ghost. Pushed deep in, the ghost's rim
 shows inside the wall beyond the stopped glove.
+`14_body_side.jpg` (`--gallery body+side`, with `+stoop`, `+crouch`,
+`--seated`): the body under the head (`rig::stance`, drawn by
+`render::body`), from 2 m to the right, in flat mode (whose hands are held
+up). Standing, the knees soft. Bent over, the hips stay put and the chest
+leans out over them, the pouches, harness and pack leaning with it while
+the holster stays on the hip. Crouched, the knees forward over feet that
+didn't move. Seated, the hips under the belt (the slots stay at their
+standing heights, as the seated view is lifted to a standing eye), the
+thighs out ahead.
+`15_body_eye.jpg` (`--gallery body+down`, `+stoop`, `+crouch`): the same
+from the eye. Looking down, the chest rig, the jacket and the sleeves;
+the chest rig keeps the feet out of sight standing.
+`16_carrying.jpg` (`--gallery carry`, `carry+side`, `drag+side`, `pack`,
+flat mode with the hands posed by the gallery; `interact::carry`): a car
+door taken off the ground by its two ends and held up across you, from the
+eye and from beside; the same door taken by its near end in one hand and
+drawn back, the far end on the ground, scraping; and the pack swung off
+the left shoulder, hanging open in front of you for the right hand to
+reach into.

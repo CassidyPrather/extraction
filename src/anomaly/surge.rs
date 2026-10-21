@@ -227,6 +227,12 @@ mod tests {
                     },
                     avian3d::prelude::RigidBodyDisabled,
                 ));
+                // The hand holds it too: a hold its hand doesn't know of
+                // drops (`interact::drop_orphaned_holds`).
+                app.world_mut()
+                    .get_mut::<crate::interact::Hand>(hand)
+                    .unwrap()
+                    .holding = Some(bead);
             }
             {
                 let mut raid = app.world_mut().resource_mut::<Raid>();

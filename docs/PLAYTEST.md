@@ -120,6 +120,24 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Heavy things.** A car door, a bus panel, a wheel, a heavy's claw:
+  take it by both ends and lift it. It's heavy: it swings on when you
+  stop and comes round late when you turn, and you walk slower and can't
+  run. With one hand you can only drag it, its far end scraping along
+  the ground (the machines hear that). Let go of it swinging and it's a
+  shove, not a throw. A robot's wreck: take it by a leg and drag it,
+  slowly. Your pack: reach over a shoulder, take it, and bring it round
+  in front of you: it hangs open from your hand and you can reach in
+  with the other; take it back over the shoulder and let go, and it's
+  on. Say if anything feels floaty or gets stuck.
+- **Your body.** Look down: a jacket, the chest rig and belt on it,
+  trousers and boots. Turn your head and your feet stay put; turn your
+  whole body, or step across the room, and they step after you. Crouch
+  and your knees come forward; bend over and the chest rig and pack lean
+  with you while the holster stays on your hip. Reach right out and your
+  shoulder comes forward. Seated, you sit, the belt on your hips. The
+  **BODY** card on the comfort board hides it. Say if your arms ever look
+  stretched or bent wrong, or if a limb goes through you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
@@ -380,6 +398,14 @@ said you don't use?
   notices. Bring the AK's iron sights to your cheek: do they line up
   without fiddling? Does the front post going soft read as your eye
   focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
+- Gun handling.
+  - Cup the PM or the Nagant under the grip with your other palm: does it
+    steady the shot without pulling your aim?
+  - Hold an AK out at arm's length, then tucked in: does the weight tell?
+  - Take your rifle off your sling and let go of it in front of you:
+    does the sling catch it?
+  - Walk through a doorway with it raised: do the knocks feel and sound
+    right, and never too often?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

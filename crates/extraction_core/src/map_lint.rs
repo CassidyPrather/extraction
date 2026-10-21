@@ -64,6 +64,15 @@ pub enum Rule {
     /// way round, over the way in or out, or met without warning
     /// (`map_sentry`).
     Sentry,
+    /// A spotter that ends a raid rather than shaping it: its winch where
+    /// you can't stand to cut it, watching nothing, no way in under it
+    /// while its eye is turned away, watching the way in or out, or seeing
+    /// most of a sentry's field (`map_spotter`).
+    Spotter,
+    /// The minelayer's fields as the game lays them: a mine on a main
+    /// route or in a doorway, or a site with room for under half a field
+    /// (`map_mines`).
+    Mines,
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
@@ -312,6 +321,11 @@ pub const WORK_YARD: f32 = 16.0;
 pub const WORK_OPEN: f32 = 0.7;
 /// The robot Gate is at least this far from the insertion.
 pub const GATE_FROM_INSERTION: f32 = 300.0;
+/// A rendezvous keeps this far from the robots' Gate: you wait two minutes
+/// there for the truck, and every machine in the valley comes and goes by
+/// the Gate. The sims killed raiders waiting at Marrow's Ranger tower,
+/// 128 m from it, to whatever came out next.
+pub const RV_FROM_GATE: f32 = 160.0;
 /// Surge layouts tried when checking anomalies against the routes.
 pub const ANOMALY_SEEDS: u64 = 32;
 /// An artifact field's middle is at least this far from every main route
@@ -355,7 +369,13 @@ pub const VIEW_MAX: usize = 16;
 /// house is dozens of pieces and a shadow-casting shell. Counting each run
 /// as a building would cost a village its gardens or its houses. They are
 /// counted and printed in the render-load measure on their own.
-pub const VIEW_LIGHT: &[&str] = &["fence_garden"];
+///
+/// A car wreck is one too: one body mesh and its box, and its doors,
+/// bonnet, boot and wheels as small breakable parts, about a dozen pieces
+/// with no roof, no rooms and no loot, under two metres tall (a lorry 2.2).
+/// They stand by the roads in ones and twos; counted as buildings, every
+/// wreck on a road through a village would cost it a house.
+pub const VIEW_LIGHT: &[&str] = &["fence_garden", "wreck_lada", "wreck_uaz", "wreck_lorry"];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
 /// grid blocks only the cells whose middles fall within 0.7 m of a run
@@ -368,6 +388,18 @@ pub const FENCE_CLEAR: f32 = 0.5;
 /// clear. The ground may rise this much along it, metres: the far panel's
 /// foot goes 0.15 m into the grass, no more.
 pub const FENCE_RISE: f32 = 0.3;
+
+/// Car wrecks: cover on the verges (they're placements, so the cover
+/// measure counts them), never on a road (`Overlap`; they aren't in
+/// `ON_ROADS`). Wider than the nav grid's cell with its clearance, so a
+/// main route goes round one, not through it as it could a fence.
+pub const WRECKS: &[&str] = &["wreck_lada", "wreck_uaz", "wreck_lorry"];
+/// A wreck isn't levelled for (`map::prefab_wants_pad`): it stands level
+/// on the lowest of its corners and middle (`Heightmap::footing`). The
+/// ground anywhere under it may be this much over or under that foot,
+/// metres: a wheel on the high side sunk to its hub (a car's are 0.58 m
+/// across), or the low side's off the grass by as much, no more.
+pub const WRECK_RISE: f32 = 0.3;
 
 /// Where a kiosk's door is checked for footing: this far out from it.
 pub const KIOSK_STEP: f32 = 2.0;
@@ -1496,6 +1528,48 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             fences.0, fences.1
         ));
     }
+    // Wrecks, and the most ground over or under any one's foot.
+    let mut wrecks = (0, 0.0f32);
+    for p in &map.placements {
+        if !WRECKS.contains(&p.prefab.as_str()) || p.absolute {
+            continue;
+        }
+        let rc = Rect::of(&p.prefab, p.at, p.rot);
+        let foot = hm.footing(&p.prefab, p.at, p.rot);
+        // Every half metre under it, edges included.
+        let (nx, nz) = (
+            (rc.half[0] * 4.0).ceil() as usize,
+            (rc.half[1] * 4.0).ceil() as usize,
+        );
+        let (off, at) = (0..=nx)
+            .flat_map(|i| (0..=nz).map(move |k| (i, k)))
+            .map(|(i, k)| {
+                rc.world([
+                    -rc.half[0] + 2.0 * rc.half[0] * i as f32 / nx as f32,
+                    -rc.half[1] + 2.0 * rc.half[1] * k as f32 / nz as f32,
+                ])
+            })
+            .map(|q| ((hm.height(q) - foot).abs(), q))
+            .fold((0.0f32, p.at), |a, b| if b.0 > a.0 { b } else { a });
+        wrecks = (wrecks.0 + 1, wrecks.1.max(off));
+        if off > WRECK_RISE {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "the {} at ({:.0}, {:.0}) has ground {off:.2} m off its foot",
+                    p.prefab, p.at[0], p.at[1]
+                ),
+                at,
+            );
+        }
+    }
+    if wrecks.0 > 0 {
+        r.measures.push(format!(
+            "wrecks: {}, the ground at most {:.2} m off a wreck's foot",
+            wrecks.0, wrecks.1
+        ));
+    }
     // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
     // own placement is padded as any building), so what can go wrong is
     // under the exits' pads, and where their doors open: onto water or a
@@ -1665,6 +1739,18 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 ),
                 *g,
             );
+        }
+    }
+    for g in gates.iter().filter(|_| robots) {
+        for m in map.markers_of(&MarkerKind::Rendezvous) {
+            if dist(*g, m.at) < RV_FROM_GATE {
+                find(
+                    &mut r,
+                    Rule::Patrol,
+                    format!("{} is {:.0} m from the robot Gate", m.name, dist(*g, m.at)),
+                    m.at,
+                );
+            }
         }
     }
     let gate_seen = gates.first().map(|g| flood(&walk, *g));
@@ -1908,6 +1994,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         for (what, at) in c.findings {
             find(&mut r, Rule::Sentry, what, at);
         }
+        let c = crate::map_spotter::check(map, hm, &walk, ins, &named, |p| inside_fence(map, p));
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Spotter, what, at);
+        }
+        let c = crate::map_mines::check(map, hm, &walk, &named);
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Mines, what, at);
+        }
     }
 
     // -- Doors -----------------------------------------------------------------------
@@ -2040,6 +2136,14 @@ mod tests {
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
         );
+    }
+
+    /// Every wreck is a light prop (`VIEW_LIGHT` names them again).
+    #[test]
+    fn every_wreck_is_a_light_prop() {
+        for w in WRECKS {
+            assert!(VIEW_LIGHT.contains(w), "{w} missing from VIEW_LIGHT");
+        }
     }
 
     /// The Training Yard belongs to onboarding: its findings are printed
@@ -2244,6 +2348,49 @@ mod tests {
                 .any(|(what, _)| what.ends_with(&format!("the route to {}", route.to))),
             "{across:?}"
         );
+    }
+
+    /// A wreck on the carriageway is on the road; one across a hillside
+    /// stands with its high side buried; and neither is levelled for, nor
+    /// is the ground round it settled: the land is as it was without it.
+    #[test]
+    fn a_wreck_on_a_road_or_a_slope_is_found() {
+        let wreck = |prefab: &str, at: P2, rot: f32| crate::map::Placement {
+            prefab: prefab.into(),
+            at,
+            rot,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        };
+        let bare = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let mut map = bare.clone();
+        // On the district road in the village, which runs north-south.
+        map.placements.push(wreck("wreck_lada", [3.5, 50.0], 0.0));
+        // Across the side of the radio mast's hill, 18° there.
+        map.placements
+            .push(wreck("wreck_lorry", [-120.0, -220.0], 90.0));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        let found = |rule: Rule, s: &str| {
+            r.findings
+                .iter()
+                .any(|f| f.rule == rule && f.what.contains(s))
+        };
+        assert!(
+            found(Rule::Overlap, "wreck_lada is on the District road"),
+            "{}",
+            r.text()
+        );
+        assert!(
+            found(Rule::Footing, "the wreck_lorry at (-120, -220) has ground"),
+            "{}",
+            r.text()
+        );
+        let was = Heightmap::build(&bare);
+        for at in [[-120.0, -220.0], [-120.0, -226.0], [-110.0, -220.0]] {
+            assert_eq!(hm.height(at), was.height(at), "the ground moved at {at:?}");
+        }
     }
 
     #[test]

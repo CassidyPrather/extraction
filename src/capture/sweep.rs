@@ -48,6 +48,8 @@ pub const GRID: (u32, u32) = (4, 2);
 pub const FOV: f32 = 40.0;
 /// The cameras' near plane.
 pub const NEAR: f32 = 0.03;
+/// How much further than the weather's the sweep's cameras see.
+const CLEAR_AIR: f32 = 8.0;
 /// How far under the subjects the studio floor's top is, metres.
 pub const FLOOR_GAP: f32 = 0.004;
 
@@ -140,10 +142,6 @@ struct Record {
     blockouts: usize,
     /// Meshes touching no other mesh and off the floor, by name.
     floating: Vec<String>,
-    /// The radius the map clears round a prefab on the surface (trees,
-    /// rocks, other prefabs kept out), for comparing with how far it
-    /// reaches. None underground, where there's nothing to clear.
-    clearance: Option<f32>,
     /// Frames it took to load.
     load_frames: u32,
     /// Meshes spawned with it outside its hierarchy (a building's crates,
@@ -193,8 +191,10 @@ struct Sweep {
 }
 
 /// Meshes of the scene round the camera, not of any subject (the sky, the
-/// renderer's warm-up, the sun's shafts).
-const SCENE_MESHES: [&str; 3] = ["Sky dome", "Warm-up shelf", "Light shafts"];
+/// renderer's warm-up, the sun's shafts, and at night the moths round the
+/// lamp, which wildlife spawns afresh whenever they're cleared: the night
+/// sweep once cleared them for ever and never moved on).
+const SCENE_MESHES: [&str; 4] = ["Sky dome", "Warm-up shelf", "Light shafts", "Moth"];
 
 /// Frames the studio settles for when it opens and at each new light
 /// (the sky and fog ease into a new weather).
@@ -350,7 +350,11 @@ fn sweep(
                 ..default()
             };
             cam.viewport = Some(cell(0));
-            commands.entity(cam_e).insert(super::Lens(FOV.to_radians()));
+            // The haze is the valley's, not the subject's: a big subject
+            // framed from 200 m off was lost in it.
+            commands
+                .entity(cam_e)
+                .insert((super::Lens(FOV.to_radians()), super::ClearAir(CLEAR_AIR)));
             let weather = crate::world::sky::Weather::default();
             for i in 1..8 {
                 st.extra.push(
@@ -359,6 +363,7 @@ fn sweep(
                             Name::new(format!("Sweep camera {i}")),
                             SweepCamera,
                             super::Lens(FOV.to_radians()),
+                            super::ClearAir(CLEAR_AIR),
                             Camera {
                                 viewport: Some(cell(i)),
                                 order: i as isize,
@@ -610,12 +615,14 @@ fn sweep(
                 return;
             };
             // A model sits on the floor, its lowest point at the studio's. A
-            // prefab stands where it was built: its origin is its footing,
+            // building stands where it was built: its origin is its footing,
             // the floor its ground (its foundation buried, as in a valley),
             // and the pieces the game spawns round it in world space
             // (crates, boarded windows, wreckage) stay where they belong.
-            let lift = match subject {
-                Subject::Prefab(_) => 0.0,
+            // An underground site is nearly all below its footing, which
+            // would put it under the floor, so it sits on it like a model.
+            let lift = match &subject {
+                Subject::Prefab(p) if !crate::world::underground::ids().any(|u| u == p) => 0.0,
                 _ => STUDIO.y - lo.y,
             };
             if lift != 0.0 {
@@ -832,12 +839,6 @@ fn record(
         meshes,
         blockouts,
         floating,
-        clearance: match s {
-            Subject::Prefab(p) if !crate::world::underground::ids().any(|u| u == p.as_str()) => {
-                Some(extraction_core::map::prefab_clearance(p))
-            }
-            _ => None,
-        },
         load_frames,
         failed,
         left_behind: 0,

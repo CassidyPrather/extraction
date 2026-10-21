@@ -98,12 +98,13 @@ def measure(d, v):
     inside[max(0, y):y + h, max(0, x):x + w] = True
     mask = blob((soft > 0.004) & inside)
     area = int(mask.sum())
+    # Its lamp, if it shows: pixels well above what's behind, anywhere in
+    # its box (a glow over a lattice mast needn't touch the lattice).
+    lamp = int(((diff / np.maximum(b, 0.01) >= LAMP_CONTRAST) & (soft > 0.004) & inside).sum())
     if area == 0:
-        return 0, 0.0, 0, None
+        return 0, 0.0, lamp, None
     c = diff[mask] / np.maximum(b[mask], 0.01)
     contrast = float(np.median(c))
-    # Its lamp, if it shows: the pixels well above the structure's own.
-    lamp = int((c >= LAMP_CONTRAST).sum())
     ys, xs = np.nonzero(mask)
     return area, contrast, lamp, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 

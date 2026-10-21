@@ -54,6 +54,12 @@ pub struct Drone {
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something.
 pub const LOCK_TIME: f32 = 0.9;
+/// A still body shows a drone this share of a moving one (a walker 0.55).
+pub const STILL_SHOWS: f32 = 0.3;
+/// Its rounds scatter this much more (radians) per m/s its target runs
+/// across its line: sprint across open ground and it mostly misses (at
+/// 25 m, a sprint throws them about 3 m wide; a walk about 1).
+pub const CROSSING_SPREAD: f32 = 0.025;
 
 /// A drone began locking on (audio chirps; the eye flares).
 #[derive(Message, Clone, Copy, Debug)]
@@ -111,6 +117,9 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 hearing: 1.0,
                 eye: Vec3::new(0.0, -0.08, -0.22),
             },
+            // From up there it picks out movement more than shape: keep
+            // still when one passes over.
+            super::senses::MotionSight(STILL_SHOWS),
             Awareness::default(),
             Intent::default(),
             Brain::Transit { to: job.site },
@@ -435,9 +444,9 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
+    bodies: Query<&crate::player::Body>,
 ) {
     let dt = time.delta_secs();
-    let now = time.elapsed_secs();
     fighting_since.retain(|e, _| {
         drones
             .get(*e)
@@ -449,11 +458,7 @@ fn drone_guns(
             d.lock = 0.0;
             continue;
         }
-        // A first look at you before it locks on (`walker::SIGHT_BEAT`).
-        let since = *fighting_since.entry(e).or_insert(now);
-        if now - since < super::walker::SIGHT_BEAT {
-            continue;
-        }
+
         if !aware.can_see_target {
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
@@ -472,6 +477,12 @@ fn drone_guns(
             continue;
         };
         if !part.alive() {
+            continue;
+        }
+        // A first look at you before it locks on (`walker::SIGHT_BEAT`).
+        let looked = fighting_since.entry(e).or_insert(0.0);
+        *looked += dt;
+        if *looked < super::walker::SIGHT_BEAT {
             continue;
         }
         if d.lock < LOCK_TIME {
@@ -496,6 +507,14 @@ fn drone_guns(
         if d.burst_left == 0 {
             d.burst_left = 3;
         }
+        // Someone running across its line is hard to hit from up here.
+        let crossing = aware
+            .target
+            .and_then(|p| bodies.get(p).ok())
+            .map_or(0.0, |b| {
+                let v = Vec3::new(b.velocity.x, 0.0, b.velocity.z);
+                (v - to * v.dot(to)).length()
+            });
         *seed = super::senses::shot_seed(&minds, e, &time);
         shots.write(Shot {
             gun: e,
@@ -505,7 +524,7 @@ fn drone_guns(
             speed: 380.0,
             damage: 9.0,
             projectiles: 1,
-            spread: 0.035,
+            spread: 0.035 + CROSSING_SPREAD * crossing,
             recoil: 0.0,
             seed: *seed,
         });
@@ -581,7 +600,19 @@ mod tests {
             );
         }
         queue.apply(app.world_mut());
-        for _ in 0..90 * 15 {
+        // Walking about (a drone picks out movement more than shape: one
+        // that stood stock still might not be made out at all, which is
+        // `mind_tests::keeping_still_beats_a_drone_overhead`).
+        for i in 0..90 * 15 {
+            let a = i as f32 / 90.0 * 0.5;
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0;
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = Vec3::new(-a.sin(), 0.0, a.cos());
             app.update();
             if app.world().resource::<Heard>().shot.is_some() {
                 break;

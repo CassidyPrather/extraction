@@ -31,6 +31,13 @@ pub enum Surface {
 /// A boxcar's bogie centres, metres either side of its middle.
 pub const BOGIE: f32 = 4.5;
 
+/// How far a wreck's tyres sit into the plane through the ground under
+/// its four wheels (`map::prefab_wheels`; its model's tyres reach 2 cm
+/// under its origin). The ground twists under four wheels, which can't
+/// all lie in one plane: this leaves the low pair a few cm into it and the
+/// high pair no more than a hair over, both inside 5 cm.
+pub const WRECK_SEAT: f32 = 0.015;
+
 /// Past a road's end the ground rises or falls no more than this in any
 /// half metre: walkable, not a bank (the body steps 0.4 m).
 pub const ROAD_END_LEDGE: f32 = 0.35;
@@ -454,8 +461,13 @@ impl Heightmap {
             }
         }
         // Where people built, the ground was settled: the land the map was
-        // laid out on (no knolls, no gullies) round the buildings.
-        for pl in &map.placements {
+        // laid out on (no knolls, no gullies) round the buildings. Not
+        // round a car wreck: it was left on the verge as the verge was.
+        for pl in map
+            .placements
+            .iter()
+            .filter(|p| !crate::map_lint::WRECKS.contains(&p.prefab.as_str()))
+        {
             let r = crate::map::prefab_clearance(&pl.prefab);
             let lo = [pl.at[0] - r - 8.0, pl.at[1] - r - 8.0];
             let hi = [pl.at[0] + r + 8.0, pl.at[1] + r + 8.0];
@@ -667,6 +679,9 @@ impl Heightmap {
         if let Some((a, b)) = self.bogies(prefab, at, rot_deg) {
             return (a + b) * 0.5;
         }
+        if let Some(h) = self.wheels(prefab, at, rot_deg) {
+            return h.iter().sum::<f32>() * 0.25 + 0.02 - WRECK_SEAT;
+        }
         // The funicular's car is built on the grade through its middle.
         if prefab == "funicular_car" {
             return self.height(at);
@@ -701,11 +716,40 @@ impl Heightmap {
         Some((h(-BOGIE), h(BOGIE)))
     }
 
+    /// The ground under a wreck's four wheels (`map::prefab_wheels`'
+    /// order), where the game's Quat::from_rotation_y(-rot) puts them.
+    fn wheels(&self, prefab: &str, at: P2, rot_deg: f32) -> Option<[f32; 4]> {
+        let w = crate::map::prefab_wheels(prefab)?;
+        let (s, c) = rot_deg.to_radians().sin_cos();
+        Some(w.map(|[lx, lz]| self.height([at[0] + lx * c - lz * s, at[1] + lx * s + lz * c])))
+    }
+
     /// How far a placement pitches nose-up about its local X, radians:
-    /// rolling stock follows the grade, buildings stand level.
+    /// rolling stock follows the grade, a wreck the ground under its
+    /// axles; buildings stand level.
     pub fn pitch(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+        if let (Some(h), Some(w)) = (
+            self.wheels(prefab, at, rot_deg),
+            crate::map::prefab_wheels(prefab),
+        ) {
+            return ((h[2] + h[3] - h[0] - h[1]) * 0.5).atan2(w[2][1] - w[0][1]);
+        }
         self.bogies(prefab, at, rot_deg)
             .map_or(0.0, |(a, b)| (b - a).atan2(2.0 * BOGIE))
+    }
+
+    /// How far a placement rolls about its local Z, radians (its +X side
+    /// up): a wreck takes the ground's fall across its track; everything
+    /// else stands level.
+    pub fn roll(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
+        let (Some(h), Some(w)) = (
+            self.wheels(prefab, at, rot_deg),
+            crate::map::prefab_wheels(prefab),
+        ) else {
+            return 0.0;
+        };
+        let track = (w[1][0] - w[0][0] + w[3][0] - w[2][0]) * 0.5;
+        ((h[1] + h[3] - h[0] - h[2]) * 0.5).atan2(track)
     }
 
     /// Roads are graded after the pads, and a road's fill can rise inside
@@ -1010,6 +1054,55 @@ impl Heightmap {
 mod tests {
     use super::*;
     use crate::map::*;
+
+    /// A car-space point where the game places it: Ry(-rot) after
+    /// Rx(-pitch) after Rz(roll), from the footing (`placement_transform`).
+    fn posed(hm: &Heightmap, p: &Placement, local: [f32; 3]) -> [f32; 3] {
+        let (pitch, roll) = (
+            hm.pitch(&p.prefab, p.at, p.rot),
+            hm.roll(&p.prefab, p.at, p.rot),
+        );
+        let [x, y, z] = local;
+        let (sr, cr) = roll.sin_cos();
+        let (x, y) = (x * cr - y * sr, x * sr + y * cr);
+        let (sp, cp) = (-pitch).sin_cos();
+        let (y, z) = (y * cp - z * sp, y * sp + z * cp);
+        let (sy, cy) = (-p.rot.to_radians()).sin_cos();
+        let (x, z) = (x * cy + z * sy, -x * sy + z * cy);
+        let y0 = hm.footing(&p.prefab, p.at, p.rot) + p.y;
+        [p.at[0] + x, y0 + y, p.at[1] + z]
+    }
+
+    /// Every wreck in every valley stands on its four wheels: each tyre's
+    /// bottom within 5 cm of the ground under it, none in the air.
+    #[test]
+    fn wrecks_stand_on_their_wheels() {
+        let mut bad = Vec::new();
+        let mut n = 0;
+        let yard = [("training_yard", TRAINING_YARD)];
+        for (name, text) in VALLEYS.into_iter().chain(yard) {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            for p in &map.placements {
+                let Some(w) = prefab_wheels(&p.prefab) else {
+                    continue;
+                };
+                n += 1;
+                for [x, z] in w {
+                    let q = posed(&hm, p, [x, -0.02, z]);
+                    let off = q[1] - hm.height([q[0], q[2]]);
+                    if off.abs() > 0.05 {
+                        bad.push(format!(
+                            "{name} {} at ({:.1}, {:.1}): wheel ({x}, {z}) {off:+.3} m",
+                            p.prefab, p.at[0], p.at[1]
+                        ));
+                    }
+                }
+            }
+        }
+        println!("{n} wrecks");
+        assert!(bad.is_empty(), "wrecks off their wheels: {bad:#?}");
+    }
 
     fn flat_map() -> MapDef {
         MapDef {

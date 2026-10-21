@@ -57,6 +57,9 @@ pub const NAMES: &[&str] = &[
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
     crate::robots::sentry::SCENARIO,
+    crate::robots::spotter::SCENARIO,
+    crate::robots::minelayer::SCENARIO,
+    crate::robots::mender::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -565,6 +568,147 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
             ]
+        }
+        crate::robots::mender::SCENARIO | crate::robots::mender::CONTROL => {
+            // A hurt pylon ahead, a mender coming to weld it. The bot
+            // waits for the arc and shoots the mender off it; the control
+            // lets it work.
+            use crate::robots::mender as md;
+            let shoot = name == md::SCENARIO;
+            let mut t = vec![
+                Log(s(if shoot {
+                    "mender: shoot the mender off the machine it's welding"
+                } else {
+                    "mender control: let it weld"
+                })),
+                Setup(md::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("ak74"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Expect(super::Expect::GunRounds(20, 31)),
+                // Off safe.
+                Gun(MacroKind::Mode),
+                Support,
+                // Till it's there and welding.
+                Wait(8.0),
+            ];
+            if shoot {
+                t.extend([
+                    Shoot {
+                        target: Entity::PLACEHOLDER,
+                        shots: 30,
+                    },
+                    Wait(20.0),
+                    Expect(super::Expect::RobotHits(1)),
+                    Expect(super::Expect::Wrecked(1)),
+                    // Shot off before it's done (left to it, it welds 130 or so).
+                    Expect(super::Expect::Counter(md::WELDED, 0, 80)),
+                ]);
+            } else {
+                t.extend([
+                    Wait(20.0),
+                    Expect(super::Expect::Counter(md::WELDED, 100, 100_000)),
+                ]);
+            }
+            t
+        }
+        crate::robots::minelayer::SCENARIO | crate::robots::minelayer::CONTROL => {
+            // A field of mines across the way. The bot walks up to the
+            // first, cuts its lead, goes round the end of the rest and on.
+            // The control walks straight through.
+            use crate::robots::minelayer as ml;
+            let careful = name == ml::SCENARIO;
+            let mut t = vec![
+                Log(s(if careful {
+                    "minefield: spot the first mine, cut it, go round the rest"
+                } else {
+                    "minefield control: straight through"
+                })),
+                Setup(ml::SCENARIO),
+                Wait(1.0),
+            ];
+            if careful {
+                t.extend([
+                    PickUp {
+                        id: s("bolt_cutters"),
+                        side: Side::Right,
+                    },
+                    WalkTo {
+                        to: ml::MINE_PLACEHOLDER,
+                        within: 0.6,
+                    },
+                    Cut { within: 2.0 },
+                    Wait(1.0),
+                    WalkTo {
+                        to: ml::ROUND_PLACEHOLDER,
+                        within: 1.0,
+                    },
+                ]);
+            }
+            t.extend([
+                WalkTo {
+                    to: ml::PAST_PLACEHOLDER,
+                    within: 1.5,
+                },
+                Wait(2.0),
+            ]);
+            if careful {
+                t.extend([
+                    Expect(super::Expect::Counter(ml::DISARMED, 1, 1)),
+                    Expect(super::Expect::Counter(ml::BLOWN, 0, 0)),
+                    Expect(super::Expect::HealthAtLeast(99.0)),
+                ]);
+            } else {
+                t.push(Expect(super::Expect::Counter(ml::BLOWN, 1, 9)));
+            }
+            t
+        }
+        crate::robots::spotter::SCENARIO | crate::robots::spotter::CONTROL => {
+            // Under a spotter's balloon (straight under it is blind), cut
+            // its tether and walk out across the ground it watched: no
+            // call. The control walks out without the cut, and is called.
+            let cut = name == crate::robots::spotter::SCENARIO;
+            let mut t = vec![
+                Log(s(if cut {
+                    "spotter tether: in under a spotter, cut it loose, walk out"
+                } else {
+                    "spotter control: walk out under a spotter's watch"
+                })),
+                Setup(crate::robots::spotter::SCENARIO),
+                Wait(1.0),
+            ];
+            if cut {
+                t.extend([
+                    PickUp {
+                        id: s("bolt_cutters"),
+                        side: Side::Right,
+                    },
+                    Cut { within: 20.0 },
+                    Wait(3.0),
+                ]);
+            }
+            t.extend([
+                WalkTo {
+                    to: crate::robots::spotter::PAST_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(12.0),
+                Expect(if cut {
+                    super::Expect::Counter(crate::robots::spotter::CALLS, 0, 0)
+                } else {
+                    super::Expect::Counter(crate::robots::spotter::CALLS, 1, 9)
+                }),
+                Expect(super::Expect::Alive),
+            ]);
+            t
         }
         crate::onboarding::bot::SCENARIO | crate::onboarding::first_hour::YARD => {
             crate::onboarding::bot::opening()

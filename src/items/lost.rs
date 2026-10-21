@@ -23,6 +23,14 @@
 //! (a third of rods thrown at 25 m/s did). A moving item whose middle is
 //! more than [`SKIN`] under the terrain, and not down a site, is lifted
 //! back onto it at once.
+//!
+//! And new items settle gently: spawned overlapping one another or the
+//! world (a heap of loot rolled onto one spot, a find half in a wall), the
+//! solver pushes them apart, and in a pile those pushes add up: a PPSh
+//! drum, one of ten spawned together, left at 12 m/s. For [`SETTLE`]
+//! seconds a new item moves no faster than [`GENTLE`] (or than it was
+//! spawned moving, if faster); half a second of falling is slower than
+//! that, so a drop is untouched.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -42,6 +50,17 @@ pub const SKIN: f32 = 0.15;
 pub const STRIDE: f32 = 0.05;
 /// How often items are looked at, seconds.
 const EVERY: f32 = 0.25;
+/// Seconds a new item settles for.
+pub const SETTLE: f32 = 0.5;
+/// How fast a settling item may move, m/s.
+pub const GENTLE: f32 = 5.0;
+
+/// A new item, settling: seconds left, and its speed limit meanwhile.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Settling {
+    pub left: f32,
+    pub cap: f32,
+}
 
 /// Where a loose item's middle was after a tick, its speed then, and
 /// which tick (a trail older than the last tick is stale: the item slept,
@@ -59,17 +78,49 @@ impl Plugin for LostItemsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedPostUpdate,
-            (no_tunnelling, ground_skin, recover_lost_items)
+            (
+                settle_new_items,
+                no_tunnelling,
+                ground_skin,
+                recover_lost_items,
+            )
                 .chain()
                 .after(PhysicsSystems::Last),
         );
     }
 }
 
+/// New items spread out of a heap (or out of the wall they spawned in)
+/// at a walk, not a launch.
+fn settle_new_items(
+    mut commands: Commands,
+    time: Res<Time>,
+    new: Query<(Entity, Option<&LinearVelocity>), (Added<Item>, Without<Settling>)>,
+    mut settling: Query<(Entity, &mut Settling, &mut LinearVelocity)>,
+) {
+    for (e, v) in &new {
+        let cap = v.map_or(0.0, |v| v.0.length()).max(GENTLE);
+        commands
+            .entity(e)
+            .try_insert(Settling { left: SETTLE, cap });
+    }
+    let dt = time.delta_secs();
+    for (e, mut s, mut v) in &mut settling {
+        let speed = v.0.length();
+        if speed > s.cap {
+            v.0 *= s.cap / speed;
+        }
+        s.left -= dt;
+        if s.left <= 0.0 {
+            commands.entity(e).remove::<Settling>();
+        }
+    }
+}
+
 /// Whether a world point is down an underground site: over (or less than
 /// `below` under) a site's floor near there, and under its ceiling (a
 /// stair's open to the sky).
-fn down_a_site(zone: &Zone, p: Vec3, below: f32) -> bool {
+pub(crate) fn down_a_site(zone: &Zone, p: Vec3, below: f32) -> bool {
     for site in ug::placed(&zone.map) {
         let Some(r) = ug::raster(&site.id) else {
             continue;

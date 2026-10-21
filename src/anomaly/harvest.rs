@@ -93,6 +93,13 @@ pub fn heat(
     mut gripped: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
+    // Only stones hot and in a hand now: one let go (or gone) starts
+    // afresh, rather than carrying its grip's time to the next hand.
+    gripped.retain(|e, _| {
+        stones
+            .get(*e)
+            .is_ok_and(|(.., hot, held)| hot.is_some() && held.is_some())
+    });
     let coals: Vec<(Vec3, f32)> = burners
         .iter()
         .filter(|(a, _)| a.kind == AnomalyKind::Burner)

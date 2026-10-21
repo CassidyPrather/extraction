@@ -82,7 +82,7 @@
         // Coldharbour's bench.
         Plateau(polygon: [(-120.0, -20.0), (40.0, -20.0), (40.0, 55.0), (-120.0, 55.0)], blend: 30.0),
         // The Gate's yard in the cirque.
-        Plateau(polygon: [(200.0, -255.0), (232.0, -255.0), (232.0, -225.0), (200.0, -225.0)], height: Some(131.0), blend: 30.0),
+        Plateau(polygon: [(220.0, -257.0), (252.0, -257.0), (252.0, -227.0), (220.0, -227.0)], height: Some(132.0), blend: 30.0),
         // The valley station's yard.
         Plateau(polygon: [(64.0, 200.0), (84.0, 200.0), (84.0, 228.0), (64.0, 228.0)], blend: 8.0),
         // Level ground at their doors (the lint's door rule): the roadmen's top hut, the top station, the chapel, the adit house, the snow survey hut, the observatory.
@@ -191,7 +191,7 @@
         // upper slopes.
         (
             name: "Gate track", kind: Dirt, width: 5.0, smoothing: 35.0,
-            points: [(205.0, -238.0), (180.0, -232.0), (145.0, -218.0), (118.0, -180.0), (80.0, -150.0), (20.0, -150.0)],
+            points: [(225.0, -240.0), (200.0, -236.0), (180.0, -232.0), (145.0, -218.0), (118.0, -180.0), (80.0, -150.0), (20.0, -150.0)],
         ),
     ],
 
@@ -255,6 +255,9 @@
         // The ore mill, stepped down the spur; the adit house over it.
         (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, y: 90.0, absolute: true, tag: "ore_mill"),
         (prefab: "rail_shed", at: (135.0, -44.0), rot: 270.0, tag: "adit_house"),
+        // Coldharbour's mine in the knoll: down by the adit house, out
+        // onto the mill's back apron (assets/underground).
+        (prefab: "adit_rime", at: (160.0, -55.0), rot: 180.0),
 
         // The tip road's end: the compressor house.
         (prefab: "pump_station", at: (238.0, -60.0), rot: 180.0, tag: "compressor_house"),
@@ -262,6 +265,11 @@
         // The upper slopes: the avalanche watchers' hut, the snow survey.
         (prefab: "shed", at: (-25.0, -95.0), rot: 20.0, tag: "snow_survey"),
         (prefab: "ranger_tower", at: (60.0, -170.0), rot: 340.0, tag: "avalanche_watch"),
+
+        // The miners' barracks on the west slopes, by the miners' path:
+        // where the single men lived, out of the settlement.
+        (prefab: "house_brick", at: (-168.0, -50.0), rot: 90.0, tag: "barracks"),
+        (prefab: "shed", at: (-170.0, -32.0), rot: 90.0, tag: "barracks_store"),
 
         // The bivouac under the summit, on the miners' path.
         (prefab: "shed", at: (-94.0, -168.0), rot: 290.0, tag: "bivouac"),
@@ -274,7 +282,7 @@
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
-        (prefab: "robot_gate", at: (215.0, -240.0), rot: 320.0),
+        (prefab: "robot_gate", at: (235.0, -242.0), rot: 320.0),
     ],
 
     markers: [
@@ -284,8 +292,8 @@
         (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
         (kind: Rendezvous, at: (70.0, -262.0), name: "The col"),
         (kind: Rendezvous, at: (238.0, -28.0), name: "Tip road"),
-        (kind: RobotGate, at: (215.0, -240.0), rot: 320.0, name: "The Gate"),
-        (kind: Sentry(arc: 140.0, power: Some((224.9, -231.9))), at: (215.0, -222.0), rot: -15.0, name: "Gate sentry"),
+        (kind: RobotGate, at: (235.0, -242.0), rot: 320.0, name: "The Gate"),
+        (kind: Sentry(arc: 90.0, power: Some((250.9, -251.9))), at: (241.0, -242.0), rot: -15.0, name: "Gate sentry"),
         (kind: ArtifactField, at: (195.0, -160.0), name: "The tarn"),
         (kind: ArtifactField, at: (-55.0, -115.0), name: "The crown hole"),
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
@@ -308,6 +316,7 @@
         (kind: Poi, at: (60.0, -170.0), name: "Avalanche watch"),
         (kind: Poi, at: (20.0, -245.0), name: "The col"),
         (kind: Poi, at: (-94.0, -168.0), name: "The bivouac"),
+        (kind: Poi, at: (-160.0, -45.0), name: "The barracks"),
         (kind: Poi, at: (-208.0, -210.0), name: "The observatory"),
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),

@@ -411,6 +411,71 @@ burner, well); a hand pulling its cell through the headset path
 behind a well while a heavy comes for it); `--gallery
 heavy[:open|:hot|:down]` and `docs/shots/heavy/`.
 
+### The sentry: learn it, then walk past it
+
+A turret head on a 4.6 m mast at the Gates, the Depot's mouths and key
+pits (`robots/sentry.rs`, its rules `extraction_core::sentry`; placed as
+`MarkerKind::Sentry` by Map design, held to `map_sentry`'s lint). It is
+built to be got round, not shot down:
+
+- **Its sweep is learnable.** End to end at 24°/s with a pause at each end;
+  **behind it is blind**: its head can't turn past its arc.
+- **It warns**: a chirp, then a second before the first round of a burst;
+  out of sight two seconds and it has to chirp again.
+- **It's drawn**: a thrown can's clatter, a hot artifact or a mirror shard
+  flying past turns it for five seconds.
+- **It runs on a cable** to a junction box behind it: bolt cutters through
+  any stretch, or the box wrecked, and it's dark. An EMP blinds it; the
+  recall cuts the depots off from it. A heavy lured into its arc takes its
+  rounds. At night its searchlight sweeps with it.
+- Wrecked (its head shot through), it hangs off its mast, a landmark.
+
+Checks: the rules' tests; the body's (sweep, chirp before fire, never
+behind, a cut dark, real bolt cutters on its cable, a noise draws it, a
+heavy in its fire); `sentry_cable` (a bot gets behind one, cuts the cable,
+walks through its arc unhurt; without the cut it's shot down).
+
+### The spotter, the minelayer and the mender
+
+Three more of the Custodian's machines, none armed, each with a tell, a
+weakness, salvage and a scenario.
+
+**The spotter** (`robots/spotter.rs`, `extraction_core::spotter`): an
+observation balloon 24 m up on a tether, a camera under it turning a slow
+circle (40 s a turn, a 100° view). It needs 3.5 s of you in view for a fix;
+its beacon blinks faster and goes red as the fix builds, and a full fix
+sounds a klaxon that brings robots near it to look and queues a response
+to where you stood. *Weakness:* straight under it is blind (about 20 m
+round the winch): get to the winch and cut the tether, or wreck the winch,
+and it rises and drifts off downwind. *Salvage:* hole the envelope and it
+sinks to the ground: a gas valve, fabric, its eye if whole. Placed by
+`MarkerKind::Spotter`. Scenario `spotter_tether` (no call);
+`spotter_control` walks out under its watch and is called.
+
+**The minelayer** (`robots/minelayer.rs`, `extraction_core::minelayer`):
+a slow tracked crawler that sets out from the gate five minutes into a
+raid and lays a staggered line of four pressure mines across the way at
+two points of interest. *Tell:* the grind of its tracks, the chunk of its
+chute; each mine blinks red every two seconds in a ring of turned earth.
+A mine arms after 4 s, clicks under 25 kg and goes off 0.35 s later.
+*Disarm* by cutting its lead with bolt cutters or holding a hand on its
+prong for 2.5 s: either way a safe `pressure_mine` to sell; or shoot it
+from out of its 4 m reach. *Weakness:* its striped hopper: hole it and the
+mines in it cook off with it. Seen, it turns tail and drops a mine
+behind it. *Salvage:* its cell, a servo, and the mines left in a whole
+hopper. Scenario `minefield` (spot, cut, go round, unhurt);
+`minefield_control` walks straight through and sets one off.
+
+**The mender** (`robots/mender.rs`, `extraction_core::mender`): a small
+quadcopter with a welding arm, sent from the gate when the valley's
+machines are hurt (120 hp missing; two a raid). It picks the worst hurt
+near at hand and welds back 9 hp a second, only what's still there.
+*Tell:* the arc's blue-white flicker, seen a valley off. *Weakness:* it
+hangs still and low beside the part it welds; shoot its arm off and it
+can mend nothing. *Salvage:* as a drone, and a kit of spare parts.
+Scenario `mender_weld` (shoot it off a hurt pylon);
+`mender_control` lets it weld the pylon whole.
+
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover
@@ -519,14 +584,31 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   - The Nagant flips off its high bore; the PM is snappy.
   - The flare pistol is a long, slow shove.
   - The TOZ-8 .22 barely moves.
+- **A cupped pistol** (`layout::cup`): a handgun has a place under its
+  grip for the other palm. Cupped there, it counts as two hands: a stiffer
+  spring and more mass behind it. It steadies the gun without aiming it,
+  so the gun hand still points it. A PM's kick drops from 313 to 82 mrad.
+  Shot: `docs/shots/weapon-feel/pistol_cupped.png`.
+- **Held out or tucked in**: away from the chest a gun's weight tells in
+  its sway. `SWAY_REACH` is 1.6 mrad per kg at arm's length (65 cm from
+  the chest), falling to nothing tucked in at 30 cm. A second hand halves
+  it, and a stock against the shoulder bears it.
+- **The sling** (`weapons/carry.rs`): a gun you've slung once stays on
+  its sling. Let it go anywhere, not thrown, and the sling catches it back
+  where it hangs instead of dropping it. Thrown, or put in a bag or someone
+  else's hands, it's off the sling.
+- **Bumps**: a held gun carried into a wall, a doorframe or a tree is
+  stopped by it. The muzzle is knocked back off it, the hands feel what it
+  hit by material, and a hard knock (0.8 m/s or more) is heard
+  (`GunBumped`). A gun's collider is its own shape, out to the muzzle.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
-  muzzle path. Each is held as a player would: two hands where there's
-  a place for the second, shouldered where there's a stock. The trigger
+  muzzle path. Each is held as a player would: two hands (a handgun
+  cupped), shouldered where there's a stock. The trigger
   is held for half a second on its most automatic setting. The gauge:
   - Each pair of guns must differ in peak rise and its timing, peak push,
     the climb and walk left at the end, and shots, by at least 8.
-  - Each must stay under 0.14 rad of climb with two hands, or 0.4 for a
-    pistol in one.
+  - Each must stay under 0.14 rad of climb with two hands. A cup must at
+    least halve a handgun's kick in one hand.
   - A single shot must be back within a third of its peak by the end.
   - A new gun in the catalog is measured with the rest.
   - `cargo test every_gun_has_its_own -- --nocapture` prints the table.

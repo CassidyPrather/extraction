@@ -15,7 +15,9 @@
 //! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
 //! off: it drags itself across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
-//! hound running across), `knockdown` (a heavy round into a walker's
+//! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
+//! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
+//! `knockdown` (a heavy round into a walker's
 //! side: down, and up again), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
@@ -50,6 +52,10 @@ impl Plugin for ReelPlugin {
 /// Frames to let things settle before the first shot.
 const WARMUP: u32 = 45;
 
+/// Which damage a `tells` robot takes.
+#[derive(Component)]
+struct TellCase(u8);
+
 #[derive(Default)]
 struct Reel {
     frame: u32,
@@ -76,8 +82,8 @@ fn reel(
     mut zaps: MessageWriter<super::indoor::CrawlerZap>,
     mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
+    cases: Query<&TellCase>,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -192,6 +198,9 @@ fn reel(
                 // Calm walkers at 30, 60 and 80 m, and one that sees you
                 // beside the far one: do their eyes read after dark?
                 let mut first = None;
+                // Bearings taken: a far walker straight behind a near one
+                // is hidden by it.
+                let mut taken: Vec<Vec3> = Vec::new();
                 for (k, (d, x, level)) in [
                     (30.0f32, -2.0f32, 0u8),
                     (60.0, 3.0, 0),
@@ -201,8 +210,45 @@ fn reel(
                 .into_iter()
                 .enumerate()
                 {
-                    let p = eye + flat * d + right * x;
-                    let at = zone.on_ground(p.x, p.z);
+                    // Swung round (up to 40°, inside the frame) until the
+                    // ground between doesn't hide it: any map, any camera.
+                    let tries: Vec<Vec3> = (0..=32)
+                        .map(|i| {
+                            (if i % 2 == 0 { 1.0 } else { -1.0 }) * (i / 2 + i % 2) as f32 * 2.5
+                        })
+                        .map(|deg: f32| {
+                            let b = (x / d).atan() + deg.to_radians();
+                            let dir = flat * b.cos() + right * b.sin();
+                            let p = eye + dir * d;
+                            zone.on_ground(p.x, p.z)
+                        })
+                        .collect();
+                    let seen = |at: &Vec3| hidden(&zone, eye, *at + Vec3::Y * 1.1);
+                    let free = |at: &Vec3| {
+                        let dir = (*at - eye).with_y(0.0).normalize_or_zero();
+                        taken
+                            .iter()
+                            .all(|t| t.angle_between(dir).to_degrees() > 5.0)
+                    };
+                    // The nearest swing that's clear and not behind another,
+                    // else the least hidden.
+                    let at = tries
+                        .iter()
+                        .copied()
+                        .find(|at| seen(at) < 0.0 && free(at))
+                        .unwrap_or_else(|| {
+                            tries
+                                .iter()
+                                .copied()
+                                .min_by(|a, b| seen(a).total_cmp(&seen(b)))
+                                .unwrap()
+                        });
+                    info!(
+                        "reel eyesfar: walker {k} at {:.0} m, {at:.1} (hidden by {:.2} m)",
+                        at.distance(eye),
+                        hidden(&zone, eye, at + Vec3::Y * 1.1).max(0.0)
+                    );
+                    taken.push((at - eye).with_y(0.0).normalize_or_zero());
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
                     commands
                         .entity(w)
@@ -248,6 +294,30 @@ fn reel(
                     ));
                 });
                 e
+            }
+            "tells" | "tellsbefore" => {
+                // Damage at range (20-40 m): a walker on a shot leg, one
+                // with its eye shot out, one with a failing core, and a
+                // drone with a rotor hit (`tellsbefore`: the same, whole).
+                let mut first = None;
+                for (k, (d, x)) in [(24.0f32, -6.0f32), (30.0, 0.0), (36.0, 6.0)]
+                    .into_iter()
+                    .enumerate()
+                {
+                    let p = eye + flat * d + right * x;
+                    let at = zone.on_ground(p.x, p.z);
+                    let w = spawn_walker(&mut commands, &zone, at, job(at));
+                    commands.entity(w).insert(TellCase(k as u8));
+                    first.get_or_insert(w);
+                }
+                let d = eye + flat * 26.0 + right * 2.5 + Vec3::Y * 4.0;
+                let drone = spawn_drone(&mut commands, d, job(d));
+                commands
+                    .entity(drone)
+                    .remove::<Senses>()
+                    .remove::<Brain>()
+                    .insert(TellCase(3));
+                first.unwrap()
             }
             "rubble" => {
                 // A heap of broken blocks across its way (Destruction's
@@ -346,6 +416,8 @@ fn reel(
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
+                // The lame one walks across, so it limps.
+                "tells" | "tellsbefore" => vec![p(eye + flat * 24.0 + right * 6.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
@@ -423,6 +495,33 @@ fn reel(
                 recoil: 0.0,
                 seed: frame as u64,
             });
+        }
+    }
+    // The damage for `tells`, once they're up: by case, the leg, the eye,
+    // the core, the drone's rotor.
+    if what == "tells" && frame == 5 {
+        for (e, mut p, gt) in &mut parts {
+            let Ok(case) = cases.get(p.robot) else {
+                continue;
+            };
+            let hurt = match (case.0, p.role) {
+                (0, PartRole::Leg(1)) => Some(0.3),
+                (1, PartRole::Sensor) => Some(0.0),
+                (2, PartRole::Core) => Some(0.2),
+                (3, PartRole::Rotor(1)) => Some(0.15),
+                _ => None,
+            };
+            if let Some(h) = hurt {
+                p.hp = p.max_hp * h;
+                if h == 0.0 {
+                    destroyed.write(PartDestroyed {
+                        robot: p.robot,
+                        part: e,
+                        role: p.role,
+                        at: gt.translation(),
+                    });
+                }
+            }
         }
     }
     // Shot about but going: plates on their last bolt, the core at a fifth
@@ -508,4 +607,15 @@ fn reel(
             }
         },
     );
+}
+
+/// How far the ground between `eye` and `to` rises into the line of
+/// sight, at its worst (m; negative: it's clear by that much).
+fn hidden(zone: &Zone, eye: Vec3, to: Vec3) -> f32 {
+    (1..40)
+        .map(|i| {
+            let p = eye.lerp(to, i as f32 / 40.0);
+            zone.ground(p.x, p.z) - (p.y - 0.2)
+        })
+        .fold(f32::MIN, f32::max)
 }
