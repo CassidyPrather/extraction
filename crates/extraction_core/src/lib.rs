@@ -35,6 +35,7 @@ pub mod map_spotter;
 pub mod map_surge;
 pub mod melee;
 pub mod mender;
+pub mod plough;
 pub mod minelayer;
 pub mod music;
 pub mod nav;
