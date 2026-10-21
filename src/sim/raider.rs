@@ -628,6 +628,15 @@ pub struct Scene<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+    vent_levers: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::furnace::VentLever,
+            &'static GlobalTransform,
+        ),
+    >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     breeds: Query<'w, 's, &'static crate::robots::Breed>,
     spatial: SpatialQuery<'w, 's>,
@@ -783,11 +792,23 @@ pub fn think(
     scene: Scene,
     mut log: ResMut<SimLog>,
     mut locks: MessageReader<crate::robots::drone::DroneLock>,
+    mut vented: MessageReader<crate::world::furnace::Vented>,
 ) {
     let dt = scene.time.delta_secs();
     let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
+    let vented: Vec<(Entity, usize)> = vented.read().map(|v| (v.site, v.vent)).collect();
     for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
+        // A flue vented: its heat's cells are a way again.
+        for (site, vent) in &vented {
+            for plan in r.plans.iter_mut().filter(|p| p.entity == *site) {
+                let zones = extraction_core::underground::layout(&plan.name)
+                    .and_then(|l| l.vents.get(*vent))
+                    .map(|v| v.zones.clone())
+                    .unwrap_or_default();
+                plan.vent(&zones);
+            }
+        }
         if r.stage == Stage::Done || health.down {
             continue;
         }
@@ -2655,6 +2676,42 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
     }
 }
 
+/// How long to give a vented flue to cool before going through (s): it's
+/// past scorching in five, and gentle by twenty.
+const VENT_WAIT: f32 = 20.0;
+
+/// To a local point a site's heat shuts off: the way by one of its vent
+/// levers (closed still), pulled, a wait while it cools, then on through.
+fn vent_first(scene: &Scene, plan: &BuildingPlan, pos: Vec3, goal: Vec2) -> Option<Vec<Task>> {
+    if plan.hot.is_empty() {
+        return None;
+    }
+    let l = extraction_core::underground::layout(&plan.name)?;
+    for (lever, v, gt) in scene
+        .vent_levers
+        .iter()
+        .filter(|(_, v, _)| v.site == plan.entity && !v.open)
+    {
+        let Some(def) = l.vents.get(v.vent) else {
+            continue;
+        };
+        let mut cool = plan.clone();
+        cool.vent(&def.zones);
+        let at = gt.translation();
+        let Some(mut tasks) = indoor(plan, pos, plan.to_local(at).xz(), 0.5) else {
+            continue;
+        };
+        let Some(on) = indoor(&cool, at, goal, 0.3) else {
+            continue;
+        };
+        tasks.push(Task::Press(lever));
+        tasks.push(Task::Wait(VENT_WAIT));
+        tasks.extend(on);
+        return Some(tasks);
+    }
+    None
+}
+
 /// Indoors: `metres` along the building's plan from `pos` toward `to`
 /// (world x, z), doors opened on the way. None outdoors, or with no way.
 fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>> {
@@ -2860,6 +2917,9 @@ fn take_item(
                     let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
                     indoor(plan, pos, near, 0.3)?
                 }
+                // Behind heat nothing crosses: vent it first (it clangs),
+                // unless careful.
+                None if r.traits.name != "cautious" => vent_first(scene, plan, pos, goal)?,
                 None => return None,
             };
             // Behind a door on an underground site's power: throw the
