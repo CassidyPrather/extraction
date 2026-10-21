@@ -416,5 +416,5 @@ Empties:
 - `pt_bed`: lorry (0, 1.18, 2.03).
 
 The body boxes include mirrors and bumpers. For a collider, shrink them
-a little, or use the lorry's cab and bed as two boxes: the cab at about
-z -2.8..-0.5, the bed at z -0.4..3.6 with its top at y 1.2.
+a little. The lorry's bed floor is at y 1.18 (`pt_bed`), well below the
+box's top.
