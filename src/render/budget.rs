@@ -1657,7 +1657,12 @@ mod tests {
     #[test]
     #[ignore = "timing: cargo test --lib busy -- --ignored --nocapture"]
     fn busy_moments() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
             for (name, mean, p99) in stats {
@@ -1679,6 +1684,11 @@ mod tests {
     #[test]
     fn cinder_works_holds_the_budget() {
         holds("cinder_works");
+    }
+
+    #[test]
+    fn sallow_reservoir_holds_the_budget() {
+        holds("sallow_reservoir");
     }
 
     #[test]
