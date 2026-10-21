@@ -102,6 +102,36 @@ pub fn key_under(p: Vec3) -> Option<u8> {
         .find(|k| (p.x - key_x(*k)).abs() <= WHITE * 0.5)
 }
 
+/// An upright piano standing here (its origin on the floor under its
+/// middle, its keyboard to -Z).
+pub fn spawn(commands: &mut Commands, at: Transform) -> Entity {
+    use avian3d::prelude::*;
+    commands
+        .spawn((
+            Name::new("Piano"),
+            Piano::default(),
+            at,
+            Visibility::default(),
+            RigidBody::Static,
+            // The case behind the keys, and the keybed under them: the
+            // hands go over the keys, not into a box.
+            Collider::compound(vec![
+                (
+                    Vec3::new(0.0, 0.6, 0.1),
+                    Quat::IDENTITY,
+                    Collider::cuboid(1.45, 1.2, 0.38),
+                ),
+                (
+                    Vec3::new(0.0, 0.33, -0.14),
+                    Quat::IDENTITY,
+                    Collider::cuboid(1.45, 0.66, 0.2),
+                ),
+            ]),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+        ))
+        .id()
+}
+
 /// Fingertips push keys down; a key sounds as it passes most of its
 /// travel, with the speed it went, and is damped as the finger lifts.
 pub(super) fn play_pianos(

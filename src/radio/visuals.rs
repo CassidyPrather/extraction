@@ -128,10 +128,182 @@ fn turn_knobs(
     }
 }
 
+/// A prop whose model is still loading.
+#[derive(Component)]
+struct PendingProp(Handle<bevy::gltf::Gltf>);
+
+/// Props drawn from their model (`models/props/<name>.glb`): the
+/// gramophone and the piano. Their nodes, named, are what moves.
+fn dress_props(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+    grams: Query<Entity, Added<super::gramophone::Gramophone>>,
+    pianos: Query<Entity, Added<super::piano::Piano>>,
+) {
+    for (e, name) in grams
+        .iter()
+        .map(|e| (e, "gramophone"))
+        .chain(pianos.iter().map(|e| (e, "upright_piano")))
+    {
+        commands
+            .entity(e)
+            .insert(PendingProp(server.load(format!("models/props/{name}.glb"))));
+    }
+}
+
+fn spawn_nodes(
+    commands: &mut Commands,
+    parent: Entity,
+    nodes: Vec<crate::models::ModelNode>,
+    mat: &mut impl FnMut(Option<&str>) -> Handle<StandardMaterial>,
+) {
+    for mut node in nodes {
+        let children = std::mem::take(&mut node.children);
+        let n = commands
+            .spawn((
+                Name::new(node.name.clone()),
+                node.transform,
+                Visibility::default(),
+                ChildOf(parent),
+            ))
+            .id();
+        crate::models::spawn_primitives_ranged(commands, n, &node, None, &mut *mat);
+        spawn_nodes(commands, n, children, mat);
+    }
+}
+
+fn finish_props(
+    mut commands: Commands,
+    pending: Query<(Entity, &PendingProp)>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    nodes: Res<Assets<bevy::gltf::GltfNode>>,
+    gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
+    mut model_mats: ResMut<crate::models::ModelMaterials>,
+    mut lib: ResMut<crate::render::materials::MaterialLibrary>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::models::{ModelState, Models, model_nodes};
+    for (e, p) in &pending {
+        let gltf = match Models::state(&p.0, &server, &gltfs) {
+            ModelState::Loading => continue,
+            ModelState::Failed => {
+                warn!("a music prop's model failed to load");
+                commands.entity(e).remove::<PendingProp>();
+                continue;
+            }
+            ModelState::Ready(g) => g,
+        };
+        commands.entity(e).remove::<PendingProp>();
+        let model = model_nodes(gltf, &nodes, &gltf_meshes);
+        let mut mat = |name: Option<&str>| {
+            model_mats.get(name.unwrap_or("Wood"), &mut lib, &server, &mut materials)
+        };
+        spawn_nodes(&mut commands, e, model, &mut mat);
+    }
+}
+
+/// The platter turns with the spring, the arm swings over the record when
+/// it's down, the crank turns a little each push.
+fn animate_gramophones(
+    mut commands: Commands,
+    grams: Query<(Entity, &super::gramophone::Gramophone)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&Rest>)>,
+    time: Res<Time>,
+    mut arm: Local<std::collections::HashMap<Entity, f32>>,
+    mut crank: Local<std::collections::HashMap<Entity, f32>>,
+) {
+    let dt = time.delta_secs();
+    for (e, g) in &grams {
+        let a = arm.entry(e).or_default();
+        let want = if g.arm_down { 0.55 } else { 0.0 };
+        *a += (want - *a) * (dt * 4.0).min(1.0);
+        let a = *a;
+        // The crank shows the spring: a turn per push's worth.
+        let c = crank.entry(e).or_default();
+        let target = g.spring / super::gramophone::PER_TURN * std::f32::consts::TAU;
+        *c += (target - *c) * (dt * 6.0).min(1.0);
+        let c = *c;
+        for n in children.iter_descendants(e) {
+            let Ok((name, mut t, rest)) = nodes.get_mut(n) else {
+                continue;
+            };
+            let name = name.as_str();
+            if !matches!(name, "platter" | "tonearm" | "crank") {
+                continue;
+            }
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(n).insert(Rest(*t));
+                    *t
+                }
+            };
+            match name {
+                // 78 turns a minute at full speed.
+                "platter" => t.rotate_local_y(-g.speed * 78.0 / 60.0 * std::f32::consts::TAU * dt),
+                "tonearm" => t.rotation = rest.rotation * Quat::from_rotation_y(a),
+                _ => t.rotation = rest.rotation * Quat::from_rotation_x(c),
+            }
+        }
+    }
+}
+
+/// Keys go down under the fingers that push them, pivoting at the back.
+fn animate_pianos(
+    mut commands: Commands,
+    pianos: Query<(Entity, &super::piano::Piano)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&Rest>)>,
+) {
+    for (e, p) in &pianos {
+        for n in children.iter_descendants(e) {
+            let Ok((name, mut t, rest)) = nodes.get_mut(n) else {
+                continue;
+            };
+            let Some(key) = name
+                .as_str()
+                .strip_prefix("key_")
+                .and_then(|k| k.parse::<u8>().ok())
+            else {
+                continue;
+            };
+            let depth = p
+                .depth
+                .get(key.wrapping_sub(super::piano::LOW) as usize)
+                .copied()
+                .unwrap_or(0.0);
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(n).insert(Rest(*t));
+                    *t
+                }
+            };
+            // The front goes down: about the back pivot, front at -Z.
+            let want = rest.rotation * Quat::from_rotation_x(-depth / 0.15);
+            if t.rotation.angle_between(want) > 1e-4 {
+                t.rotation = want;
+            }
+        }
+    }
+}
+
 pub struct MusicVisualsPlugin;
 
 impl Plugin for MusicVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (animate_decks, turn_knobs));
+        app.add_systems(
+            Update,
+            (
+                animate_decks,
+                turn_knobs,
+                dress_props,
+                finish_props,
+                animate_gramophones,
+                animate_pianos,
+            ),
+        );
     }
 }

@@ -38,6 +38,9 @@
             Item(id: "tape_hymns", weight: 1.0),
             Item(id: "tape_lodge", weight: 1.0),
             Item(id: "tape_duty", weight: 1.0),
+            Item(id: "record_augustin", weight: 0.4),
+            Item(id: "record_entertainer", weight: 0.4),
+            Item(id: "record_susanna", weight: 0.4),
         ]),
         "ammo_common": (rolls: (1, 2), entries: [
             Item(id: "ammo_9x18", weight: 3.0),

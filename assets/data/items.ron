@@ -469,6 +469,24 @@
             tags: ["plastic", "tape"],
         ),
         (
+            id: "record_augustin", dims: Some((0.254, 0.004, 0.254)), name: "Record: O du lieber Augustin",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a waltz.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
+        ),
+        (
+            id: "record_entertainer", dims: Some((0.254, 0.004, 0.254)), name: "Record: The Entertainer",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a rag.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
+        ),
+        (
+            id: "record_susanna", dims: Some((0.254, 0.004, 0.254)), name: "Record: Oh! Susanna",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a dance orchestra.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
+        ),
+        (
             id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
             category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
             tags: ["glass", "metal"],

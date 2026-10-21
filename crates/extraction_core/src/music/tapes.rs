@@ -128,6 +128,69 @@ pub const TAPES: &[TapeDef] = &[
     },
 ];
 
+/// The 78s: one tune a side, and the side that plays is the one up.
+#[derive(Debug)]
+pub struct RecordDef {
+    pub item: &'static str,
+    pub tune: &'static str,
+    pub label: &'static str,
+}
+
+pub const RECORDS: &[RecordDef] = &[
+    RecordDef {
+        item: "record_augustin",
+        tune: "waltz_folk",
+        label: "O du lieber Augustin - Waltz",
+    },
+    RecordDef {
+        item: "record_entertainer",
+        tune: "ragtime",
+        label: "The Entertainer - Rag",
+    },
+    RecordDef {
+        item: "record_susanna",
+        tune: "dance_band",
+        label: "Oh! Susanna - Dance Orchestra",
+    },
+];
+
+pub fn record(item: &str) -> Option<&'static RecordDef> {
+    RECORDS.iter().find(|r| r.item == item)
+}
+
+/// A record's playing time (s): the tune, a lead-in groove, and the
+/// run-out's few seconds of crackle.
+pub fn record_length(def: &RecordDef) -> f32 {
+    tunes::get(def.tune).map_or(0.0, |t| t.length()) + 3.0 + 4.0
+}
+
+/// A record as the horn plays it: two seconds of lead-in groove, the
+/// tune, the run-out, through a gramophone, levelled like a tape.
+pub fn render_record(def: &RecordDef, sr: f32) -> Vec<f32> {
+    let seed = def
+        .item
+        .bytes()
+        .fold(7u64, |h, b| h.wrapping_mul(31) ^ b as u64);
+    let len = record_length(def);
+    let mut out = vec![0.0f32; (len * sr) as usize];
+    if let Some(t) = tunes::get(def.tune) {
+        let x = synth::render(&t.parts(seed), sr, seed);
+        let start = (3.0 * sr) as usize;
+        for (i, s) in x.iter().enumerate() {
+            if let Some(o) = out.get_mut(start + i) {
+                *o = *s;
+            }
+        }
+    }
+    let level = synth::rms(&out).max(1e-6);
+    for s in out.iter_mut() {
+        *s *= 0.1 / level;
+    }
+    media::gramophone(&mut out, sr, seed);
+    out.truncate((len * sr) as usize);
+    out
+}
+
 pub fn get(item: &str) -> Option<&'static TapeDef> {
     TAPES.iter().find(|t| t.item == item)
 }
@@ -214,6 +277,15 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), TAPES.len());
+    }
+
+    #[test]
+    fn every_record_is_a_tune() {
+        for r in RECORDS {
+            assert!(r.item.starts_with("record_"));
+            assert!(tunes::get(r.tune).is_some(), "{}", r.tune);
+            assert!(record_length(r) > 20.0);
+        }
     }
 
     /// The music is where the side says, and the run-out is hiss.

@@ -57,11 +57,12 @@ pub enum Render {
     Station(&'static str, u64),
     /// The hiss between stations.
     Static,
-    /// A record on the gramophone, piano and organ pieces: for the audit
-    /// until the instruments in the world play their own.
-    Gramophone(usize),
+    /// Piano and organ pieces, for the audit: what the instruments in the
+    /// world sound like played.
     PianoTune(usize),
     OrganTune(usize),
+    /// A 78, by its item id, as the horn plays it.
+    Record(&'static str),
     /// One piano note, struck firmly and held (the dampers are the
     /// player's volume): every third key, the rest shifted to it.
     PianoKey(u8),
@@ -100,13 +101,11 @@ impl Render {
                 .unwrap_or_default(),
             Render::Motor => motor_loop(sr),
             Render::Static => media::static_bed((24.0 * sr) as usize, sr, 0x57),
-            Render::Gramophone(i) => {
-                let mut x = tune_on(RECORDS[i % RECORDS.len()], sr);
-                media::gramophone(&mut x, sr, *i as u64);
-                x
-            }
             Render::PianoTune(i) => tune_on(PIANO[i % PIANO.len()], sr),
             Render::OrganTune(i) => tune_on(ORGAN[i % ORGAN.len()], sr),
+            Render::Record(id) => tapes::record(id)
+                .map(|r| tapes::render_record(r, sr))
+                .unwrap_or_default(),
             Render::PianoKey(k) => {
                 use extraction_core::music::{mml::Note, synth};
                 let part = synth::Part {
@@ -158,8 +157,7 @@ fn tune_on(id: &str, sr: f32) -> Vec<f32> {
         .unwrap_or_default()
 }
 
-/// What's on the 78s, the piano's and the organ's pieces.
-const RECORDS: &[&str] = &["waltz_folk", "ragtime"];
+/// The piano's and the organ's pieces.
 const PIANO: &[&str] = &["gymnopedie", "minuet_g"];
 const ORGAN: &[&str] = &["old_hundredth", "eventide"];
 
@@ -617,6 +615,71 @@ fn sound_pianos(
     }
 }
 
+/// A record playing on a gramophone.
+#[derive(Component)]
+struct GramoVoice {
+    gram: Entity,
+    render: Render,
+}
+
+/// The horn plays the record at the speed the spring turns it: as the
+/// spring runs down, the music slows and sags flat, the way it does.
+fn play_gramophones(
+    mut commands: Commands,
+    mut renders: ResMut<Renders>,
+    grams: Query<(Entity, &super::gramophone::Gramophone)>,
+    records: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut voices: Query<(Entity, &GramoVoice, &mut PlaybackSettings)>,
+) {
+    let want = |g: &super::gramophone::Gramophone| {
+        let id = g
+            .record
+            .and_then(|r| records.get(r).ok())
+            .and_then(|i| tapes::record(&catalog.get(i.kind()).id))?
+            .item;
+        (g.arm_down && g.speed > 0.05).then_some(Render::Record(id))
+    };
+    let mut have = std::collections::HashSet::new();
+    for (v, voice, mut settings) in &mut voices {
+        let Ok((_, g)) = grams.get(voice.gram) else {
+            commands.entity(v).despawn();
+            continue;
+        };
+        if want(g).as_ref() != Some(&voice.render) {
+            commands.entity(v).despawn();
+            continue;
+        }
+        renders.want(voice.render.clone());
+        if (settings.speed - g.speed as f64).abs() > 0.003 {
+            settings.speed = g.speed as f64;
+        }
+        have.insert(voice.gram);
+    }
+    for (e, g) in &grams {
+        if have.contains(&e) {
+            continue;
+        }
+        let Some(render) = want(g) else {
+            continue;
+        };
+        let Some(sample) = renders.want(render.clone()) else {
+            continue;
+        };
+        commands.spawn((
+            GramoVoice { gram: e, render },
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("gramophone"))),
+            PlaybackSettings::default()
+                .with_play_from(PlayFrom::Seconds(g.at as f64))
+                .with_speed(g.speed.max(0.05) as f64),
+            // The horn's mouth.
+            Transform::from_xyz(0.11, 0.3, -0.2),
+            Placed::new("gramophone"),
+            ChildOf(e),
+        ));
+    }
+}
+
 pub struct MusicSoundPlugin;
 
 impl Plugin for MusicSoundPlugin {
@@ -625,7 +688,14 @@ impl Plugin for MusicSoundPlugin {
             .init_resource::<StationFiles>()
             .add_systems(
                 Update,
-                (collect_renders, play_decks, play_radios, sound_pianos).chain(),
+                (
+                    collect_renders,
+                    play_decks,
+                    play_radios,
+                    sound_pianos,
+                    play_gramophones,
+                )
+                    .chain(),
             );
     }
 }
@@ -675,7 +745,10 @@ mod tests {
             ("music/motor", Render::Motor.run(sr)),
             ("music/station", Render::Station("far_music", 0).run(sr)),
             ("music/static", Render::Static.run(sr)),
-            ("music/gramophone", cut(Render::Gramophone(0).run(sr), 60.0)),
+            (
+                "music/gramophone",
+                cut(Render::Record(tapes::RECORDS[0].item).run(sr), 60.0),
+            ),
             ("music/piano", cut(Render::PianoTune(0).run(sr), 60.0)),
             ("music/organ", cut(Render::OrganTune(0).run(sr), 60.0)),
         ];
