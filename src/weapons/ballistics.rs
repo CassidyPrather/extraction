@@ -111,6 +111,9 @@ pub struct Hit {
     pub mass_g: f32,
     /// What the round was loaded with (armour weighs an AP core).
     pub load: Load,
+    /// A blow, not a round: a point, an edge or something blunt (wood and
+    /// robots weigh them differently). `None` for rounds and blasts.
+    pub blow: Option<extraction_core::melee::Blow>,
 }
 
 /// A muzzle flash's light, fading out.
@@ -372,6 +375,7 @@ pub(crate) fn fly_projectiles(
                 shooter: p.shooter,
                 mass_g: p.mass_g,
                 load: p.load,
+                blow: None,
             });
             match outcome {
                 Outcome::Through { speed: out } => {

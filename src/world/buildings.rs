@@ -83,6 +83,8 @@ pub struct Geo {
     /// Outside doors and doorways: what must be kept clear in front of
     /// them (mirrored in `map::prefab_entrances` for the map lint).
     pub entrances: Vec<extraction_core::map::Entrance>,
+    /// Ladders climbed with the hands (`interact::hand_climb`).
+    pub ladders: Vec<crate::interact::hand_climb::Ladder>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -1313,6 +1315,27 @@ impl Builder {
         )
     }
 
+    /// A ladder you climb with your hands: its rails' middle from `bottom`
+    /// to `top`, `width` apart, standing out toward `out`; `over` is where
+    /// the top puts you (prefab space).
+    pub fn ladder(
+        &mut self,
+        bottom: Vec3,
+        top: Vec3,
+        width: f32,
+        out: Vec3,
+        over: Option<Vec3>,
+    ) -> &mut Self {
+        self.geo.ladders.push(crate::interact::hand_climb::Ladder {
+            bottom,
+            top,
+            width,
+            out,
+            over,
+        });
+        self
+    }
+
     pub fn finish(self) -> Geo {
         self.geo
     }
@@ -1364,6 +1387,9 @@ pub const PREFABS: [&str; 39] = [
 
 pub fn prefab(id: &str) -> Option<Geo> {
     if let Some(g) = super::underground::geo(id) {
+        return Some(g);
+    }
+    if let Some(g) = super::dam::geo(id) {
         return Some(g);
     }
     let mut b = Builder {
@@ -2477,6 +2503,22 @@ fn water_tower(b: &mut Builder) {
     column(b, Shape::Cylinder(2.5, 3.5), 12.5, Mat::PaintedMetal);
     column(b, Shape::Cylinder(1.3, 1.4), 16.0, Mat::RustyMetal);
     b.dress_structure(from, vec![("water_tower", Transform::IDENTITY)]);
+    // The ladder up the back to the gallery (topping out just under its
+    // deck, onto it), then on up the tank to the roof.
+    b.ladder(
+        Vec3::new(0.0, 0.3, 1.95),
+        Vec3::new(0.0, 11.9, 1.95),
+        0.4,
+        Vec3::Z,
+        Some(Vec3::new(0.0, 12.55, 2.6)),
+    );
+    b.ladder(
+        Vec3::new(0.0, 12.8, 2.75),
+        Vec3::new(0.0, 16.4, 2.75),
+        0.4,
+        Vec3::Z,
+        Some(Vec3::new(0.0, 16.05, 1.9)),
+    );
 }
 
 /// A quarry's steel headframe over its shaft, sheave wheels on top.
@@ -3121,6 +3163,16 @@ fn ropeway_pylon(b: &mut Builder) {
         Transform::IDENTITY,
         ["ropeway_pylon_lod1", "ropeway_pylon_lod2"],
     );
+    // The ladder up the -Z +X leg's face (art/props/heroes.py): it leans in
+    // with the leg; over the top onto the head box behind the crossarm.
+    let leg = |y: f32| 2.0 + (0.6 - 2.0) * y / 20.0;
+    b.ladder(
+        Vec3::new(leg(0.3) - 0.25, 0.3, -leg(0.3) - 0.12),
+        Vec3::new(leg(19.8) - 0.25, 19.8, -leg(19.8) - 0.12),
+        0.4,
+        Vec3::NEG_Z,
+        Some(Vec3::new(0.3, 20.05, -0.45)),
+    );
 }
 
 /// A pylon fallen along -z off its sheared legs, as `ropeway_pylon_down`
@@ -3699,7 +3751,7 @@ fn radio_mast(b: &mut Builder) {
 
 /// A dead bus standing on its wheels (one gone, that corner on a block):
 /// body, a band of dark windows, roof, bumpers, wheel arches, a door.
-fn wrecked_bus(b: &mut Builder, floor: Vec3) {
+pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     let (w, len) = (2.5, 10.0);
     let wheel_r = 0.48;
     let body_lo = floor.y + wheel_r + 0.15;
@@ -4202,6 +4254,14 @@ fn boxcar(b: &mut Builder) {
             );
             y += 0.35;
         }
+        // Climbable, onto the roof.
+        b.ladder(
+            Vec3::new(x, f + 0.3, z),
+            Vec3::new(x, f + h - 0.1, z),
+            0.4,
+            Vec3::Z * end,
+            Some(Vec3::new(x, f + h + 0.15, end * (d * 0.5 - 0.6))),
+        );
         b.bx(
             Vec3::new(0.28, 0.24, 0.6),
             Vec3::new(0.0, 1.1, end * (d * 0.5 + 0.2)),
@@ -4309,6 +4369,18 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 at: t.transform_point(s.at),
                 table: s.table,
             });
+        }
+        for l in &geo.ladders {
+            commands.spawn(
+                crate::interact::hand_climb::Ladder {
+                    bottom: t.transform_point(l.bottom),
+                    top: t.transform_point(l.top),
+                    width: l.width,
+                    out: t.rotation * l.out,
+                    over: l.over.map(|o| t.transform_point(o)),
+                }
+                .bundle(),
+            );
         }
     }
     info!("{} building loot spots", loot.0.len());

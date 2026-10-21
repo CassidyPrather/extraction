@@ -935,8 +935,8 @@ mod tests {
 
     #[test]
     fn every_valley_has_a_well_and_a_mirror_somewhere_sensible() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        use crate::map::{CINDER_WORKS, KETTLE_PASS, SALLOW_RESERVOIR};
+        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS, SALLOW_RESERVOIR] {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();

@@ -197,15 +197,18 @@ pub const MACHINE_TICK_NEAR: f32 = 25.0;
 pub const MACHINE_TICK: (f32, f32) = (0.1, 0.012);
 
 /// A machine nearby turns certain (`robot_voice::Spoke` engaging): a
-/// faint tick on the off-hand wrist (the left; the right's busy with the
-/// gun). Off with the comfort setting `machine_tick`.
+/// faint tick on the watch wrist (the off hand: `Comfort::gun_side`'s
+/// other). Off with the comfort setting `machine_tick`.
 fn machine_tick(
     mut spoke: MessageReader<crate::robot_voice::Spoke>,
     players: Query<&GlobalTransform, With<LocalPlayer>>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut out: MessageWriter<Haptic>,
 ) {
-    let on = comfort.is_none_or(|c| c.machine_tick);
+    let on = comfort.as_deref().is_none_or(|c| c.machine_tick);
+    let wrist = comfort
+        .as_deref()
+        .map_or(Side::Left, |c| c.gun_side().other());
     let Some(me) = players.iter().next().map(|g| g.translation()) else {
         spoke.clear();
         return;
@@ -214,7 +217,7 @@ fn machine_tick(
         s.said == crate::robot_voice::Utterance::Engaging && s.at.distance(me) < MACHINE_TICK_NEAR
     });
     if on && certain {
-        pulse(&mut out, Side::Left, MACHINE_TICK);
+        pulse(&mut out, wrist, MACHINE_TICK);
     }
 }
 

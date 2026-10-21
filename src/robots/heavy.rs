@@ -927,6 +927,7 @@ fn heavy_anomalies(
                         .length();
                     if d < radius * 1.5 + KNEE_RADIUS * SIZE {
                         hits.write(crate::weapons::ballistics::Hit {
+                            blow: None,
                             entity: ke,
                             point: kgt.translation(),
                             normal: Vec3::Y,
@@ -1203,6 +1204,7 @@ fn move_arm(
                         hit = true;
                         let damage = SLAM_DAMAGE * (1.0 - 0.5 * flat / SLAM_RADIUS);
                         hits.write(crate::weapons::ballistics::Hit {
+                            blow: None,
                             entity: body,
                             point: p + Vec3::Y * 1.0,
                             normal: Vec3::Y,
@@ -1634,6 +1636,7 @@ pub(crate) mod tests {
             .map(|g| g.translation())
             .unwrap_or_default();
         app.world_mut().write_message(Hit {
+            blow: None,
             entity: part,
             point: at,
             normal: Vec3::Y,

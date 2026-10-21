@@ -57,10 +57,13 @@ pub const NAMES: &[&str] = &[
 ///   (`progression::safehouse::scenario`).
 /// - `door_shot`: a walker shot through a shut plank door
 ///   (`destruction::scenario`).
+/// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
+///   default (`bot::crossing`).
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
     crate::destruction::scenario::SCENARIO,
+    super::crossing::SCENARIO,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -389,6 +392,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
         crate::progression::safehouse::scenario::SCENARIO => {
             crate::progression::safehouse::scenario::opening()
         }
+        super::crossing::SCENARIO => super::crossing::opening(),
         _ => return None,
     })
 }

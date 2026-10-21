@@ -21,11 +21,26 @@ pub struct MeleeDef {
     pub blade: f32,
 }
 
-/// What kind of blow it was.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What kind of blow it was: a point driven in (a thrust), an edge drawn
+/// across (a slash), or something blunt swung (a rifle butt).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Blow {
-    Thrust,
-    Slash,
+    Point,
+    Edge,
+    Blunt,
+}
+
+/// Speed, m/s, below which a blunt blow is only a bump.
+pub const BLUNT_MIN: f32 = 2.5;
+/// Harm per kilogram per (m/s over the floor) squared.
+pub const BLUNT_K: f32 = 1.4;
+
+/// Harm from something of `mass_kg` meeting a thing at `speed` m/s (into
+/// its face): nothing below [`BLUNT_MIN`], then with the mass and the
+/// square of the speed over it.
+pub fn blunt(mass_kg: f32, speed: f32) -> Option<f32> {
+    let over = speed - BLUNT_MIN;
+    (over > 0.0).then(|| BLUNT_K * mass_kg * over * over)
 }
 
 /// Harm from a blade moving at `along` m/s toward its point and `across`
@@ -36,9 +51,9 @@ pub fn strike(def: &MeleeDef, along: f32, across: f32) -> Option<(f32, Blow)> {
     let thrust = along.max(0.0);
     let slash = across.max(0.0);
     let (speed, blow, k) = if thrust >= slash {
-        (thrust, Blow::Thrust, 1.0)
+        (thrust, Blow::Point, 1.0)
     } else {
-        (slash, Blow::Slash, SLASH)
+        (slash, Blow::Edge, SLASH)
     };
     let over = speed - def.min_speed;
     if over <= 0.0 {
@@ -51,6 +66,16 @@ pub fn strike(def: &MeleeDef, along: f32, across: f32) -> Option<(f32, Blow)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A rifle's butt swung hard hurts; nudged, it doesn't; a heavier gun
+    /// hits harder at the same speed.
+    #[test]
+    fn a_butt_stroke_is_mass_and_speed() {
+        assert_eq!(blunt(3.6, 1.5), None);
+        let ak = blunt(3.6, 6.0).unwrap();
+        assert!(ak > 40.0 && ak < 120.0, "{ak}");
+        assert!(blunt(4.0, 6.0).unwrap() > ak);
+    }
 
     fn knife() -> MeleeDef {
         MeleeDef {
@@ -72,11 +97,11 @@ mod tests {
     fn harder_is_more_and_a_thrust_beats_a_slash() {
         let (soft, _) = strike(&knife(), 3.0, 0.0).unwrap();
         let (hard, blow) = strike(&knife(), 5.5, 0.0).unwrap();
-        assert_eq!(blow, Blow::Thrust);
+        assert_eq!(blow, Blow::Point);
         assert!(hard > soft * 4.0, "{soft} {hard}");
         assert!((hard - 40.0).abs() < 1e-3);
         let (slash, blow) = strike(&knife(), 0.0, 5.5).unwrap();
-        assert_eq!(blow, Blow::Slash);
+        assert_eq!(blow, Blow::Edge);
         assert!(slash < hard);
     }
 }

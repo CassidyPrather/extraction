@@ -571,6 +571,7 @@ fn gallery(
                 let kill = matches!(part.0, Slot::Bolt { plate: 0 | 1, .. } | Slot::Knee(1));
                 if kill {
                     hits.write(crate::weapons::ballistics::Hit {
+                        blow: None,
                         entity: pe,
                         point: Vec3::ZERO,
                         normal: Vec3::Y,

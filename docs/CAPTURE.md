@@ -105,7 +105,14 @@ headless sim: one 1/90 s fixed step a frame. Two cameras follow the bot:
   where a wall or the ground is in the way;
 - a drone's-eye view circling 20 m up and 16 m out.
 
-The cameras render only while something is worth seeing: leaving the
+The player has no body a camera draws: in the headset you see your gloves
+and sleeves. The body's shadow comes from a proxy of capsules on a layer
+only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's cameras see
+that layer too, so the bot shows as a figure, dressed in drab. For the
+first 8 s the cameras render without saving, so the valley's detail has
+streamed in before the first kept frame.
+
+After that, the cameras render only while something is worth seeing: leaving the
 truck, a robot within 30 m, a fight, an anomaly, the truck called and the
 ride out, going down, and six seconds of walking every 75 s. Frames in
 between cost little, and a frame is saved every 1/30 s of raid time. The
