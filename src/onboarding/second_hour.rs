@@ -866,6 +866,13 @@ pub(super) fn direct(
                 }));
                 tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
             } else if let Some(leg) = leg {
+                info!(
+                    "DBG lamed try {} clear {:?} mode {:?} rounds {:?}",
+                    run.tries,
+                    world.gun_clear(player),
+                    world.mode(player),
+                    world.rounds(player)
+                );
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
                     tasks.push(Gun(MacroKind::Rack));
