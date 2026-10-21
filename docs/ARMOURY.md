@@ -193,8 +193,8 @@ the common table plus a few things of its own:
 ## Shots
 
 `docs/shots/armoury/`: each gun in the gallery (`--gallery <id>+open`
-works the action and swings a bipod down; give it 60 frames so the
-model has loaded):
+works the action and swings a bipod down, `+jam` puts it in a double
+feed; give it 60 frames so the model has loaded):
 
 ```bash
 EXTRACTION_BIN=target/fast/extraction scripts/shot.sh docs/shots/armoury/rpk74_open.png \
