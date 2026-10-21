@@ -134,6 +134,13 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 /// (bare) to 1 (smothered): the vigour its ivy and weeds grow with, the
 /// same on the server and every client. 0 everywhere with decay off.
 /// For Audio's rustle in the leaves.
+/// Whether anything grows at this height in a valley: not above its snow
+/// line (`snow::snow_line`), where the snow lies all winter and the wind
+/// takes what's left.
+pub fn warm(map: &extraction_core::map::MapDef, y: f32) -> bool {
+    super::snow::snow_line(map).is_none_or(|line| y < line)
+}
+
 pub fn amount(at: Vec2, prefab: &str) -> f32 {
     if enabled() && !prefab.ends_with("_drowned") {
         vigour(seed(at, prefab))
@@ -891,6 +898,18 @@ mod tests {
                 "{name}: ivy on {climbed} of {grown} buildings"
             );
         }
+    }
+
+    /// Nothing grows above a valley's snow line; a valley without one
+    /// grows at any height.
+    #[test]
+    fn nothing_grows_above_the_snow_line() {
+        let kettle = crate::world::load_map_def("kettle_pass");
+        let line = crate::world::snow::snow_line(&kettle).expect("Kettle has a snow line");
+        assert!(warm(&kettle, line - 1.0));
+        assert!(!warm(&kettle, line + 1.0));
+        let marrow = crate::world::load_map_def("marrow_creek");
+        assert!(warm(&marrow, 500.0));
     }
 
     /// Ivy is never bare: every vine has leaves within 0.4 m along it; and

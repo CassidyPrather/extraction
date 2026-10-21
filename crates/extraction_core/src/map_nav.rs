@@ -26,13 +26,17 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
         .filter(|p| !crate::underground::is_site(&p.prefab))
     {
         let f = prefab_footprint(&p.prefab);
+        // Anything thinner than a cell (a garden fence's 0.2 m) needs the
+        // clearance to reach half a cell, or the grid's cell centres fall
+        // either side of it and a path goes straight through.
+        let thin = f[0].min(f[2]) * 0.5;
         g.block(
             Obstacle::Rect {
                 at: p.at,
                 half: [f[0] * 0.5, f[2] * 0.5],
                 yaw: p.rot.to_radians(),
             },
-            0.6,
+            (CELL * 0.5 - thin).max(0.6),
         );
         let (sn, c) = p.rot.to_radians().sin_cos();
         for (o, half) in prefab_walls(&p.prefab) {
@@ -123,4 +127,39 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
         }
     }
     g
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::map::{Placement, TRAINING_YARD};
+
+    /// A garden fence (0.2 m thick, thinner than a cell) is a wall to the
+    /// walkers at any angle: a path from one side to the other goes round
+    /// its end, never through.
+    #[test]
+    fn a_thin_fence_is_walked_round_at_any_angle() {
+        for rot in [0.0f32, 20.0, 45.0, 70.0, 90.0, 135.0] {
+            let mut map = MapDef::from_ron(TRAINING_YARD).unwrap();
+            let at = [-45.0, 30.0];
+            map.placements.push(Placement {
+                prefab: "fence_garden".into(),
+                at,
+                rot,
+                y: 0.0,
+                absolute: false,
+                tag: String::new(),
+            });
+            let hm = Heightmap::build(&map);
+            let g = zone_grid(&map, &hm, MAX_SLOPE);
+            // Its face is local -Z: 2.5 m out either side of its middle.
+            let r = rot.to_radians();
+            let n = [-r.sin(), r.cos()];
+            let a = [at[0] - n[0] * 2.5, at[1] - n[1] * 2.5];
+            let b = [at[0] + n[0] * 2.5, at[1] + n[1] * 2.5];
+            let path = g.path(a, b).expect("a way round");
+            let len: f32 = path.windows(2).map(|w| crate::geom::dist(w[0], w[1])).sum();
+            assert!(len > 8.0, "rot {rot}: {len:.1} m, straight through");
+        }
+    }
 }

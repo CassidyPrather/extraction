@@ -54,6 +54,8 @@ pub enum Step {
     Slap,
     /// Press a pump's action release.
     ReleaseAction,
+    /// Swing the gun's bipod down (or fold it).
+    Bipod,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -82,6 +84,8 @@ pub enum MacroKind {
     Rack,
     Reload,
     Mode,
+    /// Swing a bipod down, or fold it.
+    Bipod,
 }
 
 /// The motions for a macro on this gun.
@@ -110,6 +114,7 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             }
         }
         MacroKind::Mode => steps.push((0.0, Step::Mode)),
+        MacroKind::Bipod => steps.push((0.2, Step::Bipod)),
         MacroKind::Reload => match action {
             ActionKind::SemiAuto if gun.firearm.def.magazine_family.is_none() => {
                 // A fixed magazine (an SKS): hold the bolt open, thumb
@@ -257,6 +262,8 @@ fn start_macros(
         MacroKind::Mode
     } else if keys.just_pressed(KeyCode::KeyR) {
         MacroKind::Reload
+    } else if keys.just_pressed(KeyCode::KeyL) {
+        MacroKind::Bipod
     } else {
         return;
     };
@@ -286,6 +293,7 @@ fn run_macros(
         Without<Gun>,
     >,
     mut bags: Query<&mut Backpack>,
+    mut bipods: Query<&mut super::armoury::Bipod>,
 ) {
     for (player_e, mut mac) in &mut players {
         let player = Some(player_e);
@@ -316,6 +324,12 @@ fn run_macros(
             Step::Lift(t) => gun.firearm.set_handle_lift(t),
             Step::Slap => gun.firearm.free_bolt(),
             Step::ReleaseAction => gun.firearm.release_action(),
+            Step::Bipod => {
+                if let Ok(mut b) = bipods.get_mut(e) {
+                    b.deployed = !b.deployed;
+                }
+                Vec::new()
+            }
             Step::Break(open) => gun.firearm.set_break_open(open),
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),

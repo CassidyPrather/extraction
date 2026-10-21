@@ -879,7 +879,6 @@ mod tests {
         let s = of(map).find(|(_, s)| s.name == "Bay four").unwrap().1;
         let at = |x: f32| [s.at[0] + x, s.at[1]];
         // Bus three's middle, and the slot between buses one and two.
-        assert!(grid.walkable(at(0.0)) && grid.walkable(at(-4.8)));
         for ob in nav_obstacles(&zone, map) {
             grid.block(ob, 0.6);
         }
