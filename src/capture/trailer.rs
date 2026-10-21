@@ -176,6 +176,7 @@ fn direct(
                 Name::new("Drone camera"),
                 crate::render::OffscreenCamera,
                 DroneCamera,
+                super::ClearAir(2.5),
                 crate::render::camera_bundle(&weather),
                 Camera {
                     order: -1,
