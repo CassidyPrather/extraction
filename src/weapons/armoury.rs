@@ -75,13 +75,13 @@ fn fit_out(
     let id = &catalog.get(item.kind()).id;
     let report = gun.firearm.def.report;
     if report != 1.0 {
-        commands.entity(add.entity).insert(Report(report));
+        commands.entity(add.entity).try_insert(Report(report));
     }
     if matches!(gun.firearm.def.cartridge.as_str(), "26mm" | "bolt") {
-        commands.entity(add.entity).insert(super::flares::Launcher);
+        commands.entity(add.entity).try_insert(super::flares::Launcher);
     }
     if let Some((pivot, feet)) = bipod_of(id) {
-        commands.entity(add.entity).insert(Bipod {
+        commands.entity(add.entity).try_insert(Bipod {
             pivot,
             feet,
             deployed: false,
