@@ -10,7 +10,7 @@ Code: `src/destruction/`, with the geometry in
 | Thing | Breaks from | How much | Leaves |
 | - | - | - | - |
 | Window pane (every `window_sash` pane, four to a sash) | a round or fragment crossing it; anything thrown, swung or punched through it at 2.5 m/s or more; a robot's body against it; a grenade within 7 m that can see it | at once | teeth in the frame, shards on the floor |
-| Plank door | rounds (at half their harm: they hole the boards, they don't split them), blows and blasts (full harm); a crowbar at its latch edge; a walker battering a wedged door | 260 (a Mosin's round is 90, a knife's thrust 40) | six boards' splinters; the doorway stands open |
+| Plank door | rounds (at half their harm: they hole the boards, they don't split them), blows by kind (`wood::blow_share`: blunt in full, an edge half, a point a quarter) and blasts; a crowbar at its latch edge; a walker battering a wedged door | 260 (a Mosin's round is 90, a knife's thrust 40) | six boards' splinters; the doorway stands open |
 | Supply crate (in the open, under loot) | rounds, blows, blasts, a crowbar in its lid | 110 (four pistol rounds) | slats, and a roll of its loot table spilled out on top of what was on its lid |
 | Crate in a building (`Builder::crate_box`) | the same | 110, scaled by size | the same (its loot spot's table) |
 
@@ -230,11 +230,3 @@ house's back wall, its boards on the ground).
   `Hit` says which (asked of Weapon feel).
 - Robots firing at a heard position through thin walls
   (`firearm_terminal` already says what a round gets through).
-
-## Merge notes
-
-- Weapon feel's `Hit::blow` (`Option<melee::Blow>`): add `blow: None` to
-  the `Hit`s built in `destruction::tests` (they're blows: `Some(Blunt)`)
-  and `hooks::smash` (`Some(Blunt)`), and weigh wood by it in
-  `wood::take_hits`: rounds on doors `ROUND_ON_DOOR`, `Point` 0.25,
-  `Edge` 0.5, `Blunt`/blasts 1.0.

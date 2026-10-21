@@ -284,7 +284,7 @@ fn blows_break_a_door_down() {
     let mut blows = 0;
     while app.world().get::<Door>(door).is_some() && blows < 40 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: leaf_collider,
             point: mid,
             normal: n,
@@ -359,7 +359,7 @@ fn whats_broken_stays_broken_until_the_surge() {
     let (door, collider, mid, n) = plank_door(&mut a);
     for _ in 0..10 {
         a.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: collider,
             point: mid,
             normal: n,
@@ -608,7 +608,7 @@ fn a_crate_in_a_house_breaks_open_and_comes_back_with_the_surge() {
     let mut blows = 0;
     while app.world().get_entity(c).is_ok() && blows < 20 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: c,
             point: at + Vec3::Y * size * 0.5,
             normal: Vec3::Y,
@@ -1080,4 +1080,31 @@ fn a_grenade_at_a_doors_foot_blows_it_in_and_one_further_off_doesnt() {
         app.world().get::<Door>(door).is_none(),
         "a near blast blows it in"
     );
+}
+
+#[test]
+fn a_blade_bites_wood_less_than_a_butt() {
+    use extraction_core::melee::Blow;
+    let hit = |blow, mass_g| Hit {
+        entity: Entity::PLACEHOLDER,
+        point: Vec3::ZERO,
+        normal: Vec3::Y,
+        velocity: Vec3::X,
+        damage: 40.0,
+        shooter: None,
+        mass_g,
+        load: Default::default(),
+        blow,
+    };
+    let share = super::wood::blow_share;
+    assert_eq!(share(&hit(Some(Blow::Blunt), 0.0), true), 1.0);
+    assert_eq!(share(&hit(Some(Blow::Edge), 0.0), true), 0.5);
+    assert_eq!(share(&hit(Some(Blow::Point), 0.0), true), 0.25);
+    assert_eq!(share(&hit(None, 7.9), true), super::wood::ROUND_ON_DOOR);
+    assert_eq!(
+        share(&hit(None, 7.9), false),
+        1.0,
+        "a crate's slats take a round whole"
+    );
+    assert_eq!(share(&hit(None, 0.0), true), 1.0, "a blast");
 }

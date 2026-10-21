@@ -223,8 +223,24 @@ fn blasts(
                 shooter: None,
                 mass_g: 0.0,
                 load: Default::default(),
+                blow: None,
             });
         }
+    }
+}
+
+/// How much of a hit's harm tells on wood: a blunt blow (a butt, a
+/// crowbar, a blast) all of it; an edge half (a blade bites, it doesn't
+/// split); a point a quarter (it goes in and sticks); a round on a door
+/// [`ROUND_ON_DOOR`] (it holes the boards).
+pub fn blow_share(h: &Hit, door: bool) -> f32 {
+    use extraction_core::melee::Blow;
+    match h.blow {
+        Some(Blow::Point) => 0.25,
+        Some(Blow::Edge) => 0.5,
+        Some(Blow::Blunt) => 1.0,
+        None if h.mass_g > 0.0 && door => ROUND_ON_DOOR,
+        None => 1.0,
     }
 }
 
@@ -251,11 +267,7 @@ fn take_hits(
         if t.hp <= 0.0 {
             continue;
         }
-        let share = if h.mass_g > 0.0 && door {
-            ROUND_ON_DOOR
-        } else {
-            1.0
-        };
+        let share = blow_share(h, door);
         t.hp -= h.damage * share;
         t.push = h.velocity.normalize_or_zero() * if h.mass_g > 0.0 { 2.0 } else { 3.5 };
         if t.hp <= 0.0 {
