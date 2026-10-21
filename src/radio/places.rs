@@ -45,6 +45,28 @@ pub const PLACES: &[Place] = &[
     by("sallow_reservoir", "tape_bells", [-56.30, 206.80], 295.2, 0.3),
 ];
 
+/// Lower than this over the ground is the floor (m).
+pub const SURFACE: f32 = 0.3;
+
+/// A surface by the note to lay a thing on: beside it as asked, the other
+/// side, then round it further out. Never the floor (Story's rule for
+/// scenes and loot alike).
+pub fn surface_near(zone: &crate::world::Zone, p: &Place, yaw: Quat) -> Option<(f32, f32, f32)> {
+    let mut tries = vec![Vec3::X * p.aside, Vec3::X * -p.aside];
+    for r in [0.6f32, 0.9, 1.2, 1.5] {
+        for k in 0..12 {
+            let a = k as f32 / 12.0 * std::f32::consts::TAU;
+            tries.push(Vec3::new(a.cos(), 0.0, a.sin()) * r);
+        }
+    }
+    tries.into_iter().find_map(|o| {
+        let off = yaw * o;
+        let (x, z) = (p.at[0] + off.x, p.at[1] + off.z);
+        let y = crate::world::notes::rest_height(zone, x, z, 2.2);
+        (y - zone.ground(x, z) >= SURFACE).then_some((x, y, z))
+    })
+}
+
 /// Lays this valley's tapes once it has loaded. A player laid here comes
 /// with a cell, part run down: it was someone's.
 pub(super) fn lay_tapes(
@@ -67,9 +89,10 @@ pub(super) fn lay_tapes(
             continue;
         };
         let yaw = Quat::from_rotation_y(-p.rot.to_radians());
-        let off = yaw * Vec3::X * p.aside;
-        let (x, z) = (p.at[0] + off.x, p.at[1] + off.z);
-        let y = crate::world::notes::rest_height(&zone, x, z, 2.2);
+        let Some((x, y, z)) = surface_near(&zone, p, yaw) else {
+            warn!("{}: no surface by {:?}", p.item, p.at);
+            continue;
+        };
         let half = catalog.get(kind).size_m()[1] * 0.5;
         let e = spawn_item(
             &mut commands,
@@ -82,6 +105,30 @@ pub(super) fn lay_tapes(
         );
         if p.item == "cassette_player" {
             commands.entity(e).insert(super::deck::WithCell(0.5));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Everything laid finds a table, shelf or crate by its note: none of
+    /// it lies on the floor.
+    #[test]
+    fn everything_lies_on_a_surface() {
+        let catalog = extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG).unwrap();
+        let mut maps: Vec<&str> = PLACES.iter().map(|p| p.map).collect();
+        maps.dedup();
+        for map in maps {
+            let zone = crate::world::Zone::load(map);
+            for p in PLACES.iter().filter(|p| p.map == map) {
+                assert!(catalog.kind(p.item).is_some(), "{}", p.item);
+                let yaw = Quat::from_rotation_y(-p.rot.to_radians());
+                let (x, y, z) = surface_near(&zone, p, yaw)
+                    .unwrap_or_else(|| panic!("{} in {map}: no surface", p.item));
+                assert!(y - zone.ground(x, z) >= SURFACE, "{}", p.item);
+            }
         }
     }
 }
