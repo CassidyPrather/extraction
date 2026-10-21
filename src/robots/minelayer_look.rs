@@ -18,10 +18,10 @@ use crate::render::materials::MaterialLibrary;
 const MODEL: &str = "models/robots/minelayer.glb";
 /// Its lamp, local to its root.
 pub const LAMP: Vec3 = Vec3::new(0.0, 0.95, 0.0);
-/// Where the mine's LED sits on it, and the model's offset (the mine is
-/// modelled apart, at x 3).
+/// Where the mine's LED sits on it. (The mine is modelled apart, at x 3,
+/// but exported about its own origin like every part, so it hangs at the
+/// mine itself.)
 const LED: Vec3 = Vec3::new(0.1, 0.075, 0.0);
-const MINE_MODEL_AT: Vec3 = Vec3::new(3.0, 0.0, 0.0);
 
 pub struct MinelayerLookPlugin;
 
@@ -195,7 +195,7 @@ fn dress(
             &mut materials,
             e,
             "mine",
-            Transform::from_translation(-MINE_MODEL_AT),
+            Transform::IDENTITY,
         );
         // Its ring of turned earth.
         commands.spawn((
