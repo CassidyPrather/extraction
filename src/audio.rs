@@ -2544,7 +2544,6 @@ struct BurnLoop;
 fn tool_sounds(
     mut commands: Commands,
     mut pried: MessageReader<crate::interact::tools::crowbar::Pried>,
-    mut free: MessageReader<crate::interact::tools::crowbar::PriedFree>,
     mut cuts: MessageReader<crate::interact::tools::cutters::Cut>,
     places: Query<&GlobalTransform>,
     bank: Res<SoundBank>,
@@ -2572,30 +2571,8 @@ fn tool_sounds(
             0.1,
         );
     }
-    for f in free.read() {
-        next.remove(&f.target);
-        play_at_speed(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "impacts/wood",
-            at(f.target),
-            "tool.pry_free",
-            0.0,
-            0.8,
-            0.08,
-        );
-        play(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "physical/door_open",
-            at(f.target),
-            "tool.pry_free",
-            -4.0,
-            0.1,
-        );
-    }
+    // A pried thing giving way is Destruction's `Broke`, heard with
+    // the rest of the breaks.
     for c in cuts.read() {
         play_at_speed(
             &mut commands,
