@@ -1855,7 +1855,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
 
 /// How deep a drowned house's silt lies over its footing: four of a
 /// stair's risers (`underground::STEP_RISE`), a hand under the sills.
-const SILT: f32 = 0.76;
+pub const SILT: f32 = 0.76;
 
 /// A house that was under a reservoir (`Ruin::Drowned`): its walls, no
 /// roof, floors or partitions, no doors or glass, the timber sodden; silt

@@ -14,6 +14,11 @@ Writes assets/models/props/<name>.glb, one node `static` each:
                    middle.
 - `campfire`       a cold fire: a ring of stones 0.8 across, charred logs
                    and ash; origin on the ground at its middle.
+- `walker_wreck`   a Custodian walker lying where it stopped, its four legs
+                   folded under it, its eye socket empty, the turret gone
+                   from its back to a flat mount 0.7 up (jam jars of
+                   flowers stand on it): 1.0 x 0.7 x 1.5 (x, y, z), its
+                   visor -Z; origin on the ground at its middle.
 
 Nothing here has a face or a wound: the playtester's rule is unease, not
 gore.
@@ -173,3 +178,40 @@ prop("remains_seated", remains_seated)
 prop("remains_lying", remains_lying)
 prop("bedroll", bedroll)
 prop("campfire", campfire)
+
+
+def walker_wreck():
+    p = Part("static")
+    R, cy = 0.4, 0.3
+    # The orb, low on its folded legs, a little sunk.
+    p.sphere(R, (0.0, cy, 0.0), "Shell", segs=24, rings=14)
+    # Panel seams round it.
+    for lat in (-0.35, 0.0, 0.35):
+        r = R * math.cos(lat) + 0.004
+        p.lathe([(r - 0.006, -0.004), (r, -0.004), (r, 0.004), (r - 0.006, 0.004)], "Dark",
+                segs=28, closed=True, xf=T(0.0, cy + R * math.sin(lat), 0.0) @ UP)
+    # The turret's mount, flat, its bolts: where the jars stand.
+    p.cyl(0.17, 0.0, 0.03, "Shell", segs=20, xf=T(0.0, cy + R - 0.03, 0.0) @ UP)
+    for k in range(6):
+        a = k * math.pi / 3
+        p.cyl(0.012, 0.0, 0.008, "Dark", segs=6,
+              xf=T(0.13 * math.cos(a), cy + R, 0.13 * math.sin(a)) @ UP)
+    # The visor slit, its sensor gone: an empty socket.
+    p.box((0.32, 0.09, 0.05), (0.0, cy + 0.12, -R + 0.03), "Dark")
+    p.sphere(0.035, (0.0, cy + 0.12, -R + 0.005), "Black", segs=10, rings=6)
+    # Four legs folded under: hip, knee out and down on the ground, the
+    # shin folded back under the orb.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            hip = (sx * 0.27, cy - 0.12, sz * 0.22)
+            knee = (sx * 0.44, 0.07, sz * 0.68)
+            foot = (sx * 0.2, 0.05, sz * 0.32)
+            limb(p, hip, knee, 0.075, 0.06, "Shell")
+            p.sphere(0.065, knee, "Dark", segs=12, rings=8)
+            limb(p, knee, foot, 0.055, 0.045, "Shell")
+            p.sphere(0.05, foot, "Dark", segs=10, rings=6)
+    return [p]
+
+
+
+prop("walker_wreck", walker_wreck)
