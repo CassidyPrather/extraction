@@ -723,8 +723,8 @@ pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
 }
 
 /// Which of its sashes someone boarded up, the same way: a quarter of a
-/// damaged ruin's, one in twelve of a house's, none of a burnt or drowned
-/// one's. Destruction nails three `window_board`s across each, outside.
+/// damaged house's, one in twelve of a whole one's, none of a burnt or
+/// drowned one's, nor of anything but the common houses. Destruction nails three `window_board`s across each, outside.
 pub fn boarded_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
     super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| boarded(&geo, prefab, at))
 }
@@ -741,7 +741,15 @@ fn sashes(geo: &Geo) -> usize {
 pub(super) fn boarded(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
     let xz = Vec2::new(at.translation.x, at.translation.z);
     let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(xz, prefab) ^ 0xb0a2d);
-    let share = if prefab.ends_with("_damaged") {
+    // Only the common houses (their walls all 0.18 m, as the boards are
+    // set for).
+    let house = matches!(
+        extraction_core::map::prefab_base(prefab),
+        "house_plank" | "farmhouse" | "house_brick"
+    );
+    let share = if !house {
+        0.0
+    } else if prefab.ends_with("_damaged") {
         0.25
     } else if extraction_core::map::prefab_base(prefab) != prefab {
         0.0
