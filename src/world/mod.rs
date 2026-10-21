@@ -9,6 +9,7 @@ pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
+pub mod dam;
 pub mod decay;
 pub mod halos;
 pub mod impostors;

@@ -1389,6 +1389,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
     if let Some(g) = super::underground::geo(id) {
         return Some(g);
     }
+    if let Some(g) = super::dam::geo(id) {
+        return Some(g);
+    }
     let mut b = Builder {
         drop: extraction_core::map::prefab_lift(id),
         ..Default::default()
@@ -3748,7 +3751,7 @@ fn radio_mast(b: &mut Builder) {
 
 /// A dead bus standing on its wheels (one gone, that corner on a block):
 /// body, a band of dark windows, roof, bumpers, wheel arches, a door.
-fn wrecked_bus(b: &mut Builder, floor: Vec3) {
+pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     let (w, len) = (2.5, 10.0);
     let wheel_r = 0.48;
     let body_lo = floor.y + wheel_r + 0.15;

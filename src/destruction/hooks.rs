@@ -152,6 +152,7 @@ fn smash(
             if gt.translation().distance(s.at) <= s.radius + 1.0 {
                 t.push = s.push;
                 hits.write(crate::weapons::ballistics::Hit {
+                    blow: None,
                     entity: e,
                     point: s.at,
                     normal: -s.push.normalize_or(Vec3::Y),

@@ -120,6 +120,7 @@ mod tests {
             ("marrow_creek", crate::map::MARROW_CREEK),
             ("kettle_pass", crate::map::KETTLE_PASS),
             ("cinder_works", crate::map::CINDER_WORKS),
+            ("sallow_reservoir", crate::map::SALLOW_RESERVOIR),
             ("training_yard", crate::map::TRAINING_YARD),
         ] {
             let map = MapDef::from_ron(text).unwrap();

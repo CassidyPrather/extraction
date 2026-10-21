@@ -284,6 +284,7 @@ fn blows_break_a_door_down() {
     let mut blows = 0;
     while app.world().get::<Door>(door).is_some() && blows < 40 {
         app.world_mut().write_message(Hit {
+            blow: None,
             entity: leaf_collider,
             point: mid,
             normal: n,
@@ -358,6 +359,7 @@ fn whats_broken_stays_broken_until_the_surge() {
     let (door, collider, mid, n) = plank_door(&mut a);
     for _ in 0..10 {
         a.world_mut().write_message(Hit {
+            blow: None,
             entity: collider,
             point: mid,
             normal: n,
@@ -606,6 +608,7 @@ fn a_crate_in_a_house_breaks_open_and_comes_back_with_the_surge() {
     let mut blows = 0;
     while app.world().get_entity(c).is_ok() && blows < 20 {
         app.world_mut().write_message(Hit {
+            blow: None,
             entity: c,
             point: at + Vec3::Y * size * 0.5,
             normal: Vec3::Y,
