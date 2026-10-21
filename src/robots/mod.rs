@@ -33,6 +33,7 @@ pub mod pylon;
 pub mod reel;
 pub mod search;
 pub mod senses;
+pub mod sentry;
 pub mod sorter;
 pub mod sorter_look;
 pub mod visuals;
@@ -259,6 +260,7 @@ impl Plugin for RobotsPlugin {
                     sorter::SorterPlugin,
                     heavy::HeavyPlugin,
                     heavy_mind::HeavyMindPlugin,
+                    sentry::SentryPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
