@@ -25,7 +25,7 @@
             (kind: Shelf, at: (-2.6, -1.0), rot: 90.0, loot: Some("gadgets")),
         ]),
         // The gallery itself, along the dam under the crest: 44 m of it.
-        (id: "gallery", at: (16.0, 32.0), size: (44.0, 2.4), height: 2.4, lamp: Dead, props: [
+        (id: "gallery", at: (16.0, 32.0), size: (44.0, 2.4), height: 2.4, lamp: Powered, stage: 0, props: [
             (kind: Rubble, at: (6.0, 0.6)),
             (kind: SmallCrate, at: (19.5, -0.7), loot: Some("ammo_common")),
         ]),
@@ -56,6 +56,13 @@
         // The drainage adit: from the plumb chamber's sump back down to
         // the toe, the other way round.
         (from: "plumb_chamber", to: "toe_landing", via: [(-12.0, 10.0)]),
+    ],
+    // The gauge room's breaker: the gallery's lamps, and the door to the
+    // tower's stair (held shut till then: out the way you came, or not).
+    power: [(kind: Breaker, room: "gauge_room", at: (2.75, -1.7), rot: 270.0, doors: ["tower_foot"])],
+    // The drainage adit's dip, waist deep.
+    floods: [
+        (link: Some(("plumb_chamber", "toe_landing")), depth: 1.0),
     ],
     // The seepage, ankle deep the gallery's length.
     basins: [
