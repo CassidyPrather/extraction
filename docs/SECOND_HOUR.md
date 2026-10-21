@@ -17,7 +17,7 @@ is it taking aim.").
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
 | Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
-| Drone lock | the chirp before it fires | get behind something |
+| Drone lock | the chirp before it fires | run across it, to cover (sprinting across its line scatters its rounds; standing still in the open doesn't) |
 | Anomaly | within 4 m of one's edge | throw something in first |
 | Underground | below ground in a site | torch on, go slow |
 | Surge | the sky turns (5 min warning) | come home |

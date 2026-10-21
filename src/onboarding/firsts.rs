@@ -147,7 +147,7 @@ impl First {
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
-            First::DroneLock => &["Truck: \"Get behind something. That chirp is it taking aim.\""],
+            First::DroneLock => &["Truck: \"Run across it, to cover. That chirp is it taking aim.\""],
             First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
                 &["Truck: \"Torch on, go slow. Dark down there, and not empty.\""]
