@@ -489,8 +489,8 @@ fn dress_body(
 
 /// Points the cameras: the chase camera eases to a spot behind and above
 /// the bot's shoulder (pulled in where a wall or the ground is in the
-/// way), looking a little ahead of it; the drone circles 30 m up and
-/// 18 m out (higher over a crown), looking down at it.
+/// way), looking a little ahead of it; the drone circles 18 m up and
+/// 12 m out (higher over a crown), looking down at it.
 #[allow(clippy::too_many_arguments)]
 fn aim(
     mut dir: ResMut<Director>,
@@ -562,7 +562,7 @@ fn aim(
     // the crowns and moves there if it's much better; it climbs over any
     // crown in its way.
     let trees = trees.get_or_insert_with(|| super::cinematic::Trees::new(&zone));
-    let spot = |a: f32| eye + Vec3::new(a.sin(), 0.0, a.cos()) * 18.0 + Vec3::Y * 30.0;
+    let spot = |a: f32| eye + Vec3::new(a.sin(), 0.0, a.cos()) * 12.0 + Vec3::Y * 18.0;
     d.drone_angle += dt * 7f32.to_radians();
     d.look_round -= dt;
     if d.look_round <= 0.0 {

@@ -120,7 +120,7 @@ headless sim: one 1/90 s fixed step a frame. Two cameras follow the bot:
 
 - a chase camera eased in behind and above its right shoulder, pulled in
   where a wall or the ground is in the way;
-- a drone's-eye view circling 20 m up and 16 m out.
+- a drone's-eye view circling 18 m up and 12 m out (higher over a crown, and used only when it can see the bot).
 
 The player has no body a camera draws: in the headset you see your gloves
 and sleeves. The body's shadow comes from a proxy of capsules on a layer
