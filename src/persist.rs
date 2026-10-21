@@ -1262,6 +1262,7 @@ pub fn reset_zone(world: &mut World) {
     crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
+    crate::progression::safehouse::relay_leftovers(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
     world.write_message(SaveNow);
 }
