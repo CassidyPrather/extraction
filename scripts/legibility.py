@@ -2,7 +2,7 @@
 """Reads back the render-based legibility gauge's shots (`--legibility DIR`).
 
     scripts/legibility.py DIR [--sheet OUT.png] [--crops CROPDIR]
-    scripts/legibility.py --compare OUT.png BEFORE AFTER [...] [--sources A,B]
+    scripts/legibility.py --compare OUT.png BEFORE AFTER [...] [--sources A,B] [--every N]
 
 Each shot shows one text panel from where it's read, at the headset's
 pixels a degree (render::legibility). This crops the panel, blurs it a
@@ -106,17 +106,25 @@ def proxy(im, dark):
     return f"(proxy {keep:.2})", keep
 
 
-def compare(pairs, out, sources=None):
-    """Before and after, side by side, a row a source: `pairs` is a list of
-    (before dir, after dir); each row is the first shot of a source in
-    each, at 2x with square pixels, labelled with its size and score."""
+def compare(pairs, out, sources=None, every=1):
+    """Before and after, side by side: `pairs` is a list of (before dir,
+    after dir). A row a source (the first shot of it in each), or with
+    `every` > 1, every `every`th shot of each source, paired with the
+    after shot of the same panel (the nearest by position). At 2x with
+    square pixels, labelled with its size and score."""
     rows = []
     for before, after in pairs:
-        b = {s["source"]: s for s in reversed(json.load(open(os.path.join(before, "legibility.json"))))}
-        a = {s["source"]: s for s in reversed(json.load(open(os.path.join(after, "legibility.json"))))}
-        for src in sources or sorted(set(b) & set(a)):
-            if src in b and src in a and (b[src], a[src]) not in rows:
-                rows.append(((before, b[src]), (after, a[src])))
+        bs = json.load(open(os.path.join(before, "legibility.json")))
+        as_ = json.load(open(os.path.join(after, "legibility.json")))
+        for src in sources or sorted({s["source"] for s in bs} & {s["source"] for s in as_}):
+            bb = [s for s in bs if s["source"] == src]
+            aa = [s for s in as_ if s["source"] == src]
+            if not bb or not aa:
+                continue
+            for b in bb[:: every] if every > 1 else bb[:1]:
+                near = min(aa, key=lambda a: sum((x - y) ** 2 for x, y in
+                                                 zip(a.get("centre", [0, 0, 0]), b.get("centre", [0, 0, 0]))))
+                rows.append(((before, b), (after, near)))
     W, H = 520, 300
     sheet = Image.new("RGB", (W * 2, H * len(rows) + 24), (30, 30, 30))
     d = ImageDraw.Draw(sheet)
@@ -145,12 +153,17 @@ def main(argv):
     if argv and argv[0] == "--compare":
         # --compare OUT BEFORE AFTER [BEFORE AFTER ...] [--sources A,B,...]
         sources = None
+        every = 1
+        if "--every" in argv:
+            i = argv.index("--every")
+            every = int(argv[i + 1])
+            argv = argv[:i] + argv[i + 2:]
         if "--sources" in argv:
             i = argv.index("--sources")
             sources = argv[i + 1].split(",")
             argv = argv[:i] + argv[i + 2:]
         dirs = argv[2:]
-        compare(list(zip(dirs[::2], dirs[1::2])), argv[1], sources)
+        compare(list(zip(dirs[::2], dirs[1::2])), argv[1], sources, every)
         return 0
     sheet = None
     crops_dir = None
