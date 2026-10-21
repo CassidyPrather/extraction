@@ -697,7 +697,8 @@ fn find_grab(
             &reach,
             hand.translation,
             Quat::IDENTITY,
-            &SpatialQueryFilter::from_mask([Layer::World]),
+            // (A wreck's limbs are the robot's parts: `carry::Draggable`.)
+            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot]),
         ) {
             let mut up = hit;
             for _ in 0..4 {
@@ -945,7 +946,13 @@ fn apply_hand_actions(
                         let offset = Transform::from_matrix(offset.into());
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
-                        let v = hand.velocity.clamp_length_max(MAX_THROW);
+                        // Something bulky doesn't take on the hand's speed as
+                        // it's taken hold of: it starts from where it lay.
+                        let v = if bulky {
+                            Vec3::ZERO
+                        } else {
+                            hand.velocity.clamp_length_max(MAX_THROW)
+                        };
                         physics_on(&mut commands, item, world, v, Vec3::ZERO, false);
                         commands.entity(item).insert(Held {
                             player,
@@ -985,8 +992,9 @@ fn apply_hand_actions(
                 let mut angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
                 // Something bulky is shoved, not thrown: an arm puts so much
                 // into it, and it hardly turns (`carry`).
-                if let Ok((.., Some(it), true)) = items.get(item) {
-                    let m = catalog.get(it.kind()).mass.max(0.5);
+                if let Ok((.., it, true)) = items.get(item) {
+                    // (A wreck has no catalog entry: about a walker's hull.)
+                    let m = it.map_or(80.0, |it| catalog.get(it.kind()).mass).max(0.5);
                     velocity = hand
                         .velocity
                         .clamp_length_max((2.0 * carry::SHOVE / m).sqrt());
@@ -1420,17 +1428,19 @@ pub(crate) fn follow_hands(
         Option<&Mass>,
         Option<&mut HoldFeel>,
         Has<carry::Bulky>,
+        Has<carry::Draggable>,
     )>,
     roots: Query<&GlobalTransform, With<Player>>,
     blocked: Res<LeashBlocked>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (e, h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel, bulky) in
+    for (e, h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel, bulky, wreck) in
         &mut held
     {
-        // One hand on something bulky drags it (`carry`).
-        if bulky && support.is_none() {
+        // One hand on something bulky drags it, and a wreck is only ever
+        // dragged (`carry`).
+        if (bulky && support.is_none()) || wreck {
             continue;
         }
         let Ok(hand) = hands.get(h.hand) else {

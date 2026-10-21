@@ -113,7 +113,13 @@ impl Plugin for BodyPlugin {
                         .after(backpack_released),
                 ),
             )
-            .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems));
+            .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems))
+            .add_systems(
+                FixedUpdate,
+                hang_held_pack
+                    .in_set(super::InteractSystems::Follow)
+                    .after(super::follow_hands),
+            );
     }
 }
 
@@ -471,6 +477,61 @@ fn follow_head(
                 t.translation.lerp(want, ease)
             };
             t.rotation = Quat::from_rotation_y(torso.yaw);
+        }
+    }
+}
+
+/// How far under the hand a held pack hangs (its middle), metres.
+pub const HANG: f32 = 0.3;
+
+/// Your pack swung off a shoulder and held: it hangs from the hand by its
+/// top strap, upright, its back to you, and while it's in front of you it's
+/// open, what's in it showing, for the other hand to reach in and take;
+/// taken back over the shoulder it closes (and let go there, it's on).
+#[allow(clippy::type_complexity)]
+fn hang_held_pack(
+    mut packs: Query<(
+        &mut Backpack,
+        &Held,
+        &Position,
+        &Rotation,
+        &mut LinearVelocity,
+        &mut AngularVelocity,
+    )>,
+    hands: Query<&super::Hand>,
+    players: Query<&Children, With<Player>>,
+    torsos: Query<&GlobalTransform, With<Torso>>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs().max(1e-4);
+    for (mut bag, held, pos, rot, mut lin, mut ang) in &mut packs {
+        if !bag.carried {
+            continue;
+        }
+        let (Ok(hand), Ok(children)) = (hands.get(held.hand), players.get(held.player)) else {
+            continue;
+        };
+        let Some(torso) = children.iter().find_map(|c| torsos.get(c).ok()) else {
+            continue;
+        };
+        let torso = torso.compute_transform();
+        let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
+            .with_rotation(torso.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+        lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
+        let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
+        if angle > std::f32::consts::PI {
+            angle -= std::f32::consts::TAU;
+        }
+        let w = axis * angle / dt;
+        ang.0 = if w.is_finite() {
+            w.clamp_length_max(20.0)
+        } else {
+            Vec3::ZERO
+        };
+        let in_front = torso.rotation.inverse() * (pos.0 - torso.translation);
+        let open = in_front.z < -0.05;
+        if bag.open != open {
+            bag.open = open;
         }
     }
 }
