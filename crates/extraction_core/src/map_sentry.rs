@@ -56,32 +56,51 @@ const TRUCK_SPOTS: [f32; 3] = [0.0, 3.6, 8.0];
 pub struct Sentry {
     pub name: String,
     pub at: P2,
-    /// Middle of its arc, as [`sentry::bearing`] measures (the marker's
-    /// `rot`), and its full width, degrees.
+    /// Middle of its arc, as [`sentry::bearing`] measures (see
+    /// [`Sentry::of`]), and its full width, degrees.
     pub centre: f32,
     pub arc: f32,
     pub power: P2,
 }
 
+/// How far behind the mast its box stands when the map doesn't say (the
+/// game's `robots::sentry::POWER_BEHIND`).
+pub const POWER_BEHIND: f32 = 12.0;
+/// The widest arc a sentry may sweep: past this, with its eye's own
+/// field, there's no behind to get round to.
+pub const ARC_MAX: f32 = 260.0;
+
+impl Sentry {
+    /// A sentry marker as the game stands it (`robots::sentry::from_marker`):
+    /// `rot` faces the way a sign's board would (0 toward +Z, 90 toward
+    /// +X), so its arc's middle is `180 - rot` as [`sentry::bearing`]
+    /// measures; the box defaults to [`POWER_BEHIND`] straight behind.
+    pub fn of(m: &crate::map::Marker) -> Option<Sentry> {
+        let MarkerKind::Sentry { arc, power } = &m.kind else {
+            return None;
+        };
+        let r = m.rot.to_radians();
+        let facing = [r.sin(), r.cos()];
+        Some(Sentry {
+            name: if m.name.is_empty() {
+                "a sentry".into()
+            } else {
+                m.name.clone()
+            },
+            at: m.at,
+            centre: sentry::wrap_deg(180.0 - m.rot),
+            arc: *arc,
+            power: power.unwrap_or([
+                m.at[0] - facing[0] * POWER_BEHIND,
+                m.at[1] - facing[1] * POWER_BEHIND,
+            ]),
+        })
+    }
+}
+
 /// The map's sentries.
 pub fn sentries(map: &MapDef) -> Vec<Sentry> {
-    map.markers
-        .iter()
-        .filter_map(|m| match &m.kind {
-            MarkerKind::Sentry { arc, power } => Some(Sentry {
-                name: if m.name.is_empty() {
-                    "a sentry".into()
-                } else {
-                    m.name.clone()
-                },
-                at: m.at,
-                centre: m.rot,
-                arc: *arc,
-                power: *power,
-            }),
-            _ => None,
-        })
-        .collect()
+    map.markers.iter().filter_map(Sentry::of).collect()
 }
 
 /// A placement as a block that stops a line of sight.
@@ -364,6 +383,12 @@ pub fn check(
                 " in its field"
             },
         ));
+        if s.arc > ARC_MAX {
+            out.findings.push((
+                format!("{} sweeps {:.0}° (at most {ARC_MAX})", s.name, s.arc),
+                s.at,
+            ));
+        }
         if share < FIELD_SHARE {
             out.findings.push((
                 format!(
@@ -470,9 +495,13 @@ mod tests {
         (map, hm)
     }
 
+    /// A sentry facing `rot` the way the maps write it (0 toward +Z).
     fn sentry_at(at: P2, rot: f32, arc: f32, power: P2) -> Marker {
         Marker {
-            kind: MarkerKind::Sentry { arc, power },
+            kind: MarkerKind::Sentry {
+                arc,
+                power: Some(power),
+            },
             at,
             rot,
             name: "Test sentry".into(),
@@ -482,7 +511,7 @@ mod tests {
 
     #[test]
     fn behind_it_is_never_seen_and_in_front_is() {
-        let (map, _) = yard_with(sentry_at([0.0, 0.0], 0.0, 90.0, [0.0, 15.0]));
+        let (map, _) = yard_with(sentry_at([0.0, 0.0], 180.0, 90.0, [0.0, 15.0]));
         let s = &sentries(&map)[0];
         // Facing -Z: 20 m ahead it can look; 20 m behind, never.
         assert!(s.sweeps([0.0, -20.0]));
@@ -492,7 +521,7 @@ mod tests {
 
     #[test]
     fn a_wall_hides_what_is_behind_it() {
-        let (mut map, _) = yard_with(sentry_at([0.0, 0.0], 0.0, 90.0, [0.0, 15.0]));
+        let (mut map, _) = yard_with(sentry_at([0.0, 0.0], 180.0, 90.0, [0.0, 15.0]));
         let p = [0.0, -30.0];
         let hm = Heightmap::build(&map);
         let open = sentries(&map)[0].sees(&map, &hm, p);
@@ -574,9 +603,12 @@ mod scout {
                             let power = [at[0] + b.sin() * d, at[1] - b.cos() * d];
                             let mut map = base.clone();
                             map.markers.push(crate::map::Marker {
-                                kind: MarkerKind::Sentry { arc, power },
+                                kind: MarkerKind::Sentry {
+                                    arc,
+                                    power: Some(power),
+                                },
                                 at,
-                                rot: centre,
+                                rot: sentry::wrap_deg(180.0 - centre),
                                 name: "S".into(),
                                 y: 0.0,
                             });
@@ -606,7 +638,7 @@ mod scout {
                 "at ({:.1}, {:.1}) rot {:.0} arc {:.0} power ({:.1}, {:.1}): sees {:.0}% ({} cells)",
                 g.2[0],
                 g.2[1],
-                g.3,
+                sentry::wrap_deg(180.0 - g.3),
                 g.4,
                 g.5[0],
                 g.5[1],

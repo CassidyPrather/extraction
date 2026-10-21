@@ -8,7 +8,7 @@
 //! findings (`lint.json`) for the preview to draw, and the Surge's walk to
 //! a roof past a minute's (`surge.f32`, for `--heat`).
 
-use extraction_core::map::{MapDef, MarkerKind};
+use extraction_core::map::MapDef;
 use extraction_core::terrain::Heightmap;
 use std::io::Write;
 
@@ -104,13 +104,13 @@ fn main() {
         .map(|m| {
             let kind = format!("{:?}", m.kind);
             let kind = kind.split(['(', ' ', '{']).next().unwrap_or("").to_string();
-            // A sentry's sweep and box, for the preview's wedge.
-            let extra = match &m.kind {
-                MarkerKind::Sentry { arc, power } => format!(
+            // A sentry's sweep (its middle as sentry::bearing measures) and box, for the preview's wedge.
+            let extra = match extraction_core::map_sentry::Sentry::of(m) {
+                Some(s) => format!(
                     ",\"rot\":{},\"arc\":{},\"power\":[{},{}]",
-                    m.rot, arc, power[0], power[1]
+                    s.centre, s.arc, s.power[0], s.power[1]
                 ),
-                _ => String::new(),
+                None => String::new(),
             };
             format!(
                 "{{\"kind\":\"{}\",\"name\":\"{}\",\"at\":[{},{}]{}}}",

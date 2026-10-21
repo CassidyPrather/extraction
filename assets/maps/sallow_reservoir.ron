@@ -471,7 +471,7 @@
         (kind: RobotGate, at: (222.0, -232.0), rot: 315.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 140.0, power: (228.1, -228.6)), at: (216.0, -221.6), rot: -150.0, name: "Gate sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((228.1, -228.6))), at: (216.0, -221.6), rot: -30.0, name: "Gate sentry"),
         (kind: ArtifactField, at: (-105.0, -75.0), name: "The churchyard"),
         (kind: ArtifactField, at: (160.0, -250.0), name: "The silt fans"),
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (227.0, 215.0), name: "Spillway well"),
