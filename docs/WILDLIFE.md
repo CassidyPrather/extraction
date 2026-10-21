@@ -155,6 +155,35 @@ At dusk and at night (not in heavy rain), seven moths flit round each of
 the nearest six lit lamps within 35 m of you: any point light, house
 lamps, lanterns, the camp's (`wildlife::small_look`; visual only).
 
+## Bats
+
+At dusk and at night (not in heavy rain), small groups of bats, three to
+eight, hunt in loose, erratic loops over the water, along the outside of
+the woods' edges and round the buildings, 3 to 15 m up
+(`wildlife::bats`). By day they roost in the buildings, out of sight. As
+with the fish, the valley near you is cut into 40 m cells and about half
+the cells with water, a wood's edge or a building in them have a group,
+always the same for the seed; they're kept within 90 m of you. Each bat
+flies at 6 to 9 m/s and swerves every quarter to whole second, turning
+hard. None is ever inside or under anything built, or lower than 2 m
+over the ground or the water. What they tell you:
+
+- **Bats veer off a light**: they keep 9 m from a lamp (the houses'
+  lamps, any other lit near you) and out of a torch's beam (30 m long, a
+  cone 40 degrees across, with a margin): your torch on the creek clears
+  a lane through them, and a hole in their loops where you'd expect none
+  is a light, or was.
+- **A shot scatters them** (as far off as it flushes a flock): they're
+  off flat out for three seconds, then back to hunting.
+- **A machine within 40 m of where they hunt sends them off**: gone
+  after five seconds, and back only a minute after nothing's been near.
+  No bats over a stretch of water at dusk, when the next one along has
+  them, says something's been there.
+
+Drawn within 60 m (`art/animals/bat.py`: wings up and down, swapped ten
+times a second, 232 triangles; a 64-triangle stand-in past 25 m), a
+little over life size so they read against the dusk.
+
 ## The chorus
 
 `wildlife::insects::Chorus` is how loud the small life round you is, 0
@@ -194,6 +223,14 @@ wind thin it. When the insects stop, something is close.
 - `wildlife::fish::tests`: every valley has shoals; walking to the bank,
   wading in and shooting, no fish leaves deep water or the space between
   bed and surface, and they dart.
+- `wildlife::bats::tests`: out only at dusk and at night (and in the
+  whole game: bats on Marrow Creek's creek at dusk and night, none by
+  day); four minutes per valley of someone walking round the groups with
+  a torch on them, shooting now and then, and a walker coming by: no bat
+  ever inside or under anything built or below 2 m, none faster than
+  9 m/s, and they scatter, leave and come back; with a torch pointed
+  across their beat they keep further from its beam than in the dark;
+  determinism.
 - The gauges (`render::budget`): everything far off is one mesh
   (`visuals::FarParts`: flocks past 60 m, deer and dogs past 90 m), so
   the animals cost a view one draw beyond the near ones.
@@ -208,7 +245,8 @@ wind thin it. When the insects stop, something is close.
 `docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
 Creek), `flock_up.png` (the same house a few seconds after they went up),
 `deer_grazing.png`, `dogs.png` (Cinder Works), `heron.png` (Sallow
-Reservoir's shallows).
+Reservoir's shallows), `bats.png` (dusk over Marrow Creek's creek,
+looking downstream from -130, 8).
 
 ## Pacing
 
