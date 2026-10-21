@@ -31,17 +31,17 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 OUT = os.path.join(ROOT, "assets", "audio", "radio")
 QUALITY = 2  # Vorbis -q:a
 
+# The loop's eight lines, in order (Story's, held to docs/LORE.md): line 3
+# is why Hana stayed (no dogs on the buses); line 6 was added after the
+# machines came, on 2 November.
 EVACUATION_TEXT = (
-    "This is the Quarantine Authority, valley office Marrow. "
-    "The valleys of Marrow Creek, Kettle Pass and Cinder Works are closed. "
-    "The closure is for three days. "
-    "Residents of Marrow Creek: buses leave the bus depot at six o'clock "
-    "on the fourteenth of October. "
-    "Residents of Kettle Pass: the train and the lorries leave over the pass "
-    "on the fifteenth. "
-    "Residents of Cinder Works: transport leaves on the fifteenth. "
-    "Take your documents and one bag each. Do not take animals. "
-    "Leave your doors unlocked. "
+    "Attention. This valley is closed by order of the Quarantine Authority. "
+    "Proceed to the south gate. Transport is provided. "
+    "Take one bag for each person. Leave animals with water. "
+    "Do not lock your door. Your property will be kept. "
+    "You will return when the review is complete. "
+    "Do not approach the machines. They are here to help. "
+    "Report persons who remain to the gate. "
     "This message repeats."
 )
 EVACUATION_VOICE = {"voice": "en-gb", "speed": 140, "pitch": 38, "word_gap_10ms": 3}
@@ -168,7 +168,7 @@ def main():
 
     x, text = evacuation()
     path, secs = write_ogg(x, "evacuation.ogg")
-    assert 45.0 <= secs <= 75.0, f"evacuation loop is {secs:.1f} s"
+    assert 35.0 <= secs <= 75.0, f"evacuation loop is {secs:.1f} s"
     manifest.append({
         "file": "evacuation.ogg",
         "text": text,
