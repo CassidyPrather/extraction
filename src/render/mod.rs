@@ -1,7 +1,9 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod affordance;
 pub mod arms;
 pub mod bench;
+pub mod blink;
 pub mod budget;
 pub mod cards;
 pub mod comfort;
@@ -10,6 +12,7 @@ pub mod fog;
 pub mod grade;
 pub mod kit;
 pub mod kitchen;
+pub mod landmarks;
 pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
@@ -23,10 +26,13 @@ pub mod props;
 pub mod screen;
 pub mod spikes;
 pub mod stats;
+pub mod tells;
 pub mod terrain_material;
+pub mod tools;
 pub mod upgrades;
 pub mod warmup;
 pub mod water_material;
+pub mod wayfind_shots;
 pub mod world_props;
 
 use bevy::camera::Hdr;
@@ -64,8 +70,12 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
+        .add_plugins(wayfind_shots::WayfindShotsPlugin)
+        .add_plugins(landmarks::LandmarkLampsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
+        .add_plugins(tools::ToolVisualsPlugin)
+        .add_plugins(blink::BlinkPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)

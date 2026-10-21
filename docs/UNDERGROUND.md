@@ -8,6 +8,7 @@ torchlight, with the best loot behind the most risk.
 | Marrow Creek | `bunker_marrow` | Civil-defence shelter under the village: blast door, gas lock, decontamination, a spine corridor, dormitory, mess, filter plant, generator, command post, armoury, medical post, escape tunnel | 11 | Entrance stair; escape stair 60 m north |
 | Kettle Pass | `mine_kettle` | Mine gallery behind the mine office: shaft station, lamp room, main drive, crosscuts, a tall stope, explosives magazine, sump, refuge chamber, raise | 10 | Entrance incline; the raise's stair |
 | Cinder Works | `tunnel_cinder` | Service tunnel and pump room under the factory hall: stair hall, two tunnels, pump room, valve chamber, switch room, store, cable vault, workshop, overflow chamber | 10 | Entrance stair; a stair south of the hall |
+| Sallow Reservoir | `gallery_sallow` | The dam's inspection gallery: a landing under the toe, 44 m of gallery under the crest (seepage ankle deep), plumb-line chamber, weir chamber, gauge room, a passage under the bed to the draw-off tower | 6 | Entrance by the valve house; a stair up beside the tower on the bed |
 
 Plans: `docs/underground/<site>.svg` (regenerate with
 `PLAN_DIR=$PWD/docs/underground cargo test -p extraction_core plans_draw`).
@@ -347,6 +348,8 @@ already there), then the mine, then the cellars.
 | `pump_marrow` | Marrow (-173, 3), outfall (-173, 58) | three basins: inlet (valve in a dry gallery), screens (valve under the inlet's water), sump (hand pump only) | `underground::Levels`, `DrainControl`, `BasinDrained`, `site_water` reads live levels, basin surfaces follow | `the_pump_station_drains` |
 | `deep_kettle` | Kettle (-54, 106), incline (-54, 173) | firedamp in the old heading (and its corridor) and a dip; the canary; a cart on the haulage rail; shoring between heading and refuge | `world::workings`: `Gas`, `InGas`, `GasIgnited`, `Canary`, `MineCart`, `Shoring`, `Fall`, `RoofFell` | `crossing_the_gas_with_the_canary`, `the_cart_rolls_and_the_roof_falls` |
 | `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
+
+| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
 
 Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
 `shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a

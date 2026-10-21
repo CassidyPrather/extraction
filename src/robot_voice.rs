@@ -745,6 +745,9 @@ fn from_minds(
             Mind::Engaging => Utterance::Engaging,
             Mind::Lost => Utterance::Lost,
             Mind::Calling => Utterance::Calling,
+            // (Robot minds: its own line is Audio's to give.)
+            Mind::Flanking => Utterance::Engaging,
+            Mind::Retreating => Utterance::Hurt,
             Mind::Answering { caller } => {
                 let from = places.get(caller).map_or(m.at, |g| g.translation());
                 answers

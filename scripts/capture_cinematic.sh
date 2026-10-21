@@ -15,6 +15,8 @@ MAP="${1:-marrow_creek}"
 OUT="${2:-target/capture/$MAP}"
 shift $(( $# > 2 ? 2 : $# ))
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
+. scripts/capture_common.sh
+capture_check_bin "$BIN"
 CINE="${CINE:-scripts/capture_paths/$MAP.cine}"
 SIZE="${SIZE:-1280x720}"
 FPS="${FPS:-24}"

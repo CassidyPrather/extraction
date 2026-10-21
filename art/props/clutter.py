@@ -134,9 +134,11 @@ def coat_hook():
     c = (0.0, -0.45, -0.08)
     p.lathe([(0.0, 0.45), (0.14, 0.4), (0.22, 0.2), (0.24, -0.1), (0.27, -0.5), (0.0, -0.5)],
             "Wool", segs=10, xf=T(*c) @ S(1.0, 1.0, 0.35) @ UP)
+    # The sleeves hanging down from the shoulders (not out through the
+    # wall behind).
     for sx in (-1, 1):
         p.lathe([(0.0, 0.0), (0.05, 0.02), (0.045, 0.55), (0.0, 0.56)], "Wool", segs=8,
-                xf=T(sx * 0.2, -0.1, -0.09) @ RZ(sx * 0.12) @ RX(math.pi / 2) @ UP)
+                xf=T(sx * 0.2, -0.1, -0.09) @ RZ(sx * 0.12) @ RX(math.pi) @ UP)
     return [p]
 
 

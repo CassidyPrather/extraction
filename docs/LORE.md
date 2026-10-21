@@ -406,6 +406,21 @@ Small arrangements of existing props and items at the points of interest
 moment someone didn't come back from. A scene should be readable without
 its note; a note, if it has one, adds a fact, not an explanation.
 
+### Set pieces
+
+Larger scenes you walk through, one a valley, each telling a turn of the
+story by what's left and rewarding whoever looks closely (`Prop` pieces
+draw any model from `props/`). What's left to take lies on something,
+never on the ground, and each is walkable from where the raid sets down
+(`world::scenes` tests both).
+
+| Where | Set piece | What it tells |
+| - | - | - |
+| Marrow, the depot yard | **The second lorry** | The luggage left for the lorry that was to follow the buses on the 15th: one piece a household, labelled, in rows. "It's not coming. Take what you need. Leave the labels on." |
+| Kettle, the lodge meadow | **Fiala's walker** | A machine that came to old Fiala's fence every evening and never took a thing of his, lying where it stopped, jam jars of flowers on its back. He took its eye out so it would stop looking. |
+| Cinder, by the blast furnace | **The charging queue** | The last charge, pallet by pallet (cases, a bedstead, books, dishes, a tool chest), held when the fire got into the north wood on 26 February, and never fed. |
+| Sallow, the stock ground | **Bay four** | Marrow depot's buses in their row on the dry bed, and the bay between three and five still held for number four, the bus Lev drove out. |
+
 ## Tone rules
 
 - **Understated.** Nobody says "horror", "nightmare" or "doomed". Fear is

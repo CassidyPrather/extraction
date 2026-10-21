@@ -7,6 +7,7 @@
 
 pub mod ammo;
 pub mod anomaly;
+pub mod contracts;
 pub mod cooking;
 pub mod cover;
 pub mod fabrication;
@@ -32,6 +33,7 @@ pub mod progression;
 pub mod rocks;
 pub mod safehouse;
 pub mod save;
+pub mod sentry;
 pub mod terrain;
 pub mod underground;
 pub mod unity;

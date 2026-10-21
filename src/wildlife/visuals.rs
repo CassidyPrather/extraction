@@ -31,6 +31,28 @@ pub const BEAT_EASY: f32 = 3.2;
 pub const BEAT_HARD: f32 = 6.0;
 
 const MODEL: &str = "models/animals/rook.glb";
+const HERON: &str = "models/animals/heron.glb";
+
+impl BirdArt {
+    pub fn poses(&self, species: Species) -> Option<&BirdPoses> {
+        match species {
+            Species::Heron => self.heron.as_ref(),
+            _ => self.rook.as_ref(),
+        }
+    }
+}
+
+/// A model's colours by material: a rook's black and grey bill; a heron's
+/// grey, white and yellow.
+fn colours(model: &str, material: Option<&str>) -> LinearRgba {
+    match (model == HERON, material) {
+        (false, Some("Beak")) => LinearRgba::rgb(0.13, 0.13, 0.135),
+        (false, _) => LinearRgba::rgb(0.034, 0.034, 0.04),
+        (true, Some("Beak")) => LinearRgba::rgb(0.32, 0.25, 0.07),
+        (true, Some("Pale")) => LinearRgba::rgb(0.42, 0.42, 0.4),
+        (true, _) => LinearRgba::rgb(0.11, 0.115, 0.12),
+    }
+}
 
 /// A bird's poses, one mesh each.
 #[derive(Clone)]
@@ -45,7 +67,9 @@ pub struct BirdPoses {
 
 #[derive(Resource, Default)]
 pub struct BirdArt {
-    pub poses: Option<BirdPoses>,
+    /// Rooks (ravens and jackdaws are rooks, tinted) and herons.
+    pub rook: Option<BirdPoses>,
+    pub heron: Option<BirdPoses>,
     materials: HashMap<&'static str, Handle<StandardMaterial>>,
 }
 
@@ -75,7 +99,11 @@ pub struct FarParts {
     /// The last build's parts, to skip rebuilding a still scene.
     built: Vec<(AssetId<Mesh>, [f32; 4])>,
     entity: Option<(Entity, Handle<Mesh>)>,
+    since: u32,
 }
+
+/// The far mesh is rebuilt at most every this many frames.
+pub const FAR_REBUILD: u32 = 6;
 
 pub struct VisualsPlugin;
 
@@ -93,7 +121,7 @@ impl Plugin for VisualsPlugin {
     }
 }
 
-/// The poses from the model once it's in; blockouts if it never comes.
+/// The poses from the models once they're in; blockouts if they never come.
 fn load_birds(
     mut art: ResMut<BirdArt>,
     mut models: ResMut<Models>,
@@ -103,48 +131,60 @@ fn load_birds(
     gltf_meshes: Res<Assets<GltfMesh>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if art.poses.is_some() {
-        return;
-    }
-    let Some(handle) = models.request(MODEL, &server) else {
-        art.poses = Some(blockout(&mut meshes));
-        return;
-    };
-    match Models::state(&handle, &server, &gltfs) {
-        ModelState::Loading => {}
-        ModelState::Failed => art.poses = Some(blockout(&mut meshes)),
-        ModelState::Ready(gltf) => {
-            let tree = model_nodes(gltf, &nodes, &gltf_meshes);
-            let mut pose = |name: &str| merged(&tree, name, &mut meshes);
-            let poses = (|| {
-                Some(BirdPoses {
-                    sit: pose("sit")?,
-                    sit_far: pose("sit_lod1")?,
-                    beat: [pose("up")?, pose("mid")?, pose("down")?],
-                    glide: pose("glide")?,
-                    fly_far: pose("fly_lod1")?,
-                })
-            })();
-            art.poses = Some(poses.unwrap_or_else(|| {
-                warn!("{MODEL}: a pose is missing; drawing blockout birds");
-                blockout(&mut meshes)
-            }));
+    for model in [MODEL, HERON] {
+        let have = if model == HERON {
+            &art.heron
+        } else {
+            &art.rook
+        };
+        if have.is_some() {
+            continue;
+        }
+        let got = match models.request(model, &server) {
+            None => Some(blockout(&mut meshes)),
+            Some(handle) => match Models::state(&handle, &server, &gltfs) {
+                ModelState::Loading => None,
+                ModelState::Failed => Some(blockout(&mut meshes)),
+                ModelState::Ready(gltf) => {
+                    let tree = model_nodes(gltf, &nodes, &gltf_meshes);
+                    let mut pose = |name: &str| merged(&tree, name, model, &mut meshes);
+                    let poses = (|| {
+                        Some(BirdPoses {
+                            sit: pose("sit")?,
+                            sit_far: pose("sit_lod1")?,
+                            beat: [pose("up")?, pose("mid")?, pose("down")?],
+                            glide: pose("glide")?,
+                            fly_far: pose("fly_lod1")?,
+                        })
+                    })();
+                    Some(poses.unwrap_or_else(|| {
+                        warn!("{model}: a pose is missing; drawing blockout birds");
+                        blockout(&mut meshes)
+                    }))
+                }
+            },
+        };
+        if model == HERON {
+            art.heron = got;
+        } else {
+            art.rook = got;
         }
     }
 }
 
 /// A node's primitives as one mesh, each painted its material's colour
 /// (the bird's material is white: the colours are the colour).
-fn merged(tree: &[ModelNode], name: &str, meshes: &mut Assets<Mesh>) -> Option<Handle<Mesh>> {
+fn merged(
+    tree: &[ModelNode],
+    name: &str,
+    model: &str,
+    meshes: &mut Assets<Mesh>,
+) -> Option<Handle<Mesh>> {
     let node = ModelNode::find(tree, name)?;
     let mut s = StandIn::default();
     for p in &node.primitives {
         let mesh = meshes.get(&p.mesh)?;
-        let c = match p.material.as_deref() {
-            Some("Beak") => LinearRgba::rgb(0.13, 0.13, 0.135),
-            _ => LinearRgba::rgb(0.034, 0.034, 0.04),
-        };
-        s.add(mesh, c);
+        s.add(mesh, colours(model, p.material.as_deref()));
     }
     s.build().map(|m| meshes.add(keep(m)))
 }
@@ -186,6 +226,8 @@ fn tint(species: Species) -> Color {
         Species::Rook => Color::WHITE,
         Species::Raven => Color::srgb(0.8, 0.8, 0.85),
         Species::Jackdaw => Color::srgb(1.9, 1.9, 1.95),
+        Species::Chough => Color::srgb(0.75, 0.75, 0.78),
+        Species::Heron => Color::WHITE,
     }
 }
 
@@ -198,6 +240,8 @@ fn material(
         Species::Rook => "rook",
         Species::Raven => "raven",
         Species::Jackdaw => "jackdaw",
+        Species::Chough => "chough",
+        Species::Heron => "heron",
     };
     let tint = tint(species);
     art.materials
@@ -223,10 +267,10 @@ fn draw_flocks(
     flocks: Query<(Entity, &Flock), Without<Drawn>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(poses) = art.poses.clone() else {
-        return;
-    };
     for (e, flock) in &flocks {
+        let Some(poses) = art.poses(flock.species).cloned() else {
+            continue;
+        };
         let mat = material(&mut art, flock.species, &mut materials);
         for (i, b) in flock.birds.iter().enumerate() {
             commands.spawn((
@@ -268,11 +312,8 @@ fn pose_birds(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
-    let Some(poses) = &art.poses else {
-        return;
-    };
     let dt = time.delta_secs();
-    let eye = cams.iter().next().map(|g| g.translation());
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     for (mut v, mut tf, mut mesh, mut vis) in &mut birds {
         let Ok(flock) = flocks.get(v.flock) else {
             continue;
@@ -280,8 +321,16 @@ fn pose_birds(
         let Some(b) = flock.birds.get(v.index) else {
             continue;
         };
+        let Some(poses) = art.poses(flock.species) else {
+            continue;
+        };
+        // Taken away: nothing to draw.
+        if b.state == BirdState::Gone {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        }
         // The whole flock far off: drawn in the one far mesh (`far_flocks`).
-        let whole = eye.is_some_and(|e| e.distance(flock.mean()) > FLOCK_FAR);
+        let whole = !eyes.is_empty() && nearest(&eyes, flock.mean()) > FLOCK_FAR;
         vis.set_if_neq(if whole {
             Visibility::Hidden
         } else {
@@ -290,9 +339,14 @@ fn pose_birds(
         if whole {
             continue;
         }
-        let far = eye.is_some_and(|e| e.distance(b.pos) > FAR);
+        let far = !eyes.is_empty() && nearest(&eyes, b.pos) > FAR;
         tf.translation = b.pos;
         let want = match b.state {
+            // Dead: on its back, wings half open.
+            BirdState::Dead | BirdState::Gone => {
+                tf.rotation = Quat::from_rotation_y(-b.yaw) * Quat::from_rotation_z(2.6);
+                &poses.glide
+            }
             BirdState::Sitting(_) => {
                 tf.rotation = Quat::from_rotation_y(-b.yaw - std::f32::consts::FRAC_PI_2);
                 v.roll = 0.0;
@@ -333,6 +387,12 @@ fn pose_birds(
     }
 }
 
+/// How far `p` is from the nearest eye (both of a headset's, a tour's,
+/// a screenshot's: something is far only if it's far from every one).
+pub fn nearest(eyes: &[Vec3], p: Vec3) -> f32 {
+    eyes.iter().map(|e| e.distance(p)).fold(f32::MAX, f32::min)
+}
+
 /// A bird's far pose and turn (no banking: from far off nobody sees it).
 fn far_pose(b: &super::flock::Bird) -> (bool, Quat) {
     match b.state {
@@ -340,6 +400,7 @@ fn far_pose(b: &super::flock::Bird) -> (bool, Quat) {
             true,
             Quat::from_rotation_y(-b.yaw - std::f32::consts::FRAC_PI_2),
         ),
+        BirdState::Dead | BirdState::Gone => (true, Quat::from_rotation_z(1.5)),
         _ if b.vel.length_squared() > 0.01 => (
             false,
             Transform::IDENTITY.looking_to(b.vel, Vec3::Y).rotation,
@@ -355,20 +416,21 @@ fn far_flocks(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut far: ResMut<FarParts>,
 ) {
-    let Some(poses) = &art.poses else {
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
+    if eyes.is_empty() {
         return;
-    };
-    let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
-        return;
-    };
+    }
     for flock in &flocks {
-        let d = eye.distance(flock.mean());
+        let Some(poses) = art.poses(flock.species) else {
+            continue;
+        };
+        let d = nearest(&eyes, flock.mean());
         if d <= FLOCK_FAR || d > HIDE {
             continue;
         }
         let scale = Vec3::splat(flock.species.size());
         let tint = tint(flock.species).to_linear();
-        for b in &flock.birds {
+        for b in flock.birds.iter().filter(|b| b.state != BirdState::Gone) {
             let (sitting, rot) = far_pose(b);
             let at = Transform::from_translation(b.pos)
                 .with_rotation(rot)
@@ -389,7 +451,7 @@ pub(crate) fn build_far(
     mut far: ResMut<FarParts>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut vis: Query<&mut Visibility>,
+    mut vis: Query<(&mut Visibility, &mut Mesh3d)>,
 ) {
     let far = &mut *far;
     let sig: Vec<(AssetId<Mesh>, [f32; 4])> = far
@@ -424,24 +486,41 @@ pub(crate) fn build_far(
             .id();
         (e, mesh)
     });
-    if let Ok(mut v) = vis.get_mut(*e) {
+    let Ok((mut v, mut mesh3d)) = vis.get_mut(*e) else {
+        return;
+    };
+    {
         v.set_if_neq(if parts.is_empty() {
             Visibility::Hidden
         } else {
             Visibility::Inherited
         });
     }
-    if parts.is_empty() || sig == far.built {
+    // Every few frames at most: a new mesh takes a frame or two to reach
+    // the GPU, and one replaced every frame is never drawn. (At 90 Hz
+    // that's 15 times a second; from this far off nobody sees the steps.)
+    far.since += 1;
+    if parts.is_empty() || sig == far.built || far.since < FAR_REBUILD {
         return;
     }
+    far.since = 0;
     let mut built = StandIn::default();
     for (m, at, tint) in &parts {
         if let Some(mesh) = meshes.get(m) {
             built.add(&mesh.clone().transformed_by(*at), *tint);
         }
     }
-    if let (Some(m), Some(mut mesh)) = (built.build(), meshes.get_mut(&*handle)) {
-        *mesh = keep(m);
+    // A new mesh each time (rewriting one in place with another layout
+    // left it undrawn), the old one dropped.
+    if let Some(m) = built.build() {
+        let new = meshes.add(keep(m));
+        meshes.remove(&*handle);
+        *handle = new.clone();
+        mesh3d.0 = new;
+        // Its bounds are worked out again from the new mesh.
+        commands
+            .entity(*e)
+            .remove::<bevy::camera::primitives::Aabb>();
     }
     far.built = sig;
 }

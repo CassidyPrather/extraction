@@ -6,7 +6,11 @@ meet something the yard doesn't cover, Lev says one short line on the
 radio with what to do. He says each line once per career, and the career
 saves which ones he's said (`firsts` in `career.ron`). The lines are
 spaced five seconds apart, because the wrist only shows the newest one.
-Each line fits the wrist (3 lines of 26 characters) and uses no game words.
+Each line fits the radio (3 lines of 26 characters) and uses no game words.
+The wrist pages a long line (3 lines of 18 a page, 2 under a caption's
+speaker), so where there's danger now, what to do comes first: it's on
+the first page, and the reason follows ("Get behind something. That chirp
+is it taking aim.").
 
 | Moment | When | He says |
 | - | - | - |
@@ -74,6 +78,57 @@ Last run (260 s, the merged tree with the bracing fix):
 | First death | 3 | go back for it | yes |
 | Kit recovered | 4 | went back for it before the convoy | yes |
 
+### Per mode: seated, one-handed, left-handed
+
+The same career is replayed with each access setting (`--seated`,
+`--one-handed`, `--left-handed`). The bot plays the way that setting
+makes the player play:
+- **Seated:** its real eye is at 1.2 m. The rig lifts it to a standing
+  eye, and it reaches no lower than a seated hand. Anything lower takes
+  the crouch button.
+- **One-handed:** everything is done with the gun hand. It reloads from a
+  pouch, racks with the second button, and switches the fire mode with a
+  stick click. It holsters the gun to free the hand, and draws it back.
+- **Left-handed:** mirrored. The holster and mount are on the other hip,
+  the watch is on the right wrist, and the sticks are swapped.
+
+Last runs, all on the same tree (commit a84d213):
+
+| Mode | Flag | Moments met | Answered right | Bot task failures |
+| - | - | - | - | - |
+| Standing, two hands, right | (none) | 14 | 14 | 0 |
+| Left-handed | `--left-handed` | 14 | 14 | 0 |
+| One-handed | `--one-handed` | 14 | 14 | 0 |
+| Seated | `--seated` | 14 | 14 | 0 |
+
+Where a mode failed, the game was usually wrong for that mode, and the fix
+went into the game for that kind of player:
+- **Seated: the crouch didn't reach the ground.** Crouching seated took
+  the eye to 0.9 m, so a hand beside the chair reached the floor only by
+  leaning, and missed kit that had settled on a slope below the feet. The
+  crouch now goes to 0.7 m. A hand held at knee height reaches the ground
+  (`seated_lift_and_crouch_to_the_floor`).
+- **Left-handed: the aim was right-hand only.** The aim hint read the
+  right hand's gun, so a left-handed player's sights were wrong. It now
+  reads whichever hand holds the grip.
+- **One-handed: a magazine had to go in by hand, and there is no other
+  hand.** An empty gun held to a pouched magazine now takes it straight
+  into the well. Pouches are filled first with magazines, and pockets
+  with everything else, so a magazine is where the well can reach it. The
+  second button racks the gun (there is no hand for the slide), and a gun
+  rested on a surface counts as held in two hands.
+- **One-handed: the bot's own bookkeeping.** These were the bot's faults,
+  not the game's:
+  - a gun picked up for the pack became its "last gun";
+  - a button press timed from the clock of the idle wait it replaced
+    never came, so the fire selector stuck on auto;
+  - a torch put away to open a door was never taken back out.
+  All are fixed.
+- **One-handed, lamed walker: the kiosk has to stay between you.** A
+  one-handed shot at a leg takes longer, so the walker had seen the bot.
+  It limped round the kiosk to look, and found it. Hiding now moves round
+  the kiosk while the walker looks, keeping the kiosk between.
+
 ### What it found
 
 - **A held trigger keeps a rifle firing.** When the driver's line cut in
@@ -102,13 +157,13 @@ Last run (260 s, the merged tree with the bracing fix):
   lands before you're in cover, and the wound bleeds until dressed. The
   only sign was "BLEED" on the wrist's status line, and the bot (like a
   player who missed it) bled out later, waiting for the truck. Now Lev
-  says it once ("You're bleeding. Dressing on it now, before you drop."),
+  says it once ("Dressing on, now: you're bleeding. Before you drop."),
   the moment the yard's first-aid station was for.
 - **A lamed walker can't chase you, but it can still shoot.** Walking off
   in the open, as the old line ("it can't chase you now") suggested, got
   the bot shot. Walking off out of its sight (behind the bunker's kiosk)
   worked; it limped a few metres to look, and no further. Lev now says
-  so: "You've lamed it. It can't follow. Get out of its sight."
+  so: "Get out of its sight. You've lamed it; it can't follow."
 - **A torch and a slow walk down the bunker stair was fine** for 25 s at
   the foot. (The test `underground_a_crawler_sees_you_by_your_torch` says what happens
   further in.)

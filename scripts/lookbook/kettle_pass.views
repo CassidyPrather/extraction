@@ -3,7 +3,7 @@ k01_gate        120,0,255,345,-1     # from the insertion, up the valley
 k02_row         0,0,175,0,-3         # Miners' Row
 k03_road        40,0,0,0,4           # up toward the pass
 k04_beck        -110,0,60,240,-6     # Kettle Beck
-k05_quarry      150,0,10,28,-6       # into the quarry
+k05_quarry      145,0,11,28,-6       # into the quarry (5 m west of the spruce clump since the forest reshuffled)
 k06_mine        -170,0,0,311,-3      # the mine yard
 k07_pines       180,0,-120,90,0      # east slope pines
 k08_pass        10,0,-245,180,-6     # from the pass, back down the valley
