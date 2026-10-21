@@ -1646,7 +1646,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, SALLOW_RESERVOIR, TRAINING_YARD};
+    use crate::map::{CINDER_WORKS, TRAINING_YARD};
 
     fn run(name: &str, text: &str) -> Report {
         let map = MapDef::from_ron(text).unwrap();
@@ -1660,33 +1660,27 @@ mod tests {
         r
     }
 
-    fn assert_clean(r: &Report) {
+    /// Every valley on [`crate::map::VALLEYS`] lints clean: a new valley is
+    /// held to the guide the moment it's listed. They lint side by side.
+    #[test]
+    fn every_valley_passes_the_map_lint() {
+        let reports: Vec<Report> = std::thread::scope(|s| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(name, text)| s.spawn(move || run(name, text)))
+                .collect();
+            jobs.into_iter().map(|j| j.join().unwrap()).collect()
+        });
+        let dirty: Vec<String> = reports
+            .iter()
+            .filter(|r| !r.findings.is_empty())
+            .map(Report::text)
+            .collect();
         assert!(
-            r.findings.is_empty(),
-            "{} breaks the map design rules:\n{}",
-            r.map,
-            r.text()
+            dirty.is_empty(),
+            "valleys break the map design rules:\n{}",
+            dirty.join("\n")
         );
-    }
-
-    #[test]
-    fn marrow_creek_passes_the_map_lint() {
-        assert_clean(&run("marrow_creek", MARROW_CREEK));
-    }
-
-    #[test]
-    fn kettle_pass_passes_the_map_lint() {
-        assert_clean(&run("kettle_pass", KETTLE_PASS));
-    }
-
-    #[test]
-    fn cinder_works_passes_the_map_lint() {
-        assert_clean(&run("cinder_works", CINDER_WORKS));
-    }
-
-    #[test]
-    fn sallow_reservoir_passes_the_map_lint() {
-        assert_clean(&run("sallow_reservoir", SALLOW_RESERVOIR));
     }
 
     /// The Training Yard belongs to onboarding: its findings are printed

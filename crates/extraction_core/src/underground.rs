@@ -2101,14 +2101,10 @@ mod tests {
     use crate::terrain::Heightmap;
 
     fn maps() -> Vec<MapDef> {
-        [
-            crate::map::MARROW_CREEK,
-            crate::map::KETTLE_PASS,
-            crate::map::CINDER_WORKS,
-        ]
-        .iter()
-        .map(|t| MapDef::from_ron(t).unwrap())
-        .collect()
+        crate::map::VALLEYS
+            .iter()
+            .map(|v| MapDef::from_ron(v.1).unwrap())
+            .collect()
     }
 
     /// Every layout parses and is fit to build: rooms reached from the
@@ -2349,11 +2345,11 @@ mod scout {
     fn scout() {
         let arg = std::env::var("SCOUT").unwrap();
         let v: Vec<&str> = arg.split(':').collect();
-        let text = match v[0] {
-            "marrow_creek" => crate::map::MARROW_CREEK,
-            "kettle_pass" => crate::map::KETTLE_PASS,
-            _ => crate::map::CINDER_WORKS,
-        };
+        let text = crate::map::VALLEYS
+            .iter()
+            .find(|m| m.0 == v[0])
+            .expect("SCOUT names a valley")
+            .1;
         let id = v[1];
         let (tx, tz, rad): (f32, f32, f32) = (
             v[2].parse().unwrap(),
@@ -2462,11 +2458,7 @@ mod where_ {
     #[test]
     #[ignore]
     fn where_sites() {
-        for text in [
-            crate::map::MARROW_CREEK,
-            crate::map::KETTLE_PASS,
-            crate::map::CINDER_WORKS,
-        ] {
+        for text in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(text).unwrap();
             let hm = crate::terrain::Heightmap::build(&map);
             for s in placed(&map) {
