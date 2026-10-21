@@ -166,8 +166,11 @@ pub(super) fn direct(
             let wrong = (station + 2) % STATIONS.len();
             if wrong > 0 {
                 // Up the track the wrong way, to that one's lamp.
-                tasks.extend(world.go(here, Vec2::new(0.0, post(wrong).y), 1.5));
+                let lamp = Vec2::new(0.0, post(wrong).y);
+                tasks.extend(world.go(here, lamp, 1.5));
                 tasks.push(Task::Wait(2.0));
+                // Wrong lamp: back to where it went astray.
+                tasks.extend(world.go(lamp, here, 1.0));
                 bot.log
                     .push(format!("  (lost: went to {} first)", STATIONS[wrong].title));
             }
