@@ -24,6 +24,7 @@ pub mod screen;
 pub mod spikes;
 pub mod stats;
 pub mod terrain_material;
+pub mod tools;
 pub mod upgrades;
 pub mod warmup;
 pub mod water_material;
@@ -66,6 +67,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
+        .add_plugins(tools::ToolVisualsPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)

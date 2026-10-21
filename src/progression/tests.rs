@@ -285,7 +285,7 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
         .query::<(&crate::raid::truck::Truck, &GlobalTransform)>()
         .iter(app.world())
         .next()
-        .unwrap()
+        .expect("the truck")
         .1
         .compute_transform();
     let shelf = truck.transform_point(CABINET_AT);
@@ -299,21 +299,27 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
     assert!(on < 0.25, "the dressing is {on:.2} m from the shelf");
     // Out, with the radio, ten minutes before the Surge.
     let player = one::<With<LocalPlayer>>(&mut app);
-    let kind = catalog.kind("radio").unwrap();
-    let radio = app
-        .world_mut()
-        .query::<(Entity, &Item)>()
-        .iter(app.world())
-        .find(|(_, i)| i.kind() == kind)
-        .unwrap()
-        .0;
+    // (Its own radio: the world's loot and the truck's kit move about.)
+    let kind = catalog.kind("radio").expect("a radio in the catalog");
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    let radio = crate::items::spawn_item(
+        &mut Commands::new(&mut queue, app.world()),
+        &catalog,
+        crate::items::SpawnItem {
+            kind,
+            transform: Transform::default(),
+            condition: 1.0,
+        },
+    );
+    queue.apply(app.world_mut());
+    app.update();
     // In the worn pack: carried.
     let pack = app
         .world_mut()
         .query::<(Entity, &Backpack)>()
         .iter(app.world())
         .find(|(_, b)| b.owner == player && b.carried)
-        .unwrap()
+        .expect("the player wears a pack")
         .0;
     app.world_mut()
         .get_mut::<Backpack>(pack)
