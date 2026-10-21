@@ -64,7 +64,11 @@ pub const TAPES: &[TapeDef] = &[
         item: "tape_practice",
         labels: ["for Anna - practice", "B"],
         sides: [
-            &[take("minuet_g_learner"), take("bratre_kubo"), cut("fur_elise", 30.0)],
+            &[
+                take("minuet_g_learner"),
+                take("bratre_kubo"),
+                cut("fur_elise", 30.0),
+            ],
             &[take("brahms_lullaby")],
         ],
         wear: 0.5,
@@ -73,7 +77,10 @@ pub const TAPES: &[TapeDef] = &[
     TapeDef {
         item: "tape_hymns",
         labels: ["HARVEST HYMNS", "ADVENT"],
-        sides: [&[take("old_hundredth"), take("largo")], &[take("silent_night")]],
+        sides: [
+            &[take("old_hundredth"), take("largo")],
+            &[take("silent_night")],
+        ],
         wear: 0.3,
     },
     // Old Fiala, the hunting lodge: dances taped off the wireless.
@@ -101,7 +108,10 @@ pub const TAPES: &[TapeDef] = &[
     TapeDef {
         item: "tape_birthday",
         labels: ["Our piano. Ruben's birthday.", "B"],
-        sides: [&[take("gymnopedie"), take("gymnopedie")], &[take("minuet_g")]],
+        sides: [
+            &[take("gymnopedie"), take("gymnopedie")],
+            &[take("minuet_g")],
+        ],
         wear: 0.4,
     },
     // Alois Pech, Sallow: his copy of his father's wire recording of Old
@@ -145,7 +155,10 @@ pub fn render_side(def: &TapeDef, side: Side, sr: f32) -> Vec<f32> {
     let len = side_length(def);
     let mut out = vec![0.0f32; (len * sr) as usize];
     let mut at = 0.0f32;
-    let seed = def.item.bytes().fold(0u64, |h, b| h.wrapping_mul(31) ^ b as u64);
+    let seed = def
+        .item
+        .bytes()
+        .fold(0u64, |h, b| h.wrapping_mul(31) ^ b as u64);
     for (k, t) in def.sides[side.index()].iter().enumerate() {
         at += t.gap;
         let Some(tune) = tunes::get(t.tune) else {
@@ -153,9 +166,8 @@ pub fn render_side(def: &TapeDef, side: Side, sr: f32) -> Vec<f32> {
         };
         let audio = synth::render(&tune.parts(seed ^ k as u64), sr, seed ^ k as u64);
         let from = (t.from * sr) as usize;
-        let end = t
-            .to
-            .map_or(audio.len(), |to| ((to * sr) as usize).min(audio.len()));
+        let end =
+            t.to.map_or(audio.len(), |to| ((to * sr) as usize).min(audio.len()));
         let start = (at * sr) as usize;
         for (i, s) in audio[from.min(end)..end].iter().enumerate() {
             if let Some(o) = out.get_mut(start + i) {
@@ -187,7 +199,12 @@ mod tests {
             for side in def.sides {
                 assert!(!side.is_empty(), "{}", def.item);
                 for t in side.iter() {
-                    assert!(tunes::get(t.tune).is_some(), "{}: no tune {}", def.item, t.tune);
+                    assert!(
+                        tunes::get(t.tune).is_some(),
+                        "{}: no tune {}",
+                        def.item,
+                        t.tune
+                    );
                 }
             }
             let len = side_length(def);
