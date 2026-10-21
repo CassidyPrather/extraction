@@ -196,4 +196,16 @@ Creek), `flock_up.png` (the same house a few seconds after they went up),
 
 ## Pacing
 
-Pending: a batch of sims with and without.
+A first batch of bot raids on Marrow Creek, four with animals and four
+without (`EXTRACTION_WILDLIFE=off`), the same seeds; one run in each crashed
+in Avian (`Neither body ... is in an island`, with or without animals):
+
+| | Raids done | Extracted | Flushes a raid | Raised the alarm | Robots sent by birds |
+| - | - | - | - | - | - |
+| With | 3 | 1 | 8 to 15 | 1 to 4 | 0 |
+| Without | 2 | 0 | | | |
+
+Bots set off flocks all the time and the alarm now and then, but in these
+raids no robot was near enough to hear it: the birds tell the machines
+something only when you're careless close to them, which is the point.
+Few raids; a bigger batch (all valleys, 8 each) is to come.
