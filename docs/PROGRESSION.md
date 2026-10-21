@@ -131,9 +131,9 @@ staying out into the Surge. A stone sealed in its lead case in the stash
 counts. After the epilogue the quiet jobs ask for none.
 
 **The fourth valley.** Sallow Reservoir (`docs/FOURTH_VALLEY.md`) doesn't
-come up on the route card until the career has raided Marrow Creek, Kettle
-Pass and Cinder Works (`Progress::opens`). It has no key; the capstone
-stays three.
+come up on the route card until the overflow contract has opened it (see
+"Contracts"; offered once the career has raided Marrow Creek, Kettle Pass
+and Cinder Works). It has no key; the capstone stays three.
 
 **Your order.** With the ladder done the driver will take an order: a
 second card under the job, pressed to cycle, says what you want his caches
@@ -185,6 +185,45 @@ will see the rack lie up, and that's the decision it's there to make.
 Cut from this: a reputation number (the order card is what reputation
 would have bought); per-fitting repairs at the bench (upkeep is taken, not
 crafted, so it never becomes a menu); rotating "seasons".
+
+## Contracts: the job board as an arc
+
+The ladder's jobs are errands; a **contract** is a story with a name on
+it (`extraction_core::contracts`, game side `progression::contracts`). It's
+a short chain of steps, each a job on the card in turn, under a head that
+says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
+
+- **Fetch** and **Scout**, as the ladder has them;
+- **Bring**: a named thing laid by a place (a building's loot spot within
+  30 m, else on the ground), home in the stash;
+- **Plant**: the contract's kit (Lev's relay box) set down by a place,
+  within 4 m; then get home;
+- **Photograph**: a walker or a heavy with the contract's camera: hold it
+  up, the machine in the middle of the view (within about 11 degrees), in
+  range (60 m) and in sight, press; then get home. Going down spoils the
+  film.
+
+| Contract | For | Offered | Steps | Pays | Opens |
+| - | - | - | - | - | - |
+| The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
+| Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |
+| A walker's portrait | the town paper | head of Far jobs | photograph a walker; look at the chimney (Cinder) | a PU scope, 2 boxes 7.62R, trust 2 | re-pack 7.62R AP |
+| The overflow | Lev | past the ladder, trust 3, all three valleys raided | plant a relay at the Depot (Marrow); 2 electronics | a fuel can, a radio, trust 2 | Sallow Reservoir |
+| The heavy | the town paper | past the ladder, trust 5 | photograph a heavy; plant a relay at the Fire lookout (Cinder) | 2 EMP grenades, a steel plate, trust 3 | |
+
+**The ladder keeps its length.** A contract starts only at the head of its
+tier, and its steps are that tier's jobs (counted toward the fitting as
+any job is), so the ladder is still about 30 raids; the last tier keeps its
+last job for Hana's letter. A contract's fetch never goes stale (the
+driver's patience is for errands). Its kit comes through the cab's hatch
+as it starts; its pay as the last step's handed in, with what it opens
+said on the wrist.
+
+**Trust** is earned only by contracts (7 by the overflow, 10 with the
+heavy); past the ladder it's what the driver's bigger asks wait on. **The
+fourth valley** is opened by the overflow, which the driver offers once
+the career has raided all three valleys: Sallow Reservoir is the place
+that contract's relay listens to.
 
 ## Safehouses: staying out overnight
 
