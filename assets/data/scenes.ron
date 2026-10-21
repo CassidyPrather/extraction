@@ -491,7 +491,7 @@
         items: [
             (id: "binoculars", at: (-0.84, 0.5, -0.45)),
             (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
-            (id: "matches", at: (-1.15, 0.5, -0.5)),
+            (id: "matches", at: (-0.8, 0.5, -0.6)),
         ],
         note: Some((
             name: "Hide note",
@@ -794,8 +794,8 @@
         at: (215.0, -200.0),
         rot: 0.0,
         pieces: [
-            Prop(model: "walker_wreck", at: (0.0, 0.0, 0.0), rot: 30.0, size: (1.0, 0.7, 1.5)),
-            Prop(model: "flower_jars", at: (0.0, 0.7, 0.0), rot: 30.0, size: (0.34, 0.4, 0.2), collide: false),
+            Prop(model: "walker_wreck", at: (0.0, 0.0, 0.0), rot: 30.0, size: (1.0, 0.67, 1.5)),
+            Prop(model: "flower_jars", at: (0.0, 0.67, 0.0), rot: 30.0, size: (0.4, 0.42, 0.3), collide: false),
             Chair(at: (1.5, 0.7), rot: 250.0),
             Crate(at: (-1.5, 0.6), size: 0.5),
         ],
