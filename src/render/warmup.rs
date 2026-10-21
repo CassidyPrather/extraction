@@ -54,6 +54,8 @@ impl Plugin for WarmupPlugin {
                         shelve::<XrayMaterial>,
                         shelve::<crate::world::halos::HaloMaterial>,
                         shelve::<crate::world::beams::BeamMaterial>,
+                        shelve::<crate::world::storm::SheetMaterial>,
+                        shelve::<crate::world::storm::BoltMaterial>,
                     ),
                     shelve_unworn,
                     shelve_end,
@@ -366,6 +368,8 @@ struct Shelf {
     on: Vec<(Entity, u32)>,
     layouts: std::collections::HashMap<AssetId<Mesh>, u64>,
     cube: Option<Handle<Mesh>>,
+    /// For each layout, a mesh of it that draws nothing: see [`point_twin`].
+    twins: std::collections::HashMap<u64, Handle<Mesh>>,
     shelved: usize,
     /// What was shelved, by material type.
     by_type: std::collections::BTreeMap<String, usize>,
@@ -390,6 +394,7 @@ impl Default for Shelf {
             on: Vec::new(),
             layouts: default(),
             cube: None,
+            twins: default(),
             shelved: 0,
             by_type: default(),
             decoys: Vec::new(),
@@ -439,6 +444,88 @@ impl Shelf {
     }
 }
 
+/// A mesh with `mesh`'s layout (its attributes, topology and indexing)
+/// whose one triangle is its first vertex three times over: whatever a
+/// vertex shader makes of it, the three corners land on one point and no
+/// fragment is drawn, but the pipeline is built all the same. The shelf
+/// draws these, not the things themselves: a shader that places its
+/// vertices in the world itself (rain, the storm's sheets and bolts)
+/// ignores the shelf's tiny scale, and its copy drew full size round the
+/// eye on every restock.
+fn point_twin(mesh: &Mesh) -> Option<Mesh> {
+    use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues as V};
+    if mesh.primitive_topology() != PrimitiveTopology::TriangleList {
+        return None;
+    }
+    let mut twin = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    for (attr, values) in mesh.try_attributes().ok()? {
+        macro_rules! thrice {
+            ($($v:ident),*) => {
+                match values {
+                    $(V::$v(a) => V::$v(vec![*a.first()?; 3]),)*
+                }
+            };
+        }
+        let first = thrice!(
+            Uint8,
+            Uint8x2,
+            Uint8x4,
+            Sint8,
+            Sint8x2,
+            Sint8x4,
+            Unorm8,
+            Unorm8x2,
+            Unorm8x4,
+            Snorm8,
+            Snorm8x2,
+            Snorm8x4,
+            Uint16,
+            Uint16x2,
+            Uint16x4,
+            Sint16,
+            Sint16x2,
+            Sint16x4,
+            Unorm16,
+            Unorm16x2,
+            Unorm16x4,
+            Snorm16,
+            Snorm16x2,
+            Snorm16x4,
+            Float16,
+            Float16x2,
+            Float16x4,
+            Float32,
+            Float32x2,
+            Float32x3,
+            Float32x4,
+            Uint32,
+            Uint32x2,
+            Uint32x3,
+            Uint32x4,
+            Sint32,
+            Sint32x2,
+            Sint32x3,
+            Sint32x4,
+            Float64,
+            Float64x2,
+            Float64x3,
+            Float64x4,
+            Unorm8x4Bgra,
+            Unorm10_10_10_2
+        );
+        twin.insert_attribute(attr.clone(), first);
+    }
+    match mesh.try_indices_option().ok()? {
+        Some(Indices::U16(_)) => twin.insert_indices(Indices::U16(vec![0, 1, 2])),
+        Some(Indices::U32(_)) => twin.insert_indices(Indices::U32(vec![0, 1, 2])),
+        None => {}
+    }
+    Some(twin)
+}
+
 fn hash_of(v: impl std::hash::Hash) -> u64 {
     use std::hash::Hasher;
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -467,7 +554,7 @@ fn layout_of(mesh: &Mesh) -> Option<u64> {
 fn record_layouts(
     mut shelf: ResMut<Shelf>,
     mut events: MessageReader<AssetEvent<Mesh>>,
-    meshes: Res<Assets<Mesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     if shelf.frame > shelf.warm_for {
         events.clear();
@@ -475,8 +562,18 @@ fn record_layouts(
     }
     for ev in events.read() {
         if let AssetEvent::Added { id } | AssetEvent::Modified { id } = ev {
-            if let Some(l) = meshes.get(*id).and_then(layout_of) {
-                shelf.layouts.insert(*id, l);
+            let Some(mesh) = meshes.get(*id) else {
+                continue;
+            };
+            let Some(l) = layout_of(mesh) else {
+                continue;
+            };
+            shelf.layouts.insert(*id, l);
+            if !shelf.twins.contains_key(&l) {
+                if let Some(twin) = point_twin(mesh) {
+                    let twin = meshes.add(twin);
+                    shelf.twins.insert(l, twin);
+                }
             }
         }
     }
@@ -490,14 +587,29 @@ fn shelve_start(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     // The headset's eye once there is one (it comes with the session),
-    // else the flat camera.
-    if let Some(eye) = eyes.iter().next() {
+    // else the flat camera. Either eye will do, and the shelf stays on the
+    // one it took: there are two, in no set order, and starting over each
+    // time the query named the other one never finished the warm-up and
+    // left a set of decoys (and their lights) behind each time.
+    let on_an_eye = shelf.camera.is_some_and(|c| eyes.contains(c));
+    if let Some(eye) = eyes.iter().min().filter(|_| !on_an_eye) {
         if shelf.camera != Some(eye) {
             for (e, _) in shelf.on.drain(..) {
                 commands.entity(e).try_despawn();
             }
+            for e in std::mem::take(&mut shelf.decoys) {
+                commands.entity(e).try_despawn();
+            }
+            // (What was learned of the meshes stays: their data has gone
+            // to the render world since.)
+            let (layouts, twins) = (
+                std::mem::take(&mut shelf.layouts),
+                std::mem::take(&mut shelf.twins),
+            );
             *shelf = Shelf {
                 camera: Some(eye),
+                layouts,
+                twins,
                 ..default()
             };
         }
@@ -518,7 +630,8 @@ fn shelve_start(
         false
     });
     if shelf.cube.is_none() {
-        shelf.cube = Some(meshes.add(Cuboid::new(1.0, 1.0, 1.0)));
+        let cube = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
+        shelf.cube = Some(meshes.add(point_twin(&cube).unwrap_or(cube)));
     }
     // The decoys come in now, are dressed next frame, are shelved at the
     // second restock and go.
@@ -600,7 +713,9 @@ fn shelve<M: Material>(
             let short = ty.rsplit("::").next().unwrap_or(ty).to_string();
             *shelf.by_type.entry(short).or_default() += 1;
         }
-        if let Some(e) = shelf.put(&mut commands, mesh.0.clone(), ranged, !no_shadow) {
+        // Its layout's twin, which draws nothing, where there is one.
+        let shown = shelf.twins.get(&layout).cloned().unwrap_or(mesh.0.clone());
+        if let Some(e) = shelf.put(&mut commands, shown, ranged, !no_shadow) {
             commands
                 .entity(e)
                 .insert((MeshMaterial3d(mat.0.clone()), ShelfMark));
@@ -732,11 +847,34 @@ mod tests {
         };
         let mut most = 0;
         let mut saw_decoys = 0;
+        let mut real = std::collections::BTreeSet::new();
         for _ in 0..(WARM_FOR + KEEP + 20) {
             app.update();
             most = most.max(shelved(&mut app));
             saw_decoys = saw_decoys.max(decoys(&mut app));
+            // Every entry wears a twin (a mesh that draws nothing).
+            let twins: std::collections::HashSet<AssetId<Mesh>> = app
+                .world()
+                .resource::<Shelf>()
+                .twins
+                .values()
+                .map(|h| h.id())
+                .chain(app.world().resource::<Shelf>().cube.iter().map(|h| h.id()))
+                .collect();
+            let w = app.world_mut();
+            for (mesh, name) in w
+                .query_filtered::<(&Mesh3d, Option<&Name>), With<ShelfMark>>()
+                .iter(w)
+            {
+                if !twins.contains(&mesh.0.id()) {
+                    real.insert(format!("{name:?} {:?}", mesh.0.id()));
+                }
+            }
         }
+        assert!(
+            real.is_empty(),
+            "shelf entries drawing the real mesh: {real:?}"
+        );
         let kinds = extraction_core::anomaly::AnomalyKind::ALL.len();
         assert_eq!(saw_decoys, kinds, "a decoy of each kind");
         assert_eq!(decoys(&mut app), 0, "the decoys gone");
@@ -748,6 +886,85 @@ mod tests {
             shelf.kinds.len(),
             shelf.shelved,
             shelf.by_type
+        );
+    }
+    /// A twin has its mesh's layout, and its one triangle is a point.
+    #[test]
+    fn a_twin_is_a_point() {
+        let mut card = Mesh::from(Cuboid::new(2.0, 3.0, 4.0));
+        card.insert_attribute(
+            crate::world::trees::ATTRIBUTE_CARD_CENTRE,
+            vec![[1.0f32, 2.0, 3.0]; card.count_vertices()],
+        );
+        for mesh in [
+            Mesh::from(Cuboid::new(2.0, 3.0, 4.0)),
+            card,
+            Mesh::from(Sphere::new(1.0)),
+        ] {
+            let twin = point_twin(&mesh).expect("a triangle list has a twin");
+            assert_eq!(layout_of(&twin), layout_of(&mesh));
+            let pos = twin
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .unwrap()
+                .as_float3()
+                .unwrap();
+            assert_eq!(pos.len(), 3);
+            assert!(pos.iter().all(|p| *p == pos[0]));
+            assert_eq!(twin.indices().map(|i| i.len()), Some(3));
+        }
+    }
+
+    /// In a headset there are two eyes, and which one a query names first
+    /// can change. The shelf stays on the one it took: it still finishes,
+    /// and leaves no decoys (each with its lights) behind. (It started
+    /// over each time the order changed: in a slow simulated headset the
+    /// lights piled up by a dozen a restock and the eye's opaque pass grew
+    /// tenfold.)
+    #[test]
+    fn two_eyes_one_shelf() {
+        let _one_at_a_time = super::super::budget::tests::heavy();
+        let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
+        let eye = |app: &mut App, n: u32| {
+            app.world_mut()
+                .spawn((
+                    bevy_mod_xr::camera::XrCamera(n),
+                    Transform::from_xyz(0.0, 2.0, 0.0),
+                ))
+                .id()
+        };
+        let (a, _b) = (eye(&mut app, 0), eye(&mut app, 1));
+        let decoys = |app: &mut App| {
+            let w = app.world_mut();
+            w.query_filtered::<&Transform, With<crate::anomaly::Anomaly>>()
+                .iter(w)
+                .filter(|t| t.translation.y < DECOYS_AT.y + 1.0)
+                .count()
+        };
+        let kinds = extraction_core::anomaly::AnomalyKind::ALL.len();
+        let mut most = 0;
+        for i in 0..(WARM_FOR + KEEP + 20) {
+            // Every so often the first eye goes to the back of the queue.
+            if i % 30 == 15 {
+                let w = app.world_mut();
+                let cam = w.entity_mut(a).take::<bevy_mod_xr::camera::XrCamera>();
+                w.entity_mut(a).insert(cam.unwrap());
+            }
+            app.update();
+            most = most.max(decoys(&mut app));
+        }
+        assert_eq!(most, kinds, "one set of decoys, at most");
+        assert_eq!(decoys(&mut app), 0, "the decoys gone");
+        let w = app.world_mut();
+        assert_eq!(
+            w.query_filtered::<(), With<ShelfMark>>().iter(w).count(),
+            0,
+            "the shelf cleared"
+        );
+        let shelf = app.world().resource::<Shelf>();
+        assert!(
+            shelf.frame > WARM_FOR,
+            "the warm-up finished ({} frames)",
+            shelf.frame
         );
     }
 }

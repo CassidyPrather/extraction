@@ -298,6 +298,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
+| BODY | shown / hidden | your body drawn under you when you look down (torso, legs, boots); hidden, only the arms and hands |
 
 For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
 it on: is anything out of reach, or does anything need the hand you've

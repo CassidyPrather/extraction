@@ -1999,6 +1999,96 @@ fn a_pair_of_hounds_splits_up() {
     assert!(widest > 60.0, "they split round you: {widest:.0}°");
 }
 
+/// Fresh prints in the snow, leading off from in front of a walker: it
+/// reads the trail and goes to look along it, not where it stands.
+#[test]
+fn a_walker_follows_fresh_prints_in_the_snow() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    // A walker faces -Z: prints from 6 m in front, leading on north.
+    {
+        let mut tracks = app.world_mut().resource_mut::<crate::world::snow::Tracks>();
+        for k in 0..30 {
+            let z = post.z - 6.0 - k as f32 * 0.8;
+            tracks.add(crate::world::snow::Print {
+                at: zone.on_ground(post.x + (k % 2) as f32 * 0.3, z),
+                yaw: 0.0,
+                left: k % 2 == 0,
+                by: player,
+                fill: 0.2,
+            });
+        }
+    }
+    let mut lead = None;
+    for _ in 0..90 * 2 {
+        app.update();
+        if let Brain::Investigate { at, .. } = *app.world().get::<Brain>(w).unwrap() {
+            lead = Some(at);
+            break;
+        }
+    }
+    let at = lead.expect("it went to look");
+    // Along the trail, well past where it first saw it.
+    assert!(
+        post.z - at.z > 6.0 + super::tracks::LEAD * 0.6,
+        "read on along the trail: {at}"
+    );
+}
+
+/// A scope's glint gives a still sniper away, further off than a walker
+/// sees a body: it places them (within the glimpse spread), where it had
+/// a wrong guess before. No glint, and it's none the wiser.
+#[test]
+fn a_glint_gives_a_still_sniper_away() {
+    #[derive(Resource)]
+    struct Flash(Option<(Entity, Vec3, Vec3)>);
+    let placed = |flash: bool| {
+        let (mut app, player, zone) = app(None);
+        let post = zone.on_ground(100.0, 200.0);
+        let w = walker_at(&mut app, &zone, post);
+        // 150 m in front of it (it faces -Z), past its eyes' reach.
+        let you = zone.on_ground(100.0, 50.0);
+        put(&mut app, player, you);
+        let eye = post + Vec3::Y * 1.6;
+        let head = you + Vec3::Y * 1.6;
+        app.insert_resource(Flash(flash.then_some((player, head, eye - head))))
+            .add_systems(
+                Last,
+                |f: Res<Flash>, mut g: ResMut<crate::weapons::optics::Glints>| {
+                    if let Some((p, at, toward)) = f.0 {
+                        g.0.push((
+                            p,
+                            crate::weapons::optics::Glint {
+                                strength: 1.0,
+                                at,
+                                toward,
+                            },
+                        ));
+                    }
+                },
+            );
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(zone.on_ground(160.0, 50.0));
+            a.uncertainty = 10.0;
+        }
+        for _ in 0..90 {
+            app.update();
+        }
+        let a = app.world().get::<Awareness>(w).unwrap();
+        a.last_known.map(|l| flat(l - you)).unwrap_or(f32::MAX)
+    };
+    let off = placed(true);
+    assert!(
+        off < 150.0 * super::senses::GLIMPSE_SPREAD + 1.0,
+        "the flash placed you: {off:.1} m off"
+    );
+    assert!(placed(false) > 50.0, "no flash, no news");
+}
+
 /// A lure that keeps going (a tape playing on a table) draws a walker
 /// once: it looks, searches, finds nothing, gives up, and then the same
 /// sound there doesn't draw it again for a while.
@@ -2034,4 +2124,198 @@ fn a_lure_that_keeps_going_wears_out() {
     }
     assert!(looked && calm > 2.0, "it looked and gave up");
     assert_eq!(drawn_again, None, "and the same tune didn't draw it again");
+}
+
+/// A small placement that's cleared away (a crate burst) comes off the
+/// walkers' grid: where it stood is walkable again, once the grid is
+/// rebuilt (off the main thread).
+#[test]
+fn a_cleared_crate_comes_off_the_grid() {
+    let (mut app, _, zone) = app(None);
+    app.update();
+    let nav = app.world().resource::<super::walker::Nav>().0.clone();
+    let (i, p) = zone
+        .map
+        .placements
+        .iter()
+        .enumerate()
+        .find(|(_, p)| {
+            let f = extraction_core::map::prefab_footprint(&p.prefab);
+            f[0].max(f[2]) <= super::walker::GONE_SIZE && !nav.walkable(p.at)
+        })
+        .expect("a small placement on the grid");
+    let at = zone.on_ground(p.at[0], p.at[1]);
+    app.world_mut().write_message(crate::destruction::Cleared {
+        min: at - Vec3::splat(0.4),
+        max: at + Vec3::splat(0.4),
+    });
+    let mut open = false;
+    for _ in 0..90 * 10 {
+        app.update();
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        if nav.walkable(p.at) {
+            open = true;
+            break;
+        }
+    }
+    assert!(open, "placement {i} ({}) came off the grid", p.prefab);
+    assert!(
+        app.world()
+            .resource::<super::walker::NavGone>()
+            .placements
+            .contains(&i)
+    );
+}
+
+/// When everyone's goal jumps at once (the player teleported home), the
+/// long path searches are spread over a few ticks, PATH_BUDGET a tick,
+/// not all in one frame; and they all get there.
+#[test]
+fn a_repath_storm_is_spread_over_ticks() {
+    use super::walker::{PATH_BUDGET, Walker};
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let walkers: Vec<Entity> = (0..8)
+        .map(|k| {
+            walker_at(
+                &mut app,
+                &zone,
+                zone.on_ground(90.0 + k as f32 * 3.0, 200.0),
+            )
+        })
+        .collect();
+    let far = zone.on_ground(100.0, 140.0);
+    for &w in &walkers {
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Investigate {
+            at: far,
+            left: 60.0,
+        };
+    }
+    let mut ticks = 0;
+    let mut done = std::collections::HashSet::new();
+    while done.len() < walkers.len() && ticks < 30 {
+        app.update();
+        ticks += 1;
+        let mut this_tick = 0;
+        for &w in &walkers {
+            let to_far = app
+                .world()
+                .get::<Walker>(w)
+                .unwrap()
+                .goal
+                .is_some_and(|g| flat(g - far) < 0.5);
+            if to_far && done.insert(w) {
+                this_tick += 1;
+            }
+        }
+        assert!(
+            this_tick <= PATH_BUDGET as usize * 2,
+            "{this_tick} long searches in one update"
+        );
+    }
+    assert_eq!(
+        done.len(),
+        walkers.len(),
+        "all of them repathed ({ticks} updates)"
+    );
+}
+
+/// An armed walker at `post`, at its post.
+fn armed_walker_at(app: &mut App, zone: &Zone, post: Vec3) -> Entity {
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            zone,
+            post,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..90 {
+        app.update();
+    }
+    w
+}
+
+/// A walker that's just picked a fight looks before it shoots: its first
+/// round comes no sooner than SIGHT_BEAT + AIM_TIME after it starts.
+#[test]
+fn a_walker_looks_before_it_shoots() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let start = app.world().resource::<Time>().elapsed_secs();
+    for _ in 0..90 * 6 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let first = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .find(|(e, _)| *e == w)
+        .map(|(_, t)| *t - start)
+        .expect("it fired in the end");
+    assert!(
+        first >= super::walker::SIGHT_BEAT + super::walker::AIM_TIME - 0.05,
+        "it looked first: first round {first:.2} s in"
+    );
+}
+
+/// Go down and they let you go: a walker fighting you forgets you and
+/// gives up, so it isn't waiting when you come to.
+#[test]
+fn going_down_lets_you_go() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    app.update();
+    app.world_mut()
+        .write_message(crate::health::Downed { player, at: me });
+    app.update();
+    app.update();
+    let a = app.world().get::<Awareness>(w).unwrap();
+    assert_eq!(a.target, None, "it forgot you");
+    assert!(
+        !matches!(
+            app.world().get::<Brain>(w).unwrap(),
+            Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
+        ),
+        "and gave up: {:?}",
+        app.world().get::<Brain>(w).unwrap()
+    );
 }

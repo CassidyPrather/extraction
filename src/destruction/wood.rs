@@ -547,6 +547,15 @@ pub struct Drawn {
     pub range: std::ops::Range<f32>,
 }
 
+/// A drawn model's name, and the one node of it to draw if it names one
+/// (`wreck_lada#door_fl`).
+pub fn model_node(model: &str) -> (&str, Option<&str>) {
+    match model.split_once('#') {
+        Some((m, n)) => (m, Some(n)),
+        None => (model, None),
+    }
+}
+
 /// The crate models (`art/props/crates.py`): unit cubes on the floor.
 pub const CRATE_MODELS: [&str; 2] = ["crate_slat", "crate_army"];
 

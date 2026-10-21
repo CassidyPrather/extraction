@@ -564,7 +564,12 @@ impl Flock {
             self.wary = WARY_FOR;
         }
         for b in &mut self.birds {
-            if matches!(b.state, BirdState::Sitting(_) | BirdState::Landing(_)) {
+            // Coming in, it goes round with the rest (not on down onto the
+            // roof they're leaving).
+            if matches!(b.state, BirdState::Landing(_)) {
+                b.state = BirdState::Flying;
+            }
+            if matches!(b.state, BirdState::Sitting(_)) {
                 // Nearest the threat go first; calm, they drift off over a
                 // few seconds.
                 b.delay = match from {
@@ -744,6 +749,8 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
                 continue;
             }
             BirdState::Gone => continue,
+            // A perch to come down on only while the flock's landing.
+            BirdState::Landing(_) if landing_site.is_none() => b.state = BirdState::Flying,
             _ => {}
         }
         if b.delay > 0.0 {
@@ -876,20 +883,47 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
 fn keep_clear(b: &mut Bird, prev: Vec3, zone: &Zone, obstacles: &Obstacles, landing: bool) {
     // Coming down, it may go as low as its perch: a heron's is the bed of
     // the shallows.
-    let g = zone.ground(b.pos.x, b.pos.z) + if landing { 0.0 } else { 0.4 };
+    let off = if landing { 0.0 } else { 0.4 };
+    let g = zone.ground(b.pos.x, b.pos.z) + off;
     if b.pos.y < g {
         b.pos.y = g;
         b.vel.y = b.vel.y.max(if landing { 0.0 } else { 2.0 });
     }
-    if obstacles.inside(b.pos, 0.02) {
-        b.pos = prev;
-        let mut lift = 0;
-        while obstacles.inside(b.pos, 0.02) && lift < 80 {
-            b.pos.y += 0.25;
-            lift += 1;
-        }
-        b.vel = Vec3::new(b.vel.x * 0.3, b.vel.y.max(1.5), b.vel.z * 0.3);
+    if !obstacles.inside(b.pos, 0.02) {
+        return;
     }
+    let clear = |p: Vec3| !obstacles.inside(p, 0.02) && p.y >= zone.ground(p.x, p.z) + off - 1e-3;
+    // Along the face, not stopped dead at it: what of the step is clear
+    // (up a dam's face with the roost beyond it, not pinned to it).
+    let step = b.pos - prev;
+    for keep in [Vec3::new(0.0, 1.0, 1.0), Vec3::new(1.0, 1.0, 0.0), Vec3::Y] {
+        let p = prev + step * keep;
+        if step.dot(keep) != 0.0 && clear(p) {
+            b.pos = p;
+            b.vel *= keep;
+            b.vel.y = b.vel.y.max(1.0);
+            return;
+        }
+    }
+    // Hemmed in (under a lip on a wall's face): out sideways first (out
+    // from under it, not down under it again), else the nearest way; no
+    // longer going into it.
+    for flat in [true, false] {
+        let out = obstacles.push_out(b.pos, 0.02, flat);
+        if clear(out) {
+            let n = (out - b.pos).normalize_or_zero();
+            b.vel -= n * b.vel.dot(n).min(0.0);
+            b.pos = out;
+            return;
+        }
+    }
+    b.pos = prev;
+    let mut lift = 0;
+    while obstacles.inside(b.pos, 0.02) && lift < 80 {
+        b.pos.y += 0.25;
+        lift += 1;
+    }
+    b.vel = Vec3::new(b.vel.x * 0.3, b.vel.y.max(1.5), b.vel.z * 0.3);
 }
 
 /// A flock a player flushed is heard by the machines: a noise at the
@@ -1055,6 +1089,13 @@ mod tests {
             let steps = (minutes * 60.0 / DT) as usize;
             for step in 0..steps + (150.0 / DT) as usize {
                 let busy = step < steps;
+                if step == steps {
+                    // Left alone now: the flocks up must come down (and none
+                    // moves on of its own accord in the meantime).
+                    for f in &mut flocks {
+                        f.restless = f32::INFINITY;
+                    }
+                }
                 // Off to a random flock's site, walking or running.
                 let goal = perches.sites[flocks[(step / 900) % flocks.len()].heading_for()].centre;
                 let speed = if (step / 300) % 3 == 0 { 5.0 } else { 1.4 };

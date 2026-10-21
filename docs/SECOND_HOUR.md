@@ -32,6 +32,13 @@ is it taking aim.").
 | First death | waking in the truck | what came back (the crate, counted) and what didn't (what you carried, counted, where you fell); beat their convoy there |
 | Convoy took it / kit recovered | the first time each way | gone through the Gate / that's how you get it back |
 | Note pinned | first note read (Story's board) | he keeps copies, board in the back |
+| Aimed | a walker's gun settling on you | break its line, now; it's aiming at you |
+| Sentry | a sentry's chirp near you | down, out of its sweep |
+| Hush | in a hush | out of there, now; that dead quiet hurts |
+
+A line about danger now goes ahead of anything waiting. It's said 1.5 s
+after the line before it, not 5 s: a walker's aim came in the same moment
+as "heard", and five seconds later was after the shot.
 
 Other systems can add their own moment with `MeetFirst(First::...)`.
 

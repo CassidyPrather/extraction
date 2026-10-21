@@ -2634,8 +2634,21 @@ pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     for site in ug::placed(&zone.map) {
         let r = ug::raster(&site.id)?;
         let footing = zone.hm.footing(&site.id, site.at, site.rot);
-        let local = site.to_site([p.x, p.z]);
-        let Some(f) = r.floor_at(local) else { continue };
+        // The point, or (for a body against a wall, its centre a hair past
+        // its cell's edge) the nearest open cell within a body's radius.
+        let at = site.to_site([p.x, p.z]);
+        let Some((local, f)) = std::iter::once([0.0f32, 0.0])
+            .chain((0..8).map(|k| {
+                let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                [a.cos() * BODY_REACH, a.sin() * BODY_REACH]
+            }))
+            .find_map(|d| {
+                let q = [at[0] + d[0], at[1] + d[1]];
+                r.floor_at(q).map(|f| (q, f))
+            })
+        else {
+            continue;
+        };
         let floor = footing + f;
         // Up to its roof: a tall room's (the ash pit's 10 m, with you on
         // the crane over it) as well as a corridor's.
@@ -2650,6 +2663,10 @@ pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     }
     None
 }
+
+/// How far past a cell's edge a point still stands on it: a body's
+/// radius, so one against a wall (its centre past the open cells) is in.
+const BODY_REACH: f32 = 0.35;
 
 /// The Depot's site id.
 pub const DEPOT: &str = "depot_marrow";

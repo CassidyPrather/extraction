@@ -483,7 +483,11 @@ impl Plugin for OnboardingPlugin {
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
             .add_systems(Update, second_hour::direct)
-            .add_systems(Update, first_hour::direct_raid)
+            .init_resource::<first_hour::Fight>()
+            .add_systems(
+                Update,
+                (first_hour::first_fight, first_hour::direct_raid).chain(),
+            )
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
