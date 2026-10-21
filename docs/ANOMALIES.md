@@ -20,6 +20,18 @@ Wells, mirrors and hushes don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
 can still bloom any kind in your way.
 
+### Placing standing anomalies (and any marker)
+
+Every map marker clears trees for 8 m around it (`forest::scatter_trees`).
+Each scatter cell now draws from its own seeded stream. So a new marker,
+road or building removes only the trees in its own cells, and every other
+tree stays exactly where it was. Before this, the scatter drew from one
+stream per forest: one cleared cell shifted every later tree in that
+forest. That once put a tree in the camera's face on a budget view
+(Kettle's quarry view, overdraw 4.3 to 10.3).
+Test: `forest::a_new_marker_clears_only_its_own_trees`. Rerun the
+map's `*_holds_the_budget` test anyway when you add one.
+
 ### Migration
 
 The Surge's own anomalies (lifts, burners, snares) aren't scattered afresh
