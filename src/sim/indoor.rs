@@ -196,6 +196,7 @@ pub fn plan_buildings(
             .iter()
             .map(|(_, l)| l.0.hinge.y)
             .min_by(|a, b| a.total_cmp(b))
+            .or(geo.floor)
             .unwrap_or(0.0);
         let extent = half.x.max(half.y) + MARGIN;
         let n = ((extent * 2.0) / CELL).ceil() as usize;
