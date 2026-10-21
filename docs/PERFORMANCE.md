@@ -163,17 +163,19 @@ Worst fallback view: 549k triangles. The gauges print which path they
 measured (`foliage fetched` / `FALLBACK`), and so does the session log
 (`forest: foliage ...`).
 
-The gauges at every lookbook view of the four valleys (GPU-less client,
-one eye), in clear weather (the furthest you see, so the most drawn;
-`BUDGET_WEATHER=drizzle` for the reference look), worst view against
-the budget:
+The gauges at every lookbook view of the five valleys (GPU-less client,
+one eye, fetched foliage), in clear weather (the furthest you see, so
+the most drawn; `BUDGET_WEATHER=drizzle` for the reference look), worst
+view against the budget, on main with everything merged (wildlife, ivy,
+decals, the fourth valley, the underground sites):
 
 | | Worst | Budget | Headroom |
 | - | - | - | - |
-| Draws | 1081 (Marrow Creek spruce) | 1200 | 10% |
-| Triangles | 570k (Marrow Creek spruce) | 900k | 37% |
-| Shadow draws | 706 (Training Yard aerial) | 900 | 22% |
-| Shadow triangles | 247k (Cinder Works gate) | 700k | 65% |
+| Draws | 998 (Marrow Creek aerial) | 1200 | 17% |
+| Triangles | 515k (Marrow Creek spruce) | 900k | 43% |
+| Shadow draws | 509 (Training Yard aerial) | 900 | 43% |
+| Shadow triangles | 422k > (small casters) under 330k | 700k | 50%+ |
+| Overdraw, mean | 7.3 (Marrow Creek spruce) | 10 | 27% |
 
 At the start the worst views were 3316 draws and 970 shadow draws.
 
@@ -185,8 +187,8 @@ ms, which says nothing about the laptop).
 
 Left on the list: interiors seen from
 outside within 25 m (furniture behind walls; measured small, no class
-in any view's top five); the truck's 47-94 shadow
-casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
+in any view's top five); the hands' 80 draws in every view (each finger
+a mesh; Hands are merging them); GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
 prepass, a second geometry pass per eye: not worth it at these counts).
 
 ## Stereo: what the second eye costs, and multiview
@@ -472,3 +474,33 @@ startup_frames` (ignored, wall-clock) times it per valley on all cores.
   tangents) are built on the compute pool, each chunk on its own, and
   spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
   (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).
+
+## Small things' shadows
+
+At the gates half the sun's shadow-pass meshes were smaller than 10 cm
+(Cinder Works' gate: 275 under 5 cm, 146 more under 10, against 333
+bigger): the truck's buttons and fittings, door furniture, tins and
+boxes of rounds. Past a few metres such a shadow is a texel or two of the
+cascade. `budget::small_shadows` gives every mesh under 12 cm (its
+largest side, world size) a `ShadowReach` when its bounds arrive: under
+5 cm it casts within 3 m of the eye, under 12 cm within 6 m (with
+`ShadowReach`'s 2 m give either way). `EXTRACTION_SMALL_SHADOWS=0` leaves
+them all casting, to compare. Sun shadow draws, before > after:
+
+| view | before | after |
+|---|---|---|
+| Cinder Works gate | 852 | 412 |
+| Sallow Reservoir gate | 824 | 393 |
+| Marrow Creek gate | 612 | 315 |
+| Kettle Pass gate | 501 | 269 |
+| Training Yard aerial | 743 | 509 |
+| Marrow Creek aerial | 501 | 366 |
+
+`ShadowReach` (and the forest's near detail) now take their eyes from
+`render::eyes`: the cameras not drawing into an image, so an impostor
+capture's rig isn't one.
+
+`docs/shots/performance/small_shadows_truck.png` is the player's first
+view (the truck at base, clear day, lavapipe) with the rule; without it
+the frame is identical to the pixel (the buttons, the vise, the tins are
+within reach and still cast), as is the Marrow gate view.

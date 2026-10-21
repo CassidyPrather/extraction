@@ -163,10 +163,10 @@ pub fn views(zone: &Zone) -> Vec<View> {
             // the room shows rather than the nearest wall.
             let footing = zone.hm.footing(&p.prefab, p.at, p.rot);
             let floor = match p.prefab.as_str() {
-                "ranger_tower" => 9.1,
+                "ranger_tower" | "survey_tower" => 9.1,
                 _ => 0.4,
             };
-            let (cx, cz) = if p.prefab == "ranger_tower" {
+            let (cx, cz) = if matches!(p.prefab.as_str(), "ranger_tower" | "survey_tower") {
                 (1.6, 1.6)
             } else {
                 (f.x * 0.5 - 0.6, f.z * 0.5 - 0.6)

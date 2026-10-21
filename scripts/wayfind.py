@@ -92,7 +92,14 @@ def measure(d, v):
     return area, contrast, lamp, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 
 
+# --afford: an interactable from 1.5 m stands out from what it's on.
+AFFORD_AREA = 60
+AFFORD_CONTRAST = 0.15
+
+
 def main(argv):
+    afford = "--afford" in argv
+    argv = [a for a in argv if a != "--afford"]
     sheet = None
     if "--sheet" in argv:
         i = argv.index("--sheet")
@@ -102,15 +109,38 @@ def main(argv):
     views = json.load(open(os.path.join(d, "wayfind.json")))
     by_from = {}
     rows = []
+    sky = {}
     for v in views:
+        if v["from"] == "sky":
+            p = os.path.join(d, v["with"])
+            if os.path.exists(p):
+                L = lum(p)
+                sky[v["landmark"]] = float(L[: L.shape[0] // 2].mean())
+            continue
         if not (os.path.exists(os.path.join(d, v["with"])) and os.path.exists(os.path.join(d, v["without"]))):
             continue
         area, contrast, lamp, box = measure(d, v)
-        ok = (area >= MIN_AREA and contrast >= MIN_CONTRAST) or lamp >= LAMP_AREA
+        if afford:
+            ok = (area >= AFFORD_AREA and contrast >= AFFORD_CONTRAST) or lamp >= LAMP_AREA
+        else:
+            ok = (area >= MIN_AREA and contrast >= MIN_CONTRAST) or lamp >= LAMP_AREA
         by_from.setdefault(v["from"], []).append((v, ok, area, contrast))
         rows.append((v, ok, area, contrast, box))
         print(f"{'ok  ' if ok else 'no  '} {v['from']:28} {v['landmark']:22} {v['distance']:5.0f} m  "
               f"{area:6d} px  contrast {contrast:.2f}  lamp {lamp} px")
+    if len(sky) == 2:
+        a, b = sky.get("sky toward the light", 0.0), sky.get("sky away from it", 0.0)
+        k = a / max(b, 1e-6)
+        print(f"sky: toward the sun or moon {k:.2f}x as bright as away"
+              f" ({'a compass' if k >= 1.1 else 'no help'})")
+    if afford:
+        lost = [(v, a, c) for v, ok, a, _l, c, _b in [(r[0], r[1], r[2], 0, r[3], r[4]) for r in rows] if not ok]
+        for v, a, c in lost:
+            print(f"doesn't stand out: {v['from']}: {v['landmark']} ({a} px, contrast {c:.2f})")
+        print(f"{len(rows)} things, {len(lost)} don't stand out")
+        if sheet:
+            contact(d, rows, sheet)
+        return len(lost)
     blind = [f for f, vs in by_from.items() if not any(ok for _, ok, _, _ in vs)]
     for f in sorted(by_from):
         seen = [v["landmark"] for v, ok, _, _ in by_from[f] if ok]

@@ -109,14 +109,25 @@ What changed, and worth a comment each:
   Say if that ever keeps hold of something you meant to drop.
 - **Solid hands.** Your gloves stop at walls, tables and doors instead of
   going through. When your real hand goes further, a faint ghost glove
-  shows where it is. Push a door open with your palm. A gun pushed into
-  a wall can't shoot through it.
+  shows where it is, fading in the deeper your hand goes. Push a door
+  open with your palm. A gun pushed into a wall can't shoot through it.
+  An open hand parts grass and ferns, and branches when you reach up into
+  a tree.
+- **What your hands feel.** Touch something and its material comes
+  through the controller: a dull thud for wood, a ringing hit for metal,
+  two light ticks for glass, a hard knock for stone or the ground, a soft
+  give for a robot's skin, a rattle for a fence. The harder you hit, the
+  stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
+  slamming home, a magazine seating and a round chambering each feel
+  different now. Say if any two materials feel the same to you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
-  hand. Let go with both hands and you fall. To get up onto a wall or a
-  ledge about waist to chest high, press both open palms on its top and
-  push down. If climbing makes you queasy, the **CLIMBING** card on the
-  comfort board takes you straight to the top instead. Mark it if you
-  ever rise when you only meant to lean on a table.
+  hand. Let go with both hands and you fall. To get up onto a wall, a
+  ledge or a window sill (waist to head high), press both open palms on
+  its top and pull down: one pull and you're over. Through a window you
+  end up inside. If climbing makes you queasy, the **CLIMBING** card on
+  the comfort board takes you straight to the top instead, with a quick
+  blink rather than a jump. Mark it if you ever rise when you only meant
+  to lean on a table.
 - **Crowbar.** Hold it by the end and steady it along the shaft with your
   other hand. Put the claw to the latch edge of a plank door, the lid
   edge of a supply crate, or a robot's armour plate (the heavy machine's
@@ -284,7 +295,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | MUSIC | rises with danger / off | the score |
 | GUN HAND | right / left | left: the holster and chest mount on the left, the watch on the right wrist, moving on the right stick and turning on the left, the gun hand's stick click the fire selector |
 | PLAYING | standing / seated | seated: the view and hands lifted to a standing eye (measured from how you sit, over a few seconds); the crouch button (right stick down, or the left with GUN HAND left) brings you down to the floor |
-| HANDS | two / one | one: bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands |
+| HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
 
@@ -350,7 +361,8 @@ said you don't use?
   does the black edge and the sliding picture tell you to centre? At
   dusk, glass toward the sun and see whether a robot down the line
   notices. Bring the AK's iron sights to your cheek: do they line up
-  without fiddling?
+  without fiddling? Does the front post going soft read as your eye
+  focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

@@ -90,6 +90,9 @@ pub struct LaunchOptions {
     /// Dev: from the truck's stop and every rendezvous, shoot each landmark
     /// in range with and without it, into this folder (`render::wayfind_shots`).
     pub wayfind: Option<PathBuf>,
+    /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
+    /// without it, into this folder (`render::wayfind_shots`).
+    pub afford: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -144,6 +147,7 @@ impl Default for LaunchOptions {
             tour_views: None,
             legibility: None,
             wayfind: None,
+            afford: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -173,6 +177,13 @@ impl Default for LaunchOptions {
 }
 
 impl LaunchOptions {
+    /// A session that plays the real game's start (the camp, the truck,
+    /// the kit in the crate): any but a scenario, and a scenario given a
+    /// career to play (`--save`, as the first-hour personas are).
+    pub fn plays_for_real(&self) -> bool {
+        self.scenario.is_none() || self.save.is_some()
+    }
+
     /// A run driven by tooling (a screenshot, a tour, a bot, a scenario, a
     /// sim raid) rather than a player: it never reopens the game, whether
     /// on another valley or on another OpenXR runtime.
@@ -181,6 +192,7 @@ impl LaunchOptions {
             || self.tour.is_some()
             || self.legibility.is_some()
             || self.wayfind.is_some()
+            || self.afford.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -278,6 +290,13 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--afford" => {
+                    o.afford = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--wayfind" => {
                     o.wayfind = Some(val().into());
                     o.robots = false;
@@ -333,6 +352,10 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::bot::crossing::SCENARIO) && !o.map_explicit {
             o.map = crate::bot::crossing::DEFAULT_MAP.into();
             o.map_explicit = true;
+        }
+        // A newcomer's first raid has the Zone's machines in it.
+        if o.scenario.as_deref() == Some(crate::onboarding::first_hour::RAID) {
+            o.robots = true;
         }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {

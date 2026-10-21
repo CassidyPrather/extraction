@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod first_hour;
 pub mod firsts;
 pub mod hints;
 pub mod second_hour;
@@ -109,10 +110,37 @@ impl Goal {
         }
     }
 
+    /// How, for how you play (`Comfort`): the sticks swap sides with GUN
+    /// HAND left, and with one hand what needed two is done another way.
+    pub fn how_for(self, flat: bool, comfort: &crate::rig::comfort::Comfort) -> String {
+        if !flat && comfort.one_handed {
+            let one = match self {
+                Goal::FillMag => Some("Mag in hand. Touch it to\nthe box on the table."),
+                Goal::SeatMag => Some("Mag in a pouch. Bring the\npistol in hand down on it."),
+                Goal::Rack => Some("Press B or Y on the gun\nhand: it racks."),
+                Goal::Dressing => Some("Hold it. Press A or X\non that hand."),
+                _ => None,
+            };
+            if let Some(t) = one {
+                return t.into();
+            }
+        }
+        let t = self.how(flat);
+        if !flat && comfort.left_handed {
+            t.replace("right stick", "\u{0}")
+                .replace("left stick", "right stick")
+                .replace('\u{0}', "left stick")
+        } else {
+            t.into()
+        }
+    }
+
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
-            (Goal::TakePistol | Goal::TakeRadio, false) => "Reach into the crate.\nSqueeze GRIP.",
+            (Goal::TakePistol | Goal::TakeRadio, false) => {
+                "Reach into the crate: a\nring marks it. Squeeze GRIP."
+            }
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
@@ -138,7 +166,7 @@ impl Goal {
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::DropMag, false) => "Press A on the gun hand.",
             (Goal::DropMag, true) => "Pistol in hand. Press B.",
-            (Goal::OpenDoor, false) => "GRIP the door by its edge\nand pull it round.",
+            (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
@@ -455,6 +483,7 @@ impl Plugin for OnboardingPlugin {
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
             .add_systems(Update, second_hour::direct)
+            .add_systems(Update, first_hour::direct_raid)
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
@@ -1154,6 +1183,8 @@ fn watch_uses(
             complete(&mut ob, Goal::Dressing, &mut out);
         }
     }
+    // Then forget what's no longer in hand (each dressing ever held stayed).
+    dressings.retain(|e| held.contains(*e));
     for c in calls.read() {
         // A call only counts once you're out where the truck can come.
         if locals.contains(c.player) && raid.phase != Phase::AtBase {
@@ -1162,13 +1193,15 @@ fn watch_uses(
     }
 }
 
-/// Turning (the right stick sideways in a headset; the view swung round
-/// in flat mode) and crouching (the toggle, or squatting for real).
+/// Turning (the turning stick sideways in a headset: the right, or the
+/// left with GUN HAND left; the view swung round in flat mode) and
+/// crouching (the toggle, or squatting for real).
 fn watch_moves(
     mut ob: ResMut<Onboarding>,
     mut out: MessageWriter<GoalDone>,
     players: Query<(&crate::rig::RigInput, &Transform), With<LocalPlayer>>,
     driver: Res<RigDriver>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut swung: Local<(Option<f32>, f32)>,
 ) {
     let Some((input, t)) = players.iter().next() else {
@@ -1181,7 +1214,9 @@ fn watch_moves(
         swung.1 += d.abs();
     }
     swung.0 = Some(yaw);
-    let stick = input.hand(Side::Right).stick;
+    let stick = input
+        .hand(comfort.as_ref().map_or(Side::Right, |c| c.gun_side()))
+        .stick;
     let turned = if *driver == RigDriver::Flat {
         swung.1 > 1.5
     } else {
@@ -1435,7 +1470,12 @@ fn lamps(ob: Res<Onboarding>, mut posts: Query<&mut StationPost>) {
 }
 
 /// A station board's words, for this progress and mode.
-pub fn sign_text(ob: &Onboarding, i: usize, flat: bool) -> String {
+pub fn sign_text(
+    ob: &Onboarding,
+    i: usize,
+    flat: bool,
+    comfort: &crate::rig::comfort::Comfort,
+) -> String {
     let st = &STATIONS[i];
     let mut t = format!("{}  {}\n\n", i + 1, st.title);
     let next = st.goals.iter().find(|g| !ob.is_done(**g));
@@ -1454,7 +1494,7 @@ pub fn sign_text(ob: &Onboarding, i: usize, flat: bool) -> String {
     match next {
         Some(g) => {
             t += "\n";
-            t += g.how(flat);
+            t += &g.how_for(flat, comfort);
         }
         None => {
             // Done: the steps are ticked off; what's worth knowing instead.
@@ -1488,11 +1528,13 @@ pub fn checklist_text(ob: &Onboarding) -> String {
 fn signs(
     ob: Res<Onboarding>,
     driver: Res<RigDriver>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut signs: Query<(&StationSign, &mut ScreenText)>,
 ) {
     let flat = *driver == RigDriver::Flat;
+    let comfort = comfort.map(|c| c.clone()).unwrap_or_default();
     for (s, mut screen) in &mut signs {
-        let t = sign_text(&ob, s.0, flat);
+        let t = sign_text(&ob, s.0, flat, &comfort);
         if screen.text != t {
             screen.text = t;
         }
@@ -1588,6 +1630,36 @@ mod tests {
         check_panel(screen, source).map(|_| ())
     }
 
+    /// Standing two-handed right-handed, left-handed, one-handed.
+    fn access_modes() -> [crate::rig::comfort::Comfort; 3] {
+        use crate::rig::comfort::Comfort;
+        [
+            Comfort::default(),
+            Comfort {
+                left_handed: true,
+                ..Default::default()
+            },
+            Comfort {
+                one_handed: true,
+                ..Default::default()
+            },
+        ]
+    }
+
+    /// The sticks named are the ones that do it: turning is on the left
+    /// with GUN HAND left; one-handed, a magazine is filled and racked
+    /// without a second hand.
+    #[test]
+    fn the_yard_says_how_for_how_you_play() {
+        let [_, left, one] = access_modes();
+        assert!(Goal::Turn.how_for(false, &left).contains("left stick"));
+        assert!(Goal::Run.how_for(false, &left).contains("right stick"));
+        assert!(!Goal::FillMag.how_for(false, &one).contains("other"));
+        assert!(Goal::Rack.how_for(false, &one).contains("Press B"));
+        // Flat play has no hands to count.
+        assert_eq!(Goal::Rack.how_for(true, &one), Goal::Rack.how(true));
+    }
+
     /// Every board's words, at every stage, in both modes, read from where
     /// you'd stand (the readability test sees only what's up at the start).
     #[test]
@@ -1602,10 +1674,13 @@ mod tests {
                 if skipped {
                     ob.skipped = ob.done.clone();
                 }
-                for flat in [false, true] {
+                for (flat, comfort) in [false, true]
+                    .into_iter()
+                    .flat_map(|f| access_modes().into_iter().map(move |c| (f, c)))
+                {
                     for i in 0..STATIONS.len() {
                         let size = if i == 0 { TRUCK_SIGN } else { SIGN };
-                        let s = paper(sign_text(&ob, i, flat), size);
+                        let s = paper(sign_text(&ob, i, flat, &comfort), size);
                         let source = if i == 0 {
                             TextSource::TruckBoard
                         } else {
@@ -1679,8 +1754,11 @@ mod tests {
             assert!(st.tip.lines().all(|l| l.len() <= 28), "{}", st.tip);
         }
         for g in all_goals() {
-            for flat in [false, true] {
-                let how = g.how(flat);
+            for (flat, comfort) in [false, true]
+                .into_iter()
+                .flat_map(|f| access_modes().into_iter().map(move |c| (f, c)))
+            {
+                let how = g.how_for(flat, &comfort);
                 assert!(how.lines().count() <= 2, "{g:?}: {how}");
                 assert!(how.lines().all(|l| l.len() <= 28), "{g:?}: {how}");
                 let control = if flat {
