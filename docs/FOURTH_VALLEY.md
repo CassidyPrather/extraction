@@ -256,6 +256,84 @@ the gauge house and out: 262 s.
   World models' masonry material and drowned ruins, Underground's
   inspection gallery.
 
+## Building a valley: how Sallow was made (for the next one)
+
+What it took, in order, and what bit. Map design's rules and lint
+(`docs/MAP_DESIGN.md`) are the standard; this is the practice.
+
+### Everything a new valley touches
+
+- `assets/maps/<id>.ron`. The truck's route card lists every map file but
+  the yard, so it's offered as soon as it exists (Progression gates late
+  valleys: `progression::LATE_VALLEYS`).
+- `extraction_core::map`: its text constant, its row in `map::VALLEYS`
+  (a test holds the list to `assets/maps`), a `*_parses_and_builds` test
+  of what makes it itself; `map_lint`: its `*_passes_the_map_lint` test.
+- New prefabs: footprints in `map::prefab_footprint` (unlisted ones are a
+  4 x 3 x 4 blockout, and the nav grid blocks by footprint), geometry in a
+  module hooked into `buildings::prefab` (Sallow's: `world::dam`), its own
+  sound/footprint/model tests; models in `art/props/<name>.py`, clean
+  under `art/check.py`, a row in `docs/ASSETS.md`.
+- Owners who key things by map name or id: Visual design (fog, grade,
+  terrain), Audio (the `sounds` block, echoes), Anomalies (a Well, a
+  Mirror and a Hush in every valley, held by their test), Story
+  (`scripts/place_notes.py` writes the notes), Progression (gate, jobs),
+  Wildlife (species), Underground (a site), Performance (a
+  `scripts/lookbook/<id>.views` and a `*_holds_the_budget` test).
+- A crossing: `--scenario crossing --map <id>`.
+
+### The loop
+
+```bash
+cargo build --release -p extraction_core --bin map-dump
+scripts/map-preview.sh <id>                     # findings drawn on, routes
+python3 scripts/map_probe.py target/preview/<id> crest=0,140 bed=0,0
+python3 scripts/map_probe.py target/preview/<id> --slope x0,z0,x1,z1 out.png
+python3 scripts/map_ramp.py "Face stair" 30 52 8 6 -30,154 90,154
+target/fast/extraction --sim 8 --map <id> --jobs 2 --seed N; scripts/sim-report.sh <id>
+```
+
+Lint to clean on the dump first (seconds a round), then sims (40
+minutes a batch of eight), then screenshots.
+
+### What bit
+
+- **Roads follow the land.** A road's grade is the terrain under it,
+  averaged over `smoothing`; it won't climb a cliff, and a hairpin's legs
+  sit at their own ground's heights. Make the land a ramp:
+  `scripts/map_ramp.py` lays terraces under the road.
+- **A main route needs every 2 m cell under 16 degrees**, not 16 over
+  10 m: a road narrower than the step edges beside it fails. Give ramped
+  roads width and shoulder.
+- **Choice blocks the corridor on that same 16-degree grid.** Two
+  crossings of a dam (or a creek) that meet before the last 90 m count
+  as one way: Sallow needed a third crossing and a high path (the
+  catchwater) before every rendezvous had two ways. A creek's banks over
+  16 degrees wall a basin off for it (Sallow's old river had to go broad
+  and shallow).
+- **Plateaus come after channels and hills**, and in the order listed:
+  a plateau's blend erases a channel cut next to it, and the later of
+  two overlapping plateaus wins.
+- **Water's level is the lowest bed across the strip plus `depth`,
+  smoothed over 12 m**, and it fills up to `width / 2 + 2` m from the
+  line wherever that's under the level. For a lake, flatten its bed with
+  a plateau, or the level follows the bed; keep the strip off anything
+  lower nearby (Sallow's causeway holds the arm 8 m above the bed).
+- **Where two roads meet at different heights there's a step**; a road
+  that ends on another road should join it at its height.
+- **The truck appears on the rendezvous marker**; walking onto it before
+  it comes leaves you inside it. Stop short (the crossing does).
+- **`absolute` placements skip pads, the fit gauge and the water lint**:
+  what the dam faces and the tower are; what a drowned house in water
+  would be.
+- **The sims go where the loot is, by the building.** `choose_site`
+  weighs a building by its spots times its region's richness over
+  distance: a street of full houses at danger 2 pulled every bot past
+  danger-3 open ground. Ruins hold next to nothing. Count loot spots
+  where you want traffic, and read the never-visited list.
+- **A test that hand-lists valleys doesn't check yours.** Use
+  `map::VALLEYS`.
+
 ## Status
 
 Whitebox lint clean, sims iterated, the dam, tower and stock built
