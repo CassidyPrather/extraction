@@ -415,11 +415,11 @@ struct TaskExtras<'w, 's> {
         's,
         (
             Entity,
-            &'static crate::interact::tools::cutters::Cuttable,
+            &'static crate::destruction::hooks::Cuttable,
             &'static GlobalTransform,
         ),
     >,
-    cuts: MessageWriter<'w, crate::interact::tools::cutters::Cut>,
+    cuts: MessageWriter<'w, crate::destruction::hooks::Cut>,
 }
 
 /// Advances each bot's current task.
@@ -530,7 +530,7 @@ fn run_tasks(
                 let nearest = ext
                     .cuttables
                     .iter()
-                    .map(|(e, k, g)| (e, g.transform_point(k.at)))
+                    .map(|(e, _, g)| (e, g.translation()))
                     .filter(|(_, p)| p.distance(root.translation) < within)
                     .min_by(|a, b| {
                         a.1.distance(root.translation)
@@ -549,7 +549,7 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     ext.cuts
-                        .write(crate::interact::tools::cutters::Cut { target, by: player });
+                        .write(crate::destruction::hooks::Cut { target, by: player });
                     bot.note("cut it".to_string());
                     bot.next();
                 }

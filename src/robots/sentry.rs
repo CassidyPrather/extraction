@@ -262,10 +262,12 @@ pub fn spawn_sentry(
             Name::new("Sentry cable"),
             SentryPiece::Cable,
             OfSentry(robot),
-            crate::interact::tools::cutters::Cuttable {
-                at: Vec3::ZERO,
-                radius: CABLE_REACH,
-            },
+            crate::destruction::hooks::Cuttable { needs: 0.0 },
+            // What the cutters' jaws find: a thin overlap-only box along
+            // the stretch, which nothing collides with or shoots.
+            Sensor,
+            Collider::cuboid(0.08, 0.06, len),
+            CollisionLayers::new(Layer::Hand, LayerMask::NONE),
             Transform::from_translation(mid).with_rotation(rot),
             CableLength(len),
             Visibility::default(),
@@ -304,7 +306,7 @@ pub fn cable_run(zone: &Zone, from: Vec3, to: Vec3) -> Vec<(Vec3, f32, Quat)> {
 #[allow(clippy::too_many_arguments)]
 fn sentry_power(
     mut commands: Commands,
-    mut cuts: MessageReader<crate::interact::tools::cutters::Cut>,
+    mut cuts: MessageReader<crate::destruction::hooks::Cut>,
     mut destroyed: MessageReader<super::PartDestroyed>,
     pieces: Query<(&SentryPiece, &OfSentry)>,
     mut sentries: Query<(Entity, &mut Sentry, &Robot, &Transform)>,
@@ -325,7 +327,7 @@ fn sentry_power(
             // Cut through: it's two loose ends now, not a cable.
             commands
                 .entity(c.target)
-                .remove::<crate::interact::tools::cutters::Cuttable>()
+                .remove::<(crate::destruction::hooks::Cuttable, Collider)>()
                 .insert(CableCut);
         }
     }
@@ -744,7 +746,7 @@ pub(crate) mod tests {
                 .unwrap();
             vr.app
                 .world_mut()
-                .write_message(crate::interact::tools::cutters::Cut {
+                .write_message(crate::destruction::hooks::Cut {
                     target: cable,
                     by: vr.player,
                 });
