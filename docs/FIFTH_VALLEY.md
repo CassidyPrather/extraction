@@ -157,8 +157,38 @@ open snow; C is short but goes past the mill.
 
 ## Cold
 
-(To be written with the cold system: exposure up high and in the wind,
-warmth indoors and by a stove.)
+There are no meters in this game, so the cold is in the body
+(`extraction_core::cold`, `src/world/cold.rs`). A valley says how cold it
+is (`cold: 1.0` in the map; every other valley is 0).
+
+- Out in the open the air bites by the valley's cold, your height over
+  the insertion (nothing in the Bottoms, full from 85 m up: the col and
+  the summit), and the weather: a clear spell is kinder; fog, rain and
+  above all falling snow (Visual design's `Snow`) are worse; night bites
+  harder. On the col in ordinary weather you're chilled through in about
+  six minutes.
+- A roof over your head (a ray up from the head finds anything solid:
+  a house, the mill, a gallery's roof) stops it and warms you back in
+  under a minute.
+- A chilled body shivers: its stamina is capped (down to 45% frozen
+  through), so sprints are short and, through the guns' tired sway, the
+  aim shakes; every few seconds a shiver runs through both hands.
+- Your breath shows in the cold air (the snow's, `world::snow`).
+
+So the summit and the col are places you go to and leave, and the
+buildings on the way are where you stop: the galleries, the bivouac,
+the col hut, the snow survey hut.
+
+## Structures
+
+| Prefab | Where it's built | What it is |
+| - | - | - |
+| `ore_mill` | `src/world/fell.rs` | four bays stepped 4 m up the knoll (floors 0.15/4.15/8.15/12.15), stairs between, a ladder up the ore bin; 9 loot spots; the bots' indoor plan knows each bay's floor |
+| `observatory` | `fell.rs` | stone block, porch, instrument room with the radio desk, ladders to the store and the roof deck, dome, mast to 19.7 m |
+| `funicular_lower`, `funicular_upper` | `fell.rs` | the stations beside the line; the top one's bull wheel in its housing |
+| `funicular_car` | `fell.rs` | a stepped car on the 20% grade, stopped at the passing loop |
+| the funicular's track and stair | `src/world/roadworks.rs` | laid along the road named `Funicular`: metre gauge, rope on rollers, the passing loop, the service stair and its rail (visual only; you walk the graded path) |
+| the avalanche galleries | `roadworks.rs` | `galleries: [(at, length)]` on a road: wall on the uphill side, roof on columns over the road, snow and icicles, a drift up onto the roof; solid |
 
 ## Checks that keep it so
 
@@ -172,4 +202,14 @@ warmth indoors and by a stove.)
 
 ## Status
 
-Whitebox lint-clean but for the landmarks its own prefabs give it.
+Lint-clean under every rule on main (doors, Surge, landmarks), the fit
+gauge, the anomalies' and wildlife's per-valley tests; `--scenario
+crossing --map rime_fell` walks to the tip road and extracts (219 s).
+Shots: `scripts/lookbook.sh rime_fell` (twelve views), the prefabs and
+road works in `docs/shots/fifth-valley/`.
+
+Waiting on others: Story's notes (`place_notes.py`, after the merge),
+Progression's contract that opens the fell after Sallow, World models'
+models for the mill, observatory and stations, Audio's recordings
+(high wind, choughs, avalanche, the rope, a loose sheet on the mill),
+Visual design's grass under snow.
