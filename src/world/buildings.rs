@@ -109,6 +109,23 @@ pub enum BreakKind {
     BusDoor,
     /// A wrecked bus's side skirt panel.
     BusPanel,
+    /// A car wreck's door, bonnet, boot lid or wheel (`destruction::strip`).
+    /// Their models are authored in the car's own space, so each slots
+    /// into the body where it came from.
+    CarDoor,
+    CarBonnet,
+    CarBoot,
+    CarWheel,
+}
+
+impl BreakKind {
+    /// A car's part: its model is in the car's space, not its own.
+    pub fn in_car_space(self) -> bool {
+        matches!(
+            self,
+            BreakKind::CarDoor | BreakKind::CarBonnet | BreakKind::CarBoot | BreakKind::CarWheel
+        )
+    }
 }
 
 /// A breakable thing on a building (`Geo::breakables`).
