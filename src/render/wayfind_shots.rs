@@ -1,8 +1,8 @@
 //! `--wayfind DIR`: the render-based wayfinding gauge. From where you get
 //! your bearings (the truck's stop, every rendezvous: standing, eyes
 //! 1.7 m up), the free camera turns to each landmark in range (a
-//! placement at least `map_lint::LANDMARK_HEIGHT` tall, within
-//! `map_lint::CLEAR_SIGHT`) with the headset's pixels a degree, and
+//! placement at least `map_lint::LANDMARK_HEIGHT` tall, between
+//! [`NEAREST`] and [`FARTHEST`]) with the headset's pixels a degree, and
 //! shoots it twice: as it is, and with the landmark hidden. What differs
 //! is the landmark as the eye gets it, through fog, trees and the dark:
 //! `scripts/wayfind.py` measures its size and contrast and says whether
@@ -16,13 +16,23 @@ use bevy::camera::Camera;
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
 use extraction_core::map::{MarkerKind, prefab_footprint};
-use extraction_core::map_lint::{CLEAR_SIGHT, LANDMARK_HEIGHT};
+use extraction_core::map_lint::LANDMARK_HEIGHT;
 
 use super::FreeCamera;
 use super::legibility::eye_px_per_deg;
 use crate::launch::LaunchOptions;
 use crate::world::Zone;
 use crate::world::buildings::Building;
+
+/// Landmarks nearer than this are what you're standing at, not steering
+/// by (m). Low enough to take an RV's own tower (Cinder's fire lookout
+/// stands 14.8 m from its ranger tower).
+pub const NEAREST: f32 = 5.0;
+
+/// How far out landmarks are shot (m): past the map lint's clear sight
+/// (200 m in drizzle), out to where a faint twin still confuses
+/// (`map_lint`'s uniqueness range), to see how far they really carry.
+pub const FARTHEST: f32 = 320.0;
 
 pub struct WayfindShotsPlugin;
 
@@ -207,7 +217,7 @@ fn shoot(
             for (e, prefab, pose, size) in &marks {
                 let look = pose.translation + Vec3::Y * size.y * 0.6;
                 let d = look.xz().distance(eye.xz());
-                if d > CLEAR_SIGHT || d < 15.0 {
+                if !(NEAREST..=FARTHEST).contains(&d) {
                     continue;
                 }
                 let i = v.len();
