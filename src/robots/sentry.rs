@@ -453,7 +453,7 @@ fn sentry_mind(
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
     minds: Query<&super::senses::MindSeed>,
-    others: Query<(&Brain, &Awareness, &Robot), Without<Sentry>>,
+    others: Query<(&Brain, &Awareness, &Robot), (Without<Sentry>, Without<super::heavy::Heavy>)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -564,8 +564,10 @@ fn sentry_mind(
         }
         *t = head_transform(s.foot, s.yaw, s.pitch);
         // The gun: in view and in its arc, a warning, then bursts.
-        // Someone another machine is already fighting, it leaves be: a
+        // Someone another machine is already shooting at, it leaves be: a
         // sentry piling in on a player already under fire is no puzzle.
+        // (A heavy on your heels is another matter: lure it into the arc
+        // and it takes the rounds.)
         let busy = aware.target.is_some_and(|t| engaged.contains(&t));
         let in_view = !busy && seen.is_some_and(|p| rules::in_view(bearing(p), s.yaw));
         let gun = children.iter().find_map(|c| guns.get(c).ok());
@@ -1091,7 +1093,7 @@ pub(crate) mod tests {
         let (sentry, heavy) = {
             let mut c = vr.app.world_mut().commands();
             let s = spawn_sentry(&mut c, &zone, at, 0.0, 120.0, Vec2::new(48.0, 236.0));
-            let h_at = zone.on_ground(40.0, 220.0);
+            let h_at = zone.on_ground(40.0, 223.0);
             let h = super::super::heavy::spawn_heavy(
                 &mut c,
                 &zone,
@@ -1108,7 +1110,7 @@ pub(crate) mod tests {
             vr.app.world_mut().flush();
             (s, h)
         };
-        vr.stand(zone.on_ground(40.0, 208.0), 0.0);
+        vr.stand(zone.on_ground(40.0, 214.0), 0.0);
         vr.step(90 * 15);
         let fired = vr
             .app
