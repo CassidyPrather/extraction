@@ -21,9 +21,11 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod screen;
+pub mod spikes;
 pub mod stats;
 pub mod terrain_material;
 pub mod upgrades;
+pub mod warmup;
 pub mod water_material;
 pub mod world_props;
 
@@ -60,6 +62,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(crate::raid::lev::LevVisualsPlugin)
         .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
+        .add_plugins(warmup::WarmupPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)

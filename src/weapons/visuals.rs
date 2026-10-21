@@ -46,12 +46,15 @@ impl Plugin for GunVisualsPlugin {
                 super::muzzle::muzzle_fx,
                 super::grenades::show_grenade_parts,
                 super::grenades::explosion_fx,
+                super::zero::aim_lenses,
+                super::zero::turn_drums,
             ),
         )
         .add_plugins((
             super::impacts::ImpactFxPlugin,
             super::sling::SlingPlugin,
             super::tracers::TracerPlugin,
+            super::wear::WearPlugin,
         ));
     }
 }

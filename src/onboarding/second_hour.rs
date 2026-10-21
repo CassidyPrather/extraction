@@ -901,6 +901,7 @@ pub(super) struct World2<'w, 's> {
     remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
+    comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     door_at: Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
     robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
@@ -965,7 +966,10 @@ impl World2<'_, '_> {
             .map(|(_, it, ..)| self.catalog.get(it.kind()).id.as_str())
     }
 
+    /// What's in a hand, as a right-handed bot names it (a left-handed one
+    /// plays mirrored).
     fn holding(&self, side: Side) -> Option<Entity> {
+        let side = side.mirrored(self.comfort.as_ref().is_some_and(|c| c.left_handed));
         self.hands
             .iter()
             .find(|(rh, _)| rh.side == side)

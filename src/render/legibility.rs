@@ -425,6 +425,36 @@ pub fn baked(src: &str) -> Vec<BakedText> {
         .collect()
 }
 
+/// A `text()` height: a number, or `A if ... else B` of two (the smaller).
+fn height(arg: &str) -> Option<f32> {
+    if let Ok(h) = arg.parse::<f32>() {
+        return Some(h);
+    }
+    let (a, rest) = arg.split_once(" if ")?;
+    let (_, b) = rest.split_once(" else ")?;
+    Some(
+        a.trim()
+            .parse::<f32>()
+            .ok()?
+            .min(b.trim().parse::<f32>().ok()?),
+    )
+}
+
+/// A computed height's smallest value, stated by a `# smallest: H` comment
+/// on the call's line, the one after or the one before (looked for in that
+/// order).
+fn smallest(src: &str, line: usize) -> Option<f32> {
+    let lines: Vec<&str> = src.lines().collect();
+    [Some(line), Some(line + 1), line.checked_sub(1)]
+        .into_iter()
+        .flatten()
+        .filter_map(|i| lines.get(i))
+        .find_map(|l| {
+            l.split_once("# smallest:")
+                .and_then(|(_, v)| v.split_whitespace().next()?.parse().ok())
+        })
+}
+
 /// Stencil `text()` calls in an art script: (line, string, cap height m).
 pub fn stencil_calls(src: &str) -> Vec<(usize, String, Option<f32>)> {
     let mut out = Vec::new();
@@ -445,7 +475,7 @@ pub fn stencil_calls(src: &str) -> Vec<(usize, String, Option<f32>)> {
                 if args.len() < 3 {
                     continue;
                 }
-                let h = args[2].trim().parse::<f32>().ok();
+                let h = height(args[2].trim()).or_else(|| smallest(src, i));
                 out.push((i + 1, args[1].trim().to_string(), h));
             }
         }
@@ -498,6 +528,9 @@ mod tests {
         assert_eq!(c.len(), 2, "{c:?}");
         assert_eq!(c[0].2, Some(0.0065));
         assert_eq!(c[1].1, "name");
+        assert_eq!(height("0.0075 if len(label) <= 4 else 0.006"), Some(0.006));
+        let src = "    text(p, s, h1 * 0.8, m,\n         depth=0.0003)  # smallest: 0.0048\n";
+        assert_eq!(stencil_calls(src)[0].2, Some(0.0048));
     }
 
     /// Every panel in the game (each valley, the yard, the camp, the
@@ -676,7 +709,7 @@ mod tests {
             .collect();
         assert!(!rooms.is_empty(), "no buildings");
         let outside = zone.on_ground(site.at[0] + 30.0, site.at[1] + 30.0) + Vec3::Y * 1.7;
-        let mut go = |app: &mut App, at: Vec3, frames: usize| {
+        let go = |app: &mut App, at: Vec3, frames: usize| {
             {
                 let w = app.world_mut();
                 let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
@@ -711,7 +744,7 @@ mod tests {
         let amb = app
             .world()
             .components()
-            .resource_id::<GlobalAmbientLight>()
+            .component_id::<GlobalAmbientLight>()
             .expect("the ambient");
         let schedules = app.world().resource::<bevy::ecs::schedule::Schedules>();
         use bevy::ecs::schedule::ScheduleLabel;

@@ -26,6 +26,7 @@ impl Plugin for LootPlugin {
             Startup,
             (
                 load_tables.before(LootSpawnSystems),
+                supply_crates,
                 (spawn_zone_loot, spawn_dev_cache)
                     .chain()
                     .in_set(LootSpawnSystems),
@@ -137,6 +138,45 @@ pub fn clear_of_notes(at: Vec3, notes: &[(Vec3, Quat)]) -> Vec3 {
     at
 }
 
+/// The table a supply crate was packed from (broken open, it spills a
+/// roll of it: `destruction::wood`).
+#[derive(Component, Clone, Debug)]
+pub struct CrateLoot(pub String);
+
+/// The supply crates under the loot markers in the open. They're part of
+/// the place, not the loot: there whether the Zone was rolled or
+/// restored, and not doubled when the Surge rolls it again.
+pub fn spawn_supply_crates(commands: &mut Commands, zone: &Zone) {
+    for m in &zone.map.markers {
+        let MarkerKind::Loot { table } = &m.kind else {
+            continue;
+        };
+        if m.y >= 0.3 {
+            continue;
+        }
+        let ground = zone.on_ground(m.at[0], m.at[1]);
+        let yaw = (m.at[0] * 0.37 + m.at[1] * 0.11).sin() * 3.0;
+        commands.spawn((
+            Name::new(format!("Supply crate ({})", m.name)),
+            SupplyCrate,
+            CrateLoot(table.clone()),
+            Transform::from_translation(ground + Vec3::Y * SUPPLY_CRATE.y * 0.5)
+                .with_rotation(Quat::from_rotation_y(yaw)),
+            Visibility::default(),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(SUPPLY_CRATE.x, SUPPLY_CRATE.y, SUPPLY_CRATE.z),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+        ));
+    }
+}
+
+fn supply_crates(mut commands: Commands, zone: Res<Zone>) {
+    spawn_supply_crates(&mut commands, &zone);
+}
+
 fn spawn_marker_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -154,20 +194,6 @@ fn spawn_marker_loot(
         // Loot isn't left on the ground for you to stoop for: a marker in
         // the open gets a supply crate, and the loot sits on its lid.
         let base = if m.y < 0.3 {
-            let yaw = (m.at[0] * 0.37 + m.at[1] * 0.11).sin() * 3.0;
-            commands.spawn((
-                Name::new(format!("Supply crate ({})", m.name)),
-                SupplyCrate,
-                Transform::from_translation(ground + Vec3::Y * SUPPLY_CRATE.y * 0.5)
-                    .with_rotation(Quat::from_rotation_y(yaw)),
-                Visibility::default(),
-                avian3d::prelude::RigidBody::Static,
-                avian3d::prelude::Collider::cuboid(SUPPLY_CRATE.x, SUPPLY_CRATE.y, SUPPLY_CRATE.z),
-                avian3d::prelude::CollisionLayers::new(
-                    crate::world::Layer::World,
-                    avian3d::prelude::LayerMask::ALL,
-                ),
-            ));
             ground + Vec3::Y * (SUPPLY_CRATE.y + 0.06)
         } else {
             ground + Vec3::Y * (m.y + 0.1)

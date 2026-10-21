@@ -47,7 +47,7 @@ not just the instance.
   CHECKED" instead of measuring the game that ships.
 - **Before you finish:** `cargo test --workspace` and
   `cargo run --profile fast -- --headless --scenario all` (must print
-  `all 11 scenarios OK`). `second_hour` (a bot's three-raid career past
+  `all 19 scenarios OK`). `second_hour` (a bot's three-raid career past
   the yard, onboarding) is longer (about 4 minutes) and not in `all`:
   run it by name, `--headless --scenario second_hour`. While working, run only the tests you touched;
   the full suite takes about 7 minutes. If it restarts your container,
@@ -107,6 +107,7 @@ reformatting their code.
 | Destruction | `src/destruction/`, `docs/DESTRUCTION.md`; one hook in `src/weapons/impacts.rs` |
 | Heavy machine | `src/robots/heavy*.rs`, `art/robots/heavy*`; uses Robot bodies' and Robot minds' machinery |
 | Capture | `src/capture/`, `scripts/capture_*.sh`, `docs/CAPTURE.md`, `docs/shots/showcase/` |
+| Legibility | text and fine symbols everywhere: the size floors, `docs/LEGIBILITY.md`, the text registry and its gauges; may resize, move or re-light text in any area, telling the owner |
 
 ### Session ids
 
@@ -135,6 +136,7 @@ Message another workstream directly with `mcp__claude-code-remote__send_message`
 | Destruction | `session_01UnnefVR1t5QAeMk45Vh8tg` |
 | Heavy machine | `session_01UYS29AKspvCeepAatEb31x` |
 | Capture | `session_01G4MW4GWrhGGDH6D1ThFCZE` |
+| Legibility | `session_01EFDRQ8jB3YUANXu8qAPEXH` |
 
 The coordinator handles the player body, locomotion and interaction
 (`src/interact`, `src/player.rs`, `src/rig`) and merges everything.

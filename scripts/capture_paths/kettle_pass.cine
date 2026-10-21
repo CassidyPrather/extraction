@@ -1,0 +1,8 @@
+# Kettle Pass: cinematic shots (see docs/CAPTURE.md).
+
+shot kp_arrival gen=road index=0 from=0.03 to=0.2 height=2.6 dur=12 pitch=3
+shot kp_headframe gen=orbit target=headframe turns=0.3 dur=12
+shot kp_ropeway gen=rise target=ropeway_station dur=10
+shot kp_beck gen=river index=0 from=0.3 to=0.5 height=2.2 dur=12 pitch=4
+shot kp_chapel gen=orbit target=chapel turns=-0.25 height=6 dur=12
+shot kp_pass gen=road index=0 from=0.4 to=0.65 height=30 dur=14 pitch=12 weather=clearing

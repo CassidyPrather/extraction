@@ -81,6 +81,14 @@ impl Look {
                 contrast: 1.1,
                 ..base
             },
+            // The drained reservoir: cold, wet and blue-grey, the silt
+            // draining the colour out.
+            "Sallow Reservoir" => Self {
+                temperature: -0.012,
+                saturation: 1.05,
+                contrast: 1.1,
+                ..base
+            },
             // The practice ground: a shade brighter and kinder, to read.
             "Training Yard" => Self {
                 exposure: 0.15,
@@ -155,8 +163,16 @@ const ADAPT_SHARE: f32 = 0.6;
 /// The most they open up, in stops.
 const ADAPT_MAX: f32 = 3.0;
 /// Opening up to the dark is slow; closing down to the light is quick (s).
-const ADAPT_TO_DARK: f32 = 18.0;
+/// Into the dark, the first stop comes in a few seconds (out of a lit room
+/// into the night you start to see again), the rest over a minute or so.
+const ADAPT_TO_DARK: f32 = 6.0;
+const ADAPT_TO_DARK_LATE: f32 = 20.0;
 const ADAPT_TO_LIGHT: f32 = 2.5;
+/// What a day outside lights the eye with (lux): the scale of `light`.
+const DAY_LUX: f32 = 2500.0;
+/// How long a lamp's light at the eye takes to count (s): walking past one
+/// mustn't pump the exposure.
+const LAMP_EASE: f32 = 1.5;
 
 /// The eyes' current adaptation, in stops over the valley's grade.
 #[derive(Resource, Default, Debug)]
@@ -166,6 +182,8 @@ pub struct Adaptation {
     pub indoors: f32,
     /// The grade it's added to (set with the weather).
     pub base: f32,
+    /// The lamps' light at the eye, eased (against a day's).
+    pub lamps: f32,
     settled: bool,
 }
 
@@ -184,10 +202,12 @@ impl Adaptation {
 
     /// One step toward `target` over `dt` seconds.
     pub fn step(&mut self, target: f32, dt: f32) {
-        let tau = if target > self.stops {
+        let tau = if target <= self.stops {
+            ADAPT_TO_LIGHT
+        } else if self.stops < 1.0 {
             ADAPT_TO_DARK
         } else {
-            ADAPT_TO_LIGHT
+            ADAPT_TO_DARK_LATE
         };
         self.stops += (target - self.stops) * (1.0 - (-dt / tau).exp());
     }
@@ -198,6 +218,7 @@ pub fn adapt_eyes(
     entrances: Option<Res<crate::robots::doors::Entrances>>,
     eyes: Query<(&GlobalTransform, &Camera), (With<Camera3d>, Without<super::OffscreenCamera>)>,
     mut grades: Query<&mut ColorGrading>,
+    lamps: Query<(&PointLight, &GlobalTransform)>,
     mut adapt: ResMut<Adaptation>,
     time: Res<Time>,
 ) {
@@ -214,7 +235,11 @@ pub fn adapt_eyes(
     let dt = time.delta_secs();
     let want = if indoors { 1.0 } else { 0.0 };
     adapt.indoors += (want - adapt.indoors) * (1.0 - (-dt / 0.4).exp());
-    let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT));
+    // Lamps near the eye light it too: by a lantern at night the eyes
+    // don't open as far, and the dark past its pool is darker for it.
+    let at_eye = eye.map_or(0.0, |p| lamp_light(p, &lamps));
+    adapt.lamps += (at_eye - adapt.lamps) * (1.0 - (-dt / LAMP_EASE).exp());
+    let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) + adapt.lamps;
     let target = Adaptation::target(light);
     // A new raid starts with the eyes already used to its light.
     if !adapt.settled || conditions.is_changed() {
@@ -229,6 +254,26 @@ pub fn adapt_eyes(
             g.global.exposure = want;
         }
     }
+}
+
+/// The point lights' light at `p`, against a day's: each one's lumens
+/// spread over a sphere (cd), over the distance squared, within its range.
+pub fn lamp_light<'a>(
+    p: Vec3,
+    lamps: impl IntoIterator<Item = (&'a PointLight, &'a GlobalTransform)>,
+) -> f32 {
+    let mut lux = 0.0;
+    for (l, gt) in lamps {
+        let d2 = gt.translation().distance_squared(p);
+        if d2 > l.range * l.range || l.intensity <= 0.0 {
+            continue;
+        }
+        let c = l.color.to_linear();
+        let y = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+        lux += l.intensity / (4.0 * std::f32::consts::PI) / d2.max(0.25) * y;
+    }
+    // A lamp in your face is still not the day.
+    (lux / DAY_LUX).min(0.5)
 }
 
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
@@ -283,7 +328,7 @@ mod tests {
         for _ in 0..20 {
             a.step(room, 0.1);
         }
-        assert!(a.stops < room * 0.2, "{} of {room}", a.stops);
+        assert!(a.stops < room * 0.35, "{} of {room}", a.stops);
         // ...and back out into the day, most of the way in two.
         for _ in 0..20 {
             a.step(0.0, 0.1);
@@ -296,6 +341,44 @@ mod tests {
         for _ in 0..20 {
             b.step(0.0, 0.1);
         }
-        assert!(b.stops < room * 0.5 && before < room * 0.2);
+        assert!(b.stops < room * 0.5 && before < room * 0.35);
+    }
+
+    #[test]
+    fn out_of_a_lit_room_into_the_night_you_see_again_in_seconds() {
+        let night = Adaptation::target(0.02);
+        let mut a = Adaptation::default();
+        for _ in 0..40 {
+            a.step(night, 0.1);
+        }
+        // Four seconds in: some way, not all of it.
+        assert!(
+            a.stops > 0.4 && a.stops < night * 0.5,
+            "{} of {night}",
+            a.stops
+        );
+        for _ in 0..600 {
+            a.step(night, 0.1);
+        }
+        assert!(a.stops > night * 0.9);
+    }
+
+    #[test]
+    fn a_lantern_lights_the_eye_by_its_distance() {
+        let lamp = PointLight {
+            color: Color::WHITE,
+            intensity: 9_000.0,
+            range: 7.0,
+            ..default()
+        };
+        let at = GlobalTransform::from_translation(Vec3::ZERO);
+        let near = lamp_light(Vec3::new(1.5, 0.0, 0.0), [(&lamp, &at)]);
+        let far = lamp_light(Vec3::new(5.0, 0.0, 0.0), [(&lamp, &at)]);
+        let out = lamp_light(Vec3::new(8.0, 0.0, 0.0), [(&lamp, &at)]);
+        // Close to, more than a full moon's sky (0.08); out of range, none.
+        assert!(
+            near > 0.08 && far < near * 0.2 && out == 0.0,
+            "{near} {far}"
+        );
     }
 }

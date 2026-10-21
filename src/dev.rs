@@ -418,7 +418,7 @@ fn first_person_hands(
                     size: crate::render::comfort::WRIST_SIZE,
                     style: crate::raid::bench::ScreenStyle::Lcd,
                 },
-                crate::render::props::wrist_mount(),
+                crate::render::props::wrist_mount(crate::rig::Side::Left),
                 ChildOf(h),
             ));
         }
