@@ -1759,50 +1759,69 @@ fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
 }
 
 #[test]
-fn a_lada_comes_apart_where_kit_modelled_it() {
+fn the_wrecks_come_apart_where_kit_modelled_them() {
     use crate::world::buildings::BreakKind;
     let car = Transform::from_xyz(3.0, 0.0, -2.0).with_rotation(Quat::from_rotation_y(0.4));
-    let parts = super::strip::car_parts("wreck_lada", car);
-    assert_eq!(parts.len(), 10, "four doors, bonnet, boot, four wheels");
-    let count = |k: BreakKind| parts.iter().filter(|p| p.kind == k).count();
-    assert_eq!(count(BreakKind::CarDoor), 4);
-    assert_eq!(count(BreakKind::CarWheel), 4);
+    let building = Transform::from_xyz(100.0, 20.0, 50.0).with_rotation(Quat::from_rotation_y(2.1));
     let back = car.compute_affine().inverse();
-    for b in &parts {
-        // Out of the car: its -Z face points away from the car's middle.
-        let mid = back.transform_point3(b.at.translation);
-        let out = back.transform_vector3(b.at.rotation * Vec3::NEG_Z);
-        let centre = Vec3::new(0.0, 0.6, 0.0);
-        assert!(
-            out.dot(mid - centre) > 0.0,
-            "{:?} at {mid} faces out ({out})",
-            b.model
-        );
-        // Its model lands back in the car's space, wherever the building
-        // stands and wherever the car stands in it.
-        let building =
-            Transform::from_xyz(100.0, 20.0, 50.0).with_rotation(Quat::from_rotation_y(2.1));
-        let p = super::strip::Part::of(b, &building);
-        assert_eq!(p.hp, None, "metal: off to a crowbar only");
-        assert!(
-            (p.at * p.model_at)
-                .compute_affine()
-                .abs_diff_eq((building * car).compute_affine(), 1e-4),
-            "{:?} draws where the car is",
-            b.model
-        );
-    }
-    // Every node it names is in Kit's model (once the model's here).
-    let file = crate::asset_root_path().join(crate::render::world_props::path("wreck_lada"));
-    if let Ok(bytes) = std::fs::read(&file) {
-        let text = String::from_utf8_lossy(&bytes);
+    for (model, n, doors) in [
+        ("wreck_lada", 10, 4),
+        ("wreck_uaz", 10, 4),
+        ("wreck_lorry", 7, 2),
+    ] {
+        let parts = super::strip::car_parts(model, car);
+        assert_eq!(parts.len(), n, "{model}'s parts");
+        let count = |k: BreakKind| parts.iter().filter(|p| p.kind == k).count();
+        assert_eq!(count(BreakKind::CarDoor), doors, "{model}'s doors");
+        assert_eq!(count(BreakKind::CarWheel), 4, "{model}'s wheels");
+        assert_eq!(count(BreakKind::CarBonnet), 1, "{model}'s bonnet");
+        assert_eq!(count(BreakKind::CarBoot), 1, "{model}'s boot or tailgate");
+        let (body, _) = super::strip::car_body(model).expect("a body box");
         for b in &parts {
-            let (_, node) = super::wood::model_node(b.model.unwrap());
-            let node = node.unwrap();
+            let name = b.model.unwrap();
+            // Out of the car: its -Z face points away from the body's middle.
+            let mid = back.transform_point3(b.at.translation);
+            let out = back.transform_vector3(b.at.rotation * Vec3::NEG_Z);
             assert!(
-                text.contains(&format!("\"name\":\"{node}\"")),
-                "wreck_lada has a node {node}"
+                out.dot(mid - body) > 0.0,
+                "{name} at {mid} faces out ({out})"
             );
+            // Its box, turned, is the box read off the model: thinnest
+            // along the way it faces.
+            assert!(
+                b.size.z <= b.size.x.min(b.size.y) + 1e-4,
+                "{name}'s box {} is thinnest out",
+                b.size
+            );
+            // Its model lands back in the car's space, wherever the
+            // building stands and wherever the car stands in it.
+            let p = super::strip::Part::of(b, &building);
+            assert_eq!(p.hp, None, "{name}: metal, off to a crowbar only");
+            assert!(
+                (p.at * p.model_at)
+                    .compute_affine()
+                    .abs_diff_eq((building * car).compute_affine(), 1e-4),
+                "{name} draws where the car is"
+            );
+            let want = match b.kind {
+                BreakKind::CarDoor => "car_door",
+                BreakKind::CarWheel => "car_wheel",
+                _ => "car_bonnet",
+            };
+            assert_eq!(b.yields, Some(want), "{name} yields");
+        }
+        // Every node it names is in Kit's model (once the model's here).
+        let file = crate::asset_root_path().join(crate::render::world_props::path(model));
+        if let Ok(bytes) = std::fs::read(&file) {
+            let text = String::from_utf8_lossy(&bytes);
+            for b in &parts {
+                let (_, node) = super::wood::model_node(b.model.unwrap());
+                let node = node.unwrap();
+                assert!(
+                    text.contains(&format!("\"name\":\"{node}\"")),
+                    "{model} has a node {node}"
+                );
+            }
         }
     }
 }

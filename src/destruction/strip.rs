@@ -115,58 +115,165 @@ struct CarNode(&'static str, [f32; 3], [f32; 3]);
 
 /// Kit's car wrecks (`art/vehicles/wrecks.py`): each a model whose
 /// separable parts are its top-level nodes, in the car's space (floor
-/// under the wheelbase's middle, front to -Z, +X its right side).
-const CARS: &[(&str, &[CarNode])] = &[(
-    "wreck_lada",
-    &[
-        CarNode(
-            "wreck_lada#bonnet",
-            [0.0, 0.843, -1.493],
-            [1.52, 0.035, 1.015],
-        ),
-        CarNode("wreck_lada#boot", [0.0, 0.852, 1.63], [1.52, 0.035, 0.72]),
-        CarNode(
-            "wreck_lada#door_fl",
-            [-0.766, 0.83, -0.467],
-            [0.092, 0.99, 0.995],
-        ),
-        CarNode(
-            "wreck_lada#door_fr",
-            [0.766, 0.83, -0.467],
-            [0.092, 0.99, 0.995],
-        ),
-        CarNode(
-            "wreck_lada#door_rl",
-            [-0.766, 0.83, 0.527],
-            [0.092, 0.99, 0.855],
-        ),
-        CarNode(
-            "wreck_lada#door_rr",
-            [0.766, 0.83, 0.527],
-            [0.092, 0.99, 0.855],
-        ),
-        CarNode(
-            "wreck_lada#wheel_fl",
-            [-0.68, 0.27, -1.21],
-            [0.17, 0.58, 0.58],
-        ),
-        CarNode(
-            "wreck_lada#wheel_fr",
-            [0.68, 0.27, -1.21],
-            [0.17, 0.58, 0.58],
-        ),
-        CarNode(
-            "wreck_lada#wheel_rl",
-            [-0.68, 0.27, 1.21],
-            [0.17, 0.58, 0.58],
-        ),
-        CarNode(
-            "wreck_lada#wheel_rr",
-            [0.68, 0.27, 1.21],
-            [0.17, 0.58, 0.58],
-        ),
-    ],
-)];
+/// under the wheelbase's middle, front to -Z, +X its right side). The
+/// boxes are the nodes' own bounds, read from the models; `body` first.
+const CARS: &[(&str, &[CarNode])] = &[
+    (
+        "wreck_lada",
+        &[
+            CarNode(
+                "wreck_lada#body",
+                [-0.042, 0.798, -0.007],
+                [1.796, 1.185, 4.313],
+            ),
+            CarNode(
+                "wreck_lada#bonnet",
+                [0.0, 0.843, -1.493],
+                [1.52, 0.035, 1.015],
+            ),
+            CarNode("wreck_lada#boot", [0.0, 0.852, 1.63], [1.52, 0.035, 0.72]),
+            CarNode(
+                "wreck_lada#door_fl",
+                [-0.766, 0.83, -0.467],
+                [0.092, 0.99, 0.995],
+            ),
+            CarNode(
+                "wreck_lada#door_fr",
+                [0.766, 0.83, -0.467],
+                [0.092, 0.99, 0.995],
+            ),
+            CarNode(
+                "wreck_lada#door_rl",
+                [-0.766, 0.83, 0.527],
+                [0.092, 0.99, 0.855],
+            ),
+            CarNode(
+                "wreck_lada#door_rr",
+                [0.766, 0.83, 0.527],
+                [0.092, 0.99, 0.855],
+            ),
+            CarNode(
+                "wreck_lada#wheel_fl",
+                [-0.68, 0.27, -1.21],
+                [0.17, 0.58, 0.58],
+            ),
+            CarNode(
+                "wreck_lada#wheel_fr",
+                [0.68, 0.27, -1.21],
+                [0.17, 0.58, 0.58],
+            ),
+            CarNode(
+                "wreck_lada#wheel_rl",
+                [-0.68, 0.27, 1.21],
+                [0.17, 0.58, 0.58],
+            ),
+            CarNode(
+                "wreck_lada#wheel_rr",
+                [0.68, 0.27, 1.21],
+                [0.17, 0.58, 0.58],
+            ),
+        ],
+    ),
+    (
+        "wreck_uaz",
+        &[
+            CarNode(
+                "wreck_uaz#body",
+                [-0.018, 1.099, -0.076],
+                [1.899, 1.718, 3.952],
+            ),
+            CarNode("wreck_uaz#bonnet", [0.0, 1.1, -1.41], [1.35, 0.06, 1.06]),
+            CarNode(
+                "wreck_uaz#door_fl",
+                [-0.841, 1.134, -0.39],
+                [0.102, 0.958, 0.9],
+            ),
+            CarNode(
+                "wreck_uaz#door_fr",
+                [0.841, 1.134, -0.39],
+                [0.102, 0.958, 0.9],
+            ),
+            CarNode(
+                "wreck_uaz#door_rl",
+                [-0.841, 1.134, 0.455],
+                [0.102, 0.958, 0.69],
+            ),
+            CarNode(
+                "wreck_uaz#door_rr",
+                [0.841, 1.134, 0.455],
+                [0.102, 0.958, 0.69],
+            ),
+            CarNode("wreck_uaz#tailgate", [0.0, 0.94, 1.885], [1.54, 0.78, 0.29]),
+            CarNode(
+                "wreck_uaz#wheel_fl",
+                [-0.72, 0.37, -1.19],
+                [0.24, 0.78, 0.78],
+            ),
+            CarNode(
+                "wreck_uaz#wheel_fr",
+                [0.72, 0.37, -1.19],
+                [0.24, 0.78, 0.78],
+            ),
+            CarNode(
+                "wreck_uaz#wheel_rl",
+                [-0.72, 0.37, 1.19],
+                [0.24, 0.78, 0.78],
+            ),
+            CarNode("wreck_uaz#wheel_rr", [0.72, 0.37, 1.19], [0.24, 0.78, 0.78]),
+        ],
+    ),
+    (
+        "wreck_lorry",
+        &[
+            CarNode(
+                "wreck_lorry#body",
+                [-0.033, 1.215, 0.402],
+                [2.583, 1.91, 6.435],
+            ),
+            CarNode(
+                "wreck_lorry#bonnet",
+                [0.0, 1.235, -1.955],
+                [1.124, 0.47, 1.4],
+            ),
+            CarNode(
+                "wreck_lorry#door_fl",
+                [-0.966, 1.462, -0.505],
+                [0.092, 0.964, 0.95],
+            ),
+            CarNode(
+                "wreck_lorry#door_fr",
+                [0.966, 1.462, -0.505],
+                [0.092, 0.964, 0.95],
+            ),
+            CarNode(
+                "wreck_lorry#tailboard",
+                [0.0, 1.44, 3.536],
+                [2.31, 0.53, 0.092],
+            ),
+            CarNode(
+                "wreck_lorry#wheel_fl",
+                [-0.8, 0.43, -1.65],
+                [0.24, 0.9, 0.9],
+            ),
+            CarNode("wreck_lorry#wheel_fr", [0.8, 0.43, -1.65], [0.24, 0.9, 0.9]),
+            CarNode(
+                "wreck_lorry#wheel_rl",
+                [-0.86, 0.43, 1.65],
+                [0.53, 0.9, 0.9],
+            ),
+            CarNode("wreck_lorry#wheel_rr", [0.86, 0.43, 1.65], [0.53, 0.9, 0.9]),
+        ],
+    ),
+];
+
+/// A car wreck's body box in the car's space (centre, size): for the
+/// prefab's collider. Its parts stand proud of it a little; they're
+/// their own colliders.
+pub fn car_body(model: &str) -> Option<(Vec3, Vec3)> {
+    let (_, nodes) = CARS.iter().find(|(m, _)| *m == model)?;
+    let n = nodes.iter().find(|n| n.0.ends_with("#body"))?;
+    Some((Vec3::from(n.1), Vec3::from(n.2)))
+}
 
 /// A car wreck's parts as a building's breakables, the car standing at
 /// `at` in the building's space: a door or a wheel faces out of its side,
@@ -178,14 +285,16 @@ pub fn car_parts(model: &'static str, at: Transform) -> Vec<Breakable> {
     };
     nodes
         .iter()
+        .filter(|n| !n.0.ends_with("#body"))
         .map(|n| {
             let (local, size) = car_node_pose(n);
             let node = super::wood::model_node(n.0).1.unwrap_or_default();
             let (kind, mat, yields) = match node.split('_').next().unwrap_or_default() {
                 "door" => (BreakKind::CarDoor, Mat::PaintedMetal, "car_door"),
                 "wheel" => (BreakKind::CarWheel, Mat::RustyMetal, "car_wheel"),
-                "bonnet" => (BreakKind::CarBonnet, Mat::PaintedMetal, "scrap_metal"),
-                _ => (BreakKind::CarBoot, Mat::PaintedMetal, "scrap_metal"),
+                "bonnet" => (BreakKind::CarBonnet, Mat::PaintedMetal, "car_bonnet"),
+                // A boot lid, a tailgate, a tailboard.
+                _ => (BreakKind::CarBoot, Mat::PaintedMetal, "car_bonnet"),
             };
             Breakable {
                 kind,
@@ -200,16 +309,21 @@ pub fn car_parts(model: &'static str, at: Transform) -> Vec<Breakable> {
 }
 
 /// A car part's box in the car's space, and its size: its outer face to
-/// local -Z, its long side along local x. A lid lying flat faces up; a
-/// door or a wheel faces out of its side.
+/// local -Z. It faces out along its thinnest side, the way it sits from
+/// the car's middle: a door or a wheel out of its side, a bonnet or a boot
+/// lid up, a tailgate back.
 fn car_node_pose(CarNode(_, c, s): &CarNode) -> (Transform, Vec3) {
-    use std::f32::consts::FRAC_PI_2;
+    use std::f32::consts::{FRAC_PI_2, PI};
     let (c, s) = (Vec3::from(*c), Vec3::from(*s));
-    let (rot, size) = if s.y < s.x.min(s.z) {
+    let (rot, size) = if s.y <= s.x.min(s.z) {
         (Quat::from_rotation_x(FRAC_PI_2), Vec3::new(s.x, s.z, s.y))
-    } else {
+    } else if s.x <= s.z {
         let out = if c.x < 0.0 { FRAC_PI_2 } else { -FRAC_PI_2 };
         (Quat::from_rotation_y(out), Vec3::new(s.z, s.y, s.x))
+    } else if c.z > 0.0 {
+        (Quat::from_rotation_y(PI), s)
+    } else {
+        (Quat::IDENTITY, s)
     };
     (Transform::from_translation(c).with_rotation(rot), size)
 }
