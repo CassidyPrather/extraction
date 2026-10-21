@@ -441,6 +441,38 @@ fine on a monitor makes people sick or tired in a headset.
   counts in the view load, as cover, as a way indoors for the rhythm and
   the Surge, and its door as somewhere you must be able to walk to.
 
+## Gardens and fences
+
+A house with a garden fence round its back is a house someone lived in,
+and its planks are something to shoot through or break down
+(`fence_garden`: four breakable plank panels between five posts, an
+8.4 m run, footprint 8.5 x 0.2).
+
+- A garden is behind or beside its house, never on the door side (the
+  door strip keeps it off anyway), and squared to the house: each run is
+  turned with the house's `rot`.
+- Two runs and the house's wall make an L with its fourth side open: you
+  walk in, and so do the walkers. The paddocks behind the farmhouses are
+  two runs deep and two wide. A gate in a run wants 3.5 m to show on the
+  walkers' 2 m grid, which narrows every gap by its 0.6 m clearance both
+  sides; to them a 1.5 m gap is mostly a wall.
+- Runs touch their house (0.1 m off it) and each other, or stand at
+  least `SQUEEZE` off, like any placement.
+- Off roads and paths (`Overlap` finds a run on one), and off the main
+  routes: no route within 0.5 m of a run (`FENCE_CLEAR`). The grid blocks
+  a run only where a cell's middle falls within 0.7 m of it, so a route
+  could otherwise be drawn through one.
+- A fence isn't levelled for (`prefab_wants_pad`): a pad for a run that
+  meets a house's back wall reached under the house and lifted its door
+  off its steps. It stands on the lowest ground under it, and the ground
+  may rise at most 0.3 m along it (`FENCE_RISE`), so put gardens on the
+  flat: Kettle's Miners' Row stands on the kettle's sides and has none.
+
+Marrow Creek has five gardens (four village houses, the foreman's cabin)
+and the farm's paddock, 14 runs; Kettle Pass four (the gatekeeper's and
+weir cottages, the camp cabin, the lodge's second cabin) and the low
+farm's paddock, 12 runs.
+
 ## Performance: what's in view
 
 Lavapipe screenshots and a 90 Hz headset both pay for every building in
@@ -450,6 +482,9 @@ casters); trees are instanced with impostors, rocks have LODs.
 - At most 16 placements within 150 m of any point on a main route or any
   point of interest (`VIEW_MAX`, `VIEW_RANGE`), an underground site's
   exit kiosks among them. A village is a dozen buildings, not forty.
+  Light props (`VIEW_LIGHT`: the garden fence, nine boxes a run, no roof)
+  aren't counted; the measure prints how many are in the worst view on
+  their own (8 in Marrow's village, 6 in Kettle's).
 - Spread groups out so no view takes in two big ones at once.
 - `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` reports what a view
   actually draws (`docs/QA.md`, render load).

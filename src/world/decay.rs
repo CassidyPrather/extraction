@@ -66,6 +66,82 @@ pub fn tint(mesh: &mut Mesh, tint: Vec3) {
     }
 }
 
+/// The snow a building carries in a valley where it lies all winter
+/// (`snow::snow_line`, `MapDef::snow`): a load on every top that faces
+/// up and is open to the sky (its roof's slopes, a flat roof, the sills,
+/// the steps), thinner as the slope steepens and none past 55 degrees,
+/// with a cornice lipping over a sloped roof's eaves. Visual only: pieces
+/// to bake with the building's own (they block nothing).
+pub fn snow_load(geo: &Geo, occ: &Occluders) -> Vec<super::buildings::Piece> {
+    let mut out = Vec::new();
+    for p in &geo.pieces {
+        let Shape::Box(s) = p.shape else { continue };
+        if matches!(p.mat, Mat::Glass | Mat::Snow) {
+            continue;
+        }
+        let s = s * p.at.scale;
+        let up = p.at.rotation * Vec3::Y;
+        let area = s.x * s.z;
+        if up.y < 0.57 || area < 0.08 || s.x.min(s.z) < 0.08 {
+            continue;
+        }
+        let top = p.at.translation + up * s.y * 0.5;
+        // Open to the sky over its middle and its ends.
+        let (ax, az) = (p.at.rotation * Vec3::X, p.at.rotation * Vec3::Z);
+        let open = [
+            Vec3::ZERO,
+            ax * 0.4 * s.x,
+            -ax * 0.4 * s.x,
+            az * 0.4 * s.z,
+            -az * 0.4 * s.z,
+        ]
+        .iter()
+        .filter(|o| occ.sky(top + **o + up * 0.05, up) > 0.5)
+        .count();
+        if open < 4 {
+            continue;
+        }
+        // Deep on the flat, a skin on a steep pitch; thin on a sill.
+        let pitch = ((up.y - 0.57) / 0.43).clamp(0.0, 1.0);
+        let full = if area < 0.5 { 0.07 } else { 0.24 };
+        let depth = full * (0.35 + 0.65 * pitch);
+        let inset = 0.03;
+        let rot = p.at.rotation;
+        // Sunk a centimetre into what it lies on.
+        let lift = depth * 0.5 - 0.01;
+        out.push(super::buildings::Piece {
+            shape: Shape::Box(Vec3::new(s.x - inset * 2.0, depth, s.z - inset * 2.0)),
+            at: Transform::from_translation(top + up * lift).with_rotation(rot),
+            mat: Mat::Snow,
+            collide: false,
+        });
+        // The cornice at a slope's foot: the load creeping over the eaves.
+        if up.y < 0.985 && area >= 0.5 {
+            let downhill = (up * up.y - Vec3::Y).normalize();
+            let local = rot.inverse() * downhill;
+            let (half, across, along_x) = if local.x.abs() > local.z.abs() {
+                (s.x * 0.5, s.z, true)
+            } else {
+                (s.z * 0.5, s.x, false)
+            };
+            let lip = 0.2;
+            let size = if along_x {
+                Vec3::new(lip, depth * 1.35, across - inset * 2.0)
+            } else {
+                Vec3::new(across - inset * 2.0, depth * 1.35, lip)
+            };
+            let at = top + downhill * (half - lip * 0.5 + 0.06) + up * (depth * 0.675 - 0.01);
+            out.push(super::buildings::Piece {
+                shape: Shape::Box(size),
+                at: Transform::from_translation(at).with_rotation(rot),
+                mat: Mat::Snow,
+                collide: false,
+            });
+        }
+    }
+    out
+}
+
 /// How mossy a building is, 0..1, from its seed.
 pub fn mossiness(seed: u64) -> f32 {
     let mut rng = fastrand::Rng::with_seed(seed ^ 0x0b55);
@@ -806,6 +882,35 @@ pub(super) fn weathered(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Snow lies on a house's roof slopes, with a cornice at each eave,
+    /// and nowhere under its roof: every load is open to the sky.
+    #[test]
+    fn snow_lies_on_the_roofs_and_under_nothing() {
+        for id in ["house_plank", "house_brick", "cabin_log", "shed", "chapel"] {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            let load = snow_load(&geo, &occ);
+            assert!(load.len() >= 4, "{id}: {} loads", load.len());
+            assert!(
+                load.iter().all(|p| p.mat == Mat::Snow && !p.collide),
+                "{id}"
+            );
+            // On the roof: some of it well up, and sloped.
+            assert!(
+                load.iter()
+                    .any(|p| p.at.translation.y > 2.5 && (p.at.rotation * Vec3::Y).y < 0.98),
+                "{id}: no snow on a pitched roof"
+            );
+            for p in &load {
+                let Shape::Box(s) = p.shape else { panic!() };
+                let up = p.at.rotation * Vec3::Y;
+                let top = p.at.translation + up * (s.y * 0.5 + 0.05);
+                assert!(occ.sky(top, up) > 0.5, "{id}: snow under cover at {top:?}");
+            }
+            assert_eq!(snow_load(&geo, &occ).len(), load.len(), "{id}");
+        }
+    }
 
     /// The timber houses come in several faded paints and bare boards,
     /// each the same every time, none brighter than the boards.

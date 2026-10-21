@@ -846,6 +846,12 @@ fn run_tasks(
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
                 let d = pos.distance(to);
+                // A step aside that can't be made isn't worth a fail.
+                if within == SIDESTEP && bot.elapsed > 4.0 {
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                }
                 if d <= within {
                     bot.walk = None;
                     if within != SIDESTEP {

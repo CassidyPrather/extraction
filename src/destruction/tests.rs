@@ -1255,7 +1255,7 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
                 yields: vec![("scrap_metal".into(), 3)],
                 pry: 200.0,
                 model: None,
-                scale: Vec3::ONE,
+                model_at: Transform::IDENTITY,
                 hp: None,
             },
         );
@@ -1655,7 +1655,10 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
     // is plain on purpose). Never a box in a material that never loads,
     // which draws pale and flat.
     let root = crate::asset_root_path();
-    let model = |m: &str| root.join(crate::render::world_props::path(m)).exists();
+    let model = |m: &str| {
+        let (m, _) = super::wood::model_node(m);
+        root.join(crate::render::world_props::path(m)).exists()
+    };
     let textured = |mat: crate::render::materials::Mat| {
         let (dir, ..) = mat.info();
         dir.is_none_or(|d| {
@@ -1693,4 +1696,132 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
         }
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+#[test]
+fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
+    use super::strip::{FENCE_HP, Strippable};
+    use bevy::ecs::system::RunSystemOnce;
+    let mut app = app(None);
+    run(&mut app, 3);
+    // No valley has one yet (Map design's): stand one in a clearing.
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0);
+    app.world_mut().spawn((
+        crate::world::buildings::Building {
+            prefab: "fence_garden".into(),
+        },
+        Transform::from_translation(at),
+    ));
+    run(&mut app, 3);
+    let panels = |app: &mut App| -> Vec<(Entity, Vec3)> {
+        app.world_mut()
+            .query_filtered::<(Entity, &GlobalTransform, &Timber), With<Strippable>>()
+            .iter(app.world())
+            .filter(|(_, g, t)| t.max == FENCE_HP && g.translation().distance(at) < 6.0)
+            .map(|(e, g, _)| (e, g.translation()))
+            .collect()
+    };
+    let up = panels(&mut app);
+    assert_eq!(up.len(), 4, "four panels between five posts");
+    // Rifle rounds through the boards: a panel splinters, and its posts
+    // (the building's) still stand.
+    let (p, c) = up[1];
+    let debris = live_debris(&mut app);
+    let out = app.world().get::<GlobalTransform>(p).unwrap().rotation() * Vec3::NEG_Z;
+    let mut shots = 0;
+    while app.world().get_entity(p).is_ok() && shots < 6 {
+        shoot(&mut app, c + out * 3.0, c, 715.0, 7.9, 40.0);
+        run(&mut app, 3);
+        shots += 1;
+    }
+    assert!(app.world().get_entity(p).is_err(), "the panel broke");
+    assert!(
+        shots >= 2,
+        "a fence panel takes more than one round ({shots})"
+    );
+    assert!(live_debris(&mut app) > debris, "in splinters");
+    assert_eq!(panels(&mut app).len(), 3, "the others stand");
+    // The gap is clear to walk through: nothing solid where it stood.
+    let spatial = app
+        .world_mut()
+        .run_system_once(move |s: avian3d::prelude::SpatialQuery| {
+            s.point_intersections(
+                c,
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+            )
+        })
+        .unwrap();
+    assert!(spatial.is_empty(), "nothing solid in the gap");
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    assert_eq!(panels(&mut app).len(), 4, "the Surge puts it back");
+}
+
+#[test]
+fn the_wrecks_come_apart_where_kit_modelled_them() {
+    use crate::world::buildings::BreakKind;
+    let car = Transform::from_xyz(3.0, 0.0, -2.0).with_rotation(Quat::from_rotation_y(0.4));
+    let building = Transform::from_xyz(100.0, 20.0, 50.0).with_rotation(Quat::from_rotation_y(2.1));
+    let back = car.compute_affine().inverse();
+    for (model, n, doors) in [
+        ("wreck_lada", 10, 4),
+        ("wreck_uaz", 10, 4),
+        ("wreck_lorry", 7, 2),
+    ] {
+        let parts = super::strip::car_parts(model, car);
+        assert_eq!(parts.len(), n, "{model}'s parts");
+        let count = |k: BreakKind| parts.iter().filter(|p| p.kind == k).count();
+        assert_eq!(count(BreakKind::CarDoor), doors, "{model}'s doors");
+        assert_eq!(count(BreakKind::CarWheel), 4, "{model}'s wheels");
+        assert_eq!(count(BreakKind::CarBonnet), 1, "{model}'s bonnet");
+        assert_eq!(count(BreakKind::CarBoot), 1, "{model}'s boot or tailgate");
+        let (body, _) = super::strip::car_body(model).expect("a body box");
+        for b in &parts {
+            let name = b.model.unwrap();
+            // Out of the car: its -Z face points away from the body's middle.
+            let mid = back.transform_point3(b.at.translation);
+            let out = back.transform_vector3(b.at.rotation * Vec3::NEG_Z);
+            assert!(
+                out.dot(mid - body) > 0.0,
+                "{name} at {mid} faces out ({out})"
+            );
+            // Its box, turned, is the box read off the model: thinnest
+            // along the way it faces.
+            assert!(
+                b.size.z <= b.size.x.min(b.size.y) + 1e-4,
+                "{name}'s box {} is thinnest out",
+                b.size
+            );
+            // Its model lands back in the car's space, wherever the
+            // building stands and wherever the car stands in it.
+            let p = super::strip::Part::of(b, &building);
+            assert_eq!(p.hp, None, "{name}: metal, off to a crowbar only");
+            assert!(
+                (p.at * p.model_at)
+                    .compute_affine()
+                    .abs_diff_eq((building * car).compute_affine(), 1e-4),
+                "{name} draws where the car is"
+            );
+            let want = match b.kind {
+                BreakKind::CarDoor => "car_door",
+                BreakKind::CarWheel => "car_wheel",
+                _ => "car_bonnet",
+            };
+            assert_eq!(b.yields, Some(want), "{name} yields");
+        }
+        // Every node it names is in Kit's model (once the model's here).
+        let file = crate::asset_root_path().join(crate::render::world_props::path(model));
+        if let Ok(bytes) = std::fs::read(&file) {
+            let text = String::from_utf8_lossy(&bytes);
+            for b in &parts {
+                let (_, node) = super::wood::model_node(b.model.unwrap());
+                let node = node.unwrap();
+                assert!(
+                    text.contains(&format!("\"name\":\"{node}\"")),
+                    "{model} has a node {node}"
+                );
+            }
+        }
+    }
 }
