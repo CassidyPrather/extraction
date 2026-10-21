@@ -138,14 +138,26 @@ fn glaze_buildings(
     server: Res<AssetServer>,
     mut shards: ResMut<ShardMaterial>,
     spatial: avian3d::prelude::SpatialQuery,
+    undressed: Query<(), With<crate::world::buildings::PropsPending>>,
+    mut waiting: Local<Vec<Entity>>,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
     let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
+    dirty.append(&mut waiting);
     if dirty.is_empty() {
         return;
     }
     dirty.sort();
     dirty.dedup();
+    // Not before the building's own walls are drawn (its shading bakes in
+    // the background): glass hanging in the air on a valley's arrival.
+    let (now, later): (Vec<Entity>, Vec<Entity>) =
+        dirty.into_iter().partition(|b| !undressed.contains(*b));
+    *waiting = later;
+    let dirty = now;
+    if dirty.is_empty() {
+        return;
+    }
     // Per building, two meshes: the whole panes, and the broken ones'
     // teeth (paler and glinting, so a broken window reads as broken).
     type Buf = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>);
@@ -314,40 +326,70 @@ fn dress_debris(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut library: ResMut<MaterialLibrary>,
     mut shards: ResMut<ShardMaterial>,
+    mut shapes: Local<Vec<Handle<Mesh>>>,
     server: Res<AssetServer>,
 ) {
+    // A handful of shard shapes, each a unit slab, stretched to every
+    // piece's size: pieces of a kind share mesh and material, so a
+    // window's worth (or a cap's worth) batches into a few draws.
+    if shapes.is_empty() {
+        let cut = fracture::shatter([1.0, 1.0], [0.3, -0.2], 0x5_4A9E, 16);
+        *shapes = cut
+            .falling
+            .iter()
+            .chain(&cut.kept)
+            .take(SHAPES)
+            .map(|sh| {
+                let h = sh.half_extents();
+                let unit: Vec<P2> = sh
+                    .poly
+                    .iter()
+                    .map(|p| [p[0] / h[0].max(1e-3), p[1] / h[1].max(1e-3)])
+                    .collect();
+                meshes.add(slab(&unit, 1.0))
+            })
+            .collect();
+    }
     for (e, d) in &added {
         let material = match d.kind {
             Kind::Glass => shards.get(&mut materials),
             Kind::Wood(m) => library.get(m, &server, &mut materials),
         };
+        let mut half = [0.0f32; 2];
+        for p in &d.poly {
+            half[0] = half[0].max(p[0].abs());
+            half[1] = half[1].max(p[1].abs());
+        }
+        let k = (half[0] * 1000.0 + half[1] * 7000.0) as usize % shapes.len().max(1);
+        let size = Vec3::new(half[0], half[1], d.thick);
         // On a child, so shrinking it never touches the body.
         commands.spawn((
-            DebrisMesh,
-            Mesh3d(meshes.add(slab(&d.poly, d.thick))),
+            DebrisMesh(size),
+            Mesh3d(shapes[k].clone()),
             MeshMaterial3d(material),
             NotShadowCaster,
-            Transform::IDENTITY,
+            Transform::from_scale(size),
             ChildOf(e),
         ));
     }
 }
 
+/// How many shard shapes the pieces share.
+const SHAPES: usize = 8;
+
+/// A piece's drawn slab, and its size (the unit shape's stretch).
 #[derive(Component)]
-pub struct DebrisMesh;
+pub struct DebrisMesh(pub Vec3);
 
 /// The last half second of a piece's life, it shrinks away.
-fn fade_debris(
-    pieces: Query<&Debris>,
-    mut drawn: Query<(&ChildOf, &mut Transform), With<DebrisMesh>>,
-) {
-    for (parent, mut t) in &mut drawn {
+fn fade_debris(pieces: Query<&Debris>, mut drawn: Query<(&ChildOf, &DebrisMesh, &mut Transform)>) {
+    for (parent, size, mut t) in &mut drawn {
         let Ok(d) = pieces.get(parent.parent()) else {
             continue;
         };
         let left = d.life - d.age;
         if left < 0.5 {
-            t.scale = Vec3::splat((left / 0.5).clamp(0.05, 1.0));
+            t.scale = size.0 * (left / 0.5).clamp(0.05, 1.0);
         }
     }
 }
