@@ -263,6 +263,18 @@ impl Monkey {
         let w = self.vr.app.world_mut();
         let mut q = w.query::<(Entity, &GlobalTransform, Option<&LinearVelocity>)>();
         for (e, g, v) in q.iter(w) {
+            if let Some(v) = v
+                && v.0.length() > 50.0
+                && e.index_u32() != index
+            {
+                eprintln!(
+                    "fast f{} {e} {:?}: at {:.2} v {:.1}",
+                    self.frame,
+                    w.get::<Name>(e),
+                    g.translation(),
+                    v.0
+                );
+            }
             if e.index_u32() == index {
                 let r = w.entity(e);
                 let names: Vec<String> = r
@@ -433,7 +445,12 @@ impl Monkey {
             }
         };
         let off = Vec3::new(self.rng.range(-1.5, 1.5), 0.0, self.rng.range(-1.5, 1.5));
-        let p = at + off;
+        // Inside the fence: the map's own edge is walled off.
+        let inside = zone.map.size * 0.5 - 20.0;
+        let p = (at + off).clamp(
+            Vec3::new(-inside, f32::MIN, -inside),
+            Vec3::new(inside, f32::MAX, inside),
+        );
         // Stand on whatever is there: an underground floor, a building's
         // floor (dropped from just above the spot), or the ground.
         let ground = zone.ground(p.x, p.z);
@@ -1340,4 +1357,152 @@ fn chaos_probe_stand() {
         let f = vr.feet();
         eprintln!("{i}: feet {f:.2}");
     }
+}
+
+/// Every loot spot on every map sits on or over the ground (or an
+/// underground site's floor): the monkey found curios at Cinder Works'
+/// slag heaps spawned under the hill and falling through it.
+#[test]
+fn every_loot_spot_is_over_the_ground() {
+    use crate::world::buildings::{loot_spot_at, placement_transform, prefab};
+    let mut bad = Vec::new();
+    let mut n = 0;
+    for map in [
+        "training_yard",
+        "marrow_creek",
+        "kettle_pass",
+        "cinder_works",
+        "sallow_reservoir",
+    ] {
+        let zone = Zone::load(map);
+        for p in &zone.map.placements {
+            let Some(geo) = prefab(&p.prefab) else {
+                continue;
+            };
+            let t = placement_transform(&zone, p);
+            for s in &geo.loot {
+                n += 1;
+                let at = loot_spot_at(&zone, &t, s.at);
+                if crate::world::underground::floor_under(&zone, at).is_some() {
+                    continue;
+                }
+                let ground = zone.ground(at.x, at.z);
+                if at.y < ground - 0.05 {
+                    bad.push(format!(
+                        "{map} {} at {:?}: spot {at:.2} is {:.2} m under the ground",
+                        p.prefab,
+                        p.at,
+                        ground - at.y
+                    ));
+                }
+            }
+        }
+    }
+    assert!(n > 100, "only {n} loot spots");
+    assert!(
+        bad.is_empty(),
+        "{} spots under the ground:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+}
+
+/// Scratch: what the underground rasters say about a point.
+#[test]
+#[ignore]
+fn chaos_probe_floor() {
+    let env = |k: &str| std::env::var(k).ok();
+    let zone = Zone::load(&env("PROBE_MAP").unwrap_or("marrow_creek".into()));
+    let p: Vec<f32> = env("PROBE_P")
+        .unwrap_or("-245.0,8.5,-152.5".into())
+        .split(',')
+        .map(|v| v.parse().unwrap())
+        .collect();
+    let p = Vec3::new(p[0], p[1], p[2]);
+    for site in extraction_core::underground::placed(&zone.map) {
+        let r = extraction_core::underground::raster(&site.id).unwrap();
+        let footing = zone.hm.footing(&site.id, site.at, site.rot);
+        let local = site.to_site([p.x, p.z]);
+        eprintln!(
+            "{} at {:?}: footing {footing:.2} local {local:?} floor {:?}",
+            site.id,
+            site.at,
+            r.floor_at(local)
+        );
+    }
+    eprintln!(
+        "ground {:.2} floor_under {:?}",
+        zone.ground(p.x, p.z),
+        crate::world::underground::floor_under(&zone, p)
+    );
+}
+
+/// An item despawned while stowed (a grenade going off in the pack or a
+/// pouch) leaves the pack's list and the pouch empty: the monkey found a
+/// pack still listing an EMP grenade that had gone off in it.
+#[test]
+fn a_despawned_item_leaves_its_pack_and_pouch() {
+    let mut vr = Vr::new("training_yard");
+    let feet = vr.feet();
+    let a = vr.spawn("tea_tin", Transform::from_translation(feet + Vec3::Y));
+    let b = vr.spawn("tea_tin", Transform::from_translation(feet + Vec3::Y * 1.3));
+    let player = vr.player;
+    let w = vr.app.world_mut();
+    let bag = w
+        .query::<(Entity, &Backpack)>()
+        .iter(w)
+        .find(|(_, b)| b.owner == player && b.carried)
+        .map(|(e, _)| e)
+        .expect("a pack");
+    let pouch = w
+        .query::<(Entity, &Socket, &SocketOwner)>()
+        .iter(w)
+        .find(|(_, s, o)| {
+            o.0 == player && s.occupant.is_none() && matches!(s.kind, SocketKind::Body(_))
+        })
+        .map(|(e, _, _)| e)
+        .expect("a pouch");
+    {
+        let mut state: bevy::ecs::system::SystemState<(
+            Commands,
+            Query<&mut Backpack>,
+            Query<&mut Socket>,
+        )> = bevy::ecs::system::SystemState::new(w);
+        let (mut commands, mut bags, mut sockets) = state.get_mut(w).unwrap();
+        let mut bg = bags.get_mut(bag).unwrap();
+        crate::interact::body::stow_in_backpack(&mut commands, a, bag, &mut bg, Vec3::ZERO);
+        let mut s = sockets.get_mut(pouch).unwrap();
+        crate::interact::seat_in_socket(&mut commands, b, pouch, &mut s);
+        state.apply(w);
+    }
+    vr.step(3);
+    assert!(
+        vr.app
+            .world()
+            .get::<Backpack>(bag)
+            .unwrap()
+            .contents
+            .contains(&a)
+    );
+    assert_eq!(
+        vr.app.world().get::<Socket>(pouch).unwrap().occupant,
+        Some(b)
+    );
+    vr.app.world_mut().despawn(a);
+    vr.app.world_mut().despawn(b);
+    vr.step(2);
+    assert!(
+        !vr.app
+            .world()
+            .get::<Backpack>(bag)
+            .unwrap()
+            .contents
+            .contains(&a),
+        "the pack still lists it"
+    );
+    assert_eq!(
+        vr.app.world().get::<Socket>(pouch).unwrap().occupant,
+        None,
+        "the pouch still holds it"
+    );
 }

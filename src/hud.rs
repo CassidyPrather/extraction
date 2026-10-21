@@ -246,4 +246,4 @@ fn update_hud(
     text.0 = lines.join("\n");
 }
 
-const KEYS: &str = "WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | B mag | T combine | C crouch | U use (radio, bandage) | E on the bell pull to leave | H check yourself";
+const KEYS: &str = "WASD move | E grab | F 2nd hand | Q drop | G stow | Tab pack | 1-0 draw | LMB fire | RMB aim | R reload | V rack | X mode | L bipod | B mag | T combine | C crouch | U use (radio, bandage) | E on the bell pull to leave | H check yourself";

@@ -121,6 +121,12 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
         {
             continue;
         }
+        // Nor what has no mesh of its own to hide (a wreck part drawn in
+        // its building's surfaces): with and without would be the same.
+        if !has_mesh(world, e) {
+            info!("afford: {k:?} {e} has no mesh of its own; not shot");
+            continue;
+        }
         let pose = gt.compute_transform();
         let size = world
             .get::<avian3d::prelude::ColliderAabb>(e)
@@ -129,14 +135,11 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
             .min(Vec3::splat(3.0));
         picked.push((k, e, pose, size));
     }
+    let mut spatial = bevy::ecs::system::SystemState::<avian3d::prelude::SpatialQuery>::new(world);
     let mut v = Vec::new();
     for (k, e, pose, size) in picked {
         let centre = pose.translation;
-        let fwd = pose.rotation * Vec3::Z;
-        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::X);
-        let ground = zone.ground(centre.x, centre.z);
-        let mut eye = centre + flat * super::affordance::SEEN_FROM;
-        eye.y = (ground + EYE).max(centre.y + 0.2);
+        let eye = vantage(world, &mut spatial, &zone, e, pose);
         let i = v.len();
         v.push(View {
             from: format!("{k:?}"),
@@ -160,6 +163,93 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
     info!("afford: {} views", v.len());
     world.resource_mut::<Shots>().views = Some(v);
 }
+
+/// Whether `e` or anything under it draws a mesh.
+fn has_mesh(world: &World, e: Entity) -> bool {
+    world.get::<Mesh3d>(e).is_some()
+        || world
+            .get::<Children>(e)
+            .is_some_and(|c| c.iter().any(|k| has_mesh(world, k)))
+}
+
+/// Where to stand to see an interactable: [`super::affordance::SEEN_FROM`]
+/// out from its front, back or either side, at eye height (or just above
+/// it), whichever first sees it with nothing in between. Its own +Z
+/// alone put the camera behind the panel a button sits on, or in a wall.
+fn vantage(
+    world: &World,
+    spatial: &mut bevy::ecs::system::SystemState<avian3d::prelude::SpatialQuery>,
+    zone: &Zone,
+    e: Entity,
+    pose: Transform,
+) -> Vec3 {
+    let centre = pose.translation;
+    let fwd = pose.rotation * Vec3::Z;
+    let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::X);
+    let eye_at = |dir: Vec3| {
+        let mut eye = centre + dir * super::affordance::SEEN_FROM;
+        eye.y = (zone.ground(centre.x, centre.z) + EYE).max(centre.y + 0.2);
+        eye
+    };
+    let sides = [flat, -flat, flat.cross(Vec3::Y), -flat.cross(Vec3::Y)];
+    let Ok(query) = spatial.get(world) else {
+        return eye_at(flat);
+    };
+    // The thing itself or a part of it; what it sits on (its parent: the
+    // bench under a knob) is in the way.
+    let related = |a: Entity, b: Entity| {
+        let up = |mut x: Entity, to: Entity| loop {
+            if x == to {
+                return true;
+            }
+            match world.get::<ChildOf>(x) {
+                Some(c) => x = c.parent(),
+                None => return false,
+            }
+        };
+        up(a, b)
+    };
+    // How far the line from the eye runs before something not the thing
+    // stops it: up to within [`NEAR_ENOUGH`] of its middle counts as seen
+    // (a knob 2 cm proud of a bench front has no collider of its own).
+    let open = |eye: Vec3| {
+        let Ok(dir) = Dir3::new(centre - eye) else {
+            return 0.0;
+        };
+        let d = eye.distance(centre) - NEAR_ENOUGH;
+        let filter = avian3d::prelude::SpatialQueryFilter::default();
+        let mut from = eye;
+        let mut run = 0.0;
+        // Step past the thing's own parts.
+        loop {
+            match query.cast_ray(from, dir, d - run, true, &filter) {
+                None => return d,
+                Some(hit) if related(hit.entity, e) => {
+                    run += hit.distance + 0.01;
+                    from = eye + *dir * run;
+                    if run >= d {
+                        return d;
+                    }
+                }
+                Some(hit) => return run + hit.distance,
+            }
+        }
+    };
+    let eyes = sides.map(eye_at);
+    // The first side with nothing in the way; else the one that sees
+    // farthest in.
+    eyes.iter()
+        .copied()
+        .find(|eye| open(*eye) >= eye.distance(centre) - NEAR_ENOUGH - 1e-3)
+        .unwrap_or_else(|| {
+            eyes.into_iter()
+                .max_by(|a, b| open(*a).total_cmp(&open(*b)))
+                .unwrap_or_else(|| eye_at(flat))
+        })
+}
+
+/// How near the middle of an interactable a sight line must get to see it.
+const NEAR_ENOUGH: f32 = 0.1;
 
 #[allow(clippy::too_many_arguments)]
 fn shoot(

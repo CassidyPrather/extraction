@@ -395,4 +395,37 @@ mod tests {
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].what, "entities");
     }
+
+    /// End to end: a system that leaks an entity every few frames trips the
+    /// gauge, which names what grew; the same world without it doesn't.
+    #[test]
+    fn a_leaking_system_trips_the_gauge() {
+        fn leak(mut commands: Commands, mut n: Local<u32>) {
+            *n += 1;
+            if *n % 3 == 0 {
+                commands.spawn(Name::new("Leaked spark"));
+            }
+        }
+        let play = |leaky: bool| {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins);
+            if leaky {
+                app.add_systems(Update, leak);
+            }
+            for _ in 0..10 {
+                app.world_mut().spawn(Name::new("Rock"));
+            }
+            soak(&mut app, 60.0, 1.0, |_, _| {}, |_| {})
+        };
+        let rec = play(true);
+        let found = rec.leaks();
+        assert!(found.iter().any(|l| l.what == "entities"), "{found:?}");
+        assert!(rec.report().contains("Leaked spark"), "{}", rec.report());
+        let rec = play(false);
+        assert!(
+            !rec.leaks().iter().any(|l| l.what == "entities"),
+            "{}",
+            rec.report()
+        );
+    }
 }
