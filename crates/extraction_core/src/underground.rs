@@ -216,6 +216,10 @@ pub struct Portal {
     /// The floor its stair goes down to, site y; the layout's otherwise.
     #[serde(default)]
     pub floor: Option<f32>,
+    /// A front over its kiosk's door: a prop model (`models/props/`,
+    /// origin on the ground at its centre, its back to the wall).
+    #[serde(default)]
+    pub facade: Option<String>,
 }
 
 fn yes() -> bool {

@@ -142,7 +142,7 @@ fn ceiling(r: &Raster, i: usize, j: usize) -> Option<f32> {
     }
 }
 
-fn build(l: &'static Layout, r: &Raster) -> Geo {
+fn build(l: &'static Layout, r: &'static Raster) -> Geo {
     let m = mats(l.style);
     let mut b = Builder::default();
     walls(&mut b, r, &m);
@@ -588,7 +588,7 @@ fn rects(
 /// A stair: its kiosk on the surface (walls, roof, door, apron), the
 /// steps (drawn) over a ramp (walked), the stepped soffit, and the fill
 /// under the kiosk's back wall where the tunnel leaves it.
-fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
+fn stair(b: &mut Builder, r: &'static Raster, k: usize, m: &Mats) {
     let p = &r.portals[k];
     let s = r.stairs[k];
     // Built in the portal's own frame, its ground at 0.
@@ -608,6 +608,28 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
         [&[door(KIOSK[0])], &[], &[], &[]],
     );
     kb.flat_roof(KIOSK[0] * 2.0, KIOSK[1] * 2.0, top + KIOSK_HEIGHT, m.kiosk);
+    // A front over the door, if it has one: its jambs and header solid,
+    // drawn by the model (Kit's intake front: 3.0 x 3.4 x 0.5, a 1.2 x 2.2
+    // opening).
+    if let Some(name) = p.facade.as_deref() {
+        let (w, h, d, ow, oh) = (3.0, 3.4, 0.5, 1.2, 2.2);
+        let z = -KIOSK[1] - WALL * 0.5 - d * 0.5;
+        let from = kb.geo.pieces.len();
+        let jamb = (w - ow) * 0.5;
+        for sx in [-1.0f32, 1.0] {
+            kb.bx(
+                Vec3::new(jamb, oh, d),
+                Vec3::new(sx * (ow + jamb) * 0.5, top + oh * 0.5, z),
+                m.kiosk,
+            );
+        }
+        kb.bx(
+            Vec3::new(w, h - oh, d),
+            Vec3::new(0.0, top + (oh + h) * 0.5, z),
+            m.kiosk,
+        );
+        kb.dress(from, vec![(name, Transform::from_xyz(0.0, top, z))]);
+    }
     let (ox, oz) = (KIOSK[0] + WALL * 0.5, KIOSK[1] + WALL * 0.5);
     // Its floor inside the door, down into the ground.
     let land = STAIR_TOP + oz;
