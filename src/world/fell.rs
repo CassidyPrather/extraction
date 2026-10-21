@@ -911,10 +911,7 @@ fn flotation_floor(b: &mut Builder) {
         Vec3::new(4.2, f + 0.35, -5.8),
         Mat::PaintedMetal,
     );
-    b.dress(
-        from,
-        vec![("mill_pump", Transform::from_xyz(4.2, f, -5.8))],
-    );
+    b.dress(from, vec![("mill_pump", Transform::from_xyz(4.2, f, -5.8))]);
     for (x, z) in [(5.5, -9.3), (6.2, -9.35), (5.85, -8.75)] {
         b.barrel(Vec3::new(x, f, z));
     }
