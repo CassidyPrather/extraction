@@ -258,7 +258,7 @@ pub fn flare_visuals(
                     color: colour,
                     intensity: 0.0,
                     range: reach,
-                    shadows_enabled: false,
+                    shadow_maps_enabled: false,
                     ..default()
                 },
                 Transform::default(),
