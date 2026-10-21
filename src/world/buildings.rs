@@ -1438,7 +1438,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 44] = [
+pub const PREFABS: [&str; 45] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1453,6 +1453,7 @@ pub const PREFABS: [&str; 44] = [
     "mast_hut",
     "radio_mast",
     "ranger_tower",
+    "survey_tower",
     "quarantine_gate",
     "guard_booth",
     "robot_gate",
@@ -1559,6 +1560,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "mast_hut" => mast_hut(&mut b),
         "radio_mast" => radio_mast(&mut b),
         "ranger_tower" => ranger_tower(&mut b),
+        "survey_tower" => survey_tower(&mut b),
         "quarantine_gate" => quarantine_gate(&mut b),
         "guard_booth" => guard_booth(&mut b),
         "robot_gate" => robot_gate(&mut b),
@@ -4238,6 +4240,94 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
 }
 
 fn ranger_tower(b: &mut Builder) {
+    let top = tower_legs(b);
+    b.shell(
+        4.0,
+        4.0,
+        top + 0.08,
+        2.4,
+        0.08,
+        Mat::Planks,
+        [
+            &[wide_window(2.0, 3.0)],
+            &[door(3.2), wide_window(1.2, 1.4)],
+            &[wide_window(2.0, 3.0)],
+            &[wide_window(2.0, 3.0)],
+        ],
+    );
+    b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
+    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+}
+
+/// The survey post: the ranger tower's legs, stair and platform, but open
+/// on top, a railing round it, and the survey mast with its beacon (art
+/// `survey_mast`): unlike the ranger tower's roofed cabin from afar. Its
+/// entrance is where the stair arrives (the ranger tower's door).
+fn survey_tower(b: &mut Builder) {
+    let top = tower_legs(b);
+    let deck = top + 0.075;
+    // The railing: posts and two rails round the edge, open where the
+    // stair arrives (+X, z 1.2).
+    let e = 2.1;
+    let rail = |b: &mut Builder, a: Vec2, c: Vec2| {
+        let v = c - a;
+        let mid = (a + c) * 0.5;
+        let yaw = -v.y.atan2(v.x);
+        for (y, t) in [(1.0, 0.07), (0.5, 0.05)] {
+            b.bx_rot(
+                Vec3::new(v.length(), t, 0.05),
+                Vec3::new(mid.x, deck + y, mid.y),
+                yaw,
+                Mat::Timber,
+            );
+        }
+    };
+    let corners = [
+        Vec2::new(-e, -e),
+        Vec2::new(e, -e),
+        Vec2::new(e, e),
+        Vec2::new(-e, e),
+    ];
+    rail(b, corners[3], corners[0]);
+    rail(b, corners[0], corners[1]);
+    rail(b, corners[2], corners[3]);
+    // The +X side, broken for the stair's arrival.
+    rail(b, Vec2::new(e, -e), Vec2::new(e, 1.2 - 0.6));
+    rail(b, Vec2::new(e, 1.2 + 0.6), Vec2::new(e, e));
+    for c in corners
+        .into_iter()
+        .chain([Vec2::new(e, 0.6), Vec2::new(e, 1.8)])
+    {
+        b.bx(
+            Vec3::new(0.08, 1.05, 0.08),
+            Vec3::new(c.x, deck + 0.525, c.y),
+            Mat::Timber,
+        );
+    }
+    let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+    b.geo.entrances.push(extraction_core::map::Entrance {
+        at: [r(2.04), 1.2],
+        out: [1.0, 0.0],
+        width: 0.95,
+        clear: 1.0,
+    });
+    // The mast, its collider a pole; the model draws it and the beacon.
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(0.24, 5.4, 0.24),
+        Vec3::new(0.0, deck + 2.7, 0.0),
+        Mat::PaintedMetal,
+    );
+    b.dress_structure(
+        from,
+        vec![("survey_mast", Transform::from_xyz(0.0, deck, 0.0))],
+    );
+    b.table(Vec3::new(-0.9, deck, 1.1), 0.0, Some("gadgets"));
+}
+
+/// The ranger tower's four legs, its stair in three flights up the +X
+/// side and its platform: the platform's top, less its boards.
+fn tower_legs(b: &mut Builder) -> f32 {
     let top = 9.0;
     for (x, z) in [(-1.8, -1.8), (1.8, -1.8), (1.8, 1.8), (-1.8, 1.8)] {
         b.bx(
@@ -4331,22 +4421,7 @@ fn ranger_tower(b: &mut Builder) {
         Vec3::new(0.0, top, 0.0),
         Mat::Planks,
     );
-    b.shell(
-        4.0,
-        4.0,
-        top + 0.08,
-        2.4,
-        0.08,
-        Mat::Planks,
-        [
-            &[wide_window(2.0, 3.0)],
-            &[door(3.2), wide_window(1.2, 1.4)],
-            &[wide_window(2.0, 3.0)],
-            &[wide_window(2.0, 3.0)],
-        ],
-    );
-    b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
-    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+    top
 }
 
 fn quarantine_gate(b: &mut Builder) {
