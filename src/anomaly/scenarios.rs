@@ -33,11 +33,22 @@ const SPOTS: [[f32; 2]; 6] = [
     [-10.0, -60.0],
 ];
 
+/// How far east of an anomaly's edge the bot may stand, metres: every
+/// scenario's stand points lie within it, and it starts at [`ARRIVE`].
+const APRON: f32 = 14.0;
+/// Where the bot is put down to start, metres east of the anomaly's edge.
+const ARRIVE: f32 = 12.0;
+
 /// Open ground for the `i`th scenario's anomaly near its spot: off the
-/// roads, clear of buildings and trees (the bot stands east of it), not
-/// steep.
+/// roads, clear of buildings and trees, not steep, and its apron (east of
+/// it, where the bot stands and starts) walkable all the way in.
 fn spot(zone: &Zone, i: usize, kind: AnomalyKind, radius: f32) -> Vec3 {
     let trees = extraction_core::forest::scatter_trees(&zone.map, &zone.hm);
+    let nav = extraction_core::map_nav::zone_grid(
+        &zone.map,
+        &zone.hm,
+        extraction_core::map_nav::MAX_SLOPE,
+    );
     let m = zone
         .marker(&MarkerKind::Insertion)
         .map(|m| m.at)
@@ -55,6 +66,7 @@ fn spot(zone: &Zone, i: usize, kind: AnomalyKind, radius: f32) -> Vec3 {
                 && trees
                     .iter()
                     .all(|t| Vec2::new(t.pos[0], t.pos[2]).distance(*p) > radius + 7.0)
+                && (0..=APRON as i32).all(|k| nav.walkable([p.x + radius + k as f32, p.y]))
         })
         .unwrap_or(base);
     zone.on_ground(p.x, p.y)
@@ -84,6 +96,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest snare: ground it with a bolt, reach in while it recharges",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 2.0),
                 Stage {
                     kind: AnomalyKind::Snare,
@@ -119,6 +132,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest lift: wind it up with a bolt, stand clear, catch the stone it throws",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 2.5),
                 Stage {
                     kind: AnomalyKind::Lift,
@@ -155,6 +169,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest burner: shoot the stone out of the coals, let it cool, take it",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 4.0),
                 Stage {
                     kind: AnomalyKind::Burner,
@@ -200,6 +215,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest well: dash in for the stone at its heart, and out",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r * 3.2),
                 Stage {
                     kind: AnomalyKind::Well,
@@ -225,6 +241,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest mirror: throw a bolt through the fold, reach in while it closes",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 2.0),
                 Stage {
                     kind: AnomalyKind::Mirror,
@@ -259,6 +276,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Log(s(
                     "harvest hush: in for the stone and out before the silence presses",
                 )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 2.0),
                 Stage {
                     kind: AnomalyKind::Hush,
