@@ -386,9 +386,104 @@ pub fn occlusion(spatial: &SpatialQuery, openings: &[Vec3], from: Vec3, to: Vec3
     }
 }
 
+/// A big flat face a loud sound slaps back off (Sallow's dam): its plane
+/// through `at` facing `normal`, `half` along `along` either way, from
+/// `base` up `height`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reflector {
+    pub at: Vec3,
+    pub normal: Vec3,
+    pub along: Vec3,
+    pub half: f32,
+    pub base: f32,
+    pub height: f32,
+}
+
+/// The faces in a zone's placements that slap back: the dam's downstream
+/// face (towards +z in its own frame) and its upstream wall (towards
+/// -z), each its length long (`world::dam`).
+pub fn reflectors(placements: &[(String, Transform)]) -> Vec<Reflector> {
+    placements
+        .iter()
+        .filter_map(|(prefab, xf)| {
+            let (len, height, facing, plane) = match prefab.as_str() {
+                "dam_face" => (265.0, 22.0, 1.0, 1.5),
+                "dam_face_end" => (25.0, 22.0, 1.0, 1.5),
+                "dam_back" => (245.0, 21.0, -1.0, -1.5),
+                "dam_back_end" => (35.0, 21.0, -1.0, -1.5),
+                _ => return None,
+            };
+            let normal = xf.rotation * Vec3::Z * facing;
+            Some(Reflector {
+                at: xf.translation + xf.rotation * Vec3::Z * plane,
+                normal,
+                along: xf.rotation * Vec3::X,
+                half: len * 0.5,
+                base: xf.translation.y,
+                height,
+            })
+        })
+        .collect()
+}
+
+/// Speed of sound, m/s.
+pub const SOUND: f32 = 343.0;
+/// A slapback is heard as one when it comes this long after the sound
+/// itself (s); sooner, it fuses with it.
+pub const SLAP_AFTER: f32 = 0.06;
+
+/// A sound at `from` slapping back off `wall` to `ear`: where its image
+/// is (the sound mirrored in the wall's plane, so it plays from behind
+/// the wall at the length of the reflected path) and how long after the
+/// sound itself it arrives (s). `None` if either is behind the wall, the
+/// reflection misses it, or it would fuse with the sound.
+pub fn slapback(wall: &Reflector, from: Vec3, ear: Vec3) -> Option<(Vec3, f32)> {
+    let ds = (from - wall.at).dot(wall.normal);
+    let dl = (ear - wall.at).dot(wall.normal);
+    if ds <= 0.5 || dl <= 0.5 {
+        return None;
+    }
+    let image = from - wall.normal * (2.0 * ds);
+    // Where the reflected path meets the wall.
+    let t = ds / (ds + dl);
+    let hit = from + (ear - from) * t;
+    let along = (hit - wall.at).dot(wall.along);
+    let y = hit.y;
+    if along.abs() > wall.half || y < wall.base || y > wall.base + wall.height {
+        return None;
+    }
+    let delay = (image.distance(ear) - from.distance(ear)) / SOUND;
+    (delay >= SLAP_AFTER).then_some((image, delay))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A shot 100 m out from the dam's face, fired where you stand,
+    /// comes back off it 0.58 s later from 100 m behind it; from behind
+    /// the face, or past its end, it doesn't.
+    #[test]
+    fn the_dam_slaps_back() {
+        let face = reflectors(&[("dam_face".into(), Transform::from_xyz(0.0, 30.0, 0.0))]);
+        let wall = face[0];
+        let here = Vec3::new(10.0, 32.0, 101.5);
+        let (image, delay) = slapback(&wall, here, here).unwrap();
+        assert!((delay - 200.0 / SOUND).abs() < 0.01, "{delay}");
+        assert!((image.z - (1.5 - 100.0)).abs() < 0.01, "{image}");
+        assert!(slapback(&wall, Vec3::new(0.0, 32.0, -20.0), here).is_none());
+        assert!(
+            slapback(
+                &wall,
+                Vec3::new(400.0, 32.0, 50.0),
+                Vec3::new(400.0, 32.0, 60.0)
+            )
+            .is_none()
+        );
+        // Right at it: the echo fuses with the shot.
+        let near = Vec3::new(0.0, 32.0, 6.0);
+        assert!(slapback(&wall, near, near).is_none());
+    }
     use bevy::ecs::system::RunSystemOnce;
 
     fn app(map: &str) -> App {
@@ -710,6 +805,27 @@ mod tests {
                     continue;
                 }
                 put(&mut app, name, sh.xf.translation + Vec3::Y * 1.6);
+            }
+            // Sallow's draw-off tower: inside at the bridge from the crest
+            // (it has no door shell); and the crest itself.
+            for p in zone
+                .map
+                .placements
+                .iter()
+                .filter(|p| p.prefab == "draw_off_tower" || p.prefab == "dam_face")
+            {
+                let xf = crate::world::buildings::placement_transform(&zone, p);
+                let up = if p.prefab == "draw_off_tower" {
+                    crate::world::dam::TOWER_BRIDGE + 1.6
+                } else {
+                    22.0 + 1.6
+                };
+                let name = if p.prefab == "dam_face" {
+                    "dam_crest"
+                } else {
+                    "draw_off_tower"
+                };
+                put(&mut app, name.into(), xf.translation + Vec3::Y * up);
             }
             for p in zone
                 .map

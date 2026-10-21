@@ -30,12 +30,14 @@ pub mod persist;
 pub mod player;
 pub mod progression;
 pub mod qa;
+pub mod radio;
 pub mod raid;
 pub mod render;
 pub mod rig;
 pub mod robot_voice;
 pub mod robots;
 pub mod sim;
+pub mod soak;
 pub mod tour;
 #[cfg(test)]
 mod vr_harness;
@@ -92,6 +94,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                radio::RadioPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
@@ -125,6 +128,7 @@ impl Plugin for ClientPlugin {
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .add_plugins(wildlife::WildlifeVisualsPlugin)
+        .add_plugins(radio::visuals::MusicVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
@@ -263,22 +267,26 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     if !opts.flat {
         // Named, so the runtime (SteamVR's binding UI, its per-app
         // resolution) knows the game apart from other Bevy apps.
-        app.add_plugins(bevy_mod_openxr::add_xr_plugins(defaults).set(
-            bevy_mod_openxr::init::OxrInitPlugin {
-                app_info: bevy_mod_openxr::types::AppInfo {
-                    name: "Extraction".into(),
-                    version: bevy_mod_openxr::types::Version(0, 1, 0),
-                },
-                // Finger tracking (SteamVR gives it for Index controllers);
-                // dropped with a warning where the runtime lacks it.
-                exts: {
-                    let mut exts = bevy_mod_openxr::exts::OxrExtensions::default();
-                    exts.enable_hand_tracking();
-                    exts
-                },
-                ..default()
-            },
-        ));
+        app.add_plugins(
+            bevy_mod_openxr::add_xr_plugins(defaults)
+                // The session starts when the load has settled
+                // (`rig::xr::handle_session`), not at once.
+                .set(bevy_mod_xr::session::XrSessionPlugin { auto_handle: false })
+                .set(bevy_mod_openxr::init::OxrInitPlugin {
+                    app_info: bevy_mod_openxr::types::AppInfo {
+                        name: "Extraction".into(),
+                        version: bevy_mod_openxr::types::Version(0, 1, 0),
+                    },
+                    // Finger tracking (SteamVR gives it for Index controllers);
+                    // dropped with a warning where the runtime lacks it.
+                    exts: {
+                        let mut exts = bevy_mod_openxr::exts::OxrExtensions::default();
+                        exts.enable_hand_tracking();
+                        exts
+                    },
+                    ..default()
+                }),
+        );
         app.add_plugins(rig::xr::XrDriverPlugin);
         app.insert_resource(XrActive);
     } else {
@@ -291,7 +299,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     // system errors become warnings.
     app.set_error_handler(bevy::ecs::error::warn);
     if opts.screenshot.is_none() {
-        app.add_plugins(audio::AudioPlugin);
+        app.add_plugins((audio::AudioPlugin, radio::sound::MusicSoundPlugin));
     }
     // GPU time per render pass for the session log (`log_frame_times`):
     // the headset's device has timestamp queries; elsewhere it's a no-op.

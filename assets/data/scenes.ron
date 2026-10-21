@@ -20,10 +20,10 @@
             Remains(at: (0.3, 0.7), rot: 30.0, seated: false),
         ],
         items: [
-            (id: "brass", at: (-0.5, 0.0, -0.4)),
-            (id: "brass", at: (0.6, 0.0, -0.3), rot: 70.0),
-            (id: "ak_mag", at: (-0.2, 0.0, 0.25), rot: 20.0, condition: 0.6),
-            (id: "field_dressing", at: (1.0, 0.0, 0.5)),
+            (id: "brass", at: (-0.7, 0.9, -1.15)),
+            (id: "brass", at: (1.0, 0.7, -0.85), rot: 70.0),
+            (id: "ak_mag", at: (-1.1, 0.9, -0.8), rot: 20.0, condition: 0.6),
+            (id: "field_dressing", at: (1.25, 0.7, -1.1)),
         ],
         note: Some((
             name: "Barricade note",
@@ -188,7 +188,7 @@
         ],
         items: [
             (id: "ammo_545", at: (0.9, 0.7, -0.6), condition: 0.7),
-            (id: "brass", at: (-0.3, 0.0, 0.1)),
+            (id: "brass", at: (1.1, 0.7, -0.4)),
         ],
     ),
     (
@@ -249,7 +249,7 @@
         ],
         items: [
             (id: "lead_case", at: (-0.15, 0.7, -0.1)),
-            (id: "water_bottle", at: (-1.0, 0.0, -0.6)),
+            (id: "water_bottle", at: (0.2, 0.7, 0.2)),
         ],
         note: Some((
             name: "Pickers' note",
@@ -491,7 +491,7 @@
         items: [
             (id: "binoculars", at: (-0.84, 0.5, -0.45)),
             (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
-            (id: "matches", at: (1.0, 0.0, 0.2)),
+            (id: "matches", at: (-0.8, 0.5, -0.6)),
         ],
         note: Some((
             name: "Hide note",
@@ -509,9 +509,11 @@
         after: Some(Visits(5)),
         pieces: [
             Remains(at: (0.0, 0.0), rot: 0.0, seated: false),
+            // His kit box, set down at the door.
+            Crate(at: (0.7, -0.5), size: 0.4),
         ],
         items: [
-            (id: "flashlight", at: (0.5, 0.0, -0.5), condition: 0.1),
+            (id: "flashlight", at: (0.7, 0.4, -0.5), condition: 0.1),
         ],
         note: Some((
             name: "Shot-firer's last",
@@ -705,7 +707,7 @@
         ],
         items: [
             (id: "water_bottle", at: (0.0, 0.4, 0.0), condition: 0.6),
-            (id: "old_photo", at: (0.4, 0.05, 0.2), condition: 0.3),
+            (id: "old_photo", at: (0.1, 0.4, 0.1), condition: 0.3),
         ],
     ),
     (
@@ -720,9 +722,10 @@
             Bedroll(at: (0.4, 0.6), rot: 90.0),
             Bedroll(at: (0.4, -0.6), rot: 90.0),
             Lantern(at: (1.2, 0.0, 0.0)),
+            Crate(at: (1.0, 0.9), size: 0.4),
         ],
         items: [
-            (id: "old_photo", at: (0.5, 0.05, 0.9), condition: 0.5),
+            (id: "old_photo", at: (1.0, 0.4, 0.9), condition: 0.5),
         ],
         note: Some((
             name: "Novakova's note",
@@ -746,6 +749,231 @@
             name: "Sorter's chit",
             text: "Metal doesn't burn, so it's sorted out first. Bedsteads, prams, a piano's iron frame (down the pit, it was too heavy for the hook), tin toys by the bucket.\nEverything else goes in.\nI kept one back, a clockwork bird. It's in the box. I don't know whose it was. Somebody's.",
             at: (0.0, 0.5, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    // --- Set pieces: places you walk through that tell it.
+    (
+        map: "marrow_creek",
+        name: "The second lorry",
+        // The depot yard: what was left for the luggage lorry on the 15th,
+        // one piece a household, labelled. It never came.
+        at: (15.0, -239.0),
+        rot: 0.0,
+        pieces: [
+            Prop(model: "suitcase_shut", at: (-3.2, 0.0, -0.6), rot: 10.0, size: (0.62, 0.22, 0.47)),
+            Prop(model: "suitcase_shut", at: (-3.2, 0.22, -0.6), rot: -5.0, size: (0.62, 0.22, 0.47)),
+            Prop(model: "suitcase_shut", at: (-2.4, 0.0, -0.9), rot: 35.0, size: (0.62, 0.22, 0.47)),
+            Prop(model: "belongings_box", at: (-1.6, 0.0, -0.5), rot: -10.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "bundle", at: (-1.0, 0.0, -0.9), rot: 20.0, size: (0.49, 0.39, 0.4)),
+            Prop(model: "belongings_box", at: (-0.4, 0.0, -0.4), rot: 5.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "bundle", at: (-0.4, 0.46, -0.4), rot: -30.0, size: (0.49, 0.39, 0.4), collide: false),
+            Prop(model: "suitcase_shut", at: (0.3, 0.0, -0.8), rot: 80.0, size: (0.62, 0.22, 0.47)),
+            Crate(at: (1.2, -0.6), size: 0.5),
+            Prop(model: "suitcase_open", at: (1.2, 0.5, -0.6), rot: -15.0, size: (0.68, 0.12, 0.64)),
+            Prop(model: "picture_frame", at: (-1.6, 0.46, -0.5), rot: 15.0, size: (0.3, 0.03, 0.24), collide: false),
+            Crate(at: (2.4, -0.5), size: 0.7),
+        ],
+        items: [
+            (id: "wristwatch", at: (1.1, 0.62, -0.65), condition: 0.7),
+            (id: "old_photo", at: (1.35, 0.62, -0.5), condition: 0.6),
+            (id: "condensed_milk", at: (2.3, 0.7, -0.35)),
+        ],
+        note: Some((
+            name: "Luggage notice",
+            text: "LUGGAGE FOR THE SECOND LORRY\nOne piece a household, labelled. Lorry 15 Oct, 0900, from the depot yard.\n(pencil) Not come. 16th.\n(another hand) It's not coming. Take what you need. Leave the labels on.",
+            at: (2.5, 0.7, -0.6),
+            rot: 180.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "Fiala's walker",
+        // The lodge meadow: a machine that came to the fence every evening,
+        // and lay down here. Jam jars of flowers on its back.
+        at: (215.0, -200.0),
+        rot: 0.0,
+        pieces: [
+            Prop(model: "walker_wreck", at: (0.0, 0.0, 0.0), rot: 30.0, size: (1.0, 0.67, 1.5)),
+            Prop(model: "flower_jars", at: (0.0, 0.67, 0.0), rot: 30.0, size: (0.4, 0.42, 0.3), collide: false),
+            Chair(at: (1.5, 0.7), rot: 250.0),
+            Crate(at: (-1.5, 0.6), size: 0.5),
+        ],
+        items: [
+            (id: "binoculars", at: (1.5, 0.45, 0.7), rot: 40.0),
+            (id: "sensor_eye", at: (-1.6, 0.5, 0.45)),
+        ],
+        note: Some((
+            name: "Fiala's card",
+            text: "It came to the fence every evening the second autumn, and stood. It never took a thing of mine. We watched the deer, the two of us.\nThis spring it lay down here and didn't get up. I took its eye out so it would stop looking.\nI've given it what I'd give a dog.\n- Fiala",
+            at: (-1.4, 0.5, 0.7),
+            rot: 90.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "The charging queue",
+        // By the blast furnace: the carts of the last charge, held when the
+        // fire got out into the north wood on 26 Feb, and never fed.
+        at: (-150.0, 178.0),
+        rot: 0.0,
+        pieces: [
+            Pallet(at: (-6.0, 0.0), rot: 0.0),
+            Prop(model: "belongings_box", at: (-6.2, 0.144, 0.0), size: (0.56, 0.46, 0.4)),
+            Prop(model: "bundle", at: (-5.7, 0.144, 0.1), rot: 25.0, size: (0.49, 0.39, 0.4)),
+            Pallet(at: (-3.5, 0.0), rot: 0.0),
+            Prop(model: "suitcase_shut", at: (-3.5, 0.144, 0.0), size: (0.62, 0.22, 0.47)),
+            Prop(model: "suitcase_shut", at: (-3.5, 0.364, 0.0), rot: 15.0, size: (0.62, 0.22, 0.47)),
+            Pallet(at: (-1.0, 0.0), rot: 0.0),
+            Prop(model: "bed", at: (-1.0, 0.144, 0.0), rot: 90.0, size: (0.91, 0.9, 1.96)),
+            Pallet(at: (1.5, 0.0), rot: 0.0),
+            Prop(model: "books", at: (1.3, 0.144, 0.0), rot: 10.0, size: (0.5, 0.12, 0.27), collide: false),
+            Prop(model: "dishes", at: (1.8, 0.144, 0.1), rot: -20.0, size: (0.45, 0.1, 0.35), collide: false),
+            Pallet(at: (4.0, 0.0), rot: 0.0),
+            Prop(model: "tool_chest", at: (4.0, 0.144, 0.0), size: (0.92, 0.55, 0.54)),
+            Crate(at: (6.3, 0.0), size: 0.9),
+        ],
+        items: [
+            (id: "multitool", at: (3.8, 0.694, 0.0), rot: 20.0),
+            (id: "spare_parts", at: (4.25, 0.694, 0.05)),
+            (id: "chess_piece", at: (6.1, 0.9, 0.25)),
+        ],
+        note: Some((
+            name: "Charge chit",
+            text: "CHARGE 412 TO 419: HOLD.\nFire's out in the north wood. Every hand to the sidings with buckets. Leave the carts where they stand.\n- R. Kral, 26 Feb",
+            at: (6.3, 0.9, -0.15),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "sallow_reservoir",
+        name: "Bay four",
+        // The stock ground: Marrow depot's buses in their row, and the bay
+        // kept for number four, which Lev drove out. Still held.
+        at: (70.0, -74.0),
+        rot: 0.0,
+        pieces: [
+            Prop(model: "kept_bus", at: (-6.4, 0.0, 0.0), size: (2.57, 2.74, 10.24)),
+            Prop(model: "kept_bus", at: (-3.2, 0.0, 0.0), size: (2.57, 2.74, 10.24)),
+            Prop(model: "kept_bus", at: (0.0, 0.0, 0.0), size: (2.57, 2.74, 10.24)),
+            Prop(model: "kept_bus", at: (6.4, 0.0, 0.0), size: (2.57, 2.74, 10.24)),
+            Prop(model: "depot_tagger", at: (3.2, 0.0, -4.4), rot: 180.0, size: (0.76, 1.3, 0.68)),
+            Crate(at: (2.4, -2.6), size: 0.5),
+            Prop(model: "suitcase_shut", at: (2.4, 0.5, -2.6), rot: -20.0, size: (0.62, 0.22, 0.47)),
+        ],
+        items: [
+            (id: "field_dressing", at: (2.3, 0.72, -2.6)),
+            (id: "canned_stew", at: (2.55, 0.72, -2.5)),
+        ],
+        terminal: Some((
+            at: (3.2, 1.3, -4.4),
+            rot: 180.0,
+            pages: [
+                "BAY 4\nMARROW DEPOT NO. 4\n\nSTATUS   NOT RECOVERED\nBAY      HELD",
+            ],
+            recalled: [
+                "BAY 4\nRECALL ACCEPTED\n\nBAY      HELD",
+            ],
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Jan Holm's handcart",
+        // In the village street by the post office, where the collector
+        // took Jan Holm on 3 Nov with the shelter's lamp oil on his cart.
+        // Hana left it where it stopped.
+        at: (-16.0, 76.0),
+        rot: 0.0,
+        pieces: [
+            Pallet(at: (0.0, 0.0), rot: 15.0),
+            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "bundle", at: (0.3, 0.144, 0.1), rot: -20.0, size: (0.49, 0.39, 0.4)),
+            Prop(model: "lantern", at: (-0.25, 0.604, 0.0), size: (0.12, 0.27, 0.12), collide: false),
+            Prop(model: "boots", at: (0.9, 0.0, 0.7), rot: 40.0, size: (0.22, 0.25, 0.34), collide: false),
+        ],
+        items: [
+            (id: "matches", at: (-0.1, 0.604, 0.1)),
+            (id: "canned_beans", at: (0.35, 0.534, 0.1)),
+        ],
+        note: Some((
+            name: "Hana's chalk",
+            text: "Jan's cart. I've left it where it stopped, so she can see it from the shelter steps if she comes up. The lamp oil's gone down to her.\nTake the beans if you need them. Leave the cart.\n- H.M.",
+            at: (-0.25, 0.604, -0.12),
+            rot: 180.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "The lamp board",
+        // By the mine: the lamp checks on their board, every one back on
+        // its hook the day the pit shut, but the Nováks'.
+        at: (-196.0, -54.0),
+        rot: 90.0,
+        pieces: [
+            Prop(model: "shelf_metal", at: (0.0, 0.0, -0.4), size: (1.06, 1.8, 0.36)),
+            Table(at: (0.0, 0.6), rot: 0.0),
+            Prop(model: "carbide_lamp", at: (-0.4, 0.79, 0.55), size: (0.11, 0.2, 0.1), collide: false),
+            Prop(model: "carbide_lamp", at: (-0.25, 0.79, 0.6), rot: 20.0, size: (0.11, 0.2, 0.1), collide: false),
+            Prop(model: "helmet_lamp", at: (0.35, 0.79, 0.65), rot: -30.0, size: (0.34, 0.17, 0.44), collide: false),
+        ],
+        items: [
+            (id: "brass", at: (0.05, 0.79, 0.45)),
+            (id: "flashlight", at: (0.4, 0.79, 0.35), condition: 0.4),
+        ],
+        note: Some((
+            name: "Lamp room chit",
+            text: "LAMP CHECKS, 15 OCT. Pit shut.\nEvery check back on the board but NOVAK, three. Old Novak said he was fetching his tools from the old heading. Took Marie and the boy.\nThe cage was still running at six. I waited till dark.\n- Lamp room",
+            at: (-0.05, 0.79, 0.75),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "The bucket line",
+        // Below the fire lookout, at the edge of the north-west wood: the
+        // butts and the charred beam where the works and Ash Row held the
+        // fire on 26 Feb till the wind went round.
+        at: (-160.0, -116.0),
+        rot: 135.0,
+        pieces: [
+            Barrel(at: (-3.5, 0.0)),
+            Barrel(at: (-2.2, 0.2)),
+            Barrel(at: (-0.9, -0.1)),
+            Prop(model: "beam_charred", at: (1.6, 0.0, -0.3), rot: 8.0, size: (4.56, 0.24, 0.2)),
+            Prop(model: "rope_coil", at: (3.4, 0.0, 0.6), rot: 30.0, size: (0.97, 0.15, 0.69), collide: false),
+            Crate(at: (0.4, 0.8), size: 0.6),
+        ],
+        items: [
+            (id: "field_dressing", at: (0.25, 0.6, 0.75)),
+            (id: "water_bottle", at: (0.6, 0.6, 0.9), condition: 0.5),
+        ],
+        note: Some((
+            name: "Bucket tally",
+            text: "BUCKET LINE, 26 FEB.\nWorks hands 31, Ash Row 12, the lookout.\nHeld the ride here from noon till dark. The wind went round at seven and took it over our heads.\n- tally, R.K.",
+            at: (0.4, 0.6, 0.65),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "sallow_reservoir",
+        name: "The keeper's chair",
+        // Old Sallow, below the church tower: Alois Pech's chair, set where
+        // he sat each evening of the drain to watch the church come out.
+        at: (-62.0, -28.0),
+        rot: 0.0,
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 240.0),
+            Crate(at: (0.8, 0.2), size: 0.5),
+            Prop(model: "lantern", at: (0.7, 0.5, 0.3), size: (0.12, 0.27, 0.12), collide: false),
+        ],
+        items: [
+            (id: "tea_tin", at: (0.95, 0.5, 0.1)),
+            (id: "compass", at: (0.0, 0.45, 0.05)),
+        ],
+        note: Some((
+            name: "Keeper's slip",
+            text: "Day 20. The church out to the clock. Ten to four, as I said.\nSat with it till dark. Back tomorrow with the flask.\n- A.P.",
+            at: (0.85, 0.5, 0.05),
             rot: 0.0,
         )),
     ),

@@ -8,7 +8,7 @@
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
 //! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
-//! `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
+//! `--no-post-blur`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -58,6 +58,9 @@ pub struct Comfort {
     /// A faint tick on the wrist when a machine nearby turns certain of
     /// you (`rig::haptics`).
     pub machine_tick: bool,
+    /// Iron sights: the front post goes soft as the eye comes down behind
+    /// them, focused on the target (`weapons::optics`).
+    pub post_blur: bool,
 }
 
 impl Default for Comfort {
@@ -78,6 +81,7 @@ impl Default for Comfort {
             one_handed: false,
             captions: true,
             machine_tick: true,
+            post_blur: true,
         }
     }
 }
@@ -301,6 +305,7 @@ impl Comfort {
                 "--one-handed" => c.one_handed = true,
                 "--no-captions" => c.captions = false,
                 "--no-machine-tick" => c.machine_tick = false,
+                "--no-post-blur" => c.post_blur = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };

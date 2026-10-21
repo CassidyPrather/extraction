@@ -236,6 +236,8 @@ def main():
         return
     import audio_voices  # noqa: E402  (what the robots say)
     audio_voices.add_sets(sets, out)
+    import audio_music  # noqa: E402  (the music and broadcasts, src/radio)
+    audio_music.add_sets(sets, out)
     import audio_mix  # noqa: E402  (the mix and scene passes)
     flagged = audio_mix.run(sets, out)
     import audio_acoustics  # noqa: E402  (what the rooms do)
@@ -246,6 +248,7 @@ def main():
         with open(out / "mix.txt", "a") as f:
             f.write("\n\n" + text + "\n")
     flagged += room_flags
+    flagged += audio_music.run(sets, out)
     import audio_binaural  # noqa: E402  (where the headset puts sounds)
     ear_flags, ear_lines = audio_binaural.run(out)
     if ear_lines:

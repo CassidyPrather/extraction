@@ -49,6 +49,9 @@ pub struct HeightFog {
     pub cap_base: f32,
     /// How fast the cap thickens going up (1/m).
     pub cap_rise: f32,
+    /// Where snow can lie (m; `world::snow::snow_line`), far overhead in a
+    /// valley without one.
+    pub snow_line: f32,
 }
 
 impl Default for HeightFog {
@@ -62,6 +65,7 @@ impl Default for HeightFog {
             cap_density: 0.0,
             cap_base: 100.0,
             cap_rise: 0.08,
+            snow_line: NO_SNOW,
         }
     }
 }
@@ -92,38 +96,96 @@ const OPAQUE_ANCHOR: &str = "        // NOTE: If rendering as opaque, alpha shou
 const OPAQUE_PATCHED: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        // EXTRACTION_WET: kept (the sky openness) until the lighting reads it.\n        color.a = clamp(color.a, 0.0, 1.0);\n";
 /// Wetness rides the fog colour's alpha as `1 - wetness * WET_CODE`.
 pub const WET_CODE: f32 = 0.002;
+/// Lying snow rides the fog's lobe exponent: a whole number, plus
+/// `snow * SNOW_CODE` (a lobe a hundredth sharper at most: unseen).
+pub const SNOW_CODE: f32 = 0.01;
+/// A snow line no ground reaches.
+pub const NO_SNOW: f32 = 1.0e5;
 
 const WET_WGSL: &str = r#"
 fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
     var o = p;
     let alpha_mode = p.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
-    if (alpha_mode != pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE) {
+    let opaque = alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_OPAQUE;
+    let mask = alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MASK
+        || alpha_mode == pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_ALPHA_TO_COVERAGE;
+    if (!opaque && !mask) {
         return o;
     }
-    o.material.base_color.a = 1.0;
 #ifdef DISTANCE_FOG
-    let w = clamp((1.0 - view_bindings::fog.base_color.a) * 500.0, 0.0, 1.0);
+    let w = select(0.0, clamp((1.0 - view_bindings::fog.base_color.a) * 500.0, 0.0, 1.0), opaque);
+    let snow = clamp(fract(view_bindings::fog.directional_light_exponent + 1e-5) * 100.0 - 1e-3, 0.0, 1.0);
 #else
     // A view with no fog (the impostors' capture) has no weather either.
     let w = 0.0;
+    let snow = 0.0;
+#endif
+    // A masked surface's alpha is its cutout (a tree's cards): open sky.
+    let open = select(1.0, clamp(p.material.base_color.a, 0.0, 1.0), opaque);
+    if (opaque) {
+        o.material.base_color.a = 1.0;
+    }
+#ifdef DISTANCE_FOG
+    if (snow > 0.002 && HF_SNOW_LINE < 1.0e4) {
+        o = extraction_snow(o, snow, open, mask);
+    }
 #endif
     if (w < 0.002) {
         return o;
     }
     // Rain falls on what faces up; walls take the run-off, a little.
-    let open = clamp(p.material.base_color.a, 0.0, 1.0);
     let up = clamp(p.world_normal.y, 0.0, 1.0);
     let k = w * open * (0.3 + 0.7 * up);
     // Darker (soaked), and glossy, metal less so.
     let soak = mix(0.62, 0.85, p.material.metallic);
-    o.material.base_color = vec4<f32>(p.material.base_color.rgb * mix(1.0, soak, k), 1.0);
+    // (Not where snow lies on it: snow is matt.)
+    o.material.base_color = vec4<f32>(o.material.base_color.rgb * mix(1.0, soak, k), o.material.base_color.a);
     o.material.perceptual_roughness = mix(
-        p.material.perceptual_roughness,
-        min(p.material.perceptual_roughness, 0.32),
+        o.material.perceptual_roughness,
+        min(o.material.perceptual_roughness, 0.32),
         k * 0.85,
     );
     return o;
 }
+
+// (The height fog's noise and the valley's snow line live with
+// `apply_fog`, under DISTANCE_FOG: so does this.)
+#ifdef DISTANCE_FOG
+// Snow (`world::snow`): it lies on what faces up, out in the open, above
+// the valley's line (a few metres' ragged edge), thin first in patches and
+// then all over; on a slope only where it isn't steep. Matt and white.
+fn extraction_snow(p: pbr_types::PbrInput, snow: f32, open: f32, cards: bool) -> pbr_types::PbrInput {
+    var o = p;
+    let wp = p.world_position.xyz;
+    let edge = (hf_noise(wp.xz * 0.06) - 0.5) * 7.0;
+    let above = smoothstep(HF_SNOW_LINE - 3.0, HF_SNOW_LINE + 4.0, wp.y + edge);
+    // Cards (foliage, ivy) have rounded normals, up over a whole crown:
+    // only their tops take it, and never all over (the green shows under
+    // the load; white all through, a spruce was a ghost of one).
+    let flat = select(
+        smoothstep(0.35, 0.8, p.world_normal.y),
+        smoothstep(0.6, 0.95, p.world_normal.y) * 0.45,
+        cards,
+    );
+    let patches = hf_noise(wp.xz * 1.3) * 0.6 + hf_noise(wp.xz * 0.21) * 0.4;
+    // (Steepness scales it: subtracted, a wall still took snow at full.)
+    let lie = clamp((snow * 1.6 - patches * 0.7) * 3.0, 0.0, 1.0) * flat;
+    let s = open * above * lie;
+    if (s <= 0.0) {
+        return o;
+    }
+    o.material.base_color = vec4<f32>(
+        mix(p.material.base_color.rgb, vec3<f32>(0.74, 0.76, 0.8), s),
+        p.material.base_color.a,
+    );
+    o.material.perceptual_roughness = mix(p.material.perceptual_roughness, 0.75, s);
+    o.material.metallic = mix(p.material.metallic, 0.0, s);
+    o.material.emissive = p.material.emissive * (1.0 - s);
+    // Snow smooths over the surface's own relief.
+    o.N = normalize(mix(p.N, p.world_normal, s * 0.6));
+    return o;
+}
+#endif
 "#;
 
 fn height_fog_wgsl(f: &HeightFog) -> String {
@@ -137,6 +199,7 @@ const HF_DRIFT: f32 = {drift:.4};
 const HF_CAP: f32 = {cap:.6};
 const HF_CAP_BASE: f32 = {cap_base:.3};
 const HF_CAP_RISE: f32 = {cap_rise:.5};
+const HF_SNOW_LINE: f32 = {snow_line:.2};
 
 fn hf_hash(p: vec2<f32>) -> f32 {{
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -204,6 +267,7 @@ fn extraction_height_fog(
         cap = f.cap_density.max(0.0),
         cap_base = f.cap_base,
         cap_rise = f.cap_rise,
+        snow_line = f.snow_line,
     )
 }
 

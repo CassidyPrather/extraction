@@ -172,10 +172,25 @@ fn touching(
     layout: &super::GunLayout,
     rest_at: Vec3,
     mag_foot: Option<Vec3>,
+    bipod_feet: Option<Vec3>,
     checks: &mut BraceChecks,
 ) -> bool {
     use avian3d::prelude::{Collider, ColliderAabb, SpatialQueryFilter};
     checks.looked += 1;
+    // A deployed bipod's feet rest on anything, the bare ground too: it's
+    // what they're for (`armoury::Bipod`).
+    if bipod_feet.is_some_and(|feet| {
+        !spatial
+            .shape_intersections(
+                &Collider::sphere(BRACE_REACH),
+                feet,
+                Quat::IDENTITY,
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+            )
+            .is_empty()
+    }) {
+        return true;
+    }
     let (lo, hi) = layout.bounds();
     // A hand-driven gun stops a little short of what it's pressed onto,
     // so "resting" allows the same reach as the handguard.
@@ -233,6 +248,12 @@ pub struct Handling {
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
+    /// Iron sights brought to the eye: the turn about the front post that
+    /// lines the rear sight up with it (item space), eased.
+    pub sight_fix: Quat,
+    /// How far the eye is down behind the iron sights, 0..1, eased: the
+    /// front post goes soft as it rises (`optics`' post blur).
+    pub at_eye: f32,
 }
 
 impl Handling {
@@ -308,6 +329,7 @@ fn handle_guns(
         &mut HoldFeel,
         Option<&Held>,
         Option<&Supported>,
+        Option<&super::armoury::Bipod>,
     )>,
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     bodies: Query<&Body>,
@@ -322,13 +344,14 @@ fn handle_guns(
     terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
     // Played one-handed, a gun rested on something is held as well as two
     // hands hold it: what the surface is for.
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
-    for (_, gun, item, gt, mut handling, mut feel, held, support) in &mut guns {
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support, bipod) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -368,6 +391,9 @@ fn handle_guns(
             &gun.layout,
             rest_at,
             mag_foot,
+            bipod
+                .filter(|b| b.swing >= 1.0)
+                .map(|b| gt.transform_point(b.feet_now())),
             &mut checks,
         );
         let was_braced = handling.hold.braced;
@@ -433,9 +459,67 @@ fn handle_guns(
         let yaw = handling.rise.y + sway.y;
         let pivot = gun.layout.grip.translation;
         let r = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch);
-        feel.offset = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
+        let kick = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
             .with_rotation(r);
+        // Iron sights at the cheek: a turn about the front post puts the
+        // rear sight on the eye's line to it. Worked out where the gun would
+        // be without it (so it settles rather than chasing itself).
+        let front = front_post(gun);
+        let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
+        let (want, lined) = match head {
+            Some(eye) if !scoped.iter().any(|m| m.0 == gun_e) => {
+                let eye_now = gt.affine().inverse().transform_point3(eye);
+                let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
+                (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
+            }
+            _ => (Quat::IDENTITY, false),
+        };
+        let ease = 1.0 - (-dt / SIGHT_EASE).exp();
+        handling.sight_fix = handling.sight_fix.slerp(want, ease);
+        handling.at_eye += (if lined { 1.0 } else { 0.0 } - handling.at_eye) * ease;
+        feel.offset = kick * about_front(handling.sight_fix);
         feel.lag = hold.lag(mass);
+    }
+}
+
+/// How near behind the rear sight (metres along the bore, and off its line)
+/// the eye must be for the sights to line up at the cheek, the most they
+/// turn the gun for it (radians), and how quickly (seconds).
+pub const SIGHT_DEPTH: (f32, f32) = (-0.02, 0.16);
+pub const SIGHT_OFF: f32 = 0.05;
+pub const SIGHT_MAX: f32 = 0.06;
+pub const SIGHT_EASE: f32 = 0.08;
+
+/// The front post, in gun space: on the sight line at the muzzle.
+pub fn front_post(gun: &Gun) -> Vec3 {
+    let s = gun.layout.sight.translation;
+    Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
+}
+
+/// Whether an eye at `eye` (gun space) is just behind the rear sight.
+pub fn at_sights(gun: &Gun, eye: Vec3) -> bool {
+    let rel = eye - gun.layout.sight.translation;
+    (SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
+}
+
+/// The turn about the front post (gun space) that puts the rear sight on
+/// the line from an eye at `eye` (gun space, the gun as held without it) to
+/// the front post: none unless the eye is just behind the rear sight.
+pub fn sight_fix(gun: &Gun, eye: Vec3) -> Quat {
+    if !at_sights(gun, eye) {
+        return Quat::IDENTITY;
+    }
+    let rear = gun.layout.sight.translation;
+    let front = front_post(gun);
+    let q = Quat::from_rotation_arc(
+        (rear - front).normalize(),
+        (eye - front).normalize_or((rear - front).normalize()),
+    );
+    let (axis, angle) = q.to_axis_angle();
+    if angle > SIGHT_MAX {
+        Quat::from_axis_angle(axis, SIGHT_MAX)
+    } else {
+        q
     }
 }
 
@@ -476,6 +560,8 @@ pub(crate) fn case_size(cartridge: &str) -> (f32, f32) {
         "7.62x38R" => (0.0049, 0.0385),
         "7.62x25" => (0.0049, 0.025),
         "7.62x54R" => (0.0062, 0.054),
+        "22lr" => (0.0029, 0.0156),
+        "26mm" => (0.0135, 0.078),
         _ => (0.005, 0.03),
     }
 }
@@ -662,7 +748,7 @@ mod tests {
 
 /// Through the headset path: poses, grip and trigger into `RigInput`.
 #[cfg(test)]
-mod vr_tests {
+pub(crate) mod vr_tests {
     use super::*;
     use crate::interact::GripRole;
     use crate::rig::Side;
@@ -675,22 +761,22 @@ mod vr_tests {
     const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
     const EYE: Vec3 = Vec3::new(0.0, 1.65, 0.0);
 
-    struct Range {
-        vr: Vr,
-        gun: Entity,
-        feet: Vec3,
+    pub(crate) struct Range {
+        pub(crate) vr: Vr,
+        pub(crate) gun: Entity,
+        pub(crate) feet: Vec3,
     }
 
     /// Stand in the open with `id` in the right hand, held out in front
     /// at chest height (or with the stock to the cheek), the left hand on
     /// the handguard if `two`.
-    fn hold(id: &str, two: bool, shoulder: bool) -> Range {
+    pub(crate) fn hold(id: &str, two: bool, shoulder: bool) -> Range {
         hold_after(id, two, shoulder, 0)
     }
 
     /// [`hold`], with `extra` bare entities spawned first (whatever else a
     /// game spawns shifts every entity's index).
-    fn hold_after(id: &str, two: bool, shoulder: bool, extra: usize) -> Range {
+    pub(crate) fn hold_after(id: &str, two: bool, shoulder: bool, extra: usize) -> Range {
         let mut vr = Vr::new("training_yard");
         for _ in 0..extra {
             vr.app.world_mut().spawn(Transform::IDENTITY);
@@ -740,12 +826,12 @@ mod vr_tests {
         Range { vr, gun, feet }
     }
 
-    fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {
+    pub(crate) fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {
         r.vr.app.world_mut().get_mut::<Gun>(r.gun).unwrap()
     }
 
     /// A full magazine in the mechanism, a round chambered, on `mode`.
-    fn load(r: &mut Range, family: &str, rounds: u32, mode: FireMode) {
+    pub(crate) fn load(r: &mut Range, family: &str, rounds: u32, mode: FireMode) {
         let mut g = gun_mut(r);
         let f = &mut g.firearm;
         f.insert_magazine(Magazine {
@@ -766,7 +852,7 @@ mod vr_tests {
 
     /// Holds the trigger until `n` shots are out (or a few seconds pass),
     /// returning each projectile's direction as it left.
-    fn fire(r: &mut Range, n: usize, pulse: bool) -> Vec<Vec3> {
+    pub(crate) fn fire(r: &mut Range, n: usize, pulse: bool) -> Vec<Vec3> {
         // Rounds already in the air aren't this burst's.
         let mut seen: HashSet<Entity> = {
             let mut q =
@@ -796,7 +882,7 @@ mod vr_tests {
     }
 
     /// Takes `id` from where it lies into the `side` hand.
-    fn take_in(r: &mut Range, side: Side, id: &str, at: Vec3) -> Entity {
+    pub(crate) fn take_in(r: &mut Range, side: Side, id: &str, at: Vec3) -> Entity {
         let e = r.vr.spawn(id, Transform::from_translation(at));
         r.vr.app
             .world_mut()
@@ -1204,7 +1290,86 @@ mod vr_tests {
         assert_eq!(worn_burst(4), alone, "with loot about");
     }
 
-    fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
+    /// The rear sight and front post of the held gun, in the world.
+    fn sights(r: &mut Range) -> (Vec3, Vec3, Quat) {
+        let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+        let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+        (
+            gt.transform_point(g.layout.sight.translation),
+            gt.transform_point(front_post(g)),
+            gt.rotation(),
+        )
+    }
+
+    /// Brought to the cheek with the eye a little high of the sight line,
+    /// an AK settles so the eye, the rear sight and the front post line up;
+    /// with the eye nowhere near, the sights are left alone.
+    #[test]
+    fn iron_sights_line_up_at_the_cheek() {
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        assert_eq!(
+            r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix,
+            Quat::IDENTITY,
+            "the eye nowhere near the sights"
+        );
+        let (rear, front, rot) = sights(&mut r);
+        let eye = rear + rot * Vec3::new(0.0, 0.012, 0.06);
+        let line_miss = |rear: Vec3, front: Vec3| {
+            let d = (rear - front).normalize();
+            let v = eye - front;
+            (v - d * v.dot(d)).length()
+        };
+        assert!(line_miss(rear, front) > 0.009, "starts off the line");
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        r.vr.head(eye - root);
+        r.vr.step(60);
+        let (rear, front, _) = sights(&mut r);
+        let miss = line_miss(rear, front);
+        assert!(miss < 0.004, "eye, rear sight, front post: {miss} m off");
+    }
+
+    /// Iron sights brought to the eye, the front post goes soft (the eye
+    /// is on the target), unless the comfort setting is off; taken down,
+    /// it's sharp again.
+    #[test]
+    fn the_front_post_softens_at_the_cheek() {
+        use crate::weapons::optics::{POST_BLUR, post_blur};
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        let at_eye = |r: &Range| r.vr.app.world().get::<Handling>(r.gun).unwrap().at_eye;
+        assert!(at_eye(&r) < 0.01, "the eye nowhere near: {}", at_eye(&r));
+        let (rear, _, rot) = sights(&mut r);
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        let away =
+            r.vr.app
+                .world()
+                .get::<crate::rig::RigInput>(r.vr.player)
+                .unwrap()
+                .head
+                .translation;
+        r.vr.head(rear + rot * Vec3::new(0.0, 0.01, 0.06) - root);
+        r.vr.step(60);
+        let a = at_eye(&r);
+        assert!(a > 0.95, "down behind the sights: {a}");
+        assert!((post_blur(a, true) - POST_BLUR).abs() < 0.05);
+        assert_eq!(post_blur(a, false), 0.0, "the comfort setting off");
+        r.vr.head(away);
+        r.vr.step(60);
+        assert!(at_eye(&r) < 0.05, "taken down: {}", at_eye(&r));
+    }
+
+    pub(crate) fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
         for i in 1..=steps {
             r.vr.move_hand(side, a.lerp(b, i as f32 / steps as f32));
             r.vr.step(1);
@@ -1297,7 +1462,7 @@ mod vr_tests {
 
     /// Grabs `gun`'s handle with the left trigger and pulls it through its
     /// travel and lets it go.
-    fn rack(r: &mut Range) {
+    pub(crate) fn rack(r: &mut Range) {
         let slide = r.vr.point(r.gun, |p| matches!(p, GripRole::Handle(_)));
         r.vr.hand(Side::Left, slide, Quat::IDENTITY, 0.0, 0.0);
         r.vr.step(2);
@@ -1347,7 +1512,7 @@ mod vr_tests {
     }
 
     /// A real magazine of `id` with `rounds`, seated in the gun's well.
-    fn seat_mag(r: &mut Range, id: &str, rounds: u32) -> Entity {
+    pub(crate) fn seat_mag(r: &mut Range, id: &str, rounds: u32) -> Entity {
         let mag = r.vr.spawn(
             id,
             Transform::from_translation(r.feet + Vec3::new(-0.3, 1.0, -0.3)),
@@ -1372,7 +1537,7 @@ mod vr_tests {
     }
 
     /// Takes `id` from the air into the left hand.
-    fn take(r: &mut Range, id: &str, rounds: u32) -> Entity {
+    pub(crate) fn take(r: &mut Range, id: &str, rounds: u32) -> Entity {
         let at = r.feet + Vec3::new(-0.35, 1.0, -0.3);
         let e = r.vr.spawn(id, Transform::from_translation(at));
         r.vr.app.world_mut().get_mut::<Item>(e).unwrap().rounds = rounds;
@@ -1393,14 +1558,14 @@ mod vr_tests {
     }
 
     /// The gun's load port and its up, in the world.
-    fn load_port(r: &mut Range) -> (Vec3, Vec3) {
+    pub(crate) fn load_port(r: &mut Range) -> (Vec3, Vec3) {
         let port = gun_mut(r).layout.load_port;
         let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
         (gt.transform_point(port), gt.up().as_vec3())
     }
 
     /// Glides the left hand from `a` to `b`.
-    fn glide(r: &mut Range, a: Vec3, b: Vec3, steps: usize) {
+    pub(crate) fn glide(r: &mut Range, a: Vec3, b: Vec3, steps: usize) {
         for i in 0..=steps {
             r.vr.move_hand(Side::Left, a.lerp(b, i as f32 / steps as f32));
             r.vr.step(1);
@@ -1560,7 +1725,7 @@ mod vr_tests {
     }
 
     /// A gun-hand button for one press (the headset's B is `secondary`).
-    fn press(r: &mut Range, which: &str) {
+    pub(crate) fn press(r: &mut Range, which: &str) {
         for down in [true, false] {
             {
                 let mut input =
