@@ -1171,3 +1171,41 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
     assert!(app.world().get_entity(b1).is_err(), "pried off");
     assert!(live_debris(&mut app) > 2, "in splinters");
 }
+
+#[test]
+fn a_hole_in_a_doorless_building_puts_it_in_the_robots_index() {
+    use super::hooks::Breach;
+    let mut app = app(None);
+    run(&mut app, 5);
+    let entrances = app.world().resource::<crate::robots::doors::Entrances>();
+    assert!(!entrances.shells.is_empty(), "the index is built");
+    let indexed: Vec<Entity> = entrances.shells.iter().map(|s| s.building).collect();
+    // A building with a breachable wall and no door.
+    let found = app
+        .world_mut()
+        .query::<(Entity, &crate::world::buildings::Building, &Transform)>()
+        .iter(app.world())
+        .filter(|(e, ..)| !indexed.contains(e))
+        .find_map(|(e, b, t)| {
+            let geo = crate::world::buildings::prefab(&b.prefab)?;
+            let i = geo.pieces.iter().position(|p| {
+                matches!(p.shape, crate::world::buildings::Shape::Box(s) if s.z < 0.45 && s.y > 1.6 && s.x > 1.6)
+                    && p.collide
+                    && super::breach::breachable(p.mat)
+            })?;
+            Some((e, t.transform_point(geo.pieces[i].at.translation), *t))
+        });
+    let Some((e, at, t)) = found else {
+        panic!("Marrow Creek has a doorless building with a plank wall");
+    };
+    app.world_mut().write_message(Breach {
+        at,
+        out: t.rotation * Vec3::Z,
+    });
+    run(&mut app, 3);
+    let entrances = app.world().resource::<crate::robots::doors::Entrances>();
+    assert!(
+        entrances.shells.iter().any(|s| s.building == e),
+        "the building has a box to be inside"
+    );
+}
