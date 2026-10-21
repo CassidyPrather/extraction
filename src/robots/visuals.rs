@@ -39,6 +39,7 @@ impl Plugin for RobotVisualsPlugin {
                 spin_propellers,
                 pose_leg_visuals,
                 dim_dead_eyes,
+                last_flicker,
                 blink_beacons,
                 show_halos,
                 dress_pylon_masts,
@@ -920,6 +921,106 @@ fn dim_dead_eyes(
                 .entity(e)
                 .insert(MeshMaterial3d(m.eye_dead.clone()));
         }
+    }
+}
+
+/// An eye dying: it flares and stutters at its socket for [`LAST_FLICKER`]
+/// seconds, then it's out for good (`dim_dead_eyes`; `fx` throws the
+/// socket's sparks). A still frame at 30 m catches it going.
+#[derive(Component)]
+struct LastFlicker {
+    left: f32,
+    radius: f32,
+    /// The flare itself, which reads by day when the halo doesn't.
+    core: Handle<StandardMaterial>,
+}
+
+/// How long a dying eye flickers (s).
+pub const LAST_FLICKER: f32 = 0.7;
+
+/// Whether a dying eye is lit `left` seconds before it's out: three
+/// stutters, the last the brightest, then dark.
+pub fn flicker_lit(left: f32) -> f32 {
+    let t = LAST_FLICKER - left;
+    match t {
+        t if t < 0.08 => 1.0,
+        t if t < 0.2 => 0.0,
+        t if t < 0.28 => 0.6,
+        t if t < 0.45 => 0.0,
+        t if t < 0.6 => 1.4,
+        _ => 0.0,
+    }
+}
+
+fn last_flicker(
+    mut commands: Commands,
+    mut deaths: MessageReader<super::PartDestroyed>,
+    robots: Query<(&Robot, &GlobalTransform, Option<&super::anim::Gait>)>,
+    mut flickers: Query<(Entity, &mut LastFlicker, &mut crate::world::halos::Halo)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut flare: Local<Option<Handle<Mesh>>>,
+    time: Res<Time>,
+) {
+    for d in deaths.read() {
+        if d.role != PartRole::Sensor {
+            continue;
+        }
+        let Ok((robot, gt, gait)) = robots.get(d.robot) else {
+            continue;
+        };
+        let radius = if robot.kind == RobotKind::Drone {
+            0.6
+        } else {
+            1.2 * gait.map_or(1.0, |g| g.size)
+        };
+        // Riding with the body, at the socket.
+        let local = gt.affine().inverse().transform_point3(d.at);
+        let core = materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            alpha_mode: AlphaMode::Add,
+            fog_enabled: false,
+            ..default()
+        });
+        let mesh = flare
+            .get_or_insert_with(|| meshes.add(Sphere::new(0.12).mesh().ico(2).unwrap()))
+            .clone();
+        commands.spawn((
+            LastFlicker {
+                left: LAST_FLICKER,
+                radius,
+                core: core.clone(),
+            },
+            Mesh3d(mesh),
+            MeshMaterial3d(core),
+            NotShadowCaster,
+            crate::world::halos::Halo {
+                color: LinearRgba::BLACK,
+                radius: 0.0,
+            },
+            Transform::from_translation(local),
+            Visibility::default(),
+            ChildOf(d.robot),
+        ));
+    }
+    let dt = time.delta_secs();
+    for (e, mut f, mut halo) in &mut flickers {
+        f.left -= dt;
+        if f.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let k = flicker_lit(f.left);
+        if let Some(mut m) = materials.get_mut(&f.core) {
+            m.emissive = LinearRgba::rgb(12.0, 2.4, 0.7) * k;
+        }
+        let want = crate::world::halos::Halo {
+            color: LinearRgba::rgb(1.0, 0.25, 0.08) * 3.0 * k,
+            radius: if k > 0.0 { f.radius } else { 0.0 },
+        };
+        halo.set_if_neq(want);
     }
 }
 
