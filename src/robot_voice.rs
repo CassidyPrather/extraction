@@ -564,6 +564,46 @@ pub fn render_horn(sample_rate: f32) -> Vec<f32> {
     out
 }
 
+/// The sweep detector's stone ping (`anomaly::detector::StonePing`): a
+/// higher, sweeter voice than its click, a soft-edged sine at 1.76 kHz
+/// with its octave, 90 ms. Played faster the nearer the stone.
+pub fn render_ping(sample_rate: f32) -> Vec<f32> {
+    let n = (0.09 * sample_rate) as usize;
+    let mut out: Vec<f32> = (0..n)
+        .map(|i| {
+            let t = i as f32 / sample_rate;
+            let env = (t / 0.004).min(1.0) * (1.0 - t / 0.09).max(0.0).powi(2);
+            ((TAU * 1760.0 * t).sin() + 0.25 * (TAU * 3520.0 * t).sin()) * env
+        })
+        .collect();
+    level(&mut out);
+    out
+}
+
+/// A wet aegis biting its carrier (`anomaly::costs::ArtifactBite`): a
+/// short electric crackle, 150 ms of noise gated into sparks through a
+/// bright formant.
+pub fn render_crackle(sample_rate: f32) -> Vec<f32> {
+    let n = (0.15 * sample_rate) as usize;
+    let mut rng = Rng::new(0x5a9);
+    let mut bp = Bandpass::new(3800.0, 1.2, sample_rate);
+    let mut gate = 0.0f32;
+    let mut out: Vec<f32> = (0..n)
+        .map(|i| {
+            let t = i as f32 / sample_rate;
+            if rng.f32() < 0.004 {
+                gate = 1.0;
+            }
+            gate *= 0.995;
+            let env = (1.0 - t / 0.15).max(0.0);
+            let x = (rng.f32() * 2.0 - 1.0) * (0.15 + gate);
+            (bp.run(x) * 2.0 + x * 0.3) * env
+        })
+        .collect();
+    level(&mut out);
+    out
+}
+
 /// How long an utterance lasts, s (for spacing them).
 pub fn duration(kind: VoiceKind, u: Utterance) -> f32 {
     let end = phrase(u).iter().map(|n| n.at + n.len).fold(0.0, f32::max);
@@ -1315,6 +1355,8 @@ mod tests {
             }
         }
         write_wav(&dir.join("horn.wav"), &render_horn(SR), SR as u32);
+        write_wav(&dir.join("ping.wav"), &render_ping(SR), SR as u32);
+        write_wav(&dir.join("crackle.wav"), &render_crackle(SR), SR as u32);
     }
 
     fn write_wav(path: &std::path::Path, x: &[f32], sr: u32) {

@@ -150,6 +150,24 @@ pub const MIX: &[Cue] = &[
     cue!("armour.ping", "impacts/ricochet", 1.0, 105.0, 15.0, Action, 8.0),
     cue!("epilogue.creak", "physical/door_creak", -13.0, 60.0, 2.0, Event),
     cue!("scope.click", "guns/safety", -8.0, 45.0, 0.5, Detail),
+    cue!("break.crunch", "physical/glass_break", -12.0, 60.0, 1.7, Detail),
+    cue!("break.glass", "physical/glass_break", -9.0, 95.0, 10.0, Action, 8.0),
+    cue!("break.wood", "impacts/wood", 3.0, 90.0, 10.0, Action, 8.0),
+    cue!("break.splinter", "impacts/wood", -2.0, 80.0, 10.0, Detail, 6.0),
+    cue!("break.wood_big", "physical/door_close", -9.0, 95.0, 10.0, Action, 10.0),
+    cue!("break.breach", "impacts/concrete", 0.0, 105.0, 15.0, Action, 12.0),
+    cue!("break.rubble", "ambience/rockfall", -4.0, 90.0, 15.0, Action, 10.0),
+    cue!("flock.wings", "physical/cloth", -6.0, 70.0, 20.0, Event, 8.0),
+    cue!("flock.call", "ambience/crow", -3.5, 75.0, 25.0, Event, 15.0),
+    cue!("detector.ping", "device/stone_ping", -14.0, 60.0, 0.5, Signal),
+    cue!("bite.shock", "device/crackle", -8.0, 85.0, 0.4, Action),
+    cue!("bite.glint", "physical/chime", -22.0, 45.0, 0.5, Detail),
+    cue!("burn.sizzle", "anomaly/burner_roar", -6.0, 65.0, 0.5, Detail),
+    cue!("tool.pry", "physical/door_creak", -8.0, 70.0, 1.0, Detail),
+    cue!("tool.pry_free", "impacts/wood", -4.0, 85.0, 1.0, Action),
+    cue!("tool.cut", "guns/safety", -6.0, 70.0, 0.8, Detail),
+    cue!("tool.cut_ping", "impacts/ricochet", -9.0, 65.0, 0.8, Detail),
+    cue!("hush.tone", "anomaly/well_drone", -30.0, 40.0, 0.0, Bed),
     cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
     cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),
     cue!("grenade.spoon", "guns/casing", -8.0, 65.0, 1.0, Detail),
@@ -241,7 +259,7 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.snare", "anomaly/snare_buzz", -2.0, 60.0, 8.0, Signal),
     cue!("anomaly.well", "anomaly/well_drone", -6.0, 70.0, 8.0, Signal),
     cue!("anomaly.mirror", "anomaly/mirror_shimmer", -6.0, 60.0, 8.0, Signal),
-    cue!("anomaly.blink", "anomaly/mirror_blink", -8.5, 95.0, 8.0, Action, 7.0),
+    cue!("anomaly.blink", "anomaly/mirror_blink", -9.5, 95.0, 8.0, Action, 7.0),
     cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
     cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
     cue!("anomaly.reveal", "anomaly/reveal", -24.0, 65.0, 8.0, Signal),
@@ -397,6 +415,8 @@ mod tests {
             .map(|u| crate::robot_voice::set_name(crate::robot_voice::VoiceKind::Walker, *u))
             .collect();
         voices.push("voice/heavy/horn".into());
+        voices.push("device/stone_ping".into());
+        voices.push("device/crackle".into());
         for c in MIX {
             assert!(
                 index.get(c.set).is_some() || voices.iter().any(|v| v == c.set),
