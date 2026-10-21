@@ -122,9 +122,9 @@ are all over 18 m.
 
 | Landmark | Prefab | Where | Steer by it for |
 | - | - | - | - |
-| The dam | `dam_wall` | across the south | home, the truck |
+| The dam | `dam_face`, `dam_face_end`, `dam_back`, `dam_back_end` (one landmark to the lint) | across the south | home, the truck |
 | Draw-off tower | `draw_off_tower` | bed, by the dam | the crest, the bed's south end |
-| Church tower | `steeple` | Old Sallow | the middle of the bed |
+| Church tower | `chapel_drowned` (its bell tower) | Old Sallow | the middle of the bed |
 | Radio mast | `radio_mast` | east hill | the catchwater, RV C |
 | Water tower | `water_tower` | New Sallow | the upper arm, RV A |
 | The Gate | `robot_gate` | north-east shore | stay away |
@@ -250,7 +250,7 @@ the gauge house and out: 262 s.
   door held until the gauge room's breaker is thrown). The fourth way
   through the dam, under cover. Then: its six test loops onto VALLEYS,
   the lint, fit and sims again.
-- Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
+- Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
   World models' masonry material and drowned ruins, Underground's
@@ -265,7 +265,7 @@ What it took, in order, and what bit. Map design's rules and lint
 
 - `assets/maps/<id>.ron`. The truck's route card lists every map file but
   the yard, so it's offered as soon as it exists (Progression gates late
-  valleys: `progression::LATE_VALLEYS`).
+  valleys: Sallow opens with a contract, `progression::contracts`).
 - `extraction_core::map`: its text constant, its row in `map::VALLEYS`
   (a test holds the list to `assets/maps`), a `*_parses_and_builds` test
   of what makes it itself; `map_lint`: its `*_passes_the_map_lint` test.
