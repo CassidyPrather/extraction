@@ -90,6 +90,8 @@ fn spawn_hand_bodies(
                 Mass(2.0),
                 NoAutoMass,
                 SweptCcd::default(),
+                // What it meets, felt (`touch`).
+                CollisionEventsEnabled,
                 Collider::compound(vec![(
                     HAND_CENTRE,
                     Quat::IDENTITY,

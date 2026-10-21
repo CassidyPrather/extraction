@@ -522,7 +522,10 @@ fn fly(
             if let Projection::Perspective(p) = &mut *proj {
                 p.fov = shot.fov.to_radians();
             }
-            commands.entity(cam_e).insert(super::ClearAir(shot.clear));
+            commands.entity(cam_e).insert((
+                super::ClearAir(shot.clear),
+                super::Lens(shot.fov.to_radians()),
+            ));
             let n = if cine.cur == 0 {
                 opts.frames.max(shot.settle)
             } else {

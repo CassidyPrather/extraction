@@ -52,6 +52,9 @@ pub enum Kind {
     MineCart,
     /// Your own pack, reached for over the shoulder.
     OwnPack,
+    /// A seam a crowbar can be put to (a board's nailed end, a shutter's
+    /// hinge edge, a robot's plate).
+    PrySeam,
 }
 
 /// A cue an interactable gives.
@@ -68,12 +71,18 @@ pub enum Cue {
     Ring,
     /// The controller ticks on hover and clicks on use.
     Haptic,
+    /// A ring where the tool goes, shown from a few steps while the tool's
+    /// in hand (`render::pry_cue`).
+    ToolRing,
 }
 
 impl Cue {
     /// Seen from across a room, before you touch it.
     pub fn at_a_distance(self) -> bool {
-        matches!(self, Cue::Contrast(_) | Cue::Lit | Cue::Shape(_))
+        matches!(
+            self,
+            Cue::Contrast(_) | Cue::Lit | Cue::Shape(_) | Cue::ToolRing
+        )
     }
 }
 
@@ -84,7 +93,7 @@ pub struct Spec {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 18] = [
+    pub const ALL: [Kind; 19] = [
         Kind::PushButton,
         Kind::Card,
         Kind::Readable,
@@ -103,6 +112,7 @@ impl Kind {
         Kind::SafehouseFixture,
         Kind::MineCart,
         Kind::OwnPack,
+        Kind::PrySeam,
     ];
 
     pub fn spec(self) -> Spec {
@@ -143,7 +153,7 @@ impl Kind {
             ),
             Kind::FixtureControl => (
                 &[
-                    Shape("a breaker, a valve wheel, a pump handle"),
+                    Shape("a breaker, a valve wheel, a pump handle, a lever box"),
                     Ring,
                     Haptic,
                 ],
@@ -169,6 +179,9 @@ impl Kind {
                 &[Shape("your pack, seen when you take it off"), Haptic],
                 0.4,
             ),
+            // Nothing painted on them: a ring at the seam with the bar in
+            // hand, and the bar's click when it seats.
+            Kind::PrySeam => (&[ToolRing, Haptic], 0.12),
         };
         Spec { cues, part }
     }
@@ -206,11 +219,13 @@ pub struct Traits {
     pub item: bool,
     pub ladder: bool,
     pub rope: bool,
-    /// A breaker or a valve: a run-control with its own look.
+    /// A breaker, a valve, a furnace lever box: a run-control with its own
+    /// look.
     pub fixture: bool,
     pub cart: bool,
     pub button: bool,
     pub pack: bool,
+    pub pryable: bool,
 }
 
 /// Its kind, if it's an interactable at all; `Err` for something
@@ -232,6 +247,8 @@ pub fn kind_of(t: &Traits) -> Result<Option<Kind>, ()> {
         Kind::Rope
     } else if t.item {
         Kind::LooseItem
+    } else if t.pryable {
+        Kind::PrySeam
     } else if t.grabbable {
         return Err(());
     } else {
@@ -261,11 +278,27 @@ pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, T
             Has<crate::world::workings::MineCart>,
             Has<crate::interact::poke::PokeButton>,
             Has<crate::interact::body::Backpack>,
+            Has<crate::destruction::hooks::Pryable>,
+            Has<crate::world::furnace::VentLever>,
+            Has<crate::world::furnace::CraneLever>,
         ),
     )>();
     q.iter(world)
         .map(|(e, p, parent, grabbable, f)| {
-            let (readable, item, ladder, rope, power, drain, cart, button, pack) = f;
+            let (
+                readable,
+                item,
+                ladder,
+                rope,
+                power,
+                drain,
+                cart,
+                button,
+                pack,
+                pryable,
+                vent,
+                crane,
+            ) = f;
             (
                 e,
                 Traits {
@@ -276,10 +309,11 @@ pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, T
                     item,
                     ladder,
                     rope,
-                    fixture: power || drain,
+                    fixture: power || drain || vent || crane,
                     cart,
                     button,
                     pack,
+                    pryable,
                 },
             )
         })

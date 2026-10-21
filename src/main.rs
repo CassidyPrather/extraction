@@ -3,6 +3,10 @@
 use bevy::prelude::*;
 
 fn main() -> AppExit {
+    // `extraction soak ...`: a long headless run held to the leak gauge.
+    if std::env::args().nth(1).as_deref() == Some("soak") {
+        return extraction::soak::drive::cli(std::env::args().skip(2));
+    }
     let mut opts = extraction::LaunchOptions::from_args();
     // The first hour's newcomers: two sessions each, the yard then a raid.
     if let Some(personas) = opts

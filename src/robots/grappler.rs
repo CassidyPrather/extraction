@@ -1,7 +1,8 @@
 //! The grappler: a walker body with a harpoon line instead of a gun. On a
 //! logistics job grapplers stand guard round a dirigible's cargo pod. They
 //! don't shoot: they spear you with a tether and reel, so you're slow and
-//! dragged toward them while their friends come.
+//! dragged toward them while their friends come: the line sings as it
+//! bites ([`REEL_NOISE`]), a noise at you that robots round about hear.
 
 use bevy::prelude::*;
 
@@ -20,6 +21,8 @@ pub struct Grappler {
 /// A grappler winds up this long before it throws: it rears back, and
 /// [`HarpoonWindup`] says so (the tell).
 pub const WINDUP: f32 = 0.6;
+/// A line that bites sings this far (m): its friends come.
+pub const REEL_NOISE: f32 = 60.0;
 
 /// A grappler began winding up a throw at `to` (for its tell).
 #[derive(Message, Clone, Copy, Debug)]
@@ -92,6 +95,7 @@ fn harpoons(
     mut shots: MessageWriter<Harpoon>,
     mut windups: MessageWriter<HarpoonWindup>,
     stunned: Query<(), With<super::Stunned>>,
+    mut noise: MessageWriter<super::Noise>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
 ) {
@@ -144,6 +148,14 @@ fn harpoons(
                 by: e,
                 left: TETHER_TIME,
             });
+            // The line sings as it bites: the others hear where you are.
+            if let Ok(at) = players.get(target) {
+                noise.write(super::Noise {
+                    at: at.translation(),
+                    radius: REEL_NOISE,
+                    source: Some(target),
+                });
+            }
         }
         shots.write(Harpoon {
             from: e,
@@ -234,6 +246,14 @@ mod tests {
             );
             q.apply(app.world_mut());
         }
+        #[derive(Resource, Default)]
+        struct Sung(bool);
+        app.init_resource::<Sung>().add_systems(
+            Last,
+            |mut n: MessageReader<super::super::Noise>, mut s: ResMut<Sung>| {
+                s.0 |= n.read().any(|n| n.radius == REEL_NOISE);
+            },
+        );
         let mut speared = false;
         for _ in 0..90 * 20 {
             app.update();
@@ -243,5 +263,7 @@ mod tests {
             }
         }
         assert!(speared, "the grappler got a line into the player");
+        app.update();
+        assert!(app.world().resource::<Sung>().0, "and the line sang");
     }
 }

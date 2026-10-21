@@ -245,3 +245,5 @@ pub fn photograph(
         }
     }
 }
+
+pub mod scenario;

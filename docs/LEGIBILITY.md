@@ -252,7 +252,8 @@ Can you find your way without a HUD? `--wayfind DIR`
 (`scripts/wayfind.sh MAP [OUT] [--weather fog] [--hour night]`) stands
 where you get your bearings (where the truck sets you down, every
 rendezvous), turns to each landmark in range (a placement at least
-`map_lint::LANDMARK_HEIGHT` tall, within `CLEAR_SIGHT`) at the headset's
+`map_lint::LANDMARK_HEIGHT` tall, 5–320 m off: past the lint's 200 m
+clear sight, out to its uniqueness range) at the headset's
 pixels a degree, and shoots it with and without the landmark, time
 frozen. What differs, inside the landmark's box in the picture, is the
 landmark as the eye gets it through fog, trees and dark. It counts if it
@@ -278,4 +279,29 @@ there, the fog and the dark say otherwise. So:
   which is what fog is for (`map_lint::FOG_SIGHT`).
 - **The compass needle** was red from end to end: nothing said which end
   was north. Red to the north, dark steel to the south.
-- **The field map** reads (above); its routes are the map's own roads.
+- **The field map** draws every landmark as a pencilled tower with a red
+  lamp dot and a short name, so what you see can be found on the paper
+  (`scripts/field_map.py`; `map_lint::tests::field_map_draws_the_landmarks`
+  keeps its landmark height and names in step with the game's).
+- **The sky** as a compass: toward the sun the sky is 1.65–1.7x as bright
+  as away from it in every valley by day; by night, toward the moon, only
+  1.09–1.14x (passed to Visual design).
+
+All five valleys, with the lamps (vantages with a landmark to steer by):
+
+| Valley | drizzle | night |
+| - | - | - |
+| Marrow Creek | 4 of 4 | 4 of 4 |
+| Kettle Pass | 4 of 4 (the hunting lodge by the mast's lamp, 170 m) | 4 of 4 (the hunting lodge by the mast's lamp; 3 of 4 before it was lit) |
+| Cinder Works | 4 of 4: the fire lookout steers by its own ranger tower (15 m; the gauge used to skip anything under 15 m) and the chimney's lamp at 300 m | 4 of 4 |
+| Sallow Reservoir | 4 of 4 | 4 of 4 |
+
+## Night
+
+At night the render gauges (`--legibility`, `--afford`, `--wayfind`
+with `--hour night`) find: every panel reads (screens are self-lit, the
+yard's boards have their lanterns, notes indoors are lit now that the
+ambient doesn't drain); the truck's interactables read under its lamp;
+interactables out in the dark don't, by design, until you bring a light
+or put your hand to them: the grab ring is self-lit; landmarks show by
+their lamps.

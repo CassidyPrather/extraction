@@ -224,8 +224,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // (Scaling the deck keeps its shape: the bellies, thickest, glow
         // most. Added flat, it went to a featureless sheet.)
         let lit = sky.flash.w * (0.45 + 1.2 * pow(c, 6.0) + 3.0 * pow(c, 48.0));
+        // Plus its own glow, as bright as the lit air (at night there's
+        // nothing to scale: the cloud was a flat band behind a lit valley).
         col = col * (1.0 + lit * (0.5 + 2.2 * belly) * mix(0.5, 1.0, detail))
-            + vec3<f32>(0.72, 0.78, 1.0) * 0.06 * lit;
+            + vec3<f32>(0.72, 0.78, 1.0) * 0.216 * lit * (0.6 + 0.8 * belly) * mix(0.5, 1.0, detail);
     }
 
     // Toward and below the horizon the sky is fog.

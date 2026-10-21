@@ -1414,6 +1414,7 @@ fn fell_heavy(
     catalog: Res<Catalog>,
     mut impacts: MessageWriter<super::wreck::WreckImpact>,
     mut out: MessageWriter<HeavyEvent>,
+    minds: Query<&super::senses::MindSeed>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -1425,7 +1426,9 @@ fn fell_heavy(
             commands
                 .entity(e)
                 .insert((super::wreck::Broken, super::Salvaged));
-            let seed = e.index_u32() as f32;
+            // Seeded by the machine (where it was spawned), not by its
+            // entity: it lies the same whatever else is in the world.
+            let seed = (minds.get(e).map_or(0, |m| m.0) % 10_007) as f32;
             // Forward onto its face or over on a side: seeded, so no two
             // lie the same.
             // (Well over: a wreck, not something parked.)
@@ -1666,6 +1669,16 @@ pub(crate) mod tests {
     /// A headless world with no director, and a heavy sent `to` from `at`
     /// (ground x/z), its senses off unless `senses`.
     pub(crate) fn world_with_heavy(at: [f32; 2], to: [f32; 2], senses: bool) -> (App, Entity) {
+        world_with_heavy_after(0, at, to, senses)
+    }
+
+    /// As [`world_with_heavy`], with `pad` unrelated entities spawned first.
+    pub(crate) fn world_with_heavy_after(
+        pad: usize,
+        at: [f32; 2],
+        to: [f32; 2],
+        senses: bool,
+    ) -> (App, Entity) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -1674,6 +1687,9 @@ pub(crate) mod tests {
         app.finish();
         app.cleanup();
         app.update();
+        for k in 0..pad {
+            app.world_mut().spawn(Name::new(format!("pad {k}")));
+        }
         let zone = app.world().resource::<Zone>().clone();
         let catalog = app.world().resource::<Catalog>().clone();
         let from = zone.on_ground(at[0], at[1]);
@@ -1943,6 +1959,39 @@ pub(crate) mod tests {
         assert!(salvage.iter().any(|s| s == "heavy_claw"), "{salvage:?}");
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
+    }
+
+    /// Where and how it lies is seeded by the machine, not by its entity
+    /// id: with fifty unrelated things spawned first, the same fall lies
+    /// the same.
+    #[test]
+    fn its_fall_is_its_own() {
+        let fall = |pad: usize| {
+            let (mut app, heavy) = world_with_heavy_after(pad, [40.0, 230.0], [40.0, 230.0], false);
+            for _ in 0..30 {
+                app.update();
+            }
+            for k in [0u8, 2] {
+                let (knee, _) = part(&mut app, heavy, Slot::Knee(k)).unwrap();
+                hit(&mut app, knee, 400.0);
+            }
+            for _ in 0..120 {
+                app.update();
+            }
+            (
+                heavy,
+                app.world().get::<Heavy>(heavy).unwrap().lean,
+                app.world().get::<Transform>(heavy).unwrap().rotation,
+            )
+        };
+        let (a, lean_a, rot_a) = fall(0);
+        let (b, lean_b, rot_b) = fall(50);
+        assert_ne!(a.index_u32(), b.index_u32(), "different entities");
+        assert!((lean_a - lean_b).length() < 1e-5, "{lean_a} vs {lean_b}");
+        // (Its pose settles under physics, which isn't bit-exact between
+        // worlds; the seeded lean is.)
+        let off = rot_a.angle_between(rot_b);
+        assert!(off < 0.02, "lies {off} rad apart");
     }
 
     /// An EMP puts it on its knees, but for less than a walker's twelve

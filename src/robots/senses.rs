@@ -146,6 +146,12 @@ pub const OCCLUDED: f32 = 0.45;
 /// Sound bends over a low rise: it counts as blocked only by what stands
 /// this high over its source (a wall, a hill; not a hump in a field) (m).
 pub const HEARD_OVER: f32 = 1.2;
+/// A robot that searched somewhere and found nothing pays no heed, this
+/// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
+/// gave up: a lure that keeps going wears out its welcome. (Sounds you
+/// make there still count.)
+pub const BORED_FOR: f32 = 120.0;
+pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
 pub const HEARD_FULL: f32 = 15.0;
@@ -299,6 +305,7 @@ pub(crate) fn gunshot_noise(
     mut noise: MessageWriter<Noise>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
     hounds: Query<(), With<super::hound::Hound>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     for s in shots.read() {
         if hounds.contains(s.gun) {
@@ -308,7 +315,7 @@ pub(crate) fn gunshot_noise(
             crate::gadgets::SUPPRESSED_REACH
         } else {
             1.0
-        };
+        } * reports.get(s.gun).map_or(1.0, |r| r.0);
         noise.write(Noise {
             at: s.origin,
             radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
@@ -324,6 +331,8 @@ pub(crate) fn door_noise(
     mut was_open: Local<std::collections::HashMap<Entity, bool>>,
     mut noise: MessageWriter<Noise>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_none_or(|b| b == door.open) {
@@ -361,7 +370,7 @@ pub(crate) fn perceive(
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints): (
+    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
         Query<&crate::world::buildings::Door>,
         Res<crate::gadgets::Cloaks>,
@@ -370,6 +379,7 @@ pub(crate) fn perceive(
         Res<super::doors::Entrances>,
         Option<Res<crate::anomaly::hush::Hushes>>,
         Option<Res<crate::weapons::optics::Glints>>,
+        Option<Res<crate::weapons::flares::Starlight>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
@@ -379,9 +389,26 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
+    (mut gave_up, mut bored): (
+        MessageReader<super::search::LostYou>,
+        Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+    ),
 ) {
     let dt = time.delta_secs();
     let world = SpatialQueryFilter::from_mask([Layer::World]);
+    // Where each robot looked and found nothing lately: sounds nobody made
+    // there (a tape playing, a hum, a flare's crackle) it stops answering.
+    let now = time.elapsed_secs();
+    for g in gave_up.read() {
+        bored
+            .entry(g.robot)
+            .or_default()
+            .push((g.searched, now + BORED_FOR));
+    }
+    bored.retain(|e, spots| {
+        spots.retain(|(_, until)| *until > now);
+        !spots.is_empty() && robots.contains(*e)
+    });
     let mut sounds: Vec<Sound> = noises
         .read()
         .map(|n| Sound {
@@ -478,12 +505,14 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
-                // Your torch lights you when the sky doesn't.
+                // Your torch lights you when the sky doesn't; so does a
+                // white star overhead (`weapons::flares`).
                 light: if torch.is_some() {
                     conditions.light_at(indoors).max(TORCH)
                 } else {
                     conditions.light_at(indoors)
-                },
+                }
+                .max(starlight.as_ref().map_or(0.0, |s| s.at(head))),
                 dark,
                 torch,
             }
@@ -630,6 +659,13 @@ pub(crate) fn perceive(
         let ear = gt.translation();
         for s in &sounds {
             if s.source == Some(robot_e) {
+                continue;
+            }
+            let dull = s.source.is_none()
+                && bored.get(&robot_e).is_some_and(|spots| {
+                    spots.iter().any(|(at, _)| at.distance(s.at) < BORED_RADIUS)
+                });
+            if dull {
                 continue;
             }
             let d = s.at.distance(ear);

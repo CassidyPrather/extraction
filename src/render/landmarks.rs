@@ -22,8 +22,9 @@ impl Plugin for LandmarkLampsPlugin {
     }
 }
 
-/// Prefabs whose models carry their own lamp.
-const LIT: &[&str] = &["radio_mast"];
+/// Prefabs whose models carry a lamp bright enough to steer by (the radio
+/// mast's own is too small to carry past 150 m at night: it gets one too).
+const LIT: &[&str] = &[];
 
 /// The lamp's radius, and its halo's (m).
 const LAMP_R: f32 = 0.35;

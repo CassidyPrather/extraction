@@ -40,7 +40,7 @@ from mathutils import Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import UP, prop, rod  # noqa: E402
-from common import RY, RZ, Part, T, fillet  # noqa: E402
+from common import RX, RY, RZ, Part, T, fillet  # noqa: E402
 
 
 def limb(p, a, b, r0, r1, mat, segs=10):
@@ -186,10 +186,10 @@ prop("campfire", campfire)
 
 def walker_wreck():
     p = Part("static")
-    R, cy = 0.4, 0.27
-    # The orb slumped 20 degrees onto its +X side and sunk a little; its
-    # parts go with it.
-    orb = T(0.0, cy, 0.0) @ RZ(-0.35)
+    R, cy = 0.4, 0.25
+    # The orb fallen 40 degrees onto its side and pitched forward, its
+    # visor down in the grass, sunk a little; its parts go with it.
+    orb = T(0.0, cy, 0.0) @ RX(-0.42) @ RZ(-0.7)
 
     def at(v):
         return tuple(orb @ Vector(v))
@@ -199,74 +199,101 @@ def walker_wreck():
         r = R * math.cos(lat) + 0.004
         p.lathe([(r - 0.006, -0.004), (r, -0.004), (r, 0.004), (r - 0.006, 0.004)], "Dark",
                 segs=28, closed=True, xf=orb @ T(0.0, R * math.sin(lat), 0.0) @ UP)
-    # The turret's mount, tilted with it, its bolts.
+    # The turret's mount, gone over with it, its bolts.
     p.cyl(0.17, 0.0, 0.03, "Shell", segs=20, xf=orb @ T(0.0, R - 0.03, 0.0) @ UP)
     for k in range(6):
         a = k * math.pi / 3
         p.cyl(0.012, 0.0, 0.008, "Dark", segs=6,
               xf=orb @ T(0.13 * math.cos(a), R, 0.13 * math.sin(a)) @ UP)
-    # A panel lying level on its high shoulder, where the jars stand (its
-    # top 0.7 up).
-    p.cyl(0.19, 0.0, 0.025, "Shell", segs=20, xf=T(0.0, 0.675, 0.0) @ UP)
-    # The visor slit, its sensor gone: an empty socket.
+    # A panel lying level on its highest point, where the jars stand.
+    p.cyl(0.19, 0.0, 0.025, "Shell", segs=20, xf=T(0.0, cy + R - 0.005, 0.0) @ UP)
+    # The visor slit, its sensor gone: an empty socket, half in the grass.
     p.box((0.32, 0.09, 0.05), (0.0, 0.12, -R + 0.03), "Dark", xf=orb)
     p.sphere(0.035, (0.0, 0.12, -R + 0.005), "Black", segs=10, rings=6, xf=orb)
-    # The legs: one folded under the low side, one splayed, one snapped
-    # with its shin lying apart, one tucked under the high side.
-    hip = lambda sx, sz: at((sx * 0.27, -0.12, sz * 0.22))  # noqa: E731
-    for (h, knee, foot) in (
-            (hip(1, -1), (0.36, 0.05, -0.36), (0.12, 0.04, -0.16)),
-            (hip(-1, -1), (-0.44, 0.08, -0.6), (-0.28, 0.04, -0.7)),
-            (hip(1, 1), (0.4, 0.06, 0.4), (0.16, 0.04, 0.2))):
+    # The legs: the low side's crumpled under it, one on the high side
+    # splayed, one snapped (its shin lying apart).
+    hips = [at((sx * 0.27, -0.12, sz * 0.22)) for sx in (-1, 1) for sz in (-1, 1)]
+    hips.sort(key=lambda h: h[1])
+    for h in hips[:2]:
+        knee = (h[0] * 1.6, 0.07, h[2] * 1.6)
+        foot = (h[0] * 0.7 + 0.05, 0.05, h[2] * 0.7)
         limb(p, h, knee, 0.075, 0.06, "Shell")
         p.sphere(0.065, knee, "Dark", segs=12, rings=8)
         limb(p, knee, foot, 0.055, 0.045, "Shell")
         p.sphere(0.05, foot, "Dark", segs=10, rings=6)
+    h = hips[2]
+    knee = (max(-0.44, min(0.44, h[0] * 2.2)), 0.09, max(-0.64, min(0.64, h[2] * 2.6)))
+    foot = (knee[0] * 0.8, 0.05, max(-0.72, min(0.72, knee[2] * 1.15)))
+    limb(p, h, knee, 0.075, 0.06, "Shell")
+    p.sphere(0.065, knee, "Dark", segs=12, rings=8)
+    limb(p, knee, foot, 0.055, 0.045, "Shell")
+    p.sphere(0.05, foot, "Dark", segs=10, rings=6)
     # Snapped: the thigh's stub, splintered, and the shin on the ground.
-    stub = (-0.42, 0.18, 0.4)
-    limb(p, hip(-1, 1), stub, 0.075, 0.07, "Shell")
+    h = hips[3]
+    stub = tuple(u + (u - c) * 0.6 for u, c in zip(h, (0.0, cy, 0.0)))
+    limb(p, h, stub, 0.075, 0.07, "Shell")
     for k in range(4):
         a = k * math.pi / 2 + 0.3
-        rod(p, stub, (stub[0] - 0.06 + 0.03 * math.cos(a), stub[1] - 0.02 + 0.03 * math.sin(a),
+        rod(p, stub, (stub[0] + 0.03 * math.cos(a), stub[1] + 0.03 * math.sin(a),
                       stub[2] + 0.05), 0.012, "Dark", segs=4)
-    limb(p, (-0.2, 0.05, 0.66), (0.28, 0.045, 0.58), 0.055, 0.045, "Shell")
-    p.sphere(0.065, (-0.2, 0.06, 0.66), "Dark", segs=12, rings=8)
+    limb(p, (-0.25, 0.05, 0.66), (0.25, 0.045, 0.6), 0.055, 0.045, "Shell")
+    p.sphere(0.065, (-0.25, 0.06, 0.66), "Dark", segs=12, rings=8)
     return [p]
 
 
 def flower_jars():
-    """Four jam jars of wild flowers: yarrow, harebells and long grasses,
-    0.34 x 0.4 x 0.2 overall; origin under their middle."""
+    """Four jam jars of wild flowers leaning out every way: yarrow's flat
+    white heads, ox-eye daisies, harebells, a red poppy, long grasses;
+    0.4 x 0.42 x 0.3 or so overall, read at 4 m; origin under their
+    middle."""
     p = Part("static")
     rng = random.Random(23)
-    for (x, z, h) in ((-0.11, 0.03, 0.11), (0.0, -0.05, 0.13), (0.1, 0.04, 0.1),
-                      (0.02, 0.06, 0.09)):
+    jars = ((-0.11, 0.03, 0.11), (0.0, -0.05, 0.13), (0.1, 0.04, 0.1), (0.02, 0.06, 0.09))
+    kinds = ["yarrow", "daisy", "yarrow", "daisy", "harebell", "grass", "grass", "yarrow",
+             "daisy"]
+    poppy_given = False
+    for n, (x, z, h) in enumerate(jars):
         p.lathe([(0.0, 0.0), (0.04, 0.0), (0.042, 0.01), (0.042, h - 0.015), (0.034, h - 0.005),
                  (0.034, h), (0.0, h)], "Glass", segs=14, xf=T(x, 0.0, z) @ UP)
+        # The rim catching the light, the water dark.
+        p.lathe([(0.033, h), (0.037, h), (0.037, h + 0.006), (0.033, h + 0.006)], "Steel",
+                segs=14, closed=True, xf=T(x, 0.0, z) @ UP)
         p.cyl(0.039, 0.003, h * 0.6, "Dark", segs=12, xf=T(x, 0.0, z) @ UP)
-        # Stems out of the mouth, leaning.
-        for k in range(7):
+        rng.shuffle(kinds)
+        for k, kind in enumerate(kinds):
+            if kind == "harebell" and not poppy_given and n == 1:
+                kind, poppy_given = "poppy", True
             a = rng.random() * 2 * math.pi
-            lean = rng.uniform(0.02, 0.07)
-            top = (x + lean * math.cos(a), rng.uniform(0.26, 0.37), z + lean * math.sin(a) * 0.6)
-            kind = rng.choice(("yarrow", "harebell", "grass", "grass"))
-            base = (x + rng.uniform(-0.02, 0.02), h * rng.uniform(0.3, 0.6),
-                    z + rng.uniform(-0.02, 0.02))
-            rod(p, base, top, 0.0025, "Olive", segs=4)
+            lean = rng.uniform(0.06, 0.15)
+            top = (x + lean * math.cos(a), rng.uniform(0.24, 0.4), z + lean * math.sin(a) * 0.8)
+            base = (x + rng.uniform(-0.015, 0.015), h * rng.uniform(0.3, 0.6),
+                    z + rng.uniform(-0.015, 0.015))
+            rod(p, base, top, 0.003, "Olive", segs=4)
             if kind == "yarrow":
-                # A flat head of tiny flowers, big enough to read at 5 m.
-                for j in range(7):
-                    b = j * 0.9
-                    r = 0.022 if j else 0.0
-                    p.sphere(0.013, (top[0] + r * math.cos(b), top[1] + 0.006,
-                                     top[2] + r * math.sin(b)), "Cream", segs=6, rings=4)
+                # A flat head of tiny flowers, 8-10 cm across.
+                for j in range(9):
+                    b = j * 0.7
+                    r = 0.0 if j == 0 else (0.025 if j < 5 else 0.042)
+                    p.sphere(0.016, (top[0] + r * math.cos(b), top[1] + 0.006,
+                                     top[2] + r * math.sin(b)), "Cream", segs=5, rings=3)
+            elif kind == "daisy":
+                # White petals round a yellow eye, 6 cm, facing up and out.
+                for j in range(10):
+                    b = j * 2 * math.pi / 10
+                    c = (top[0] + 0.02 * math.cos(b), top[1] + 0.004, top[2] + 0.02 * math.sin(b))
+                    p.box((0.028, 0.004, 0.012), c, "Cream", xf=T(*c) @ RY(-b) @ T(*(-v for v in c)))
+                p.sphere(0.011, (top[0], top[1] + 0.008, top[2]), "Yellow", segs=8, rings=5)
+            elif kind == "poppy":
+                p.lathe([(0.0, 0.0), (0.012, 0.0), (0.03, 0.025), (0.026, 0.03), (0.0, 0.01)],
+                        "Red", segs=10, xf=T(*top) @ UP)
+                p.sphere(0.008, (top[0], top[1] + 0.012, top[2]), "Black", segs=6, rings=4)
             elif kind == "harebell":
                 for j in range(2):
-                    q = (top[0] + 0.012 * j, top[1] - 0.012 * j, top[2])
-                    p.lathe([(0.0, 0.0), (0.006, 0.0), (0.018, -0.028), (0.0, -0.025)], "Blue",
+                    q = (top[0] + 0.014 * j, top[1] - 0.014 * j, top[2])
+                    p.lathe([(0.0, 0.0), (0.008, 0.0), (0.024, -0.032), (0.0, -0.028)], "Blue",
                             segs=8, xf=T(*q) @ UP)
             else:
-                rod(p, top, (top[0] + 0.03 * math.cos(a), top[1] + 0.04, top[2]), 0.002,
+                rod(p, top, (top[0] + 0.05 * math.cos(a), top[1] + 0.06, top[2]), 0.0025,
                     "Olive", segs=3)
     return [p]
 

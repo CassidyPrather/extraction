@@ -131,7 +131,7 @@ are all over 18 m.
 
 ### Over the dam
 
-Three ways, west to east, each a different risk:
+Three ways over, west to east, each a different risk, and one under:
 
 - **The west road** leaves the river road by the keeper's cottages, runs
   west along the valley and climbs the west abutment's long shoulder to
@@ -146,6 +146,13 @@ Three ways, west to east, each a different risk:
   you climb from the filter house, walled in for most of its length, a
   Well standing in it beside the steps. At its head the catchwater path
   runs north along the east hillside above the shore road.
+- **The inspection gallery** (Underground's `gallery_sallow`, under the
+  toe at (-6, 172)) goes under it: in by a kiosk beside the valve house,
+  44 m along inside the dam, out by a stair at the draw-off tower's foot
+  on the bed. Its door stays shut until the gauge room's breaker is
+  thrown. It's the one way through under cover, dark, wet and close, and
+  it's the most looted place in the valley (79 items in the seed 41
+  sims).
 
 From the crest into the bed: the **slipway** (through a gap in the upstream
 parapet, west of the middle), the **haul ramp** the machines cut down
@@ -211,7 +218,7 @@ for it in the open beside the Custodian's ground.
 
 ## What the sims said, and what changed
 
-Four batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
+Six batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 
 | Batch | Out | Died | What it showed | Change |
 | - | -: | -: | - | - |
@@ -219,6 +226,8 @@ Four batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 | seed 1 | 5 | 3 | Bots in Old Sallow now, but every raid west to New Sallow | A tagging shed on the sorting ground |
 | seed 11 | 7 | 1 | Still west: a danger-2 street of full houses outweighed everything | New Sallow picked over (loot 0.9) |
 | seed 21 | 6 | 2 | The shed looted (30 items); all three ways out used (Inflow bridge 4, Sallow Head 3, gauge house 1); both deaths in the danger-3 east under the Gate | |
+| seed 31 | 4 | 4 | Old Sallow's drowned houses in; all four deaths to drones crossing the open east bed | Three more stock rows in the east for cover |
+| seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four: Story put scene pieces in the nav grid |
 
 Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
 visited yet: the valve house and filter house, the draw-off tower (no
@@ -244,12 +253,12 @@ the gauge house and out: 262 s.
   mirror), and the dam's `Mat::Concrete`
   faces and tower `Mat::DressedStone` (then `python3
   scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
-- Underground's dam gallery (claude/polish-underground 810121c,
-  `gallery_sallow` at (-6, 172)): in by a kiosk beside the valve house,
-  44 m under the crest, out by a stair beside the draw-off tower (its
-  door held until the gauge room's breaker is thrown). The fourth way
-  through the dam, under cover. Then: its six test loops onto VALLEYS,
-  the lint, fit and sims again.
+- Story's `scenes::nav_obstacles` (claude/polish-story): scene pieces in
+  the nav grid, so "Bay four"'s 0.63 m slot between its buses (scenes.ron,
+  (70, -74)) is solid to it. Then the sims again.
+- World models' breakable bus panels (dc8b032): `dam::buses` drops
+  `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
+  draws it whole).
 - Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),

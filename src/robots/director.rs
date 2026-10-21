@@ -5,7 +5,8 @@
 //!   flies home.
 //! - **Watch**: a walker picks its way to a work site and stands there.
 //! - **Response**: loud noise (gunfire) is reported; after a delay a drone
-//!   is dispatched to where it was heard. Noise has a cost, paid later.
+//!   is dispatched to where it was heard. Noise has a cost, paid later:
+//!   keep it up ([`Director::heat`]) and two walkers come as well.
 //!
 //! - **Logistics** and **Construction**: see `dirigible` and `pylon`.
 //!
@@ -45,7 +46,20 @@ pub struct Director {
     /// Pending night visits: (seconds until dispatch, the door, where the
     /// sleeper lies).
     pub visits: Vec<(f32, Entity, Vec3)>,
+    /// How hot you've made it: a point per reported gunshot (at most one
+    /// per [`HEAT_GAP`]), cooling a point every [`HEAT_COOL`] seconds. At
+    /// [`ESCALATE`] a response brings a pair of walkers as well.
+    pub heat: f32,
+    /// Seconds before another shot adds heat.
+    pub heat_gap: f32,
 }
+
+/// Heat: a reported shot adds a point, at most one per this (s)...
+pub const HEAT_GAP: f32 = 8.0;
+/// ...a point cools in this long (s)...
+pub const HEAT_COOL: f32 = 150.0;
+/// ...and from this much a response brings two walkers too.
+pub const ESCALATE: f32 = 2.5;
 
 impl Director {
     /// Send a response team to `at` in `delay` seconds.
@@ -98,6 +112,8 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         next_logistics: 150.0,
         chatter: Vec::new(),
         visits: Vec::new(),
+        heat: 0.0,
+        heat_gap: 0.0,
     });
 }
 
@@ -114,6 +130,10 @@ fn hear_reports(
             continue;
         }
         let by_player = n.source.is_some_and(|s| players.contains(s));
+        if by_player && n.radius > 150.0 && director.heat_gap <= 0.0 {
+            director.heat += 1.0;
+            director.heat_gap = HEAT_GAP;
+        }
         if by_player && n.radius > 150.0 && director.response_cooldown <= 0.0 {
             let delay = director.rng.range(35.0, 70.0);
             director.queue_response(delay, n.at);
@@ -218,6 +238,8 @@ fn run_director(
     }
     let dt = time.delta_secs();
     director.response_cooldown -= dt;
+    director.heat_gap -= dt;
+    director.heat = (director.heat - dt / HEAT_COOL).max(0.0);
     director.next_job -= dt;
     let active = robots.iter().filter(|r| !r.wrecked).count();
     let exit = gate(&zone);
@@ -240,6 +262,19 @@ fn run_director(
             duration: 40.0,
             exit,
         };
+        // You've been loud: two walkers come to look as well (and fight as
+        // a pair: `walker::flank_role`).
+        if director.heat >= ESCALATE && active + 3 <= director.max_active {
+            info!("director: walkers to {at:.0} (heat {:.1})", director.heat);
+            for k in 0..2 {
+                let side = Vec3::new(k as f32 * 2.0 - 1.0, 0.0, 0.0) * 2.0;
+                let w = spawn_walker(&mut commands, &zone, exit + side, job.clone());
+                commands.entity(w).insert(super::Brain::Investigate {
+                    at,
+                    left: super::search::INVESTIGATE_TIME * 4.0,
+                });
+            }
+        }
         // Now and then a pair of hounds instead: they hunt by ear.
         if director.rng.chance(super::hound_mind::HOUND_SHARE) && active + 2 <= director.max_active
         {

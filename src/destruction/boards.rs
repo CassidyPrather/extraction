@@ -110,7 +110,8 @@ pub fn spawn_boards(
                 held: 0.0,
             },
             Drawn {
-                model: MODEL,
+                model: Some(MODEL),
+                mat: Mat::Planks,
                 at: Transform::from_scale(local.scale),
                 size,
                 range: crate::render::lod::near_range().end_margin,

@@ -34,6 +34,10 @@ pub enum Mount {
     Helmet,
     /// A plate carrier's pocket: armour plates.
     Plate,
+    /// A cassette player's well: cassettes.
+    Cassette,
+    /// A gramophone's platter: records.
+    Record,
 }
 
 /// How big a thing is, for pockets and slings. Bulk (a continuous volume) is
