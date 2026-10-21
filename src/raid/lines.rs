@@ -184,9 +184,9 @@ pub const FIRST_HOME_FROM: &[(&str, &str)] = &[
     ),
 ];
 
-/// The drive-home line: his story when it's that homecoming, then his
-/// word on a valley you're home from for the first time (`first_from`),
-/// then what you've brought (a stone, an eye, a cell, a lot of food),
+/// The drive-home line: his story when it's that homecoming; Anna's tape
+/// or a stone if you have one; his word on a valley you're home from for
+/// the first time (`first_from`); then an eye, a cell or a lot of food;
 /// then the rest.
 pub fn coming_home_with(
     n: u32,
@@ -197,16 +197,20 @@ pub fn coming_home_with(
     if !recalled && let Some((_, l)) = COMING_HOME.iter().find(|(at, _)| *at == n) {
         return l;
     }
+    // Anna's tape, and a stone humming in your kit (a warning), before
+    // his word on the valley.
+    if c.anna {
+        return pick(CARGO_ANNA, n);
+    }
+    if c.artifact {
+        return pick(CARGO_ARTIFACT, n);
+    }
     if let Some(map) = first_from
         && let Some((_, l)) = FIRST_HOME_FROM.iter().find(|(m, _)| *m == map)
     {
         return l;
     }
-    if c.anna {
-        pick(CARGO_ANNA, n)
-    } else if c.artifact {
-        pick(CARGO_ARTIFACT, n)
-    } else if c.eye {
+    if c.eye {
         pick(CARGO_EYE, n)
     } else if c.cell {
         pick(CARGO_CELL, n)

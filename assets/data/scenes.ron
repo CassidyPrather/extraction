@@ -876,4 +876,105 @@
             ],
         )),
     ),
+    (
+        map: "marrow_creek",
+        name: "Jan Holm's handcart",
+        // In the village street by the post office, where the collector
+        // took Jan Holm on 3 Nov with the shelter's lamp oil on his cart.
+        // Hana left it where it stopped.
+        at: (-16.0, 76.0),
+        rot: 0.0,
+        pieces: [
+            Pallet(at: (0.0, 0.0), rot: 15.0),
+            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "bundle", at: (0.3, 0.144, 0.1), rot: -20.0, size: (0.49, 0.39, 0.4)),
+            Prop(model: "lantern", at: (-0.25, 0.604, 0.0), size: (0.12, 0.27, 0.12), collide: false),
+            Prop(model: "boots", at: (0.9, 0.0, 0.7), rot: 40.0, size: (0.22, 0.25, 0.34), collide: false),
+        ],
+        items: [
+            (id: "matches", at: (-0.1, 0.604, 0.1)),
+            (id: "canned_beans", at: (0.35, 0.534, 0.1)),
+        ],
+        note: Some((
+            name: "Hana's chalk",
+            text: "Jan's cart. I've left it where it stopped, so she can see it from the shelter steps if she comes up. The lamp oil's gone down to her.\nTake the beans if you need them. Leave the cart.\n- H.M.",
+            at: (-0.25, 0.604, -0.12),
+            rot: 180.0,
+        )),
+    ),
+    (
+        map: "kettle_pass",
+        name: "The lamp board",
+        // By the mine: the lamp checks on their board, every one back on
+        // its hook the day the pit shut, but the Nováks'.
+        at: (-196.0, -54.0),
+        rot: 90.0,
+        pieces: [
+            Prop(model: "shelf_metal", at: (0.0, 0.0, -0.4), size: (1.06, 1.8, 0.36)),
+            Table(at: (0.0, 0.6), rot: 0.0),
+            Prop(model: "carbide_lamp", at: (-0.4, 0.79, 0.55), size: (0.11, 0.2, 0.1), collide: false),
+            Prop(model: "carbide_lamp", at: (-0.25, 0.79, 0.6), rot: 20.0, size: (0.11, 0.2, 0.1), collide: false),
+            Prop(model: "helmet_lamp", at: (0.35, 0.79, 0.65), rot: -30.0, size: (0.34, 0.17, 0.44), collide: false),
+        ],
+        items: [
+            (id: "brass", at: (0.05, 0.79, 0.45)),
+            (id: "flashlight", at: (0.4, 0.79, 0.35), condition: 0.4),
+        ],
+        note: Some((
+            name: "Lamp room chit",
+            text: "LAMP CHECKS, 15 OCT. Pit shut.\nEvery check back on the board but NOVAK, three. Old Novak said he was fetching his tools from the old heading. Took Marie and the boy.\nThe cage was still running at six. I waited till dark.\n- Lamp room",
+            at: (-0.05, 0.79, 0.75),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "The bucket line",
+        // Below the fire lookout, at the edge of the north-west wood: the
+        // butts and the charred beam where the works and Ash Row held the
+        // fire on 26 Feb till the wind went round.
+        at: (-160.0, -116.0),
+        rot: 135.0,
+        pieces: [
+            Barrel(at: (-3.5, 0.0)),
+            Barrel(at: (-2.2, 0.2)),
+            Barrel(at: (-0.9, -0.1)),
+            Prop(model: "beam_charred", at: (1.6, 0.0, -0.3), rot: 8.0, size: (4.56, 0.24, 0.2)),
+            Prop(model: "rope_coil", at: (3.4, 0.0, 0.6), rot: 30.0, size: (0.97, 0.15, 0.69), collide: false),
+            Crate(at: (0.4, 0.8), size: 0.6),
+        ],
+        items: [
+            (id: "field_dressing", at: (0.25, 0.6, 0.75)),
+            (id: "water_bottle", at: (0.6, 0.6, 0.9), condition: 0.5),
+        ],
+        note: Some((
+            name: "Bucket tally",
+            text: "BUCKET LINE, 26 FEB.\nWorks hands 31, Ash Row 12, the lookout.\nHeld the ride here from noon till dark. The wind went round at seven and took it over our heads.\n- tally, R.K.",
+            at: (0.4, 0.6, 0.65),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "sallow_reservoir",
+        name: "The keeper's chair",
+        // Old Sallow, below the church tower: Alois Pech's chair, set where
+        // he sat each evening of the drain to watch the church come out.
+        at: (-62.0, -28.0),
+        rot: 0.0,
+        pieces: [
+            Chair(at: (0.0, 0.0), rot: 240.0),
+            Crate(at: (0.8, 0.2), size: 0.5),
+            Prop(model: "lantern", at: (0.7, 0.5, 0.3), size: (0.12, 0.27, 0.12), collide: false),
+        ],
+        items: [
+            (id: "tea_tin", at: (0.95, 0.5, 0.1)),
+            (id: "compass", at: (0.0, 0.45, 0.05)),
+        ],
+        note: Some((
+            name: "Keeper's slip",
+            text: "Day 20. The church out to the clock. Ten to four, as I said.\nSat with it till dark. Back tomorrow with the flask.\n- A.P.",
+            at: (0.85, 0.5, 0.05),
+            rot: 0.0,
+        )),
+    ),
 ]
