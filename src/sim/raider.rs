@@ -1665,6 +1665,34 @@ fn fight_on(
         .filter(|t| hit && r.hp < 45.0 && scene.visible(*t, eye))
         .filter(|_| r.rng.range(0.0, 1.0) < r.traits.duck)
         .and_then(|t| cover_from(scene, eye - Vec3::Y * 1.6, t, 10.0));
+    // A drone that's hitting it: standing there is death, whatever its
+    // health. Out of its sight if anywhere's near; else run across its
+    // line (it can't hit that well: `drone::CROSSING_SPREAD`).
+    let drone = scene
+        .robots
+        .get(target)
+        .is_ok_and(|(_, rb, ..)| rb.kind == crate::robots::RobotKind::Drone);
+    let cover = cover.or_else(|| {
+        threat
+            .filter(|t| drone && hit && scene.visible(*t, eye))
+            .and_then(|t| {
+                let feet = eye - Vec3::Y * 1.6;
+                cover_from(scene, feet, t, 14.0).or_else(|| {
+                    let across = Vec2::new(t.x - feet.x, t.z - feet.z)
+                        .perp()
+                        .normalize_or(Vec2::X);
+                    let side = if r.rng.range(0.0, 1.0) < 0.5 {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    let to = feet.xz() + across * side * 10.0;
+                    scene
+                        .path_clear(eye, Vec3::new(to.x, eye.y, to.y))
+                        .then_some((10.0, to))
+                })
+            })
+    });
     let outcome = outcome
         .or(cover.is_some().then_some("took_cover"))
         .or(lost.then_some("lost"))
