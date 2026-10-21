@@ -69,9 +69,10 @@ fn put(app: &mut App, player: Entity, at: Vec3) {
 /// walkable ground `away` metres off to one side: the flock, where it sits,
 /// and that ground.
 fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
+    // The ducks too: their flushes count as birds'.
     let old: Vec<Entity> = app
         .world_mut()
-        .query_filtered::<Entity, With<Flock>>()
+        .query_filtered::<Entity, Or<(With<Flock>, With<super::ducks::Raft>)>>()
         .iter(app.world())
         .collect();
     for e in old {
