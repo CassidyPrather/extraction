@@ -935,6 +935,20 @@ fn run_tasks(
                     let Some((m, _, mgt)) = pouched else {
                         // Out of magazines: as a reload macro with none, it
                         // stays empty.
+                        let slots: Vec<_> = ext
+                            .sockets
+                            .iter()
+                            .filter(|(_, o, _)| o.0 == player)
+                            .map(|(so, _, _)| {
+                                (
+                                    so.kind.clone(),
+                                    so.occupant
+                                        .and_then(|e| items.get(e).ok())
+                                        .map(|i| (catalog.get(i.kind()).id.clone(), i.rounds)),
+                                )
+                            })
+                            .collect();
+                        info!("DBG slots {slots:?} family {family}");
                         bot.note("no loaded magazine in a pouch".into());
                         bot.next();
                         continue;

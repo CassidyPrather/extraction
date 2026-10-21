@@ -10,6 +10,7 @@
 
 pub mod bench;
 pub mod board;
+pub mod captions;
 pub mod chatter;
 pub mod comfort_board;
 pub mod epilogue;
@@ -153,6 +154,7 @@ impl Plugin for RaidPlugin {
             crate::camp::CampPlugin,
             crate::capstone::CapstonePlugin,
             chatter::ChatterPlugin,
+            captions::CaptionsPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,
             board::BoardPlugin,

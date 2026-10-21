@@ -627,9 +627,7 @@ pub(super) fn direct(
                 advance(&mut run, next);
             } else {
                 // Armed again, if what it had went down with it.
-                let armed = world
-                    .holding(Side::Right)
-                    .is_some_and(|e| world.guns.get(e).is_ok());
+                let armed = world.armed(player);
                 if !armed {
                     if let Some(gun) = world.any_gun(here) {
                         tasks.push(Grab {
@@ -685,9 +683,7 @@ pub(super) fn direct(
             }
         }
         Step::Drone => {
-            let armed = world
-                .holding(Side::Right)
-                .is_some_and(|e| world.guns.get(e).is_ok());
+            let armed = world.armed(player);
             if !armed && run.tries < 2 {
                 // A rifle and a magazine, if what it had is gone (these
                 // ones: the nearest of an id might be an empty one).
@@ -1020,6 +1016,8 @@ pub(super) struct World2<'w, 's> {
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
     comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
+    owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
+    gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     door_at: Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
     robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
@@ -1527,6 +1525,17 @@ impl World2<'_, '_> {
             })
             .map(|(_, g)| g.transform_point(Vec3::Y * 0.3))
             .min_by(|a, b| a.distance(from).total_cmp(&b.distance(from)))
+    }
+
+    /// A gun in hand, or on the body (slung, holstered: a one-handed
+    /// player's is there whenever the hand's doing something else).
+    fn armed(&self, player: Entity) -> bool {
+        self.holding(Side::Right)
+            .is_some_and(|e| self.guns.get(e).is_ok())
+            || self.items.iter().any(|(e, _, _, _, sock, _)| {
+                sock.is_some_and(|s| self.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                    && self.gun_ids.get(e).is_ok()
+            })
     }
 
     fn rounds(&self, player: Entity) -> Option<u32> {

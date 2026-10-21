@@ -201,12 +201,17 @@ fn handed_wrist(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wrist_panel(
     mut panels: Query<&mut ScreenText, With<WristPanel>>,
     raid: Res<crate::raid::Raid>,
     players: Query<(&crate::player::Body, &crate::health::Health), With<LocalPlayer>>,
     time: Res<Time>,
     mut timer: Local<f32>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    captions: Option<Res<crate::raid::captions::Captions>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<LocalPlayer>>,
 ) {
     *timer -= time.delta_secs();
     if *timer > 0.0 {
@@ -224,13 +229,45 @@ fn wrist_panel(
     } else {
         "SURGE NOW".to_string()
     };
-    let mut text = format!(
-        "{clock}  {:>4.1}kg\nHP {:>3.0}{}",
-        body.carried_kg,
-        health.hp.max(0.0),
-        if health.bleeding > 0.05 { " BLEED" } else { "" }
-    );
-    if let Some((msg, _)) = raid.log.last() {
+    let bleed = health.bleeding > 0.05;
+    // Captions: who's speaking and from where on a line of its own, the
+    // status squeezed onto one line to make room.
+    let caption = comfort
+        .filter(|c| c.captions)
+        .and(captions)
+        .and_then(|c| c.last.clone())
+        .filter(|_| raid.log.last().is_some());
+    let mut text = if caption.is_some() {
+        format!(
+            "{clock} HP{:.0}{}",
+            health.hp.max(0.0),
+            if bleed {
+                " BLEED".to_string()
+            } else {
+                format!(" {:.0}kg", body.carried_kg)
+            }
+        )
+    } else {
+        format!(
+            "{clock}  {:>4.1}kg\nHP {:>3.0}{}",
+            body.carried_kg,
+            health.hp.max(0.0),
+            if bleed { " BLEED" } else { "" }
+        )
+    };
+    if let Some(c) = caption {
+        let me = locals.iter().next();
+        let head = heads
+            .iter()
+            .find(|(_, p)| Some(p.parent()) == me)
+            .map(|(g, _)| g);
+        text += "\n";
+        text += &c.header(head).unwrap_or_default();
+        for line in crate::render::screen::wrap(&c.text, WRIST_COLUMNS, 3) {
+            text += "\n";
+            text += &line;
+        }
+    } else if let Some((msg, _)) = raid.log.last() {
         for line in crate::render::screen::wrap(msg, WRIST_COLUMNS, 3) {
             text += "\n";
             text += &line;
