@@ -491,7 +491,7 @@
         items: [
             (id: "binoculars", at: (-0.84, 0.5, -0.45)),
             (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
-            (id: "matches", at: (-1.15, 0.5, -0.5)),
+            (id: "matches", at: (-0.8, 0.5, -0.6)),
         ],
         note: Some((
             name: "Hide note",

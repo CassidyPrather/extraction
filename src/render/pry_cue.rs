@@ -1,6 +1,6 @@
 //! Where to pry: while a hand holds the crowbar, every seam it can be put
 //! to within [`SHOW_WITHIN`] shows a small ring, in the grab ring's green,
-//! where the claw seats (`interact::tools::crowbar::Pryable::seam`). A
+//! where the claw seats (`destruction::hooks::Pryable::seam`). A
 //! nailed board end, a shutter's hinge edge, a latch: nothing on the
 //! models says "here" from a few steps (`docs/LEGIBILITY.md`,
 //! affordances), and painting them would be on things everyone sees all
@@ -9,8 +9,9 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
+use crate::destruction::hooks::Pryable;
 use crate::interact::Hand;
-use crate::interact::tools::crowbar::{Crowbar, Pryable};
+use crate::interact::tools::crowbar::Crowbar;
 
 pub struct PryCuePlugin;
 
@@ -87,7 +88,7 @@ fn pry_cues(
         if let Ok((mut t, mut v)) = cues.get_mut(cue) {
             t.translation = at;
             t.rotation = Quat::from_rotation_arc(Vec3::Y, (hand - at).normalize_or(Vec3::Y));
-            t.scale = Vec3::splat(p.radius.clamp(0.04, 0.12) * pulse);
+            t.scale = Vec3::splat(p.along.length().clamp(0.05, 0.12) * pulse);
             *v = Visibility::Visible;
         }
     }
@@ -132,7 +133,8 @@ mod tests {
             Pryable {
                 needs: 50.0,
                 seam: Vec3::new(0.0, 0.5, 0.0),
-                radius: 0.1,
+                along: Vec3::X * 0.1,
+                held: 0.0,
             }
             .clone_with(at)
         };
