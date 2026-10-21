@@ -680,7 +680,7 @@ fn wear_kit(
 /// looking down at the feet, to see the body's shadow. `down`: the head
 /// tips forward and looks down at the body, as a head does (the camera is
 /// the eye); `side` puts the camera 2 m to the right, to see the whole
-/// body (`render::body`). The free camera otherwise stays where
+/// body (`render::body`); `crouch` squats. The free camera otherwise stays where
 /// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
@@ -703,7 +703,8 @@ fn pose_body_for_gallery(
         spec.contains("above"),
     );
     let (down, side) = (spec.contains("down"), spec.contains("side"));
-    if !stoop && !behind && !above && !down && !side {
+    let crouch = spec.contains("crouch");
+    if !stoop && !behind && !above && !down && !side && !crouch {
         return;
     }
     *frames += 1;
@@ -716,6 +717,15 @@ fn pose_body_for_gallery(
         input.head.translation += flat * 0.25 - Vec3::Y * 0.35;
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.1);
+    }
+    if crouch && *frames > 20 {
+        // Squatting, eyes 0.85 m up, looking down past the knees.
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        input.head.translation =
+            Vec3::new(input.head.translation.x, 0.85, input.head.translation.z) + flat * 0.12;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-0.9);
     }
     if down && *frames > 20 {
         // A head looking down pivots on the neck: the eyes come forward.
