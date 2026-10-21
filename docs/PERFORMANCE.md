@@ -426,7 +426,18 @@ something real (main at 43940f8, fetched foliage):
   cards within about 1.5 m of the eye in their vertex shader, as the
   impostors' near cut does (in VR those are flat sheets in your face);
   it needs each card's centre in a vertex attribute, and the tree shader
-  is Visual design's.
+  is Visual design's. Done, with their OK: each card vertex carries its
+  card's centre (`trees::ATTRIBUTE_CARD_CENTRE`, at location 8 through
+  `TreeSway`'s specialize), and `tree_sway.wgsl` shrinks the card to it
+  smoothly, whole from 2 m and gone by 1.2 m (`trees::card_scale`); the
+  trunks, the dark core and the cards' shadows stay, and the overdraw
+  gauge models it. Kettle's quarry on main: 10.27 > 8.64 (tree cards 6.07
+  > 4.43). `EXTRACTION_CARD_SHRINK=0` leaves cards whole, to compare.
+  `docs/shots/performance/card_shrink_k05.png` (lavapipe, left before,
+  right after) also shows what the view had become: its camera stands
+  inside that spruce's dark core, which is drawn from inside; the view
+  wants moving a few metres, and the core seen from within is a look for
+  World models and Visual design.
 - **Where each valley stands** (worst share of any limit in any view):
   Marrow 1.00 (aerial, 1195 of 1200 draws), Kettle 0.89 (quarry overdraw,
   of 11.5), Training Yard 0.90 (aerial shadow draws), Cinder 0.86 (gate
