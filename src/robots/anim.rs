@@ -380,6 +380,9 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
+    // Down to two legs it can't stand: belly on the ground, it hauls
+    // itself along on what it has left.
+    let crawling = alive_legs == 2 && !drive.down;
     g.coil = (g.coil - dt).max(0.0);
     g.leap = (g.leap - dt).max(0.0);
     let speed_scale = drive.pace.clamp(0.0, g.shape.max_pace())
@@ -389,7 +392,8 @@ pub fn step_walker(
             0.3
         } else {
             1.0
-        };
+        }
+        * if crawling { 0.5 } else { 1.0 };
     let desired = if drive.down {
         Vec3::ZERO
     } else {
@@ -569,6 +573,8 @@ pub fn step_walker(
         g.shape.height() - 0.4
     } else if drive.stunned {
         0.55
+    } else if crawling {
+        g.shape.height() - 0.45
     } else {
         missing as f32 * 0.14
             + g.limp * 0.05
@@ -1539,6 +1545,52 @@ mod tests {
             );
             let up = w.feet.iter().filter(|f| f.alive && f.t < 1.0).count();
             assert!(up <= 1, "{up} feet up on three legs");
+        }
+    }
+
+    /// On two legs it can't stand: it drags itself along on its belly,
+    /// slowly, one foot reaching at a time, its feet on the ground.
+    #[test]
+    fn two_legs_crawl() {
+        let flat = |_: Vec3| 0.0;
+        for dead in [[0, 1], [0, 2]] {
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            for i in dead {
+                w.feet[i].alive = false;
+            }
+            for _ in 0..(10 * 90) {
+                let drive = Drive {
+                    desired: Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| 0.0,
+                    &mut |_| {},
+                );
+                assert!(t.translation.is_finite());
+                for f in w.feet.iter().filter(|f| f.alive && f.t >= 1.0) {
+                    assert!(f.planted.y.abs() < 0.01, "a planted foot off the ground");
+                }
+            }
+            assert!(
+                t.translation.y < 0.75,
+                "{dead:?}: belly down ({:.2} m)",
+                t.translation.y
+            );
+            let went = t.translation.x;
+            assert!(
+                (1.0..6.0).contains(&went),
+                "{dead:?}: it crawled {went:.2} m in 10 s"
+            );
         }
     }
 

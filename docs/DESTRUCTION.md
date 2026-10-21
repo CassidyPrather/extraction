@@ -238,8 +238,10 @@ door's crash).
   eased into a pane (holds) and driven through it (breaks), and stabbed
   into a supply crate until it gives; and a grenade at a door's foot
   blowing it in where one four metres off doesn't; a shutter beaten to
-  splinters, the bus's door prised off for scrap, and both back after
-  the Surge.
+  splinters, the bus's door prised off for scrap (landing outside the
+  bus), and both back after the Surge; a garden fence's panel shot out
+  between its posts, the gap clear, and back after the Surge; and that
+  nothing we spawn is drawn without its model or its texture on disk.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

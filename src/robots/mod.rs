@@ -38,6 +38,7 @@ pub mod sentry_look;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;
+pub mod tracks;
 pub mod visuals;
 pub mod walker;
 pub mod weathering;
@@ -244,11 +245,11 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
-            .add_observer(senses::seed_mind)
             .add_plugins((
                 hound_mind::HoundMindPlugin,
                 flee::FleePlugin,
                 sorter_mind::SorterMindPlugin,
+                tracks::TracksPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

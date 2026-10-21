@@ -11,7 +11,8 @@
 //! ```
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
-//! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
+//! you), `limp` (a leg shot off, then across), `crawl` (two legs shot
+//! off: it drags itself across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `knockdown` (a heavy round into a walker's
 //! side: down, and up again), `rubble` (a walker over a heap of broken
@@ -347,16 +348,21 @@ fn reel(
             };
         }
         for (e, mut p, gt) in &mut parts {
-            if p.robot != subject || p.role != PartRole::Leg(1) {
+            let shot_off = match what {
+                "crawl" => matches!(p.role, PartRole::Leg(0) | PartRole::Leg(1)),
+                _ => p.role == PartRole::Leg(1),
+            };
+            if p.robot != subject || !shot_off {
                 continue;
             }
+            let role = p.role;
             match what {
-                "limp" => {
+                "limp" | "crawl" => {
                     p.hp = 0.0;
                     destroyed.write(PartDestroyed {
                         robot: subject,
                         part: e,
-                        role: PartRole::Leg(1),
+                        role,
                         at: gt.translation(),
                     });
                 }

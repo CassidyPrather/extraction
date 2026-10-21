@@ -168,6 +168,18 @@ pub const MIX: &[Cue] = &[
     cue!("tool.cut_ping", "impacts/ricochet", -9.0, 65.0, 0.8, Detail),
     cue!("hush.tone", "anomaly/well_drone", -30.0, 40.0, 0.0, Bed),
     cue!("echo.slap", "guns/rifle_shot", 0.0, 120.0, 20.0, Event, 60.0),
+    cue!("animal.deer", "wildlife/deer_bark", -4.0, 85.0, 40.0, Event, 25.0),
+    cue!("animal.chamois", "wildlife/chamois", -6.0, 85.0, 40.0, Event, 25.0),
+    cue!("animal.dog", "wildlife/dog_bark", -4.0, 90.0, 30.0, Signal, 20.0),
+    cue!("animal.yelp", "wildlife/dog_yelp", -6.0, 85.0, 20.0, Event, 15.0),
+    cue!("animal.hooves", "footsteps/leaves", -6.0, 70.0, 20.0, Event, 10.0),
+    cue!("animal.rats", "wildlife/rats", -14.0, 50.0, 3.0, Detail),
+    cue!("animal.thump", "physical/body_hit", -6.0, 75.0, 15.0, Event, 8.0),
+    cue!("flock.heron", "wildlife/heron", -4.0, 80.0, 30.0, Event, 20.0),
+    cue!("flock.chough", "wildlife/chough", -6.0, 80.0, 30.0, Event, 20.0),
+    cue!("body.breath", "body/breath", -24.0, 50.0, 0.3, Detail, 1.0),
+    cue!("water.lap", "ambience/lap", -18.0, 55.0, 8.0, Detail, 5.0),
+    cue!("water.drip", "ambience/drip", -14.0, 50.0, 5.0, Detail, 4.0),
     cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
     cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),
     cue!("grenade.spoon", "guns/casing", -8.0, 65.0, 1.0, Detail),
@@ -431,6 +443,11 @@ mod tests {
         voices.push("voice/heavy/horn".into());
         voices.push("device/stone_ping".into());
         voices.push("device/crackle".into());
+        voices.extend(
+            crate::synth_foley::STAND_INS
+                .iter()
+                .map(|s| s.set.to_string()),
+        );
         for c in MIX {
             assert!(
                 index.get(c.set).is_some()
@@ -459,6 +476,10 @@ mod tests {
             "toz8",
             "flare_pistol",
             "crossbow",
+            "sks",
+            "rpk74",
+            "nagant",
+            "ppsh",
             "factory_hall",
             "chimney",
             "rail_shed",

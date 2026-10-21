@@ -93,6 +93,9 @@ pub struct Geo {
     /// the building's collider, nor drawn by it): Destruction spawns,
     /// draws and breaks them.
     pub breakables: Vec<Breakable>,
+    /// The floor walked on inside, building-local y, where it isn't a
+    /// door's sill (a drowned house's silt: it has no doors left).
+    pub floor: Option<f32>,
 }
 
 /// What a breakable thing is.
@@ -1991,6 +1994,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
     ));
     // The silt: wall to wall, and through the doorway to the bank.
     let top = f + SILT;
+    b.geo.floor = Some(top);
     b.bx(
         Vec3::new(w - thick, SILT, d - thick),
         Vec3::new(0.0, f + SILT * 0.5, 0.0),
@@ -2100,6 +2104,7 @@ fn chapel_drowned(b: &mut Builder) {
         Vec2::new(x - thick * 0.5, z - thick * 0.5),
     ));
     let top = f + SILT;
+    b.geo.floor = Some(top);
     b.bx(
         Vec3::new(w - thick, SILT, d - thick),
         Vec3::new(0.0, f + SILT * 0.5, 0.0),
@@ -5249,7 +5254,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         }
         for s in &geo.loot {
             loot.0.push(LootSpot {
-                at: clear_of_notes(&zone.map, t.transform_point(s.at)),
+                at: loot_spot_at(&zone, &t, s.at),
                 table: s.table,
             });
         }
@@ -5276,6 +5281,19 @@ const LOOT_CLEAR: f32 = 0.55;
 
 /// A loot spot moved along the table, away from a note or terminal that
 /// lies on it (notes sit 0.3 m off a table's middle, where its loot is).
+/// Where a prefab's loot spot (`local`, in the prefab) lies in the world:
+/// clear of notes, and never under the ground. A prefab set on its lowest
+/// corner over a hill (the slag heaps' anomaly) had its loot spawned inside
+/// the hill, falling through it (`docs/SOAK.md`). Underground sites' spots
+/// are under the ground on purpose.
+pub fn loot_spot_at(zone: &Zone, t: &Transform, local: Vec3) -> Vec3 {
+    let mut at = clear_of_notes(&zone.map, t.transform_point(local));
+    if crate::world::underground::floor_under(zone, at).is_none() {
+        at.y = at.y.max(zone.ground(at.x, at.z) + 0.05);
+    }
+    at
+}
+
 fn clear_of_notes(map: &extraction_core::map::MapDef, at: Vec3) -> Vec3 {
     use extraction_core::map::MarkerKind;
     let Some(m) = map.markers.iter().find(|m| {

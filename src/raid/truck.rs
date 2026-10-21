@@ -296,14 +296,56 @@ fn press_things(
     let _ = locals;
 }
 
+/// How far (m) from where the truck stands someone must be for it to
+/// pull up there: its length and a little.
+pub const PARK_CLEAR: f32 = 5.0;
+
+/// The rendezvous pose, or the nearest one beside it with nobody standing
+/// in it: someone new waits right on the spot, and the truck came down on
+/// top of them (inside its bed's walls, they could neither move nor
+/// board).
+pub fn rv_pose_clear(zone: &Zone, rv: usize, people: &[Vec3]) -> Transform {
+    let base = rv_pose(zone, rv);
+    let clear = |t: &Transform| {
+        people
+            .iter()
+            .all(|p| p.xz().distance(t.translation.xz()) > PARK_CLEAR)
+    };
+    if clear(&base) {
+        return base;
+    }
+    let (yaw, _, _) = base.rotation.to_euler(EulerRot::YXZ);
+    // Pulled on past them, or short of them, or alongside.
+    for local in [
+        Vec3::new(0.0, 0.0, -9.0),
+        Vec3::new(0.0, 0.0, 9.0),
+        Vec3::new(6.0, 0.0, 0.0),
+        Vec3::new(-6.0, 0.0, 0.0),
+        Vec3::new(0.0, 0.0, -15.0),
+    ] {
+        let at = base.transform_point(local);
+        let t = parked(zone, [at.x, at.z], yaw);
+        if clear(&t) {
+            return t;
+        }
+    }
+    base
+}
+
 /// The truck appears at the rendezvous when it arrives, and goes home after.
-fn drive_truck(raid: Res<Raid>, zone: Res<Zone>, mut trucks: Query<(&mut Truck, &mut Transform)>) {
+fn drive_truck(
+    raid: Res<Raid>,
+    zone: Res<Zone>,
+    mut trucks: Query<(&mut Truck, &mut Transform), Without<Player>>,
+    people: Query<&GlobalTransform, With<Player>>,
+) {
     for (mut truck, mut t) in &mut trucks {
         match raid.phase {
             // The short exfil: it never left.
             Phase::TruckWaiting { rv, .. } if rv == super::SHORT_EXFIL => {}
             Phase::TruckWaiting { rv, .. } if truck.at_base => {
-                *t = rv_pose(&zone, rv);
+                let people: Vec<Vec3> = people.iter().map(|p| p.translation()).collect();
+                *t = rv_pose_clear(&zone, rv, &people);
                 truck.at_base = false;
             }
             Phase::Out | Phase::TruckCalled { .. } if !truck.at_base => {
@@ -376,4 +418,61 @@ fn finish_raid(
 pub struct DropEverything {
     pub player: Entity,
     pub at: Vec3,
+}
+
+#[cfg(test)]
+mod park_tests {
+    use super::*;
+    use crate::raid::{Phase, Raid};
+
+    /// Someone waiting right on the rendezvous: the truck pulls up beside
+    /// them, not on top of them.
+    #[test]
+    fn the_truck_pulls_up_clear_of_whoever_waits_on_the_spot() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>();
+        let spot = zone
+            .map
+            .markers_of(&MarkerKind::Rendezvous)
+            .next()
+            .map(|m| zone.on_ground(m.at[0], m.at[1]))
+            .unwrap();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = spot + Vec3::Y;
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting { rv: 0, left: 1.0e6 };
+        app.update();
+        app.update();
+        let truck = app
+            .world_mut()
+            .query_filtered::<&Transform, With<Truck>>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+            .translation;
+        let d = truck.xz().distance(spot.xz());
+        assert!(d > PARK_CLEAR, "parked on them: {d:.1} m");
+        assert!(d < 20.0, "and still at the rendezvous: {d:.1} m");
+    }
 }
