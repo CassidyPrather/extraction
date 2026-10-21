@@ -196,7 +196,7 @@ pub fn plan_buildings(
             .iter()
             .map(|(_, l)| l.0.hinge.y)
             .min_by(|a, b| a.total_cmp(b))
-            .unwrap_or(0.0);
+            .unwrap_or_else(|| standing_floor(&geo));
         let extent = half.x.max(half.y) + MARGIN;
         let n = ((extent * 2.0) / CELL).ceil() as usize;
         let mut grid = NavGrid {
@@ -510,6 +510,31 @@ fn plan_site(
         inner,
         levels: Some(levels),
     }
+}
+
+/// A floor is at least this broad both ways (furniture isn't)...
+const FLOOR_SLAB: f32 = 2.0;
+/// ...and its top under this, above the ground.
+const FLOOR_TOP: f32 = 1.0;
+
+/// With no door to read it from, the floor is what you'd stand on in the
+/// middle: the highest solid top under the building's centre that's
+/// below the band (a drowned house's silt, a ruin's slab), or the ground.
+fn standing_floor(geo: &crate::world::buildings::Geo) -> f32 {
+    geo.pieces
+        .iter()
+        .filter(|p| p.collide)
+        .filter_map(|p| {
+            let Shape::Box(s) = p.shape else {
+                return None;
+            };
+            let local = p.at.compute_affine().inverse().transform_point3(Vec3::ZERO);
+            let inside = local.x.abs() <= s.x * 0.5 && local.z.abs() <= s.z * 0.5;
+            let broad = s.x.min(s.z) >= FLOOR_SLAB;
+            let top = p.at.translation.y + s.y * 0.5;
+            (inside && broad && top < FLOOR_TOP).then_some(top)
+        })
+        .fold(0.0, f32::max)
 }
 
 /// A collider piece as an obstacle on the floor, if it's in the way.
