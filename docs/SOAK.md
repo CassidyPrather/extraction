@@ -244,3 +244,79 @@ Run on every valley, seeds 1-6 for two minutes each without robots and
   terrain now and then at 5-15 m/s, mostly dropped from a hand pushed
   into the ground; the lost items' rescue brings them back. Open:
   Physics edge cases.
+
+## Physics edge cases
+
+`src/soak/physics.rs` throws, heaps, buries and shoves things on Marrow
+Creek and watches every tick. Its rule for tunnelling: a body's middle
+never touches a surface (resting on one, it stays this side), so a
+middle whose path between two ticks passes through anything static has
+gone through it (`crossings`, `watch`). Final positions alone misled:
+items and the player that slid along a wall into a doorway, or skipped
+over a log pile, looked as if they'd gone through.
+
+| Test | What | Holds |
+| - | - | - |
+| `thrown_items_never_tunnel` | every catalog item at 10, 25 and 50 m/s at 60 outside walls (upright from 0.6 to 1.6 m, clear air in front), 60 spots of open ground and 30 of water | no NaN, nothing still flying at 20 m/s after 1.5 s, at most `THROUGH_ALLOWED` (5) of ~1,600 through anything |
+| `long_things_thrown_into_the_ground_stay_on_it` | rod, crowbar, rifles, knife, a round, spinning at 15 rad/s, into the ground at every angle | at most 2 of 96 through it |
+| `heaps_settle` | 60 items dropped in a column on three buildings' floors and the steepest hillside near the insertion | none under the floor, nothing thrown out faster than 8 m/s (12 on the hill), at most 3 still moving after 8 s |
+| `items_spawned_inside_things_are_not_launched` | items half and deep into walls, half into the ground, ten in one spot, in the truck | pushed out under `LAUNCH` (12 m/s; ten in one spot reach 10), never left under the ground |
+| `the_player_cant_be_pushed_through_walls` | sprint into 24 walls for 3 s, straight and glancing (0.6 rad either way), then walk 1.5 m on into them in the room | the capsule's middle never passes through anything |
+| `items_under_the_world_come_back` | an item shoved 6 m under the ground, one spawned 5 m under, one on an underground site's floor | back where it last rested; up on the ground; left where it is |
+| `a_tracking_jump_doesnt_launch_what_you_let_go` | the hand's tracking jumps 3 m in a frame while holding something, then lets go | it leaves at no more than `MAX_THROW` |
+
+### What it found
+
+- **A tracking glitch fired what you held at 80 m/s.** A hand's velocity
+  is smoothed from its pose each frame; a pose that jumps (tracking lost
+  and found, the playspace moved) gave a release of 80 m/s from one 3 m
+  jump. Release is capped at `interact::MAX_THROW` (25 m/s, a hard
+  overarm throw; spin at 40 rad/s), and so is the velocity a grab
+  starts with. (`src/interact/mod.rs`, the coordinator's.)
+- **Thin things went under the ground.** A cleaning rod (8 mm) or a loose
+  round thrown at the terrain slipped under its heightfield a third to a
+  half of the time, even at 10 m/s, and fell for ever: under a
+  heightfield there's nothing to push it back up. Swept CCD (on for
+  items) didn't stop it; a thicker collider helped (24 in 48 rounds down
+  to 2) but not for rods, and would float small things off the ground.
+- **Small fast things went through plank walls.** One 5.45 or 7.62
+  round in four thrown at a shed's or a house's wall at 50 m/s.
+- **A rod struck end-on blew up.** Its inertia along its length is
+  tiny: it spun up to 360 rad/s on impact and once left at 2,100 m/s.
+  Items now cap their speed at 60 m/s and spin at 60 rad/s
+  (`items::physical_bundle`; nothing the game does moves one faster).
+- **Whatever left the world stayed gone and kept falling.** The save
+  skipped items below -50 m, but the item was simulated, falling, for the
+  rest of the session.
+
+The fix for the last three is `src/items/lost.rs`, three backstops
+after each physics step:
+
+1. `no_tunnelling`: a loose item that moved more than 5 cm in a tick,
+   as fast as its speed says (a teleport isn't a flight), has its
+   middle's path ray-cast against static colliders; through one, it goes
+   back to where it struck, off the face by its half thickness, with a
+   little bounce and half its slide.
+2. `ground_skin`: a moving item more than 15 cm under the terrain (and
+   not down an underground site) is lifted back onto it.
+3. `recover_lost_items` (4 times a second): an item more than 1 m under
+   the ground and not over a site's floor (under its ceiling), or not
+   finite, goes back to where it last lay at rest, or onto the ground
+   over where it is.
+
+Throws through something: 47 of ~1,600 before, 4 after.
+
+### Open
+
+- A water tower's face (Marrow Creek, about (231, 21, -194)): a round and
+  an artifact shard thrown at it end up behind it. Not looked into: the
+  tower's colliders are Models: world's.
+- A sliver (an old photo, a letter) thrown at the ground at 25-50 m/s
+  now and then passes the terrain's surface for a tick before
+  `ground_skin` has it back up; a cleaning rod thrown end-on, spinning,
+  once in a hundred.
+- Ten items spawned in exactly one spot fly apart at up to 10 m/s
+  (Avian pushes each overlapping pair apart at up to 4 m/s). Loot spreads
+  what it spawns, so the game doesn't do this.
+- Doors (kinematic) aren't in `no_tunnelling`'s static set; nothing
+  showed going through one.
