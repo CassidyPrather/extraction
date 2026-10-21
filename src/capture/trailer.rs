@@ -604,6 +604,22 @@ mod tests {
         assert_eq!(d.clips.len(), 2);
     }
 
+    /// A trailer is a sim raid with cameras: no career, so no save slot,
+    /// so the dev cache by the insertion the bot kits up from is there. (A
+    /// trailer once had a career: its bot found no AK, decided at 103 s it
+    /// had no ammunition, and walked about for eight minutes.)
+    #[test]
+    fn a_trailer_never_saves() {
+        let o = LaunchOptions::parse(
+            "--map marrow_creek --data-dir /tmp/x --sim-run trailer --trailer 60"
+                .split(' ')
+                .map(String::from),
+        );
+        assert!(!o.headless, "a trailer renders");
+        assert!(o.camera.is_none(), "a trailer's bot starts in the truck");
+        assert_eq!(crate::persist::career_path(&o), None);
+    }
+
     #[test]
     fn the_cut_is_decided_as_it_is_filmed() {
         assert_eq!(camera_for("fight", 0.5), View::Chase);
