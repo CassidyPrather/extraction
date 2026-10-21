@@ -1,5 +1,5 @@
 """Car wrecks by the Zone's roads and in its yards, for Destruction to strip
-and World models to place. Writes assets/models/vehicles/wreck_<name>.glb.
+and World models to place. Writes assets/models/props/wreck_<name>.glb.
 
 Prop space: metres, +Y up from the ground, -Z the front, the origin on the
 ground under the middle of the wheelbase. Each sits low on flat tyres.
@@ -49,7 +49,7 @@ def write(name, parts, points):
         empty(k, v)
     print(f"{name}:")
     report()
-    export(f"assets/models/vehicles/{name}.glb")
+    export(f"assets/models/props/{name}.glb")
 
 
 def side_prism(p, profile, x0, x1, mat, sx, **kw):
