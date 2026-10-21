@@ -82,7 +82,7 @@
         // Coldharbour's bench.
         Plateau(polygon: [(-120.0, -20.0), (40.0, -20.0), (40.0, 55.0), (-120.0, 55.0)], blend: 30.0),
         // The Gate's yard in the cirque.
-        Plateau(polygon: [(200.0, -255.0), (232.0, -255.0), (232.0, -225.0), (200.0, -225.0)], height: Some(131.0), blend: 30.0),
+        Plateau(polygon: [(220.0, -257.0), (252.0, -257.0), (252.0, -227.0), (220.0, -227.0)], height: Some(132.0), blend: 30.0),
         // The valley station's yard.
         Plateau(polygon: [(64.0, 200.0), (84.0, 200.0), (84.0, 228.0), (64.0, 228.0)], blend: 8.0),
         // Level ground at their doors (the lint's door rule): the roadmen's top hut, the top station, the chapel, the adit house, the snow survey hut, the observatory.
@@ -191,7 +191,7 @@
         // upper slopes.
         (
             name: "Gate track", kind: Dirt, width: 5.0, smoothing: 35.0,
-            points: [(205.0, -238.0), (180.0, -232.0), (145.0, -218.0), (118.0, -180.0), (80.0, -150.0), (20.0, -150.0)],
+            points: [(225.0, -240.0), (200.0, -236.0), (180.0, -232.0), (145.0, -218.0), (118.0, -180.0), (80.0, -150.0), (20.0, -150.0)],
         ),
     ],
 
@@ -279,7 +279,7 @@
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
-        (prefab: "robot_gate", at: (215.0, -240.0), rot: 320.0),
+        (prefab: "robot_gate", at: (235.0, -242.0), rot: 320.0),
     ],
 
     markers: [
@@ -289,8 +289,8 @@
         (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
         (kind: Rendezvous, at: (70.0, -262.0), name: "The col"),
         (kind: Rendezvous, at: (238.0, -28.0), name: "Tip road"),
-        (kind: RobotGate, at: (215.0, -240.0), rot: 320.0, name: "The Gate"),
-        (kind: Sentry(arc: 140.0, power: Some((224.9, -231.9))), at: (215.0, -222.0), rot: -15.0, name: "Gate sentry"),
+        (kind: RobotGate, at: (235.0, -242.0), rot: 320.0, name: "The Gate"),
+        (kind: Sentry(arc: 90.0, power: Some((250.9, -251.9))), at: (241.0, -242.0), rot: -15.0, name: "Gate sentry"),
         (kind: ArtifactField, at: (195.0, -160.0), name: "The tarn"),
         (kind: ArtifactField, at: (-55.0, -115.0), name: "The crown hole"),
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
