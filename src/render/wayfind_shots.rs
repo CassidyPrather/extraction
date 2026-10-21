@@ -121,6 +121,12 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
         {
             continue;
         }
+        // Nor what has no mesh of its own to hide (a wreck part drawn in
+        // its building's surfaces): with and without would be the same.
+        if !has_mesh(world, e) {
+            info!("afford: {k:?} {e} has no mesh of its own; not shot");
+            continue;
+        }
         let pose = gt.compute_transform();
         let size = world
             .get::<avian3d::prelude::ColliderAabb>(e)
@@ -158,6 +164,14 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
     world.resource_mut::<Shots>().views = Some(v);
 }
 
+/// Whether `e` or anything under it draws a mesh.
+fn has_mesh(world: &World, e: Entity) -> bool {
+    world.get::<Mesh3d>(e).is_some()
+        || world
+            .get::<Children>(e)
+            .is_some_and(|c| c.iter().any(|k| has_mesh(world, k)))
+}
+
 /// Where to stand to see an interactable: [`super::affordance::SEEN_FROM`]
 /// out from its front, back or either side, at eye height (or just above
 /// it), whichever first sees it with nothing in between. Its own +Z
@@ -182,6 +196,8 @@ fn vantage(
     let Ok(query) = spatial.get(world) else {
         return eye_at(flat);
     };
+    // The thing itself or a part of it; what it sits on (its parent: the
+    // bench under a knob) is in the way.
     let related = |a: Entity, b: Entity| {
         let up = |mut x: Entity, to: Entity| loop {
             if x == to {
@@ -192,7 +208,7 @@ fn vantage(
                 None => return false,
             }
         };
-        up(a, b) || up(b, a)
+        up(a, b)
     };
     let clear = |eye: Vec3| {
         let Ok(dir) = Dir3::new(centre - eye) else {
