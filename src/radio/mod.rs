@@ -108,4 +108,6 @@ impl Plugin for RadioPlugin {
 }
 
 #[cfg(test)]
+mod lure_tests;
+#[cfg(test)]
 mod tests;
