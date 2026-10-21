@@ -416,8 +416,11 @@ fn build_gallery(plan: GalleryPlan, line: &Line, hm: &Heightmap) -> Gallery {
             let p = st.at + out * u;
             hm.height([p.x, p.z]) - st.at.y
         };
-        let full = geom::smoothstep(a - BANK_TAPER, a + 1.0, st.s)
-            * (1.0 - geom::smoothstep(b - 1.0, b + BANK_TAPER, st.s));
+        // Past a portal: how far, how much of the drift is left, and how
+        // far its inner foot spills toward the road (no wall to lean on).
+        let past = (a - st.s).max(st.s - b).max(0.0);
+        let full = 1.0 - geom::smoothstep(0.0, BANK_TAPER, past);
+        let spill = 3.0 * geom::smoothstep(0.0, 1.5, past);
         let start = back + 0.04;
         let crest = sec.top(back) + 0.05;
         let surface = |u: f32| crest - BANK * (u - start);
@@ -430,7 +433,11 @@ fn build_gallery(plan: GalleryPlan, line: &Line, hm: &Heightmap) -> Gallery {
             let top = (g + (top - g) * full).max(g + 0.02);
             col(u, (g - 0.4).min(top - 0.1), u, top)
         };
-        let mut cols = vec![rise(back - 0.15, crest - 0.01)];
+        let mut cols = vec![if past > 0.0 {
+            rise(back - 0.15 - spill, 0.0)
+        } else {
+            rise(back - 0.15, crest - 0.01)
+        }];
         for j in 0..BANK_COLS {
             let u = start + run * j as f32 / (BANK_COLS - 1) as f32;
             cols.push(rise(u, surface(u)));
@@ -473,11 +480,12 @@ fn build_gallery(plan: GalleryPlan, line: &Line, hm: &Heightmap) -> Gallery {
                     face_top - 0.15,
                     sec.under(face_top) + 0.03,
                 ),
+                // Out to the apron's edge: a wing wall closing the end.
                 col(
-                    back_foot + 0.2,
+                    back + 0.06,
                     -FOOT - 0.05,
-                    back_top + 0.2,
-                    sec.under(back_top) + 0.03,
+                    back + 0.06,
+                    sec.under(back + 0.06) + 0.03,
                 ),
             ]
         }));
@@ -709,6 +717,25 @@ impl Buf {
         }
     }
 
+    /// Soft shading: each vertex takes the mean normal of the faces
+    /// meeting at its position (snow has no hard edges).
+    fn smooth(&mut self) {
+        let key = |p: &[f32; 3]| {
+            (
+                (p[0] * 200.0).round() as i64,
+                (p[1] * 200.0).round() as i64,
+                (p[2] * 200.0).round() as i64,
+            )
+        };
+        let mut sum: std::collections::HashMap<(i64, i64, i64), Vec3> = Default::default();
+        for (p, n) in self.pos.iter().zip(&self.nrm) {
+            *sum.entry(key(p)).or_default() += Vec3::from_array(*n);
+        }
+        for (p, n) in self.pos.iter().zip(self.nrm.iter_mut()) {
+            *n = sum[&key(p)].normalize_or(Vec3::from_array(*n)).to_array();
+        }
+    }
+
     fn mesh(self) -> Option<Mesh> {
         if self.idx.is_empty() {
             return None;
@@ -752,7 +779,7 @@ fn material(
 ) -> Handle<StandardMaterial> {
     let own = own.get_or_insert_with(|| OwnMaterials {
         snow: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.86, 0.88, 0.9),
+            base_color: Color::srgb(0.8, 0.82, 0.84),
             perceptual_roughness: 0.95,
             reflectance: 0.3,
             ..default()
@@ -787,6 +814,9 @@ fn gallery_visuals(
         for sw in &g.sweeps {
             let mut buf = Buf::default();
             buf.sweep(sw);
+            if sw.look == Look::Snow {
+                buf.smooth();
+            }
             if let Some(mesh) = buf.mesh() {
                 merge_into(&mut merged, sw.look, mesh);
             }
@@ -919,6 +949,16 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
         let p = st.at + l * off;
         Vec3::new(p.x, hm.height([p.x, p.z]), p.z)
     };
+    // The same, the ground's small bumps averaged out over a few metres
+    // along the line: what the track is laid to (rails don't wave).
+    let level = |t: f32, off: f32| -> Vec3 {
+        let p = at(t, off);
+        let y = (-4..=4)
+            .map(|k| at((t + k as f32 * 0.5).clamp(0.0, length), off).y)
+            .sum::<f32>()
+            / 9.0;
+        Vec3::new(p.x, y, p.z)
+    };
     // The loop: 0 on the single line, 1 through the loop.
     let mid = length * 0.5;
     let has_loop = length > LOOP + 2.0 * SWITCH + 10.0;
@@ -964,7 +1004,7 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
     };
     let up_yaw = Quat::from_rotation_y(up.x.atan2(up.z));
     let pitch = |t: f32| {
-        let (a, b) = (at(t - 0.5, 0.0), at(t + 0.5, 0.0));
+        let (a, b) = (level(t - 0.5, TRACK), level(t + 0.5, TRACK));
         Quat::from_rotation_x(-(b.y - a.y).atan2(1.0))
     };
     let (t0, t1) = (1.5, length - 1.5);
@@ -987,7 +1027,7 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
             Mat::Timber
         });
         for (c, len) in spans {
-            let p = at(t, c);
+            let p = level(t, c);
             put(
                 BitKind::Sleeper,
                 t,
@@ -1015,8 +1055,8 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
             }
             for side in [-0.5f32, 0.5] {
                 let p = |t: f32| {
-                    let c = at(t, track(t));
-                    let r = at(t, track(t) + side * GAUGE);
+                    let c = level(t, track(t));
+                    let r = level(t, track(t) + side * GAUGE);
                     Vec3::new(r.x, c.y + rail_y - drop, r.z)
                 };
                 let (size, xf) = beam(p(w[0]), p(w[1]), 0.06, 0.11);
@@ -1041,12 +1081,12 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
         t += ROLLER_EVERY;
     }
     for (track, single) in [(&outer as &dyn Fn(f32) -> f32, true), (&inner, false)] {
-        let rope_at = |t: f32| at(t, track(t)) + Vec3::Y * (SLEEPER_TOP + 2.0 * roller_r + rope_r);
+        let rope_at = |t: f32| level(t, track(t)) + Vec3::Y * (SLEEPER_TOP + 2.0 * roller_r + rope_r);
         for &t in &rt {
             if !single && spread(t) < 0.01 {
                 continue;
             }
-            let c = at(t, track(t));
+            let c = level(t, track(t));
             let l = left;
             let (size, xf) = rod(
                 c + Vec3::Y * (SLEEPER_TOP + roller_r) - l * 0.15,
