@@ -221,7 +221,7 @@
     placements: [
         // The south gate.
         (prefab: "quarantine_gate", at: (-10.0, 285.0), rot: 0.0),
-        (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0),
+        (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0, tag: "gate_booth"),
 
         // The Bottoms: the valley station and the bus turn.
         (prefab: "funicular_lower", at: (76.0, 214.0), rot: 0.0, tag: "valley_station"),
@@ -248,7 +248,7 @@
         (prefab: "shop", at: (-15.0, 5.0), rot: 165.0, tag: "canteen"),
         (prefab: "house_plank", at: (-50.0, 8.0), rot: 165.0),
         (prefab: "house_plank", at: (-80.0, 15.0), rot: 165.0),
-        (prefab: "cabin_log", at: (-60.0, 48.0), rot: 345.0),
+        (prefab: "cabin_log", at: (-60.0, 48.0), rot: 345.0, tag: "keepers_cabin"),
         (prefab: "cabin_log", at: (-20.0, 42.0), rot: 345.0),
         (prefab: "chapel", at: (-104.0, 26.0), rot: 90.0),
 
@@ -270,7 +270,7 @@
         (prefab: "mast_hut", at: (20.0, -245.0), rot: 200.0, tag: "col_hut"),
 
         // The observatory on its summit.
-        (prefab: "observatory", at: (-208.0, -210.0), rot: 160.0),
+        (prefab: "observatory", at: (-208.0, -210.0), rot: 160.0, tag: "observatory"),
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
