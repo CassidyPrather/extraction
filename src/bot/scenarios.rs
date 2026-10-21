@@ -60,6 +60,7 @@ pub const NAMES: &[&str] = &[
     crate::robots::spotter::SCENARIO,
     crate::robots::minelayer::SCENARIO,
     crate::robots::mender::SCENARIO,
+    crate::robots::plough::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -566,6 +567,54 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 },
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
+                Expect(super::Expect::Alive),
+            ]
+        }
+        crate::robots::plough::SCENARIO => {
+            // A plough coming along a snowy road. A tin in its way goes in
+            // the bank. The bot drops a crowbar in its lane and steps back:
+            // it jams, its hatch springs, and the bot shoots the cell.
+            use crate::robots::plough as pl;
+            vec![
+                Log(s("plough jam: a crowbar in its lane, then its cell")),
+                Setup(pl::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("ak74"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Gun(MacroKind::Mode),
+                PickUp {
+                    id: s("crowbar"),
+                    side: Side::Left,
+                },
+                WalkTo {
+                    to: pl::LAY_PLACEHOLDER,
+                    within: 0.6,
+                },
+                Release(Side::Left),
+                WalkTo {
+                    to: pl::BACK_PLACEHOLDER,
+                    within: 1.0,
+                },
+                Support,
+                // Till it reaches the crowbar and jams.
+                Wait(10.0),
+                Expect(super::Expect::Counter(pl::JAMS, 1, 9)),
+                Shoot {
+                    target: Entity::PLACEHOLDER,
+                    shots: 25,
+                },
+                Wait(3.0),
+                Expect(super::Expect::RobotHits(1)),
+                Expect(super::Expect::Counter(pl::BURIED, 1, 9)),
+                Expect(super::Expect::Wrecked(1)),
                 Expect(super::Expect::Alive),
             ]
         }
