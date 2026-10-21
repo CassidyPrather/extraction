@@ -41,6 +41,8 @@ impl Plugin for WorldPropsPlugin {
 
 /// A prop model's path under `assets/`.
 pub fn path(name: &str) -> String {
+    // (A model's one node, `wreck_lada#body`, is in the model's file.)
+    let name = name.split_once('#').map_or(name, |(m, _)| m);
     format!("models/props/{name}.glb")
 }
 
@@ -117,7 +119,13 @@ impl PropModels<'_> {
 
     /// The model's primitives (mesh, material name) in prop space, if it
     /// has loaded.
+    /// A model's primitives, posed in prop space; or one top-level node's,
+    /// where the name picks it out (`wreck_lada#body`).
     pub fn primitives(&mut self, name: &str) -> Vec<(Handle<Mesh>, Transform, String)> {
+        let (name, node) = match name.split_once('#') {
+            Some((m, n)) => (m, Some(n)),
+            None => (name, None),
+        };
         let Some(h) = self.models.request(&path(name), &self.server) else {
             return Vec::new();
         };
@@ -143,7 +151,9 @@ impl PropModels<'_> {
             }
         }
         for n in model_nodes(g, &self.nodes, &self.gltf_meshes) {
-            walk(&n, Transform::IDENTITY, &mut out);
+            if node.is_none_or(|want| n.name == want) {
+                walk(&n, Transform::IDENTITY, &mut out);
+            }
         }
         out
     }

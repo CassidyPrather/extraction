@@ -274,6 +274,16 @@ impl DirectorWorld<'_, '_> {
     }
 
     /// The nearest loose item of `id` to `near`.
+    /// One of these on the body (a pouch, a pocket).
+    fn on_body(&self, id: &str) -> Option<Entity> {
+        self.items
+            .iter()
+            .find(|(_, it, _, _, held, sock)| {
+                held.is_none() && sock.is_some() && self.catalog.get(it.kind()).id == id
+            })
+            .map(|(e, ..)| e)
+    }
+
     /// Anything lying loose within `r` (not in the crate, not in a hand).
     fn loose_near(&self, near: Vec2, r: f32) -> Vec<Entity> {
         self.items
@@ -543,7 +553,9 @@ impl DirectorWorld<'_, '_> {
                 {
                     None
                 } else {
+                    // Lying there, or already in a pocket (a hoarder's).
                     self.loose("field_dressing", here)
+                        .or_else(|| self.on_body("field_dressing"))
                 };
                 if let Some(e) = dressing {
                     t.extend(self.free_hands());

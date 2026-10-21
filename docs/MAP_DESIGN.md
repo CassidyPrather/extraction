@@ -24,7 +24,9 @@ are printed for the onboarding work, which owns it.
 
 - **The walkers' navigation grid** (`map_nav::zone_grid`): 2 m cells,
   blocked by ground over 32°, water deeper than 0.9 m, every placement's
-  footprint, tree trunks and big rocks; forest costs more, roads less;
+  footprint (anything thinner than a cell, a garden fence, widened to
+  half a cell so no path slips through it), tree trunks and big rocks;
+  forest costs more, roads less;
   bridge decks are lanes. The robots and the sim bots walk on this very
   grid, so "reachable" means what they find.
 - **The comfort grid**: the same, blocked over 25° (`COMFORT_SLOPE`).

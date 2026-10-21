@@ -11,7 +11,8 @@
 //! ```
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
-//! you), `limp` (a leg shot off, then across), `crawl` (two legs shot
+//! you), `damaged` (plates on their last bolt, the core smoking, its
+//! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
 //! off: it drags itself across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `knockdown` (a heavy round into a walker's
@@ -214,7 +215,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" => {
+            "wreck" | "shot" | "knockdown" | "damaged" => {
                 let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
@@ -344,6 +345,7 @@ fn reel(
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
+                "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
@@ -421,6 +423,20 @@ fn reel(
                 recoil: 0.0,
                 seed: frame as u64,
             });
+        }
+    }
+    // Shot about but going: plates on their last bolt, the core at a fifth
+    // (smoke, sparks, a guttering eye).
+    if what == "damaged" && frame == 5 {
+        for (_, mut p, _) in &mut parts {
+            if p.robot != subject {
+                continue;
+            }
+            match p.role {
+                PartRole::Armour(_) => p.hp = p.max_hp * 0.3,
+                PartRole::Core => p.hp = p.max_hp * 0.2,
+                _ => {}
+            }
         }
     }
     // One heavy round into its side: it goes down, lies a moment, gets up.
