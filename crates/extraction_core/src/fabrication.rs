@@ -250,7 +250,8 @@ pub const VICE_RECIPES: &[Recipe] = &[
         id: "make_crossbow",
         name: "Build a crossbow from a leaf spring",
         needs: &[
-            (Need::Item("scrap_metal"), 3),
+            // The leaf spring and its stirrup are most of its weight.
+            (Need::Item("scrap_metal"), 7),
             (Need::Item("spare_parts"), 1),
             (Need::Item("polymer"), 1),
         ],
