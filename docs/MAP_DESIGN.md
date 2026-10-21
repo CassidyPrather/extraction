@@ -475,6 +475,53 @@ and the farm's paddock, 14 runs; Kettle Pass four (the gatekeeper's and
 weir cottages, the camp cabin, the lodge's second cabin) and the low
 farm's paddock, 12 runs.
 
+## Wrecks
+
+Cars left where they stopped (`wreck_lada` 1.8 x 4.3, `wreck_uaz`
+1.9 x 4.1, `wreck_lorry` 2.6 x 6.4; front to local -Z): no way in, no
+loot, a body to crouch behind, and doors, bonnet, boot and wheels that
+come off (Destruction's breakables). They're cover, and they say what
+happened on the roads out.
+
+- **On the verge, never the road.** Just off the carriageway, angled as
+  if pulled over or slewed; `Overlap` finds one on a road (they aren't
+  among the prefabs a road may run into). The road stays the exposed
+  way: a wreck beside it is cover a dash off the tarmac, not a wall
+  across it. Wider than a nav cell with its clearance, a wreck is walked
+  round, so no `FENCE_CLEAR`-style check is needed for routes.
+- **Where the long open stretches are.** The cover measure counts them
+  like any placement; put them where a route's longest open stretch runs
+  along a road.
+- **On the ground as it is.** A wreck isn't levelled for
+  (`prefab_wants_pad`) and the ground round it isn't settled the way
+  it is round a building (`Heightmap::erode`): it stands level on the
+  lowest of its corners and middle, and the ground under it may be at
+  most 0.3 m over or under that (`WRECK_RISE`), a wheel sunk to its hub.
+  Road verges cut into a hillside are often steeper than that; slide
+  the wreck along to where the verge is flat.
+- Like any placement: off door strips, out of the truck's room at a
+  rendezvous, `SQUEEZE` or `SEALED` from buildings and each other, out
+  of water; the trees and rocks keep their distance (`prefab_clearance`).
+  The Surge's anomalies keep off them by construction.
+- They're light props in the view load (`VIEW_LIGHT`).
+- Keep them out of the bot scenarios' ground: the insertion and the 60 m
+  of road north of it (`src/bot/scenarios.rs` sets targets and robots
+  there).
+
+Marrow Creek has five (the queue for the gate, three run into each
+other on the district road's west verge; one pulled over north of the
+logging-road turn; the farm's jeep in its yard), Kettle Pass four (Lorry
+12 on the inside of the switchbacks' third bend, as its driver's note
+says; two on the climb to the pass; the low farm's car), Cinder Works
+four (a works lorry in the yard between the garage and the hall; one
+turned back from the gate; the woodward's jeep on the lookout track; one
+on the works road out north). Cover within 25 m along the routes, before
+and after: Marrow's routes 95/96/93% with 30/30/22 m open at most, now
+100/100/97% and 0/2/20 m (the district road between the logging-road
+turn and the village was the gap); Cinder's North sidings route 93% and
+30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
+route 98% and 10 m, now 99% and 4 m.
+
 ## Performance: what's in view
 
 Lavapipe screenshots and a 90 Hz headset both pay for every building in
@@ -484,9 +531,10 @@ casters); trees are instanced with impostors, rocks have LODs.
 - At most 16 placements within 150 m of any point on a main route or any
   point of interest (`VIEW_MAX`, `VIEW_RANGE`), an underground site's
   exit kiosks among them. A village is a dozen buildings, not forty.
-  Light props (`VIEW_LIGHT`: the garden fence, nine boxes a run, no roof)
-  aren't counted; the measure prints how many are in the worst view on
-  their own (8 in Marrow's village, 6 in Kettle's).
+  Light props (`VIEW_LIGHT`: the garden fence, nine boxes a run, no roof;
+  a car wreck, one body and its dozen small parts) aren't counted; the
+  measure prints how many are in the worst view on their own (12 in
+  Marrow's, 7 in Kettle's, 3 in Cinder's).
 - Spread groups out so no view takes in two big ones at once.
 - `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` reports what a view
   actually draws (`docs/QA.md`, render load).

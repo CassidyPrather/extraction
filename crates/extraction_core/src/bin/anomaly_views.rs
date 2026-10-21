@@ -22,15 +22,12 @@ fn main() {
     let def = MapDef::from_ron(src).expect("map parses");
     let hm = Heightmap::build(&def);
     let all = layout(&def, &hm, seed, cycle);
-    let trees: Vec<[f32; 2]> = extraction_core::forest::scatter_trees(&def, &hm)
-        .iter()
-        .map(|t| [t.pos[0], t.pos[2]])
-        .collect();
+    let blockers = extraction_core::anomaly::sight_blockers(&def, &hm);
     for kind in AnomalyKind::ALL {
         let Some((a, v)) = all
             .iter()
             .filter(|a| a.kind == kind)
-            .find_map(|a| view_of(&hm, a, &all, &trees, dist).map(|v| (a, v)))
+            .find_map(|a| view_of(&hm, a, &all, &blockers, dist).map(|v| (a, v)))
         else {
             eprintln!("{kind:?}: no clear view");
             continue;

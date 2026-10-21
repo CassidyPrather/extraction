@@ -303,7 +303,20 @@
         (prefab: "fence_garden", at: (206.85, 140.10), rot: 0.0),
         (prefab: "fence_garden", at: (211.20, 144.25), rot: 270.0),
         (prefab: "fence_garden", at: (211.20, 152.75), rot: 270.0),
-            ],
+
+        // Car wrecks (Destruction strips their doors, bonnets, boots and
+        // wheels): cover on the verges, never on the road.
+        // The queue for the gate, the morning it shut: three facing south,
+        // run into each other and left on the west verge.
+        (prefab: "wreck_lada", at: (23.7, 207.7), rot: 177.0),
+        (prefab: "wreck_uaz", at: (23.9, 200.5), rot: 143.0),
+        (prefab: "wreck_lada", at: (21.7, 193.8), rot: 201.0),
+        // Pulled over north of the logging-road turn: the one thing to
+        // crouch behind between the turn and the village birches.
+        (prefab: "wreck_lada", at: (19.6, 140.1), rot: 14.0),
+        // The farm's own jeep, in the yard by the shed.
+        (prefab: "wreck_uaz", at: (176.0, 160.0), rot: 75.0),
+    ],
 
     markers: [
         (kind: Insertion, at: (40.0, 270.0), rot: 0.0, name: "South gate"),
@@ -315,7 +328,7 @@
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 140.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: 30.0, name: "Depot sentry"),
+        (kind: Sentry(arc: 90.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: 0.0, name: "Depot sentry"),
         (kind: Sentry(arc: 140.0, power: Some((148.9, -76.4))), at: (139.0, -66.5), rot: -15.0, name: "Hollow sentry"),
         (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),

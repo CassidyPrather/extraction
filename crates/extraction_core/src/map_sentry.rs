@@ -47,6 +47,13 @@ pub const BOX_FAR: f32 = 25.0;
 /// Where a main route walks into a field, the head is in sight from this
 /// far back along it (about ten seconds at a walk).
 pub const WARN_RUN: f32 = 25.0;
+/// Survey drones circle a point of interest this far out (the game's
+/// `robots::drone`, Working) and fly straight between it and the Gate.
+pub const SURVEY_ORBIT: f32 = 14.0;
+/// Lanes near the Gate are the robots' own doorstep: a sentry there
+/// guards it, and that's the danger you chose by going.
+pub const LANE_HOME: f32 = 40.0;
+
 /// The truck's tailgate and the bots' approach behind a rendezvous
 /// (the lint's `TAILGATE`, `TRUCK_APPROACH`).
 const TRUCK_SPOTS: [f32; 3] = [0.0, 3.6, 8.0];
@@ -464,6 +471,47 @@ pub fn check(
             out.findings
                 .push((format!("{} covers {what}", s.name), *at));
         }
+        // Two machines on one spot: a survey drone's orbit or lane (past
+        // the Gate's doorstep) through the sentry's sweep. The sims found
+        // raiders who lived through one dying to the other in seconds, but
+        // only where raiders go (Marrow's Depot, by its road east): every
+        // Gate sentry sweeps the lanes leaving its Gate and every key
+        // sentry a surveyed place, and those were quiet. So it's measured,
+        // for reading against the sims, not held.
+        let gate = map.markers_of(&MarkerKind::RobotGate).next().map(|m| m.at);
+        let mut lanes = Vec::new();
+        for poi in map.markers_of(&MarkerKind::Poi) {
+            let ring = (0..24).map(|k| {
+                let a = k as f32 / 24.0 * std::f32::consts::TAU;
+                [
+                    poi.at[0] + a.cos() * SURVEY_ORBIT,
+                    poi.at[1] + a.sin() * SURVEY_ORBIT,
+                ]
+            });
+            let path: Vec<P2> = match gate {
+                Some(g) => {
+                    let n = (dist(g, poi.at) / 2.0).ceil() as usize;
+                    (0..=n)
+                        .map(|i| crate::geom::lerp(g, poi.at, i as f32 / n.max(1) as f32))
+                        .filter(|p| dist(*p, g) > LANE_HOME)
+                        .collect()
+                }
+                None => Vec::new(),
+            };
+            let n = ring.chain(path).filter(|p| s.sweeps(*p)).count();
+            if n > 0 {
+                lanes.push(format!("{} ({} m)", poi.name, n * 2));
+            }
+        }
+        out.measures.push(format!(
+            "sentry {}: sweeps survey drones' ways to {}",
+            s.name,
+            if lanes.is_empty() {
+                "none".to_string()
+            } else {
+                lanes.join(", ")
+            }
+        ));
         // Warning: where a route walks into its field, the head is in sight
         // from WARN_RUN back.
         for (to, pts) in routes {

@@ -288,6 +288,17 @@
 
         // Where the robots come and go.
         (prefab: "robot_gate", at: (250.0, -255.0), rot: 315.0),
+        // Car wrecks (Destruction strips their doors, bonnets, boots and
+        // wheels): cover on the verges, never on the road.
+        // A works lorry in the yard between the garage and the hall: the
+        // cover on the works road's open stretch past the yard.
+        (prefab: "wreck_lorry", at: (45.0, -18.0), rot: 350.0),
+        // Turned back from the gate and left on the verge, facing it.
+        (prefab: "wreck_lada", at: (-100.4, 208.2), rot: 204.0),
+        // The woodward's jeep, on the lookout track through the dead wood.
+        (prefab: "wreck_uaz", at: (-54.2, -183.3), rot: 267.0),
+        // Pulled over on the works road out north, past the sidings lane.
+        (prefab: "wreck_lada", at: (-6.7, -219.4), rot: 345.0),
     ],
 
     markers: [
