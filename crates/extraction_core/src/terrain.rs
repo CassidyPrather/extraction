@@ -454,8 +454,13 @@ impl Heightmap {
             }
         }
         // Where people built, the ground was settled: the land the map was
-        // laid out on (no knolls, no gullies) round the buildings.
-        for pl in &map.placements {
+        // laid out on (no knolls, no gullies) round the buildings. Not
+        // round a car wreck: it was left on the verge as the verge was.
+        for pl in map
+            .placements
+            .iter()
+            .filter(|p| !crate::map_lint::WRECKS.contains(&p.prefab.as_str()))
+        {
             let r = crate::map::prefab_clearance(&pl.prefab);
             let lo = [pl.at[0] - r - 8.0, pl.at[1] - r - 8.0];
             let hi = [pl.at[0] + r + 8.0, pl.at[1] + r + 8.0];
