@@ -828,6 +828,11 @@
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
         ),
         (
+            id: "scour_key", dims: Some((0.05, 0.05, 0.62)), name: "Scour valve key",
+            description: "A long box spanner with a T-bar, for the reservoir's scour valves. A cut chain hangs off the handle.",
+            category: Tool, size: Medium, mass: 2.6, bulk: 1.2, tags: ["metal"],
+        ),
+        (
             id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",
             description: "A plain steel watch on a worn strap. J. HOLM, 25 YEARS engraved on the back.",
             category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"],
