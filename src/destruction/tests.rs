@@ -1825,3 +1825,59 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
         }
     }
 }
+
+#[test]
+fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{CAR_DOOR_PRY, Strippable};
+    let mut app = app(None);
+    run(&mut app, 3);
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0);
+    app.world_mut().spawn((
+        crate::world::buildings::Building {
+            prefab: "wreck_lada".into(),
+        },
+        Transform::from_translation(at),
+    ));
+    run(&mut app, 3);
+    let parts = |app: &mut App| -> Vec<(Entity, Vec3, Vec<(String, u32)>)> {
+        app.world_mut()
+            .query::<(Entity, &GlobalTransform, &Strippable)>()
+            .iter(app.world())
+            .filter(|(_, g, _)| g.translation().distance(at) < 4.0)
+            .map(|(e, g, s)| (e, g.translation(), s.yields.clone()))
+            .collect()
+    };
+    let on = parts(&mut app);
+    assert_eq!(on.len(), 10, "the Lada's ten parts");
+    let (door, door_at, _) = on
+        .iter()
+        .find(|(_, p, y)| y.iter().any(|(i, _)| i == "car_door") && p.x < at.x)
+        .cloned()
+        .expect("a left door");
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let id = catalog.kind("car_door").expect("Kit's car_door");
+    let doors = |app: &mut App| {
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = doors(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: CAR_DOOR_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(doors(&mut app), before + 1, "a car door to carry");
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    assert_eq!(parts(&mut app).len(), 10, "the Surge hangs it back");
+}
