@@ -5208,7 +5208,7 @@ mod tests {
     #[test]
     fn loot_keeps_off_the_notes() {
         use extraction_core::map::MarkerKind;
-        for name in crate::world::story::VALLEYS {
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(name);
             let mut app = App::new();
             app.add_plugins(MinimalPlugins)

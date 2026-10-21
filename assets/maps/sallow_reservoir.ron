@@ -461,7 +461,7 @@
         (kind: ArtifactField, at: (160.0, -250.0), name: "The silt fans"),
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (227.0, 215.0), name: "Spillway well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-86.0, -30.0), name: "Churchyard mirror"),
-        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-120.0, -60.0), name: "Reservoir hush"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-120.0, -5.0), name: "Old Sallow hush"),
         (kind: Offering, at: (-66.0, -12.0), name: "The drowned font"),
         (kind: Offering, at: (-195.0, -238.0), name: "The village pump"),
         (kind: WorkSite, at: (85.0, -125.0), name: "Sorting ground site"),

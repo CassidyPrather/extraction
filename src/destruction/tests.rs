@@ -284,7 +284,7 @@ fn blows_break_a_door_down() {
     let mut blows = 0;
     while app.world().get::<Door>(door).is_some() && blows < 40 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: leaf_collider,
             point: mid,
             normal: n,
@@ -359,7 +359,7 @@ fn whats_broken_stays_broken_until_the_surge() {
     let (door, collider, mid, n) = plank_door(&mut a);
     for _ in 0..10 {
         a.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: collider,
             point: mid,
             normal: n,
@@ -608,7 +608,7 @@ fn a_crate_in_a_house_breaks_open_and_comes_back_with_the_surge() {
     let mut blows = 0;
     while app.world().get_entity(c).is_ok() && blows < 20 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: c,
             point: at + Vec3::Y * size * 0.5,
             normal: Vec3::Y,
@@ -859,6 +859,24 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     run(&mut a, 4);
     assert!(!blocked(&mut a), "a hole through it");
     assert_eq!(a.world().resource::<Breaches>().0.len(), 1);
+    // The robots know it for a way in: an open doorway facing out.
+    let holes = |app: &mut App| {
+        let marks: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<super::breach::BreachHole>>()
+            .iter(app.world())
+            .collect();
+        app.world()
+            .resource::<crate::robots::doors::Entrances>()
+            .doors
+            .iter()
+            .filter(|e| marks.contains(&e.door))
+            .map(|e| (e.mid, e.out))
+            .collect::<Vec<_>>()
+    };
+    let h = holes(&mut a);
+    assert_eq!(h.len(), 1, "the hole is in the doorway index");
+    assert!(h[0].1.dot(back) > 0.9, "facing out of the house");
     assert!(live_debris(&mut a) > 6, "its boards fly");
     // Saved, and back as it was.
     let save = crate::persist::snapshot(a.world_mut());
@@ -873,9 +891,11 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     let mut b = app(Some(path.clone()));
     run(&mut b, 3);
     assert!(!blocked(&mut b), "the hole is still there after a reload");
+    assert_eq!(holes(&mut b).len(), 1, "and still a way in");
     crate::persist::reset_zone(b.world_mut());
     run(&mut b, 3);
     assert!(blocked(&mut b), "the Surge mends the wall");
+    assert!(holes(&mut b).is_empty(), "and the way in is gone");
     assert!(b.world().resource::<Breaches>().0.is_empty());
     let _ = std::fs::remove_file(&path);
 }
@@ -1032,4 +1052,59 @@ fn shards_come_to_rest_and_sleep() {
         asleep * 10 >= all * 8,
         "{asleep} of {all} asleep after five seconds"
     );
+}
+
+#[test]
+fn a_grenade_at_a_doors_foot_blows_it_in_and_one_further_off_doesnt() {
+    use crate::weapons::grenades::GrenadeEvent;
+    let blast = |app: &mut App, at: Vec3| {
+        let g = app.world_mut().spawn_empty().id();
+        app.world_mut().write_message(GrenadeEvent {
+            grenade: g,
+            event: extraction_core::grenade::Event::Exploded,
+            at,
+        });
+        run(app, 3);
+    };
+    let mut app = app(None);
+    let (door, _, mid, n) = plank_door(&mut app);
+    // Four metres out: it rattles.
+    blast(&mut app, mid + n * 4.0 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_some(),
+        "a far blast leaves it"
+    );
+    // At its foot: in it goes.
+    blast(&mut app, mid + n * 0.5 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_none(),
+        "a near blast blows it in"
+    );
+}
+
+#[test]
+fn a_blade_bites_wood_less_than_a_butt() {
+    use extraction_core::melee::Blow;
+    let hit = |blow, mass_g| Hit {
+        entity: Entity::PLACEHOLDER,
+        point: Vec3::ZERO,
+        normal: Vec3::Y,
+        velocity: Vec3::X,
+        damage: 40.0,
+        shooter: None,
+        mass_g,
+        load: Default::default(),
+        blow,
+    };
+    let share = super::wood::blow_share;
+    assert_eq!(share(&hit(Some(Blow::Blunt), 0.0), true), 1.0);
+    assert_eq!(share(&hit(Some(Blow::Edge), 0.0), true), 0.5);
+    assert_eq!(share(&hit(Some(Blow::Point), 0.0), true), 0.25);
+    assert_eq!(share(&hit(None, 7.9), true), super::wood::ROUND_ON_DOOR);
+    assert_eq!(
+        share(&hit(None, 7.9), false),
+        1.0,
+        "a crate's slats take a round whole"
+    );
+    assert_eq!(share(&hit(None, 0.0), true), 1.0, "a blast");
 }

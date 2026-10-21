@@ -412,6 +412,7 @@ pub fn finish(
             }),
             // Nights slept in the safehouse (`SIM_OVERNIGHT`).
             "nights": house.as_ref().map_or(0, |h| h.nights_out),
+            "night_visits": house.as_ref().map_or(0, |h| h.visits),
             "x": round(pos.x, 1),
             "z": round(pos.z, 1),
         }),

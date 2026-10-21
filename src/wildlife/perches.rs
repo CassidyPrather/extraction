@@ -438,7 +438,7 @@ mod tests {
     /// anything built, or below the ground.
     #[test]
     fn every_valley_has_perches_on_top_of_things() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(map);
             let (obstacles, perches) = survey(&zone);
             assert!(

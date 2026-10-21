@@ -336,8 +336,13 @@ mod tests {
     /// The raid's one-off events and a valley loading hold their worst
     /// frame to a ceiling (`SPIKE_MAP` for another valley;
     /// `SPIKE_PROFILE=1` with `--features "bevy/trace bevy/debug"` names
-    /// the systems in each worst frame).
+    /// the systems in each worst frame). Wall time, so not in the default
+    /// suite: one long frame from anything else on the machine reads as a
+    /// hitch. `scripts/hitches.sh` runs it on every valley (bench.sh calls
+    /// it); the suite holds the hitches it found by counts instead
+    /// (`guards`).
     #[test]
+    #[ignore = "wall-clock timing: scripts/hitches.sh"]
     fn hitches_hold_their_ceiling() {
         let _one_at_a_time = heavy();
         // In its own process: Bevy's task pools are the process's, and
@@ -349,6 +354,7 @@ mod tests {
                 .args([
                     "render::spikes::tests::hitches_hold_their_ceiling",
                     "--exact",
+                    "--ignored",
                     "--nocapture",
                     "--test-threads=1",
                 ])
@@ -367,25 +373,30 @@ mod tests {
             let subscriber = bevy::log::tracing_subscriber::registry().with(times);
             bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
         }
-        // A real hitch comes back; a frame lost to the rest of the suite
-        // rarely hits the same event twice. So: what's over in one run,
-        // and again in a second.
-        let first = over_ceiling(&map);
-        if first.is_empty() {
-            return;
+        // A real hitch comes back every run; a frame lost to something
+        // else on the machine rarely hits the same event again. Best of
+        // `SPIKE_RUNS` (3): an event fails only if it's over every time.
+        let runs: usize = std::env::var("SPIKE_RUNS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3);
+        let mut over = over_ceiling(&map);
+        for run in 2..=runs {
+            if over.is_empty() {
+                break;
+            }
+            println!("over in run {}: {over:?}; again", run - 1);
+            let again = over_ceiling(&map);
+            over.retain(|(what, _)| again.iter().any(|(w, _)| w == what));
         }
-        println!("over in the first run: {first:?}; again");
-        let second = over_ceiling(&map);
-        let both: Vec<String> = second
-            .iter()
-            .filter(|(what, _)| first.iter().any(|(w, _)| w == what))
-            .map(|(_, why)| why.clone())
-            .collect();
         assert!(
-            both.is_empty(),
-            "hitches over their ceiling twice (SPIKE_PROFILE=1 with --features \"bevy/trace \
-             bevy/debug\" names the systems):\n{}",
-            both.join("\n")
+            over.is_empty(),
+            "hitches over their ceiling in all {runs} runs (SPIKE_PROFILE=1 with --features \
+             \"bevy/trace bevy/debug\" names the systems):\n{}",
+            over.iter()
+                .map(|(_, why)| why.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 
@@ -450,5 +461,118 @@ mod tests {
             }
         }
         over
+    }
+}
+
+#[cfg(test)]
+mod guards {
+    use avian3d::prelude::*;
+    use bevy::prelude::*;
+
+    /// The most contact points any tick's debris touched, and the fastest
+    /// piece (m/s), over two seconds after a walker set off from `x, z` in
+    /// `map` towards `to` (metres on) is wrecked `after` ticks in.
+    pub(crate) fn wreck_contacts(
+        map: &str,
+        x: f32,
+        z: f32,
+        to: Vec2,
+        after: usize,
+    ) -> (usize, f32) {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: map.into(),
+            map_explicit: true,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(x, z);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = crate::robots::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e).remove::<crate::robots::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        *app.world_mut()
+            .get_mut::<crate::robots::Brain>(walker)
+            .unwrap() = crate::robots::Brain::Investigate {
+            at: zone.on_ground(x + to.x, z + to.y),
+            left: 999.0,
+        };
+        for _ in 0..after {
+            app.update();
+        }
+        app.world_mut()
+            .get_mut::<crate::robots::Robot>(walker)
+            .unwrap()
+            .wrecked = true;
+        let (mut most, mut fastest) = (0, 0.0f32);
+        for _ in 0..180 {
+            app.update();
+            let w = app.world_mut();
+            let debris: std::collections::HashSet<Entity> = w
+                .query_filtered::<Entity, With<crate::robots::wreck::Debris>>()
+                .iter(w)
+                .collect();
+            let points: usize = w
+                .resource::<ContactGraph>()
+                .iter_active_touching()
+                .filter(|p| debris.contains(&p.collider1) || debris.contains(&p.collider2))
+                .map(|p| p.manifolds.iter().map(|m| m.points.len()).sum::<usize>())
+                .sum();
+            most = most.max(points);
+            for v in w
+                .query_filtered::<&LinearVelocity, With<crate::robots::wreck::Debris>>()
+                .iter(w)
+            {
+                fastest = fastest.max(v.length());
+            }
+        }
+        (most, fastest)
+    }
+
+    /// A walker wrecked mid-stride on Kettle Pass's slope had its legs
+    /// flung at 1400 m/s, and their speculative contacts touched up to 1900
+    /// ground-triangle points in a tick (20 ms of solving; the gauge saw a
+    /// 54 ms frame). Debris is capped (`robots::wreck`): a count, so it
+    /// can't flake on a busy machine.
+    #[test]
+    fn a_wrecked_walker_keeps_its_pieces_close() {
+        for (to, after) in [(Vec2::new(-25.0, 0.0), 100), (Vec2::new(25.0, 0.0), 100)] {
+            let (points, fastest) = wreck_contacts("kettle_pass", -71.1, -3.4, to, after);
+            println!(
+                "wrecked heading {to} after {after} ticks: {points} contact points at most, fastest piece {fastest:.1} m/s"
+            );
+            assert!(points < 400, "{points} debris contact points in a tick");
+            assert!(fastest <= 25.5, "a piece at {fastest:.0} m/s");
+        }
+    }
+
+    /// The collider trees are optimised in place: as a task, the step
+    /// waits on it behind the forest's chunk builds (the homecoming's
+    /// 78 ms frame).
+    #[test]
+    fn collider_trees_are_optimised_in_place() {
+        let app = crate::headless_app(crate::LaunchOptions::default(), false);
+        let o = app
+            .world()
+            .resource::<avian3d::collider_tree::ColliderTreeOptimization>();
+        assert!(!o.use_async_tasks);
     }
 }
