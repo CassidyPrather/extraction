@@ -53,12 +53,10 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
-    // 10 until a forest reshuffle stood Kettle Pass's quarry view 1.3 m
-    // from a spruce, with three more within 9 m: 10.27, deterministic,
-    // and a fair worst case (standing under a spruce clump). Card quads
-    // within 2 m of the eye are 2.4 of its layers; collapsing those is
-    // the cut that would earn 10 back (docs/PERFORMANCE.md).
-    overdraw_mean: 11.5,
+    // (11.5 for a while, when Kettle Pass's quarry view stood inside a
+    // spruce clump at 10.27; moved clear, and near cards shrinking away,
+    // it's 4.4, and the worst view anywhere is 7.3.)
+    overdraw_mean: 10.0,
     overdraw_p95: 35,
 };
 
@@ -180,7 +178,13 @@ impl Plugin for BudgetPlugin {
         );
         app.add_systems(
             PostUpdate,
-            (reach_doors, late_reach, range_items, shadow_reach)
+            (
+                reach_doors,
+                late_reach,
+                range_items,
+                small_shadows.after(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+                shadow_reach,
+            )
                 .chain()
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
@@ -319,12 +323,57 @@ fn range_items(
 #[derive(Component, Clone, Copy)]
 pub struct ShadowReach(pub f32);
 
+/// Below this size (the largest side, world metres) a mesh casts the
+/// sun's shadow only near the eye: [`SMALL_REACH`] under 5 cm,
+/// [`SMALLISH_REACH`] under it. At the gates half the shadow passes'
+/// meshes were smaller than 10 cm (buttons, fittings, door furniture,
+/// tins): a shadow a texel or two wide past a few metres.
+pub const SMALL_CASTER: f32 = 0.12;
+pub const SMALL_REACH: f32 = 3.0;
+pub const SMALLISH_REACH: f32 = 6.0;
+
+/// Gives each newly bounded small mesh its [`ShadowReach`].
+#[allow(clippy::type_complexity)]
+fn small_shadows(
+    mut commands: Commands,
+    added: Query<
+        (Entity, &bevy::camera::primitives::Aabb, &GlobalTransform),
+        (
+            Added<bevy::camera::primitives::Aabb>,
+            With<Mesh3d>,
+            Without<NotShadowCaster>,
+            Without<ShadowReach>,
+        ),
+    >,
+) {
+    // (`EXTRACTION_SMALL_SHADOWS=0`: every small thing casts at any
+    // distance, to compare.)
+    if std::env::var("EXTRACTION_SMALL_SHADOWS").is_ok_and(|v| v == "0") {
+        return;
+    }
+    for (e, aabb, gt) in &added {
+        let size = (Vec3::from(aabb.half_extents) * gt.compute_transform().scale.abs())
+            .max_element()
+            * 2.0;
+        if size < SMALL_CASTER {
+            let reach = if size < 0.05 {
+                SMALL_REACH
+            } else {
+                SMALLISH_REACH
+            };
+            commands.entity(e).try_insert(ShadowReach(reach));
+        }
+    }
+}
+
 fn shadow_reach(
     mut commands: Commands,
-    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     casters: Query<(Entity, &GlobalTransform, &ShadowReach, Has<NotShadowCaster>)>,
 ) {
-    let eyes: Vec<Vec2> = cams.iter().map(|g| g.translation().xz()).collect();
+    let eyes: Vec<Vec2> = crate::render::eyes(&cams)
+        .map(|g| g.translation().xz())
+        .collect();
     if eyes.is_empty() {
         return;
     }

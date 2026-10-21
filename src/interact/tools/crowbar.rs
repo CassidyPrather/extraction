@@ -1,15 +1,22 @@
 //! The crowbar. Hold it by the end and steady it along the shaft. Put
-//! its claw to a seam (a robot's armour plate, the latch edge of a jammed
-//! door) and it seats there. Then lever: the bar stays on the seam while
-//! your hands pull the handle round, and the force is what your hands put
-//! in times how far out on the bar they are. Two hands at the end of the
-//! bar move what one hand choked up near the claw never will. Keep up the
-//! force for a moment and it gives.
+//! its claw to a seam (a plank door's latch edge, a crate's lid, a robot's
+//! armour plate) and it seats there. Then lever: the bar stays on the seam
+//! while your hands pull the handle round, and the force is what your hands
+//! put in times how far out on the bar they are. Two hands at the end of
+//! the bar move what one hand choked up near the claw never will.
+//!
+//! The seams are `destruction::hooks::Pryable`, and a seated bar sends
+//! `destruction::hooks::Pried` every tick it's levered. Whoever owns the
+//! thing decides when it gives: wood is Destruction's, the heavy machine's
+//! plates are Heavy's. An ordinary robot's armour plates are this module's
+//! ([`pryable_plates`], [`pry_plates`]).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use super::{CLICK, KNOCK, TICK, pulse};
+use crate::destruction::hooks::PRY_HOLD;
+pub use crate::destruction::hooks::{Pried, Pryable};
 use crate::interact::{GrabPoint, Grabbable, GripRole, Hand, Held, InteractSystems, Supported};
 use crate::items::{Catalog, Item};
 use crate::rig::haptics::Haptic;
@@ -30,54 +37,30 @@ const ONE_HAND: f32 = 0.5;
 /// the force counted stops growing at the lesser.
 const SLIP: f32 = 1.0;
 const MOST: f32 = 0.6;
-/// How long the force must be kept up for the thing to give, seconds.
-const GIVE: f32 = 0.25;
+/// A seam runs this far either side of its point (`Pryable::along`), and
+/// the claw seats within this of it (m).
+pub const SEAM_RUN: f32 = 0.6;
+const SEAT: f32 = 0.06;
+/// An ordinary robot's armour plate: the torque, held, that prises it off.
+const PLATE_PRY: f32 = 140.0;
 
 pub struct CrowbarPlugin;
 
 impl Plugin for CrowbarPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Pried>()
-            .add_message::<PriedFree>()
-            .add_observer(setup_crowbar)
+        app.add_observer(setup_crowbar)
             .add_systems(
                 FixedUpdate,
-                (lever, give_way).chain().after(InteractSystems::Follow),
+                (lever, pry_plates).chain().after(InteractSystems::Follow),
             )
-            .add_systems(Update, (pryable_plates, pryable_doors));
+            .add_systems(Update, pryable_plates);
     }
-}
-
-/// Something a crowbar can be put to: its seam (where the claw seats, in
-/// its own space, within `radius`) and the torque it takes to give, N·m.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct Pryable {
-    pub needs: f32,
-    pub seam: Vec3,
-    pub radius: f32,
-}
-
-/// Each tick a seated bar is levered: how hard (N·m), by whom.
-#[derive(Message, Clone, Copy, Debug)]
-pub struct Pried {
-    pub target: Entity,
-    pub torque: f32,
-    pub by: Entity,
-}
-
-/// It gave.
-#[derive(Message, Clone, Copy, Debug)]
-pub struct PriedFree {
-    pub target: Entity,
-    pub by: Entity,
 }
 
 /// A crowbar, and where its claw is seated.
 #[derive(Component, Debug, Default)]
 pub struct Crowbar {
     pub seated: Option<Seat>,
-    /// Seconds the force has been enough.
-    strain: f32,
     /// Seconds to the next strain pulse in the hands.
     buzz: f32,
 }
@@ -131,8 +114,16 @@ pub fn torque(pivot: Vec3, line: Vec3, hands: &[Vec3]) -> f32 {
     if hands.len() < 2 { sum * ONE_HAND } else { sum }
 }
 
+/// The nearest point of a seam to `p` (world), within its run.
+pub fn on_seam(seam: &Pryable, gt: &GlobalTransform, p: Vec3) -> Vec3 {
+    let local = gt.affine().inverse().transform_point3(p);
+    let along = seam.along.normalize_or(Vec3::Y);
+    let t = (local - seam.seam).dot(along).clamp(-SEAM_RUN, SEAM_RUN);
+    gt.transform_point(seam.seam + along * t)
+}
+
 /// Seat the claw on a seam it touches; lever while seated, holding the bar
-/// on the seam; give when the force has been enough for long enough.
+/// on the seam. When the seam is gone (it gave), a knock.
 #[allow(clippy::type_complexity)]
 fn lever(
     mut bars: Query<(
@@ -148,7 +139,6 @@ fn lever(
     hands: Query<&Hand>,
     pryables: Query<(Entity, &Pryable, &GlobalTransform)>,
     mut pried: MessageWriter<Pried>,
-    mut free: MessageWriter<PriedFree>,
     mut haptics: MessageWriter<Haptic>,
     time: Res<Time>,
 ) {
@@ -156,19 +146,19 @@ fn lever(
     for (mut bar, gt, held, support, mut pos, mut rot, mut lin, mut ang) in &mut bars {
         let Some(held) = held else {
             bar.seated = None;
-            bar.strain = 0.0;
             continue;
         };
         let claw = gt.transform_point(CLAW);
         let Some(seat) = bar.seated else {
             let found = pryables
                 .iter()
-                .find(|(_, p, pgt)| pgt.transform_point(p.seam).distance(claw) < p.radius);
-            if let Some((target, _, _)) = found {
+                .map(|(e, p, pgt)| (e, on_seam(p, pgt, claw)))
+                .find(|(_, q)| q.distance(claw) < SEAT);
+            if let Some((target, q)) = found {
                 let line = (gt.transform_point(GRIP) - claw).normalize_or_zero();
                 bar.seated = Some(Seat {
                     target,
-                    pivot: claw,
+                    pivot: q,
                     line,
                 });
                 pulse(&mut haptics, held.side, CLICK);
@@ -176,7 +166,12 @@ fn lever(
             continue;
         };
         let Ok((_, pryable, _)) = pryables.get(seat.target) else {
+            // It gave (broke, came off, was taken away).
             bar.seated = None;
+            pulse(&mut haptics, held.side, KNOCK);
+            if let Some(s) = support {
+                pulse(&mut haptics, s.side, KNOCK);
+            }
             continue;
         };
         let Ok(main) = hands.get(held.hand) else {
@@ -190,7 +185,6 @@ fn lever(
         if seat.line.angle_between(reach.normalize_or_zero()) > SLIP || reach.length() > 1.3 {
             // Pulled off the seam.
             bar.seated = None;
-            bar.strain = 0.0;
             pulse(&mut haptics, held.side, TICK);
             continue;
         }
@@ -200,29 +194,11 @@ fn lever(
             torque: t,
             by: held.player,
         });
-        bar.strain = if t >= pryable.needs {
-            bar.strain + dt
-        } else {
-            (bar.strain - dt).max(0.0)
-        };
-        if bar.strain >= GIVE {
-            free.write(PriedFree {
-                target: seat.target,
-                by: held.player,
-            });
-            bar.seated = None;
-            bar.strain = 0.0;
-            pulse(&mut haptics, held.side, KNOCK);
-            if let Some(s) = support {
-                pulse(&mut haptics, s.side, KNOCK);
-            }
-            continue;
-        }
         // The strain in the hands, rising with the force.
         bar.buzz -= dt;
         if bar.buzz <= 0.0 && t > 1.0 {
             bar.buzz = 0.1;
-            let a = (0.12 + 0.4 * (t / pryable.needs).min(1.0)).min(0.52);
+            let a = (0.12 + 0.4 * (t / pryable.needs.max(1.0)).min(1.0)).min(0.52);
             pulse(&mut haptics, held.side, (a, 0.02));
         }
         // Held on the seam: the claw stays put and the bar gives only a
@@ -236,82 +212,78 @@ fn lever(
     }
 }
 
-/// A robot's armour plates can be prised off.
+/// An ordinary robot's armour plates can be prised off. (The heavy
+/// machine's come off by their bolts: Heavy's business.)
+#[allow(clippy::type_complexity)]
 fn pryable_plates(
     mut commands: Commands,
-    parts: Query<(Entity, &crate::robots::RobotPart), Added<crate::robots::RobotPart>>,
+    parts: Query<
+        (Entity, &crate::robots::RobotPart),
+        (
+            Added<crate::robots::RobotPart>,
+            Without<Pryable>,
+            Without<crate::robots::heavy::HeavyPart>,
+        ),
+    >,
 ) {
     for (e, part) in &parts {
         if matches!(part.role, crate::robots::PartRole::Armour(_)) {
-            commands.entity(e).insert(Pryable {
-                needs: 140.0,
-                seam: Vec3::ZERO,
-                radius: 0.25,
-            });
+            commands.entity(e).insert((
+                PlateSeam,
+                Pryable {
+                    needs: PLATE_PRY,
+                    seam: Vec3::ZERO,
+                    along: Vec3::X,
+                    held: 0.0,
+                },
+            ));
         }
     }
 }
 
-/// A door is prised at its latch edge.
-fn pryable_doors(
-    mut commands: Commands,
-    doors: Query<
-        (Entity, &crate::world::buildings::DoorLeaf),
-        Added<crate::world::buildings::DoorLeaf>,
-    >,
-) {
-    for (e, leaf) in &doors {
-        let (w, h) = (leaf.0.width, leaf.0.height);
-        commands.entity(e).insert(Pryable {
-            needs: 100.0,
-            seam: Vec3::new(w - 0.04, h * 0.5, 0.0),
-            radius: h * 0.5,
-        });
-    }
-}
+/// On a robot's armour plate whose prying is this module's.
+#[derive(Component)]
+pub struct PlateSeam;
 
-/// What gives: a plate comes off its robot; a jammed door bursts open,
-/// its wedge knocked out. (A door the power holds doesn't move.)
-#[allow(clippy::type_complexity)]
-fn give_way(
+/// A plate levered hard enough for long enough comes off, as if shot off.
+fn pry_plates(
     mut commands: Commands,
-    mut free: MessageReader<PriedFree>,
-    mut parts: Query<(&mut crate::robots::RobotPart, &GlobalTransform)>,
+    mut pried: MessageReader<Pried>,
+    mut plates: Query<
+        (
+            Entity,
+            &mut Pryable,
+            &mut crate::robots::RobotPart,
+            &GlobalTransform,
+        ),
+        With<PlateSeam>,
+    >,
     mut destroyed: MessageWriter<crate::robots::PartDestroyed>,
-    mut doors: Query<(
-        &mut crate::world::buildings::Door,
-        &GlobalTransform,
-        Option<&crate::robots::doors::Wedged>,
-        Has<crate::world::underground::PowerLocked>,
-    )>,
+    time: Res<Time>,
 ) {
-    for f in free.read() {
-        if let Ok((mut part, gt)) = parts.get_mut(f.target) {
-            if part.alive() {
-                part.hp = 0.0;
-                destroyed.write(crate::robots::PartDestroyed {
-                    robot: part.robot,
-                    part: f.target,
-                    role: part.role,
-                    at: gt.translation(),
-                });
-            }
+    let mut levered: Vec<(Entity, f32)> = pried.read().map(|p| (p.target, p.torque)).collect();
+    levered.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.total_cmp(&a.1)));
+    levered.dedup_by_key(|p| p.0);
+    for (e, mut seam, mut part, gt) in &mut plates {
+        // Let go, or not hard enough: it starts over.
+        let torque = levered
+            .binary_search_by(|p| p.0.cmp(&e))
+            .map_or(0.0, |i| levered[i].1);
+        if torque < seam.needs {
+            seam.held = 0.0;
             continue;
         }
-        if let Ok((mut door, gt, wedged, locked)) = doors.get_mut(f.target) {
-            if locked {
-                continue;
-            }
-            if let Some(w) = wedged {
-                commands
-                    .entity(w.0)
-                    .remove::<(crate::robots::doors::Wedging, RigidBodyDisabled)>()
-                    .insert(LinearVelocity(gt.rotation() * Vec3::new(0.0, 1.0, 2.5)));
-                commands
-                    .entity(f.target)
-                    .remove::<crate::robots::doors::Wedged>();
-            }
-            door.open = true;
+        seam.held += time.delta_secs();
+        if seam.held < PRY_HOLD || !part.alive() {
+            continue;
         }
+        part.hp = 0.0;
+        destroyed.write(crate::robots::PartDestroyed {
+            robot: part.robot,
+            part: e,
+            role: part.role,
+            at: gt.translation(),
+        });
+        commands.entity(e).remove::<(Pryable, PlateSeam)>();
     }
 }

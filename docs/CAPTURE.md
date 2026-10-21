@@ -20,6 +20,23 @@ Everything is deterministic: the same seed, map, hour, weather and path
 file give the same frames. Time steps a fixed amount each frame,
 however slow the renderer is.
 
+Things that have bitten captures, and what now guards against them:
+
+- **A stale binary.** A binary built before a merge, rendering shaders
+  from after it, quit 121 frames into a shot. A haze shader's uniform had
+  grown a field, and wgpu's validation rejected the pipeline when a Hush
+  came into view. Every capture script now warns when the binary is older
+  than `src/`, `crates/` or `assets/shaders/` (`scripts/capture_common.sh`).
+- **The player dying off camera.** In a still capture (cinematics, stills,
+  the sweep) the player stands idle where `--camera` put them. The Surge
+  kills anyone in the open in seconds, and the raid then ends at base,
+  where the Surge doesn't show. Still captures keep the local player's
+  health topped up (`capture::keep_alive`). A trailer's bot takes its
+  chances.
+- **`--camera` places the player.** That's what a screenshot wants, but a
+  trailer's bot must start in the truck, as a headless sim's does. The
+  trailer takes no `--camera`; it spawns its own chase camera instead.
+
 ## Cinematics: `--cinematic FILE`
 
 The free camera flies each shot's spline. The spline is a centripetal
@@ -103,13 +120,13 @@ headless sim: one 1/90 s fixed step a frame. Two cameras follow the bot:
 
 - a chase camera eased in behind and above its right shoulder, pulled in
   where a wall or the ground is in the way;
-- a drone's-eye view circling 20 m up and 16 m out.
+- a drone's-eye view circling 18 m up and 12 m out (higher over a crown, and used only when it can see the bot).
 
 The player has no body a camera draws: in the headset you see your gloves
 and sleeves. The body's shadow comes from a proxy of capsules on a layer
 only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's cameras see
 that layer too, so the bot shows as a figure, dressed in drab. For the
-first 8 s the cameras render without saving, so the valley's detail has
+first 6 s the cameras render without saving, so the valley's detail has
 streamed in before the first kept frame.
 
 After that, the cameras render only while something is worth seeing: leaving the
@@ -117,11 +134,14 @@ truck, a robot within 30 m, a fight, an anomaly, the truck called and the
 ride out, going down, and six seconds of walking every 75 s. Frames in
 between cost little, and a frame is saved every 1/30 s of raid time. The
 raid's own telemetry (`trailer.jsonl`, the sim format) is written next to
-`trailer.json`, which lists the clips. `scripts/capture_trailer.py`
-gives each clip to one camera or the other by what it shows (a fight cuts
-back and forth every 2.5 s), trims clips to 9 s, captions them with what's
-happening and when, adds a title card and an end card, and encodes the
-result.
+`trailer.json`, which lists the clips. The cut is decided while filming
+(`trailer::camera_for`), and only that camera renders. A fight cuts back
+and forth every 2.5 s, starting close. Company arriving is seen from above
+first. Walking, the truck and the ride out are seen from above. Everything
+else is close. A camera starts rendering a moment before its first saved
+frame. `scripts/capture_trailer.py` trims clips to 9 s, captions them with
+what's happening and when, adds a title card and an end card, and encodes
+the result.
 
 ## The looks-wrong sweep: `--sweep FILTER`
 
@@ -178,10 +198,10 @@ top face.
   looks (`qa`'s burial depth, taken at the overlap rather than at a face's
   centre). `qa`'s gauge covers boxes against boxes; this one adds models
   against boxes and models against each other. Underground sites are
-  printed but not held, because earth outside their boxes hides faces
-  this check can't tell are hidden. The fights found when this gauge was
-  written are listed in `KNOWN`, waiting on their owners. Take a line out
-  when its fight is fixed. A new fight fails the test.
+  held too. Earth lies outside their boxes, so a face there counts only
+  with somewhere to stand in front of it (`floor_under`). `KNOWN` lists
+  fights waiting on their owners. It's empty: Models: world and
+  Underground fixed the first round. A new fight fails the test.
 - **Every model against itself** (`fighting`): its nodes against each
   other, as `art/check.py` checks in Blender, here in `cargo test` too.
 

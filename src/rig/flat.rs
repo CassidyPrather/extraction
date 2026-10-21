@@ -112,6 +112,7 @@ fn drive_flat_rig(
         };
         let head_rot = Quat::from_rotation_x(look.pitch);
         input.head = Transform::from_xyz(0.0, eye, 0.0).with_rotation(head_rot);
+        input.lifted = 0.0;
         // Hands in a low ready position, swinging with the gaze.
         for side in Side::BOTH {
             let offset = Vec3::new(0.2 * side.sign(), -0.32, -0.38);

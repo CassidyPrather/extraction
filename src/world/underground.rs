@@ -142,7 +142,7 @@ fn ceiling(r: &Raster, i: usize, j: usize) -> Option<f32> {
     }
 }
 
-fn build(l: &'static Layout, r: &Raster) -> Geo {
+fn build(l: &'static Layout, r: &'static Raster) -> Geo {
     let m = mats(l.style);
     let mut b = Builder::default();
     walls(&mut b, r, &m);
@@ -588,7 +588,7 @@ fn rects(
 /// A stair: its kiosk on the surface (walls, roof, door, apron), the
 /// steps (drawn) over a ramp (walked), the stepped soffit, and the fill
 /// under the kiosk's back wall where the tunnel leaves it.
-fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
+fn stair(b: &mut Builder, r: &'static Raster, k: usize, m: &Mats) {
     let p = &r.portals[k];
     let s = r.stairs[k];
     // Built in the portal's own frame, its ground at 0.
@@ -608,6 +608,28 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
         [&[door(KIOSK[0])], &[], &[], &[]],
     );
     kb.flat_roof(KIOSK[0] * 2.0, KIOSK[1] * 2.0, top + KIOSK_HEIGHT, m.kiosk);
+    // A front over the door, if it has one: its jambs and header solid,
+    // drawn by the model (Kit's intake front: 3.0 x 3.4 x 0.5, a 1.2 x 2.2
+    // opening).
+    if let Some(name) = p.facade.as_deref() {
+        let (w, h, d, ow, oh) = (3.0, 3.4, 0.5, 1.2, 2.2);
+        let z = -KIOSK[1] - WALL * 0.5 - d * 0.5;
+        let from = kb.geo.pieces.len();
+        let jamb = (w - ow) * 0.5;
+        for sx in [-1.0f32, 1.0] {
+            kb.bx(
+                Vec3::new(jamb, oh, d),
+                Vec3::new(sx * (ow + jamb) * 0.5, top + oh * 0.5, z),
+                m.kiosk,
+            );
+        }
+        kb.bx(
+            Vec3::new(w, h - oh, d),
+            Vec3::new(0.0, top + (oh + h) * 0.5, z),
+            m.kiosk,
+        );
+        kb.dress(from, vec![(name, Transform::from_xyz(0.0, top, z))]);
+    }
     let (ox, oz) = (KIOSK[0] + WALL * 0.5, KIOSK[1] + WALL * 0.5);
     // Its floor inside the door, down into the ground.
     let land = STAIR_TOP + oz;
@@ -670,13 +692,17 @@ fn stair(b: &mut Builder, r: &Raster, k: usize, m: &Mats) {
     let back = KIOSK[1] - WALL * 0.5;
     // Starting just inside the kiosk's back wall, not on its face.
     let mut z = back + 0.02;
-    while z < s.foot - 1e-3 {
+    // A foot on a cell's line is on the wall it meets there (a portal sits
+    // on the grid, square to it): end past it, or the faces fight.
+    let on_line = ((s.foot / ug::CELL).round() * ug::CELL - s.foot).abs() < 0.005;
+    let end = if on_line { s.foot + 0.02 } else { s.foot };
+    while z < end - 1e-3 {
         let (c, next) = if z >= s.bottom - 1e-3 {
-            (ceiling_at(s.bottom - 0.01), s.foot)
+            (ceiling_at(s.bottom - 0.01), end)
         } else {
             let k = ((z + 0.01 - STAIR_TOP) / TREAD).floor() as usize;
             let run_end = STAIR_TOP + ((k / CEILING_RUN + 1) * CEILING_RUN).min(s.n) as f32 * TREAD;
-            (ceiling_at(z + 0.01), run_end.min(s.foot))
+            (ceiling_at(z + 0.01), run_end.min(end))
         };
         let rise = s.rise * CEILING_RUN as f32 + SLAB + 0.05;
         // A touch narrower than the walls outside it.
@@ -1271,6 +1297,7 @@ impl Plugin for UndergroundPlugin {
                 spawn_kept_crates,
                 wire_drains,
                 work_drains.after(wire_drains),
+                regrid_residents.after(register_residents),
             ),
         )
         .add_plugins((
@@ -1278,6 +1305,7 @@ impl Plugin for UndergroundPlugin {
             super::furnace::FurnacePlugin,
         ))
         .init_resource::<Levels>()
+        .init_resource::<ResidentGrids>()
         .add_message::<BasinDrained>()
         .add_message::<DepotEntered>()
         .add_message::<CarriedOutOfDepot>();
@@ -1551,6 +1579,7 @@ pub fn register_residents(
     doors: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
     lighting: Option<ResMut<crate::robots::senses::Lighting>>,
     residents: Option<ResMut<crate::robots::indoor::IndoorSites>>,
+    mut grids: ResMut<ResidentGrids>,
     mut done: Local<bool>,
 ) {
     if *done {
@@ -1609,24 +1638,17 @@ pub fn register_residents(
             }
         }
         // Nor into deep water, as on the surface; nor a pit, nor heat
-        // nothing crosses.
-        for j in 0..grid.n {
-            for i in 0..grid.n {
-                let c = grid.centre(i, j);
-                let hot = r
-                    .heat_at(c)
-                    .is_some_and(|z| l.heat[z as usize].level >= ug::SCORCHING);
-                let pit = r.cell_of(c).is_some_and(|(a, b)| r.pit[b * r.nx + a]);
-                if r.water_at(c) >= ug::DEEP || hot || pit {
-                    grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
-                }
-            }
-        }
+        // nothing crosses: as the site stands now (`regrid_residents`
+        // follows it as it changes).
+        let base = grid.clone();
+        block_works(&mut grid, l, r, &Works::start(l));
+        let floors = std::sync::Arc::new(floors);
         let nav = crate::robots::indoor::LocalNav {
             grid: std::sync::Arc::new(grid),
             xf,
-            floors: Some(std::sync::Arc::new(floors)),
+            floors: Some(floors.clone()),
         };
+        let first = residents.sites.len();
         for round in rounds {
             let points: Vec<(&ug::Room, [f32; 2])> = match round.rooms {
                 // One room: round its quarters.
@@ -1663,6 +1685,197 @@ pub fn register_residents(
                 dormant: round.dormant,
             });
         }
+        grids.0.insert(
+            plan.entity,
+            ResidentGrid {
+                id: plan.name.clone(),
+                sites: (first..residents.sites.len()).collect(),
+                base,
+                works: Works::start(l),
+            },
+        );
+    }
+}
+
+/// Each site's residents' grid: which of [`crate::robots::indoor::IndoorSites`]
+/// are its rounds, the grid before its works are reckoned (the ground
+/// round the kiosks already shut), and the works as last reckoned.
+#[derive(Resource, Default)]
+pub struct ResidentGrids(pub HashMap<Entity, ResidentGrid>);
+
+pub struct ResidentGrid {
+    pub id: String,
+    pub sites: Vec<usize>,
+    pub base: extraction_core::nav::NavGrid,
+    pub works: Works,
+}
+
+/// What a site's works leave passable, as of now: each basin's level,
+/// each heat zone's level (vented down), where roofs have come down
+/// (site space: centre, yaw, half extents).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Works {
+    pub levels: Vec<f32>,
+    pub heat: Vec<f32>,
+    pub falls: Vec<(Vec3, f32, Vec2)>,
+    /// Each gas pocket, still there.
+    pub gas: Vec<bool>,
+}
+
+impl Works {
+    /// As the layout starts.
+    pub fn start(l: &Layout) -> Self {
+        Works {
+            levels: l.basins.iter().map(|b| b.level).collect(),
+            heat: l.heat.iter().map(|h| h.level).collect(),
+            falls: Vec::new(),
+            gas: vec![true; l.gas.len()],
+        }
+    }
+
+    /// Near enough the same for the residents: levels to 5 cm, heat to a
+    /// twentieth.
+    fn same(&self, o: &Works) -> bool {
+        let close = |a: &[f32], b: &[f32], by: f32| {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x - y).abs() < by)
+        };
+        close(&self.levels, &o.levels, 0.05)
+            && close(&self.heat, &o.heat, 0.05)
+            && self.falls.len() == o.falls.len()
+            && self.gas == o.gas
+    }
+}
+
+/// Shut a site's grid where its works make it impassable: deep water
+/// (a basin's at its level now), heat nothing crosses, a pit, a fallen
+/// roof. And make dear what its residents keep out of but can be drawn
+/// into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a noise in
+/// it still brings them, and their sparks set it off), and heat short of
+/// scorching (they keep to the cool side).
+fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
+    for j in 0..grid.n {
+        for i in 0..grid.n {
+            let c = grid.centre(i, j);
+            let Some((a, b)) = r.cell_of(c) else {
+                continue;
+            };
+            let q = b * r.nx + a;
+            let depth = match r.basin[q] {
+                Some(k) => w.levels.get(k as usize).map_or(0.0, |lv| lv - r.floors[q]),
+                None => r.water[q],
+            };
+            let hot = r.heat[q].is_some_and(|z| {
+                w.heat
+                    .get(z as usize)
+                    .copied()
+                    .unwrap_or(l.heat[z as usize].level)
+                    >= ug::SCORCHING
+            });
+            let p = Vec3::new(c[0], r.floors[q], c[1]);
+            let fallen = w.falls.iter().any(|(at, yaw, half)| {
+                let d = Quat::from_rotation_y(-*yaw) * (p - *at);
+                d.x.abs() <= half.x && d.z.abs() <= half.y
+            });
+            let k = j * grid.n + i;
+            if depth >= ug::DEEP || hot || r.pit[q] || fallen {
+                grid.cost[k] = extraction_core::nav::BLOCKED;
+                continue;
+            }
+            if grid.cost[k] == extraction_core::nav::BLOCKED {
+                continue;
+            }
+            let gassy = r.gas[q].is_some_and(|g| w.gas.get(g as usize).copied().unwrap_or(true));
+            let warm = r.heat[q].is_some_and(|z| {
+                w.heat
+                    .get(z as usize)
+                    .copied()
+                    .unwrap_or(l.heat[z as usize].level)
+                    > WARM
+            });
+            if gassy {
+                grid.cost[k] = grid.cost[k].max(GAS_COST);
+            } else if warm {
+                grid.cost[k] = grid.cost[k].max(WARM_COST);
+            }
+        }
+    }
+}
+
+/// What a resident's step costs in live firedamp, and in heat over
+/// [`WARM`] (a plain floor's is 1).
+const GAS_COST: u8 = 20;
+const WARM_COST: u8 = 10;
+/// Heat a resident would rather go round.
+const WARM: f32 = 0.3;
+
+/// Logic: as a site's works change (a basin drained, a flue vented, a
+/// roof brought down), its residents get the grid it leaves them.
+fn regrid_residents(
+    mut grids: ResMut<ResidentGrids>,
+    levels: Res<Levels>,
+    heat: Option<Res<super::furnace::Heat>>,
+    gas: Option<Res<super::workings::Gas>>,
+    falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
+    mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
+    time: Res<Time>,
+    mut every: Local<f32>,
+) {
+    *every -= time.delta_secs();
+    if *every > 0.0 {
+        return;
+    }
+    *every = 0.5;
+    for (site, g) in grids.0.iter_mut() {
+        let Some((l, r)) = ug::layout(&g.id).zip(ug::raster(&g.id)) else {
+            continue;
+        };
+        let now = Works {
+            levels: levels
+                .0
+                .get(&g.id)
+                .cloned()
+                .unwrap_or_else(|| g.works.levels.clone()),
+            heat: l
+                .heat
+                .iter()
+                .enumerate()
+                .map(|(z, h)| {
+                    let share = heat
+                        .as_ref()
+                        .and_then(|hh| hh.0.get(site))
+                        .and_then(|v| v.get(z))
+                        .copied()
+                        .unwrap_or(1.0);
+                    h.level * share
+                })
+                .collect(),
+            falls: falls
+                .iter()
+                .filter(|(_, _, c)| c.parent() == *site)
+                .map(|(f, t, _)| {
+                    let yaw = t.rotation.to_euler(EulerRot::YXZ).0;
+                    (t.translation, yaw, Vec2::new((f.width + 0.2) * 0.5, 1.0))
+                })
+                .collect(),
+            gas: gas
+                .as_ref()
+                .and_then(|g| g.live.get(site))
+                .cloned()
+                .unwrap_or_else(|| vec![true; l.gas.len()]),
+        };
+        if now.same(&g.works) {
+            continue;
+        }
+        let mut grid = g.base.clone();
+        block_works(&mut grid, l, r, &now);
+        let grid = std::sync::Arc::new(grid);
+        for &k in &g.sites {
+            out.write(crate::robots::indoor::SiteGrid {
+                site: k,
+                grid: grid.clone(),
+            });
+        }
+        g.works = now;
     }
 }
 
@@ -2424,7 +2637,14 @@ pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
         let local = site.to_site([p.x, p.z]);
         let Some(f) = r.floor_at(local) else { continue };
         let floor = footing + f;
-        if p.y > floor - 0.5 && p.y < floor + 4.5 && floor < zone.ground(p.x, p.z) - 0.5 {
+        // Up to its roof: a tall room's (the ash pit's 10 m, with you on
+        // the crane over it) as well as a corridor's.
+        let roof = r
+            .cell_of(local)
+            .map_or(0.0, |(i, j)| r.ceil[j * r.nx + i])
+            .max(4.0)
+            + 0.5;
+        if p.y > floor - 0.5 && p.y < floor + roof && floor < zone.ground(p.x, p.z) - 0.5 {
             return Some((site.id, floor));
         }
     }
@@ -2722,6 +2942,70 @@ mod tests {
         }
     }
 
+    /// As a site's works change, so does where its residents can go: the
+    /// pump station's basins pumped down open its flooded rooms to the
+    /// crawlers (`robots::indoor::SiteGrid`).
+    #[test]
+    fn the_residents_grid_follows_the_works() {
+        let opts = LaunchOptions {
+            robots: true,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..10 {
+            app.update();
+        }
+        let sites = app
+            .world()
+            .resource::<ResidentGrids>()
+            .0
+            .values()
+            .find(|g| g.id == "pump_marrow")
+            .expect("the pump station's residents")
+            .sites
+            .clone();
+        assert!(!sites.is_empty(), "it has rounds");
+        let shut = |app: &App| {
+            let s = app.world().resource::<crate::robots::indoor::IndoorSites>();
+            s.sites[sites[0]]
+                .nav
+                .grid
+                .cost
+                .iter()
+                .filter(|c| **c == extraction_core::nav::BLOCKED)
+                .count()
+        };
+        let before = shut(&app);
+        // Every basin pumped down to its floor.
+        let l = ug::layout("pump_marrow").unwrap();
+        let dry: Vec<f32> = l
+            .basins
+            .iter()
+            .map(|b| {
+                b.rooms
+                    .iter()
+                    .filter_map(|id| l.rooms.iter().find(|r| &r.id == id))
+                    .map(|r| l.floor_of(r))
+                    .fold(f32::INFINITY, f32::min)
+            })
+            .collect();
+        app.world_mut()
+            .resource_mut::<Levels>()
+            .0
+            .insert("pump_marrow".into(), dry);
+        for _ in 0..90 {
+            app.update();
+        }
+        let after = shut(&app);
+        assert!(
+            after < before,
+            "the drained rooms open to the crawlers ({before} -> {after} cells shut)"
+        );
+    }
+
     fn app(map: &str) -> App {
         let opts = LaunchOptions {
             robots: false,
@@ -2806,7 +3090,12 @@ mod tests {
     /// ground everywhere past the kiosks.
     #[test]
     fn no_daylight_in_the_rooms() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let mut app = app(map);
             let sites = sites_on(&app);
             assert!(!sites.is_empty(), "{map}: a site");
@@ -2878,7 +3167,12 @@ mod tests {
     /// steps, not the ground (the heightfield's cells are open there).
     #[test]
     fn the_ground_is_open_over_the_stairs() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let mut app = app(map);
             for (site, xf) in sites_on(&app) {
                 let r = ug::raster(&site.id).unwrap();
@@ -2932,7 +3226,12 @@ mod tests {
     fn crawlers_walk_their_rounds_in_the_dark() {
         use crate::robots::indoor::Crawler;
         use crate::robots::senses::Lighting;
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let opts = LaunchOptions {
                 robots: true,
                 map: map.to_string(),
@@ -3124,7 +3423,12 @@ mod tests {
         use crate::interact::InteractEvent;
         use crate::rig::Side;
         use crate::world::buildings::Door;
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let mut vr = crate::vr_harness::Vr::new(map);
             vr.step(3);
             let player = vr.player;
@@ -3260,7 +3564,12 @@ mod tests {
     /// deep water while the bots' plan only costs it.
     #[test]
     fn floods_wade_swim_and_keep_crawlers_out() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let mut app = app(map);
             app.update();
             let (site, xf) = sites_on(&app).remove(0);
@@ -3815,7 +4124,12 @@ mod tests {
         use crate::bot::Bot;
         use crate::rig::LocalPlayer;
         use crate::sim::indoor::{BuildingPlan, plan_buildings};
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let mut app = app(map);
             let plans: Vec<BuildingPlan> = app
                 .world_mut()

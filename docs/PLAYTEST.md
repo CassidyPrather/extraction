@@ -109,20 +109,33 @@ What changed, and worth a comment each:
   Say if that ever keeps hold of something you meant to drop.
 - **Solid hands.** Your gloves stop at walls, tables and doors instead of
   going through. When your real hand goes further, a faint ghost glove
-  shows where it is. Push a door open with your palm. A gun pushed into
-  a wall can't shoot through it.
+  shows where it is, fading in the deeper your hand goes. Push a door
+  open with your palm. A gun pushed into a wall can't shoot through it.
+  An open hand parts grass and ferns, and branches when you reach up into
+  a tree.
+- **What your hands feel.** Touch something and its material comes
+  through the controller: a dull thud for wood, a ringing hit for metal,
+  two light ticks for glass, a hard knock for stone or the ground, a soft
+  give for a robot's skin, a rattle for a fence. The harder you hit, the
+  stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
+  slamming home, a magazine seating and a round chambering each feel
+  different now. Say if any two materials feel the same to you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
-  hand. Let go with both hands and you fall. To get up onto a wall or a
-  ledge about waist to chest high, press both open palms on its top and
-  push down. If climbing makes you queasy, the **CLIMBING** card on the
-  comfort board takes you straight to the top instead. Mark it if you
-  ever rise when you only meant to lean on a table.
+  hand. Let go with both hands and you fall. To get up onto a wall, a
+  ledge or a window sill (waist to head high), press both open palms on
+  its top and pull down: one pull and you're over. Through a window you
+  end up inside. If climbing makes you queasy, the **CLIMBING** card on
+  the comfort board takes you straight to the top instead, with a quick
+  blink rather than a jump. Mark it if you ever rise when you only meant
+  to lean on a table.
 - **Crowbar.** Hold it by the end and steady it along the shaft with your
-  other hand. Put the claw to a robot's armour plate, or the latch edge
-  of a door a wedge has jammed, then pull the handle round. Two hands at
-  the end of the bar shift it; hands near the claw won't. Your hands feel
-  the strain build, then a knock as it gives.
-- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  other hand. Put the claw to the latch edge of a plank door, the lid
+  edge of a supply crate, or a robot's armour plate (the heavy machine's
+  give up a bolt at a time), then pull the handle round. Two hands at the
+  end of the bar shift it; hands near the claw won't. Your hands feel the
+  strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand: they spread as your hands do,
+  and the jaws open with them. Spread them, put the jaws on a
   padlock's shackle or on chain-link, and squeeze your hands together. A
   cut panel leaves a gap you can walk through.
 - **First aid and food.** Wind a dressing round your other forearm (one
@@ -264,14 +277,31 @@ If any of this fails, stop and send the log: everything else depends on it.
   YARD, NEW CAREER (press twice), the comfort cards, PACK UP to quit).
   To play, walk out through the gate. Is this a good first minute?
 
-### 2. Comfort (5 minutes)
+### 2. Settings (5 minutes)
 
-Press the cards on the camp board (or the truck bed's left wall): turning (snap 30°/45°,
-smooth 90–180°/s), vignette (off to 90%, darkening the edges while
-the stick moves you) and sound (full range, or narrow: the forest and
-your hands up, gunfire down, for open speakers in a room that isn't
-quiet). Note which you end up with, and anything that made
-you queasy — climbing, the zipline, being knocked about, swimming.
+Every setting is a card on the truck bed's left wall (some also on the
+camp board): press one to step it on. The choice is kept in
+`settings.ron`. Note which you end up with, and anything that made you
+queasy (climbing, the zipline, being knocked about, swimming).
+
+| Card | Steps through | What it's for |
+| - | - | - |
+| TURNING | snap 30° / 45°, smooth 90–180°/s | how the right stick turns you |
+| VIGNETTE | off to 90% | darkening the edges while the stick moves you |
+| SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
+| SHARPNESS | auto, 50–100% | render size per eye (next launch) |
+| GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
+| HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
+| MUSIC | rises with danger / off | the score |
+| GUN HAND | right / left | left: the holster and chest mount on the left, the watch on the right wrist, moving on the right stick and turning on the left, the gun hand's stick click the fire selector |
+| PLAYING | standing / seated | seated: the view and hands lifted to a standing eye (measured from how you sit, over a few seconds); the crouch button (right stick down, or the left with GUN HAND left) brings you down to the floor |
+| HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
+| CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
+| WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
+
+For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
+it on: is anything out of reach, or does anything need the hand you've
+said you don't use?
 
 ### 3. The truck and the guns, at base (15 minutes)
 
@@ -326,6 +356,13 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   does the order make sense without a HUD? Load a box with every fourth
   a tracer and fire at dusk or in fog: can you walk your rounds onto a
   target by the streaks? Try a slug in the double at 50 m.
+- Looking through. Bring the PSO up and find the picture: how hard is it
+  to get your eye into the box? Move your head a little to the side:
+  does the black edge and the sliding picture tell you to centre? At
+  dusk, glass toward the sun and see whether a robot down the line
+  notices. Bring the AK's iron sights to your cheek: do they line up
+  without fiddling? Does the front post going soft read as your eye
+  focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -494,5 +531,6 @@ pump?
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
-| `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics` | Comfort, without the cards |
+| `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
+| `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

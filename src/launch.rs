@@ -87,6 +87,12 @@ pub struct LaunchOptions {
     /// Dev: screenshot every text panel from where it's read, at the
     /// headset's pixels a degree, into this folder (`render::legibility`).
     pub legibility: Option<PathBuf>,
+    /// Dev: from the truck's stop and every rendezvous, shoot each landmark
+    /// in range with and without it, into this folder (`render::wayfind_shots`).
+    pub wayfind: Option<PathBuf>,
+    /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
+    /// without it, into this folder (`render::wayfind_shots`).
+    pub afford: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -140,6 +146,8 @@ impl Default for LaunchOptions {
             tour_only: None,
             tour_views: None,
             legibility: None,
+            wayfind: None,
+            afford: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -176,6 +184,8 @@ impl LaunchOptions {
         self.screenshot.is_some()
             || self.tour.is_some()
             || self.legibility.is_some()
+            || self.wayfind.is_some()
+            || self.afford.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -205,7 +215,7 @@ impl LaunchOptions {
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
-                | "--one-handed" | "--no-captions" => {}
+                | "--one-handed" | "--no-captions" | "--no-machine-tick" => {}
                 "--vignette" => {
                     let _ = val();
                 }
@@ -273,6 +283,20 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--afford" => {
+                    o.afford = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--wayfind" => {
+                    o.wayfind = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--tour-only" => o.tour_only = Some(val()),
                 "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
@@ -306,8 +330,12 @@ impl LaunchOptions {
             o.flat = true;
             o.headless = false;
             o.robots &= !o.capture.still();
-            o.camera
-                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            // A camera override also places the player (as screenshots
+            // want); a trailer's bot starts in the truck, as in any sim.
+            if o.capture.still() {
+                o.camera
+                    .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            }
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {
