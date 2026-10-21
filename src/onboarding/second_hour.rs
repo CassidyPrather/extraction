@@ -749,7 +749,10 @@ pub(super) fn direct(
                 // A torch from the crate, its cell in.
                 run.torch = world.drop_torch(&mut commands, root.translation);
                 tasks.push(Wait(0.5));
-            } else if world.holding(Side::Left) != run.torch.map(|t| t.0) {
+            } else if !Side::BOTH
+                .iter()
+                .any(|s| world.holding(*s) == run.torch.map(|t| t.0))
+            {
                 let (torch, cell) = run.torch.unwrap();
                 if !run.seated {
                     run.seated = true;
@@ -1619,8 +1622,11 @@ impl World2<'_, '_> {
         })
     }
 
+    /// In either hand (one-handed, it's in the only one).
     fn radio_in_hand(&self) -> bool {
-        self.holding(Side::Left)
-            .is_some_and(|e| self.id(e) == Some("radio"))
+        Side::BOTH.iter().any(|s| {
+            self.holding(*s)
+                .is_some_and(|e| self.id(e) == Some("radio"))
+        })
     }
 }

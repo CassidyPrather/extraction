@@ -230,6 +230,7 @@ pub struct Bot {
     reach_low: bool,
     /// The gun it last had in hand: the one to draw back.
     last_gun: Option<Entity>,
+    dbg_held: Option<String>,
 }
 
 impl Bot {
@@ -256,6 +257,7 @@ impl Bot {
             well_off: None,
             reach_low: false,
             last_gun: None,
+            dbg_held: None,
         }
     }
 
@@ -654,9 +656,14 @@ fn run_tasks(
             if gun_held {
                 bot.last_gun = held;
             }
+
             let held_id = held
                 .and_then(|e| items.get(e).ok())
                 .map(|i| catalog.get(i.kind()).id.clone());
+            if held_id != bot.dbg_held {
+                info!("DBG hand now {held_id:?} (task {task:?})");
+                bot.dbg_held = held_id.clone();
+            }
             match one_hand(task, gun_side, held, held_id, gun_held) {
                 OneHand::Do(t) => t,
                 OneHand::First(tasks) if bot.deferred < 4 => {
