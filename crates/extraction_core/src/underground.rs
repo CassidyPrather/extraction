@@ -2474,6 +2474,7 @@ mod where_ {
             crate::map::MARROW_CREEK,
             crate::map::KETTLE_PASS,
             crate::map::CINDER_WORKS,
+            crate::map::SALLOW_RESERVOIR,
         ] {
             let map = MapDef::from_ron(text).unwrap();
             let hm = crate::terrain::Heightmap::build(&map);
