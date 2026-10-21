@@ -534,6 +534,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
         commands.spawn((
             Name::new("Note"),
             crate::render::legibility::TextSource::Note,
+            crate::interact::read::readable(super::notes::NOTE),
             super::notes::note_panel(&note.text),
             note_pose(t, note),
             Visibility::default(),

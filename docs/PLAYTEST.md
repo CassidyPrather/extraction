@@ -145,7 +145,10 @@ What changed, and worth a comment each:
   line in capitals and page a long message every 3 seconds (watch it
   turn over); notes are on bigger paper; the field map's names are
   bigger and upright. Indoors stays lit after you've been underground
-  (rooms had been going black). Mark anything you still can't read,
+  (rooms had been going black). **Squeeze on a note** (or the logbook,
+  or the driver's request card) and it comes up into your hand, facing
+  you: bring it to your face to read; open your hand and it goes back.
+  The logbook's pages now turn with its button. Mark anything you still can't read,
   with how far away you were and the SHARPNESS setting.
 - **Magazines** seat when their top meets the well, and the bell cord
   is easier to catch.

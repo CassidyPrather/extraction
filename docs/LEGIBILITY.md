@@ -71,8 +71,11 @@ default) has an x-height of 0.528 em and caps of 0.69 em, so all-capital
 text gets 30% more letter for the same em: short labels on LCDs and
 cards are in capitals for that reason.
 
-**Strokes and contrast.** At 8 px of x-height a regular weight's stem is
-1–1.5 px, and the lens resample halves its contrast. Light letters on dark
+**Strokes and contrast.** The panels' font is Bevy's built-in Fira Mono
+in its Medium weight (500), not Regular: at 8 px of x-height its stem is
+about 1.5 px, which the lens resample softens but keeps. Bold (700) would
+thicken stems by a third and start to close the counters of e, a and s at
+that size; the render gauge reads every panel at Medium, so it stays. Light letters on dark
 glow (the LCDs and CRTs are self-lit, so they read at night); dark
 letters on paper need light on them: the paper is matte and lit by the
 scene. Contrast on every panel style is above 7:1.
@@ -195,6 +198,13 @@ What the first pass found and changed:
 - **Field map** lettering is sized in millimetres for reading held up
   (names 6.4 mm, labels 6.2 mm, was 3.6–5.2 mm), upright instead of italic,
   with a paper halo where it crosses roads and contours.
+- **Reading close.** Notes (on tables, in scenes, the driver's note,
+  the memorial list, the epilogue), the logbook and the request card can
+  be taken up: squeeze on one and it comes into your hand facing your
+  eyes; bring it to your face; open the hand and it goes back
+  (`interact::read`). The logbook got a push button for its pages; the
+  request card already had one. Control cards (comfort, route, camp)
+  still press on a squeeze: their labels read from arm's length.
 - **Seen, passed on:** the left sleeve's hem can cover the wrist panel's
   elbow end (Hands); a loot item lies across the Marrow pump-station note
   (Story/Map design).
