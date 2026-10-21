@@ -12,6 +12,7 @@ pub mod audio_score;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
+pub mod contacts;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -55,6 +56,7 @@ pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            contacts::ContactGuardPlugin,
             world::WorldPlugin,
             rig::RigPlugin,
             player::PlayerPlugin,
