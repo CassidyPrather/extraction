@@ -1943,3 +1943,58 @@ fn a_drone_spots_for_walkers_far_off() {
     assert!(heard(true), "the drone's call reached it");
     assert!(!heard(false), "a walker's call doesn't carry 100 m");
 }
+
+/// A pair of hounds on one player split up: one comes round each side.
+#[test]
+fn a_pair_of_hounds_splits_up() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    // Both start off the same side.
+    let a = hound_at(
+        &mut app,
+        &zone,
+        zone.on_ground(103.0, 225.0),
+        me,
+        JobKind::Response,
+    );
+    let b = hound_at(
+        &mut app,
+        &zone,
+        zone.on_ground(105.0, 225.0),
+        me,
+        JobKind::Response,
+    );
+    for h in [a, b] {
+        // (Plain eyes: this is about splitting up, not seeing you.)
+        app.world_mut()
+            .entity_mut(h)
+            .remove::<super::senses::MotionSight>();
+        app.world_mut().get_mut::<super::Senses>(h).unwrap().fov_deg = 360.0;
+        let mut aw = app.world_mut().get_mut::<Awareness>(h).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(h).unwrap() = Brain::Engage;
+    }
+    let bearing = |app: &App, h: Entity| {
+        let t = app.world().get::<Transform>(h).unwrap().translation;
+        Vec2::new(t.x - me.x, t.z - me.z)
+    };
+    // Walking a small circle (a still body barely shows to a hound).
+    let mut widest = 0.0f32;
+    for i in 0..90 * 6 {
+        let ang = i as f32 / 90.0 * 0.6;
+        put(
+            &mut app,
+            player,
+            me + Vec3::new(ang.cos(), 0.0, ang.sin()) * 1.5,
+        );
+        app.update();
+        let (pa, pb) = (bearing(&app, a), bearing(&app, b));
+        if pa.length() > 5.0 && pb.length() > 5.0 {
+            widest = widest.max(pa.angle_to(pb).abs().to_degrees());
+        }
+    }
+    assert!(widest > 60.0, "they split round you: {widest:.0}°");
+}
