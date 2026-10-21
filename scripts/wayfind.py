@@ -35,6 +35,22 @@ def lum(path):
     return lin @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
 
+# A sun or moon disc: this many near-white pixels at least DISC_L bright
+# (linear; moonlit cloud stays under 0.5, a star is a pixel or two).
+DISC_PX = 30
+DISC_L = 0.7
+
+
+def disc(path):
+    """Pixels of a sun or moon disc in the shot toward it: near-white (not
+    a red lamp) and bright."""
+    if not path or not os.path.exists(path):
+        return 0
+    a = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
+    white = a.min(axis=2) > 0.6 * a.max(axis=2)
+    return int((white & (lum(path) > DISC_L)).sum())
+
+
 def blob(mask):
     """The largest 4-connected blob of `mask`."""
     h, w = mask.shape
@@ -110,12 +126,14 @@ def main(argv):
     by_from = {}
     rows = []
     sky = {}
+    sky_px = {}
     for v in views:
         if v["from"] == "sky":
             p = os.path.join(d, v["with"])
             if os.path.exists(p):
                 L = lum(p)
                 sky[v["landmark"]] = float(L[: L.shape[0] // 2].mean())
+                sky_px[v["landmark"]] = p
             continue
         if not (os.path.exists(os.path.join(d, v["with"])) and os.path.exists(os.path.join(d, v["without"]))):
             continue
@@ -131,8 +149,12 @@ def main(argv):
     if len(sky) == 2:
         a, b = sky.get("sky toward the light", 0.0), sky.get("sky away from it", 0.0)
         k = a / max(b, 1e-6)
+        # A low moon sits in the lower half the mean leaves out, and a disc
+        # you can see is a compass whatever the haze round it does.
+        d = disc(sky_px.get("sky toward the light"))
         print(f"sky: toward the sun or moon {k:.2f}x as bright as away"
-              f" ({'a compass' if k >= 1.1 else 'no help'})")
+              + (f", its disc showing ({d} px)" if d >= DISC_PX else "")
+              + f" ({'a compass' if k >= 1.1 or d >= DISC_PX else 'no help'})")
     if afford:
         lost = [(v, a, c) for v, ok, a, _l, c, _b in [(r[0], r[1], r[2], 0, r[3], r[4]) for r in rows] if not ok]
         for v, a, c in lost:

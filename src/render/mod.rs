@@ -4,6 +4,7 @@ pub mod affordance;
 pub mod arms;
 pub mod bench;
 pub mod blink;
+pub mod body;
 pub mod budget;
 pub mod cards;
 pub mod comfort;
@@ -77,6 +78,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
+        .add_plugins(body::BodyPlugin)
         .add_plugins(tools::ToolVisualsPlugin)
         .add_plugins(blink::BlinkPlugin)
         .add_plugins(hand_push::HandPushPlugin)
