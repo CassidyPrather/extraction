@@ -115,6 +115,7 @@ pub const MIX: &[Cue] = &[
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
+    cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.
     cue!("gun.shot", "guns/rifle_shot", 0.0, 140.0, 0.5, Action),
     cue!("gun.shot_suppressed", "guns/rifle_shot", -5.0, 118.0, 0.5, Action),
