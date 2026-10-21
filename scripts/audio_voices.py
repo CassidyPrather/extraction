@@ -32,6 +32,10 @@ name the walker's; the other kinds play at the cue's gain plus their
   clearing their masking. And what robots hear a break to
   (`destruction::noise_radius`, the crunch's `CRUNCH_HEARD`) your ears
   hear to within `HEARD_RATIO` of it.
+- **The Hush is dull, not deaf.** Inside one everything is ducked
+  alike (so masking between sounds is unchanged) but placed sounds are
+  muffled to `HUSH_DEEP`'s cutoff while the beds aren't: your footstep
+  and a robot's call 2 m off, muffled so, still clear the wind's masking.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -75,6 +79,8 @@ def add_sets(sets, out):
         wavs = sorted(d.glob("*.wav"))
     groups = [(f"voice/{k}/{m}", f"{k}_{m}_*.wav") for k in KINDS for m in MINDS]
     groups.append(("voice/heavy/horn", "horn.wav"))
+    groups.append(("device/stone_ping", "ping.wav"))
+    groups.append(("device/crackle", "crackle.wav"))
     for name, pattern in groups:
         files = [aa.measure(p, "oneshot") for p in sorted(d.glob(pattern))]
         if not files:
@@ -230,6 +236,19 @@ def run(sets, out):
         row.append(f"{name} {ears}/{robots:g}" + (" (!)" if bad else ""))
     lines.append(f"  Breaks heard by you / by robots (m), wants {HEARD_RATIO[0]}..{HEARD_RATIO[1]}x: "
                  + ", ".join(row))
+    # The Hush: muffled placed sounds against the (unmuffled) wind.
+    text = (ROOT / "src" / "audio.rs").read_text()
+    hush_fc = float(re.search(r"HUSH_DEEP: \(f32, f32\) = \(([\d.]+), ([\d.]+)\)", text).group(2))
+    row = []
+    for target, tdist in (("step", None), ("voice.calling", 2.0)):
+        total, parts = am.render([("wind", "loop", None, 0.0, None),
+                                  (target, 0.5, tdist, 0.0, None)], sets, mix, seconds=2.5)
+        sig = am.lowpass(parts[f"1:{target}"], hush_fc)
+        margin, band = am.margin(sig, total - parts[f"1:{target}"], 0.5, 0.5)
+        bad = margin <= 0
+        flags += bad
+        row.append(f"{target} {margin:+.1f} dB at {band} Hz" + (" (masked)" if bad else ""))
+    lines.append(f"  In a Hush (placed sounds muffled to {hush_fc:g} Hz): " + ", ".join(row))
     # Masking: each kind's every word at NEAR m, against your footstep
     # (over the wind) and your shot.
     worst = {}

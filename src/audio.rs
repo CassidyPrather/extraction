@@ -175,6 +175,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
             .init_resource::<Hush>()
+            .init_resource::<HushNow>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -232,6 +233,9 @@ impl Plugin for AudioPlugin {
                         heavy_sounds,
                         heavy_loops,
                         flock_sounds,
+                        anomaly_voices,
+                        tool_sounds,
+                        hush_world,
                     ),
                 ),
             )
@@ -2430,6 +2434,286 @@ fn flock_sounds(
     }
 }
 
+/// The detector's stone ping and an artifact's crackle, synthesised
+/// (`robot_voice::render_ping`, `render_crackle`).
+const PING_SET: &str = "device/stone_ping";
+const CRACKLE_SET: &str = "device/crackle";
+
+/// The Zone's smaller voices (`anomaly`):
+///
+/// - the sweep detector's ping for a loose stone, faster and higher the
+///   nearer it is (it fires 1.25 s apart at range, 0.15 s close);
+/// - a wet aegis biting its carrier: a crackle at the chest; a shard's
+///   late glint, a faint glass tick;
+/// - a hot stone held: a sizzle at the hand for as long as it burns.
+fn anomaly_voices(
+    mut commands: Commands,
+    mut pings: MessageReader<crate::anomaly::detector::StonePing>,
+    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
+    mut burns: MessageReader<crate::anomaly::harvest::Burned>,
+    mut sizzle: Query<(Entity, &mut Transform, &SampleEffects), With<BurnLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut last_burn: Local<f32>,
+) {
+    use crate::anomaly::costs::Bite;
+    for p in pings.read() {
+        let speed = 1.0 + 0.3 * p.near.clamp(0.0, 1.0) as f64;
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            PING_SET,
+            Some(p.at),
+            "detector.ping",
+            0.0,
+            speed,
+            0.0,
+        );
+    }
+    for b in bites.read() {
+        match b.what {
+            Bite::Shock => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                CRACKLE_SET,
+                Some(b.at),
+                "bite.shock",
+                0.0,
+                0.1,
+            ),
+            Bite::Glint => play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/chime",
+                Some(b.at),
+                "bite.glint",
+                0.0,
+                2.2,
+                0.1,
+            ),
+        }
+    }
+    let now = time.elapsed_secs();
+    let mut at = None;
+    for b in burns.read() {
+        at = Some(b.at);
+    }
+    if let Some(a) = at {
+        *last_burn = now;
+        match sizzle.iter_mut().next() {
+            Some((_, mut t, effects)) => {
+                t.translation = a;
+                if let Ok(mut v) = volumes.get_effect_mut(effects) {
+                    v.volume = Volume::Decibels(mix::db("burn.sizzle"));
+                }
+            }
+            None => {
+                if let Some(sample) = bank.pick("anomaly/burner_roar", &mut rng.0) {
+                    commands.spawn((
+                        BurnLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("burn.sizzle"))),
+                        PlaybackSettings::default().with_speed(1.9),
+                        Transform::from_translation(a),
+                        Placed::new("burn.sizzle"),
+                    ));
+                }
+            }
+        }
+    } else if now - *last_burn > 0.2 {
+        // Let go: it stops.
+        for (e, ..) in &sizzle {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+/// The hot stone's sizzle while it's held.
+#[derive(Component)]
+struct BurnLoop;
+
+/// Hands' tools (`interact::tools`): the crowbar's strained creak as it
+/// levers, higher the harder (once every 0.6 s while it's working), and
+/// the crack as it gives; the cutters' snip and the ping of the cut.
+fn tool_sounds(
+    mut commands: Commands,
+    mut pried: MessageReader<crate::interact::tools::crowbar::Pried>,
+    mut free: MessageReader<crate::interact::tools::crowbar::PriedFree>,
+    mut cuts: MessageReader<crate::interact::tools::cutters::Cut>,
+    places: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<HashMap<Entity, f32>>,
+) {
+    let now = time.elapsed_secs();
+    let at = |e: Entity| places.get(e).ok().map(|g| g.translation());
+    for p in pried.read() {
+        if next.get(&p.target).is_some_and(|t| now < *t) {
+            continue;
+        }
+        next.insert(p.target, now + 0.6);
+        let strain = (p.torque / PRY_FULL).clamp(0.0, 1.0);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_creak",
+            at(p.target),
+            "tool.pry",
+            -6.0 + 6.0 * strain,
+            0.5 + 0.4 * strain as f64,
+            0.1,
+        );
+    }
+    for f in free.read() {
+        next.remove(&f.target);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/wood",
+            at(f.target),
+            "tool.pry_free",
+            0.0,
+            0.8,
+            0.08,
+        );
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_open",
+            at(f.target),
+            "tool.pry_free",
+            -4.0,
+            0.1,
+        );
+    }
+    for c in cuts.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            at(c.target),
+            "tool.cut",
+            0.0,
+            0.75,
+            0.06,
+        );
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/ricochet",
+            at(c.target),
+            "tool.cut_ping",
+            0.0,
+            1.8,
+            0.08,
+        );
+    }
+}
+
+/// A crowbar's torque that sounds full strain, N·m.
+const PRY_FULL: f32 = 400.0;
+
+/// How the Hush (`anomaly::hush`) takes the world away: inside one, 18 dB
+/// down and muffled to 350 Hz, your own steps and shots too; carrying a
+/// hushstone (within its 1.2 m), a light 4 dB and 3 kHz, all the time.
+pub const HUSH_DEEP: (f32, f32) = (18.0, 350.0);
+pub const HUSH_LIGHT: (f32, f32) = (4.0, 3000.0);
+/// After this long inside, a pressure tone rises (s), to full over 10.
+pub const HUSH_TONE_AFTER: f32 = 8.0;
+
+/// The Hush right now, eased: dB down and the cutoff every placed sound
+/// is held under (`occlusion` applies it).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct HushNow {
+    pub db: f32,
+    pub cutoff: f32,
+}
+
+impl Default for HushNow {
+    fn default() -> Self {
+        Self {
+            db: 0.0,
+            cutoff: 20_480.0,
+        }
+    }
+}
+
+#[derive(Component)]
+struct HushTone;
+
+#[allow(clippy::too_many_arguments)]
+fn hush_world(
+    mut commands: Commands,
+    hushes: Option<Res<crate::anomaly::hush::Hushes>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    inside: Query<&crate::anomaly::hush::InHush, With<crate::rig::LocalPlayer>>,
+    mut main: Query<&mut VolumeNode, (With<MainBus>, Without<HushTone>)>,
+    tone: Query<&SampleEffects, With<HushTone>>,
+    mut volumes: Query<&mut VolumeNode, Without<MainBus>>,
+    mut now: ResMut<HushNow>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+) {
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let (db, cutoff) = match hushes.as_deref() {
+        Some(h) if h.in_standing(ear) => HUSH_DEEP,
+        Some(h) if h.eats(ear) => HUSH_LIGHT,
+        _ => (0.0, 20_480.0),
+    };
+    // A second in or out: the air going dead, not a switch.
+    let k = (time.delta_secs() * 3.0).min(1.0);
+    now.db += (db - now.db) * k;
+    now.cutoff = (now.cutoff.ln() + (cutoff.ln() - now.cutoff.ln()) * k).exp();
+    if let Ok(mut v) = main.single_mut() {
+        let want = Volume::Decibels(-now.db);
+        if v.volume != want {
+            v.volume = want;
+        }
+    }
+    let secs = inside.iter().next().map_or(0.0, |h| h.0);
+    let rise = ((secs - HUSH_TONE_AFTER) / 10.0).clamp(0.0, 1.0);
+    match tone.iter().next() {
+        None => {
+            if let Some(sample) = bank.pick("anomaly/well_drone", &mut rng.0) {
+                commands.spawn((
+                    HushTone,
+                    SamplePlayer::new(sample).looping(),
+                    PlaybackSettings::default().with_speed(0.5),
+                    sample_effects![VolumeNode {
+                        volume: Volume::SILENT,
+                        ..default()
+                    }],
+                ));
+            }
+        }
+        Some(effects) => {
+            if let Ok(mut v) = volumes.get_effect_mut(effects) {
+                // Under the duck like everything, so lifted back by it.
+                v.volume = if rise < 0.01 {
+                    Volume::SILENT
+                } else {
+                    Volume::Decibels(mix::db("hush.tone") + now.db + 20.0 * rise.log10())
+                };
+            }
+        }
+    }
+}
+
 /// A break this big (m²) is a wall breached (`destruction::breach`).
 const BREACH_SIZE: f32 = 2.5;
 
@@ -3517,6 +3801,10 @@ fn render_voices(
         let sr = rate.get() as f32;
         let horn = pool.spawn(async move { vec![rv::render_horn(sr)] });
         renders.tasks.push((HORN_SET.to_string(), horn));
+        let ping = pool.spawn(async move { vec![rv::render_ping(sr)] });
+        renders.tasks.push((PING_SET.to_string(), ping));
+        let crackle = pool.spawn(async move { vec![rv::render_crackle(sr)] });
+        renders.tasks.push((CRACKLE_SET.to_string(), crackle));
     }
     renders.tasks.retain_mut(|(set, task)| {
         let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
@@ -3682,6 +3970,7 @@ fn occlude(
     mut heads: Query<&mut HrtfNode>,
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    hush: Res<HushNow>,
     spatial: SpatialQuery,
     doors: Query<&crate::world::buildings::Door>,
     entrances: Option<Res<crate::robots::doors::Entrances>>,
@@ -3711,7 +4000,11 @@ fn occlude(
         if !due || budget == 0 {
             continue;
         }
-        let o = || crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+        let o = || {
+            let mut o = crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+            o.cutoff = o.cutoff.min(hush.cutoff);
+            o
+        };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {
             budget -= 1;
             let o = o();
