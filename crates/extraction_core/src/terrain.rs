@@ -1014,6 +1014,7 @@ mod tests {
             regions: vec![],
             haze: None,
             ash: 0.0,
+            cold: 0.0,
             sounds: SoundsDef::default(),
         }
     }

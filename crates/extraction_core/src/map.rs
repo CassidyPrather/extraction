@@ -50,6 +50,10 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// How cold the valley is, 0..=1: up high in the wind a body chills
+    /// (`cold`). Most valleys aren't.
+    #[serde(default)]
+    pub cold: f32,
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,

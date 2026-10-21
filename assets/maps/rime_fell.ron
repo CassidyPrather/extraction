@@ -35,6 +35,8 @@
     fence_inset: 38.0,
     // Thin, clear, cold air.
     haze: Some((0.93, 0.98, 1.08)),
+    // Up high in the wind you chill (docs/FIFTH_VALLEY.md, "Cold").
+    cold: 1.0,
     sounds: (
         wind: "ambience/wind_mountain",
         birds: ["ambience/raven", "ambience/raven"],
