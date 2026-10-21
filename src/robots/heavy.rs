@@ -2196,8 +2196,16 @@ pub(crate) mod tests {
             .filter(|(_, _, p)| p.robot == heavy)
             .map(|(h, p, _)| (h.0, p.needs))
             .collect();
-        assert_eq!(seams.len(), 3, "the three plates and nothing else: {seams:?}");
-        assert!(seams.iter().all(|(s, n)| matches!(s, Slot::Plate(_)) && *n == PLATE_PRY));
+        assert_eq!(
+            seams.len(),
+            3,
+            "the three plates and nothing else: {seams:?}"
+        );
+        assert!(
+            seams
+                .iter()
+                .all(|(s, n)| matches!(s, Slot::Plate(_)) && *n == PLATE_PRY)
+        );
         let (plate, _) = part(&mut app, heavy, Slot::Plate(2)).unwrap();
         for k in 0..2 {
             app.world_mut().write_message(PriedFree {
@@ -2208,9 +2216,16 @@ pub(crate) mod tests {
                 app.update();
             }
             let bolts = app.world().get::<Heavy>(heavy).unwrap().bolts[2];
-            assert_eq!(bolts as usize, rules::BOLTS_PER_PLATE - 1 - k, "a bolt per give");
+            assert_eq!(
+                bolts as usize,
+                rules::BOLTS_PER_PLATE - 1 - k,
+                "a bolt per give"
+            );
         }
-        assert!(part(&mut app, heavy, Slot::Plate(2)).is_some(), "the plate holds");
+        assert!(
+            part(&mut app, heavy, Slot::Plate(2)).is_some(),
+            "the plate holds"
+        );
         let (_, free) = seated(&mut app, heavy, Slot::Plate(2)).unwrap();
         assert!(free, "on two bolts it hangs loose for a hand");
         let (_, hp) = part(&mut app, heavy, Slot::Plate(2)).unwrap();

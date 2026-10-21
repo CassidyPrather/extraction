@@ -30,8 +30,7 @@ pub struct WindowBoard;
 /// order). World models' decision (`world::decay::boarded_sashes`); a
 /// boarded sash is always a weathered one, so its panes draw no glass.
 pub fn boarded_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
-    let _ = (prefab, at);
-    Vec::new()
+    crate::world::decay::boarded_sashes(prefab, at)
 }
 
 /// The boards over a building's boarded sashes, in building space:
