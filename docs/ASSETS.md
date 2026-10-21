@@ -330,6 +330,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   box and doesn't stick out of it; anything flat or long has `dims`
   rather than a bulk cube (`every_item_model_fits_its_box` checks).
   `_kit.centred` moves a model's bounds onto the box.
+  Its lowest point sits within 6 mm of the box's floor: a tip poking
+  below it fails as surely as one sticking out.
+- **Budgets.** Guns 15-25k tris, magazines up to about 9k, items about 3k.
+  Spend it where a player's face and hands are.
+- **Item LODs.** An item's `<name>_lod1` node draws only beyond
+  `ITEM_LOD` (6 m), its other nodes only inside it
+  (`models::item_lod_range`). `check.py` doesn't count a node and its
+  `_lodN` stand-ins as z-fighting.
+- **Stamped text.** `text()`/`text_round()` heights are literal floats
+  (the legibility test reads argument 3 from the script), and a script
+  with letters is listed in `legibility::ART`.
+- **Sling points.** Long guns carry `pt_sling_front` and `pt_sling_rear`
+  empties at their swivels or slots.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.
