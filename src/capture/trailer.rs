@@ -49,7 +49,7 @@ const STEP: f32 = 1.0 / 30.0;
 const TAIL: f32 = 3.0;
 /// Seconds the cameras render before anything is kept: the valley streams
 /// its detail in round them (unfilmed frames draw nothing).
-const WARMUP: f32 = 8.0;
+const WARMUP: f32 = 6.0;
 /// Shortest clip worth keeping, seconds.
 const MIN_CLIP: f32 = 2.5;
 
@@ -214,6 +214,7 @@ fn direct(
     let me = body.translation;
     // What's worth seeing.
     if t < WARMUP {
+        d.next_frame = t;
         // Rendering, so the detail streams in, but nothing kept.
         if let Ok(mut c) = cams.single_mut() {
             c.is_active = true;
@@ -256,12 +257,23 @@ fn direct(
         write_manifest(d, &opts, &out);
     }
     let rolling = d.open.is_some();
+    // Only the camera the cut will use renders: the one for now, and the
+    // one for a moment ahead, so a camera has drawn a frame or two before
+    // its first saved one.
+    let (now, soon) = d.open.as_ref().map_or((None, None), |c| {
+        let lead = 2.5 * time.delta_secs();
+        (
+            Some(camera_for(&c.reason, t - c.start)),
+            Some(camera_for(&c.reason, t - c.start + lead)),
+        )
+    });
+    let on = |v: View| now == Some(v) || soon == Some(v);
     if let Ok(mut c) = cams.single_mut() {
-        c.is_active = rolling;
+        c.is_active = on(View::Chase);
     }
     if let Some((e, _)) = &d.drone {
         if let Ok(mut c) = drone_cams.get_mut(*e) {
-            c.is_active = rolling;
+            c.is_active = on(View::Drone);
         }
     }
     // The raid's over (the sim closes its telemetry and quits) or the
@@ -289,7 +301,11 @@ fn direct(
         d.next_frame = t;
         return;
     }
-    // A frame every STEP of raid time.
+    // A frame every STEP of raid time (never catching up on time spent
+    // not filming).
+    if d.next_frame < t - STEP {
+        d.next_frame = t;
+    }
     if t + 1e-4 < d.next_frame {
         return;
     }
@@ -300,23 +316,53 @@ fn direct(
     if let Some(c) = &mut d.open {
         c.last = d.frame;
     }
-    d.in_flight += 2;
+    d.in_flight += 1;
     let name = format!("f{n:05}.png");
-    let mut save = save_to_disk(out.join("chase").join(&name));
-    commands.spawn(Screenshot::primary_window()).observe(
-        move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
-            save(shot);
-            d.in_flight = d.in_flight.saturating_sub(1);
-        },
-    );
-    let (_, image) = d.drone.clone().unwrap();
-    let mut save = save_to_disk(out.join("drone").join(&name));
-    commands.spawn(Screenshot::image(image)).observe(
-        move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
-            save(shot);
-            d.in_flight = d.in_flight.saturating_sub(1);
-        },
-    );
+    let view = now.unwrap_or(View::Chase);
+    let mut save = save_to_disk(out.join(view.dir()).join(&name));
+    let done = move |shot: On<ScreenshotCaptured>, mut d: ResMut<Director>| {
+        save(shot);
+        d.in_flight = d.in_flight.saturating_sub(1);
+    };
+    match view {
+        View::Chase => {
+            commands.spawn(Screenshot::primary_window()).observe(done);
+        }
+        View::Drone => {
+            let (_, image) = d.drone.clone().unwrap();
+            commands.spawn(Screenshot::image(image)).observe(done);
+        }
+    }
+}
+
+/// Which camera films a frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum View {
+    Chase,
+    Drone,
+}
+
+impl View {
+    fn dir(self) -> &'static str {
+        match self {
+            View::Chase => "chase",
+            View::Drone => "drone",
+        }
+    }
+}
+
+/// The cut, decided as it's filmed: which camera has a clip `s` seconds
+/// in. A fight cuts back and forth every 2.5 s, starting close; company
+/// arriving is seen from above first; walking, the truck and the ride out
+/// from above; the rest close.
+fn camera_for(reason: &str, s: f32) -> View {
+    match reason {
+        "fight" if (s / 2.5) as u32 % 2 == 1 => View::Drone,
+        "fight" => View::Chase,
+        "robot" | "down" if s < 3.0 => View::Drone,
+        "walk" | "truck" | "extract" => View::Drone,
+        _ => View::Chase,
+    }
 }
 
 fn write_manifest(d: &Director, opts: &LaunchOptions, out: &std::path::Path) {
@@ -538,6 +584,17 @@ mod tests {
         assert!(d.advance(11.0, None));
         assert!(d.open.is_none());
         assert_eq!(d.clips.len(), 2);
+    }
+
+    #[test]
+    fn the_cut_is_decided_as_it_is_filmed() {
+        assert_eq!(camera_for("fight", 0.5), View::Chase);
+        assert_eq!(camera_for("fight", 3.0), View::Drone);
+        assert_eq!(camera_for("fight", 5.5), View::Chase);
+        assert_eq!(camera_for("robot", 1.0), View::Drone);
+        assert_eq!(camera_for("robot", 4.0), View::Chase);
+        assert_eq!(camera_for("walk", 4.0), View::Drone);
+        assert_eq!(camera_for("leaving", 4.0), View::Chase);
     }
 
     #[test]

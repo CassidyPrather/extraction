@@ -126,7 +126,7 @@ The player has no body a camera draws: in the headset you see your gloves
 and sleeves. The body's shadow comes from a proxy of capsules on a layer
 only the sun sees (`render::arms::SHADOW_ONLY`). The trailer's cameras see
 that layer too, so the bot shows as a figure, dressed in drab. For the
-first 8 s the cameras render without saving, so the valley's detail has
+first 6 s the cameras render without saving, so the valley's detail has
 streamed in before the first kept frame.
 
 After that, the cameras render only while something is worth seeing: leaving the
@@ -134,11 +134,14 @@ truck, a robot within 30 m, a fight, an anomaly, the truck called and the
 ride out, going down, and six seconds of walking every 75 s. Frames in
 between cost little, and a frame is saved every 1/30 s of raid time. The
 raid's own telemetry (`trailer.jsonl`, the sim format) is written next to
-`trailer.json`, which lists the clips. `scripts/capture_trailer.py`
-gives each clip to one camera or the other by what it shows (a fight cuts
-back and forth every 2.5 s), trims clips to 9 s, captions them with what's
-happening and when, adds a title card and an end card, and encodes the
-result.
+`trailer.json`, which lists the clips. The cut is decided while filming
+(`trailer::camera_for`), and only that camera renders. A fight cuts back
+and forth every 2.5 s, starting close. Company arriving is seen from above
+first. Walking, the truck and the ride out are seen from above. Everything
+else is close. A camera starts rendering a moment before its first saved
+frame. `scripts/capture_trailer.py` trims clips to 9 s, captions them with
+what's happening and when, adds a title card and an end card, and encodes
+the result.
 
 ## The looks-wrong sweep: `--sweep FILTER`
 
