@@ -92,9 +92,10 @@ fn flat(v: Vec3) -> f32 {
     Vec2::new(v.x, v.z).length()
 }
 
-/// The classic distraction: a piece of scrap thrown down the street
-/// clatters 14 m from a walker at its post, and the walker walks over to
-/// about where it landed (not to you) and searches round it.
+/// The classic distraction: a piece of scrap thrown down 7 m from a walker
+/// at its post (on grass, which muffles a landing to half: from 14 m it
+/// wouldn't be heard), and the walker walks over to about where it landed
+/// (not to you) and searches round it.
 #[test]
 fn a_thrown_bolt_draws_a_walker() {
     let (mut app, player, zone) = app(None);
@@ -103,7 +104,7 @@ fn a_thrown_bolt_draws_a_walker() {
     put(&mut app, player, zone.on_ground(100.0, 330.0));
     let walker = walker_at(&mut app, &zone, post);
     let catalog = app.world().resource::<crate::items::Catalog>().clone();
-    let spot = zone.on_ground(post.x + 14.0, post.z + 3.0);
+    let spot = zone.on_ground(post.x + 7.0, post.z + 3.0);
     let mut queue = CommandQueue::default();
     let bolt = {
         let mut c = Commands::new(&mut queue, app.world());
@@ -124,7 +125,8 @@ fn a_thrown_bolt_draws_a_walker() {
         .unwrap()
         .0 = Vec3::new(0.0, -8.0, 0.0);
     // It heard roughly where: it comes to look within its guess's spread.
-    let near = 3.5 + (14.0 * super::senses::HEARD_SPREAD).max(super::senses::HEARD_SPREAD_MIN);
+    let near = 3.5
+        + (flat(spot - post) * super::senses::HEARD_SPREAD).max(super::senses::HEARD_SPREAD_MIN);
     let mut closest = f32::MAX;
     let mut secs = 0.0;
     for i in 0..90 * 25 {
