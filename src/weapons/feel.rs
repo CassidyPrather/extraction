@@ -1049,8 +1049,9 @@ mod vr_tests {
         assert!(gun_mut(&mut r).firearm.handle_lift > 0.9, "and up");
     }
 
-    /// A worn, filthy SKS: rack it and the round can go off as the bolt
-    /// slams home, trigger untouched. A sound one never does.
+    /// A worn, filthy SKS: rack it and the round goes off as the bolt slams
+    /// home, trigger untouched (its dice set to roll low). A sound one
+    /// never does, whatever the roll.
     #[test]
     fn a_worn_sks_slam_fires_as_the_bolt_closes() {
         #[derive(Resource, Default)]
@@ -1066,11 +1067,14 @@ mod vr_tests {
                 g.firearm.condition = if worn { 0.1 } else { 0.9 };
                 g.firearm.fouling = 1.0;
                 g.firearm.internal_rounds = 10;
+                // Its own dice set so the bolt let go by hand rolls low (the
+                // worn gun's slam chance is 0.6; a sound one's is none).
+                g.firearm.fault_dice = (0u64..)
+                    .find(|s| extraction_core::noise::Rng::new(*s).f32() < 0.3)
+                    .unwrap();
             }
-            for _ in 0..6 {
-                rack(&mut r);
-                r.vr.step(4);
-            }
+            rack(&mut r);
+            r.vr.step(4);
             let shots = r.vr.app.world().resource::<Shots>().0;
             if worn {
                 assert!(shots > 0, "a worn SKS slam-fired");
