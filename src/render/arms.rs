@@ -70,7 +70,7 @@ impl Plugin for ArmsPlugin {
 
 /// One of the local player's arms, following its glove.
 #[derive(Component)]
-struct Arm {
+pub(crate) struct Arm {
     glove: Entity,
     side: Side,
     upper: Entity,
