@@ -20,10 +20,11 @@ and every stroke at least one eye pixel wide from where it's read.
 
 "Where it's read" is a reading pose, set per source in the registry: the
 wrist raised like a watch (0.4 m), a radio or map held up to the face
-(0.3–0.35 m), a card within reach of its button (0.75 m), a note on a
-table leant over (0.9 m, 25° off square), a signpost from a few steps
-(3 m). Anything small you must read is something you can hold and bring
-to your face.
+(0.3–0.35 m), a card or terminal within reach of its button (0.7–0.75 m,
+a terminal looked down at, 35° off square), a note on a table leant over
+(0.65 m, 20°), a signpost from a few steps (3 m). Text seen at a slant
+counts its foreshortened height. Anything small you must read is
+something you can hold and bring to your face, or reach.
 
 ## Why these numbers
 
@@ -106,9 +107,9 @@ Every source of text and fine symbol in the game is listed in
 | Wrist readout | `render/comfort.rs` | must | 0.4 m, wrist raised |
 | Radio screen | `render/comfort.rs` | must | 0.35 m, held up |
 | Bench display | `raid/bench.rs` | must | 0.9 m |
-| Notes | `world/notes.rs`, `world/scenes.rs`, `raid/board.rs` | must | 0.9 m, 25° |
+| Notes | `world/notes.rs`, `world/scenes.rs`, `raid/board.rs` | must | 0.65 m, 20° |
 | Signposts | `world/notes.rs` | must | 3 m |
-| Terminals | `world/notes.rs`, `world/scenes.rs` | must | 0.8 m |
+| Terminals | `world/notes.rs`, `world/scenes.rs` | must | 0.7 m, 35° |
 | Driver's note | `render/memorial.rs` | must | 0.8 m |
 | Memorial list | `render/memorial.rs` | incidental | 0.8 m |
 | Camp title, sheet | `camp.rs` | incidental, must | 1.2 m, 1.0 m |
@@ -118,6 +119,7 @@ Every source of text and fine symbol in the game is listed in
 | Kitchen labels | `raid/kitchen.rs` | must | 0.8 m |
 | Depot lock, epilogue | `capstone.rs` | must | 0.8 m |
 | Yard boards, training list | `onboarding` | must | 2 m |
+| The yard's first board (in the truck) | `onboarding` | must | 1.2 m |
 | Gun, magazine stampings | `art/guns`, `art/mags` | incidental | 0.35 m, in hand |
 | Ammo boxes | `art/items/ammo.py` | must | 0.35 m, in hand |
 | Keys | `art/items/curios.py` | must | 0.35 m, in hand |
@@ -148,12 +150,53 @@ Every source of text and fine symbol in the game is listed in
 OCR is harsher than a reader (no context, no second look): a panel OCR
 reads, a person reads.
 
+### Fine symbols (no letters)
+
+| Symbol | Size where seen | Verdict |
+| - | - | - |
+| Scope reticle (PU, and the PSO) | 256 texels over the lens's 26°: a texel is ~1.5 eye px; lines 2 texels, the post 6 | clear |
+| Scope picture | 384 px over 26°: ~15 px/deg, the eye's own | matches the eye |
+| Compass | red needle 4 x 38 mm on a cream face, in hand | clear; no letters to read |
+| Rear-sight ticks, PSO drum ticks | 1–2 mm enamel, gun at the face | incidental |
+| Memorial tallies | 7 x 75 mm chalk strokes on the front wall | clear |
+
 ## Filtering
 
-Panel textures are rendered once and kept. Seen from farther than they're
-read, a texture with more texels than eye pixels sparkles as the head
-moves unless it has mipmaps. See "Changes" for what's done about it.
+Panel textures are drawn once and kept. A texture seen with more texels
+than eye pixels for it (a sign from up the track, a note at a slant)
+sparkles as the head moves unless it has mipmaps. Each panel's picture is
+read back once drawn and shown with a full mip chain (averaged in linear
+light) and 16x anisotropic filtering (`render::screen::mipped`); while it
+redraws, the live render target shows.
 
 ## Changes
 
-(See the commit history; summarised here as the work lands.)
+What the first pass found and changed:
+
+- **The floor** was an em of 0.6° assuming 20 px/deg: an x-height of
+  0.32°, 4.5 px at the auto render scale's real 14 px/deg. It's now the
+  x-height floors above, over every text source.
+- **Wrist and radio** were the worst (0.21° and 0.23° x-height; OCR read
+  nothing). Both now show capitals, a few words a line, and page a long
+  message every 3 s instead of shrinking it; the wrist panel is as big as
+  its housing (78 x 48 mm). 0.59° and 0.6°.
+- **Panel styles** may set bigger type: an LCD's few lines fill its
+  screen, a paper sign's short text is as big as a ten-line page's.
+- **Notes** on a sheet a little over A4 (0.26 x 0.36 m); the logbook card
+  0.36 x 0.30 m, so its career page fits.
+- **Indoors went black.** The room's dimming of the ambient and the
+  underground's darkening ran in no set order; once you'd been near an
+  underground site the ambient drained to nothing within a few rooms,
+  for the rest of the raid (`render::grade`, `world::underground`). The
+  dimming now runs after; a test holds every ambient writer to an order.
+- **Glare.** LCD and CRT panels were glossy; the bench display caught the
+  canopy lamp's highlight over its words. They're matte now.
+- **Shimmer.** Panels have mipmaps and anisotropic filtering (above).
+- **Field map** lettering is sized in millimetres for reading held up
+  (names 6.4 mm, labels 6.2 mm, was 3.6–5.2 mm), upright instead of italic,
+  with a paper halo where it crosses roads and contours.
+- **Seen, passed on:** the left sleeve's hem can cover the wrist panel's
+  elbow end (Hands); a loot item lies across the Marrow pump-station note
+  (Story/Map design).
+
+Before and after, as the render gauge saw them: `docs/shots/legibility/`.

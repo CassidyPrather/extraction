@@ -718,6 +718,110 @@ mod tests {
         );
     }
 
+    /// Nothing in a staged scene lies on its note: a lantern or a photo on
+    /// the paper hides its words (the render gauge found the shelter's
+    /// note half under its lantern).
+    #[test]
+    fn nothing_lies_on_a_scenes_note() {
+        use crate::world::scenes::Piece;
+        let mut bad = Vec::new();
+        let half = crate::world::notes::NOTE * 0.5;
+        for scene in crate::world::scenes::all() {
+            let Some(note) = &scene.note else {
+                continue;
+            };
+            let rot = Quat::from_rotation_y(-note.rot.to_radians());
+            let on_paper = |p: [f32; 3]| {
+                let d = rot.inverse()
+                    * Vec3::new(p[0] - note.at[0], p[1] - note.at[1], p[2] - note.at[2]);
+                // A thing's own footprint: a few centimetres round its point.
+                d.y.abs() < 0.15 && d.x.abs() < half.x + 0.04 && d.z.abs() < half.y + 0.04
+            };
+            for piece in &scene.pieces {
+                if let Piece::Lantern { at } = piece {
+                    if on_paper(*at) {
+                        bad.push(format!("{}: a lantern on the note", scene.name));
+                    }
+                }
+            }
+            for thing in &scene.items {
+                if on_paper(thing.at) {
+                    bad.push(format!("{}: {} on the note", scene.name, thing.id));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// No loot lands on a note: loot rolls round a spot (tens of
+    /// centimetres), and notes lie beside loot spots on the same tables; a
+    /// torch on the pump log hid half its words. Every roll a spot can
+    /// make, kept off the notes (`items::loot::clear_of_notes`), lands
+    /// clear of every note's paper.
+    #[test]
+    fn no_loot_lands_on_a_note() {
+        use crate::items::loot::{building_roll, clear_of_notes, marker_roll, notes_lying};
+        use extraction_core::map::MarkerKind;
+        let mut bad = Vec::new();
+        let mut near = 0;
+        let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(0.06);
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "training_yard",
+        ] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..5 {
+                app.update();
+            }
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let notes = notes_lying(&zone);
+            let mut landings: Vec<(Vec3, Vec3)> = Vec::new();
+            if let Some(l) = app
+                .world()
+                .get_resource::<crate::world::buildings::BuildingLoot>()
+            {
+                for s in &l.0 {
+                    landings.extend((0..5).map(|i| (s.at, s.at + building_roll(i))));
+                }
+            }
+            for m in &zone.map.markers {
+                if let MarkerKind::Loot { .. } = m.kind {
+                    if m.y >= 0.3 {
+                        let base = zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * (m.y + 0.1);
+                        landings.extend((0..5).map(|i| (base, base + marker_roll(i))));
+                    }
+                }
+            }
+            for (spot, at) in landings {
+                let landed = clear_of_notes(at, &notes);
+                for (note, rot) in &notes {
+                    let raw = rot.inverse() * (at - *note);
+                    if raw.y.abs() < 0.4 && raw.x.abs() < half.x && raw.z.abs() < half.y {
+                        near += 1;
+                    }
+                    let p = rot.inverse() * (landed - *note);
+                    if p.y.abs() < 0.4 && p.x.abs() < half.x && p.z.abs() < half.y {
+                        bad.push(format!(
+                            "{map}: a roll at {spot:.2} lands on the note at {note:.2}"
+                        ));
+                    }
+                }
+            }
+        }
+        // The check has teeth: rolls would have landed on notes.
+        assert!(near > 10, "rolls over notes before keeping off: {near}");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// Every model's letters: big enough from where they're read, strokes
     /// at least a pixel, and every script with letters registered.
     #[test]

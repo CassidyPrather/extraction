@@ -2,6 +2,7 @@
 """Reads back the render-based legibility gauge's shots (`--legibility DIR`).
 
     scripts/legibility.py DIR [--sheet OUT.png] [--crops CROPDIR]
+    scripts/legibility.py --compare OUT.png BEFORE AFTER [...] [--sources A,B]
 
 Each shot shows one text panel from where it's read, at the headset's
 pixels a degree (render::legibility). This crops the panel, blurs it a
@@ -64,7 +65,7 @@ def flatten(im, dark):
     # The ground: the lightest nearby, smoothed.
     k = max(3, (min(g.width, g.height) // 8) | 1)
     ground = g.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.GaussianBlur(k))
-    px = [min(255, int(255 * a / max(b, 1))) for a, b in zip(g.getdata(), ground.getdata())]
+    px = [min(255, int(255 * a / max(b, 1))) for a, b in zip(g.get_flattened_data(), ground.get_flattened_data())]
     g.putdata(px)
     g = ImageOps.autocontrast(g, cutoff=1)
     ink = g.point(lambda v: 255 if v < 140 else 0)
@@ -105,7 +106,52 @@ def proxy(im, dark):
     return f"(proxy {keep:.2})", keep
 
 
+def compare(pairs, out, sources=None):
+    """Before and after, side by side, a row a source: `pairs` is a list of
+    (before dir, after dir); each row is the first shot of a source in
+    each, at 2x with square pixels, labelled with its size and score."""
+    rows = []
+    for before, after in pairs:
+        b = {s["source"]: s for s in reversed(json.load(open(os.path.join(before, "legibility.json"))))}
+        a = {s["source"]: s for s in reversed(json.load(open(os.path.join(after, "legibility.json"))))}
+        for src in sources or sorted(set(b) & set(a)):
+            if src in b and src in a and (b[src], a[src]) not in rows:
+                rows.append(((before, b[src]), (after, a[src])))
+    W, H = 520, 300
+    sheet = Image.new("RGB", (W * 2, H * len(rows) + 24), (30, 30, 30))
+    d = ImageDraw.Draw(sheet)
+    d.text((8, 6), "before", fill=(230, 230, 230))
+    d.text((W + 8, 6), "after", fill=(230, 230, 230))
+    for r, pair in enumerate(rows):
+        for c, (dir_, s) in enumerate(pair):
+            whole = Image.open(os.path.join(dir_, s["file"])).convert("RGB")
+            im = crop(whole, s["rect"])
+            inner = crop(whole, s["rect"], pad=-max(2, int(0.03 * min(s["rect"][2:]))))
+            seen = inner.filter(ImageFilter.GaussianBlur(COMPOSITOR_BLUR))
+            sc = score(s["text"], ocr(seen, s["dark"], s["text"])) if shutil.which("tesseract") else 0.0
+            k = min(2.0, (W - 8) / max(1, im.width), (H - 30) / max(1, im.height))
+            big = im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.NEAREST)
+            x, y = c * W, 24 + r * H
+            sheet.paste(big, (x + 4, y + 4))
+            ok = sc >= (MUST_SCORE if s["need"] == "MustRead" else INCIDENTAL_SCORE)
+            d.text((x + 4, y + H - 22),
+                   f"{s['source']}: x-height {s['deg']:.2f} deg at {s['at']} m (floor {s['floor']}), OCR {sc:.2f}",
+                   fill=(120, 220, 120) if ok else (240, 90, 80))
+    sheet.save(out)
+    print(out)
+
+
 def main(argv):
+    if argv and argv[0] == "--compare":
+        # --compare OUT BEFORE AFTER [BEFORE AFTER ...] [--sources A,B,...]
+        sources = None
+        if "--sources" in argv:
+            i = argv.index("--sources")
+            sources = argv[i + 1].split(",")
+            argv = argv[:i] + argv[i + 2:]
+        dirs = argv[2:]
+        compare(list(zip(dirs[::2], dirs[1::2])), argv[1], sources)
+        return 0
     sheet = None
     crops_dir = None
     rest = []

@@ -95,6 +95,48 @@ pub struct SupplyCrate;
 /// Its size: the lid at a standing reach.
 pub const SUPPLY_CRATE: Vec3 = Vec3::new(0.9, 0.78, 0.6);
 
+/// Where each note lies (as `world::notes` lays it) and which way it
+/// turns: loot rolled beside one is kept off its words.
+pub fn notes_lying(zone: &Zone) -> Vec<(Vec3, Quat)> {
+    zone.map
+        .markers
+        .iter()
+        .filter(|m| matches!(m.kind, MarkerKind::Note { .. }))
+        .map(|m| {
+            let y = crate::world::notes::rest_height(zone, m.at[0], m.at[1], 2.2 + m.y);
+            (
+                Vec3::new(m.at[0], y, m.at[1]),
+                Quat::from_rotation_y(-m.rot.to_radians()),
+            )
+        })
+        .collect()
+}
+
+/// How far a rolled item's middle stays from a note's paper.
+pub const CLEAR_OF_NOTE: f32 = 0.1;
+
+/// Where an item rolled at `at` lands, moved the least way off any note it
+/// would lie on (`docs/LEGIBILITY.md`: a torch on the pump log hid half of
+/// it).
+pub fn clear_of_notes(at: Vec3, notes: &[(Vec3, Quat)]) -> Vec3 {
+    let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(CLEAR_OF_NOTE);
+    let mut at = at;
+    for (note, rot) in notes {
+        let p = rot.inverse() * (at - *note);
+        if p.y.abs() > 0.4 || p.x.abs() >= half.x || p.z.abs() >= half.y {
+            continue;
+        }
+        let mut q = p;
+        if half.x - p.x.abs() < half.y - p.z.abs() {
+            q.x = half.x.copysign(p.x);
+        } else {
+            q.z = half.y.copysign(p.z);
+        }
+        at = *note + *rot * q;
+    }
+    at
+}
+
 fn spawn_marker_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -103,6 +145,7 @@ fn spawn_marker_loot(
     seed: u64,
 ) {
     let mut rng = Rng::new(seed ^ 0x100);
+    let notes = notes_lying(zone);
     for m in &zone.map.markers {
         let MarkerKind::Loot { table } = &m.kind else {
             continue;
@@ -135,23 +178,37 @@ fn spawn_marker_loot(
             .flat_map(|_| loot.0.roll(table, catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
-            let offset = Vec3::new(
-                (i as f32 * 0.37).sin() * 0.25,
-                0.05 * i as f32,
-                (i as f32 * 0.37).cos() * 0.18,
-            );
+            let offset = marker_roll(i);
             let e = spawn_item(
                 commands,
                 catalog,
                 SpawnItem {
                     kind: drop.kind,
-                    transform: Transform::from_translation(base + offset),
+                    transform: Transform::from_translation(clear_of_notes(base + offset, &notes)),
                     condition: drop.condition,
                 },
             );
             let _ = e;
         }
     }
+}
+
+/// Where a building spot's `i`th roll lands, from the spot.
+pub fn building_roll(i: usize) -> Vec3 {
+    Vec3::new(
+        (i as f32 * 1.7).sin() * 0.18,
+        0.04 + i as f32 * 0.06,
+        (i as f32 * 1.7).cos() * 0.12,
+    )
+}
+
+/// Where a loot marker's `i`th roll lands, from its base.
+pub fn marker_roll(i: usize) -> Vec3 {
+    Vec3::new(
+        (i as f32 * 0.37).sin() * 0.25,
+        0.05 * i as f32,
+        (i as f32 * 0.37).cos() * 0.18,
+    )
 }
 
 /// Loot rolls for a spot of this richness: the whole part, and the
@@ -172,23 +229,20 @@ fn spawn_building_loot(
 ) {
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
+    let notes = notes_lying(zone);
     for spot in &spots.0 {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| loot.0.roll(spot.table, catalog, &mut rng))
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
-            let off = Vec3::new(
-                (i as f32 * 1.7).sin() * 0.18,
-                0.04 + i as f32 * 0.06,
-                (i as f32 * 1.7).cos() * 0.12,
-            );
+            let at = clear_of_notes(spot.at + building_roll(i), &notes);
             spawn_item(
                 commands,
                 catalog,
                 SpawnItem {
                     kind: drop.kind,
-                    transform: Transform::from_translation(spot.at + off).with_rotation(
+                    transform: Transform::from_translation(at).with_rotation(
                         Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU)),
                     ),
                     condition: drop.condition,
