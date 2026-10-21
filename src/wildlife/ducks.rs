@@ -160,10 +160,25 @@ pub fn survey(zone: &Zone, obstacles: &Obstacles) -> Water {
     Water { spots }
 }
 
+/// How far the valley's water reaches, corner to corner (m).
+pub fn extent(water: &Water) -> f32 {
+    let mut ps = water.spots.iter().map(|s| s.0);
+    let Some(first) = ps.next() else {
+        return 0.0;
+    };
+    let (lo, hi) = ps.fold((first, first), |(lo, hi), p| (lo.min(p), hi.max(p)));
+    lo.distance(hi)
+}
+
 /// Where a valley's rafts start: the roomiest water more often (a
 /// reservoir's arm before a creek's pool), one or two, the second well
-/// away from the first. Indices into `water.spots`.
+/// away from the first. Indices into `water.spots`. None on water too small
+/// to get away across ([`extent`] under the shortest [`HOP`]): flushed,
+/// they'd only come down again by whatever scared them (Rime Fell's tarn).
 pub fn homes(water: &Water, map: &str, seed: u64) -> Vec<usize> {
+    if extent(water) < HOP.0 {
+        return Vec::new();
+    }
     let mut rng = Rng::new(seed ^ 0xD0C5_A11A ^ flock::name_hash(map));
     let mut out = Vec::new();
     for _ in 0..2 {
@@ -872,6 +887,15 @@ mod tests {
             .collect()
     }
 
+    /// The valleys with ducks on: all but Rime Fell, whose tarn is too
+    /// small ([`every_valley_with_water_has_rafts`]).
+    fn ducked() -> Vec<Valley> {
+        valleys()
+            .into_iter()
+            .filter(|v| extent(&v.water) >= HOP.0)
+            .collect()
+    }
+
     fn rafts_of(v: &Valley, seed: u64) -> Vec<Raft> {
         let mut rng = Rng::new(seed);
         homes(&v.water, v.map, seed)
@@ -946,7 +970,9 @@ mod tests {
     }
 
     /// Every valley has open water deep enough for ducks, and one or two
-    /// rafts on it; Sallow Reservoir's on its upper arm, among others.
+    /// rafts on it if there's room to fly off across it; Sallow
+    /// Reservoir's on its upper arm, among others. Rime Fell's tarn is too
+    /// small, and has none.
     #[test]
     fn every_valley_with_water_has_rafts() {
         for v in valleys() {
@@ -956,6 +982,12 @@ mod tests {
                 v.map,
                 v.water.spots.len()
             );
+            if v.map == "rime_fell" {
+                assert!(extent(&v.water) < HOP.0, "the tarn's grown");
+                assert!(rafts_of(&v, 1).is_empty());
+                continue;
+            }
+            assert!(extent(&v.water) >= HOP.0, "{}", v.map);
             let rafts = rafts_of(&v, 1);
             assert!(!rafts.is_empty(), "{}: no rafts", v.map);
             for r in &rafts {
@@ -987,7 +1019,7 @@ mod tests {
     /// on deep enough water at its surface for minutes, and stay together.
     #[test]
     fn swimming_ducks_stay_on_deep_water() {
-        for v in valleys() {
+        for v in ducked() {
             for mut raft in rafts_of(&v, 3) {
                 let start = raft.home;
                 let mut dabbles = 0;
@@ -1038,7 +1070,7 @@ mod tests {
     /// them the same, a shot from further.
     #[test]
     fn they_keep_away_then_flush_at_the_right_distances() {
-        for v in valleys() {
+        for v in ducked() {
             let fresh = || rafts_of(&v, 5).remove(0);
             for (speed, r) in [(1.2, FLUSH), (5.0, WARY)] {
                 let mut raft = fresh();
@@ -1123,7 +1155,7 @@ mod tests {
     /// at most once a minute.
     #[test]
     fn flushed_ducks_fly_off_and_land_on_water_again() {
-        for v in valleys() {
+        for v in ducked() {
             for mut raft in rafts_of(&v, 7) {
                 let mut alarms = Vec::new();
                 let mut ran = 0;
