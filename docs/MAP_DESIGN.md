@@ -246,12 +246,49 @@ Buildings are where the hands-on looting is, and a roof is cover from
 drones and the Surge. A raid should alternate: a walk, a search, a walk.
 
 - Along every main route, a building you can walk into within 60 m at
-  least every 320 m (`RHYTHM_GAP`). Enterable prefabs are `ENTERABLE`.
+  least every 320 m (`RHYTHM_GAP`). Enterable prefabs are `ENTERABLE`;
+  an underground kiosk's stair down counts too.
 - Mix the scale: a village of small houses, a hall you can get lost in,
   a lone hut. Big buildings belong to dangerous places (they're slow to
   clear and robots come while you do).
 - Leave open ground between groups: the outdoor stretch is where you
   look around, listen, and decide.
+
+## The Surge
+
+Five minutes' warning, then at a minute the radio says "One minute. Get
+out, or get under something." (`raid::update`), and for two minutes the
+Surge kills anyone with open sky over their head (the game casts a ray
+25 m up from the head). A roof is any walk-in building (`ENTERABLE`)
+with its roof on, anything with a door you walk through (a boxcar, the
+signal box, the chapel) and every underground kiosk; not a burnt house
+(open behind its front) or a drowned one (`map_surge::roofed`). Walks
+are measured on the comfort grid from each door, 1.5 m out from it
+(`DOOR_STEP`); an open shed with no doors (the sawmill) from anywhere
+round it.
+
+- From every point of every main route, a roof within a minute's walk
+  once the call comes: 144 m (`ROUTE_ROOF`, `SURGE_CALL` × `WALK`). A
+  first-timer on the road hears it and walks in.
+- From everywhere comfortable inside the fence, a roof within a minute
+  at the best pace a body keeps up: 234 m (`ANYWHERE_ROOF` = `dash(60)`:
+  sprinting whenever stamina allows, 12 s of it fresh and 3 parts in 5
+  after, not the 276 m a minute's sprint would be). A patch out of reach
+  is a finding at its farthest cell (`PATCH_MIN` and up).
+- Why a minute, not the five minutes' warning: a five-minute walk is
+  720 m, and no ground in any valley is that far from a roof (the
+  farthest is 223 m), so a rule at five minutes says nothing. The minute
+  after the call is when it's decided.
+- The Surge's anomalies, over 8 seeds × 4 cycles (`SURGE_SEEDS`,
+  `SURGE_CYCLES`), and the standing ones, keep their reach
+  (`AnomalyKind::danger_radius`) 2 m off every wall (`WALL_CLEAR`: a
+  building's footprint, a kiosk's with its apron) and out of the 4 m in
+  front of every door (`DOOR_STRIP`; `map_surge::anomaly_room`). The
+  layout and the run-time blooms keep to it by construction
+  (`anomaly::clear_of_buildings`); a snare once opened 2 m from the
+  factory hall's wall.
+- `SURGE=1 scripts/map-preview.sh <map>` shades the ground over a
+  minute's walk from a roof, brighter the farther.
 
 ## Anomalies
 
@@ -329,6 +366,18 @@ fine on a monitor makes people sick or tired in a headset.
 - **Footing**: nothing you go to (rendezvous, loot, offerings, keys,
   work sites, notes, signs) is in water or on ground steeper than 25°,
   and no placement stands in water.
+- **Kiosks are placements.** An underground site's placement is its
+  entrance kiosk and apron (`underground::FOOTPRINT`); its exit kiosks
+  stand on the surface too, tens of metres off (`underground::kiosks`).
+  The lint holds every kiosk to the placement rules (`map_lint::solids`,
+  the entrance counted once): no building on its apron, no squeeze
+  between its walls and a building's (the apron is ground you walk
+  over), not on a road (a road may end at its door), no crate within
+  `CRATE_ROOM`, no truck within `TRUCK_ROOM`; an exit's levelled pad not
+  in water, and the ground 2 m out from every kiosk's door
+  (`KIOSK_STEP`, its -Z end) neither water nor steeper than 25°. A kiosk
+  counts in the view load, as cover, as a way indoors for the rhythm and
+  the Surge, and its door as somewhere you must be able to walk to.
 
 ## Performance: what's in view
 
@@ -337,8 +386,8 @@ view. Buildings are the expensive part (dozens of pieces, shadow
 casters); trees are instanced with impostors, rocks have LODs.
 
 - At most 16 placements within 150 m of any point on a main route or any
-  point of interest (`VIEW_MAX`, `VIEW_RANGE`). A village is a dozen
-  buildings, not forty.
+  point of interest (`VIEW_MAX`, `VIEW_RANGE`), an underground site's
+  exit kiosks among them. A village is a dozen buildings, not forty.
 - Spread groups out so no view takes in two big ones at once.
 - `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` reports what a view
   actually draws (`docs/QA.md`, render load).

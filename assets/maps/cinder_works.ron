@@ -263,6 +263,9 @@
         (prefab: "boxcar", at: (215.1, -1.1), rot: 82.7),
         (prefab: "boxcar", at: (268.0, -5.5), rot: 89.4),
         (prefab: "shed", at: (250.0, 22.0), rot: 0.0),
+        // A lone shed out on the south-east flats: the only roof in a
+        // minute's run of that corner when the Surge is called.
+        (prefab: "shed", at: (215.0, 210.0), rot: 0.0),
 
         // The fire lookout in the dead wood.
         (prefab: "ranger_tower", at: (-178.0, -168.0), rot: 0.0),

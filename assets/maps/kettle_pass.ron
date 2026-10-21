@@ -265,7 +265,8 @@
         (prefab: "deep_kettle", at: (-54.0, 106.0), rot: 0.0),
         // The mine's headframe over its shaft, beside the gallery's kiosk.
         (prefab: "headframe", at: (-72.0, 28.0), rot: 90.0),
-        (prefab: "shed", at: (-72.0, 112.0), rot: 0.0),
+        // (A shed stood at (-72, 112): the deep workings' kiosk beside it
+        // is the roof there now, and the Row's view had no room for both.)
 
         // The low farm.
         (prefab: "farmhouse", at: (-185.0, 195.0), rot: 0.0),

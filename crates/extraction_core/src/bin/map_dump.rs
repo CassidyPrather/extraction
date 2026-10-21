@@ -5,7 +5,8 @@
 //! Usage: `map-dump <map.ron> <out-dir>`
 //!
 //! Also runs the map lint and writes its main routes (`routes.json`) and
-//! findings (`lint.json`) for the preview to draw.
+//! findings (`lint.json`) for the preview to draw, and the Surge's walk to
+//! a roof past a minute's (`surge.f32`, for `--heat`).
 
 use extraction_core::map::MapDef;
 use extraction_core::terrain::Heightmap;
@@ -156,6 +157,24 @@ fn main() {
     std::fs::write(format!("{out}/routes.json"), lint.routes_json()).unwrap();
     std::fs::write(format!("{out}/lint.json"), lint.findings_json()).unwrap();
     eprint!("{}", lint.text());
+    // The Surge: how far past a minute's walk the nearest roof is, on the
+    // heightmap's grid (0 where one is nearer, or the ground isn't
+    // comfortable, or is past the fence), for `map_preview.py --heat`.
+    let (g, d) = extraction_core::map_surge::roof_field(&map, &hm);
+    let surge: Vec<f32> = (0..hm.n * hm.n)
+        .map(|k| {
+            let at = hm.pos(k % hm.n, k / hm.n);
+            let half = map.half() - map.fence_inset;
+            if at[0].abs() > half || at[1].abs() > half {
+                return 0.0;
+            }
+            g.cell_of(at)
+                .map(|(i, j)| d[j * g.n + i] - extraction_core::map_surge::ROUTE_ROOF)
+                .filter(|m| m.is_finite())
+                .map_or(0.0, |m| m.max(0.0))
+        })
+        .collect();
+    write_f32("surge.f32", &surge);
     let sight = extraction_core::map_sight::audit(&map, &hm);
     std::fs::write(format!("{out}/sight.json"), sight.json()).unwrap();
     println!("{} ({}x{} samples) -> {out}", map.name, hm.n, hm.n);

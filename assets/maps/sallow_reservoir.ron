@@ -236,6 +236,13 @@
             points: [(-240.0, 132.0), (-245.0, 60.0), (-248.0, -20.0), (-250.0, -100.0), (-250.0, -150.0),
                      (-261.0, -176.0), (-257.0, -234.0)],
         ),
+        // Up off the west shore road to the bailiff's shed on the hillside
+        // (Map design, the Surge: the road runs in a cut there, and the
+        // nearest roof was 200 m along it).
+        (
+            name: "Bailiff's path", kind: Path, width: 3.0, shoulder: 1.5, smoothing: 4.0,
+            points: [(-249.0, -66.0), (-255.0, -92.0), (-259.0, -112.0)],
+        ),
         // The slipway: the fishing club's ramp, down into the bed.
         (
             name: "Slipway", kind: Dirt, width: 5.0, shoulder: 2.5, smoothing: 10.0,
@@ -398,6 +405,11 @@
         (prefab: "shed", at: (6.0, 246.0), rot: 90.0),
         // The roadman's hut on the way round.
         (prefab: "shed", at: (-182.0, 244.0), rot: 0.0),
+        // Map design, the Surge: a roof in a minute's reach on the west
+        // shore (the bailiff's shed, up its path off the road) and at the
+        // inflow bridge's rendezvous.
+        (prefab: "shed", at: (-264.0, -112.0), rot: 90.0),
+        (prefab: "shed", at: (14.0, -252.0), rot: 90.0),
 
         // The fishing club at the top of the slipway.
         (prefab: "cabin_log", at: (-160.0, 112.0), rot: 300.0),
