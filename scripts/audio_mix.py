@@ -106,7 +106,8 @@ def muffle_db(fc):
 # Filters the game puts on a cue's own chain (src/audio.rs), Hz: the
 # suppressed shot's low-pass, water muffled in a bottle. Judged by what
 # they take out of the asset's spectrum.
-CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0}
+CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0, "gun.squib": 450.0,
+               "gun.bulged": 1400.0, "gun.bolt_stuck": 1800.0}
 
 
 def own_filter(cue_name):

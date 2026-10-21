@@ -230,8 +230,14 @@ is what it did before.
 | A grenade's pin pulled | `grenade.pin` (a click) and `grenade.scrape` (the ring coming off) | click in the hand on the ring | silent |
 | Its spoon flying (thrown, or thumbed off to cook it) | `grenade.spoon`, a small metal ping | tick in the hand holding it down | silent |
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
+| A jam: failure to eject or feed, a double feed (`Malfunctioned`) | `gun.malfunction`, a dull wrong clack | each its own pulse in the gun hand (`weapons::faults`: 0.55/30 ms, 0.12/15 ms, 0.85/120 ms); the old generic 0.5 pulse in both hands is gone | a generic pulse as well |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A squib: a reloaded round with too little powder (`FireEvent::Squib`) | `gun.squib`: the rifle's shot low-passed at 450 Hz and slowed, a weak dull pop 10 LU under a real shot up close, nothing cycling | 0.2/30 ms in the gun hand (`weapons::faults`) | the generic malfunction clack |
+| A bulge: a round fired into a squib's bullet (`Bulged`) | `gun.bulged` (the shot through 1.4 kHz: muffled, wrong) and `gun.bulged_ring`, the barrel ringing | 1.0/350 ms (`weapons::faults`), and it hurts you | — |
+| Rodding a stuck bullet out (`Rodded`) | `gun.rod_scrape` down the bore and `gun.rod_tink` as it drops | 0.3/40 ms | — |
+| A Mosin's bolt seized after the shot (`BoltStuck`), slapped free (`BoltFreed`) | `gun.bolt_stuck`, a dull clack through 1.8 kHz; `gun.bolt_freed`, a sharp metal smack, then the bolt opening | 0.6/80 ms, a grinding 0.3 tick while you lift against it; 0.4/20 ms | — |
+| A worn SKS slam-firing (`SlamFire`) | the bolt's close (a tick before), the shot on top of it, and `gun.slam_snap`, the floating pin | the shot's kick | — |
 | A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |

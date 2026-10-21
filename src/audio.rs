@@ -813,6 +813,83 @@ fn shot_set(item: &str) -> &'static str {
     }
 }
 
+/// A gun's faults, each its own (`weapons::faults`): true if it was one.
+///
+/// - A squib: a weak, dull pop. The rifle's shot low-passed hard and far
+///   down, no crack, nothing cycling: it must not sound like a shot.
+/// - A bulge: a round fired into a squib's bullet. A muffled, wrong bang
+///   with the barrel ringing after it.
+/// - Rodded: the cleaning rod's scrape down the bore, and the bullet's
+///   small tink as it drops out.
+/// - A stuck bolt: a dull clack as the handle won't come up. Freed: the
+///   slap's sharp metal smack, then the bolt opening.
+/// - A slam-fire: the bolt's close is already there (it comes a tick
+///   before the shot); a faint snap of the floating pin marks it wrong.
+fn fault_sounds(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    event: &FireEvent,
+    at: Vec3,
+) -> bool {
+    let layers: &[(&str, &str, f64, Option<f32>)] = match event {
+        FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
+        FireEvent::Bulged { .. } => &[
+            ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
+            ("impacts/metal", "gun.bulged_ring", 0.8, None),
+        ],
+        FireEvent::Rodded => &[
+            ("physical/handle_metal", "gun.rod_scrape", 0.8, None),
+            ("guns/casing", "gun.rod_tink", 1.35, None),
+        ],
+        FireEvent::BoltStuck => &[("guns/bolt_open", "gun.bolt_stuck", 0.6, Some(1800.0))],
+        FireEvent::BoltFreed => &[
+            ("impacts/metal", "gun.bolt_freed", 1.25, None),
+            ("guns/bolt_open", "gun.bolt_open", 1.0, None),
+        ],
+        FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        _ => return false,
+    };
+    for &(set, cue, speed, cutoff) in layers {
+        match cutoff {
+            Some(hz) => play_filtered(commands, bank, rng, set, at, cue, speed, hz),
+            None => play_at_speed(commands, bank, rng, set, Some(at), cue, 0.0, speed, 0.04),
+        }
+    }
+    true
+}
+
+/// A placed one-shot through its own low-pass (`hz`), for sounds that
+/// are some other sound with its edge taken off.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
+}
+
 fn gun_sounds(
     mut commands: Commands,
     mut events: MessageReader<GunEvent>,
@@ -828,6 +905,9 @@ fn gun_sounds(
         .map(|g| g.translation())
         .unwrap_or_default();
     for ev in events.read() {
+        if fault_sounds(&mut commands, &bank, &mut rng.0, &ev.event, ev.at) {
+            continue;
+        }
         let action = guns.get(ev.gun).map(|g| g.firearm.def.action).ok();
         use extraction_core::firearm::ActionKind::*;
         let (set, cue, offset) = match (&ev.event, action) {
