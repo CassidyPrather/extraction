@@ -148,6 +148,9 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
 const STAIR_RUN: (f32, f32) = (-30.0, 90.0);
 const STAIR_RISE: (f32, f32) = (30.0, 52.0);
 const STAIR_WALL_AT: (f32, f32) = (30.0, 29.0);
+/// Its thickness: from the stair path's outer shoulder to past the foot of
+/// the embankment's bank.
+const STAIR_WALL_T: f32 = 3.0;
 
 /// The face stair's height over the valley floor at map x, as the road on
 /// its terraces grades it.
@@ -158,8 +161,8 @@ fn stair_height(x: f32) -> f32 {
 }
 
 /// The face stair's outer wall: masonry along the embankment's south
-/// edge from the valley floor to the landing, its top a metre over the
-/// steps (a parapet you can lean a rifle on, and what stops you stepping
+/// edge from the valley floor to the landing, filling the embankment's
+/// bank, its top a metre over the steps (a parapet you can lean a rifle on, and what stops you stepping
 /// off 20 m of embankment), in 4 m panels stepping up with the stair.
 fn stair_wall(b: &mut Builder) {
     let (x0, x1) = STAIR_RUN;
@@ -170,13 +173,16 @@ fn stair_wall(b: &mut Builder) {
         let a = x0 + panel * k as f32;
         let top = stair_height(a + panel) + 1.0 - foot;
         let lx = a + panel * 0.5 - cx;
+        // Thick enough to hold the embankment's whole fall from the
+        // path's edge to the valley floor (about 3 m out): from outside, a
+        // stone face down to the grass; from the stair, a parapet.
         b.bx(
-            Vec3::new(panel + 0.02, top, 0.45),
+            Vec3::new(panel + 0.02, top, STAIR_WALL_T),
             Vec3::new(lx, top * 0.5, 0.0),
             Mat::DressedStone,
         );
         b.deco(
-            Vec3::new(panel + 0.06, 0.1, 0.6),
+            Vec3::new(panel + 0.06, 0.1, STAIR_WALL_T + 0.1),
             Vec3::new(lx, top + 0.05, 0.0),
             Mat::Boulder,
         );
