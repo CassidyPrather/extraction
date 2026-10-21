@@ -153,6 +153,7 @@ impl Plugin for WildlifePlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    scene_perches,
                     gather_threats,
                     (flock::flocks, herd::herds, fish::shoals, rats::rats),
                 )
@@ -190,6 +191,39 @@ fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate:
     );
     commands.insert_resource(obstacles);
     commands.insert_resource(perches);
+}
+
+/// Story's staged scenes (`world::scenes::Staged`: a row of kept buses, a
+/// yard of luggage) are somewhere to perch too, and to keep out of, once
+/// they're staged: they're added as they appear.
+fn scene_perches(
+    staged: Option<Res<crate::world::scenes::Staged>>,
+    zone: Res<crate::world::Zone>,
+    opts: Res<crate::LaunchOptions>,
+    perches: Option<ResMut<perches::Perches>>,
+    obstacles: Option<ResMut<perches::Obstacles>>,
+    mut done: Local<std::collections::HashSet<String>>,
+) {
+    let (Some(staged), Some(mut perches), Some(mut obstacles)) = (staged, perches, obstacles)
+    else {
+        return;
+    };
+    if staged.0.len() == done.len() {
+        return;
+    }
+    for (id, scene) in crate::world::scenes::of(&opts.map) {
+        if !staged.0.contains(&id) || !done.insert(id.clone()) {
+            continue;
+        }
+        let (solids, site) = perches::scene(&zone, &id, scene);
+        for s in solids {
+            obstacles.push(s);
+        }
+        if let Some(site) = site {
+            debug!("perches on the scene {}: {}", scene.name, site.spots.len());
+            perches.sites.push(site);
+        }
+    }
 }
 
 /// Animal visuals: the client's half.

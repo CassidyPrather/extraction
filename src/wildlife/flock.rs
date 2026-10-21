@@ -68,6 +68,8 @@ pub const SAFE: f32 = 45.0;
 /// The next building is this far from the last, give or take.
 pub const HOP_MIN: f32 = 60.0;
 pub const HOP_MAX: f32 = 280.0;
+/// A staged scene's perches are picked this many times as often.
+pub const SCENE_PULL: f32 = 6.0;
 /// Wheeling overhead after a fright, seconds.
 pub const CIRCLE_FOR: (f32, f32) = (10.0, 22.0);
 /// Left alone, they move on after this long, seconds.
@@ -626,7 +628,13 @@ fn next_site(
     // Nearer ones more often.
     let weights: Vec<f32> = choices
         .iter()
-        .map(|&i| 1.0 / (perches.sites[i].centre.distance(from) + 40.0))
+        .map(|&i| {
+            let s = &perches.sites[i];
+            // Story's set pieces (a row of buses over an empty bay) more
+            // often than not.
+            let pull = if s.scene { SCENE_PULL } else { 1.0 };
+            pull / (s.centre.distance(from) + 40.0)
+        })
         .collect();
     flock.rng.weighted(&weights).map(|k| choices[k])
 }

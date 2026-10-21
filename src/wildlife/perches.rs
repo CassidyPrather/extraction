@@ -269,6 +269,8 @@ pub struct PerchSite {
     /// Shallow water, for a heron to stand in ([`wading`]), not the top of
     /// anything.
     pub wading: bool,
+    /// One of Story's staged scenes (`world::scenes`): birds favour them.
+    pub scene: bool,
 }
 
 impl PerchSite {
@@ -288,7 +290,11 @@ fn solids_of(zone: &Zone, p: &extraction_core::map::Placement) -> Vec<Solid> {
     let Some(geo) = prefab(&p.prefab) else {
         return Vec::new();
     };
-    let root = placement_transform(zone, p);
+    solids_from(&geo, placement_transform(zone, p))
+}
+
+/// A prefab's pieces as solids, posed at `root`.
+fn solids_from(geo: &crate::world::buildings::Geo, root: Transform) -> Vec<Solid> {
     geo.pieces
         .iter()
         .map(|piece| {
@@ -315,7 +321,12 @@ fn down(solids: &[Solid], top: Vec3) -> Option<(Vec3, Vec3)> {
 }
 
 /// Perches on one placement's solids.
-fn site_perches(zone: &Zone, prefab_id: &str, solids: &[Solid]) -> Option<PerchSite> {
+fn site_perches(
+    zone: &Zone,
+    prefab_id: &str,
+    solids: &[Solid],
+    min_height: f32,
+) -> Option<PerchSite> {
     if solids.is_empty() {
         return None;
     }
@@ -335,7 +346,7 @@ fn site_perches(zone: &Zone, prefab_id: &str, solids: &[Solid]) -> Option<PerchS
             let Some((p, n)) = down(solids, Vec3::new(x, hi.y + 1.0, z)) else {
                 continue;
             };
-            if n.y >= MIN_UP && p.y >= zone.ground(x, z) + MIN_HEIGHT {
+            if n.y >= MIN_UP && p.y >= zone.ground(x, z) + min_height {
                 found.push((p, n));
             }
         }
@@ -401,6 +412,7 @@ fn site_perches(zone: &Zone, prefab_id: &str, solids: &[Solid]) -> Option<PerchS
         centre,
         spots,
         wading: false,
+        scene: false,
     })
 }
 
@@ -415,7 +427,7 @@ pub fn survey(zone: &Zone) -> (Obstacles, Perches) {
             continue;
         }
         let solids = solids_of(zone, p);
-        if let Some(site) = site_perches(zone, &p.prefab, &solids) {
+        if let Some(site) = site_perches(zone, &p.prefab, &solids, MIN_HEIGHT) {
             perches.sites.push(site);
         }
         for s in solids {
@@ -423,6 +435,28 @@ pub fn survey(zone: &Zone) -> (Obstacles, Perches) {
         }
     }
     (obstacles, perches)
+}
+
+/// A staged scene's perches sit at least this high: crows on a row of
+/// cases in a yard, not only on the bus roofs.
+pub const SCENE_MIN_HEIGHT: f32 = 0.18;
+
+/// A staged scene's solids (`world::scenes`: its tables, crates, props),
+/// and its perches if it has any.
+pub fn scene(
+    zone: &Zone,
+    id: &str,
+    scene: &crate::world::scenes::Scene,
+) -> (Vec<Solid>, Option<PerchSite>) {
+    let Some(geo) = crate::world::scenes::geo(id) else {
+        return (Vec::new(), None);
+    };
+    let solids = solids_from(&geo, crate::world::scenes::pose(zone, scene));
+    let site = site_perches(zone, &scene.name, &solids, SCENE_MIN_HEIGHT).map(|mut s| {
+        s.scene = true;
+        s
+    });
+    (solids, site)
 }
 
 /// Water this deep is for wading in (m).
@@ -473,6 +507,7 @@ pub fn wading(zone: &Zone) -> Vec<PerchSite> {
                 centre,
                 spots,
                 wading: true,
+                scene: false,
             }
         })
         .collect()
@@ -542,6 +577,42 @@ mod tests {
                         .count();
                     assert_eq!(up, 0, "{map}: a perch under something at {p}");
                     assert!(p.y > zone.ground(p.x, p.z) + MIN_HEIGHT - 0.01);
+                }
+            }
+        }
+    }
+
+    /// Story's scenes, each as if staged: none of their perches is inside
+    /// or under anything (their own pieces and the valley's buildings),
+    /// and a scene with a perch line has them along its top.
+    #[test]
+    fn scene_perches_are_on_top_of_things() {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
+            let zone = Zone::load(map);
+            let (mut obstacles, _) = survey(&zone);
+            let mut sites = Vec::new();
+            for (id, sc) in crate::world::scenes::of(map) {
+                let (solids, site) = scene(&zone, &id, sc);
+                for s in solids {
+                    obstacles.push(s);
+                }
+                sites.extend(site);
+            }
+            for site in &sites {
+                assert!(site.scene);
+                for &(p, _) in &site.spots {
+                    let body = p + Vec3::Y * (BIRD_HEIGHT * 0.5 + 0.03);
+                    assert!(
+                        !obstacles.inside(body, 0.0),
+                        "{map}: a perch on the scene {} is inside something at {p}",
+                        site.prefab
+                    );
+                    assert!(p.y >= zone.ground(p.x, p.z) + SCENE_MIN_HEIGHT - 0.01);
                 }
             }
         }
