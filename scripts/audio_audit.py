@@ -157,7 +157,7 @@ def measure(path, kind):
     onset_at = np.argmax(np.abs(mono) > peak * 0.1) / SR if peak > 0 else 0.0
     clipped = int(np.sum(np.convolve(np.abs(mono) >= 0.998, np.ones(3), "valid") >= 3))
     r = {
-        "file": str(path.relative_to(AUDIO)),
+        "file": str(path.relative_to(AUDIO)) if path.is_relative_to(AUDIO) else str(path),
         "seconds": round(len(x) / SR, 3),
         "channels": x.shape[1],
         "momentary_max": round(float(m.max()), 1),
@@ -234,6 +234,8 @@ def main():
         sets = asset_pass(bank, out)
     if args.assets_only:
         return
+    import audio_voices  # noqa: E402  (what the robots say)
+    audio_voices.add_sets(sets, out)
     import audio_mix  # noqa: E402  (the mix and scene passes)
     flagged = audio_mix.run(sets, out)
     import audio_acoustics  # noqa: E402  (what the rooms do)
@@ -260,6 +262,13 @@ def main():
         with open(out / "mix.txt", "a") as f:
             f.write("\n" + text + "\n")
     flagged += score_flags
+    voice_flags, voice_lines = audio_voices.run(sets, out)
+    if voice_lines:
+        text = "\n".join(voice_lines)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n" + text + "\n")
+    flagged += voice_flags
     if args.check and flagged:
         sys.exit(f"{flagged} cue(s) flagged: see {out / 'mix.txt'}")
 

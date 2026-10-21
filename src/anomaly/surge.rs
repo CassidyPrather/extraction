@@ -124,6 +124,7 @@ pub fn surge_blooms(
             continue;
         };
         let at = zone.on_ground(p[0], p[1]);
+        let stone = rng.chance(extraction_core::anomaly::STORMGLASS_CHANCE);
         commands.queue(move |world: &mut World| {
             let e = spawn_anomaly(world, kind, at, radius, Some(BLOOM_LIFE));
             world.entity_mut(e).insert((
@@ -140,12 +141,38 @@ pub fn surge_blooms(
                 at,
                 what: AnomalyAct::Bloom,
             });
+            // The only place a stormglass grows: where the Surge itself
+            // broke the ground.
+            if stone {
+                grow(world, "art_stormglass", at + Vec3::Y * 0.4);
+            }
         });
         info!("surge: a {kind:?} blooms at {at:.0}");
     }
     if before > first_bloom() && now <= first_bloom() {
         raid.say("The ground is stirring. New ones are opening around you. Keep to the road.");
     }
+}
+
+/// Spawns an artifact at `at` (a bloom's heart).
+pub fn grow(world: &mut World, id: &str, at: Vec3) -> Option<Entity> {
+    let catalog = world.resource::<crate::items::Catalog>().clone();
+    let kind = catalog.kind(id)?;
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, world);
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(world);
+    Some(e)
 }
 
 /// When the first Surge bloom opens, seconds before the Surge.
@@ -157,6 +184,72 @@ pub fn first_bloom() -> f32 {
 mod tests {
     use super::*;
     use crate::launch::LaunchOptions;
+
+    /// Out in the open while the Surge rages: deadly, unless a stormglass
+    /// is on you.
+    #[test]
+    fn a_stormglass_is_a_roof_in_the_surge() {
+        let hurt = |carry: bool| {
+            let mut app = crate::headless_app(
+                LaunchOptions {
+                    robots: false,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let p = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let open = app.world().resource::<Zone>().on_ground(120.0, -60.0);
+            app.world_mut().get_mut::<Transform>(p).unwrap().translation = open;
+            if carry {
+                let bead = grow(app.world_mut(), "art_stormglass", open).unwrap();
+                app.update();
+                let hand = app
+                    .world_mut()
+                    .query_filtered::<Entity, With<crate::rig::RigHand>>()
+                    .iter(app.world())
+                    .next()
+                    .unwrap();
+                app.world_mut().entity_mut(bead).insert((
+                    crate::interact::Held {
+                        player: p,
+                        hand,
+                        side: crate::rig::Side::Right,
+                        point: 0,
+                        offset: Transform::IDENTITY,
+                    },
+                    avian3d::prelude::RigidBodyDisabled,
+                ));
+            }
+            {
+                let mut raid = app.world_mut().resource_mut::<Raid>();
+                raid.phase = Phase::Out;
+                raid.clock = crate::raid::SURGE_AFTER + 10.0;
+            }
+            for _ in 0..3 {
+                app.update();
+            }
+            let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
+            for _ in 0..90 * 2 {
+                app.update();
+            }
+            hp - app.world().get::<crate::health::Health>(p).unwrap().hp
+        };
+        let bare = hurt(false);
+        let sheltered = hurt(true);
+        assert!(bare > 20.0, "the open Surge tears at you ({bare:.1})");
+        assert!(
+            sheltered < 3.0,
+            "the stormglass keeps it off ({sheltered:.1})"
+        );
+    }
 
     #[test]
     fn the_surge_swells_them_and_opens_new_ones_beside_you() {

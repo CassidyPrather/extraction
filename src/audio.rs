@@ -174,6 +174,7 @@ impl Plugin for AudioPlugin {
             .register_node::<ScoreNode>()
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
+            .init_resource::<Hush>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -211,16 +212,23 @@ impl Plugin for AudioPlugin {
                     pack_sounds,
                     landing_sounds,
                     gadget_sounds,
-                    notice_sounds,
                     convoy_sounds,
                     dirigible_loops,
                     drone_and_zip_sounds,
                     kitchen_sounds,
                     mind_sounds,
+                    (render_voices, voice_sounds).chain(),
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
-                    (grenade_sounds, gear_sounds, armour_sounds),
+                    (
+                        grenade_sounds,
+                        gear_sounds,
+                        armour_sounds,
+                        epilogue_sounds,
+                        night_ambience,
+                        turret_sounds,
+                    ),
                 ),
             )
             .add_systems(
@@ -651,6 +659,29 @@ fn armour_sounds(
                 0.06,
             );
         }
+    }
+}
+
+/// A scope's elevation drum turned one detent (`weapons::zero`): a small,
+/// quick click.
+fn turret_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::weapons::zero::TurretClicked>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            Some(c.at),
+            "scope.click",
+            0.0,
+            1.7,
+            0.04,
+        );
     }
 }
 
@@ -1311,6 +1342,24 @@ fn start_ambience(
             }],
         ));
     }
+    // The night's beds (`night_ambience`): insects and leaves, silent
+    // until dark.
+    for (set, marker) in [
+        ("ambience/insects_night", NightLoop::Insects),
+        ("ambience/rustle_leaves", NightLoop::Rustle),
+    ] {
+        if let Some(sample) = bank.pick(set, &mut rng.0) {
+            commands.spawn((
+                marker,
+                SamplePlayer::new(sample).looping(),
+                PlaybackSettings::default(),
+                sample_effects![VolumeNode {
+                    volume: Volume::SILENT,
+                    ..default()
+                }],
+            ));
+        }
+    }
     if let Some(sample) = bank.pick("ambience/room_tone", &mut rng.0) {
         commands.spawn((
             RoomLoop,
@@ -1366,11 +1415,15 @@ fn ambient_oneshots(
     time: Res<Time>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     zone: Res<Zone>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     mut next: Local<(f32, f32, f32, f32)>,
 ) {
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
     };
+    let night = conditions
+        .as_deref()
+        .is_some_and(|c| c.hour == crate::world::weather::Hour::Night);
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
@@ -1423,8 +1476,9 @@ fn ambient_oneshots(
         let a = rng.0.range(0.0, std::f32::consts::TAU);
         let d = rng.0.range(25.0, 70.0);
         let at = ear + Vec3::new(a.cos() * d, rng.0.range(4.0, 15.0), a.sin() * d);
+        // Birds keep to the day.
         let birds = &zone.map.sounds.birds;
-        if !birds.is_empty() {
+        if !birds.is_empty() && !night {
             let set = &birds[rng.0.below(birds.len())];
             play(
                 &mut commands,
@@ -1463,18 +1517,35 @@ fn ambient_oneshots(
             0.1,
         );
     }
+    // Far thunder; at night, the Surge's, deeper and more often, a long
+    // way off across the Zone.
     if next.1 <= 0.0 {
-        next.1 = rng.0.range(60.0, 180.0);
-        play(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "ambience/thunder_distant",
-            None,
-            "thunder",
-            0.0,
-            0.05,
-        );
+        if night {
+            next.1 = rng.0.range(35.0, 90.0);
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/thunder_distant",
+                None,
+                "thunder.surge",
+                0.0,
+                0.78,
+                0.06,
+            );
+        } else {
+            next.1 = rng.0.range(60.0, 180.0);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/thunder_distant",
+                None,
+                "thunder",
+                0.0,
+                0.05,
+            );
+        }
     }
 }
 
@@ -1623,6 +1694,8 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Mirror => {
                         ("anomaly/mirror_shimmer", "anomaly.mirror")
                     }
+                    // Dead air: nothing to hear (Anomalies).
+                    extraction_core::anomaly::AnomalyKind::Hush => continue,
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
@@ -1949,6 +2022,175 @@ fn door_sounds(
     }
 }
 
+/// The beds held down for a moment (the ending's `Found`): `left`
+/// seconds of [`HUSH_DB`], easing in and out over a second and a half.
+#[derive(Resource, Default)]
+pub struct Hush {
+    pub left: f32,
+}
+
+pub const HUSH_DB: f32 = 9.0;
+pub const HUSH_SECONDS: f32 = 10.0;
+
+impl Hush {
+    pub fn db(&self) -> f32 {
+        let edge = 1.5;
+        let into = ((HUSH_SECONDS - self.left) / edge).clamp(0.0, 1.0);
+        let out = (self.left / edge).clamp(0.0, 1.0);
+        HUSH_DB * into.min(out)
+    }
+}
+
+/// The ending's moments (`raid::epilogue::EpilogueBeat`). The crates
+/// opening: a long, low lid creak at hers, then the others round the
+/// stacks a beat apart, fainter. Him at her crate: nothing added, the
+/// wind and the room held down a while so it sits in quiet.
+fn epilogue_sounds(
+    mut commands: Commands,
+    mut beats: MessageReader<crate::raid::epilogue::EpilogueBeat>,
+    mut hush: ResMut<Hush>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, Vec3, f32)>>,
+) {
+    use crate::raid::epilogue::BeatKind;
+    let now = time.elapsed_secs();
+    for b in beats.read() {
+        match b.kind {
+            BeatKind::CratesOpen => {
+                pending.push((now, b.at, 0.0));
+                for i in 0..5 {
+                    let a = rng.0.f32() * std::f32::consts::TAU;
+                    let r = 6.0 + rng.0.f32() * 16.0;
+                    let at = b.at + Vec3::new(a.cos() * r, 0.0, a.sin() * r);
+                    pending.push((now + 0.6 + i as f32 * 0.45 + rng.0.f32() * 0.3, at, -4.0));
+                }
+            }
+            BeatKind::Found => hush.left = HUSH_SECONDS,
+            BeatKind::Begins => {}
+        }
+    }
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, at, db) in due {
+        let speed = 0.5 + rng.0.f32() as f64 * 0.1;
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_creak",
+            Some(at + Vec3::Y),
+            "epilogue.creak",
+            db,
+            speed,
+            0.0,
+        );
+    }
+}
+
+/// The night's own beds.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+enum NightLoop {
+    Insects,
+    Rustle,
+}
+
+/// How near a machine silences the insects, m: the big ones (walkers and
+/// their breeds, the dirigible), and a drone's whine from further, since
+/// the crickets would hide it (`scripts/audio_voices.py`: at night the
+/// hush is the warning where the machine itself is masked).
+pub const INSECTS_HUSH_BIG: f32 = 60.0;
+pub const INSECTS_HUSH_DRONE: f32 = 120.0;
+/// ...and a shot this near.
+pub const INSECTS_HUSH_SHOT: f32 = 150.0;
+/// After the last of it, they wait this long, then come back over this.
+pub const INSECTS_WAIT: f32 = 6.0;
+pub const INSECTS_RETURN: f32 = 15.0;
+
+/// How dark it is for the night's sounds: 1 at night, half at dusk.
+pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
+    use crate::world::weather::Hour;
+    match hour {
+        Hour::Night => 1.0,
+        Hour::Dusk => 0.5,
+        Hour::Dawn | Hour::Day => 0.0,
+    }
+}
+
+/// The night: crickets everywhere outside, which fall silent when
+/// something big comes near or a shot goes off (and so tell you it's
+/// there) and come back a while after; wind in the leaves where it's
+/// overgrown. Quieter through walls, gone underground and in rain.
+#[allow(clippy::too_many_arguments)]
+fn night_ambience(
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    listening: Res<Listening>,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    robots: Query<(&crate::robots::Robot, &GlobalTransform)>,
+    mut shots: MessageReader<crate::weapons::GunEvent>,
+    loops: Query<(&NightLoop, &SampleEffects)>,
+    mut volumes: Query<&mut VolumeNode>,
+    time: Res<Time>,
+    mut state: Local<(f32, f32, f32)>,
+) {
+    use crate::acoustics::SpaceKind;
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    let (last_threat, hush, _) = &mut *state;
+    let near = robots.iter().any(|(r, gt)| {
+        let reach = match r.kind {
+            crate::robots::RobotKind::Drone => INSECTS_HUSH_DRONE,
+            crate::robots::RobotKind::Walker | crate::robots::RobotKind::Dirigible => {
+                INSECTS_HUSH_BIG
+            }
+            _ => 0.0,
+        };
+        !r.wrecked && gt.translation().distance(ear) < reach
+    });
+    let shot = shots.read().any(|g| {
+        matches!(g.event, extraction_core::firearm::Event::Fired { .. })
+            && g.at.distance(ear) < INSECTS_HUSH_SHOT
+    });
+    if near || shot {
+        *last_threat = now;
+    }
+    // Silent in a second and a half; back slowly, once it's been quiet a
+    // while.
+    let quiet = now - *last_threat > INSECTS_WAIT || *last_threat == 0.0;
+    *hush = if quiet {
+        (*hush + dt / INSECTS_RETURN).min(1.0)
+    } else {
+        (*hush - dt / 1.5).max(0.0)
+    };
+    let (night, rain) = conditions
+        .as_deref()
+        .map_or((0.0, 0.0), |c| (nightness(c.hour), c.rain));
+    let under = listening.space.kind == SpaceKind::Underground;
+    let walls = listening.space.enclosed;
+    let cover = zone
+        .as_deref()
+        .map_or(0.5, |z| z.forest_cover(ear.x, ear.z));
+    for (which, effects) in &loops {
+        let (level, cue) = match which {
+            NightLoop::Insects => (night * (1.0 - rain * 2.0).max(0.0) * *hush, "insects"),
+            NightLoop::Rustle => (night * (0.35 + 0.65 * cover), "rustle"),
+        };
+        let level = if under { 0.0 } else { level };
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = if level < 0.01 {
+                Volume::SILENT
+            } else {
+                Volume::Decibels(mix::db(cue) + 20.0 * level.log10() - 12.0 * walls)
+            };
+        }
+    }
+}
+
 /// The wind in the trees, and the hush of a room: which you hear depends
 /// on whether you're under a roof.
 #[derive(Component)]
@@ -1963,10 +2205,13 @@ fn indoor_ambience(
     room: Query<&SampleEffects, With<RoomLoop>>,
     mut volumes: Query<&mut VolumeNode>,
     listening: Res<Listening>,
+    mut hush: ResMut<Hush>,
     time: Res<Time>,
     mut inside: Local<f32>,
     mut below: Local<f32>,
 ) {
+    hush.left = (hush.left - time.delta_secs()).max(0.0);
+    let hushed = hush.db();
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
             .next()
@@ -1985,7 +2230,7 @@ fn indoor_ambience(
             v.volume = if *below > 0.99 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below)
+                Volume::Decibels(mix::db("wind") - 14.0 * k - 40.0 * *below - hushed)
             };
         }
     }
@@ -1994,7 +2239,7 @@ fn indoor_ambience(
             v.volume = if k < 0.01 {
                 Volume::SILENT
             } else {
-                Volume::Decibels(mix::db("room") - 12.0 + 12.0 * k)
+                Volume::Decibels(mix::db("room") - 12.0 + 12.0 * k - hushed)
             };
         }
     }
@@ -2013,9 +2258,12 @@ fn score_drive(
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut score: Query<&mut ScoreNode>,
+    epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
+    mut spoke: MessageReader<crate::robot_voice::Spoke>,
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
     mut level: Local<f32>,
+    mut duck: Local<(f32, f32)>,
 ) {
     use crate::raid::Phase;
     let Ok(mut node) = score.single_mut() else {
@@ -2026,13 +2274,35 @@ fn score_drive(
         return;
     };
     let ear = listener.iter().next().map(|g| g.translation());
-    let at_truck = match raid.as_deref().map(|r| &r.phase) {
-        None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
-        Some(Phase::TruckWaiting { .. }) => {
-            ear.is_some_and(|e| trucks.iter().any(|t| t.translation().distance(e) < 12.0))
+    // A robot speaking nearby: the score steps aside while it does.
+    let now = time.elapsed_secs();
+    for s in spoke.read() {
+        if ear.is_some_and(|e| e.distance(s.at) < mix::SCORE_DUCK_NEAR) {
+            let until = now + crate::robot_voice::duration(s.kind, s.said) + 0.3;
+            duck.0 = duck.0.max(until);
         }
-        _ => false,
+    }
+    let want_duck = if now < duck.0 {
+        mix::SCORE_DUCK_DB
+    } else {
+        0.0
     };
+    let step = if want_duck > duck.1 { 40.0 } else { 10.0 } * time.delta_secs();
+    duck.1 += (want_duck - duck.1).clamp(-step, step);
+    let volume = Volume::Decibels(mix::SCORE_DB - duck.1);
+    if node.volume != volume {
+        node.volume = volume;
+    }
+    // The ending (`raid::epilogue`) is played without it.
+    let ending = epilogue.is_some_and(|e| e.active());
+    let at_truck = ending
+        || match raid.as_deref().map(|r| &r.phase) {
+            None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
+            Some(Phase::TruckWaiting { .. }) => {
+                ear.is_some_and(|e| trucks.iter().any(|t| t.translation().distance(e) < 12.0))
+            }
+            _ => false,
+        };
     let response_near = match (director, ear) {
         (Some(d), Some(e)) => d
             .responses
@@ -2628,36 +2898,6 @@ fn gadget_sounds(
     }
 }
 
-/// A robot noticing you: the whirr of its head snapping round. Each robot
-/// at most every few seconds, however its suspicion wavers.
-fn notice_sounds(
-    mut commands: Commands,
-    mut noticed: MessageReader<crate::robots::Noticed>,
-    time: Res<Time>,
-    mut last: Local<HashMap<Entity, f32>>,
-    bank: Res<SoundBank>,
-    mut rng: ResMut<AudioRng>,
-) {
-    let now = time.elapsed_secs();
-    for n in noticed.read() {
-        if last.get(&n.robot).is_some_and(|t| now - t < 8.0) {
-            continue;
-        }
-        last.insert(n.robot, now);
-        play_at_speed(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            "machines/servo",
-            Some(n.at),
-            "robot.notice",
-            0.0,
-            1.35,
-            0.05,
-        );
-    }
-}
-
 /// The collector's convoy: the clank of a load taken on, the groan of the
 /// walker setting off through the Gate.
 fn convoy_sounds(
@@ -2844,54 +3084,106 @@ fn kitchen_sounds(
     }
 }
 
-/// How robots think, out loud: a whirr as one goes to look, servo sweeps
-/// as it searches, a falling whine as it gives up, a squelch as it calls
-/// the others; and the attack tells, a walker's turret settling before
-/// its first shot and a grappler winding up its throw. A robot's search
-/// sounds are spaced so a long hunt doesn't chatter.
-#[allow(clippy::too_many_arguments)]
-fn mind_sounds(
+/// The robots' words being rendered, off the main thread: every kind's
+/// every word, started once the stream's rate is known.
+#[derive(Default)]
+struct VoiceRenders {
+    started: bool,
+    tasks: Vec<(String, bevy::tasks::Task<Vec<Vec<f32>>>)>,
+}
+
+/// Render every word in the background at start-up (a few hundred ms of
+/// synthesis in all, never on a frame) and add each to the bank as its
+/// `voice/<kind>/<mind>` set when it's done.
+fn render_voices(
+    mut renders: Local<VoiceRenders>,
+    mut bank: ResMut<SoundBank>,
+    mut samples: ResMut<Assets<AudioSample>>,
+    rate: Option<Res<bevy_seedling::context::SampleRate>>,
+) {
+    use crate::robot_voice as rv;
+    let Some(rate) = rate.as_deref().map(|r| r.get()) else {
+        return;
+    };
+    if !renders.started {
+        renders.started = true;
+        let pool = bevy::tasks::AsyncComputeTaskPool::get();
+        for k in rv::VoiceKind::ALL {
+            for u in rv::Utterance::ALL {
+                let sr = rate.get() as f32;
+                let task = pool.spawn(async move {
+                    (0..rv::VARIANTS)
+                        .map(|v| rv::render(k, u, v, sr))
+                        .collect::<Vec<_>>()
+                });
+                renders.tasks.push((rv::set_name(k, u), task));
+            }
+        }
+    }
+    renders.tasks.retain_mut(|(set, task)| {
+        let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
+            return true;
+        };
+        let handles = buffers
+            .into_iter()
+            .map(|x| samples.add(AudioSample::new(vec![x], rate)))
+            .collect();
+        bank.sets.insert(set.clone(), handles);
+        false
+    });
+}
+
+/// What robots say (`robot_voice::Spoke`): each utterance one cue, from
+/// the robot, through the head-related filter, walls and the room like
+/// any other sound, from the sets [`render_voices`] made. (A word asked
+/// for in the first moments, before its render is done, isn't heard.)
+fn voice_sounds(
     mut commands: Commands,
-    mut investigating: MessageReader<crate::robots::search::Investigating>,
-    mut searching: MessageReader<crate::robots::search::Searching>,
-    mut lost: MessageReader<crate::robots::search::LostYou>,
-    mut called: MessageReader<crate::robots::search::CalledOut>,
-    mut aims: MessageReader<crate::robots::walker::WalkerAim>,
-    mut windups: MessageReader<crate::robots::grappler::HarpoonWindup>,
-    positions: Query<&GlobalTransform>,
-    time: Res<Time>,
-    mut last: Local<HashMap<(Entity, u8), f32>>,
+    mut spoke: MessageReader<crate::robot_voice::Spoke>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
-    let now = time.elapsed_secs();
-    let mut due = |robot: Entity, kind: u8, every: f32| {
-        let ok = last.get(&(robot, kind)).is_none_or(|t| now - t >= every);
-        if ok {
-            last.insert((robot, kind), now);
-        }
-        ok
-    };
+    use crate::robot_voice as rv;
+    for s in spoke.read() {
+        let set = rv::set_name(s.kind, s.said);
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            &set,
+            Some(s.at + Vec3::Y * 0.5),
+            s.said.cue(),
+            voice_trim(s.kind),
+            0.0,
+        );
+    }
+}
+
+/// A kind's level against its words' cue, dB, by measurement: the big
+/// ones' low voices carry more loudness per sample, the crawler's less
+/// (`scripts/audio_voices.py` keeps them within 6 LU).
+pub fn voice_trim(kind: crate::robot_voice::VoiceKind) -> f32 {
+    use crate::robot_voice::VoiceKind as K;
+    match kind {
+        K::Dirigible => -1.5,
+        K::Warden => -1.0,
+        K::Crawler => -1.0,
+        _ => 0.0,
+    }
+}
+
+/// The attack tells: a walker's turret settling before its first shot
+/// and a grappler winding up its throw. (What a robot thinks it says in
+/// its voice: [`voice_sounds`].)
+fn mind_sounds(
+    mut commands: Commands,
+    mut aims: MessageReader<crate::robots::walker::WalkerAim>,
+    mut windups: MessageReader<crate::robots::grappler::HarpoonWindup>,
+    positions: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
     let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
-    for m in investigating.read() {
-        if due(m.robot, 0, 6.0) {
-            out.push(("machines/servo", "robot.investigate", m.at, 1.15));
-        }
-    }
-    for m in searching.read() {
-        if due(m.robot, 1, 6.0) {
-            out.push(("machines/servo", "robot.search", m.at, 0.95));
-        }
-    }
-    for m in lost.read() {
-        out.push(("machines/servo", "robot.lost", m.at, 0.7));
-    }
-    for m in called.read() {
-        if due(m.robot, 2, 10.0) {
-            out.push(("machines/radio_squelch", "robot.callout", m.at, 1.0));
-            out.push(("machines/robot_voice", "robot.voice", m.at, 1.0));
-        }
-    }
     for m in aims.read() {
         out.push(("machines/clank", "walker.aim", m.at, 1.3));
         out.push(("machines/servo", "walker.aim_lock", m.at, 1.5));
@@ -3231,6 +3523,29 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The night's sounds come with the dark.
+    #[test]
+    fn night_comes_with_the_dark() {
+        use crate::world::weather::Hour;
+        assert_eq!(nightness(Hour::Night), 1.0);
+        assert_eq!(nightness(Hour::Dusk), 0.5);
+        assert_eq!(nightness(Hour::Day), 0.0);
+        assert_eq!(nightness(Hour::Dawn), 0.0);
+        // A drone's whine carries further than a walker's tread, so the
+        // crickets go quiet for it sooner.
+        const { assert!(INSECTS_HUSH_DRONE > INSECTS_HUSH_BIG) };
+    }
+
+    /// The ending's hush eases in, holds, and lets go.
+    #[test]
+    fn the_hush_eases_in_and_out() {
+        let at = |left| Hush { left }.db();
+        assert_eq!(at(0.0), 0.0);
+        assert_eq!(at(HUSH_SECONDS), 0.0);
+        assert_eq!(at(HUSH_SECONDS / 2.0), HUSH_DB);
+        assert!(at(HUSH_SECONDS - 0.5) > 0.0 && at(HUSH_SECONDS - 0.5) < HUSH_DB);
+    }
 
     /// Using a thing sounds like what it is, and anything you'd eat or use
     /// up makes a sound (silence read as "nothing happened" in VR).

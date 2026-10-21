@@ -81,6 +81,39 @@ headset and smears on OLED/LCD). **Nothing pure white** except emissives.
 - **The sky** is a low stratocumulus deck: heavy darker bellies, paler
   seams, faster scud underneath. It moves, slowly.
 
+## Night
+
+Night is half the game, and it must be both beautiful and playable.
+
+- **The moon is the light and the compass.** Its month is eight Surge
+  cycles. It rides the sun's own path: east to west over the north. Full,
+  it stands where the noon sun would. Waxing, it hangs toward the west;
+  waning, it rises in the east. Round new moon it isn't up. Bright in a
+  clear sky, it casts long, cool shadows that tell you which way you
+  face.
+- **Clear nights can be walked; overcast nights are black.** A clear
+  full-moon night lets you cross a meadow without a torch. Fog or a
+  downpour leaves only the grade's lifted black floor: the torch and the
+  lamps are the only light.
+- **The sky earns the dark.** The gaps between clouds are darker than
+  the clouds themselves. Stars show in the gaps, with a Milky Way band;
+  near the horizon they flicker. The moon silvers the cloud edges near
+  it and the fog on its side.
+- **Lights you navigate by** get a halo, not bloom. The Depot's lamps,
+  the camp's lantern and the truck's work lamp each have a tight core and
+  a wider glow, which spreads more in damp air. A torch throws a soft
+  cone of lit air with dust drifting in it; fog and rain show it most.
+- **Eyes, not a camera.** Out of a lit room you begin to see again
+  within a few seconds; the rest of your night vision comes over a
+  minute. Standing by a lamp keeps your eyes from opening as far. The
+  exposure never pumps.
+- Gauges: `scripts/night_matrix.sh` shoots every valley's night views
+  across a range of weathers and moon phases. It then checks the
+  luminance:
+  - the near ground must be distinct from the sky on a clear night;
+  - overcast must be no brighter than clear;
+  - no view may be a hole.
+
 ## Per valley
 
 | Valley | Mood | Air | Grade |

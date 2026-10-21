@@ -232,6 +232,8 @@ is what it did before.
 | Its bang | `grenade.bang` (RGD-5, sharper) or `grenade.bang_heavy` (F-1), by catalog id; level with your rifle at 15 m and no louder closer | a hit, if it hurts you | silent |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
+| The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
 | Your kit as you move (`foley`): worn plates knocking, sling swivels, the pack's load shifting, water sloshing | `gear.plate`, `gear.swivel`, `gear.pack`, `gear.slosh` (low-passed: it's in a bottle), on a step, each louder the farther it carries (`gear_db`) and more often | — | silent |
 | Robot chatter overheard on your radio | `chatter.squelch`, `chatter.static`, `chatter.voice`: their talk | — | servo chirps |
@@ -246,8 +248,7 @@ is what it did before.
 | The truck waiting | `truck.idle` at its engine | — | silent |
 | The truck leaving, with you or without | `truck.depart` | — | silent |
 | A robot losing a part | `robot.part`; glass for an eye (`robot.glass`); the frame groaning when it was the core (`robot.wreck`) | — | only the bullet's hit |
-| A robot noticing you (its suspicion passing `robots::NOTICED`) | `robot.notice`: the whirr of its head snapping round, at most every 8 s per robot | — | silent |
-| A robot going to look, searching, giving up, calling the others (`robots::search`) | `robot.investigate` (a whirr), `robot.search` (servo sweeps), `robot.lost` (a falling whine), `robot.callout` (a squelch) and `robot.voice` (its call); search sounds at most every 6 s per robot | — | silent |
+| A robot's mind turning: on its rounds, noticing you, going to look, searching, certain of you, losing you, calling the others, answering a call, hurt, dying (`robot_voice::Spoke`) | `voice.<mind>`: its kind's word for it, synthesised (see "What the machines say"); one cue per turn, never the same word twice within 4 s | a faint tick on the left wrist when one within 25 m turns certain (comfort `machine_tick`) | the servo whirrs, sweeps and a squelch; no hurt, dying or answering |
 | A walker's turret settling before its first shot; a grappler winding up | `walker.aim` + `walker.aim_lock` at the muzzle, `harpoon.windup`: the 0.6-0.7 s warning, heard 43-71 m through a downpour | — | silent |
 | The convoy loading, setting off through the Gate | `convoy.loaded`, `convoy.delivered` | — | silent |
 | A dirigible overhead | `dirigible.engine`: a slow throb (the rotor loop at 0.4x), quickening as it moves, gone when wrecked | — | silent |
@@ -274,8 +275,10 @@ step is done. The message is registered in the game plugin, so writing
 it headless is fine; it does nothing there. Give `at` a position to
 place the ding in the world instead of in your head.
 
-**Robot voices** (`machines/robot_voice`, synthesised in
-`scripts/synth_anomaly.py`, as `docs/DESIGN.md` allows). They're
+**Robot radio talk** (`machines/robot_voice`, the chatter your radio
+picks up, synthesised in `scripts/synth_anomaly.py`, as
+`docs/DESIGN.md` allows; what robots say aloud is
+`src/robot_voice.rs`, below). They're
 machine syllables: a buzz at 85-130 Hz through shifting vowel formants,
 clipped short, in bursts of three to seven. Then comes the radio's
 chain, baked into the asset: band-limited to 300-3400 Hz, crushed to
@@ -477,6 +480,130 @@ measures the cues on that output:
 | Side arrival | cross-correlation lag | ≥ 400 µs | 729 µs | 562 µs |
 | Front/back | 4–10 kHz over 0.5–3 kHz, ahead minus behind | ≥ 2.5 dB | 4.0 dB | 6.3 dB |
 | Up | the same, above minus ahead | ≥ 2.0 dB | 3.7 dB | 2.7 dB |
+
+## What the machines say
+
+Every robot that has a mind speaks it (`src/robot_voice.rs`), so you can
+read a machine's intent by ear: a small vocabulary, one word for each
+turn of its mind, and **one grammar for every kind**. Learn the walker's
+and the hound's makes sense.
+
+| Mind | The word |
+| --- | --- |
+| on its rounds (within 70 m of someone, every 18-40 s) | two soft low notes, a little apart |
+| noticed something | one note gliding up: a question |
+| investigating | three short notes stepping up |
+| searching | four short notes see-sawing: scanning |
+| certain, engaging | two hard notes, high and falling: a statement |
+| lost you, giving up | one long note sinking away |
+| calling the others | three pulses rising to a held note |
+| answering a call | the call's top note, then a step down: "heard" |
+| hurt (a part hit it survives) | a stutter of rough notes, pitch thrown about |
+| dying | one long fall, slowing and breaking up |
+
+**A voice per kind**: the drone a quick thin whistle chopped by its
+rotors; the walker a hollow mid voice; the grappler the walker's with a
+metal ring; the dirigible a slow deep horn; the crawler fast insect
+chirps; the hound a rough bark; the warden a low heavy walker. Pylons
+and sorters are mute. Every word is rendered at start-up, in the
+background on the compute pool (never on a frame: rendering on first
+use cost a 340 ms hitch when a walker first died), at the stream's
+rate, deterministically from its kind, mind and variant (three of each),
+and levelled to one loudness. It plays as an ordinary placed sound, so
+it's heard through the head-related filter, muffled by walls and doors,
+and sent to the room's reverb.
+
+**Who says what** (`VoicePlugin`, headless): it reads Robot minds'
+one hook, `robots::search::MindShift` (one per change of mind, never the
+same state twice running; its own test holds that). A robot going back
+to its rounds says so only within 70 m of someone. Each turn is said exactly once (tested). The two
+nearest robots that heard a call answer it a beat apart, and a response
+team answers as it sets out from wherever it starts. Calls and answers
+carry about 200 m in calm (`RANGE_TARGETS`), so a call answered far off
+is the warning that they're coming. The two agree: your radio, if you
+carry one, crackles with their chatter when the director sends them
+(`raid::chatter`), and their answer comes from where they start as they
+set out, so the radio tells you first and your ears confirm it.
+
+**One word at a time.** A robot whose mind turns several ways in a
+moment (noticed, then calling) says each word when the last has
+finished, in order; dying doesn't wait, and silences what was left.
+
+**Listening** (`--headless --scenario listening`, in `all`): the bot
+stands by the truck while a drone sets out 185 m away and a walker
+comes up the road. Every word is logged with its distance, the wall it
+came through (`acoustics::occlusion`) and whether you'd have heard it,
+judged by `robot_voice::heard_to` (each word's audible range in calm,
+measured by the audit, which flags drift over 25%; 6 dB of wall halves
+it). It passes if both answers to the dispatch are heard and at least
+four words in all. A run:
+
+```
+  0.0 s  walker    idle             46 m   +0.0 dB  -
+  0.5 s  drone     answering       185 m   +0.0 dB  HEARD
+  0.6 s  walker    answering        46 m   +0.0 dB  HEARD
+  2.0 s  walker    investigating    43 m   +0.0 dB  HEARD
+  2.5 s  walker    engaging         43 m   +0.0 dB  HEARD
+  2.8 s  walker    calling          42 m   +0.0 dB  HEARD
+  4.3 s  walker    noticed          41 m   +0.0 dB  HEARD
+  5.4 s  drone     calling         148 m   +0.0 dB  HEARD
+  6.4 s  drone     noticed         135 m   +0.0 dB  -
+  6.8 s  drone     investigating   130 m   +0.0 dB  -
+ 11.9 s  drone     engaging         57 m   +0.0 dB  HEARD
+```
+
+(Times are when each word is spoken, one after another per robot. The
+walker's "noticed" after "engaging" is the order its mind reports them
+in: its suspicion is announced crossing `NOTICED` after it has already
+turned to fight; raised with Robot minds.)
+
+**The score steps aside** for them: a voice within 80 m ducks the score
+12 dB for as long as it speaks (`SCORE_DUCK_DB`). The words that fall,
+giving up and dying, land on the drones' register, and the voices are
+the information; the score is only the mood.
+
+**The audit** (`scripts/audio_voices.py`) measures every rendered word:
+
+- each mind's word is within 6 LU across kinds (with `voice_trim`; now
+  1-4 LU);
+- with any kind saying any word 6 m off, your footstep over the wind
+  still clears its masking (now +12 dB) and your rifle does too
+  (+28 dB);
+- the mix pass gives each `voice.*` cue its audible range (calls 248 m
+  calm, 231 m in a downpour; the rest 50-115 m). The startle check keeps
+  a call up close under your rifle with normal dynamics and within 2 LU
+  of it with narrow;
+- the score pass: with the score at full (ducked), every word keeps 90%
+  of its range.
+
+## The night
+
+After dark (`world::weather::Hour::Night`; half at dusk) the valley
+sounds different (`night_ambience`, `ambient_oneshots`):
+
+- **Insects** (`ambience/insects_night`: TRP's cricket chorus, Ontario,
+  CC0) everywhere outside, 12 dB down through walls, gone underground
+  and in rain. **They fall silent** when something big comes near (a
+  walker or its breeds, or the dirigible, within 60 m; a drone within
+  120 m) or a shot goes off within 150 m: silent in a second and a half,
+  and back over 15 s once it's been quiet for 6. They are the natural
+  tell: the crickets stopping is often the first you know of a machine.
+- **Wind in the leaves** (`ambience/rustle_leaves`, high-passed at
+  250 Hz so it's the leaves and not the gusts on the microphone), louder
+  where it's overgrown (the zone's forest cover, until World models'
+  ivy says which buildings are overgrown).
+- **The Surge's thunder**: the far thunder comes more often at night
+  (every 35-90 s), deeper (0.78 speed), a little louder
+  (`thunder.surge`).
+- **No birds.** They used to sing all night.
+
+**The audit** (`scripts/audio_voices.py`): the insects clear the wind
+by 24 dB at 8 kHz and the leaves by 19 dB at 16 kHz, so both are
+heard. Over the night's beds every robot's word keeps 75% of its calm
+range (now 87-100%) and your footstep still clears them (+6.7 dB). A
+walker's step and a drone's rotor are warned of to the mix's own target
+(60 m, 120 m): the crickets would hide the rotor past 71 m and the
+step past 46 m, so the hush radii cover the rest.
 
 ## The score
 

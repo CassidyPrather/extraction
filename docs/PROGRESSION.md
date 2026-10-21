@@ -173,6 +173,52 @@ Cut from this: a reputation number (the order card is what reputation
 would have bought); per-fitting repairs at the bench (upkeep is taken, not
 crafted, so it never becomes a menu); rotating "seasons".
 
+## Safehouses: staying out overnight
+
+Raids were in and out. Into the Radius's best tension is the long walk
+with a safe room in the middle, so each valley has one cabin you can
+claim and sleep in (`extraction_core::safehouse`, `progression::safehouse`):
+
+| Valley | Cabin | Where |
+| - | - | - |
+| Marrow Creek | Logging camp, the south cabin (-145, 190) | danger 1, 200 m in, the west side's halfway house |
+| Kettle Pass | Charcoal burners' hut (119, -138) | danger 2, 410 m in, the climb's last stop |
+| Cinder Works | Woodward's cabin (-75, -159) | danger 2, 430 m in, in the Cinder wood |
+
+**Claiming** is three physical things, in any order: **clear** it (be
+inside with no machine within 30 m), **bar** it (a door wedge set at its
+door, the same wedge that stops a walker), **light its stove** (press it
+with matches on you; one is used). Then its bed is yours, a crate of its
+own appears (60 L, saved with the valley, not with the truck's stash),
+and a radio on the table.
+
+**Sleeping**: lie on the bed with the door wedged. The view fades; a night
+passes (15 minutes of Zone clock, so a real bite out of the hour between
+Surges, and refused if the Surge would come before morning); the hour
+moves on one step (dusk to night, night to dawn: "Grey light under the
+door."); a night behind a wedged door cools the Zone's attention. If you
+lie down loud (the second feeling or worse), the radio warns you in the
+dark and something comes to the door before light: a team of walkers
+that batters the wedge, while a drone hangs at the window.
+
+**The truck** waits one night if you radio it from the safehouse (press
+the radio); untold, it leaves the rendezvous while you sleep.
+
+**Expeditions**: past the ladder, once you've slept out, half the recover
+jobs are expeditions to the valley's deepest place ("Two days' walk. Sleep
+at the cabin on the way."). The recorder only counts if the raid that
+brought it home had a night out; the logbook records nights out.
+
+**The cost**: a safehouse can be found. Come home from a loud raid (the
+third feeling, "the air hums around you", or worse) and the machines have
+followed your trail to it: the door's broken, the crate tipped out over
+the floor, and you'll find it like that next time. The Surge ends a claim
+(and empties the crate: the Zone takes what it's given).
+
+Cut from this: hunger (there still is none; food is the kitchen's and the
+offerings'), a sleep timer or a menu (you lie down; a night is a night),
+more than one safehouse a valley.
+
 ## Where it lives
 
 - `extraction_core::progression`: tiers, upgrades, contracts and how
