@@ -215,7 +215,7 @@
         (name: "Treeline", seed: 154, density: 0.25, undergrowth: 0.15,
          mix: [(Spruce, 0.6), (Snag, 0.4)],
          polygon: [(-282.0, 225.0), (-200.0, 245.0), (-60.0, 250.0), (40.0, 230.0), (282.0, 175.0),
-                   (282.0, 120.0), (100.0, 150.0), (-60.0, 190.0), (-282.0, 150.0)]),
+                   (282.0, 120.0), (100.0, 150.0), (-60.0, 196.0), (-282.0, 196.0)]),
     ],
 
     placements: [
@@ -227,7 +227,7 @@
         (prefab: "funicular_lower", at: (76.0, 214.0), rot: 0.0, tag: "valley_station"),
         (prefab: "house_plank", at: (40.0, 252.0), rot: 200.0, tag: "station_house"),
         (prefab: "shed", at: (-70.0, 270.0), rot: 10.0, tag: "bus_shelter"),
-        (prefab: "log_pile", at: (-115.0, 262.0), rot: 80.0),
+        (prefab: "log_pile", at: (-62.0, 248.0), rot: 80.0),
 
         // The mine's radio mast on the east slope, over the lorry road.
         (prefab: "radio_mast", at: (236.0, 128.0), rot: 0.0),
