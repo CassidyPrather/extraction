@@ -433,6 +433,18 @@
         (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
         (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
+        (
+            id: "bus_panel", dims: Some((0.9, 0.6, 0.03)), name: "Bus panel",
+            description: "A side panel prised off a bus. Cream paint, a red stripe, rust.",
+            category: Material, size: Bulky, mass: 6.0, bulk: 10.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "car_door", dims: Some((1.0, 0.95, 0.12)), name: "Car door",
+            description: "A saloon's front door, the glass long gone. Good cover, for a while.",
+            category: Material, size: Bulky, mass: 16.0, bulk: 20.0,
+            tags: ["metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Robot parts
