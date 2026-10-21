@@ -15,9 +15,8 @@ noise floor).
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
     scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
 
-Writes docs/shots/anomalies/legibility/<kind>_<weather>.png (the "with"
-shot), a contact sheet docs/shots/anomalies/legibility.png and
-legibility.json beside it. Exits non-zero when a kind falls under its
+Writes a contact sheet, docs/shots/anomalies/legibility.png, and the
+numbers, legibility.json beside it (the shots stay in target/legibility). Exits non-zero when a kind falls under its
 floor.
 """
 import concurrent.futures
@@ -111,12 +110,10 @@ def measure(name: str, weather: str) -> dict:
 
 
 def sheet(results: list) -> None:
-    os.makedirs(OUT, exist_ok=True)
     tiles = []
     for r in results:
         src = os.path.join(RAW, f"{r['kind']}_{r['weather']}_on0.png")
         im = Image.open(src).convert("RGB")
-        im.save(os.path.join(OUT, f"{r['kind']}_{r['weather']}.png"))
         x0, y0, x1, y1 = BOX
         pad = 80
         t = im.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad)).resize((320, 260))
@@ -160,7 +157,7 @@ def main() -> int:
         if os.path.exists(os.path.join(RAW, f"{name}_{w}_off1.png"))
     ]
     sheet(results)
-    with open(os.path.join(OUT, "legibility.json"), "w") as f:
+    with open(OUT + ".json", "w") as f:
         json.dump(results, f, indent=1)
     for r in results:
         print(
