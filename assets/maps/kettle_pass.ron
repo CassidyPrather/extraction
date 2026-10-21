@@ -326,6 +326,10 @@
         (kind: Rendezvous, at: (-205.0, -30.0), name: "Mine yard"),
         (kind: Rendezvous, at: (232.0, -222.0), name: "Hunting lodge"),
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
+        // Sentries: each guards something, with a way round behind it and
+        // its junction box on that unseen ground (map_sentry).
+        (kind: Sentry(arc: 140.0, power: (-241.0, -245.6)), at: (-227.5, -242.0), rot: 135.0, name: "Gate sentry"),
+        (kind: Sentry(arc: 140.0, power: (218.1, -31.5)), at: (206.0, -24.5), rot: -150.0, name: "Quarry sentry"),
         (kind: ArtifactField, at: (185.0, -55.0), name: "The quarry"),
         (kind: ArtifactField, at: (-150.0, -95.0), name: "The spoil heap"),
         // Standing anomalies: they lie here every cycle (Anomalies).
