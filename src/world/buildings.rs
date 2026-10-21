@@ -4130,10 +4130,11 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     // its side panels each a thing to prise off (`Breakable`, for scrap
     // and cover), the core still solid behind.
     let skin = 0.03;
+    // (Bare, rusted under its skin: a panel prised off shows it.)
     b.bx(
         Vec3::new(w - 2.0 * skin, 1.05, len),
         floor + Vec3::new(0.0, body_lo + 0.525 - floor.y, 0.0),
-        Mat::PaintedMetal,
+        Mat::RustyMetal,
     );
     let door_z = -len * 0.5 + 1.0;
     for side in [-1.0f32, 1.0] {
