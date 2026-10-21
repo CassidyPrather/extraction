@@ -241,13 +241,11 @@ raider on a step for pacing (Bring and Plant; photographs are the
 scenarios'): the step's place pulls it hardest, the thing to bring is
 worth more than anything, and at a Plant's place it draws the relay and
 sets it down. Marrow's post counter, first runs: 1 raider in 4 met it
-(the others died on the way home). The raider's plant doesn't work yet:
-it reaches the Radio mast and runs its plant (hand freed, relay grabbed,
-released) but in 0 of 15 tries has the relay counted as set down within
-4 m; the scenario bot plants it, so the game's rule is sound and it's the
-raider's footing or hands at the mast. The telemetry's `contract.done`
-(the step's own part) and `met` (and home with it) are what to watch when
-that's fixed.
+(the others died on the way home). The raider plants as the scenario bot does (close, gun slung, the relay
+drawn into the right hand, a look at the spot, let go): at the Radio mast
+4 raiders of 4 that reached it set it down (`contract.done`), though all
+four died on the way home through Marrow. The telemetry's `contract.done`
+is the step's own part, `met` that and home with it.
 
 ## Safehouses: staying out overnight
 
