@@ -355,6 +355,78 @@ extraction_core scout_sentry -- --ignored --nocapture` tries spots
 round a point and prints the ones that pass, facing the way people come
 first. The preview draws each one's sweep (red) and cable (yellow).
 
+## Spotters
+
+A spotter (`MarkerKind::Spotter`, the machine in `robots::spotter`, its
+rules in `extraction_core::spotter`) is a balloon on a 24 m tether over a
+winch at `marker.at` (`rot` is unused). It is an alarm, not a gun: its
+level eye (100° wide) turns a full circle every 40 s and sees 85 m; held
+in view for 3.5 s it calls a drone onto you. Straight under it, within
+about 20 m of the winch (`spotter::blind_radius`), it is blind, and
+cutting the tether at the winch sends it off downwind. A map uses one to
+make you use the ground's cover, or time its turn, crossing open ground.
+The lint (`Rule::Spotter`, `map_spotter`) sees from the envelope to a
+standing body through the land, the buildings and the kiosks (not trees:
+its field is an upper bound).
+
+- **The winch on good ground**: walkable, dry, no steeper than 25°
+  (`COMFORT_SLOPE`), inside the fence.
+- **It watches something**: a key, a point of interest, a work site,
+  loot or an underground site within 85 m.
+- **A way in under it**: a walk from the insertion to within 3 m of the
+  winch (`WAY_IN`) crossing no more of the ground it sees than you walk
+  while its eye is turned away: 69 m (`WAY_SEEN`, 2.4 m/s for the 29 s
+  of a turn its view isn't on you). On flat open ground the whole ring is
+  less than that; it bites where the land rises round the winch and there
+  is no blind ring. (A sentry's way round never enters its field; a
+  spotter in the open has no such way, by design.)
+- **Never over the way in or out**: not the insertion, not a rendezvous,
+  its tailgate or the approach to it.
+- **Not stacked on a sentry**: the ground it sees covers at most half of
+  any sentry's field (`STACK_SHARE`). A spotter calling drones onto a
+  turret's ground is the pairing the sims found deadly in Marrow. Measured
+  across the valleys, a winch within about 40 m of a sentry sees 55-98% of
+  its field, one 60 m off 36-46%, and the placed ones 0%.
+
+The lint also measures, for reading against the sims: the main routes in
+its sight (metres, and the longest seen run), the work sites within its
+sight (a pylon there watches the same ground and calls too), and the
+survey drones' orbits and lanes it sees. Place one over open ground a
+main route crosses on the way to a key site, where no sentry or pylon
+already watches. Marrow's is on the road north to the bus depot and the
+rail yard, Kettle's where the three ways north part, and Cinder's on the
+west way to the fire lookout across the ash pit (the east ways have the
+chimney's sentry). To site one, `SCOUT_SPOTTER=<map>:<x>:<z> cargo test
+-p extraction_core scout_spotter -- --ignored --nocapture` tries winches
+round a point and prints the ones that pass, most main route in sight
+first, with their measures. The preview draws its 85 m sight and its
+blind ring (orange).
+
+## Mines
+
+Once a raid the minelayer (`robots::minelayer`, rules in
+`extraction_core::minelayer`) crawls out of the Gate and lays a field of
+four pressure mines at each of two points of interest (`FIELDS`): the
+`Poi` markers on walkable ground nearest the insertion, the very nearest
+skipped. It lays them across the way it came, from a hopper of six, and
+never within 3 m of a door strip, 0.5 m of a road or 2 m of a building
+(`minelayer::spot_ok`). So which markers are `Poi`s, and where they
+stand, decides where the mines go. The lint (`Rule::Mines`, `map_mines`)
+works the fields out as the game does and holds them:
+
+- **Not on a main route**: no mine within its plate and a boot (0.82 m,
+  `ON_ROUTE`) of a main route's line. A field is a find, not a coin toss.
+- **Not in a doorway**: no mine in a door's strip or a kiosk's.
+- **A site with room for a field**: at least half its four mines pass
+  `spot_ok`. A `Poi` marker at a building's door or inside its 2 m has
+  room for none; stand it in the yard in front.
+
+The measures line lists each field, its mines, how many the hopper had
+left for it and the nearest main route. A `Poi` inside a building isn't
+walkable and isn't a site at all, so Marrow, whose points of interest
+are nearly all in buildings, gets one field (the Village). The preview
+dots the mines red.
+
 ## Robot patrol space
 
 Robots don't patrol at random: they walk out of the Gate to work sites

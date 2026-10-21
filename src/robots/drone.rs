@@ -54,6 +54,8 @@ pub struct Drone {
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something.
 pub const LOCK_TIME: f32 = 0.9;
+/// A still body shows a drone this share of a moving one (a walker 0.55).
+pub const STILL_SHOWS: f32 = 0.3;
 /// Its rounds scatter this much more (radians) per m/s its target runs
 /// across its line: sprint across open ground and it mostly misses (at
 /// 25 m, a sprint throws them about 3 m wide; a walk about 1).
@@ -115,6 +117,9 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 hearing: 1.0,
                 eye: Vec3::new(0.0, -0.08, -0.22),
             },
+            // From up there it picks out movement more than shape: keep
+            // still when one passes over.
+            super::senses::MotionSight(STILL_SHOWS),
             Awareness::default(),
             Intent::default(),
             Brain::Transit { to: job.site },

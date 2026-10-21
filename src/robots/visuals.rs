@@ -50,6 +50,7 @@ impl Plugin for RobotVisualsPlugin {
                 shell_by_light,
                 super::weathering::weather_meshes,
                 part_plants,
+                drone_lamps,
             ),
         );
     }
@@ -973,7 +974,7 @@ const HALO_NEAR: f32 = 12.0;
 
 fn show_halos(
     mut halos: Query<(&Halo, &GlobalTransform, &mut Visibility)>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     parts: Query<&RobotPart>,
     robots: Query<&Robot>,
 ) {
@@ -1530,7 +1531,7 @@ fn alert_eyes(
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
     mut halos: Query<(&Eye, &mut crate::world::halos::Halo)>,
     gaits: Query<&super::anim::Gait>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     places: Query<&GlobalTransform, With<Robot>>,
     parts: Query<&RobotPart>,
     robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
@@ -1806,7 +1807,7 @@ const PARTS_WITHIN: f32 = 20.0;
 fn part_plants(
     pushers: Option<ResMut<crate::world::cover::RobotPushers>>,
     walkers: Query<(&GlobalTransform, &super::anim::Gait, &Robot), With<super::walker::Walker>>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
 ) {
     let (Some(mut pushers), Some(eye)) = (pushers, cameras.iter().next()) else {
         return;
@@ -1868,5 +1869,74 @@ mod pusher_tests {
         // None near: nothing parts.
         let far = [Vec4::new(40.0, 1.0, 0.0, 0.6)];
         assert_eq!(pushing(eye, far.into_iter(), spots), [Vec4::ZERO; 4]);
+    }
+}
+
+/// A drone's searchlight after dark: a spotlight down and ahead, which
+/// `world::beams` gives a cone of lit air (dust on a dry night, a shaft
+/// through rain or fog).
+#[derive(Component)]
+struct DroneLamp;
+
+/// Darker than this, a drone hunts with its lamp lit.
+const LAMP_BELOW: f32 = 0.3;
+/// Farther from the eye than this it's left off (a light each: they cost).
+const LAMP_WITHIN: f32 = 60.0;
+
+/// Whether a drone's lamp is lit, at this light and this far from the eye.
+fn lamp_lit(light: f32, distance: f32, wrecked: bool) -> bool {
+    !wrecked && light < LAMP_BELOW && distance < LAMP_WITHIN
+}
+
+fn drone_lamps(
+    mut commands: Commands,
+    drones: Query<(Entity, &GlobalTransform, &Robot, Option<&Children>), With<super::drone::Drone>>,
+    lamps: Query<(), With<DroneLamp>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+) {
+    let light = conditions.map_or(1.0, |c| c.light);
+    let eye = cameras.iter().next().map(|g| g.translation());
+    for (e, gt, robot, children) in &drones {
+        let d = eye.map_or(f32::MAX, |c| c.distance(gt.translation()));
+        let lit = lamp_lit(light, d, robot.wrecked);
+        let lamp = children.and_then(|c| c.iter().find(|c| lamps.contains(*c)));
+        match (lit, lamp) {
+            (true, None) => {
+                commands.spawn((
+                    DroneLamp,
+                    SpotLight {
+                        color: Color::srgb(0.85, 0.92, 1.0),
+                        intensity: 400_000.0,
+                        range: 40.0,
+                        inner_angle: 0.1,
+                        outer_angle: 0.3,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    // Under the belly, down and ahead (-Z is its front).
+                    Transform::from_xyz(0.0, -0.12, -0.1)
+                        .looking_to(Vec3::new(0.0, -1.0, -0.7), Vec3::NEG_Z),
+                    ChildOf(e),
+                ));
+            }
+            (false, Some(l)) => commands.entity(l).despawn(),
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod lamp_tests {
+    use super::lamp_lit;
+
+    /// A drone lights its lamp after dark, near enough to be seen, and
+    /// never once it's wrecked.
+    #[test]
+    fn drones_light_their_lamps_after_dark() {
+        assert!(lamp_lit(0.02, 20.0, false));
+        assert!(!lamp_lit(0.8, 20.0, false), "not by day");
+        assert!(!lamp_lit(0.02, 90.0, false), "not out of sight");
+        assert!(!lamp_lit(0.02, 20.0, true), "not wrecked");
     }
 }

@@ -318,6 +318,8 @@ pub struct Raider {
     heat: f32,
     /// Crouched since (raid seconds), when it is.
     crouched_since: Option<f32>,
+    /// Waiting at the rendezvous for the truck (it keeps low and still).
+    at_rv: bool,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
@@ -521,6 +523,7 @@ pub fn attach_raider(
                 kg: 0.0,
                 heat: 0.0,
                 crouched_since: None,
+                at_rv: false,
                 after_vent: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
@@ -1350,7 +1353,9 @@ fn sneak(
     }
     // Afloat it ducks too, as a player does: a flooded doorway's head is
     // a hand over the water.
-    let low = wary || swimming;
+    // Waiting for the truck: low and still, as a player who's learnt
+    // about drones does.
+    let low = wary || swimming || (r.at_rv && !hurrying);
     if low != input.crouch {
         input.crouch = low;
         if low {
@@ -3185,6 +3190,7 @@ fn extract_step(
             ];
         }
     }
+    r.at_rv = here.distance(approach) <= 4.0;
     if here.distance(approach) > 4.0 {
         r.act = Act::ToRv;
         if let Some(out) = leave_building(r, scene, pos) {
