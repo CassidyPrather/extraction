@@ -429,6 +429,11 @@ pub(super) fn direct_raid(
             state.note(now, Kind::Stuck, line.trim().to_string());
         }
     }
+    // A first raid that runs on past half an hour has lost its way.
+    if now > 1800.0 && state.leg != Leg::Done {
+        state.note(now, Kind::Stuck, format!("half an hour gone, still at {:?}", state.leg));
+        state.leg = Leg::Done;
+    }
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
         state.leg = Leg::Done;
