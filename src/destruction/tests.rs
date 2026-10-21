@@ -1767,7 +1767,7 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
     for (model, n, doors) in [
         ("wreck_lada", 10, 4),
         ("wreck_uaz", 10, 4),
-        ("wreck_lorry", 7, 2),
+        ("wreck_lorry", 8, 2),
     ] {
         let parts = super::strip::car_parts(model, car);
         assert_eq!(parts.len(), n, "{model}'s parts");
