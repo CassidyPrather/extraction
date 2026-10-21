@@ -80,7 +80,7 @@
         // Where the truck turns: the saddle, the col, the tip road's end.
         Plateau(polygon: [(-130.0, -278.0), (-100.0, -278.0), (-100.0, -252.0), (-130.0, -252.0)], blend: 14.0),
         Plateau(polygon: [(55.0, -275.0), (85.0, -275.0), (85.0, -250.0), (55.0, -250.0)], blend: 14.0),
-        Plateau(polygon: [(222.0, -42.0), (252.0, -42.0), (252.0, -14.0), (222.0, -14.0)], blend: 16.0),
+        Plateau(polygon: [(218.0, -70.0), (256.0, -70.0), (256.0, -14.0), (218.0, -14.0)], height: Some(103.0), blend: 24.0),
         // The mill's terraces: one per level (4 m apart), falling south
         // down the knoll's face, each running out west past the mill's
         // side door to the mill steps.
@@ -113,11 +113,18 @@
             name: "Station lane", kind: Dirt, width: 4.5, smoothing: 20.0,
             points: [(-10.0, 262.0), (30.0, 240.0), (62.0, 222.0)],
         ),
+        // The lorry road: the concentrate went down it in summer, the
+        // long way up the east slope to the tip. Open the whole way.
+        (
+            name: "Lorry road", kind: Dirt, width: 5.0, smoothing: 60.0,
+            points: [(45.0, 232.0), (90.0, 236.0), (140.0, 205.0), (180.0, 160.0), (200.0, 120.0), (212.0, 80.0),
+                     (232.0, 52.0), (256.0, 36.0), (258.0, 4.0), (248.0, -16.0)],
+        ),
         // Coldharbour's street, from the road's end east to the top station
         // and on round the spur to the mill.
         (
             name: "Coldharbour street", kind: Gravel, width: 5.0, smoothing: 20.0,
-            points: [(-40.0, 30.0), (0.0, 20.0), (58.0, 5.0), (95.0, 30.0), (122.0, 50.0), (140.0, 47.0)],
+            points: [(-40.0, 30.0), (0.0, 20.0), (56.0, 14.0), (95.0, 32.0), (122.0, 50.0), (140.0, 47.0)],
         ),
         // Round the knoll's east side from the mill's foot to its top and
         // the adit, and on east along the tip to the road's end.
@@ -135,6 +142,12 @@
         (
             name: "Compressor lane", kind: Dirt, width: 3.5, smoothing: 15.0,
             points: [(222.0, -30.0), (232.0, -42.0), (240.0, -52.0)],
+        ),
+        // The ore tramway's old bed along the upper slopes, from the col
+        // track east over the knoll's back to the tip.
+        (
+            name: "Tram bed", kind: Dirt, width: 3.5, smoothing: 40.0,
+            points: [(10.0, -40.0), (60.0, -72.0), (120.0, -85.0), (175.0, -78.0), (210.0, -55.0), (236.0, -36.0)],
         ),
         // The mine track up the upper slopes to the col.
         (
@@ -194,10 +207,13 @@
         (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0),
 
         // The Bottoms: the valley station and the bus turn.
-        (prefab: "funicular_lower", at: (71.0, 214.0), rot: 0.0, tag: "valley_station"),
+        (prefab: "funicular_lower", at: (73.0, 214.0), rot: 0.0, tag: "valley_station"),
         (prefab: "house_plank", at: (40.0, 252.0), rot: 200.0, tag: "station_house"),
         (prefab: "shed", at: (-70.0, 270.0), rot: 10.0, tag: "bus_shelter"),
         (prefab: "log_pile", at: (-115.0, 262.0), rot: 80.0),
+
+        // The lorry road's weighbridge, half way up the east slope.
+        (prefab: "shed", at: (172.0, 160.0), rot: 225.0, tag: "weighbridge"),
 
         // The switchbacks: the roadmen's huts at the hairpins.
         (prefab: "shed", at: (-195.0, 216.0), rot: 80.0, tag: "roadmen"),
@@ -208,7 +224,7 @@
         (prefab: "funicular_car", at: (59.5, 115.0), rot: 180.0),
 
         // Coldharbour.
-        (prefab: "funicular_upper", at: (68.0, 0.0), rot: 0.0, tag: "top_station"),
+        (prefab: "funicular_upper", at: (71.0, 0.0), rot: 0.0, tag: "top_station"),
         (prefab: "house_brick", at: (20.0, 0.0), rot: 165.0, tag: "mine_office"),
         (prefab: "shop", at: (-15.0, 5.0), rot: 165.0, tag: "canteen"),
         (prefab: "house_plank", at: (-50.0, 8.0), rot: 165.0),
@@ -218,11 +234,11 @@
         (prefab: "chapel", at: (-100.0, 40.0), rot: 75.0),
 
         // The ore mill, stepped down the spur; the adit house over it.
-        (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, tag: "ore_mill"),
+        (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, y: 90.0, absolute: true, tag: "ore_mill"),
         (prefab: "rail_shed", at: (135.0, -42.0), rot: 90.0, tag: "adit_house"),
 
         // The tip road's end: the compressor house.
-        (prefab: "pump_station", at: (240.0, -60.0), rot: 0.0, tag: "compressor_house"),
+        (prefab: "pump_station", at: (238.0, -60.0), rot: 180.0, tag: "compressor_house"),
 
         // The upper slopes: the avalanche watchers' hut, the snow survey.
         (prefab: "shed", at: (-25.0, -95.0), rot: 20.0, tag: "snow_survey"),
@@ -278,8 +294,9 @@
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),
         (kind: Loot(table: "ammo_common"), at: (-57.0, 151.0), name: "Hairpin hut locker"),
         (kind: Loot(table: "tools"), at: (-22.0, -100.0), name: "Snow survey kit"),
+        (kind: Loot(table: "tools"), at: (166.0, 166.0), name: "Weighbridge chain box"),
         (kind: Loot(table: "medical"), at: (24.0, -240.0), name: "Col hut rescue box"),
-        (kind: Loot(table: "workshop"), at: (244.0, -70.0), name: "Compressor house bench"),
+        (kind: Loot(table: "workshop"), at: (250.0, -50.0), name: "Compressor house bench"),
         (kind: Loot(table: "driver_cache"), at: (122.0, -34.0), name: "Adit shift box"),
         (kind: Loot(table: "ammo_common"), at: (-190.0, 128.0), name: "Gallery cache"),
     ],
