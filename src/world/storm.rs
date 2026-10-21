@@ -191,7 +191,7 @@ fn lightning(
     if st.rng.is_none() {
         st.rng = Some(Rng::new(opts.seed ^ 0xB017 ^ u64::from(conditions.cycle)));
     }
-    let held = held_flash();
+    let held = opts.storm_flash || held_flash();
     if storming && st.strike.is_none() {
         st.next -= dt;
         if st.next <= 0.0 || held {

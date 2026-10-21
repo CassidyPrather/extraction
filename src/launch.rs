@@ -102,6 +102,9 @@ pub struct LaunchOptions {
     /// Dev: snow falling now, this much lying already (0..1; only where
     /// the valley has a snow line, `world::snow`).
     pub snow: Option<f32>,
+    /// Dev: hold a near strike's light in a storm (`world::storm`), for
+    /// shots and for the budget of a flash frame.
+    pub storm_flash: bool,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
     /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
@@ -161,6 +164,7 @@ impl Default for LaunchOptions {
             gallery: None,
             weather: None,
             snow: None,
+            storm_flash: false,
             hour: None,
             moon: None,
             sun_elevation: 20.0,
