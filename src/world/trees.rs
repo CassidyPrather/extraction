@@ -932,20 +932,25 @@ struct TreeAssets {
     handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
 }
 
-/// Foliage's alpha: alpha to coverage, which lets MSAA smooth the cards'
-/// cut edges (an alpha-tested edge crawls in a headset as the head
-/// moves). It follows each view's samples by itself: with SMOOTHING off
-/// (`Comfort::msaa`), Bevy draws it as a plain test at the material's
-/// cut-off (0.5). `EXTRACTION_A2C=0` makes it a test at `cutoff` at any
-/// setting, to time against: in the software renderer coverage cost the
-/// opaque pass 40-70% wherever foliage filled the view; compare the
-/// session log's `gpu:` lines with and without it.
+/// Foliage's alpha: a test at `cutoff` by default; with soft leaves
+/// (the SMOOTHING card's "4x, soft leaves", `--a2c`) alpha to coverage,
+/// which lets MSAA smooth the cards' cut edges (an alpha-tested edge
+/// crawls in a headset as the head moves). Bevy keys coverage per view:
+/// with SMOOTHING off it's a plain test at the material's cut-off (0.5).
+/// Not the default until it's timed on the headset: in the software
+/// renderer it cost Marrow Creek's spruce view 63% of its frame at 4x.
+/// `EXTRACTION_A2C=1` / `=0` overrides either way.
 pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
-    static MASK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *MASK.get_or_init(|| std::env::var("EXTRACTION_A2C").is_ok_and(|v| v == "0")) {
-        AlphaMode::Mask(cutoff)
-    } else {
+    static SOFT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let soft = *SOFT.get_or_init(|| match std::env::var("EXTRACTION_A2C").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => crate::rig::comfort::soft_leaves_at_launch(),
+    });
+    if soft {
         AlphaMode::AlphaToCoverage
+    } else {
+        AlphaMode::Mask(cutoff)
     }
 }
 

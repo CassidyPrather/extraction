@@ -196,10 +196,11 @@ What changed, and worth a comment each:
     sights and front post. The first to shimmer are a spruce's edge
     against the sky and a fence line 20-40 m off, while turning your head
     slowly.
-  - if there's time, a third raid at 4x with `EXTRACTION_A2C=0` set (the
-    trees' leaves cut hard instead of smoothed): the software renderer
-    says smoothed leaves cost a lot, and only the headset can say if
-    they do there.
+  - if there's time, a third raid at **4x, soft leaves** (the card's
+    second step, or `--a2c`; restart the game after pressing it, since
+    the leaves change next launch): the trees' leaves smoothed instead of
+    cut hard. The software renderer says that costs a lot where foliage
+    fills the view; only the headset can say if it does there.
 
   Whether 2x reads the same at the Beyond 2's sharpness decides the
   default.
@@ -304,7 +305,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | VIGNETTE | off to 90% | darkening the edges while the stick moves you |
 | SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
 | SHARPNESS | auto, 50–100% | render size per eye (next launch) |
-| SMOOTHING | 4x / 2x / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades |
+| SMOOTHING | 4x / 4x, soft leaves / 2x / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades; soft leaves smooths the trees' leaves too (next launch); off adds a light edge filter (FXAA) |
 | GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
 | HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
 | MUSIC | rises with danger / off | the score |
@@ -548,6 +549,7 @@ pump?
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
 | `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
+| `--a2c` | Soft leaves: the trees' leaves smoothed by the samples (the SMOOTHING card's second step) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

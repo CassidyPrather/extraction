@@ -9,7 +9,8 @@
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
 //! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
 //! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
-//! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`.
+//! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`, `--a2c`
+//! (soft leaves).
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -69,6 +70,9 @@ pub struct Comfort {
     /// cheaper, with harder edges on wires and blades
     /// (`docs/PERFORMANCE.md`, "The headset's two eyes").
     pub msaa: u32,
+    /// Leaves' cut edges smoothed by the samples (alpha to coverage):
+    /// smoother, and dearer where foliage fills the view. Next launch.
+    pub soft_leaves: bool,
 }
 
 impl Default for Comfort {
@@ -92,6 +96,7 @@ impl Default for Comfort {
             post_blur: true,
             body: true,
             msaa: 4,
+            soft_leaves: false,
         }
     }
 }
@@ -165,12 +170,16 @@ impl Comfort {
             Self::RENDER_SCALES[now.map_or(0, |i| (i + 1) % Self::RENDER_SCALES.len())];
     }
 
-    /// The SMOOTHING card's steps.
-    pub const MSAAS: [u32; 3] = [4, 2, 0];
+    /// The SMOOTHING card's steps: samples, and soft leaves (alpha to
+    /// coverage on foliage, `trees::foliage_alpha`).
+    pub const SMOOTHINGS: [(u32, bool); 4] = [(4, false), (4, true), (2, false), (0, false)];
 
     pub fn next_msaa(&mut self) {
-        let now = Self::MSAAS.iter().position(|v| *v == self.msaa);
-        self.msaa = Self::MSAAS[now.map_or(0, |i| (i + 1) % Self::MSAAS.len())];
+        let now = Self::SMOOTHINGS
+            .iter()
+            .position(|s| *s == (self.msaa, self.soft_leaves));
+        (self.msaa, self.soft_leaves) =
+            Self::SMOOTHINGS[now.map_or(0, |i| (i + 1) % Self::SMOOTHINGS.len())];
     }
 
     /// The camera setting for `msaa`.
@@ -184,19 +193,18 @@ impl Comfort {
     }
 
     pub fn msaa_label(&self) -> String {
-        match self.msaa_setting() {
-            Msaa::Off => "SMOOTHING
-off (fastest)"
-                .into(),
-            Msaa::Sample2 => "SMOOTHING
-2x"
-            .into(),
-            Msaa::Sample8 => "SMOOTHING
-8x"
-            .into(),
-            _ => "SMOOTHING
-4x"
-            .into(),
+        let samples = match self.msaa_setting() {
+            Msaa::Off => "off (fastest)",
+            Msaa::Sample2 => "2x",
+            Msaa::Sample8 => "8x",
+            _ => "4x",
+        };
+        if self.soft_leaves {
+            // (A material's alpha is set as it's made.)
+            // Two short lines, as the other cards (the panel's floor).
+            format!("SMOOTHING\n{samples}+leaves, relaunch")
+        } else {
+            format!("SMOOTHING\n{samples}")
         }
     }
 
@@ -365,6 +373,7 @@ off (fastest)"
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
                     }
                 }
+                "--a2c" => c.soft_leaves = true,
                 "--msaa" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<u32>().ok()) {
                         c.msaa = v;
@@ -378,21 +387,38 @@ off (fastest)"
                 _ => {}
             }
         }
+        let _ = SOFT_LEAVES.set(c.soft_leaves);
         c
     }
+}
+
+/// Soft leaves as the game started (materials are made once).
+static SOFT_LEAVES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Whether foliage is alpha to coverage this run (`Comfort::soft_leaves`,
+/// `--a2c`); off if the settings weren't loaded (tests, sims).
+pub fn soft_leaves_at_launch() -> bool {
+    SOFT_LEAVES.get().copied().unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// SMOOTHING steps 4x, 2x, off and round; `--msaa` sets it.
+    /// SMOOTHING steps 4x, 4x with soft leaves, 2x, off and round;
+    /// `--msaa` sets it.
     #[test]
     fn smoothing_steps_and_takes_a_flag() {
         let mut c = Comfort::default();
         assert_eq!(c.msaa_setting(), Msaa::Sample4);
+        assert!(!c.soft_leaves);
+        c.next_msaa();
+        assert_eq!(c.msaa_setting(), Msaa::Sample4);
+        assert!(c.soft_leaves);
+        assert!(c.msaa_label().contains("soft leaves"));
         c.next_msaa();
         assert_eq!(c.msaa_setting(), Msaa::Sample2);
+        assert!(!c.soft_leaves);
         assert_eq!(c.msaa_label(), "SMOOTHING\n2x");
         c.next_msaa();
         assert_eq!(c.msaa_setting(), Msaa::Off);
