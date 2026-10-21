@@ -103,16 +103,25 @@ model at the building's range, splintering when it goes, saved broken and
 nailed back up by the Surge. A boarded sash is always a weathered one, so
 there's no glass behind to draw.
 
-## Wrecks you can strip
+## Shutters, fences and wrecks (`destruction::strip`)
 
-`strip::spawn_part(commands, parts, broken, Part { at, size, mat, yields,
-pry, model })` puts a part on a wreck: a bus's folding door, a panel, a
-seat. A metal part comes off only to a crowbar (`Pryable`, `pry` N·m:
-rounds hole sheet, they don't tear a door off); a wooden one breaks too.
-Off, it drops what it yields (item ids and counts: scrap now, a panel you
-can carry once Kit has one) and stays off until the Surge puts the wreck
-back together (`strip::Parts` keeps every part placed). Whoever places
-wrecks (World models) calls it; nothing in the valleys does yet.
+World models lays out what comes off a building (`Geo::breakables`);
+`strip::fit_breakables` puts each up as a static thing of its own when
+the building is placed:
+
+| Kind | Where | Takes | Pry (N·m) | Off, it… |
+|---|---|---|---|---|
+| Shutter | a pair by each window of the plank, farm and log houses | 60 | 90 | splinters |
+| Fence panel | `fence_garden`, four between its posts | 100 | 150 | splinters |
+| Bus door | the depot's wrecked bus | crowbar only | 200 | drops scrap |
+| Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
+
+Metal comes off only to a crowbar (`Pryable`): rounds hole sheet, they
+don't tear a door off. Wood breaks to rounds and blows as a board does.
+A part with no model is drawn as a box of its size in its material.
+Anything else can place a part with `strip::spawn_part(commands, parts,
+broken, Part { .. })` (kept in `strip::Parts`). Gone, a part stays gone
+(`Broken`) until the Surge puts it back, from the buildings and `Parts`.
 
 ## Broken by the years
 
@@ -228,7 +237,9 @@ door's crash).
   through the headset path (`vr_harness`): a knife in a tracked hand
   eased into a pane (holds) and driven through it (breaks), and stabbed
   into a supply crate until it gives; and a grenade at a door's foot
-  blowing it in where one four metres off doesn't.
+  blowing it in where one four metres off doesn't; a shutter beaten to
+  splinters, the bus's door prised off for scrap, and both back after
+  the Surge.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.
@@ -261,9 +272,6 @@ wall by a dozen rifle rounds).
 
 ## Next
 
-- Wooden fences, shutters and boarded windows, once World models has
-  them as pieces of their own.
-- Blunt, edge and point blows weighed differently against wood, once a
-  `Hit` says which (asked of Weapon feel).
-- Robots firing at a heard position through thin walls
-  (`firearm_terminal` already says what a round gets through).
+- Robots firing at a heard position through thin walls: Robot minds'
+  walkers, with `through::RoundPath::would_reach` to ask first.
+- A carried `bus_panel` as cover, once Kit's item lands.
