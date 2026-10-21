@@ -536,7 +536,8 @@ def repack_box(dims, c, calibre, shells=False):
                   segs=1)
         h1 = min(0.006, lw / 5.5)
         text(p, "REPACK", h1, "Dark", lab @ T(0.0, lh * 0.2, -0.0006) @ RY(math.pi),
-             depth=0.0003)
+             depth=0.0003)  # smallest: 0.006 (the 40 mm box)
+        # smallest: 0.0048 (the 40 mm box: render::legibility reads this)
         text(p, calibre, h1 * 0.8, "Dark", lab @ T(0.0, -lh * 0.25, -0.0006) @ RY(math.pi),
              depth=0.0003)
         return [p]
