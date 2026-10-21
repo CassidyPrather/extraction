@@ -308,7 +308,8 @@ pub(super) fn direct(
                     .map_or(here + Vec2::Y, |w| w.xz());
                 match world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
                     Some(k) => {
-                        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 5.0;
+                        // Well behind: a lamed walker still limps a little way to look.
+                        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 9.0;
                         let side = k.centre
                             + (here - k.centre)
                                 .reject_from(k.centre - from)
