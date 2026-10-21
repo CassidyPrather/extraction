@@ -113,7 +113,10 @@ impl Weather {
             } else {
                 Color::srgba(0.75, 0.72, 0.65, 0.25)
             },
-            directional_light_exponent: 12.0,
+            // The moon stands high (a full one where the noon sun would):
+            // a tight lobe left the horizon toward it barely lighter than
+            // away (1.1x); a wide one makes the fog that side a compass.
+            directional_light_exponent: if self.moon > 0.0 { 4.0 } else { 12.0 },
             falloff: FogFalloff::from_visibility_squared(self.visibility),
         }
     }
@@ -129,6 +132,8 @@ pub struct SkyParams {
     pub cloud: Vec4,
     /// A low sun's glow on its side of the horizon: rgb, strength in w.
     pub glow: Vec4,
+    /// Lightning: toward the strike (xyz), how bright (w; `world::storm`).
+    pub flash: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -171,6 +176,7 @@ fn spawn_sky(
                 sun_dir: (-weather.sun_dir).extend(1.0),
                 cloud: Vec4::new(1.0, 1.0, 0.0, 0.0),
                 glow: Vec4::ZERO,
+                flash: Vec4::ZERO,
             },
         })),
         Transform::IDENTITY,
@@ -339,12 +345,13 @@ fn apply_weather(
     }
     let base = Weather::default();
     // Rain and murk darken the sky; clearing lifts it.
-    let k = match conditions.kind {
-        super::weather::WeatherKind::Downpour => 0.72,
-        super::weather::WeatherKind::PeaSouper => 0.95,
-        super::weather::WeatherKind::Clearing => 1.12,
-        super::weather::WeatherKind::Drizzle => 1.0,
-    };
+    let k = if conditions.storm { 0.88 } else { 1.0 }
+        * match conditions.kind {
+            super::weather::WeatherKind::Downpour => 0.72,
+            super::weather::WeatherKind::PeaSouper => 0.95,
+            super::weather::WeatherKind::Clearing => 1.12,
+            super::weather::WeatherKind::Drizzle => 1.0,
+        };
     let haze = zone.map.haze.unwrap_or([1.0; 3]);
     let moon = super::weather::moon_position(conditions.moon_phase);
     let hour = HourLook::of(conditions.hour, opts.sun_elevation, moon);
@@ -434,6 +441,9 @@ fn apply_weather(
                 weather.glow
             };
             mat.params.cloud = match conditions.kind {
+                super::weather::WeatherKind::Downpour if conditions.storm => {
+                    Vec4::new(1.6, 2.0, 0.0, 0.0)
+                }
                 super::weather::WeatherKind::Downpour => Vec4::new(1.35, 1.6, 0.0, 0.0),
                 super::weather::WeatherKind::PeaSouper => Vec4::new(1.1, 0.3, 0.0, 0.0),
                 super::weather::WeatherKind::Clearing => Vec4::new(0.45, 0.5, 0.0, 0.0),
@@ -531,6 +541,7 @@ struct HeightFogTarget {
     base: f32,
     cap_density: f32,
     cap_base: f32,
+    snow_line: f32,
 }
 
 impl HeightFogTarget {
@@ -542,6 +553,7 @@ impl HeightFogTarget {
             base: self.base,
             cap_density: self.cap_density,
             cap_base: self.cap_base,
+            snow_line: self.snow_line,
             ..*fog
         };
         if want != *fog {
@@ -565,10 +577,11 @@ fn valley_air(
         "Kettle Pass" => (1.0, 16.0, 0.009, 52.0),
         // The practice ground is kinder: you should see what you're shown.
         "Training Yard" => (0.55, 8.0, 0.0, 0.0),
-        // The drained reservoir: wet fog thick in the silt bed (some 15-20 m
-        // under the dam's crest, the old water line about 50 m up) and thin
-        // on the crest, so the climb down reads as going into it.
-        "Sallow Reservoir" => (1.5, 38.0, 0.0, 0.0),
+        // The drained reservoir: wet fog pooling from the bed's floor (31-34 m
+        // by the dam, 41 at the head; the crest at 52), thin on the crest.
+        // (Based at 40, everything under it was at full density: the valley
+        // below the dam is as low, and the dam vanished from the gate.)
+        "Sallow Reservoir" => (1.1, 32.0, 0.0, 0.0),
         _ => (1.0, 16.0, 0.0, 0.0),
     };
     let (k, dz) = match conditions.kind {
@@ -582,6 +595,7 @@ fn valley_air(
         base,
         cap_density: cap * k,
         cap_base: map.base_height + lift + dz,
+        snow_line: super::snow::snow_line(map).unwrap_or(crate::render::fog::NO_SNOW),
     }
 }
 
@@ -591,14 +605,22 @@ fn valley_air(
 /// (`render::grade::Adaptation::indoors`).
 fn carry_wetness(
     wet: Res<super::weather::Wetness>,
+    snow: Option<Res<super::snow::Snow>>,
     adapt: Res<crate::render::grade::Adaptation>,
     mut fogs: Query<&mut DistanceFog>,
 ) {
-    let w = (wet.level * (1.0 - adapt.indoors)).clamp(0.0, 1.0);
+    let dry = 1.0 - adapt.indoors;
+    let w = (wet.level * dry).clamp(0.0, 1.0);
     let a = 1.0 - w * crate::render::fog::WET_CODE;
+    // And the snow lying, on the lobe exponent's fraction (`SNOW_CODE`).
+    let s = snow.map_or(0.0, |s| s.cover * dry).clamp(0.0, 1.0);
     for mut fog in &mut fogs {
         if (fog.color.alpha() - a).abs() > 1e-6 {
             fog.color.set_alpha(a);
+        }
+        let e = fog.directional_light_exponent.floor() + s * crate::render::fog::SNOW_CODE;
+        if (fog.directional_light_exponent - e).abs() > 1e-5 {
+            fog.directional_light_exponent = e;
         }
     }
 }

@@ -48,6 +48,12 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
                 super::zero::aim_lenses,
                 super::zero::turn_drums,
+                super::optics::add_vignettes,
+                super::optics::vignette_lenses,
+                super::optics::add_post_blurs,
+                super::optics::blur_posts,
+                super::flares::flare_visuals,
+                super::crossbow::quarrel_visuals,
             ),
         )
         .add_plugins((
@@ -116,6 +122,9 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("gate", Moves::Gate),
         ("ejector", Moves::Rod),
         ("bayonet", Moves::Bayonet),
+        ("bipod", Moves::Bipod),
+        ("string_rest", Moves::StringRest),
+        ("string_drawn", Moves::StringDrawn),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -267,11 +276,12 @@ fn animate_parts(
         Option<&super::melee::Bayonet>,
         Option<&super::sling::SlingSwing>,
         &Item,
+        Option<&super::armoury::Bipod>,
     )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
     catalog: Res<Catalog>,
 ) {
-    for (gun, children, handling, bayonet, swing, item) in &guns {
+    for (gun, children, handling, bayonet, swing, item, bipod) in &guns {
         // A slung gun's parts swing on its strap, about the rear swivel.
         let swung = swing
             .filter(|s| s.angle != Vec2::ZERO)
@@ -320,6 +330,38 @@ fn animate_parts(
                     if folding && bayonet.is_some_and(|b| b.fixed) {
                         r.rotation = Quat::from_rotation_x(std::f32::consts::PI) * r.rotation;
                     }
+                    r
+                }
+                Moves::StringRest => {
+                    let mut r = part.rest;
+                    if f.bolt_travel > 0.02 {
+                        r.scale = Vec3::ZERO;
+                    }
+                    r
+                }
+                Moves::StringDrawn => {
+                    // Modelled drawn to the latch; stretched along Z about
+                    // the tips' line to wherever the string is.
+                    let mut r = part.rest;
+                    let rest = gun
+                        .layout
+                        .handle
+                        .as_ref()
+                        .map_or(0.0, |h| (h.grab.z - part.rest.translation.z).abs());
+                    let full = rest + travel;
+                    if f.bolt_travel <= 0.02 || full <= 0.0 {
+                        r.scale = Vec3::ZERO;
+                    } else {
+                        r.scale.z *= (rest + f.bolt_travel * travel) / full;
+                    }
+                    r
+                }
+                Moves::Bipod => {
+                    // About its pivot (the model's origin), down and forward.
+                    let mut r = part.rest;
+                    let swing = bipod.map_or(0.0, |b| b.swing);
+                    r.rotation =
+                        Quat::from_rotation_x(super::armoury::BIPOD_DEPLOY * swing) * r.rotation;
                     r
                 }
                 Moves::Rod => {
@@ -420,6 +462,25 @@ fn seat_mag_visuals(
 /// chamber shows the live round or the spent case it holds, or nothing.
 fn show_chambers(guns: Query<(&Gun, &Children)>, mut nodes: Query<(&Name, &mut Visibility)>) {
     for (gun, children) in &guns {
+        if gun.firearm.def.action == extraction_core::firearm::ActionKind::Crossbow {
+            // The bolt on the rail, while there is one.
+            for c in children.iter() {
+                let Ok((name, mut vis)) = nodes.get_mut(c) else {
+                    continue;
+                };
+                if name.as_str() == "static_rail_bolt" {
+                    let v = if gun.firearm.chambers[0] == Some(Round::Live) {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    };
+                    if *vis != v {
+                        *vis = v;
+                    }
+                }
+            }
+            continue;
+        }
         if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
             continue;
         }
@@ -506,6 +567,7 @@ mod tests {
                 layout: super::super::layout::layout("nagant").unwrap(),
                 magwell: None,
                 trigger: 0.0,
+                dice: extraction_core::noise::Rng::new(0),
             })
             .id();
         let node = |app: &mut App, name: String| {

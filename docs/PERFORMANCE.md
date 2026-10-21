@@ -72,7 +72,7 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 11.5 | Was 10; Kettle's quarry view now stands under a spruce clump (10.27), see "Gauge margins" |
+| Overdraw, mean layers a pixel | 10 | Worst view 7.3 (Marrow's spruce); 11.5 for a while, see "Gauge margins" |
 | Overdraw, 95th percentile | 35 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
@@ -163,17 +163,19 @@ Worst fallback view: 549k triangles. The gauges print which path they
 measured (`foliage fetched` / `FALLBACK`), and so does the session log
 (`forest: foliage ...`).
 
-The gauges at every lookbook view of the four valleys (GPU-less client,
-one eye), in clear weather (the furthest you see, so the most drawn;
-`BUDGET_WEATHER=drizzle` for the reference look), worst view against
-the budget:
+The gauges at every lookbook view of the five valleys (GPU-less client,
+one eye, fetched foliage), in clear weather (the furthest you see, so
+the most drawn; `BUDGET_WEATHER=drizzle` for the reference look), worst
+view against the budget, on main with everything merged (wildlife, ivy,
+decals, the fourth valley, the underground sites):
 
 | | Worst | Budget | Headroom |
 | - | - | - | - |
-| Draws | 1081 (Marrow Creek spruce) | 1200 | 10% |
-| Triangles | 570k (Marrow Creek spruce) | 900k | 37% |
-| Shadow draws | 706 (Training Yard aerial) | 900 | 22% |
-| Shadow triangles | 247k (Cinder Works gate) | 700k | 65% |
+| Draws | 998 (Marrow Creek aerial) | 1200 | 17% |
+| Triangles | 515k (Marrow Creek spruce) | 900k | 43% |
+| Shadow draws | 509 (Training Yard aerial) | 900 | 43% |
+| Shadow triangles | 422k > (small casters) under 330k | 700k | 50%+ |
+| Overdraw, mean | 7.3 (Marrow Creek spruce) | 10 | 27% |
 
 At the start the worst views were 3316 draws and 970 shadow draws.
 
@@ -185,8 +187,8 @@ ms, which says nothing about the laptop).
 
 Left on the list: interiors seen from
 outside within 25 m (furniture behind walls; measured small, no class
-in any view's top five); the truck's 47-94 shadow
-casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
+in any view's top five); the hands' 80 draws in every view (each finger
+a mesh; Hands are merging them); GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
 prepass, a second geometry pass per eye: not worth it at these counts).
 
 ## Stereo: what the second eye costs, and multiview
@@ -338,10 +340,20 @@ Kettle Pass and Cinder Works hold the same ceilings (`SPIKE_MAP`): their
 events are all 1.2-2.6x the median, loading's worst after the second
 frame 79 and 102 ms.
 
-Still there: the first frame (Startup: building the Zone, terrain and
-rock meshes, 6.7 s on one thread) runs before the app submits a frame, so
-the headset shows its own loading indicator; and frame 2 (215 ms: first
-text layout, the screens). Neither is a hitch mid-raid.
+The first frame (Startup: building the Zone, terrain and rock meshes,
+6.7 s on one thread) runs before the OpenXR session is even created
+(`bevy_mod_xr` runs `XrFirst` ahead of everything but the startup
+schedules, and the session was only asked for in that frame's
+PreUpdate), so the runtime shows its own loader. What did reach the
+headset was the rest of the load: frames of 60-100 ms for about a second
+while buildings dressed and the forest's impostors were taken. So the
+session now starts only when the load has settled
+(`rig::xr::handle_session`, `bevy_mod_xr`'s own handling switched off):
+no building still waiting on its props, the forest built, every impostor
+captured; or after 20 s whatever the load's doing, so a stuck stream
+can't leave the player in the runtime's loader. `rig::xr::tests` hold
+both. (`scripts/xr_check.sh` needs more `FRAMES` for it: the screenshot
+now comes after the load, not during it.)
 
 ### First use: pipelines
 
@@ -416,11 +428,79 @@ something real (main at 43940f8, fetched foliage):
   cards within about 1.5 m of the eye in their vertex shader, as the
   impostors' near cut does (in VR those are flat sheets in your face);
   it needs each card's centre in a vertex attribute, and the tree shader
-  is Visual design's.
+  is Visual design's. Done, with their OK: each card vertex carries its
+  card's centre (`trees::ATTRIBUTE_CARD_CENTRE`, at location 8 through
+  `TreeSway`'s specialize), and `tree_sway.wgsl` shrinks the card to it
+  smoothly, whole from 2 m and gone by 1.2 m (`trees::card_scale`); the
+  trunks, the dark core and the cards' shadows stay, and the overdraw
+  gauge models it. Kettle's quarry on main: 10.27 > 8.64 (tree cards 6.07
+  > 4.43). `EXTRACTION_CARD_SHRINK=0` leaves cards whole, to compare.
+  `docs/shots/performance/card_shrink_k05.png` (lavapipe, left before,
+  right after) also shows what the view had become: its camera stands
+  inside that spruce's dark core, which is drawn from inside; the view
+  wants moving a few metres, and the core seen from within is a look for
+  World models and Visual design.
 - **Where each valley stands** (worst share of any limit in any view):
   Marrow 1.00 (aerial, 1195 of 1200 draws), Kettle 0.89 (quarry overdraw,
   of 11.5), Training Yard 0.90 (aerial shadow draws), Cinder 0.86 (gate
   shadows). The hands are 80 draws in every view (each finger a mesh);
   merged, they'd give every view 6% back, Marrow's aerial included.
+- **Forest detail around the impostor rigs.** The forest streamed near
+  trees (cards, cores) round every 3D camera, the impostors' capture rigs
+  included: rigs 4 km down under x = 0-480, which in the gauges' GPU-less
+  harness never get their picture back and stay. Near trees stood round
+  them (by horizontal distance), and the views near them counted those.
+  In the game the rigs go once their picture's read back, a few frames
+  into the load, so only the gauges were wrong; the forest now streams
+  for the cameras that don't draw into an image. Marrow Creek: aerial
+  1150 > 1003 draws, spruce 1097 > 844, summit 715 > 460, creek 502 >
+  249 (on main, where wildlife and the new scatter took the aerial to
+  1211, expect about 1064).
 - The hitch gauge's wall-clock test is out of the default suite
   (`scripts/hitches.sh`), its finds held by counts (see "Hitches").
+
+## Load time
+
+The startup frame (before the headset's session starts) was 4.7-6.2 s on
+this 4-core container, and longer on one thread. `render::spikes::tests::
+startup_frames` (ignored, wall-clock) times it per valley on all cores.
+
+- The terrain's shaping pass (noise, relief, the distance from every cell
+  to every ridge and channel spline) was most of `Heightmap::build`, on
+  one thread. Each cell's rise depends only on where it is, so rows go to
+  every core (bit-identical heights, hashed): `Heightmap::build` 3.1-4.5 s
+  > 1.5-2.5 s.
+- The terrain chunks' meshes and the rock chunks' meshes (with their
+  tangents) are built on the compute pool, each chunk on its own, and
+  spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
+  (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).
+
+## Small things' shadows
+
+At the gates half the sun's shadow-pass meshes were smaller than 10 cm
+(Cinder Works' gate: 275 under 5 cm, 146 more under 10, against 333
+bigger): the truck's buttons and fittings, door furniture, tins and
+boxes of rounds. Past a few metres such a shadow is a texel or two of the
+cascade. `budget::small_shadows` gives every mesh under 12 cm (its
+largest side, world size) a `ShadowReach` when its bounds arrive: under
+5 cm it casts within 3 m of the eye, under 12 cm within 6 m (with
+`ShadowReach`'s 2 m give either way). `EXTRACTION_SMALL_SHADOWS=0` leaves
+them all casting, to compare. Sun shadow draws, before > after:
+
+| view | before | after |
+|---|---|---|
+| Cinder Works gate | 852 | 412 |
+| Sallow Reservoir gate | 824 | 393 |
+| Marrow Creek gate | 612 | 315 |
+| Kettle Pass gate | 501 | 269 |
+| Training Yard aerial | 743 | 509 |
+| Marrow Creek aerial | 501 | 366 |
+
+`ShadowReach` (and the forest's near detail) now take their eyes from
+`render::eyes`: the cameras not drawing into an image, so an impostor
+capture's rig isn't one.
+
+`docs/shots/performance/small_shadows_truck.png` is the player's first
+view (the truck at base, clear day, lavapipe) with the rule; without it
+the frame is identical to the pixel (the buttons, the vise, the tins are
+within reach and still cast), as is the Marrow gate view.

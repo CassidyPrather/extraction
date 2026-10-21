@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import Wear, board, bolt, prop, rod  # noqa: E402
-from common import RX, RY, Part, T, fillet  # noqa: E402
+from common import RX, RY, RZ, Part, T, fillet  # noqa: E402
 
 UP_Z = RX(-math.pi / 2)  # a cylinder's axis (Z) -> +Y
 
@@ -178,10 +178,55 @@ def window_casing():
     return [p]
 
 
+def window_board():
+    """A board nailed over a window: 1.2 x 0.15 x 0.025, origin at its
+    centre, its face out to -Z (the street) with two nails at each end;
+    rough-sawn, an end split. Destruction places three across a boarded
+    sash, each its own breakable thing."""
+    p = Part("static")
+    w = Wear(91)
+    board(p, (1.2, 0.15, 0.025), (0.0, 0.0, 0.0), "Planks", wear=w, bevel=0.003)
+    # A split at one end: a sliver standing a little proud.
+    board(p, (0.22, 0.03, 0.006), (0.47, -0.05, -0.0135), "Planks", bevel=0.001, roll=0.04)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            bolt(p, (sx * 0.54, sy * 0.04, -0.0125), (0, 0, -1), r=0.006, h=0.003, mat="Rusty",
+                 segs=6)
+    return [p]
+
+
+def shutter():
+    """A plank window shutter, 0.5 x 1.1 x 0.03, origin at its centre, its
+    outer face to -Z, its hinges on its +X edge (the window's side): three
+    boards on a Z brace, two strap hinges, the paint gone grey. A
+    breakable thing (`buildings::Breakable`): Destruction spawns and
+    breaks it."""
+    p = Part("static")
+    w = Wear(93)
+    for k in range(3):
+        x = -0.25 + (k + 0.5) * 0.5 / 3
+        board(p, (0.5 / 3 - 0.004, 1.1, 0.018), (x, 0.0, -0.006), "Painted", wear=w,
+              bevel=0.002)
+    # The ledgers and the brace on the back (the wall side, +Z).
+    for y in (-0.4, 0.4):
+        p.box((0.46, 0.08, 0.012), (0.0, y, 0.009), "Timber")
+    # The brace between the ledgers (not over them: they'd share a face).
+    a = math.atan2(0.38, 0.72)
+    L = (0.72 - 0.07 * math.sin(a)) / math.cos(a)
+    p.box((0.07, L, 0.012), (0.0, 0.0, 0.009), "Timber", xf=RZ(a))
+    # Strap hinges on the face, at the ledgers.
+    for y in (-0.4, 0.4):
+        p.box((0.3, 0.03, 0.004), (0.12, y, -0.017), "Iron")
+        p.cyl(0.012, -0.03, 0.03, "Iron", segs=8, xf=T(0.255, y, -0.005) @ RX(math.pi / 2))
+    return [p]
+
+
 prop("door_leaf", door_leaf)
 prop("window_sash", window_sash)
 prop("window_sash_broken", lambda: window_sash(broken=True))
 prop("window_casing", window_casing)
+prop("window_board", window_board)
+prop("shutter", shutter)
 
 def door_metal():
     """A steel door for masonry and metal buildings, in door space like

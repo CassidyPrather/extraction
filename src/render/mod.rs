@@ -1,15 +1,19 @@
 //! Rendering: custom materials, the camera stack, post-processing.
 
+pub mod affordance;
 pub mod arms;
 pub mod bench;
+pub mod blink;
 pub mod budget;
 pub mod cards;
 pub mod comfort;
 pub mod cpu;
 pub mod fog;
 pub mod grade;
+pub mod hand_push;
 pub mod kit;
 pub mod kitchen;
+pub mod landmarks;
 pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
@@ -20,13 +24,17 @@ pub mod offering;
 #[cfg(test)]
 pub mod overdraw;
 pub mod props;
+pub mod pry_cue;
 pub mod screen;
 pub mod spikes;
 pub mod stats;
+pub mod tells;
 pub mod terrain_material;
+pub mod tools;
 pub mod upgrades;
 pub mod warmup;
 pub mod water_material;
+pub mod wayfind_shots;
 pub mod world_props;
 
 use bevy::camera::Hdr;
@@ -64,8 +72,14 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
+        .add_plugins(wayfind_shots::WayfindShotsPlugin)
+        .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
+        .add_plugins(tools::ToolVisualsPlugin)
+        .add_plugins(blink::BlinkPlugin)
+        .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
@@ -92,6 +106,22 @@ pub struct OffscreenCamera;
 /// The camera `--camera` puts anywhere (screenshots, the tour).
 #[derive(Component)]
 pub struct FreeCamera;
+
+/// The 3D cameras that might be a player's eyes, as a query filter: see
+/// [`eyes`].
+pub type EyeCamera = (With<Camera3d>, Without<OffscreenCamera>);
+
+/// The player's eyes (or the flat camera): what distance-based detail
+/// (near trees, shadows) is for. Not a camera drawing into an image (an
+/// impostor capture's rig, 4 km down, while it waits on its picture; in
+/// the GPU-less gauges it waits for ever).
+pub fn eyes<'a>(
+    cams: &'a Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), EyeCamera>,
+) -> impl Iterator<Item = &'a GlobalTransform> {
+    cams.iter()
+        .filter(|(_, t)| !matches!(t, Some(bevy::camera::RenderTarget::Image(_))))
+        .map(|(g, _)| g)
+}
 
 /// In flat mode the local player's head is a camera. (The XR driver adds
 /// its own per-eye cameras instead.)

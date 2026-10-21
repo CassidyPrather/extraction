@@ -218,6 +218,7 @@ fn sway_dirigibles(
         &super::dirigible::Dirigible,
         &mut Transform,
         Option<&mut Sway>,
+        Option<&super::RobotSeed>,
     )>,
     time: Res<Time>,
 ) {
@@ -225,7 +226,7 @@ fn sway_dirigibles(
     if dt <= 0.0 {
         return;
     }
-    for (e, d, mut t, sway) in &mut ships {
+    for (e, d, mut t, sway, seed) in &mut ships {
         let Some(mut s) = sway else {
             commands.entity(e).insert(Sway {
                 last_yaw: d.yaw,
@@ -243,7 +244,8 @@ fn sway_dirigibles(
         s.last_yaw = d.yaw;
         s.yaw_rate += (dy / dt - s.yaw_rate) * (1.0 * dt).min(1.0);
         let speed = Vec2::new(d.velocity.x, d.velocity.z).length();
-        let k = s.age + e.index_u32() as f32;
+        // (Each ship's sway on its own phase.)
+        let k = s.age + seed.map_or(0, |s| s.low() % 1000) as f32;
         let mut pitch = (d.velocity.y * 0.05).clamp(-0.1, 0.1) + 0.012 * (k * 0.23).sin();
         // Banking: the outside of the turn rises (a negative yaw rate turns
         // right, rolling it right).

@@ -26,7 +26,10 @@ pub struct HalosPlugin;
 impl Plugin for HalosPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<HaloMaterial>::default())
-            .add_systems(Update, (add_halos, size_halos, halo_air).chain());
+            .add_systems(
+                Update,
+                (add_halos, size_halos, add_glows, glows, halo_air).chain(),
+            );
     }
 }
 
@@ -65,9 +68,33 @@ impl Material for HaloMaterial {
     }
 }
 
+/// A glow without a light, for anything that shines but lights nothing
+/// (a robot's eye): a halo round the entity after dark, in `color`
+/// (linear; 1 is a lantern's core), `radius` metres out. Change it as
+/// often as you like (a mood every frame): only a changed value reaches
+/// the GPU. A zero colour or radius hides it. It's fogged like the lamps'.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Halo {
+    pub color: LinearRgba,
+    pub radius: f32,
+}
+
+/// How far off a `Halo` still shows (m), if not the lamps' 140 m: a
+/// landmark's lamp read from across the valley. Put it on with the Halo.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HaloReach(pub f32);
+
+/// The sphere drawing a `Halo`, and its own material.
+#[derive(Component)]
+struct GlowOf(Handle<HaloMaterial>);
+
+/// Where a `Halo`'s sphere is.
+#[derive(Component)]
+struct GlowSphere(Entity);
+
 /// A lamp's halo (a child of the light).
 #[derive(Component)]
-struct Halo;
+struct HaloSphere;
 
 /// The core's radiance (cd/m2-ish, before the eye's exposure).
 const CORE: f32 = 300.0;
@@ -101,7 +128,7 @@ struct Scan {
 fn add_halos(
     mut commands: Commands,
     lights: Query<(Entity, &PointLight, Option<&Children>)>,
-    halos: Query<(), With<Halo>>,
+    halos: Query<(), With<HaloSphere>>,
     conditions: Res<Conditions>,
     weather: Res<super::sky::Weather>,
     time: Res<Time>,
@@ -153,7 +180,7 @@ fn add_halos(
             .clone();
         commands.entity(e).with_child((
             Name::new("Lamp halo"),
-            Halo,
+            HaloSphere,
             Mesh3d(mesh),
             MeshMaterial3d(material),
             Transform::from_scale(Vec3::splat(halo_radius(light.intensity))),
@@ -174,11 +201,88 @@ fn add_halos(
     scan.seen = now;
 }
 
+fn add_glows(
+    mut commands: Commands,
+    added: Query<(Entity, &Halo, Option<&HaloReach>), Added<Halo>>,
+    conditions: Res<Conditions>,
+    weather: Res<super::sky::Weather>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<HaloMaterial>>,
+    mut mesh: Local<Option<Handle<Mesh>>>,
+) {
+    for (e, halo, reach) in &added {
+        let reach = reach.map_or(REACH, |r| r.0);
+        let mesh = mesh
+            .get_or_insert_with(|| meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap()))
+            .clone();
+        let air = super::beams::air(&conditions).0;
+        let material = materials.add(HaloMaterial {
+            params: HaloParams {
+                color: glow_color(halo),
+                air: Vec4::new(air, weather.visibility, 0.0, 0.0),
+            },
+        });
+        let sphere = commands
+            .spawn((
+                Name::new("Glow halo"),
+                HaloSphere,
+                GlowOf(material.clone()),
+                Mesh3d(mesh),
+                MeshMaterial3d(material),
+                Transform::from_scale(Vec3::splat(halo.radius.max(0.0))),
+                if halos_show(&conditions) {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                },
+                VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: reach..reach + 10.0,
+                    use_aabb: false,
+                },
+                NotShadowCaster,
+                NotShadowReceiver,
+                ChildOf(e),
+            ))
+            .id();
+        commands.entity(e).insert(GlowSphere(sphere));
+    }
+}
+
+fn glow_color(h: &Halo) -> Vec4 {
+    Vec4::new(h.color.red, h.color.green, h.color.blue, CORE)
+}
+
+/// A `Halo` that changed: its colour and size to the sphere.
+fn glows(
+    changed: Query<(&Halo, &GlowSphere), Changed<Halo>>,
+    mut spheres: Query<(&GlowOf, &mut Transform)>,
+    mut materials: ResMut<Assets<HaloMaterial>>,
+) {
+    for (halo, sphere) in &changed {
+        let Ok((of, mut xf)) = spheres.get_mut(sphere.0) else {
+            continue;
+        };
+        let r = halo.radius.max(0.0);
+        if (xf.scale.x - r).abs() > 1e-4 {
+            xf.scale = Vec3::splat(r);
+        }
+        let want = glow_color(halo);
+        if let Some(m) = materials.get(&of.0) {
+            if m.params.color != want {
+                if let Some(mut m) = materials.get_mut(&of.0) {
+                    m.params.color = want;
+                }
+            }
+        }
+    }
+}
+
 /// A lamp that brightens or dims takes its halo with it (a pylon's work
 /// light, a flare); off, the halo's gone.
 fn size_halos(
     lights: Query<(&PointLight, &Children), Changed<PointLight>>,
-    mut halos: Query<&mut Transform, With<Halo>>,
+    mut halos: Query<&mut Transform, With<HaloSphere>>,
 ) {
     for (light, children) in &lights {
         for c in children.iter() {
@@ -196,7 +300,7 @@ fn halo_air(
     conditions: Res<Conditions>,
     weather: Res<super::sky::Weather>,
     mut materials: ResMut<Assets<HaloMaterial>>,
-    mut halos: Query<&mut Visibility, With<Halo>>,
+    mut halos: Query<&mut Visibility, With<HaloSphere>>,
 ) {
     if !conditions.is_changed() {
         return;
@@ -226,6 +330,49 @@ mod tests {
         let lamp = halo_radius(40_000.0);
         assert!(lantern > 0.3 && lantern < 0.4);
         assert!(lamp > lantern && lamp <= 1.0);
+    }
+
+    #[test]
+    fn a_glow_follows_its_halo() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<HaloMaterial>()
+            .insert_resource(Conditions::compose(
+                super::super::weather::WeatherKind::Clearing,
+                super::super::weather::Hour::Night,
+                0,
+            ))
+            .insert_resource(super::super::sky::Weather::default())
+            .add_systems(Update, (add_glows, glows).chain());
+        let eye = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                Visibility::default(),
+                Halo {
+                    color: LinearRgba::rgb(1.0, 0.1, 0.05),
+                    radius: 0.4,
+                },
+            ))
+            .id();
+        app.update();
+        let sphere = app.world().get::<GlowSphere>(eye).expect("a sphere").0;
+        assert_eq!(app.world().get::<Transform>(sphere).unwrap().scale.x, 0.4);
+        // A new mood: the colour and the size follow.
+        *app.world_mut().get_mut::<Halo>(eye).unwrap() = Halo {
+            color: LinearRgba::rgb(1.0, 1.0, 0.9),
+            radius: 0.6,
+        };
+        app.update();
+        assert_eq!(app.world().get::<Transform>(sphere).unwrap().scale.x, 0.6);
+        let h = app.world().get::<GlowOf>(sphere).unwrap().0.clone();
+        let m = app
+            .world()
+            .resource::<Assets<HaloMaterial>>()
+            .get(&h)
+            .unwrap();
+        assert_eq!(m.params.color.y, 1.0);
     }
 
     #[test]

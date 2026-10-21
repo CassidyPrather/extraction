@@ -164,6 +164,19 @@ impl Cards {
 /// `pane` is the glass box's half size and pose (world); `out` its face
 /// toward the outside.
 fn window_shaft(cards: &mut Cards, half: Vec3, pose: Transform, out: Vec3, light: Vec3) {
+    window_shaft_to(cards, half, pose, out, light, f32::INFINITY);
+}
+
+/// [`window_shaft`], stopping `depth` along the light at the most (a
+/// hole in a roof's shaft at the floor).
+fn window_shaft_to(
+    cards: &mut Cards,
+    half: Vec3,
+    pose: Transform,
+    out: Vec3,
+    light: Vec3,
+    depth: f32,
+) {
     // The pane's two long axes.
     let axes = [
         pose.rotation * Vec3::X,
@@ -180,7 +193,7 @@ fn window_shaft(cards: &mut Cards, half: Vec3, pose: Transform, out: Vec3, light
     if light.dot(out) > -0.15 {
         return;
     }
-    let sweep = light * ROOM_DEPTH / (-light.dot(out)).max(0.4);
+    let sweep = light * (ROOM_DEPTH / (-light.dot(out)).max(0.4)).min(depth);
     cards.card(c - u * hu, c + u * hu, sweep);
     cards.card(c - v * hv, c + v * hv, sweep);
     cards.card(c - u * hu - v * hv, c + u * hu + v * hv, sweep);
@@ -322,6 +335,20 @@ fn build_shafts(
             };
             window_shaft(&mut cards, size * 0.5, pose, out, light);
         }
+        // A ruin's holed roof (`Geo::skylights`): down from the eaves to
+        // the floor.
+        for (c, half) in &geo.skylights {
+            let pose = at * Transform::from_translation(*c);
+            let depth = ROOM_DEPTH.min((c.y - 0.5).max(0.5) / (-light.y).max(0.05));
+            window_shaft_to(
+                &mut cards,
+                Vec3::new(half.x, 0.01, half.y),
+                pose,
+                at.rotation * Vec3::Y,
+                light,
+                depth,
+            );
+        }
         if let Some(mesh) = cards.build() {
             spawn(mesh);
         }
@@ -363,6 +390,23 @@ mod tests {
         assert!(forest(WeatherKind::Clearing, Hour::Dawn));
         assert!(!forest(WeatherKind::Clearing, Hour::Day));
         assert!(!forest(WeatherKind::Downpour, Hour::Dusk));
+    }
+
+    /// Through a hole in a roof, a high sun's shaft stops at the floor.
+    #[test]
+    fn a_holed_roof_lets_the_light_down_to_the_floor() {
+        let pose = Transform::from_xyz(1.0, 3.2, -1.0);
+        let half = Vec3::new(1.5, 0.01, 1.2);
+        let light = Vec3::new(-0.3, -0.95, 0.1).normalize();
+        let mut cards = Cards::default();
+        window_shaft_to(&mut cards, half, pose, Vec3::Y, light, (3.2 - 0.5) / 0.95);
+        assert!(!cards.idx.is_empty());
+        let low = cards.pos.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
+        assert!((low - 0.5).abs() < 0.05, "down to {low}");
+        // And none up out of it.
+        let mut none = Cards::default();
+        window_shaft_to(&mut none, half, pose, Vec3::Y, -light, 10.0);
+        assert!(none.idx.is_empty());
     }
 
     #[test]

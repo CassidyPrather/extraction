@@ -307,6 +307,30 @@ pub const ART: &[ArtText] = &[
         "the gun turned to the face",
     ),
     art(
+        "guns/mp133.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/rpk74.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/flare_pistol.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/mosin.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
         "mags/ak_mag.py",
         Need::Incidental,
         0.35,
@@ -317,6 +341,18 @@ pub const ART: &[ArtText] = &[
         Need::Incidental,
         0.35,
         "the drum in the hand",
+    ),
+    art(
+        "mags/rpk_mag.py",
+        Need::Incidental,
+        0.35,
+        "the magazine in the hand",
+    ),
+    art(
+        "items/ammo_22.py",
+        Need::MustRead,
+        0.35,
+        "the box in the hand: which rounds",
     ),
     art(
         "items/ammo.py",
@@ -373,6 +409,9 @@ pub const ART: &[ArtText] = &[
         5.0,
         "walking through the depot",
     ),
+    // A charcoal burner's name on his bed, a shop's CLOSED card, a
+    // chapel's hymn numbers: read across the room (World models).
+    art("props/named.py", Need::MustRead, 2.0, "across the room"),
 ];
 
 /// Text baked into a texture.
@@ -600,13 +639,32 @@ mod tests {
                 14.2,
                 100.0,
                 true,
-                Some(&"The driver says something long enough to fill the screen. ".repeat(3)),
+                Some(crate::render::comfort::Said::Plain(
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
                 0,
             ),
             size: crate::render::comfort::WRIST_SIZE,
             style: ScreenStyle::Lcd,
         };
         check("wrist, full", &wrist, Some(TextSource::Wrist));
+        // Captioned: the speaker's line in place of one of the words'.
+        let wrist = ScreenText {
+            text: crate::render::comfort::wrist_text(
+                "SURGE 12M",
+                14.2,
+                100.0,
+                true,
+                Some(crate::render::comfort::Said::Captioned(
+                    "MACHINES AT 12",
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
+                0,
+            ),
+            size: crate::render::comfort::WRIST_SIZE,
+            style: ScreenStyle::Lcd,
+        };
+        check("wrist, captioned", &wrist, Some(TextSource::Wrist));
         let radio = ScreenText {
             text: crate::render::comfort::radio_text(
                 &[
@@ -814,7 +872,6 @@ mod tests {
         use crate::items::loot::{building_roll, clear_of_notes, marker_roll, notes_lying};
         use extraction_core::map::MarkerKind;
         let mut bad = Vec::new();
-        let mut near = 0;
         let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(0.06);
         for map in [
             "marrow_creek",
@@ -855,10 +912,6 @@ mod tests {
             for (spot, at) in landings {
                 let landed = clear_of_notes(at, &notes);
                 for (note, rot) in &notes {
-                    let raw = rot.inverse() * (at - *note);
-                    if raw.y.abs() < 0.4 && raw.x.abs() < half.x && raw.z.abs() < half.y {
-                        near += 1;
-                    }
                     let p = rot.inverse() * (landed - *note);
                     if p.y.abs() < 0.4 && p.x.abs() < half.x && p.z.abs() < half.y {
                         bad.push(format!(
@@ -868,8 +921,92 @@ mod tests {
                 }
             }
         }
-        // The check has teeth: rolls would have landed on notes.
-        assert!(near > 10, "rolls over notes before keeping off: {near}");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+        // And the keeping-off itself, on a roll laid right on a turned
+        // note (loot spots are also moved off notes at the source,
+        // `world::buildings`, so the valleys may never give it one).
+        let note = (Vec3::new(3.0, 0.8, -2.0), Quat::from_rotation_y(0.7));
+        for off in [
+            Vec3::ZERO,
+            Vec3::new(0.05, 0.02, -0.1),
+            Vec3::new(-0.12, 0.0, 0.15),
+        ] {
+            let at = note.0 + note.1 * off;
+            let p = note.1.inverse() * (clear_of_notes(at, &[note]) - note.0);
+            assert!(
+                p.x.abs() >= half.x || p.z.abs() >= half.y,
+                "a roll at {off:?} on the note stayed on it: {p:?}"
+            );
+        }
+    }
+
+    /// Every signpost faces the way you come to it, so its words meet you
+    /// rather than its back: beside a road or path (within 25 m), its face
+    /// turns to the road 10 m back toward where the truck sets you down,
+    /// whence you walk up it; with none near, toward that spot itself. Its board is at eye height by construction (1.45 m
+    /// up, `world::notes`).
+    #[test]
+    fn every_sign_faces_its_approach() {
+        use extraction_core::map::{MapDef, MarkerKind};
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/maps");
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "ron") {
+                continue;
+            }
+            let map = MapDef::from_ron(&std::fs::read_to_string(&p).unwrap()).unwrap();
+            let ins = map
+                .markers_of(&MarkerKind::Insertion)
+                .next()
+                .map(|m| Vec2::from(m.at));
+            for m in &map.markers {
+                if !matches!(m.kind, MarkerKind::Sign { .. }) {
+                    continue;
+                }
+                seen += 1;
+                let at = Vec2::from(m.at);
+                // The nearest point on any road or path.
+                let mut near: Option<(f32, Vec2, Vec2)> = None;
+                for road in &map.roads {
+                    for w in road.points.windows(2) {
+                        let (a, b) = (Vec2::from(w[0]), Vec2::from(w[1]));
+                        let ab = b - a;
+                        let t = ((at - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                        let q = a + ab * t;
+                        let d = q.distance(at);
+                        if near.is_none_or(|(n, _, _)| d < n) {
+                            near = Some((d, q, ab.normalize_or_zero()));
+                        }
+                    }
+                }
+                let Some(ins) = ins else {
+                    continue;
+                };
+                let from = match near {
+                    // Back along the road, the way you walk up it.
+                    Some((d, q, along)) if d < 25.0 => [q + along * 10.0, q - along * 10.0]
+                        .into_iter()
+                        .min_by(|a, b| a.distance(ins).total_cmp(&b.distance(ins)))
+                        .unwrap(),
+                    _ => ins,
+                };
+                // The board faces the marker's +Z, turned by its rot.
+                let face = Quat::from_rotation_y(-m.rot.to_radians()) * Vec3::Z;
+                let to = (from - at).normalize_or_zero();
+                let cos = Vec2::new(face.x, face.z).dot(to);
+                if to != Vec2::ZERO && cos < 0.5 {
+                    bad.push(format!(
+                        "{}: {} faces {:.0} deg away from its approach",
+                        map.name,
+                        m.name,
+                        cos.clamp(-1.0, 1.0).acos().to_degrees()
+                    ));
+                }
+            }
+        }
+        assert!(seen > 0, "no signs found");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 

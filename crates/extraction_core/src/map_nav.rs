@@ -6,7 +6,7 @@
 //! agree on where you can walk.
 
 use crate::geom::polyline_at;
-use crate::map::{MapDef, RoadKind, prefab_footprint};
+use crate::map::{MapDef, RoadKind, prefab_footprint, prefab_walls};
 use crate::nav::{NavGrid, Obstacle};
 use crate::terrain::Heightmap;
 
@@ -34,6 +34,20 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
             },
             0.6,
         );
+        let (sn, c) = p.rot.to_radians().sin_cos();
+        for (o, half) in prefab_walls(&p.prefab) {
+            g.block(
+                Obstacle::Rect {
+                    at: [
+                        p.at[0] + o[0] * c - o[1] * sn,
+                        p.at[1] + o[0] * sn + o[1] * c,
+                    ],
+                    half: *half,
+                    yaw: p.rot.to_radians(),
+                },
+                0.6,
+            );
+        }
     }
     // Underground sites' kiosks stand on the surface like placements (the
     // shells: their aprons are open ground).

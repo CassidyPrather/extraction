@@ -27,6 +27,16 @@ pub enum ActionKind {
     /// (a Nagant): rounds go in and out one at a time at the gate; cocking
     /// the hammer (by thumb, or the long double-action pull) turns it.
     Revolver,
+    /// A pump (slide) action: shells thumbed into a tube magazine through
+    /// the loading port; the forend pumped back throws out what's in the
+    /// chamber and lets the next shell onto the carrier, pumped forward
+    /// chambers it. A cocked hammer locks the action shut until the shot
+    /// (or the action release).
+    Pump,
+    /// A crossbow: the string drawn back by hand catches on the latch;
+    /// a bolt laid in the groove; the trigger looses it. Nothing to
+    /// eject, nothing to cycle.
+    Crossbow,
 }
 
 /// Fire-selector positions.
@@ -92,10 +102,21 @@ pub struct FirearmDef {
     /// round the bolt slams home on.
     #[serde(default)]
     pub floating_pin: bool,
+    /// How far robots hear a shot from it, against what its calibre would
+    /// say (a .22 rifle's crack is a fraction of a pistol's).
+    #[serde(default = "unit")]
+    pub report: f32,
+    /// Rimfire rounds misfire more: lift the bolt and drop it to strike
+    /// again.
+    #[serde(default)]
+    pub rimfire: bool,
 }
 
 const fn one() -> u32 {
     1
+}
+const fn unit() -> f32 {
+    1.0
 }
 const fn default_rpm() -> f32 {
     600.0
@@ -209,6 +230,18 @@ const CLOSED_AT: f32 = 0.03;
 const HANDLE_DOWN_AT: f32 = 0.05;
 /// Where a stovepipe's case holds the bolt.
 const STOVEPIPE_AT: f32 = 0.2;
+/// Pump travel past which the tube lets the next shell onto the carrier
+/// (short of [`EJECT_AT`]: a short stroke releases a shell without
+/// throwing out the case, and the two jam).
+const PUMP_RELEASE: f32 = 0.7;
+/// What loosing a crossbow with no bolt on it (a dry loose: the prod's
+/// whole spring goes into its own limbs and the string) takes off its
+/// condition.
+pub const DRY_LOOSE: f32 = 0.04;
+/// A crossbow's string let go short of the latch slaps home: a little wear.
+pub const STRING_SLAP: f32 = 0.005;
+/// A rimfire round's extra chance of a misfire.
+pub const RIMFIRE_DUD: f32 = 0.03;
 /// Where a double feed wedges the bolt: it won't come further forward.
 const DOUBLE_FEED_AT: f32 = 0.4;
 /// A re-packed round's chance of a squib, and of a dud on top of the gun's.
@@ -265,11 +298,14 @@ pub struct Firearm {
     #[serde(default)]
     pub bolt_stuck: bool,
     /// The bolt slammed home on a round the floating pin will fire next
-    /// tick, and this tick's roll for it.
+    /// tick.
     #[serde(default)]
     slam_pending: bool,
+    /// The gun's own dice, for a bolt let go by hand (which has none
+    /// passed in): kept apart so a gun that can't slam-fire never draws
+    /// from anyone's rolls.
     #[serde(default)]
-    slam_roll: f32,
+    pub fault_dice: u64,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
     /// The magazine has slipped down in the well (a failure to feed): the
@@ -286,6 +322,10 @@ pub struct Firearm {
     /// The ejector rod's stroke, 1 as it pushes a case out, easing to 0.
     #[serde(default)]
     pub rod: f32,
+    /// A pump's action release is pressed: the forend comes back on a
+    /// cocked hammer (until the action closes again).
+    #[serde(default)]
+    pub action_released: bool,
     /// 0..=1. Lower is worse: more malfunctions, more spread.
     pub condition: f32,
     /// 0..=1. Dirt from shooting; cleaning removes it.
@@ -329,13 +369,14 @@ impl Firearm {
             squib: None,
             bolt_stuck: false,
             slam_pending: false,
-            slam_roll: 1.0,
+            fault_dice: 0,
             mode: 0,
             malfunction: None,
             mag_unseated: false,
             cylinder: 0,
             gate_open: false,
             rod: 0.0,
+            action_released: false,
             condition: condition.clamp(0.0, 1.0),
             fouling: 0.0,
             trigger_down: false,
@@ -373,7 +414,7 @@ impl Firearm {
 
     /// Ready to fire: closed, or for an open bolt, back on the sear.
     pub fn is_ready(&self) -> bool {
-        if self.def.open_bolt {
+        if self.def.open_bolt || self.def.action == ActionKind::Crossbow {
             self.locked_back
         } else {
             self.is_closed()
@@ -454,9 +495,6 @@ impl Firearm {
                 }
             }
         }
-        if self.def.floating_pin {
-            self.slam_roll = roll();
-        }
         if trigger && !self.trigger_down {
             self.trigger_down = true;
             events.extend(self.pull(roll));
@@ -476,6 +514,10 @@ impl Firearm {
         let mut events = Vec::new();
         if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_ready() {
             return events;
+        }
+        if self.def.action == ActionKind::Crossbow {
+            self.trigger_reset = false;
+            return self.loose(roll);
         }
         if self.def.open_bolt {
             if self.malfunction.is_some() {
@@ -530,7 +572,8 @@ impl Firearm {
                         REPACK_DUD
                     } else {
                         0.0
-                    };
+                    }
+                    + if self.def.rimfire { RIMFIRE_DUD } else { 0.0 };
                 if roll() < dud_chance {
                     events.push(Event::Dud);
                     return events;
@@ -543,6 +586,7 @@ impl Firearm {
                 }
                 if cycles
                     && self.def.action == ActionKind::BoltAction
+                    && self.sticky_chance() > 0.0
                     && roll() < self.sticky_chance()
                 {
                     self.bolt_stuck = true;
@@ -552,6 +596,24 @@ impl Firearm {
             _ => events.push(Event::DryFire),
         }
         events
+    }
+
+    /// A crossbow's trigger lets the string go: a bolt on the rail flies;
+    /// none, and the prod spends itself in a dry loose.
+    fn loose(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        self.locked_back = false;
+        self.bolt_travel = 0.0;
+        self.hammers_cocked[0] = false;
+        match self.chambers[0].take() {
+            Some(Round::Live) => {
+                let load = self.chamber_load(0);
+                self.discharge(0, load, roll).0
+            }
+            _ => {
+                self.condition = (self.condition - DRY_LOOSE).max(0.0);
+                vec![Event::DryFire]
+            }
+        }
     }
 
     /// An open bolt let go: it runs forward, strips a round, fires it as
@@ -629,6 +691,14 @@ impl Firearm {
         (events, true)
     }
 
+    /// A roll from the gun's own dice.
+    fn own_roll(&mut self) -> f32 {
+        let mut r = crate::noise::Rng::new(self.fault_dice);
+        let v = r.f32();
+        self.fault_dice = r.next_u64();
+        v
+    }
+
     /// A rod pushed down the bore from the muzzle: a squib's bullet comes
     /// out.
     pub fn rod_through(&mut self) -> Vec<Event> {
@@ -639,10 +709,10 @@ impl Firearm {
         }
     }
 
-    /// Chance a turn-bolt sticks shut after a shot: none clean, likely
-    /// filthy (fouling seizes the bolt's lugs).
+    /// Chance a turn-bolt sticks shut after a shot: none in a gun cleaned
+    /// lately, likely in a filthy one (fouling seizes the bolt's lugs).
     pub fn sticky_chance(&self) -> f32 {
-        ((self.fouling - 0.4).max(0.0) * 1.5 + (0.5 - self.condition).max(0.0) * 0.4).min(0.9)
+        ((self.fouling - 0.4).max(0.0) * 1.5).min(0.9)
     }
 
     /// A palm slapped up hard under a stuck bolt's handle breaks it free.
@@ -681,7 +751,10 @@ impl Firearm {
     /// as it cocks. Not with a revolver's gate open.
     pub fn cock_hammer(&mut self) -> Vec<Event> {
         if self.def.open_bolt
-            || self.def.action == ActionKind::BoltAction
+            || matches!(
+                self.def.action,
+                ActionKind::BoltAction | ActionKind::Crossbow
+            )
             || self.hammers_cocked.first() != Some(&false)
             || (self.def.action == ActionKind::Revolver && self.gate_open)
         {
@@ -809,7 +882,7 @@ impl Firearm {
             self.chambers[0] = Some(Round::Live);
             self.set_chamber_load(0, self.fed);
             events.push(Event::Chambered);
-            if self.def.floating_pin && roll() < self.slam_chance() {
+            if self.slam_chance() > 0.0 && roll() < self.slam_chance() {
                 self.slam_pending = true;
             }
         } else if self.def.last_round_hold_open && (self.magazine.is_some() || self.fixed_feed()) {
@@ -822,7 +895,9 @@ impl Firearm {
 
     /// A fixed magazine on a self-loader (an SKS), loaded from clips.
     fn fixed_feed(&self) -> bool {
-        self.def.magazine_family.is_none() && self.def.internal_capacity > 0
+        self.def.action == ActionKind::SemiAuto
+            && self.def.magazine_family.is_none()
+            && self.def.internal_capacity > 0
     }
 
     fn take_from_feed(&mut self) -> bool {
@@ -860,6 +935,16 @@ impl Firearm {
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
             return events;
         }
+        if self.def.action == ActionKind::Pump {
+            return self.pump_travel(travel.clamp(0.0, 1.0));
+        }
+        if self.def.action == ActionKind::Crossbow {
+            // Drawn by hand; caught on the latch, it stays there.
+            if !self.locked_back {
+                self.bolt_travel = travel.clamp(0.0, 1.0);
+            }
+            return events;
+        }
         let mut to = travel.clamp(0.0, 1.0);
         let from = self.bolt_travel;
         if self.malfunction == Some(Malfunction::DoubleFeed) {
@@ -889,7 +974,10 @@ impl Firearm {
                     }
                 }
             }
-            if to >= EJECT_AT {
+            // The ejector throws what's on the bolt face once a stroke, as
+            // the bolt passes it (a bolt held open and jiggled doesn't throw
+            // out the round just thumbed in).
+            if from < EJECT_AT && to >= EJECT_AT {
                 if let Some(round) = self.eject_chamber(0) {
                     events.push(Event::Ejected(round));
                 }
@@ -920,7 +1008,7 @@ impl Firearm {
                     self.chambers[0] = Some(round);
                     self.set_chamber_load(0, self.transit_load);
                     events.push(Event::Chambered);
-                    if self.slam_roll < self.slam_chance() {
+                    if self.slam_chance() > 0.0 && self.own_roll() < self.slam_chance() {
                         self.slam_pending = true;
                     }
                 }
@@ -931,10 +1019,108 @@ impl Firearm {
         events
     }
 
+    /// A pump's forend moved to `to`: back, it cocks the hammer, lets the
+    /// next shell out of the tube onto the carrier and (at the end of the
+    /// stroke) throws out what's in the chamber; forward, it rams the
+    /// carrier's shell home. A shell let out on a short stroke meets the
+    /// case still in the chamber, and the two jam until the forend is
+    /// pumped hard to the rear.
+    fn pump_travel(&mut self, mut to: f32) -> Vec<Event> {
+        let mut events = Vec::new();
+        let from = self.bolt_travel;
+        let jammed = self.malfunction == Some(Malfunction::DoubleFeed);
+        if to > from
+            && from <= CLOSED_AT
+            && self.hammers_cocked[0]
+            && !self.action_released
+            && !jammed
+        {
+            // The action bar lock holds it shut on a cocked hammer.
+            return events;
+        }
+        if to > from {
+            if from < COCK_AT && to >= COCK_AT && !self.hammers_cocked[0] {
+                self.hammers_cocked[0] = true;
+                events.push(Event::Cocked);
+            }
+            if from < PUMP_RELEASE
+                && to >= PUMP_RELEASE
+                && self.in_transit.is_none()
+                && self.take_from_feed()
+            {
+                self.in_transit = Some(Round::Live);
+                self.transit_load = self.fed;
+            }
+            if from < EJECT_AT && to >= EJECT_AT {
+                // A worn extractor can slip off a fired hull and leave it.
+                let slips = self.chambers[0] == Some(Round::Spent)
+                    && self.own_roll() < self.malfunction_chance();
+                if !slips {
+                    if let Some(round) = self.eject_chamber(0) {
+                        events.push(Event::Ejected(round));
+                    }
+                    if jammed {
+                        self.malfunction = None;
+                    }
+                }
+            }
+        } else if to < from {
+            let both = self.chambers[0].is_some() && self.in_transit.is_some();
+            if both && to < DOUBLE_FEED_AT {
+                // The carrier's shell runs into the case: it stops there.
+                to = DOUBLE_FEED_AT.min(from);
+                if !jammed {
+                    self.malfunction = Some(Malfunction::DoubleFeed);
+                    events.push(Event::Malfunctioned(Malfunction::DoubleFeed));
+                }
+            } else if to <= CLOSED_AT && from > CLOSED_AT {
+                if let Some(round) = self.in_transit.take() {
+                    self.chambers[0] = Some(round);
+                    self.set_chamber_load(0, self.transit_load);
+                    events.push(Event::Chambered);
+                }
+                self.action_released = false;
+                events.push(Event::BoltClosed);
+            }
+        }
+        self.bolt_travel = to;
+        events
+    }
+
+    /// A pump's action release: the forend will come back on a cocked
+    /// hammer (to clear a live shell, or to look).
+    pub fn release_action(&mut self) -> Vec<Event> {
+        if self.def.action != ActionKind::Pump || self.action_released {
+            return Vec::new();
+        }
+        self.action_released = true;
+        vec![Event::BoltLocked]
+    }
+
     /// The hand lets go of the bolt or slide. Spring-driven actions slam home
     /// (or onto the slide stop); turn-bolts stay where they were left.
     pub fn release_bolt(&mut self) -> Vec<Event> {
         match self.def.action {
+            ActionKind::Crossbow => {
+                if self.locked_back {
+                    return Vec::new();
+                }
+                let drawn = self.bolt_travel;
+                self.bolt_travel = 0.0;
+                if drawn >= EJECT_AT {
+                    // Over the latch: it catches.
+                    self.bolt_travel = 1.0;
+                    self.locked_back = true;
+                    self.hammers_cocked[0] = true;
+                    vec![Event::Cocked]
+                } else if drawn > 0.3 {
+                    // Let go short: the string slaps home.
+                    self.condition = (self.condition - STRING_SLAP).max(0.0);
+                    vec![Event::BoltClosed]
+                } else {
+                    Vec::new()
+                }
+            }
             ActionKind::SemiAuto if self.def.open_bolt => {
                 if self.locked_back {
                     return Vec::new();
@@ -1086,6 +1272,15 @@ impl Firearm {
     /// [`Self::load_round`] with a round of `load`.
     pub fn load_round_of(&mut self, load: Load) -> bool {
         match self.def.action {
+            ActionKind::Crossbow => {
+                // A bolt into the groove, the string on the latch.
+                if !self.locked_back || self.chambers[0].is_some() {
+                    return false;
+                }
+                self.chambers[0] = Some(Round::Live);
+                self.set_chamber_load(0, load);
+                true
+            }
             ActionKind::Revolver => {
                 let c = self.gate_chamber();
                 if self.gate_open && self.chambers[c].is_none() {
@@ -1105,6 +1300,24 @@ impl Firearm {
                     return true;
                 }
                 false
+            }
+            ActionKind::BoltAction if self.def.internal_capacity == 0 => {
+                // A single-shot: the round goes into the open chamber.
+                if self.bolt_travel < EJECT_AT || self.chambers[0].is_some() {
+                    return false;
+                }
+                self.chambers[0] = Some(Round::Live);
+                self.set_chamber_load(0, load);
+                true
+            }
+            ActionKind::Pump => {
+                // Through the loading port into the tube, forend forward.
+                if self.bolt_travel > 0.5 || self.internal_rounds >= self.def.internal_capacity {
+                    return false;
+                }
+                self.internal_loads.push(self.internal_rounds, load);
+                self.internal_rounds += 1;
+                true
             }
             ActionKind::BoltAction => {
                 if self.bolt_travel < EJECT_AT {
@@ -1202,6 +1415,8 @@ mod tests {
             wear_per_shot: 0.0,
             fouling_per_shot: 0.0,
             floating_pin: false,
+            report: 1.0,
+            rimfire: false,
         }
     }
 
@@ -1318,6 +1533,9 @@ mod tests {
     fn a_dirty_mosin_bolt_sticks() {
         let mut gun = Firearm::new(mosin(), 1.0);
         assert_eq!(gun.sticky_chance(), 0.0, "clean: never");
+        gun.condition = 0.1;
+        assert_eq!(gun.sticky_chance(), 0.0, "worn but clean: never");
+        gun.condition = 1.0;
         gun.fouling = 1.0;
         gun.set_handle_lift(1.0);
         gun.set_bolt_travel(1.0);
@@ -1351,14 +1569,19 @@ mod tests {
         gun.fouling = 1.0;
         assert!(gun.slam_chance() > 0.3, "{}", gun.slam_chance());
         assert_eq!(gun.fire_mode(), FireMode::Safe);
-        gun.insert_magazine(mag("ak545", 3)).unwrap();
-        // This tick's slam roll is low; the bolt slams home on a round.
-        gun.update(0.016, false, &mut || 0.0);
-        rack(&mut gun);
-        let ev = gun.update(0.016, false, &mut lucky());
+        gun.insert_magazine(mag("ak545", 8)).unwrap();
+        // Racked until the bolt slams one home (better than even odds each
+        // time on its own dice).
+        let mut ev = Vec::new();
+        for _ in 0..10 {
+            rack(&mut gun);
+            ev = gun.update(0.016, false, &mut lucky());
+            if fired(&ev) {
+                break;
+            }
+        }
         assert_eq!(ev.first(), Some(&Event::SlamFire), "{ev:?}");
         assert!(fired(&ev), "it went off by itself");
-        assert_eq!(gun.live_rounds(), 2, "and chambered the next");
     }
 
     /// Never jams, never duds.    /// Never jams, never duds.
@@ -1851,5 +2074,203 @@ mod tests {
         assert!((gun.condition - 0.8).abs() < 1e-6);
         gun.repair(0.1, 0.6);
         assert!((gun.condition - 0.8).abs() < 1e-6, "repair never lowers");
+    }
+
+    fn pump() -> FirearmDef {
+        FirearmDef {
+            action: ActionKind::Pump,
+            cartridge: "12ga".into(),
+            magazine_family: None,
+            internal_capacity: 4,
+            modes: vec![FireMode::Safe, FireMode::Semi],
+            double_action: false,
+            last_round_hold_open: false,
+            ..pistol()
+        }
+    }
+
+    /// One full pump: back to the stop, forward home.
+    fn pump_once(gun: &mut Firearm) -> Vec<Event> {
+        let mut ev = gun.set_bolt_travel(1.0);
+        ev.extend(gun.set_bolt_travel(0.0));
+        ev
+    }
+
+    /// Four shells thumbed into the tube, one pumped into the chamber and a
+    /// fifth topped up: five shots, each one pumped, the hull thrown out
+    /// on the back stroke. The forend stays where the hand leaves it.
+    #[test]
+    fn a_pump_feeds_from_its_tube_and_cycles_by_hand() {
+        let mut gun = Firearm::new(pump(), 1.0);
+        gun.cycle_mode();
+        for _ in 0..4 {
+            assert!(gun.load_round());
+        }
+        assert!(!gun.load_round(), "the tube holds four");
+        let ev = pump_once(&mut gun);
+        assert!(ev.contains(&Event::Chambered), "{ev:?}");
+        assert!(gun.load_round(), "top the tube up");
+        assert_eq!(gun.live_rounds(), 5);
+        for n in (0..5).rev() {
+            assert!(fired(&shoot(&mut gun)), "shot {}", 5 - n);
+            assert!(!fired(&shoot(&mut gun)), "a pump doesn't cycle itself");
+            let ev = pump_once(&mut gun);
+            assert!(ev.contains(&Event::Ejected(Round::Spent)), "{ev:?}");
+            assert_eq!(gun.live_rounds(), n);
+        }
+        // Pumped on an empty tube it's cocked and locked; a click frees it.
+        assert!(gun.set_bolt_travel(1.0).is_empty());
+        assert!(shoot(&mut gun).contains(&Event::DryFire));
+        gun.set_bolt_travel(0.6);
+        assert!(gun.release_bolt().is_empty());
+        assert_eq!(gun.bolt_travel, 0.6, "left half open");
+    }
+
+    /// Pumped onto a live shell, the action is locked by the cocked
+    /// hammer: the forend won't come back until the action release is
+    /// pressed, and then it throws the live shell out.
+    #[test]
+    fn a_pump_is_locked_on_a_cocked_hammer_until_released() {
+        let mut gun = Firearm::new(pump(), 1.0);
+        gun.load_round();
+        gun.load_round();
+        pump_once(&mut gun);
+        assert!(gun.set_bolt_travel(1.0).is_empty());
+        assert_eq!(gun.bolt_travel, 0.0, "locked shut");
+        gun.release_action();
+        let ev = pump_once(&mut gun);
+        assert!(ev.contains(&Event::Ejected(Round::Live)), "{ev:?}");
+        assert!(ev.contains(&Event::Chambered));
+        assert!(!gun.action_released, "closing locks it again");
+        assert_eq!(gun.bolt_travel, 0.0);
+        assert!(gun.set_bolt_travel(1.0).is_empty());
+    }
+
+    /// A short stroke lets the next shell onto the carrier without
+    /// throwing out the hull: forward, the two jam and the forend stops
+    /// short. Pumped hard to the rear, the hull goes and the shell feeds.
+    #[test]
+    fn a_short_stroke_jams_until_pumped_hard() {
+        let mut gun = Firearm::new(pump(), 1.0);
+        gun.cycle_mode();
+        for _ in 0..3 {
+            gun.load_round();
+        }
+        pump_once(&mut gun);
+        assert!(fired(&shoot(&mut gun)));
+        gun.set_bolt_travel(0.75);
+        let ev = gun.set_bolt_travel(0.0);
+        assert!(
+            ev.contains(&Event::Malfunctioned(Malfunction::DoubleFeed)),
+            "{ev:?}"
+        );
+        assert!(gun.bolt_travel >= DOUBLE_FEED_AT, "stopped short");
+        assert!(!gun.is_closed());
+        assert!(!fired(&shoot(&mut gun)));
+        let ev = pump_once(&mut gun);
+        assert!(ev.contains(&Event::Ejected(Round::Spent)), "{ev:?}");
+        assert!(ev.contains(&Event::Chambered), "{ev:?}");
+        assert_eq!(gun.malfunction, None);
+        assert!(fired(&shoot(&mut gun)));
+        assert_eq!(gun.live_rounds(), 1, "nothing lost");
+    }
+
+    /// A single-shot bolt rifle (a TOZ-8): the round goes straight into
+    /// the open chamber; close, fire, open throws the case out.
+    #[test]
+    fn a_single_shot_bolt_loads_into_its_chamber() {
+        let def = FirearmDef {
+            internal_capacity: 0,
+            rimfire: true,
+            ..mosin()
+        };
+        let mut gun = Firearm::new(def, 1.0);
+        assert!(!gun.load_round(), "bolt shut");
+        gun.set_handle_lift(1.0);
+        gun.set_bolt_travel(1.0);
+        assert!(gun.load_round());
+        assert!(!gun.load_round(), "one at a time");
+        // Jiggled at the back, the bolt doesn't throw the round out.
+        gun.set_bolt_travel(0.9);
+        gun.set_bolt_travel(1.0);
+        assert_eq!(gun.chambers[0], Some(Round::Live));
+        gun.set_bolt_travel(0.0);
+        gun.set_handle_lift(0.0);
+        assert!(fired(&shoot(&mut gun)));
+        gun.set_handle_lift(1.0);
+        let ev = gun.set_bolt_travel(1.0);
+        assert!(ev.contains(&Event::Ejected(Round::Spent)), "{ev:?}");
+    }
+
+    /// Rimfire misfires: the round stays; lift the bolt and drop it, and
+    /// it strikes again.
+    #[test]
+    fn a_rimfire_misfire_is_struck_again() {
+        let def = FirearmDef {
+            internal_capacity: 0,
+            rimfire: true,
+            ..mosin()
+        };
+        let mut gun = Firearm::new(def, 1.0);
+        gun.set_handle_lift(1.0);
+        gun.set_bolt_travel(1.0);
+        gun.load_round();
+        gun.set_bolt_travel(0.0);
+        gun.set_handle_lift(0.0);
+        // A roll inside the rimfire's extra chance.
+        let ev = gun.update(0.016, true, &mut rolls(&[0.02]));
+        gun.update(0.016, false, &mut lucky());
+        assert_eq!(ev, vec![Event::Dud]);
+        assert!(!fired(&shoot(&mut gun)), "hammer down");
+        gun.set_handle_lift(1.0);
+        gun.set_handle_lift(0.0);
+        assert!(fired(&shoot(&mut gun)), "struck again");
+    }
+
+    fn crossbow() -> FirearmDef {
+        FirearmDef {
+            action: ActionKind::Crossbow,
+            cartridge: "bolt".into(),
+            magazine_family: None,
+            modes: vec![FireMode::Safe, FireMode::Semi],
+            double_action: false,
+            last_round_hold_open: false,
+            ..pistol()
+        }
+    }
+
+    /// A crossbow: drawn short and let go, the string slaps home; drawn
+    /// to the latch it catches and stays; a bolt laid on, and the trigger
+    /// looses it, leaving nothing behind. Loosed with no bolt, the dry
+    /// loose costs the bow.
+    #[test]
+    fn a_crossbow_draws_latches_and_looses() {
+        let mut bow = Firearm::new(crossbow(), 1.0);
+        bow.cycle_mode();
+        assert!(!bow.load_round(), "not drawn");
+        bow.set_bolt_travel(0.6);
+        assert_eq!(bow.release_bolt(), vec![Event::BoltClosed]);
+        assert!(!bow.locked_back && bow.bolt_travel == 0.0, "slapped home");
+        bow.set_bolt_travel(1.0);
+        assert_eq!(bow.release_bolt(), vec![Event::Cocked]);
+        assert!(bow.locked_back);
+        bow.set_bolt_travel(0.2);
+        assert_eq!(bow.bolt_travel, 1.0, "on the latch it stays");
+        assert!(bow.load_round());
+        assert!(!bow.load_round(), "one bolt");
+        let ev = shoot(&mut bow);
+        assert!(fired(&ev));
+        assert!(!ev.iter().any(|e| matches!(e, Event::Ejected(_))));
+        assert_eq!(bow.chambers[0], None);
+        assert!(!bow.locked_back);
+        assert!(!fired(&shoot(&mut bow)), "not drawn: nothing");
+        let before = bow.condition;
+        bow.set_bolt_travel(1.0);
+        bow.release_bolt();
+        assert_eq!(shoot(&mut bow), vec![Event::DryFire]);
+        assert!(
+            before - bow.condition >= DRY_LOOSE * 0.99,
+            "the dry loose cost it"
+        );
     }
 }

@@ -104,6 +104,7 @@ fn grind_stuck_bolts(
     mut haptics: MessageWriter<Haptic>,
 ) {
     let now = time.elapsed_secs();
+    last.retain(|e, _| hands.contains(*e));
     for (e, hand, rig) in &hands {
         let Some((g, 0)) = hand.handle else {
             continue;

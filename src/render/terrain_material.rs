@@ -43,7 +43,9 @@ pub struct TerrainParams {
     pub puddles: f32,
     /// Rain falling, 0..1: rings on the puddles.
     pub rain: f32,
-    pub _pad: Vec2,
+    /// Snow lying, 0..1, above `snow_line` (m; `world::snow`).
+    pub snow: f32,
+    pub snow_line: f32,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -122,7 +124,8 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
                 burnt: 0.0,
                 puddles: 0.0,
                 rain: 0.0,
-                _pad: Vec2::ZERO,
+                snow: 0.0,
+                snow_line: crate::render::fog::NO_SNOW,
             },
             albedo: load("albedo", true),
             normal: load("normal", false),

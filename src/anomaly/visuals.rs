@@ -45,6 +45,12 @@ use crate::items::{Catalog, CustomVisual, Item};
 use crate::rig::{LocalPlayer, RigHead};
 use crate::robots::RobotPart;
 
+/// A tell's colour (`render::tells`, where it's checked against colour
+/// blindness).
+fn tell(c: [f32; 3]) -> Color {
+    Color::srgb(c[0], c[1], c[2])
+}
+
 pub struct AnomalyVisualsPlugin;
 
 impl Plugin for AnomalyVisualsPlugin {
@@ -660,7 +666,7 @@ fn dress_anomalies(
                     leaf(90, 0.2),
                     soft(6.0, 26, 0.7, Vec3::new(0.32, 0.27, 0.2), 0.22),
                 ],
-                (Color::srgb(0.9, 0.85, 0.7), 0.0, 60_000.0, 1.6),
+                (tell(crate::render::tells::LIFT), 0.0, 60_000.0, 1.6),
                 Some((
                     1.15,
                     0.6,
@@ -681,7 +687,7 @@ fn dress_anomalies(
                     glow(1.0, 70, 0.055, Vec3::new(16.0, 4.0, 0.7)),
                     soft(2.0, 14, 1.0, Vec3::new(0.12, 0.11, 0.1), 0.32),
                 ],
-                (Color::srgb(1.0, 0.32, 0.08), 35_000.0, 3.0, 0.5),
+                (tell(crate::render::tells::BURNER), 35_000.0, 3.0, 0.5),
                 Some((
                     1.2,
                     0.6,
@@ -699,7 +705,7 @@ fn dress_anomalies(
             AnomalyKind::Snare => (
                 Some(&a.glassy),
                 vec![glow(3.0, 30, 0.03, Vec3::new(5.0, 9.0, 20.0))],
-                (Color::srgb(0.45, 0.65, 1.0), 12_000.0, 12.0, 0.2),
+                (tell(crate::render::tells::SNARE), 12_000.0, 12.0, 0.2),
                 Some((
                     1.1,
                     0.4,
@@ -723,7 +729,7 @@ fn dress_anomalies(
                     glow(4.0, 36, 0.035, Vec3::new(5.0, 1.8, 12.0)),
                     soft(6.0, 20, 0.6, Vec3::new(0.2, 0.18, 0.2), 0.18),
                 ],
-                (Color::srgb(0.6, 0.3, 1.0), 4_000.0, 4.0, 1.0),
+                (tell(crate::render::tells::WELL), 4_000.0, 4.0, 1.0),
                 Some((
                     1.33,
                     r * 0.7,
@@ -743,7 +749,7 @@ fn dress_anomalies(
             AnomalyKind::Mirror => (
                 None,
                 vec![glow(5.0, 40, 0.035, Vec3::new(6.0, 10.0, 14.0))],
-                (Color::srgb(0.6, 0.85, 1.0), 0.0, 40_000.0, 0.0),
+                (tell(crate::render::tells::MIRROR), 0.0, 40_000.0, 0.0),
                 Some((
                     1.33,
                     0.8,

@@ -37,6 +37,35 @@ fn noise(p: Vec3, seed: u64) -> f32 {
     (v * 0.5 + 0.5).clamp(0.0, 1.0)
 }
 
+/// The paint a timber house's boards were last given, long faded: blue,
+/// green, ochre, oxblood, or none (bare grey boards), from its seed: a
+/// multiplier on the boards' colours.
+pub fn paint(seed: u64) -> Vec3 {
+    let mut rng = fastrand::Rng::with_seed(seed ^ 0x9a17);
+    let colour = match rng.usize(..6) {
+        0 => Vec3::new(0.62, 0.78, 1.0),
+        1 => Vec3::new(0.72, 0.92, 0.7),
+        2 => Vec3::new(1.0, 0.86, 0.55),
+        3 => Vec3::new(0.95, 0.62, 0.55),
+        _ => return Vec3::ONE,
+    };
+    Vec3::ONE.lerp(colour, 0.55 + 0.3 * rng.f32())
+}
+
+/// Tint a mesh's baked colours by `tint` (its AO and sky kept).
+pub fn tint(mesh: &mut Mesh, tint: Vec3) {
+    if tint == Vec3::ONE {
+        return;
+    }
+    if let Some(VertexAttributeValues::Float32x4(col)) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
+        for c in col.iter_mut() {
+            c[0] *= tint.x;
+            c[1] *= tint.y;
+            c[2] *= tint.z;
+        }
+    }
+}
+
 /// How mossy a building is, 0..1, from its seed.
 pub fn mossiness(seed: u64) -> f32 {
     let mut rng = fastrand::Rng::with_seed(seed ^ 0x0b55);
@@ -85,6 +114,171 @@ pub fn moss(mesh: &mut Mesh, north: Vec3, seed: u64) {
     }
 }
 
+/// How far an old house's roof has sagged at the middle of its ridge, m
+/// (0 for most: about a third sag), from its seed.
+pub fn sagging(seed: u64) -> f32 {
+    let mut rng = fastrand::Rng::with_seed(seed ^ 0x5a99);
+    if rng.f32() < 0.32 {
+        0.07 + 0.15 * rng.f32()
+    } else {
+        0.0
+    }
+}
+
+/// Where a roof is, from its merged meshes: their bounds (building-local).
+pub fn roof_bounds<'a>(meshes: impl IntoIterator<Item = &'a Mesh>) -> Option<(Vec3, Vec3)> {
+    let mut b: Option<(Vec3, Vec3)> = None;
+    for m in meshes {
+        let Some(VertexAttributeValues::Float32x3(pos)) = m.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            continue;
+        };
+        for p in pos {
+            let p = Vec3::from(*p);
+            b = Some(b.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))));
+        }
+    }
+    b
+}
+
+/// Bow what's over a pitched roof's eaves (`roof`: its bounds; its ridge
+/// along z, building-local): down by `amount` at the middle of the
+/// ridge, nothing at the gables' ends (the end walls hold it) or along
+/// the eaves (the side walls do). The roof, its ridge board and the
+/// gables' tops alike, so nothing stands off it. Drawn only: the roof's
+/// colliders stay where they were.
+pub fn sag(mesh: &mut Mesh, roof: (Vec3, Vec3), amount: f32) {
+    if amount <= 0.0 {
+        return;
+    }
+    let (lo, hi) = roof;
+    let over = lo.y + 0.02;
+    // A box's face is two triangles: cut what's over the eaves finer to
+    // bend it.
+    subdivide(mesh, 0.6, over);
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return;
+    };
+    let (c, half) = ((lo + hi) * 0.5, ((hi - lo) * 0.5).max(Vec3::splat(0.01)));
+    for p in pos.iter_mut().filter(|p| p[1] > over) {
+        let tz = ((p[2] - lo.z) / (2.0 * half.z)).clamp(0.0, 1.0);
+        let xn = ((p[0] - c.x) / half.x).abs().min(1.0);
+        p[1] -= amount * (std::f32::consts::PI * tz).sin() * (1.0 - xn);
+    }
+}
+
+/// Split a triangle list's edges over `above` (both their ends) until
+/// none is longer than `max`, every attribute interpolated. An edge splits
+/// the same in both its triangles (by its length and height alone), so the
+/// cut mesh has no cracks to open.
+fn subdivide(mesh: &mut Mesh, max: f32, above: f32) {
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return;
+    };
+    let n = pos.len();
+    let mut idx: Vec<u32> = match mesh.indices() {
+        Some(Indices::U32(i)) => i.clone(),
+        Some(Indices::U16(i)) => i.iter().map(|&k| k as u32).collect(),
+        None => (0..n as u32).collect(),
+    };
+    // Every float attribute, flattened: (id, components, data).
+    let mut attrs: Vec<(bevy::mesh::MeshVertexAttribute, usize, Vec<f32>)> = Vec::new();
+    for (a, v) in mesh.attributes() {
+        let (k, data): (usize, Vec<f32>) = match v {
+            VertexAttributeValues::Float32x2(d) => (2, d.iter().flatten().copied().collect()),
+            VertexAttributeValues::Float32x3(d) => (3, d.iter().flatten().copied().collect()),
+            VertexAttributeValues::Float32x4(d) => (4, d.iter().flatten().copied().collect()),
+            _ => return,
+        };
+        attrs.push((a.clone(), k, data));
+    }
+    let p = |attrs: &[(bevy::mesh::MeshVertexAttribute, usize, Vec<f32>)], i: u32| {
+        let d = &attrs
+            .iter()
+            .find(|(a, _, _)| a.id == Mesh::ATTRIBUTE_POSITION.id)
+            .unwrap()
+            .2;
+        Vec3::from_slice(&d[i as usize * 3..i as usize * 3 + 3])
+    };
+    for _ in 0..8 {
+        let mut mid: std::collections::HashMap<(u32, u32), u32> = Default::default();
+        let mut next = Vec::with_capacity(idx.len() * 2);
+        let mut split = false;
+        for t in idx.chunks_exact(3) {
+            let v = [t[0], t[1], t[2]];
+            let mut m = [None; 3];
+            for e in 0..3 {
+                let (a, b) = (v[e], v[(e + 1) % 3]);
+                let (pa, pb) = (p(&attrs, a), p(&attrs, b));
+                if pa.distance(pb) <= max || pa.y <= above || pb.y <= above {
+                    continue;
+                }
+                split = true;
+                let key = (a.min(b), a.max(b));
+                let k = *mid.entry(key).or_insert_with(|| {
+                    let at = attrs[0].2.len() / attrs[0].1;
+                    for (_, c, d) in attrs.iter_mut() {
+                        for j in 0..*c {
+                            let x = (d[a as usize * *c + j] + d[b as usize * *c + j]) * 0.5;
+                            d.push(x);
+                        }
+                    }
+                    at as u32
+                });
+                m[e] = Some(k);
+            }
+            // Edge e runs v[e] -> v[e+1], its middle m[e].
+            match m {
+                [None, None, None] => next.extend_from_slice(&v),
+                [Some(a), Some(b), Some(c)] => {
+                    next.extend_from_slice(&[v[0], a, c, a, v[1], b, c, b, v[2], a, b, c])
+                }
+                _ => {
+                    // One or two long edges: fan from the first one's
+                    // middle round the cut outline (from a corner, the fan
+                    // would run along an uncut edge).
+                    let mut ring = Vec::with_capacity(5);
+                    for e in 0..3 {
+                        ring.push(v[e]);
+                        if let Some(k) = m[e] {
+                            ring.push(k);
+                        }
+                    }
+                    let first = m.iter().flatten().next().copied().unwrap();
+                    let start = ring.iter().position(|&x| x == first).unwrap();
+                    ring.rotate_left(start);
+                    for w in 1..ring.len() - 1 {
+                        next.extend_from_slice(&[ring[0], ring[w], ring[w + 1]]);
+                    }
+                }
+            }
+        }
+        idx = next;
+        if !split {
+            break;
+        }
+    }
+    for (a, c, d) in attrs {
+        let v = match c {
+            2 => {
+                VertexAttributeValues::Float32x2(d.chunks_exact(2).map(|x| [x[0], x[1]]).collect())
+            }
+            3 => VertexAttributeValues::Float32x3(
+                d.chunks_exact(3).map(|x| [x[0], x[1], x[2]]).collect(),
+            ),
+            _ => VertexAttributeValues::Float32x4(
+                d.chunks_exact(4)
+                    .map(|x| [x[0], x[1], x[2], x[3]])
+                    .collect(),
+            ),
+        };
+        mesh.insert_attribute(a, v);
+    }
+    mesh.insert_indices(Indices::U32(idx));
+}
+
 fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -102,9 +296,13 @@ pub enum Stain {
     /// Soot over an opening a fire came out of: black, darker at the
     /// bottom, rising.
     Soot,
+    /// Where a reservoir stood on a drowned house's walls: a hard dark
+    /// line, a film of mud under it. Its sides don't fade (the bands
+    /// meet along a wall).
+    Tide,
 }
 
-pub const STAINS: [Stain; 3] = [Stain::Water, Stain::Rust, Stain::Soot];
+pub const STAINS: [Stain; 4] = [Stain::Water, Stain::Rust, Stain::Soot, Stain::Tide];
 
 impl Stain {
     fn tint(self) -> Vec3 {
@@ -112,6 +310,7 @@ impl Stain {
             Stain::Water => Vec3::new(0.62, 0.64, 0.6),
             Stain::Rust => Vec3::new(0.62, 0.42, 0.28),
             Stain::Soot => Vec3::new(0.18, 0.17, 0.16),
+            Stain::Tide => Vec3::new(0.3, 0.29, 0.2),
         }
     }
 
@@ -150,9 +349,19 @@ impl Stain {
                         s = s.max(k * (1.0 - d * d) * (1.0 - t / len).powf(0.8));
                     }
                 }
-                // A band along the source edge, and soft sides.
-                s = s.max((1.0 - t * 6.0).max(0.0) * 0.7);
-                s *= smooth(0.0, 0.12, u) * smooth(0.0, 0.12, 1.0 - u);
+                if self == Stain::Tide {
+                    // The line, a few centimetres of near black; under it
+                    // the mud's film, even but for a mottle, paling a
+                    // little downwards.
+                    let line = 1.0 - smooth(0.03, 0.07, t);
+                    let film =
+                        0.52 + 0.06 * (u * 37.0 + t * 11.0).sin() * (u * 13.0).cos() - 0.12 * t;
+                    s = line.max(film);
+                } else {
+                    // A band along the source edge, and soft sides.
+                    s = s.max((1.0 - t * 6.0).max(0.0) * 0.7);
+                    s *= smooth(0.0, 0.12, u) * smooth(0.0, 0.12, 1.0 - u);
+                }
                 let c = Vec3::ONE.lerp(tint, s.clamp(0.0, 1.0));
                 data.extend_from_slice(&[
                     (c.x * 255.0) as u8,
@@ -382,7 +591,70 @@ pub fn stains(geo: &Geo, occ: &Occluders, seed: u64, burnt: bool) -> Vec<Decal> 
             }
         }
     }
+    tide(geo, occ, &mut out);
     out
+}
+
+/// How far over a drowned house's silt the water stood at its lowest
+/// for years, m.
+const TIDE: f32 = 1.0;
+
+/// A drowned house's tide line (`Ruin::Drowned`: found by its silt): on
+/// every face of its walls, in and out, the line `TIDE` over the silt and
+/// the film down to the silt (outside, a little further).
+fn tide(geo: &Geo, occ: &Occluders, out: &mut Vec<Decal>) {
+    let Some(silt) = geo
+        .pieces
+        .iter()
+        .filter(|p| p.mat == Mat::Silt && p.collide)
+        .filter_map(|p| match p.shape {
+            Shape::Box(s) if s.x * s.z > 4.0 => Some(p.at.translation.y + s.y * 0.5),
+            _ => None,
+        })
+        .reduce(f32::max)
+    else {
+        return;
+    };
+    let line = silt + TIDE;
+    const PROUD: f32 = 0.008;
+    for p in &geo.pieces {
+        let Shape::Box(s) = p.shape else { continue };
+        let walls = matches!(
+            p.mat,
+            Mat::Brick | Mat::Planks | Mat::Sodden | Mat::Concrete | Mat::DressedStone
+        );
+        let (c, h) = (p.at.translation, s * 0.5);
+        if !p.collide || !walls || c.y - h.y > line - 0.05 || c.y + h.y < line + 0.02 {
+            continue;
+        }
+        let r = p.at.rotation;
+        for (ln, lu, hn, hu) in [
+            (Vec3::X, Vec3::Z, h.x, h.z),
+            (Vec3::NEG_X, Vec3::Z, h.x, h.z),
+            (Vec3::Z, Vec3::X, h.z, h.x),
+            (Vec3::NEG_Z, Vec3::X, h.z, h.x),
+        ] {
+            let (n, u) = (r * ln, r * lu);
+            if hu < 0.04 || n.y.abs() > 0.3 {
+                continue;
+            }
+            let face = Vec3::new(c.x, line, c.z) + n * hn;
+            if occ.inside(face + n * 0.04) {
+                continue;
+            }
+            let outside = Vec2::new(face.x, face.z).dot(Vec2::new(n.x, n.z)) > 0.0
+                && !occ.inside(face + n * 0.3 - Vec3::Y * TIDE);
+            let foot = (c.y - h.y).max(if outside { silt - 0.6 } else { silt });
+            out.push(Decal {
+                kind: Stain::Tide,
+                top: face + n * PROUD,
+                n,
+                u,
+                width: hu * 2.0,
+                length: (line - foot).max(0.1),
+            });
+        }
+    }
 }
 
 /// One stain kind's decals as a mesh (building-local).
@@ -443,7 +715,7 @@ pub fn decal_mesh(decals: &[Decal], kind: Stain) -> Option<Mesh> {
 /// The stains' materials: their streak textures, multiplied over what's
 /// behind them, unlit.
 #[derive(Resource)]
-pub struct StainAssets(pub [Handle<StandardMaterial>; 3]);
+pub struct StainAssets(pub [Handle<StandardMaterial>; 4]);
 
 pub fn setup_stains(
     mut commands: Commands,
@@ -471,11 +743,49 @@ pub fn setup_stains(
 /// Which of the building `prefab` at `at`'s window sashes time has
 /// smashed: one bool per `window_sash` model, in `Geo::props` order and
 /// each prop's models in order. All of a ruin's, 15 to 60% of a house's,
-/// from the building's seed. Pure, and the same headless: Destruction's
+/// from the building's seed, and every boarded one's (`boarded_sashes`:
+/// the glass went first). Pure, and the same headless: Destruction's
 /// panes start broken where this says so, and `dress_buildings` swaps
 /// those sashes for `window_sash_broken`.
 pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
     super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| weathered(&geo, prefab, at))
+}
+
+/// Which of its sashes someone boarded up, the same way: a quarter of a
+/// damaged house's, one in twelve of a whole one's, none of a burnt or
+/// drowned one's, nor of anything but the common houses. Destruction nails three `window_board`s across each, outside.
+pub fn boarded_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
+    super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| boarded(&geo, prefab, at))
+}
+
+fn sashes(geo: &Geo) -> usize {
+    geo.props
+        .iter()
+        .flat_map(|d| d.models.iter())
+        .filter(|(name, _)| *name == "window_sash")
+        .count()
+}
+
+/// [`boarded_sashes`] for a prefab's geometry in hand.
+pub(super) fn boarded(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
+    let xz = Vec2::new(at.translation.x, at.translation.z);
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(xz, prefab) ^ 0xb0a2d);
+    // Only the common houses (their walls all 0.18 m, as the boards are
+    // set for).
+    let house = matches!(
+        extraction_core::map::prefab_base(prefab),
+        "house_plank" | "farmhouse" | "house_brick"
+    );
+    let share = if !house {
+        0.0
+    } else if prefab.ends_with("_damaged") {
+        0.25
+    } else if extraction_core::map::prefab_base(prefab) != prefab {
+        0.0
+    } else {
+        1.0 / 12.0
+    };
+    (0..sashes(geo)).map(|_| rng.f32() < share).collect()
 }
 
 /// [`weathered_sashes`] for a prefab's geometry in hand.
@@ -487,17 +797,41 @@ pub(super) fn weathered(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
     } else {
         0.15 + rng.f32() * 0.45
     };
-    geo.props
-        .iter()
-        .flat_map(|d| d.models.iter())
-        .filter(|(name, _)| *name == "window_sash")
-        .map(|_| rng.f32() < share)
+    boarded(geo, prefab, at)
+        .into_iter()
+        .map(|b| (rng.f32() < share) || b)
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The timber houses come in several faded paints and bare boards,
+    /// each the same every time, none brighter than the boards.
+    #[test]
+    fn houses_are_painted_variously() {
+        let paints: Vec<Vec3> = (0..64).map(paint).collect();
+        assert_eq!(paints, (0..64).map(paint).collect::<Vec<_>>());
+        assert!(
+            paints
+                .iter()
+                .all(|p| p.max_element() <= 1.0 && p.min_element() > 0.5)
+        );
+        assert!(paints.contains(&Vec3::ONE), "no bare boards");
+        // Fading keeps a paint's direction away from white: its colour.
+        let kinds: Vec<_> = paints
+            .iter()
+            .filter(|p| **p != Vec3::ONE)
+            .map(|p| {
+                ((Vec3::ONE - *p).normalize() * 10.0)
+                    .round()
+                    .as_ivec3()
+                    .to_array()
+            })
+            .collect();
+        assert!(kinds.len() >= 4, "too few paints: {kinds:?}");
+    }
 
     /// The same building stains the same, and its stains lie on its walls'
     /// outsides.
@@ -516,6 +850,106 @@ mod tests {
         }
     }
 
+    /// A drowned house has its tide line round its walls, in and out,
+    /// and nothing else hangs on it but where the line runs.
+    #[test]
+    fn drowned_houses_have_a_tide_line() {
+        for id in [
+            "house_plank_drowned",
+            "farmhouse_drowned",
+            "house_brick_drowned",
+            "chapel_drowned",
+        ] {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            let tide: Vec<_> = stains(&geo, &occ, 7, false)
+                .into_iter()
+                .filter(|d| d.kind == Stain::Tide)
+                .collect();
+            assert!(tide.len() >= 16, "{id}: {} tide decals", tide.len());
+            let y = tide[0].top.y;
+            assert!(tide.iter().all(|d| (d.top.y - y).abs() < 1e-4), "{id}");
+            assert!(geo.doors.is_empty(), "{id}: a door left");
+            assert!(
+                !geo.pieces.iter().any(|p| p.mat == Mat::Glass),
+                "{id}: glass"
+            );
+        }
+        // And a dry house has none.
+        let geo = crate::world::buildings::prefab("house_brick").unwrap();
+        let occ = crate::world::buildings::occluders(&geo);
+        assert!(
+            !stains(&geo, &occ, 7, false)
+                .iter()
+                .any(|d| d.kind == Stain::Tide)
+        );
+    }
+
+    /// A bowed roof: two pitched slabs, cut fine (their area kept), the
+    /// middle of the ridge down by the bow, the gables' ends and the eaves
+    /// where they were.
+    #[test]
+    fn a_roof_sags_in_the_middle() {
+        let slab = |side: f32| {
+            let pitch = 0.5f32;
+            let run = 3.0;
+            crate::render::materials::metric_box(Vec3::new(run / pitch.cos(), 0.1, 8.0))
+                .transformed_by(
+                    Transform::from_xyz(side * run * 0.5, 4.0 + run * 0.5 * pitch.tan(), 0.0)
+                        .with_rotation(Quat::from_rotation_z(-side * pitch)),
+                )
+        };
+        let mut m = slab(1.0);
+        m.merge(&slab(-1.0)).unwrap();
+        let positions = |m: &Mesh| match m.attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(VertexAttributeValues::Float32x3(p)) => p.clone(),
+            _ => panic!(),
+        };
+        let area = |m: &Mesh| {
+            let p = positions(m);
+            let Some(Indices::U32(i)) = m.indices() else {
+                panic!()
+            };
+            i.chunks_exact(3)
+                .map(|t| {
+                    let [a, b, c] = [t[0], t[1], t[2]].map(|k| Vec3::from(p[k as usize]));
+                    (b - a).cross(c - a).length() * 0.5
+                })
+                .sum::<f32>()
+        };
+        let roof = roof_bounds([&m]).unwrap();
+        let mut flat = m.clone();
+        flat.insert_indices(Indices::U32(match m.indices() {
+            Some(Indices::U16(i)) => i.iter().map(|&k| k as u32).collect(),
+            Some(Indices::U32(i)) => i.clone(),
+            None => panic!(),
+        }));
+        let whole = area(&flat);
+        subdivide(&mut flat, 0.6, roof.0.y + 0.02);
+        // Cut, not torn: the same surface.
+        assert!((area(&flat) - whole).abs() / whole < 1e-4);
+        sag(&mut m, roof, 0.2);
+        let (p, q) = (positions(&m), positions(&flat));
+        assert_eq!(p.len(), q.len());
+        assert!(p.len() > 200, "{} vertices", p.len());
+        let drop: Vec<f32> = p.iter().zip(&q).map(|(a, b)| b[1] - a[1]).collect();
+        assert!(drop.iter().all(|d| (-1e-4..=0.2 + 1e-4).contains(d)));
+        // Most at the ridge's middle, none at the ends or the eaves.
+        let most = p
+            .iter()
+            .zip(&drop)
+            .filter(|(v, _)| v[0].abs() < 0.3 && v[2].abs() < 0.3)
+            .map(|(_, d)| *d)
+            .fold(0.0, f32::max);
+        assert!(most > 0.15, "the ridge's middle down {most}");
+        assert!(
+            p.iter()
+                .zip(&drop)
+                .filter(|(v, _)| v[2].abs() > 3.99)
+                .all(|(_, d)| d.abs() < 1e-4)
+        );
+    }
+
     /// Weathered sashes: one per sash, the same every time, all of a
     /// ruin's and only some of a house's.
     #[test]
@@ -528,5 +962,17 @@ mod tests {
         let ruin = weathered_sashes("house_plank_damaged", &at);
         assert!(!ruin.is_empty() && ruin.iter().all(|b| *b), "{ruin:?}");
         assert!(weathered_sashes("no_such_prefab", &at).is_empty());
+        // A boarded one's glass went first; a burnt house has none to
+        // board.
+        for (x, z) in [(-18.0, 95.0), (22.0, 85.0), (4.0, -30.0), (60.0, 12.0)] {
+            let at = Transform::from_xyz(x, 0.0, z);
+            for id in ["house_plank", "house_brick_damaged", "farmhouse"] {
+                let (w, b) = (weathered_sashes(id, &at), boarded_sashes(id, &at));
+                assert_eq!(w.len(), b.len());
+                assert!(w.iter().zip(&b).all(|(w, b)| *w || !*b), "{id}");
+                assert_eq!(b, boarded_sashes(id, &at));
+            }
+            assert!(!boarded_sashes("house_plank_burnt", &at).iter().any(|b| *b));
+        }
     }
 }

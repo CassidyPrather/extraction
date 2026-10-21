@@ -79,6 +79,8 @@ fn climbable(m: Mat) -> bool {
             | Mat::Charred
             | Mat::SootBrick
             | Mat::SootPlaster
+            | Mat::DressedStone
+            | Mat::Sodden
     )
 }
 
@@ -133,7 +135,7 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 /// same on the server and every client. 0 everywhere with decay off.
 /// For Audio's rustle in the leaves.
 pub fn amount(at: Vec2, prefab: &str) -> f32 {
-    if enabled() {
+    if enabled() && !prefab.ends_with("_drowned") {
         vigour(seed(at, prefab))
     } else {
         0.0
@@ -183,6 +185,12 @@ pub fn grow(geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
             let low = f.point(0.0, -f.hv * 0.5) + f.n * 0.03;
             let shade = 1.0 - occ.light(low, f.n);
             let sky = occ.sky(f.point(0.0, f.hv * 0.9) + f.n * 0.05, Vec3::Y);
+            // Not indoors: a metre out from it is under the roof (outside,
+            // a metre out is past the eaves). Ivy is outside, or where a
+            // ruin's roof has gone.
+            if occ.sky(f.c + f.n * 1.0, Vec3::Y) < 0.15 {
+                continue;
+            }
             let north_w = f.n.dot(north).max(0.0);
             let w = (0.35 + shade * 1.2 + sky * 0.4 + north_w * 0.9) * f.hu.min(3.0);
             cands.push((f, w));
@@ -622,11 +630,20 @@ pub fn setup_ivy(
     server: Res<AssetServer>,
     mut sway: ResMut<Assets<super::cover::SwayMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     if existing.is_some() {
         return;
     }
-    let tex: Handle<Image> = server.load("textures/foliage/birch_leaves/albedo.ktx2");
+    // The birch atlas is built by `scripts/fetch_assets.py` (not in git);
+    // without it, leaves made here, so the ivy is never bare vines (a
+    // material whose texture never loads is never drawn).
+    let atlas = "textures/foliage/birch_leaves/albedo.ktx2";
+    let tex: Handle<Image> = if crate::asset_root_path().join(atlas).exists() {
+        server.load(atlas)
+    } else {
+        images.add(leaf_image())
+    };
     commands.insert_resource(IvyAssets {
         leaves: sway.add(super::cover::SwayMaterial {
             base: StandardMaterial {
@@ -671,6 +688,63 @@ pub fn blow_ivy(
 }
 
 /// The leafiest parts of the birch atlas, `[u0, v0, u1, v1]`.
+/// Leaves drawn here for when the birch atlas isn't built: a 128-texel
+/// square of overlapping pointed leaves, cut out by alpha (the cards' UVs
+/// take any part of it).
+fn leaf_image() -> Image {
+    let n = 128u32;
+    let mut rng = fastrand::Rng::with_seed(0x1eaf);
+    let leaves: Vec<(Vec2, Vec2, f32)> = (0..70)
+        .map(|_| {
+            let c = Vec2::new(rng.f32(), rng.f32());
+            let a = rng.f32() * std::f32::consts::TAU;
+            (c, Vec2::new(a.cos(), a.sin()), 0.06 + rng.f32() * 0.05)
+        })
+        .collect();
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5) / n as f32;
+            let mut hit: Option<f32> = None;
+            for &(c, dir, len) in &leaves {
+                // Wrapped, so the square tiles.
+                let mut d = p - c;
+                d -= d.round();
+                let along = d.dot(dir) / len;
+                let across = d.perp_dot(dir) / (len * 0.45);
+                // A pointed leaf: narrowing to a tip at both ends.
+                if along.abs() < 1.0 && across.abs() < 1.0 - along.abs().powf(1.6) {
+                    hit = Some(hit.map_or(along, |h: f32| h.max(along)));
+                }
+            }
+            let px = match hit {
+                Some(a) => {
+                    let shade = 0.75 + 0.25 * (1.0 - a.abs());
+                    [
+                        (90.0 * shade) as u8,
+                        (140.0 * shade) as u8,
+                        (60.0 * shade) as u8,
+                        255,
+                    ]
+                }
+                None => [60, 90, 40, 0],
+            };
+            data.extend_from_slice(&px);
+        }
+    }
+    Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
 const LEAF_UV: [[f32; 4]; 3] = [
     [0.36, 0.28, 0.62, 0.52],
     [0.52, 0.42, 0.78, 0.66],
@@ -781,7 +855,7 @@ mod tests {
     fn ivy_is_deterministic_and_in_budget() {
         for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let map = crate::world::load_map_def(name);
-            let (mut total, mut grown) = (0, 0);
+            let (mut total, mut grown, mut climbed) = (0, 0, 0);
             for p in &map.placements {
                 let Some(geo) = crate::world::buildings::prefab(&p.prefab) else {
                     continue;
@@ -808,9 +882,49 @@ mod tests {
                 );
                 total += t;
                 grown += (t > 0) as usize;
+                climbed += (!a.vines.is_empty()) as usize;
             }
             println!("{name}: ivy on {grown} buildings, {total} tris");
-            assert!(grown > 0, "{name}: no ivy anywhere");
+            // Ivy itself, not only the saplings: on a good share of them.
+            assert!(
+                climbed * 3 >= grown,
+                "{name}: ivy on {climbed} of {grown} buildings"
+            );
+        }
+    }
+
+    /// Ivy is never bare: every vine has leaves within 0.4 m along it; and
+    /// it grows outside, never in a whole house's rooms.
+    #[test]
+    fn ivy_is_leafed_and_outdoors() {
+        for id in [
+            "house_plank",
+            "farmhouse",
+            "house_brick",
+            "bus_depot",
+            "barn",
+            "cabin_log",
+        ] {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            let [w, _, d] = extraction_core::map::prefab_footprint(id);
+            let mut vines = 0;
+            for k in 1..24u64 {
+                let g = grow(&geo, &occ, k * 7919, Vec3::NEG_Z);
+                vines += g.vines.len();
+                for v in &g.vines {
+                    for p in &v.points {
+                        let near = g.leaves.iter().any(|l| l.at.distance(*p) < 0.4);
+                        assert!(near, "{id} seed {k}: a bare vine at {p}");
+                    }
+                }
+                // Inside the walls' middles, under the eaves: a room.
+                let indoors =
+                    |p: Vec3| p.x.abs() < w * 0.5 - 0.4 && p.z.abs() < d * 0.5 - 0.4 && p.y < 2.5;
+                let n = g.leaves.iter().filter(|l| indoors(l.at)).count();
+                assert_eq!(n, 0, "{id} seed {k}: {n} leaves indoors");
+            }
+            assert!(vines > 0, "{id}: no ivy at all");
         }
     }
 }

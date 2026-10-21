@@ -259,10 +259,7 @@ mod tests {
 
     /// Findings waiting on their owners (reported to Models: world), by
     /// the start of their line. Take one out when it's fixed.
-    const KNOWN: &[&str] = &[
-        // The model's plinth stops 5.5 cm short of the blockout's.
-        "signal_box signal_box: floats",
-    ];
+    const KNOWN: &[&str] = &[];
 
     /// How far a furniture model's bottom may sit from its boxes' (m).
     const FLOOR_GAP: f32 = 0.03;

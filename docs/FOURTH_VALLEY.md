@@ -122,16 +122,16 @@ are all over 18 m.
 
 | Landmark | Prefab | Where | Steer by it for |
 | - | - | - | - |
-| The dam | `dam_wall` | across the south | home, the truck |
+| The dam | `dam_face`, `dam_face_end`, `dam_back`, `dam_back_end` (one landmark to the lint) | across the south | home, the truck |
 | Draw-off tower | `draw_off_tower` | bed, by the dam | the crest, the bed's south end |
-| Church tower | `steeple` | Old Sallow | the middle of the bed |
+| Church tower | `chapel_drowned` (its bell tower) | Old Sallow | the middle of the bed |
 | Radio mast | `radio_mast` | east hill | the catchwater, RV C |
 | Water tower | `water_tower` | New Sallow | the upper arm, RV A |
 | The Gate | `robot_gate` | north-east shore | stay away |
 
 ### Over the dam
 
-Three ways, west to east, each a different risk:
+Three ways over, west to east, each a different risk, and one under:
 
 - **The west road** leaves the river road by the keeper's cottages, runs
   west along the valley and climbs the west abutment's long shoulder to
@@ -146,6 +146,13 @@ Three ways, west to east, each a different risk:
   you climb from the filter house, walled in for most of its length, a
   Well standing in it beside the steps. At its head the catchwater path
   runs north along the east hillside above the shore road.
+- **The inspection gallery** (Underground's `gallery_sallow`, under the
+  toe at (-6, 172)) goes under it: in by a kiosk beside the valve house,
+  44 m along inside the dam, out by a stair at the draw-off tower's foot
+  on the bed. Its door stays shut until the gauge room's breaker is
+  thrown. It's the one way through under cover, dark, wet and close, and
+  it's the most looted place in the valley (79 items in the seed 41
+  sims).
 
 From the crest into the bed: the **slipway** (through a gap in the upstream
 parapet, west of the middle), the **haul ramp** the machines cut down
@@ -211,7 +218,7 @@ for it in the open beside the Custodian's ground.
 
 ## What the sims said, and what changed
 
-Four batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
+Six batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 
 | Batch | Out | Died | What it showed | Change |
 | - | -: | -: | - | - |
@@ -219,6 +226,8 @@ Four batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 | seed 1 | 5 | 3 | Bots in Old Sallow now, but every raid west to New Sallow | A tagging shed on the sorting ground |
 | seed 11 | 7 | 1 | Still west: a danger-2 street of full houses outweighed everything | New Sallow picked over (loot 0.9) |
 | seed 21 | 6 | 2 | The shed looted (30 items); all three ways out used (Inflow bridge 4, Sallow Head 3, gauge house 1); both deaths in the danger-3 east under the Gate | |
+| seed 31 | 4 | 4 | Old Sallow's drowned houses in; all four deaths to drones crossing the open east bed | Three more stock rows in the east for cover |
+| seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four: Story put scene pieces in the nav grid |
 
 Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
 visited yet: the valve house and filter house, the draw-off tower (no
@@ -238,14 +247,101 @@ the gauge house and out: 262 s.
   (-120.0, -5.0), name: "Old Sallow hush")` once their sixth kind is in.
 - World models' drowned houses and dressed stone (claude/polish-world-models,
   ae803ac and 2bd5791): Old Sallow's four `*_damaged` ruins and the
-  drowned cottage become `*_drowned`, and the dam's `Mat::Concrete`
+  drowned cottage become `*_drowned`, Old Sallow's church tower becomes
+  `chapel_drowned` (00e2ac6: the nave stripped and silted, the tower
+  standing; it needs room for its 10 x 23 m footprint by the font and the
+  mirror), and the dam's `Mat::Concrete`
   faces and tower `Mat::DressedStone` (then `python3
   scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
-- Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
+- Story's `scenes::nav_obstacles` (claude/polish-story): scene pieces in
+  the nav grid, so "Bay four"'s 0.63 m slot between its buses (scenes.ron,
+  (70, -74)) is solid to it. Then the sims again.
+- World models' breakable bus panels (dc8b032): `dam::buses` drops
+  `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
+  draws it whole).
+- Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
   World models' masonry material and drowned ruins, Underground's
   inspection gallery.
+
+## Building a valley: how Sallow was made (for the next one)
+
+What it took, in order, and what bit. Map design's rules and lint
+(`docs/MAP_DESIGN.md`) are the standard; this is the practice.
+
+### Everything a new valley touches
+
+- `assets/maps/<id>.ron`. The truck's route card lists every map file but
+  the yard, so it's offered as soon as it exists (Progression gates late
+  valleys: Sallow opens with a contract, `progression::contracts`).
+- `extraction_core::map`: its text constant, its row in `map::VALLEYS`
+  (a test holds the list to `assets/maps`), a `*_parses_and_builds` test
+  of what makes it itself; `map_lint`: its `*_passes_the_map_lint` test.
+- New prefabs: footprints in `map::prefab_footprint` (unlisted ones are a
+  4 x 3 x 4 blockout, and the nav grid blocks by footprint), geometry in a
+  module hooked into `buildings::prefab` (Sallow's: `world::dam`), its own
+  sound/footprint/model tests; models in `art/props/<name>.py`, clean
+  under `art/check.py`, a row in `docs/ASSETS.md`.
+- Owners who key things by map name or id: Visual design (fog, grade,
+  terrain), Audio (the `sounds` block, echoes), Anomalies (a Well, a
+  Mirror and a Hush in every valley, held by their test), Story
+  (`scripts/place_notes.py` writes the notes), Progression (gate, jobs),
+  Wildlife (species), Underground (a site), Performance (a
+  `scripts/lookbook/<id>.views` and a `*_holds_the_budget` test).
+- A crossing: `--scenario crossing --map <id>`.
+
+### The loop
+
+```bash
+cargo build --release -p extraction_core --bin map-dump
+scripts/map-preview.sh <id>                     # findings drawn on, routes
+python3 scripts/map_probe.py target/preview/<id> crest=0,140 bed=0,0
+python3 scripts/map_probe.py target/preview/<id> --slope x0,z0,x1,z1 out.png
+python3 scripts/map_ramp.py "Face stair" 30 52 8 6 -30,154 90,154
+target/fast/extraction --sim 8 --map <id> --jobs 2 --seed N; scripts/sim-report.sh <id>
+```
+
+Lint to clean on the dump first (seconds a round), then sims (40
+minutes a batch of eight), then screenshots.
+
+### What bit
+
+- **Roads follow the land.** A road's grade is the terrain under it,
+  averaged over `smoothing`; it won't climb a cliff, and a hairpin's legs
+  sit at their own ground's heights. Make the land a ramp:
+  `scripts/map_ramp.py` lays terraces under the road.
+- **A main route needs every 2 m cell under 16 degrees**, not 16 over
+  10 m: a road narrower than the step edges beside it fails. Give ramped
+  roads width and shoulder.
+- **Choice blocks the corridor on that same 16-degree grid.** Two
+  crossings of a dam (or a creek) that meet before the last 90 m count
+  as one way: Sallow needed a third crossing and a high path (the
+  catchwater) before every rendezvous had two ways. A creek's banks over
+  16 degrees wall a basin off for it (Sallow's old river had to go broad
+  and shallow).
+- **Plateaus come after channels and hills**, and in the order listed:
+  a plateau's blend erases a channel cut next to it, and the later of
+  two overlapping plateaus wins.
+- **Water's level is the lowest bed across the strip plus `depth`,
+  smoothed over 12 m**, and it fills up to `width / 2 + 2` m from the
+  line wherever that's under the level. For a lake, flatten its bed with
+  a plateau, or the level follows the bed; keep the strip off anything
+  lower nearby (Sallow's causeway holds the arm 8 m above the bed).
+- **Where two roads meet at different heights there's a step**; a road
+  that ends on another road should join it at its height.
+- **The truck appears on the rendezvous marker**; walking onto it before
+  it comes leaves you inside it. Stop short (the crossing does).
+- **`absolute` placements skip pads, the fit gauge and the water lint**:
+  what the dam faces and the tower are; what a drowned house in water
+  would be.
+- **The sims go where the loot is, by the building.** `choose_site`
+  weighs a building by its spots times its region's richness over
+  distance: a street of full houses at danger 2 pulled every bot past
+  danger-3 open ground. Ruins hold next to nothing. Count loot spots
+  where you want traffic, and read the never-visited list.
+- **A test that hand-lists valleys doesn't check yours.** Use
+  `map::VALLEYS`.
 
 ## Status
 

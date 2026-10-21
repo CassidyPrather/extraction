@@ -64,8 +64,9 @@ def crowbar():
     # The far end: a short flattened pry tip, bent down (a full gooseneck
     # wouldn't fit the item's 5 cm).
     rings = []
-    for z, w, t, y in ((0.328, 2 * R, 2 * R, 0.0), (0.35, 0.018, 0.01, -0.002),
-                       (0.366, 0.019, 0.005, -0.008), (0.377, 0.019, 0.0016, -0.014)):
+    # (Bent far enough to reach the item box's floor, y -0.025.)
+    for z, w, t, y in ((0.328, 2 * R, 2 * R, 0.0), (0.35, 0.018, 0.01, -0.004),
+                       (0.366, 0.019, 0.005, -0.013), (0.377, 0.019, 0.0016, -0.0235)):
         rings.append(hexring(w, t, y, z))
     p.loft(rings, "Iron")
     return [p]

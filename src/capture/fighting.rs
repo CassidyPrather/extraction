@@ -401,37 +401,11 @@ mod tests {
         }
     }
 
-    /// Fights found when this gauge was written, waiting on their owners
-    /// (reported to Models: world): (prefab or `*`, text in one side's
-    /// name, text in the other's). Take a line out when it's fixed; a new
-    /// fight fails the test.
-    const KNOWN: &[(&str, &str, &str)] = &[
-        // Window casings flush with the timber trim round the opening.
-        ("*", "(Timber)", "window_casing"),
-        ("pump_station", "(Plaster)", "window_sash"),
-        ("bus_depot", "workbench", "table"),
-        ("chapel", "(Concrete)", "steeple"),
-        ("mill_race", "mill_race", "crate_slat"),
-        ("house_plank_damaged", "(WoodFloor)", "rubble_planks"),
-        ("shed", "(Timber)", "(Concrete)"),
-        // Roof ends: shingles or tin against the gable's planks.
-        ("*", "(Shingles)", "(Planks)"),
-        ("*", "(Corrugated)", "(Planks)"),
-        ("farmhouse_burnt", "(RustyMetal)", "(Charred)"),
-        // The foundation's face flush with the bottom log, above ground
-        // (`qa` judges burial by a face's centre, which is underground).
-        ("cabin_log", "(Concrete)", "(Timber)"),
-    ];
-
-    /// Underground sites, held to no more fights than they had when the
-    /// earth rule went in (Underground is going through them); lower a
-    /// number as fights are fixed. A site not listed is held to none.
-    const SITE_CEILING: &[(&str, usize)] = &[
-        ("depot_marrow", 272),
-        ("bunker_marrow", 64),
-        ("tunnel_cinder", 60),
-        ("mine_kettle", 12),
-    ];
+    /// Fights waiting on their owners: (prefab or `*`, text in one side's
+    /// name, text in the other's). Empty: the first round (window casings,
+    /// sashes, rubble on floors, door steps on plinths...) was fixed by
+    /// Models: world. A new fight fails the test.
+    const KNOWN: &[(&str, &str, &str)] = &[];
 
     fn known(id: &str, f: &Fight) -> bool {
         KNOWN.iter().any(|(p, a, b)| {
@@ -442,9 +416,8 @@ mod tests {
 
     /// Buildings as the game draws them close up: no model placed against
     /// a box, or another model, in its plane with another material.
-    /// Underground sites are held by count (`SITE_CEILING`): outside their
-    /// boxes is earth, so a face counts there only with somewhere to stand
-    /// in front of it (`floor_under`).
+    /// Underground sites too: outside their boxes is earth, so a face counts
+    /// there only with somewhere to stand in front of it (`floor_under`).
     #[test]
     fn assembled_buildings_dont_fight() {
         let mut bad = Vec::new();
@@ -469,18 +442,6 @@ mod tests {
                 p.y > buried && (!site || floor_under(&solids, p + n * 0.05, 4.0))
             });
             let sum: f32 = fights.iter().map(|f| f.area).sum();
-            if site {
-                let ceiling = SITE_CEILING
-                    .iter()
-                    .find(|(s, _)| *s == id)
-                    .map_or(0, |(_, n)| *n);
-                if fights.len() > ceiling {
-                    bad.push(format!(
-                        "{id}: {} fights, more than the {ceiling} it's held to",
-                        fights.len()
-                    ));
-                }
-            }
             println!(
                 "{id:<22} {:>6} faces  {:>3} fights  {sum:.3} m²",
                 faces.len(),
@@ -504,7 +465,7 @@ mod tests {
                 println!("    {line}");
                 if known(id, &f) {
                     waiting += 1;
-                } else if !site {
+                } else {
                     bad.push(line);
                 }
             }

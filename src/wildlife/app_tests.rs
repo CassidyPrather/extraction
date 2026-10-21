@@ -69,9 +69,10 @@ fn put(app: &mut App, player: Entity, at: Vec3) {
 /// walkable ground `away` metres off to one side: the flock, where it sits,
 /// and that ground.
 fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
+    // The ducks too: their flushes count as birds'.
     let old: Vec<Entity> = app
         .world_mut()
-        .query_filtered::<Entity, With<Flock>>()
+        .query_filtered::<Entity, Or<(With<Flock>, With<super::ducks::Raft>)>>()
         .iter(app.world())
         .collect();
     for e in old {
@@ -163,7 +164,18 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
             log.flushed.clear();
         }
         if flush {
-            let spot = centre + side * 2.0;
+            // The first open ground out from the middle of the roof (toward
+            // the walker's side, where the ground's open): right beside the
+            // building, whichever way it's turned.
+            let nav = app
+                .world()
+                .resource::<crate::robots::walker::Nav>()
+                .0
+                .clone();
+            let spot = (4..16)
+                .map(|k| centre - side * (k as f32 * 0.5))
+                .find(|p| nav.walkable([p.x, p.z]))
+                .expect("open ground beside the building");
             put(&mut app, player, zone.on_ground(spot.x, spot.z));
         }
         for _ in 0..90 * 6 {
@@ -250,4 +262,142 @@ fn no_bird_is_ever_inside_a_collider() {
         inside.len(),
         &inside[..inside.len().min(5)]
     );
+}
+
+/// A deer is something a bullet finds: a ray down the ballistics' own
+/// filter at it hits its body. A hit kills it and leaves a carcass; when
+/// the carcass is taken away (a robot collects it), the body goes too. A
+/// bird shot off its perch falls and lies on the roof or the ground.
+#[test]
+fn animals_can_be_shot_and_their_carcasses_collected() {
+    use super::bodies::{AnimalBody, Carcass, Killed};
+    use super::herd::{Herd, State};
+    #[derive(Resource, Default)]
+    struct Deaths(Vec<Killed>);
+    let mut app = crate::headless_app(
+        crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        },
+        false,
+    );
+    app.init_resource::<Deaths>().add_systems(
+        Last,
+        |mut k: MessageReader<Killed>, mut d: ResMut<Deaths>| d.0.extend(k.read().copied()),
+    );
+    app.finish();
+    app.cleanup();
+    for _ in 0..30 {
+        app.update();
+    }
+    let (herd_e, deer) = app
+        .world_mut()
+        .query::<(Entity, &Herd)>()
+        .iter(app.world())
+        .next()
+        .map(|(e, h)| (e, h.beasts[0].pos))
+        .expect("Marrow Creek has its deer");
+    // From 10 m off, at chest height, at the deer's middle.
+    let target = deer + Vec3::Y * 0.6;
+    let from = target + Vec3::new(10.0, 0.5, 0.0);
+    let hit = {
+        let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
+        let spatial = q.get(app.world()).unwrap();
+        let filter = SpatialQueryFilter::from_mask([
+            crate::world::Layer::World,
+            crate::world::Layer::Item,
+            crate::world::Layer::Robot,
+            crate::world::Layer::Player,
+        ]);
+        spatial
+            .cast_ray(from, Dir3::new(target - from).unwrap(), 20.0, true, &filter)
+            .map(|h| h.entity)
+    };
+    let body = hit.expect("the ray found nothing");
+    assert!(
+        app.world().get::<AnimalBody>(body).is_some(),
+        "the ray hit something else"
+    );
+    app.world_mut()
+        .write_message(crate::weapons::ballistics::Hit {
+            entity: body,
+            point: target,
+            normal: Vec3::X,
+            velocity: Vec3::NEG_X * 700.0,
+            damage: 48.0,
+            shooter: None,
+            mass_g: 3.4,
+            load: Default::default(),
+            blow: None,
+        });
+    for _ in 0..10 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().get::<Herd>(herd_e).unwrap().beasts[0].state,
+        State::Dead
+    );
+    let carcass = app
+        .world_mut()
+        .query_filtered::<Entity, With<Carcass>>()
+        .iter(app.world())
+        .next()
+        .expect("a carcass");
+    assert_eq!(app.world().resource::<Deaths>().0.len(), 1);
+    // The Custodian takes it.
+    app.world_mut().despawn(carcass);
+    for _ in 0..5 {
+        app.update();
+    }
+    let h = app.world().get::<Herd>(herd_e).unwrap();
+    assert!(h.beasts[0].gone, "its body is still there");
+    assert!(
+        app.world().get_entity(body).is_err(),
+        "its collider is still there"
+    );
+    // A sitting bird, shot: it falls onto whatever's under it.
+    let (flock_e, i, perch) = app
+        .world_mut()
+        .query::<(Entity, &Flock)>()
+        .iter(app.world())
+        .next()
+        .map(|(e, f)| (e, 0, f.birds[0].pos))
+        .unwrap();
+    let bird_body = app
+        .world_mut()
+        .query::<(Entity, &AnimalBody)>()
+        .iter(app.world())
+        .find(|(_, b)| b.owner == flock_e && b.index == i)
+        .map(|(e, _)| e)
+        .unwrap();
+    app.world_mut()
+        .write_message(crate::weapons::ballistics::Hit {
+            entity: bird_body,
+            point: perch,
+            normal: Vec3::X,
+            velocity: Vec3::NEG_X * 300.0,
+            damage: 34.0,
+            shooter: None,
+            mass_g: 6.0,
+            load: Default::default(),
+            blow: None,
+        });
+    for _ in 0..90 * 4 {
+        app.update();
+    }
+    let f = app.world().get::<Flock>(flock_e).unwrap();
+    let b = &f.birds[i];
+    assert!(!b.state.alive());
+    let zone = app.world().resource::<Zone>().clone();
+    let obstacles = app.world().resource::<super::perches::Obstacles>().clone();
+    let under = obstacles
+        .below(b.pos + Vec3::Y * 0.05)
+        .unwrap_or(f32::MIN)
+        .max(zone.ground(b.pos.x, b.pos.z));
+    assert!(
+        (b.pos.y - under).abs() < 0.05,
+        "it's not lying on anything: {:.2} over {under:.2}",
+        b.pos.y
+    );
+    assert!(app.world().resource::<Deaths>().0.len() >= 2);
 }

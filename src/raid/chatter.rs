@@ -41,6 +41,7 @@ fn listen(
     catalog: Res<Catalog>,
     mut out: MessageWriter<RobotChatter>,
     mut heard_count: Local<u32>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
 ) {
     let Some(mut director) = director else {
         return;
@@ -49,7 +50,9 @@ fn listen(
         return;
     }
     let heard = std::mem::take(&mut director.chatter);
-    if raid.phase == Phase::AtBase {
+    // No machine talk in the training yard: nothing hunts you there, and
+    // its range had the radio saying they were coming.
+    if raid.phase == Phase::AtBase || opts.is_some_and(|o| o.map == crate::camp::TRAINING_YARD) {
         return;
     }
     for (player, gt) in &players {

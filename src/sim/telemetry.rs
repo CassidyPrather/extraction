@@ -113,6 +113,9 @@ pub struct Tracker {
     expect: Vec<(String, f32, f32)>,
     inside: Vec<Entity>,
     phase: String,
+    /// The longest spell airborne lately, s, fading a second a second: a
+    /// landing that hurts follows most of a second of free fall.
+    recent_air: f32,
 }
 
 pub(crate) fn phase_name(p: &Phase) -> &'static str {
@@ -150,6 +153,7 @@ pub fn record(
     mut shots: MessageReader<Shot>,
     mut hits: MessageReader<Hit>,
     mut anomaly_events: MessageReader<AnomalyEvent>,
+    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
     (names, parents): (Query<&Name>, Query<&ChildOf>),
 ) {
     if log.finished {
@@ -232,6 +236,15 @@ pub fn record(
         }
     }
 
+    // A carried artifact biting back.
+    for b in bites.read() {
+        if b.player == me && b.what == crate::anomaly::costs::Bite::Shock {
+            tr.expect
+                .push(("aegis".into(), extraction_core::anomaly::AEGIS_SHOCK, 0.3));
+        }
+    }
+    tr.recent_air = body.airborne.max(tr.recent_air - dt);
+
     // Anomalies: walking into one, and anything one does nearby.
     let mut inside_now = Vec::new();
     let mut inside_kind = None;
@@ -290,8 +303,11 @@ pub fn record(
                     "surge".to_string()
                 } else if health.bleeding > 0.0 && rest <= health.bleeding * dt * 1.5 + 1e-3 {
                     "bleeding".to_string()
-                } else {
+                } else if tr.recent_air > 0.4 {
                     "fall".to_string()
+                } else {
+                    // Nothing above claimed it: say so rather than guess.
+                    "other".to_string()
                 };
                 *tr.pending.entry(cause.clone()).or_default() += rest;
                 log.recent.push((t, cause.clone(), rest));
@@ -409,6 +425,21 @@ pub fn finish(
                                 "danger": zone.map.region_at(*at).map(|r| r.danger)}))
                 }
                 _ => None,
+            }),
+            // A contract's step (`SIM_CONTRACT`): whether it was met.
+            "contract": progression.as_ref().and_then(|p| {
+                let a = p.0.contract.as_ref()?;
+                let job = p.0.job.as_ref()?;
+                let home = outcome == "extracted";
+                use extraction_core::progression::Job;
+                let (kind, met) = match job {
+                    Job::Plant { planted, .. } => ("plant", *planted && home),
+                    Job::Bring { item, .. } => ("bring", home && s.loot.iter().any(|l| l == item)),
+                    Job::Scout { seen, .. } => ("scout", *seen && home),
+                    Job::Photograph { taken, .. } => ("photograph", *taken && home),
+                    _ => ("other", false),
+                };
+                Some(json!({"id": a.id, "step": a.step, "kind": kind, "met": met}))
             }),
             // Nights slept in the safehouse (`SIM_OVERNIGHT`).
             "nights": house.as_ref().map_or(0, |h| h.nights_out),
