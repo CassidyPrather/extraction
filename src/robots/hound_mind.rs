@@ -65,6 +65,8 @@ pub struct HoundMind {
     pub lunge: f32,
     /// It has bitten this lunge.
     pub bit: bool,
+    /// The coil's over: spring at this (the body's `hound::lunge`).
+    pub spring: Option<Vec3>,
 }
 
 /// A hound bit (for its sound and the body's snap).
@@ -97,6 +99,23 @@ fn wake_hounds(mut commands: Commands, hounds: Query<(Entity, &Senses), Added<Ho
                 ..senses.clone()
             },
         ));
+    }
+}
+
+/// A hound whose coil is over springs ([`LUNGE_SPEED`], the body's
+/// `hound::lunge`): right after the brain, before the gait walks.
+pub fn spring_hounds(
+    mut hounds: Query<(
+        &mut HoundMind,
+        &mut super::walker::Walker,
+        &mut super::anim::Gait,
+        &GlobalTransform,
+    )>,
+) {
+    for (mut h, mut w, mut g, gt) in &mut hounds {
+        if let Some(at) = h.spring.take() {
+            super::hound::lunge(&mut w, &mut g, gt.translation(), at, LUNGE_SPEED);
+        }
     }
 }
 

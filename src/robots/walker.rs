@@ -121,6 +121,7 @@ impl Plugin for WalkerPlugin {
                 (
                     walker_parts_destroyed,
                     walker_brain,
+                    super::hound_mind::spring_hounds,
                     super::anim::walk,
                     super::anim::aim_turrets,
                     walker_guns,
@@ -327,7 +328,7 @@ fn walker_brain(
             Option<&super::indoor::LocalNav>,
             Option<&mut super::indoor::Patrol>,
             Has<super::indoor::Crawler>,
-            Option<&mut super::anim::Gait>,
+            Option<&super::anim::Gait>,
             Option<&mut super::hound_mind::HoundMind>,
             Option<&super::flee::Fleeing>,
             (Has<super::indoor::Dormant>, Has<super::indoor::Warden>),
@@ -366,14 +367,11 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, mut gait, mut hound, fleeing, (dormant, warden)),
+        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden)),
     ) in &mut walkers
     {
         // (The heavy thinks for itself: `heavy_mind`.)
-        if gait
-            .as_ref()
-            .is_some_and(|g| g.shape == super::anim::Shape::Heavy)
-        {
+        if gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy) {
             continue;
         }
         let is_hound = hound.is_some();
@@ -409,7 +407,7 @@ fn walker_brain(
             }
             continue;
         }
-        let lame = gait.as_ref().is_some_and(|g| g.limp > LAME);
+        let lame = gait.is_some_and(|g| g.limp > LAME);
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
         if !single_minded {
@@ -574,15 +572,7 @@ fn walker_brain(
                             if h.crouch <= 0.0 {
                                 h.lunge = super::hound_mind::LUNGE_TIME;
                                 h.bit = false;
-                                if let Some(g) = gait.as_deref_mut() {
-                                    super::hound::lunge(
-                                        &mut w,
-                                        g,
-                                        pos,
-                                        tp,
-                                        super::hound_mind::LUNGE_SPEED,
-                                    );
-                                }
+                                h.spring = Some(tp);
                             }
                             None
                         } else if h.lunge > 0.0 {

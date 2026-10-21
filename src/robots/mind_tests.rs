@@ -141,8 +141,15 @@ fn a_thrown_bolt_draws_a_walker() {
         "walked to where it landed (closest {closest:.1} m)"
     );
     assert!(secs < 15.0, "in good time ({secs:.1} s)");
-    for _ in 0..90 * 2 {
+    // Once at its guess, it looks round.
+    for _ in 0..90 * 10 {
         app.update();
+        if matches!(
+            app.world().get::<Brain>(walker).unwrap(),
+            Brain::Search { .. }
+        ) {
+            break;
+        }
     }
     assert!(
         matches!(
@@ -1450,4 +1457,130 @@ fn a_new_site_grid_reroutes_its_crawlers() {
     }
     assert!(reached_b, "got there");
     assert!(!crossed, "round the gas, not through it");
+}
+
+/// The Sorter: seeing you, it rings the hall once, winds up (the tell)
+/// and only then throws. Lose it and it watches where you were, gropes
+/// round there with its arm, then goes back to work.
+#[test]
+fn the_sorter_rings_winds_up_throws_then_gropes_and_calms() {
+    use super::sorter::{SorterOrder, SorterThrow, SorterWindup};
+    use super::sorter_mind::{ALARM, GROPE_TIME, SorterMind, WATCH_TIME};
+    #[derive(Resource, Default)]
+    struct Seen {
+        alarms: Vec<f32>,
+        windups: Vec<f32>,
+        throws: Vec<f32>,
+    }
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Seen>().add_systems(
+        Last,
+        |mut n: MessageReader<super::Noise>,
+         mut w: MessageReader<SorterWindup>,
+         mut t: MessageReader<SorterThrow>,
+         time: Res<Time>,
+         mut s: ResMut<Seen>| {
+            let now = time.elapsed_secs();
+            s.alarms
+                .extend(n.read().filter(|n| n.radius == ALARM).map(|_| now));
+            s.windups.extend(w.read().map(|_| now));
+            s.throws.extend(t.read().map(|_| now));
+        },
+    );
+    // An open-air hall on a meadow, as the body's own tests use.
+    let c = Vec2::new(40.0, 220.0);
+    let mut top = f32::MIN;
+    for i in -12..=12 {
+        for j in -8..=8 {
+            top = top.max(zone.ground(c.x + i as f32, c.y + j as f32));
+        }
+    }
+    let hall = Transform::from_xyz(c.x, top, c.y);
+    let sorter = {
+        let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+        let mut cmd = q.get_mut(app.world_mut()).unwrap();
+        cmd.spawn((
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(30.0, 0.2, 20.0),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                [
+                    crate::world::Layer::Item,
+                    crate::world::Layer::Robot,
+                    crate::world::Layer::Player,
+                ],
+            ),
+            Transform::from_xyz(c.x, top - 0.1, c.y),
+        ));
+        let e = super::sorter::spawn_sorter(
+            &mut cmd,
+            hall,
+            Vec2::new(12.0, 8.0),
+            6.0,
+            super::sorter::depot_spots(),
+            4,
+        );
+        q.apply(app.world_mut());
+        e
+    };
+    // Standing in the hall, 7 m off its middle.
+    put(&mut app, player, Vec3::new(c.x + 7.0, top, c.y + 2.0));
+    for _ in 0..90 * 12 {
+        app.update();
+    }
+    {
+        let s = app.world().resource::<Seen>();
+        assert_eq!(s.alarms.len(), 1, "rang the hall once: {:?}", s.alarms);
+        let thrown = *s.throws.first().expect("it threw");
+        let wound = s
+            .windups
+            .iter()
+            .copied()
+            .filter(|w| *w <= thrown)
+            .next_back()
+            .expect("wound up first");
+        assert!(
+            thrown - wound >= super::sorter::WINDUP * 0.9,
+            "the tell ({:.2} s) before the throw",
+            thrown - wound
+        );
+    }
+    // Gone, out of its sight: it lost you by the hall's far end.
+    put(&mut app, player, zone.on_ground(c.x + 200.0, c.y + 200.0));
+    for _ in 0..3 {
+        app.update();
+    }
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(sorter).unwrap();
+        a.target = None;
+        a.can_see_target = false;
+        a.last_known = Some(Vec3::new(c.x - 6.0, top, c.y - 3.0));
+        a.uncertainty = 2.0;
+    }
+    *app.world_mut().get_mut::<SorterMind>(sorter).unwrap() = SorterMind::Watch {
+        at: Vec3::new(c.x - 6.0, top, c.y - 3.0),
+        left: WATCH_TIME,
+    };
+    let mut watched = false;
+    let mut groped = false;
+    for _ in 0..90 * (WATCH_TIME + GROPE_TIME + 6.0) as usize {
+        app.update();
+        let mind = *app.world().get::<SorterMind>(sorter).unwrap();
+        let order = app.world().get::<SorterOrder>(sorter).copied();
+        watched |= matches!(mind, SorterMind::Watch { .. })
+            && matches!(order, Some(SorterOrder::Watch { .. }));
+        groped |= matches!(mind, SorterMind::Grope { .. })
+            && matches!(order, Some(SorterOrder::Reach { .. }));
+    }
+    assert!(watched, "it watched where you were");
+    assert!(groped, "and groped round there");
+    assert_eq!(
+        *app.world().get::<SorterMind>(sorter).unwrap(),
+        SorterMind::Calm
+    );
+    assert_eq!(
+        app.world().get::<SorterOrder>(sorter).copied(),
+        Some(SorterOrder::Idle),
+        "back to its work"
+    );
 }
