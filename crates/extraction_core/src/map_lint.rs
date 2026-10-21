@@ -64,6 +64,15 @@ pub enum Rule {
     /// way round, over the way in or out, or met without warning
     /// (`map_sentry`).
     Sentry,
+    /// A spotter that ends a raid rather than shaping it: its winch where
+    /// you can't stand to cut it, watching nothing, no way in under it
+    /// while its eye is turned away, watching the way in or out, or seeing
+    /// most of a sentry's field (`map_spotter`).
+    Spotter,
+    /// The minelayer's fields as the game lays them: a mine on a main
+    /// route or in a doorway, or a site with room for under half a field
+    /// (`map_mines`).
+    Mines,
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
@@ -1984,6 +1993,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         r.measures.extend(c.measures);
         for (what, at) in c.findings {
             find(&mut r, Rule::Sentry, what, at);
+        }
+        let c = crate::map_spotter::check(map, hm, &walk, ins, &named, |p| inside_fence(map, p));
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Spotter, what, at);
+        }
+        let c = crate::map_mines::check(map, hm, &walk, &named);
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Mines, what, at);
         }
     }
 

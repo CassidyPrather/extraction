@@ -111,7 +111,7 @@ pub fn sentries(map: &MapDef) -> Vec<Sentry> {
 }
 
 /// A placement as a block that stops a line of sight.
-struct Block {
+pub(crate) struct Block {
     at: P2,
     half: P2,
     yaw: f32,
@@ -128,7 +128,7 @@ impl Block {
     }
 }
 
-fn blocks(map: &MapDef, hm: &Heightmap) -> Vec<Block> {
+pub(crate) fn blocks(map: &MapDef, hm: &Heightmap) -> Vec<Block> {
     let mut out: Vec<Block> = map
         .placements
         .iter()
@@ -178,7 +178,7 @@ pub struct Field {
 /// Whether the line from `a` to `b` (heights above sea level) is clear of
 /// the land and the buildings. The last metre at either end is free (the
 /// mast's own pad, the ground you stand on).
-fn clear(hm: &Heightmap, blocks: &[&Block], a: (P2, f32), b: (P2, f32)) -> bool {
+pub(crate) fn clear(hm: &Heightmap, blocks: &[&Block], a: (P2, f32), b: (P2, f32)) -> bool {
     let d = dist(a.0, b.0);
     let n = (d / 1.0).ceil().max(1.0) as usize;
     (1..n).all(|i| {
@@ -192,7 +192,7 @@ fn clear(hm: &Heightmap, blocks: &[&Block], a: (P2, f32), b: (P2, f32)) -> bool 
     })
 }
 
-fn near_line<'a>(blocks: &'a [Block], a: P2, b: P2) -> Vec<&'a Block> {
+pub(crate) fn near_line<'a>(blocks: &'a [Block], a: P2, b: P2) -> Vec<&'a Block> {
     blocks
         .iter()
         .filter(|k| crate::geom::polyline_closest(&[a, b], k.at).0 <= k.reach)
@@ -323,7 +323,7 @@ pub fn flood_avoiding(g: &NavGrid, from: P2, avoid: &[bool]) -> Vec<bool> {
 }
 
 /// Whether any reached cell lies within `r` of `p`.
-fn reached_within(g: &NavGrid, seen: &[bool], p: P2, r: f32) -> bool {
+pub(crate) fn reached_within(g: &NavGrid, seen: &[bool], p: P2, r: f32) -> bool {
     let k = (r / g.cell).ceil() as i64;
     let Some((ci, cj)) = g.cell_of(p) else {
         return false;
@@ -340,6 +340,67 @@ fn reached_within(g: &NavGrid, seen: &[bool], p: P2, r: f32) -> bool {
         }
     }
     false
+}
+
+/// The ways in and out a machine mustn't watch: the insertion, and at
+/// each rendezvous the truck's spot, its tailgate and the approach behind.
+pub(crate) fn ways_out(map: &MapDef, ins: P2) -> Vec<(String, P2)> {
+    let mut ways: Vec<(String, P2)> = vec![("the insertion".into(), ins)];
+    for m in map.markers_of(&MarkerKind::Rendezvous) {
+        let at = m.at;
+        let l = (at[0] * at[0] + at[1] * at[1]).sqrt().max(1e-3);
+        let back = [-at[0] / l, -at[1] / l];
+        for d in TRUCK_SPOTS {
+            ways.push((
+                format!("the truck at {}", m.name),
+                [at[0] + back[0] * d, at[1] + back[1] * d],
+            ));
+        }
+    }
+    ways
+}
+
+/// The first of `ways` that `sees` covers: the spot or the ground 3 m
+/// round it (a gate may stand on the spot itself).
+pub(crate) fn covered(ways: &[(String, P2)], sees: impl Fn(P2) -> bool) -> Option<(String, P2)> {
+    ways.iter()
+        .find(|(_, at)| {
+            (0..9).any(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 8.0;
+                let r = if k == 8 { 0.0 } else { 3.0 };
+                sees([at[0] + a.cos() * r, at[1] + a.sin() * r])
+            })
+        })
+        .cloned()
+}
+
+/// Where survey drones go, per point of interest: their orbit round it
+/// ([`SURVEY_ORBIT`]) and their lane from the Gate past its doorstep
+/// ([`LANE_HOME`]), points every 2 m or so.
+pub(crate) fn drone_ways(map: &MapDef) -> Vec<(String, Vec<P2>)> {
+    let gate = map.markers_of(&MarkerKind::RobotGate).next().map(|m| m.at);
+    map.markers_of(&MarkerKind::Poi)
+        .map(|poi| {
+            let ring = (0..24).map(|k| {
+                let a = k as f32 / 24.0 * std::f32::consts::TAU;
+                [
+                    poi.at[0] + a.cos() * SURVEY_ORBIT,
+                    poi.at[1] + a.sin() * SURVEY_ORBIT,
+                ]
+            });
+            let lane: Vec<P2> = match gate {
+                Some(g) => {
+                    let n = (dist(g, poi.at) / 2.0).ceil() as usize;
+                    (0..=n)
+                        .map(|i| crate::geom::lerp(g, poi.at, i as f32 / n.max(1) as f32))
+                        .filter(|p| dist(*p, g) > LANE_HOME)
+                        .collect()
+                }
+                None => Vec::new(),
+            };
+            (poi.name.clone(), ring.chain(lane).collect())
+        })
+        .collect()
 }
 
 /// What a sentry check found: findings (what, where) and measures.
@@ -383,10 +444,8 @@ pub fn check(
                 .map(|p| (p.prefab.clone(), p.at)),
         )
         .collect();
-    let rvs: Vec<(&str, P2)> = map
-        .markers_of(&MarkerKind::Rendezvous)
-        .map(|m| (m.name.as_str(), m.at))
-        .collect();
+    let ways = ways_out(map, ins);
+    let drones = drone_ways(map);
     for s in sentries(map) {
         let f = s.field(map, hm, walk);
         let share = f.visible as f32 / f.reachable.max(1) as f32;
@@ -448,28 +507,8 @@ pub fn check(
                 s.power,
             ));
         }
-        let mut covers: Vec<(String, P2)> = vec![("the insertion".into(), ins)];
-        for (name, at) in &rvs {
-            let l = (at[0] * at[0] + at[1] * at[1]).sqrt().max(1e-3);
-            let back = [-at[0] / l, -at[1] / l];
-            for d in TRUCK_SPOTS {
-                covers.push((
-                    format!("the truck at {name}"),
-                    [at[0] + back[0] * d, at[1] + back[1] * d],
-                ));
-            }
-        }
-        if let Some((what, at)) = covers.iter().find(|(_, at)| {
-            // The spot or the ground round it (a gate may stand on the
-            // spot itself).
-            (0..9).any(|k| {
-                let a = k as f32 * std::f32::consts::TAU / 8.0;
-                let r = if k == 8 { 0.0 } else { 3.0 };
-                s.sees_with(hm, &blocks, [at[0] + a.cos() * r, at[1] + a.sin() * r])
-            })
-        }) {
-            out.findings
-                .push((format!("{} covers {what}", s.name), *at));
+        if let Some((what, at)) = covered(&ways, |p| s.sees_with(hm, &blocks, p)) {
+            out.findings.push((format!("{} covers {what}", s.name), at));
         }
         // Two machines on one spot: a survey drone's orbit or lane (past
         // the Gate's doorstep) through the sentry's sweep. The sims found
@@ -478,31 +517,13 @@ pub fn check(
         // Gate sentry sweeps the lanes leaving its Gate and every key
         // sentry a surveyed place, and those were quiet. So it's measured,
         // for reading against the sims, not held.
-        let gate = map.markers_of(&MarkerKind::RobotGate).next().map(|m| m.at);
-        let mut lanes = Vec::new();
-        for poi in map.markers_of(&MarkerKind::Poi) {
-            let ring = (0..24).map(|k| {
-                let a = k as f32 / 24.0 * std::f32::consts::TAU;
-                [
-                    poi.at[0] + a.cos() * SURVEY_ORBIT,
-                    poi.at[1] + a.sin() * SURVEY_ORBIT,
-                ]
-            });
-            let path: Vec<P2> = match gate {
-                Some(g) => {
-                    let n = (dist(g, poi.at) / 2.0).ceil() as usize;
-                    (0..=n)
-                        .map(|i| crate::geom::lerp(g, poi.at, i as f32 / n.max(1) as f32))
-                        .filter(|p| dist(*p, g) > LANE_HOME)
-                        .collect()
-                }
-                None => Vec::new(),
-            };
-            let n = ring.chain(path).filter(|p| s.sweeps(*p)).count();
-            if n > 0 {
-                lanes.push(format!("{} ({} m)", poi.name, n * 2));
-            }
-        }
+        let lanes: Vec<String> = drones
+            .iter()
+            .filter_map(|(poi, pts)| {
+                let n = pts.iter().filter(|p| s.sweeps(**p)).count();
+                (n > 0).then(|| format!("{poi} ({} m)", n * 2))
+            })
+            .collect();
         out.measures.push(format!(
             "sentry {}: sweeps survey drones' ways to {}",
             s.name,
