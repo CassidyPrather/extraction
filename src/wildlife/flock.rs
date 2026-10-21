@@ -140,6 +140,9 @@ pub enum Species {
     Raven,
     /// Jackdaws: small, quick, chattering (Cinder Works).
     Jackdaw,
+    /// Alpine choughs: black, quick, in tumbling flocks over the fell (Rime
+    /// Fell; the rook's model, smaller and blacker, a yellow bill).
+    Chough,
     /// A grey heron, alone, standing in the shallows (Sallow Reservoir):
     /// it perches only on wading spots, and it's wary.
     Heron,
@@ -150,6 +153,7 @@ impl Species {
         match map {
             "kettle_pass" => Species::Raven,
             "cinder_works" => Species::Jackdaw,
+            "rime_fell" => Species::Chough,
             _ => Species::Rook,
         }
     }
@@ -160,6 +164,7 @@ impl Species {
             Species::Rook => (10, 20),
             Species::Raven => (4, 8),
             Species::Jackdaw => (10, 18),
+            Species::Chough => (8, 16),
             Species::Heron => (1, 1),
         }
     }
@@ -180,6 +185,7 @@ impl Species {
             Species::Rook => 1.0,
             Species::Raven => 1.35,
             Species::Jackdaw => 0.78,
+            Species::Chough => 0.85,
             // Its own model, at its own size.
             Species::Heron => 1.0,
         }

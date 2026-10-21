@@ -226,6 +226,7 @@ fn tint(species: Species) -> Color {
         Species::Rook => Color::WHITE,
         Species::Raven => Color::srgb(0.8, 0.8, 0.85),
         Species::Jackdaw => Color::srgb(1.9, 1.9, 1.95),
+        Species::Chough => Color::srgb(0.75, 0.75, 0.78),
         Species::Heron => Color::WHITE,
     }
 }
@@ -239,6 +240,7 @@ fn material(
         Species::Rook => "rook",
         Species::Raven => "raven",
         Species::Jackdaw => "jackdaw",
+        Species::Chough => "chough",
         Species::Heron => "heron",
     };
     let tint = tint(species);

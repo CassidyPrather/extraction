@@ -52,6 +52,16 @@ pub struct Build {
 
 pub fn build(kind: Kind) -> Build {
     match kind {
+        // A deer's body in a chamois's coat: dark brown, a paler face and
+        // belly, nearly black legs.
+        Kind::Chamois => Build {
+            colours: [
+                ("Hide", LinearRgba::rgb(0.045, 0.034, 0.027)),
+                ("Pale", LinearRgba::rgb(0.16, 0.14, 0.11)),
+                ("Hoof", LinearRgba::rgb(0.01, 0.01, 0.01)),
+            ],
+            ..build(Kind::Deer)
+        },
         Kind::Deer => Build {
             model: "models/animals/deer.glb",
             hips: [
@@ -344,6 +354,7 @@ fn draw_herds(
                     let mut c = commands.spawn((
                         Name::new(match herd.kind {
                             Kind::Deer => "Deer",
+                            Kind::Chamois => "Chamois",
                             Kind::Dog => "Dog",
                         }),
                         Mesh3d(mesh.clone()),

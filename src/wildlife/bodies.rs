@@ -107,7 +107,7 @@ fn give_bodies(
     }
     for (e, h) in &herds {
         let (w, hgt, l) = match h.kind {
-            Kind::Deer => (0.3, 0.45, 1.0),
+            Kind::Deer | Kind::Chamois => (0.3, 0.45, 1.0),
             Kind::Dog => (0.24, 0.35, 0.8),
         };
         for (i, b) in h.beasts.iter().enumerate() {
@@ -208,7 +208,7 @@ fn deaths(
     }
     for (e, mut h) in &mut herds {
         let kind = match h.kind {
-            Kind::Deer => CarcassKind::Deer,
+            Kind::Deer | Kind::Chamois => CarcassKind::Deer,
             Kind::Dog => CarcassKind::Dog,
         };
         for (i, b) in h.beasts.iter_mut().enumerate() {
