@@ -26,6 +26,7 @@ impl Plugin for RobotVisualsPlugin {
             super::fx::RobotFxPlugin,
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
+            super::sentry_look::SentryLookPlugin,
         ))
         .add_systems(
             Update,
@@ -197,12 +198,13 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), With<super::heavy::Heavy>>,
+    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy dresses itself: `heavy_look`.)
+        // (The heavy and the sentry dress themselves: `heavy_look`,
+        // `sentry_look`.)
         if heavies.contains(part.robot) {
             continue;
         }
@@ -1608,8 +1610,16 @@ fn alert_eyes(
         } else {
             0.0
         };
-        let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter * gain;
+        // Its colour and, for eyes that can't tell red from orange (or a
+        // look from far off), its rhythm (`render::tells`); brighter after
+        // dark.
+        let [r, g, b] = crate::render::tells::eye_colour(a, x);
+        let pulse = crate::render::tells::eye_pulse(
+            a,
+            aware.can_see_target,
+            now + robot.index_u32() as f32 * 0.37,
+        );
+        let want = LinearRgba::rgb(r, g, b) * stutter * pulse * gain;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;

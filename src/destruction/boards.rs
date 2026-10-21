@@ -37,9 +37,10 @@ pub fn boarded_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
 /// three across each, outside, a little tilted (their place and lean
 /// from World models' notes on the sash's space).
 pub fn boards_of(geo: &Geo, boarded: &[bool]) -> Vec<Transform> {
-    // The sash's centre plane is the wall's; boards sit against the
-    // casing, 3 cm proud of a 0.18 m wall's outer face.
-    const OUT: f32 = -(0.09 + 0.03 + 0.0125);
+    // The sash's centre plane is the wall's; boards sit on the casing,
+    // 5 cm proud of a 0.18 m wall's outer face (its side boards and their
+    // rosettes stand 3 cm out).
+    const OUT: f32 = -(0.09 + 0.05 + 0.0125);
     let mut out = Vec::new();
     let mut sash = 0;
     for d in &geo.props {

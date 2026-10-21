@@ -1758,8 +1758,15 @@ pub(crate) mod tests {
         let mut fastest = 0.0f32;
         let mut worst = 0.0f32;
         let mut steps = 0;
+        // Its closest approach: once there it searches the site, and how
+        // long that takes depends on what's around (trees), so by the end
+        // it may be on its way back.
+        let to = zone.on_ground(40.0, 205.0);
+        let mut closest = f32::INFINITY;
         for _ in 0..(90 * 30) {
             app.update();
+            let p = app.world().get::<Transform>(heavy).unwrap().translation;
+            closest = closest.min(Vec2::new(p.x - to.x, p.z - to.z).length());
             let w = app.world().get::<Walker>(heavy).unwrap();
             fastest = fastest.max(w.velocity.length());
             for [hip, _, foot] in app.world().get::<LegPoses>(heavy).unwrap().0 {
@@ -1777,12 +1784,7 @@ pub(crate) mod tests {
         assert!(t.translation.is_finite());
         let over = t.translation.y - zone.ground(t.translation.x, t.translation.z);
         assert!(over > 2.2 && over < 3.0, "rides {over:.2} m up");
-        let to = zone.on_ground(40.0, 205.0);
-        assert!(
-            Vec2::new(t.translation.x - to.x, t.translation.z - to.z).length() < 6.0,
-            "got there: {:.1?}",
-            t.translation
-        );
+        assert!(closest < 6.0, "got there: within {closest:.1} m");
         // Slow: you can outwalk it, but not stroll.
         assert!(fastest > 0.9 && fastest < 1.8, "{fastest:.2} m/s");
         assert!(steps > 8, "it stepped ({steps})");

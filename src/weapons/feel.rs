@@ -248,6 +248,9 @@ pub struct Handling {
     /// A visual-only stroke of the bolt or slide after a self-loader
     /// fires, 1 at the shot down to 0.
     pub cycle: f32,
+    /// Iron sights brought to the eye: the turn about the front post that
+    /// lines the rear sight up with it (item space), eased.
+    pub sight_fix: Quat,
 }
 
 impl Handling {
@@ -338,13 +341,14 @@ fn handle_guns(
     terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
     // Played one-handed, a gun rested on something is held as well as two
     // hands hold it: what the surface is for.
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
-    for (_, gun, item, gt, mut handling, mut feel, held, support, bipod) in &mut guns {
+    for (gun_e, gun, item, gt, mut handling, mut feel, held, support, bipod) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
                 *handling = Handling::default();
@@ -452,9 +456,61 @@ fn handle_guns(
         let yaw = handling.rise.y + sway.y;
         let pivot = gun.layout.grip.translation;
         let r = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch);
-        feel.offset = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
+        let kick = Transform::from_translation(pivot - r * pivot + Vec3::Z * handling.push)
             .with_rotation(r);
+        // Iron sights at the cheek: a turn about the front post puts the
+        // rear sight on the eye's line to it. Worked out where the gun would
+        // be without it (so it settles rather than chasing itself).
+        let front = front_post(gun);
+        let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
+        let want = match head {
+            Some(eye) if !scoped.iter().any(|m| m.0 == gun_e) => {
+                let eye_now = gt.affine().inverse().transform_point3(eye);
+                let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
+                sight_fix(gun, eye_bare)
+            }
+            _ => Quat::IDENTITY,
+        };
+        let ease = 1.0 - (-dt / SIGHT_EASE).exp();
+        handling.sight_fix = handling.sight_fix.slerp(want, ease);
+        feel.offset = kick * about_front(handling.sight_fix);
         feel.lag = hold.lag(mass);
+    }
+}
+
+/// How near behind the rear sight (metres along the bore, and off its line)
+/// the eye must be for the sights to line up at the cheek, the most they
+/// turn the gun for it (radians), and how quickly (seconds).
+pub const SIGHT_DEPTH: (f32, f32) = (-0.02, 0.16);
+pub const SIGHT_OFF: f32 = 0.05;
+pub const SIGHT_MAX: f32 = 0.06;
+pub const SIGHT_EASE: f32 = 0.08;
+
+/// The front post, in gun space: on the sight line at the muzzle.
+pub fn front_post(gun: &Gun) -> Vec3 {
+    let s = gun.layout.sight.translation;
+    Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
+}
+
+/// The turn about the front post (gun space) that puts the rear sight on
+/// the line from an eye at `eye` (gun space, the gun as held without it) to
+/// the front post: none unless the eye is just behind the rear sight.
+pub fn sight_fix(gun: &Gun, eye: Vec3) -> Quat {
+    let rear = gun.layout.sight.translation;
+    let rel = eye - rear;
+    if !(SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) || rel.truncate().length() > SIGHT_OFF {
+        return Quat::IDENTITY;
+    }
+    let front = front_post(gun);
+    let q = Quat::from_rotation_arc(
+        (rear - front).normalize(),
+        (eye - front).normalize_or((rear - front).normalize()),
+    );
+    let (axis, angle) = q.to_axis_angle();
+    if angle > SIGHT_MAX {
+        Quat::from_axis_angle(axis, SIGHT_MAX)
+    } else {
+        q
     }
 }
 
@@ -1223,6 +1279,50 @@ pub(crate) mod vr_tests {
             "a worn gun jams: {alone:?}"
         );
         assert_eq!(worn_burst(4), alone, "with loot about");
+    }
+
+    /// The rear sight and front post of the held gun, in the world.
+    fn sights(r: &mut Range) -> (Vec3, Vec3, Quat) {
+        let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+        let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+        (
+            gt.transform_point(g.layout.sight.translation),
+            gt.transform_point(front_post(g)),
+            gt.rotation(),
+        )
+    }
+
+    /// Brought to the cheek with the eye a little high of the sight line,
+    /// an AK settles so the eye, the rear sight and the front post line up;
+    /// with the eye nowhere near, the sights are left alone.
+    #[test]
+    fn iron_sights_line_up_at_the_cheek() {
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        assert_eq!(
+            r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix,
+            Quat::IDENTITY,
+            "the eye nowhere near the sights"
+        );
+        let (rear, front, rot) = sights(&mut r);
+        let eye = rear + rot * Vec3::new(0.0, 0.012, 0.06);
+        let line_miss = |rear: Vec3, front: Vec3| {
+            let d = (rear - front).normalize();
+            let v = eye - front;
+            (v - d * v.dot(d)).length()
+        };
+        assert!(line_miss(rear, front) > 0.009, "starts off the line");
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        r.vr.head(eye - root);
+        r.vr.step(60);
+        let (rear, front, _) = sights(&mut r);
+        let miss = line_miss(rear, front);
+        assert!(miss < 0.004, "eye, rear sight, front post: {miss} m off");
     }
 
     pub(crate) fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {

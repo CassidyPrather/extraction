@@ -263,22 +263,26 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     if !opts.flat {
         // Named, so the runtime (SteamVR's binding UI, its per-app
         // resolution) knows the game apart from other Bevy apps.
-        app.add_plugins(bevy_mod_openxr::add_xr_plugins(defaults).set(
-            bevy_mod_openxr::init::OxrInitPlugin {
-                app_info: bevy_mod_openxr::types::AppInfo {
-                    name: "Extraction".into(),
-                    version: bevy_mod_openxr::types::Version(0, 1, 0),
-                },
-                // Finger tracking (SteamVR gives it for Index controllers);
-                // dropped with a warning where the runtime lacks it.
-                exts: {
-                    let mut exts = bevy_mod_openxr::exts::OxrExtensions::default();
-                    exts.enable_hand_tracking();
-                    exts
-                },
-                ..default()
-            },
-        ));
+        app.add_plugins(
+            bevy_mod_openxr::add_xr_plugins(defaults)
+                // The session starts when the load has settled
+                // (`rig::xr::handle_session`), not at once.
+                .set(bevy_mod_xr::session::XrSessionPlugin { auto_handle: false })
+                .set(bevy_mod_openxr::init::OxrInitPlugin {
+                    app_info: bevy_mod_openxr::types::AppInfo {
+                        name: "Extraction".into(),
+                        version: bevy_mod_openxr::types::Version(0, 1, 0),
+                    },
+                    // Finger tracking (SteamVR gives it for Index controllers);
+                    // dropped with a warning where the runtime lacks it.
+                    exts: {
+                        let mut exts = bevy_mod_openxr::exts::OxrExtensions::default();
+                        exts.enable_hand_tracking();
+                        exts
+                    },
+                    ..default()
+                }),
+        );
         app.add_plugins(rig::xr::XrDriverPlugin);
         app.insert_resource(XrActive);
     } else {

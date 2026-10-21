@@ -54,6 +54,7 @@ pub const NAMES: &[&str] = &[
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
+    crate::robots::sentry::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -497,6 +498,29 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::sentry::SCENARIO => {
+            vec![
+                Log(s(
+                    "sentry cable: get behind a sentry, cut its cable, walk through its arc",
+                )),
+                Setup(crate::robots::sentry::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                // (The setup fills in where: past the sentry, through its arc.)
+                WalkTo {
+                    to: crate::robots::sentry::PAST_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(2.0),
+                Expect(super::Expect::HealthAtLeast(99.0)),
+                Expect(super::Expect::Alive),
+            ]
+        }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),

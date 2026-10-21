@@ -202,12 +202,17 @@ fn handed_wrist(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wrist_panel(
     mut panels: Query<&mut ScreenText, With<WristPanel>>,
     raid: Res<crate::raid::Raid>,
     players: Query<(&crate::player::Body, &crate::health::Health), With<LocalPlayer>>,
     time: Res<Time>,
     mut timer: Local<f32>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    captions: Option<Res<crate::raid::captions::Captions>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<LocalPlayer>>,
 ) {
     *timer -= time.delta_secs();
     if *timer > 0.0 {
@@ -225,12 +230,30 @@ fn wrist_panel(
     } else {
         "SURGE NOW".to_string()
     };
+    // Captions: who's speaking and from where, on a line of their own.
+    let caption = comfort
+        .filter(|c| c.captions)
+        .and(captions)
+        .and_then(|c| c.last.clone())
+        .filter(|_| raid.log.last().is_some());
+    let header = caption.as_ref().and_then(|c| {
+        let me = locals.iter().next();
+        let head = heads
+            .iter()
+            .find(|(_, p)| Some(p.parent()) == me)
+            .map(|(g, _)| g);
+        c.header(head)
+    });
+    let said = match (&caption, &header) {
+        (Some(c), Some(h)) => Some(Said::Captioned(h, &c.text)),
+        _ => raid.log.last().map(|(m, _)| Said::Plain(m.as_str())),
+    };
     let text = wrist_text(
         &clock,
         body.carried_kg,
         health.hp,
         health.bleeding > 0.05,
-        raid.log.last().map(|(m, _)| m.as_str()),
+        said,
         page(&time),
     );
     for mut p in &mut panels {
@@ -312,7 +335,7 @@ const RADIO_COLUMNS: usize = 15;
 const RADIO_LINES: usize = 4;
 
 /// Lines of the driver's words a page on the wrist.
-const WRIST_LINES: usize = 3;
+pub(crate) const WRIST_LINES: usize = 3;
 
 /// Seconds a page of a long message stays up.
 const PAGE_SECS: f32 = 3.0;
@@ -338,14 +361,23 @@ fn paged(msg: &str, columns: usize, lines: usize, page: usize) -> Vec<String> {
     all.into_iter().skip(p * lines).take(lines).collect()
 }
 
+/// The last thing said, for the wrist.
+pub enum Said<'a> {
+    /// As logged.
+    Plain(&'a str),
+    /// A caption: the speaker line ("LEV, RADIO"), then the words.
+    Captioned(&'a str, &'a str),
+}
+
 /// What the wrist shows: the clock, the load, health, and the driver's
-/// last words (a page at a time).
+/// last words (a page at a time). A caption's speaker line takes one of
+/// the words' lines, so the panel stays as tall.
 pub fn wrist_text(
     clock: &str,
     kg: f32,
     hp: f32,
     bleeding: bool,
-    said: Option<&str>,
+    said: Option<Said>,
     page: usize,
 ) -> String {
     let mut text = format!(
@@ -354,11 +386,18 @@ pub fn wrist_text(
         hp.max(0.0),
         if bleeding { " BLEED" } else { "" }
     );
-    if let Some(msg) = said {
-        for line in paged(msg, WRIST_COLUMNS, WRIST_LINES, page) {
-            text += "\n";
-            text += &line;
-        }
+    let (header, msg, lines) = match said {
+        Some(Said::Plain(m)) => (None, m, WRIST_LINES),
+        Some(Said::Captioned(h, m)) => (Some(h), m, WRIST_LINES - 1),
+        None => return text,
+    };
+    if let Some(h) = header {
+        text += "\n";
+        text += &h.to_uppercase();
+    }
+    for line in paged(msg, WRIST_COLUMNS, lines, page) {
+        text += "\n";
+        text += &line;
     }
     text
 }
@@ -372,7 +411,7 @@ pub fn radio_text(heard: &[String], page: usize) -> String {
 }
 
 /// Characters per line on the wrist: narrow keeps the type big.
-const WRIST_COLUMNS: usize = 18;
+pub(crate) const WRIST_COLUMNS: usize = 18;
 
 #[cfg(test)]
 mod tests {

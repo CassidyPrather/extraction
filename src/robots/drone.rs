@@ -433,6 +433,7 @@ fn drone_guns(
     mut shots: MessageWriter<Shot>,
     mut locks: MessageWriter<DroneLock>,
     mut seed: Local<u64>,
+    minds: Query<&super::senses::MindSeed>,
 ) {
     let dt = time.delta_secs();
     for (e, mut d, brain, aware, robot, children, t) in &mut drones {
@@ -483,9 +484,7 @@ fn drone_guns(
         if d.burst_left == 0 {
             d.burst_left = 3;
         }
-        *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *seed = super::senses::shot_seed(&minds, e, &time);
         shots.write(Shot {
             gun: e,
             shooter: Some(e),
