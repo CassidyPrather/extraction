@@ -24,6 +24,9 @@ pub enum Load {
     Tracer,
     /// A 12 gauge slug: one heavy lead ball where buckshot is nine.
     Slug,
+    /// Ball re-packed at the bench: now and then too little powder (a
+    /// squib) or a tired primer (a dud).
+    Repacked,
 }
 
 /// AP's cost through hard plate (armour steel, sheet, a helmet), against
@@ -91,6 +94,19 @@ impl Loads {
         let load = self.0.pop().unwrap_or_default();
         self.trim();
         load
+    }
+
+    /// The top round comes off a box or a loose round of `count` whose
+    /// unlisted rounds are `base` (its own load).
+    pub fn pop_or(&mut self, count: u32, base: Load) -> Load {
+        let n = count as usize;
+        if self.0.len() > n {
+            self.0.drain(..self.0.len() - n);
+        }
+        if count == 0 {
+            return base;
+        }
+        self.0.pop().unwrap_or(base)
     }
 
     /// The load of the round on top of a stack of `count`.

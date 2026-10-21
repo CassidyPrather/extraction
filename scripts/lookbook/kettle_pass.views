@@ -1,4 +1,4 @@
-# Kettle Pass lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+# Kettle Pass lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
 k01_gate        120,0,255,345,-1     # from the insertion, up the valley
 k02_row         0,0,175,0,-3         # Miners' Row
 k03_road        40,0,0,0,4           # up toward the pass
@@ -10,3 +10,4 @@ k08_pass        10,0,-245,180,-6     # from the pass, back down the valley
 k09_lodge       210,0,-190,34,-2     # the hunting lodge
 k10_summit      -120,0,-235,90,-6    # summit vista, east
 k11_aerial      120,45,300,350,-6    # over the gate, up toward the pass
+k13_deep_haulage -54.0,=2.48,128.5,180,-2  # the deep workings: down the haulage from the cage landing

@@ -7,6 +7,7 @@
 //! run faster than real time with no window). Map simulations build on the
 //! same tasks.
 
+pub mod crossing;
 pub mod scenarios;
 
 use bevy::prelude::*;
@@ -62,6 +63,15 @@ pub enum Task {
         kind: crate::robots::RobotKind,
         at: Vec3,
     },
+    /// Put an anomaly here holding a stone (`at` on the ground), and loose
+    /// kit to work it with (anomaly harvesting scenarios).
+    Stage {
+        kind: extraction_core::anomaly::AnomalyKind,
+        at: Vec3,
+        radius: f32,
+        artifact: String,
+        kit: Vec<(String, Vec3)>,
+    },
     /// Fight the nearest robot: aim at its core, shoot until it's wrecked
     /// or `shots` trigger pulls are spent.
     Engage {
@@ -69,6 +79,8 @@ pub enum Task {
     },
     Expect(Expect),
     Log(String),
+    /// Stand somewhere else at once (scenario setup: skip the walk).
+    Teleport(Vec3),
     /// Walk within reach of this item and grab it (for bots that choose
     /// what they want, rather than "the nearest of an id").
     Grab {
@@ -107,6 +119,9 @@ pub enum Task {
     /// magazine out, the well brought down onto one in a pouch, the second
     /// button to rack.
     OneHandReload,
+    /// Stage a scenario's world by name, where the bot stands: the module
+    /// under test answers [`scenarios::Setup`] (a heavy and a well).
+    Setup(&'static str),
 }
 
 /// A controller button.
@@ -189,8 +204,14 @@ pub enum Expect {
     Near(Vec2, f32),
     /// At least this many robots are wrecks.
     Wrecked(usize),
+    /// At least this many of the bot's shots have struck a robot.
+    RobotHits(u32),
     /// The bot is still standing.
     Alive,
+    /// The player would have heard at least this many robots' words (of
+    /// this mind, if given): `robot_voice::Heard`, in the listening
+    /// scenario.
+    Heard(Option<crate::robot_voice::Utterance>, usize),
 }
 
 #[derive(Component, Debug)]
@@ -209,6 +230,8 @@ pub struct Bot {
     /// The last aim point and when, for leading a moving target.
     track: Option<(Vec3, f32)>,
     pub hits: u32,
+    /// Of those, how many struck a robot.
+    pub robot_hits: u32,
     pub passed: u32,
     pub failed: u32,
     pub log: Vec<String>,
@@ -245,6 +268,7 @@ impl Bot {
             sprint: false,
             track: None,
             hits: 0,
+            robot_hits: 0,
             passed: 0,
             failed: 0,
             log: Vec::new(),
@@ -335,7 +359,8 @@ pub struct BotPlugin;
 
 impl Plugin for BotPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreUpdate, drive_bots.in_set(RigDriverSystems))
+        app.add_plugins(crossing::CrossingPlugin)
+            .add_systems(PreUpdate, drive_bots.in_set(RigDriverSystems))
             .add_systems(Update, (run_tasks, count_hits));
     }
 }
@@ -472,11 +497,18 @@ fn drive_bots(
     }
 }
 
-fn count_hits(mut hits: MessageReader<Hit>, mut bots: Query<(Entity, &mut Bot)>) {
+fn count_hits(
+    mut hits: MessageReader<Hit>,
+    mut bots: Query<(Entity, &mut Bot)>,
+    parts: Query<(), With<crate::robots::RobotPart>>,
+) {
     for hit in hits.read() {
         for (e, mut bot) in &mut bots {
             if hit.shooter == Some(e) {
                 bot.hits += 1;
+                if parts.contains(hit.entity) {
+                    bot.robot_hits += 1;
+                }
             }
         }
     }
@@ -569,6 +601,8 @@ struct TaskExtras<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+    heard: Option<Res<'w, crate::robot_voice::Heard>>,
+    setups: MessageWriter<'w, scenarios::Setup>,
 }
 
 /// Advances each bot's current task.
@@ -700,6 +734,21 @@ fn run_tasks(
             }
             Task::Log(msg) => {
                 bot.note(msg);
+                bot.next();
+            }
+            Task::Teleport(to) => {
+                let mut t = *root;
+                t.translation = zone.on_ground(to.x, to.z);
+                commands.entity(player).insert(t);
+                bot.walk = None;
+                bot.next();
+            }
+            Task::Setup(name) => {
+                ext.setups.write(scenarios::Setup {
+                    name,
+                    at: root.translation,
+                    facing: root.forward().as_vec3(),
+                });
                 bot.next();
             }
             Task::LookAt(p) => {
@@ -1045,6 +1094,20 @@ fn run_tasks(
                 bot.note(format!("spawned a {kind:?}"));
                 bot.next();
             }
+            Task::Stage {
+                kind,
+                at,
+                radius,
+                artifact,
+                kit,
+            } => {
+                let (artifact, kit) = (artifact.clone(), kit.clone());
+                commands.queue(move |world: &mut World| {
+                    crate::anomaly::harvest::stage(world, kind, at, radius, &artifact, &kit);
+                });
+                bot.note(format!("staged a {kind:?}"));
+                bot.next();
+            }
             Task::Engage { shots } => {
                 let nearest = robots.iter().filter(|(_, r, _)| !r.wrecked).min_by(|a, b| {
                     a.2.translation()
@@ -1340,6 +1403,17 @@ fn run_tasks(
                     Expect::Wrecked(n) => {
                         let w = robots.iter().filter(|(_, r, _)| r.wrecked).count();
                         (w >= *n, format!("at least {n} robots wrecked (got {w})"))
+                    }
+                    Expect::RobotHits(n) => (
+                        bot.robot_hits >= *n,
+                        format!("at least {n} hits on robots (got {})", bot.robot_hits),
+                    ),
+                    Expect::Heard(said, n) => {
+                        let got = ext.heard.as_ref().map_or(0, |h| h.count(*said));
+                        (
+                            got >= *n,
+                            format!("heard at least {n} {said:?} words (got {got})"),
+                        )
                     }
                     Expect::Alive => {
                         let h = healths

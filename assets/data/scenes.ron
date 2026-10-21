@@ -270,15 +270,15 @@
             Chair(at: (0.0, 0.0), rot: 0.0),
             Remains(at: (0.0, 0.0), rot: 0.0, seated: true),
             Crate(at: (0.6, -0.35), size: 0.5),
-            Lantern(at: (0.62, 0.5, -0.25)),
+            Lantern(at: (0.8, 0.5, -0.15)),
         ],
         items: [
-            (id: "old_photo", at: (0.5, 0.5, -0.45), condition: 0.3),
+            (id: "old_photo", at: (0.8, 0.5, -0.5), condition: 0.3),
         ],
         note: Some((
             name: "Shelter note",
             text: "Day 30 down here. They took Jan from the street on the 3rd. I came down with the lamp oil.\nThe filters still turn. The machines don't come down the stair. I think they can't count us if they can't see us.\n- E. Holm",
-            at: (0.6, 0.5, -0.35),
+            at: (0.55, 0.5, -0.35),
             rot: 0.0,
         )),
     ),
@@ -318,7 +318,7 @@
             Chair(at: (0.0, 0.7), rot: 0.0),
         ],
         items: [
-            (id: "multitool", at: (-0.15, 0.6, 0.05), condition: 0.5),
+            (id: "multitool", at: (-0.23, 0.6, 0.1), condition: 0.5),
             (id: "spare_parts", at: (0.18, 0.6, -0.1)),
         ],
         note: Some((
@@ -365,7 +365,7 @@
             Crate(at: (0.0, 0.0), size: 0.4),
         ],
         items: [
-            (id: "cook_bread", at: (-0.08, 0.4, 0.05)),
+            (id: "cook_bread", at: (-0.15, 0.4, 0.05)),
         ],
         note: Some((
             name: "Basket note",
@@ -489,7 +489,7 @@
             Crate(at: (-1.0, -0.6), size: 0.5),
         ],
         items: [
-            (id: "binoculars", at: (-1.0, 0.5, -0.5)),
+            (id: "binoculars", at: (-0.84, 0.5, -0.45)),
             (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
             (id: "matches", at: (1.0, 0.0, 0.2)),
         ],
@@ -572,7 +572,7 @@
             Crate(at: (0.0, 0.0), size: 0.6),
         ],
         items: [
-            (id: "multitool", at: (0.1, 0.6, 0.1), condition: 0.4),
+            (id: "multitool", at: (0.2, 0.6, 0.1), condition: 0.4),
         ],
         note: Some((
             name: "Far stair note",
@@ -672,6 +672,80 @@
             name: "Vey tag",
             text: "CUSTODIAN - KEPT\nVEY, O. Institute survey.\nRecovered: the Hollow, 23 NOV.\nWith: notebook (1).\nReview: pending.",
             at: (0.0, 0.65, 0.4),
+            rot: 0.0,
+        )),
+    ),
+    // --- Signature sites (Underground's, claude/polish-underground).
+    (
+        map: "marrow_creek",
+        name: "Pump control desk",
+        // The drowned pump station's control desk (room "control", site
+        // pump_marrow): the rest of the pump keeper's log.
+        at: (-162.6, 13.8),
+        rot: 0.0,
+        floor: Some(17.61),
+        pieces: [],
+        note: Some((
+            name: "Pump log, below",
+            text: "PUMP LOG - O. Brabec, below\n2 Nov. Power off at the board. Not mine. Pumps stopping, the creek coming in at the inlet.\nLet the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy boots are by my locker. Take them, and the flask.\n- O.B.",
+            at: (0.0, 0.785, 0.0),
+            rot: 0.0,
+        )),
+    ),
+    (
+        map: "marrow_creek",
+        name: "Brabec's locker",
+        // By his locker in the sump (site pump_marrow; the boots are the
+        // layout's), under 2.4 m of water until it's pumped.
+        at: (-188.4, 40.2),
+        rot: 0.0,
+        floor: Some(12.61),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.4),
+        ],
+        items: [
+            (id: "water_bottle", at: (0.0, 0.4, 0.0), condition: 0.6),
+            (id: "old_photo", at: (0.4, 0.05, 0.2), condition: 0.3),
+        ],
+    ),
+    (
+        map: "kettle_pass",
+        name: "Deep refuge",
+        // The old workings' refuge (room "refuge", site deep_kettle): a
+        // family that wouldn't go over the pass.
+        at: (-66.0, 151.6),
+        rot: 0.0,
+        floor: Some(-0.22),
+        pieces: [
+            Bedroll(at: (0.4, 0.6), rot: 90.0),
+            Bedroll(at: (0.4, -0.6), rot: 90.0),
+            Lantern(at: (1.2, 0.0, 0.0)),
+        ],
+        items: [
+            (id: "old_photo", at: (0.5, 0.05, 0.9), condition: 0.5),
+        ],
+        note: Some((
+            name: "Novakova's note",
+            text: "We didn't go over the pass. Grandad wouldn't, and we wouldn't without him.\nThe bird went up first every morning, the way he said, and came back singing. So we stayed another day.\nGrandad died on the 9th. Petr counts the days on the post in chalk. I let him.\nWe're going up tonight, while there's no moon.\n- M. Novakova",
+            at: (0.9, 0.0, 0.0),
+            rot: 270.0,
+        )),
+    ),
+    (
+        map: "cinder_works",
+        name: "Sorting ledge",
+        // The cellars' far ledge, over the ash pit (room "far_ledge", site
+        // cellars_cinder): where the furnace's charge was sorted.
+        at: (-208.0, 168.0),
+        rot: 0.0,
+        floor: Some(11.47),
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.5),
+        ],
+        note: Some((
+            name: "Sorter's chit",
+            text: "Metal doesn't burn, so it's sorted out first. Bedsteads, prams, a piano's iron frame (down the pit, it was too heavy for the hook), tin toys by the bucket.\nEverything else goes in.\nI kept one back, a clockwork bird. It's in the box. I don't know whose it was. Somebody's.",
+            at: (0.0, 0.5, 0.0),
             rot: 0.0,
         )),
     ),

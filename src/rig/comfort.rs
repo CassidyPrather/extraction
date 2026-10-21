@@ -7,8 +7,8 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--no-binaural`, `--no-score`, `--left-handed`,
-//! `--seated`, `--one-handed`, `--no-captions`,
+//! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
+//! `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -34,6 +34,10 @@ pub struct Comfort {
     /// takes it, as the squeeze does. Off by default: an unmeant grab is
     /// worse than a missed one.
     pub finger_grab: bool,
+    /// Climbing (ladders, ledges): a grip on the ladder or both palms on
+    /// the ledge puts you at the top, for those that pulling yourself up
+    /// makes sick.
+    pub climb_teleport: bool,
     /// In the headset, placed sounds through a head-related filter, so
     /// above and behind can be told apart (`audio`); off, they're panned.
     pub binaural: bool,
@@ -51,6 +55,9 @@ pub struct Comfort {
     /// What's said (the driver, the radio, the machines) shown on the
     /// wrist with who's speaking and from where.
     pub captions: bool,
+    /// A faint tick on the wrist when a machine nearby turns certain of
+    /// you (`rig::haptics`).
+    pub machine_tick: bool,
 }
 
 impl Default for Comfort {
@@ -63,12 +70,14 @@ impl Default for Comfort {
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
+            climb_teleport: false,
             binaural: true,
             score: true,
             left_handed: false,
             seated: false,
             one_handed: false,
             captions: true,
+            machine_tick: true,
         }
     }
 }
@@ -120,7 +129,10 @@ impl Comfort {
     /// a laptop GPU (the playtest's Bigscreen Beyond 2 asked for 2980 and
     /// ran at 20-30 fps).
     pub const AUTO_EYE_PX: f32 = 1800.0;
-    pub const RENDER_SCALES: [f32; 6] = [0.0, 0.5, 0.6, 0.7, 0.85, 1.0];
+    /// The SHARPNESS card's steps (0 is auto). None below 60%: at 50% a
+    /// Beyond 2's text loses a quarter of its pixels and drops under the
+    /// legibility floor (`docs/LEGIBILITY.md`).
+    pub const RENDER_SCALES: [f32; 5] = [0.0, 0.6, 0.7, 0.85, 1.0];
 
     /// The share of the runtime's `recommended` width to render.
     pub fn render_scale_for(&self, recommended: u32) -> f32 {
@@ -204,11 +216,27 @@ impl Comfort {
         }
     }
 
+    pub fn machine_tick_label(&self) -> String {
+        if self.machine_tick {
+            "WARNING TICK\non the wrist".into()
+        } else {
+            "WARNING TICK\nOFF".into()
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
         } else {
             "GRAB\nsqueeze".into()
+        }
+    }
+
+    pub fn climb_label(&self) -> String {
+        if self.climb_teleport {
+            "CLIMBING\nstraight to the top".into()
+        } else {
+            "CLIMBING\nhand over hand".into()
         }
     }
 
@@ -265,12 +293,14 @@ impl Comfort {
                 "--snap-turn" => c.smooth_turn = false,
                 "--narrow-dynamics" => c.narrow_dynamics = true,
                 "--finger-grab" => c.finger_grab = true,
+                "--climb-teleport" => c.climb_teleport = true,
                 "--no-binaural" => c.binaural = false,
                 "--no-score" => c.score = false,
                 "--left-handed" => c.left_handed = true,
                 "--seated" => c.seated = true,
                 "--one-handed" => c.one_handed = true,
                 "--no-captions" => c.captions = false,
+                "--no-machine-tick" => c.machine_tick = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
@@ -316,6 +346,6 @@ mod tests {
         assert!((c.render_scale_for(2980) - 0.604).abs() < 0.01);
         assert_eq!(c.render_scale_for(1600), 1.0);
         c.next_render_scale();
-        assert_eq!(c.render_scale_for(2980), 0.5);
+        assert_eq!(c.render_scale_for(2980), 0.6);
     }
 }

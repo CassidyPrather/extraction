@@ -101,9 +101,17 @@ impl Plugin for WreckPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DebrisLedger>()
             .add_message::<WreckImpact>()
+            .add_observer(unjoin)
             .add_systems(
                 FixedUpdate,
-                (ledger_strays, break_up, collapse, spiral, settle)
+                (
+                    ledger_strays,
+                    break_up,
+                    collapse,
+                    spiral,
+                    settle,
+                    tidy_joints,
+                )
                     .chain()
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
@@ -123,7 +131,15 @@ fn debris_body(mass: f32, collider: Collider, inertia: Vec3) -> impl Bundle {
         Restitution::new(0.15),
         LinearDamping(0.15),
         AngularDamping(0.6),
-        CollisionLayers::new(Layer::Robot, [Layer::World, Layer::Robot, Layer::Item]),
+        // A piece never needs more (a wreck throws them at a few m/s); a
+        // leg caught between its joints and a slope was flung at 600 m/s,
+        // and its speculative contacts touched 15,000 ground triangles in
+        // a tick (`render::spikes`).
+        MaxLinearSpeed(25.0),
+        MaxAngularSpeed(40.0),
+        // Item, not Robot: bullets and hands still meet it, but the
+        // player's move-and-slide (World and Robot) walks through it.
+        CollisionLayers::new(Layer::Item, [Layer::World, Layer::Robot, Layer::Item]),
         Settling::default(),
         Visibility::default(),
     )
@@ -153,7 +169,8 @@ fn break_up(
             Option<&super::anim::Gait>,
             Has<super::collector::Collector>,
         ),
-        Without<Broken>,
+        // (The heavy falls in its own way and stays: `heavy`.)
+        (Without<Broken>, Without<super::heavy::Heavy>),
     >,
     parts: Query<(
         &RobotPart,
@@ -240,7 +257,7 @@ fn break_up(
                                 .with_anchor(hip)
                                 .with_swing_limits(0.0, 1.5),
                             JointCollisionDisabled,
-                            ChildOf(upper),
+                            WreckJoint { a: e, b: upper },
                         ))
                         .id();
                     // The knee hinges across the leg's plane.
@@ -255,7 +272,7 @@ fn break_up(
                             .with_anchor(knee)
                             .with_hinge_axis(upper_rot.inverse() * hinge),
                         JointCollisionDisabled,
-                        ChildOf(lower),
+                        WreckJoint { a: upper, b: lower },
                     ));
                     let health = children
                         .iter()
@@ -466,9 +483,47 @@ fn keep(ledger: &mut DebrisLedger, commands: &mut Commands, ids: &[Entity]) {
     ledger.0.extend(ids.iter().copied());
     while ledger.0.len() > MAX_DEBRIS {
         if let Some(old) = ledger.0.pop_front() {
+            // (Its joints go with it: see `unjoin`.)
             if let Ok(mut ec) = commands.get_entity(old) {
                 ec.despawn();
             }
+        }
+    }
+}
+
+/// A joint between two pieces of a wreck (avian joints are entities of
+/// their own; this says which bodies, so the joint can go with them).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct WreckJoint {
+    pub a: Entity,
+    pub b: Entity,
+}
+
+/// When a jointed body goes (despawned with a wreck, capped out of the
+/// debris, a robot leaving), its joints go first, in the same flush: avian
+/// must never hold a joint whose body is gone.
+fn unjoin(
+    gone: On<Remove, RigidBody>,
+    joints: Query<(Entity, &WreckJoint)>,
+    mut commands: Commands,
+) {
+    for (j, wj) in &joints {
+        if wj.a == gone.entity || wj.b == gone.entity {
+            commands.entity(j).try_despawn();
+        }
+    }
+}
+
+/// Joints whose bodies have both come to rest (or gone) are done with.
+fn tidy_joints(
+    mut commands: Commands,
+    joints: Query<(Entity, &WreckJoint)>,
+    bodies: Query<&RigidBody>,
+) {
+    for (j, wj) in &joints {
+        let resting = |e: Entity| bodies.get(e).map_or(true, |b| *b == RigidBody::Static);
+        if resting(wj.a) && resting(wj.b) {
+            commands.entity(j).try_despawn();
         }
     }
 }
@@ -498,7 +553,10 @@ fn collapse(
             });
             for (joint, _, weak) in c.hips.iter().flatten() {
                 if *weak {
-                    commands.entity(*joint).insert(JointDisabled);
+                    // Torn off: the joint goes (never `JointDisabled`: a
+                    // disabled joint whose bodies are despawned later is
+                    // re-added to avian's graph on the way out, and panics).
+                    commands.entity(*joint).try_despawn();
                 }
             }
         }
@@ -507,7 +565,7 @@ fn collapse(
             // lie the same.
             for k in [c.seed % 4, (c.seed / 4 + 1 + c.seed % 4) % 4] {
                 if let Some((joint, _, _)) = c.hips[k as usize] {
-                    commands.entity(joint).insert(JointDisabled);
+                    commands.entity(joint).try_despawn();
                 }
             }
         }
@@ -693,6 +751,21 @@ mod tests {
                 "at rest"
             );
         }
+        // The pieces don't stop the player: their move-and-slide casts
+        // against World and Robot, and debris is neither.
+        let walks = LayerMask::from([Layer::World, Layer::Robot]);
+        for e in &pieces {
+            let layers = app.world().get::<CollisionLayers>(*e).unwrap();
+            assert_eq!(
+                layers.memberships & walks,
+                LayerMask::NONE,
+                "debris in the way"
+            );
+            assert!(
+                layers.memberships.has_all(Layer::Item),
+                "bullets still meet it"
+            );
+        }
         // And the wreck is still a robot, still wrecked, to loot.
         assert!(app.world().get::<Robot>(walker).unwrap().wrecked);
     }
@@ -773,5 +846,83 @@ mod tests {
             Some(&RigidBody::Static),
             "at rest"
         );
+    }
+
+    /// Wrecks come apart on joints; despawning them (a robot leaving, the
+    /// debris cap, a whole tree at once) must never leave avian holding a
+    /// joint whose body is gone. (A torn-off leg's `JointDisabled` joint,
+    /// despawned with its leg, was re-added to the graph and panicked.)
+    #[test]
+    fn jointed_wrecks_despawn_cleanly() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let job = |at: Vec3| super::super::Job {
+            kind: super::super::JobKind::Survey,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let mut robots = Vec::new();
+        for k in 0..6 {
+            let at = zone.on_ground(30.0 + k as f32 * 4.0, 230.0);
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = if k % 2 == 0 {
+                super::super::walker::spawn_walker(&mut c, &zone, at, job(at))
+            } else {
+                super::super::hound::spawn_hound(&mut c, &zone, at, job(at))
+            };
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            robots.push(e);
+        }
+        for _ in 0..20 {
+            app.update();
+        }
+        for e in &robots {
+            app.world_mut().get_mut::<Robot>(*e).unwrap().wrecked = true;
+        }
+        // Mid-collapse (legs tearing off), then gone: half the robots
+        // despawned outright, and enough more wrecks to cap the debris.
+        for _ in 0..70 {
+            app.update();
+        }
+        for e in robots.iter().step_by(2) {
+            app.world_mut().entity_mut(*e).despawn();
+        }
+        for k in 0..8 {
+            let at = zone.on_ground(30.0 + k as f32 * 4.0, 240.0);
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(&mut c, &zone, at, job(at));
+            q.apply(app.world_mut());
+            app.update();
+            app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+            for _ in 0..30 {
+                app.update();
+            }
+        }
+        for _ in 0..(90 * 4) {
+            app.update();
+        }
+        // And every joint left points at bodies that are there.
+        let joints: Vec<WreckJoint> = app
+            .world_mut()
+            .query::<&WreckJoint>()
+            .iter(app.world())
+            .copied()
+            .collect();
+        for j in joints {
+            assert!(app.world().get_entity(j.a).is_ok() && app.world().get_entity(j.b).is_ok());
+        }
+        let debris = app.world_mut().query::<&Debris>().iter(app.world()).count();
+        assert!(debris <= MAX_DEBRIS, "{debris} pieces");
     }
 }

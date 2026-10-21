@@ -55,15 +55,15 @@ pub const ROWS: usize = ((BOARD.y - HEADER - 0.02) / ROW) as usize;
 
 /// Each valley's column: its left edge (board space) and cards a row,
 /// sized so every note there is fits.
-pub fn columns() -> &'static [(f32, usize); 3] {
-    static COLUMNS: std::sync::OnceLock<[(f32, usize); 3]> = std::sync::OnceLock::new();
+pub fn columns() -> &'static [(f32, usize)] {
+    static COLUMNS: std::sync::OnceLock<Vec<(f32, usize)>> = std::sync::OnceLock::new();
     COLUMNS.get_or_init(|| {
         let ids: Vec<String> = every_note().into_iter().map(|(i, _)| i).collect();
-        let mut counts = [0usize; 3];
+        let mut counts = vec![0usize; crate::progression::valleys().len()];
         for (_, col, _) in layout(&ids) {
             counts[col] += 1;
         }
-        let mut out = [(0.0, 1); 3];
+        let mut out = vec![(0.0, 1); counts.len()];
         let mut x = -BOARD.x * 0.5;
         for (col, n) in counts.iter().enumerate() {
             let across = n.div_ceil(ROWS).max(1);
@@ -261,11 +261,11 @@ pub fn card_pose(column: usize, n: usize, id: &str) -> Transform {
 
 /// Where each read note is pinned: (id, column, place in column).
 pub fn layout(read: &[String]) -> Vec<(String, usize, usize)> {
-    let valleys = crate::world::story::VALLEYS;
-    let mut counts = [0usize; 3];
+    let valleys = crate::progression::valleys();
+    let mut counts = vec![0usize; valleys.len()];
     let mut out = Vec::new();
     for id in read {
-        let Some(col) = split(id).and_then(|(m, _)| valleys.iter().position(|v| *v == m)) else {
+        let Some(col) = split(id).and_then(|(m, _)| valleys.iter().position(|v| v.0 == m)) else {
             continue;
         };
         out.push((id.clone(), col, counts[col]));
@@ -324,6 +324,7 @@ fn pin_cards(
         commands.spawn((
             Name::new("Pinned note"),
             Pin { id: id.clone() },
+            crate::render::legibility::TextSource::PinnedNote,
             ScreenText {
                 text: crate::render::screen::wrap_to_fit(name, CARD, ScreenStyle::Card),
                 size: CARD,
@@ -340,13 +341,14 @@ fn pin_cards(
             ChildOf(board),
         ));
     }
-    for col in 0..3 {
+    for col in 0..columns().len() {
         let used = placed.iter().any(|(_, c, _)| *c == col);
         if used && !heads.iter().any(|h| h.0 == col) {
             let name = crate::progression::valleys()[col].1.name.to_uppercase();
             commands.spawn((
                 Name::new("Board column"),
                 ColumnHead(col),
+                crate::render::legibility::TextSource::BoardColumn,
                 ScreenText {
                     text: name,
                     size: Vec2::new(column_width(columns()[col].1) - 0.03, HEADER - 0.015),
@@ -415,6 +417,7 @@ fn press_cards(
         commands.spawn((
             Name::new("Note taken down"),
             TakenDown { id: pin.id.clone() },
+            crate::render::legibility::TextSource::Note,
             note,
             Pressable::Note,
             Grabbable {
@@ -562,7 +565,7 @@ fn string_visuals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel};
 
     /// Every card that could be pinned reads from the bed, and every
     /// valley's notes fit their column without overlapping.
@@ -577,12 +580,13 @@ mod tests {
                 size: CARD,
                 style: ScreenStyle::Card,
             };
-            let deg = (em_metres(&card) / read_from(&card)).atan().to_degrees();
-            assert!(deg >= MIN_EM_DEG, "{id}: {deg:.2} deg");
+            if let Err(e) = check_panel(&card, TextSource::PinnedNote) {
+                panic!("{id}: {e}");
+            }
         }
         let ids: Vec<String> = all.iter().map(|(i, _)| i.clone()).collect();
         // Every valley's notes fit its column, and the columns the board.
-        for col in 0..3 {
+        for col in 0..columns().len() {
             let n = layout(&ids).iter().filter(|(_, c, _)| *c == col).count();
             let (_, across) = columns()[col];
             assert!(

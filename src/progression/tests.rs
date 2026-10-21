@@ -63,6 +63,7 @@ fn jobs_persist_across_save_and_load() {
             region: "The quarry".into(),
             at: None,
             place: None,
+            overnight: false,
         });
     }
     save_now(&mut a);
@@ -153,6 +154,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             local: [0.0, 0.05, -0.5 + i as f32 * 0.016],
             gun: None,
             inserted: Vec::new(),
+            loads: Default::default(),
         });
     }
     assert!(career.progress.is_none());
@@ -185,6 +187,7 @@ fn a_recover_job_puts_a_recorder_out_and_takes_it_home() {
         region: region.into(),
         at: None,
         place: None,
+        overnight: false,
     });
     for _ in 0..3 {
         app.update();
@@ -346,7 +349,7 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
 #[test]
 fn the_longest_job_and_career_page_still_read() {
     use crate::raid::bench::ScreenText;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel};
     let mut app = crate::raid::requests::tests::app();
     let long = "in the hut under the mast out past the Woodward's cabin.";
     {
@@ -363,6 +366,7 @@ fn the_longest_job_and_career_page_still_read() {
             region: "The slag heaps".into(),
             at: None,
             place: Some(long.into()),
+            overnight: false,
         });
     }
     {
@@ -395,12 +399,14 @@ fn the_longest_job_and_career_page_still_read() {
             continue;
         }
         seen += 1;
-        let deg = (em_metres(screen) / read_from(screen)).atan().to_degrees();
-        assert!(
-            deg >= MIN_EM_DEG,
-            "{name}: {deg:.2} deg letters:\n{}",
-            screen.text
-        );
+        let source = if name.as_str() == "Logbook" {
+            TextSource::Logbook
+        } else {
+            TextSource::Request
+        };
+        if let Err(e) = check_panel(screen, source) {
+            panic!("{name}: {e}\n{}", screen.text);
+        }
     }
     assert_eq!(seen, 2);
 }
@@ -543,6 +549,7 @@ fn a_recover_job_can_send_you_underground() {
         region: name.clone(),
         at: None,
         place: None,
+        overnight: false,
     });
     for _ in 0..40 {
         app.update();

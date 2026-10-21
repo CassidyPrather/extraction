@@ -25,6 +25,7 @@ impl Plugin for RobotVisualsPlugin {
             super::reel::ReelPlugin,
             super::fx::RobotFxPlugin,
             super::sorter_look::SorterLookPlugin,
+            super::heavy_look::HeavyLookPlugin,
         ))
         .add_systems(
             Update,
@@ -196,10 +197,15 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
+    heavies: Query<(), With<super::heavy::Heavy>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
+        // (The heavy dresses itself: `heavy_look`.)
+        if heavies.contains(part.robot) {
+            continue;
+        }
         if let Ok(robot) = robots.get(part.robot) {
             models.request(model_path(robot.kind), &server);
         }
@@ -1545,10 +1551,13 @@ fn alert_eyes(
                 let h = materials.add(base);
                 // A soft glow round the eye, so in the dusk and the dark
                 // you see its mood before you see it.
+                // (Lit by its emissive alone, so it can outshine the
+                // night: an unlit colour stops at white.)
                 let glow = materials.add(StandardMaterial {
-                    base_color: Color::srgba(1.0, 0.25, 0.1, 0.0),
+                    base_color: Color::BLACK,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
                     alpha_mode: AlphaMode::Add,
-                    unlit: true,
                     fog_enabled: false,
                     ..default()
                 });
@@ -1575,6 +1584,11 @@ fn alert_eyes(
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
+    // After dark the eye opens up to a hard point (emissive about 40 at
+    // rest, past 100 once it has you), so a walker reads at 60-80 m on a
+    // clear night, and its glow stays round it even calm.
+    let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
+    let gain = 1.0 + 9.0 * night;
     for (robot, aware, own, _) in &robots {
         let Some(own) = own else {
             continue;
@@ -1595,24 +1609,25 @@ fn alert_eyes(
             0.0
         };
         // Its colour and, for eyes that can't tell red from orange (or a
-        // look from far off), its rhythm (`render::tells`).
+        // look from far off), its rhythm (`render::tells`); brighter after
+        // dark.
         let [r, g, b] = crate::render::tells::eye_colour(a, x);
         let pulse = crate::render::tells::eye_pulse(
             a,
             aware.can_see_target,
             now + robot.index_u32() as f32 * 0.37,
         );
-        let want = LinearRgba::rgb(r, g, b) * stutter * pulse;
+        let want = LinearRgba::rgb(r, g, b) * stutter * pulse * gain;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;
             }
         }
-        let alpha = (0.03 + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0);
-        let tint = Color::srgba(1.0, 0.25 + 0.3 * x, 0.1 + 0.1 * x, alpha);
+        let alpha = (0.03 + 0.12 * night + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0);
+        let tint = LinearRgba::rgb(1.0, 0.08 + 0.3 * x, 0.03 + 0.08 * x) * alpha * 14.0;
         if let Some(mut g) = materials.get_mut(&own.1) {
-            if g.base_color != tint {
-                g.base_color = tint;
+            if g.emissive != tint {
+                g.emissive = tint;
             }
         }
     }

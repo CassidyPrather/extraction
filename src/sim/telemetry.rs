@@ -339,6 +339,7 @@ pub fn finish(
     mut exit: MessageWriter<AppExit>,
     progression: Option<Res<crate::progression::Progression>>,
     zone: Res<crate::world::Zone>,
+    house: Option<Res<crate::progression::safehouse::Safehouse>>,
 ) {
     if log.finished {
         return;
@@ -409,6 +410,9 @@ pub fn finish(
                 }
                 _ => None,
             }),
+            // Nights slept in the safehouse (`SIM_OVERNIGHT`).
+            "nights": house.as_ref().map_or(0, |h| h.nights_out),
+            "night_visits": house.as_ref().map_or(0, |h| h.visits),
             "x": round(pos.x, 1),
             "z": round(pos.z, 1),
         }),

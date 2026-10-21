@@ -45,6 +45,7 @@ USED = {
     "f1": ["thrown"],
     "matches": ["kitchen"],
     "fuel_can": ["short exfil"],
+    "bolt": ["thrown at anomalies"],
 }
 
 

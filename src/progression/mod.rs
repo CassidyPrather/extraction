@@ -29,12 +29,6 @@ use crate::world::{Layer, Zone};
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
 pub struct Progression(pub Progress);
 
-/// Lev has been into the depot with you (Story's epilogue, saved as
-/// `Stats::epilogue`): Story's systems set it; the job card's asks and the
-/// career page change with it.
-#[derive(Resource, Debug, Clone, Copy, Default, PartialEq)]
-pub struct Epilogue(pub bool);
-
 /// A job was handed in at the card (`raid/requests.rs`).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct JobDone;
@@ -60,8 +54,8 @@ pub struct ProgressionPlugin;
 
 impl Plugin for ProgressionPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(safehouse::SafehousePlugin);
         app.init_resource::<Progression>()
-            .init_resource::<Epilogue>()
             .add_message::<JobDone>()
             .add_systems(
                 Update,
@@ -154,12 +148,17 @@ pub fn job_text(job: &Job, catalog: &Catalog, map: &str, epilogue: bool) -> Stri
             map: m,
             region,
             place,
+            overnight,
             ..
         } => {
             let where_ = place
                 .clone()
                 .unwrap_or_else(|| format!("somewhere in the {region}."));
-            elsewhere(m) + &lines::ask_recover(&where_)
+            if *overnight {
+                elsewhere(m) + &lines::ask_expedition(&where_)
+            } else {
+                elsewhere(m) + &lines::ask_recover(&where_)
+            }
         }
         Job::Letter => elsewhere(extraction_core::progression::LETTER_MAP) + lines::ASK_LETTER,
         Job::Ledger => elsewhere(extraction_core::progression::LEDGER_MAP) + lines::ASK_LEDGER,
@@ -297,6 +296,7 @@ fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>)
             },
             Collider::cuboid(0.3, 0.12, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
             crate::raid::bench::ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.12),
@@ -407,11 +407,13 @@ fn job_done(
 fn offer_job(
     opts: Res<LaunchOptions>,
     raid: Res<Raid>,
-    epilogue: Res<Epilogue>,
+    // Lev has been into the depot with you (Story's epilogue): the job
+    // card's asks ease off.
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut progression: ResMut<Progression>,
 ) {
-    if progression.0.quiet != epilogue.0 {
-        progression.0.quiet = epilogue.0;
+    if progression.0.quiet != epilogue.done {
+        progression.0.quiet = epilogue.done;
     }
     if progression.0.job.is_some() {
         return;
@@ -467,6 +469,7 @@ fn place_recorder(
         region,
         at,
         place,
+        ..
     }) = &mut progression.0.job
     else {
         return;
@@ -493,10 +496,14 @@ fn place_recorder(
             p.xz().distance(Vec2::from_array(*at)) < UNDERGROUND_REACH
                 && p.y < zone.ground(p.x, p.z) - 1.5
         }
-        None => zone
-            .map
-            .region_at([p.x, p.z])
-            .is_some_and(|r| r.name == *region),
+        // A region's: above ground (a site under it is its own job).
+        None => {
+            p.y >= zone.ground(p.x, p.z) - 1.5
+                && zone
+                    .map
+                    .region_at([p.x, p.z])
+                    .is_some_and(|r| r.name == *region)
+        }
     };
     let mut candidates: Vec<Vec3> = spots
         .iter()
@@ -909,6 +916,7 @@ pub fn career_page(
 }
 
 pub mod lines;
+pub mod safehouse;
 
 #[cfg(test)]
 mod tests;

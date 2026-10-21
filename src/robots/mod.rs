@@ -21,6 +21,9 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod heavy;
+pub mod heavy_look;
+pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
@@ -254,6 +257,8 @@ impl Plugin for RobotsPlugin {
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
+                    heavy::HeavyPlugin,
+                    heavy_mind::HeavyMindPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
@@ -280,7 +285,11 @@ fn damage_parts(
     mut robots: Query<&mut Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
     mut noise: MessageWriter<Noise>,
+    mut minds: MessageWriter<search::MindShift>,
+    mut log: ResMut<search::MindLog>,
+    time: Res<Time>,
 ) {
+    let now = time.elapsed_secs();
     for hit in hits.read() {
         let Ok((mut part, gt)) = parts.get_mut(hit.entity) else {
             continue;
@@ -306,7 +315,22 @@ fn damage_parts(
                 if let Ok(mut r) = robots.get_mut(part.robot) {
                     r.wrecked = true;
                 }
+                log.shift(
+                    &mut minds,
+                    part.robot,
+                    search::Mind::Dying,
+                    gt.translation(),
+                    now,
+                );
             }
+        } else {
+            log.shift(
+                &mut minds,
+                part.robot,
+                search::Mind::Hurt,
+                gt.translation(),
+                now,
+            );
         }
     }
 }

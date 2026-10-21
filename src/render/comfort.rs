@@ -159,9 +159,10 @@ fn add_wrist_panel(
         }
         commands.entity(e).with_child((
             WristPanel(hand.side),
+            crate::render::legibility::TextSource::Wrist,
             ScreenText {
                 text: String::new(),
-                size: Vec2::new(0.075, 0.045),
+                size: WRIST_SIZE,
                 style: ScreenStyle::Lcd,
             },
             // On the back of the wrist, on the glove's display housing, like
@@ -225,54 +226,36 @@ fn wrist_panel(
     let clock = if raid.phase == crate::raid::Phase::AtBase {
         "AT BASE".to_string()
     } else if surge > 0.0 {
-        format!("SURGE {:>2.0}m", (surge / 60.0).ceil())
+        format!("SURGE {:>2.0}M", (surge / 60.0).ceil())
     } else {
         "SURGE NOW".to_string()
     };
-    let bleed = health.bleeding > 0.05;
-    // Captions: who's speaking and from where on a line of its own, the
-    // status squeezed onto one line to make room.
+    // Captions: who's speaking and from where, on a line of their own.
     let caption = comfort
         .filter(|c| c.captions)
         .and(captions)
         .and_then(|c| c.last.clone())
         .filter(|_| raid.log.last().is_some());
-    let mut text = if caption.is_some() {
-        format!(
-            "{clock} HP{:.0}{}",
-            health.hp.max(0.0),
-            if bleed {
-                " BLEED".to_string()
-            } else {
-                format!(" {:.0}kg", body.carried_kg)
-            }
-        )
-    } else {
-        format!(
-            "{clock}  {:>4.1}kg\nHP {:>3.0}{}",
-            body.carried_kg,
-            health.hp.max(0.0),
-            if bleed { " BLEED" } else { "" }
-        )
-    };
-    if let Some(c) = caption {
+    let header = caption.as_ref().and_then(|c| {
         let me = locals.iter().next();
         let head = heads
             .iter()
             .find(|(_, p)| Some(p.parent()) == me)
             .map(|(g, _)| g);
-        text += "\n";
-        text += &c.header(head).unwrap_or_default();
-        for line in crate::render::screen::wrap(&c.text, WRIST_COLUMNS, 3) {
-            text += "\n";
-            text += &line;
-        }
-    } else if let Some((msg, _)) = raid.log.last() {
-        for line in crate::render::screen::wrap(msg, WRIST_COLUMNS, 3) {
-            text += "\n";
-            text += &line;
-        }
-    }
+        c.header(head)
+    });
+    let said = match (&caption, &header) {
+        (Some(c), Some(h)) => Some(Said::Captioned(h, &c.text)),
+        _ => raid.log.last().map(|(m, _)| Said::Plain(m.as_str())),
+    };
+    let text = wrist_text(
+        &clock,
+        body.carried_kg,
+        health.hp,
+        health.bleeding > 0.05,
+        said,
+        page(&time),
+    );
     for mut p in &mut panels {
         if p.text != text {
             p.text = text.clone();
@@ -296,9 +279,10 @@ fn add_radio_screens(
         }
         commands.entity(e).with_child((
             RadioScreen,
+            crate::render::legibility::TextSource::Radio,
             ScreenText {
                 text: "CH4  ----".into(),
-                size: Vec2::new(0.056, 0.032),
+                size: RADIO_SIZE,
                 style: ScreenStyle::Lcd,
             },
             // Over the tuning window, above the speaker grille (the
@@ -333,11 +317,11 @@ fn radio_screens(
             }
         )
     } else {
-        raid.log[n.saturating_sub(2)..]
+        let last: Vec<String> = raid.log[n.saturating_sub(2)..]
             .iter()
-            .flat_map(|(m, _)| crate::render::screen::wrap(m, RADIO_COLUMNS, 3))
-            .collect::<Vec<_>>()
-            .join("\n")
+            .map(|(m, _)| m.clone())
+            .collect();
+        radio_text(&last, page(&time))
     };
     for mut s in &mut screens {
         if s.text != text {
@@ -346,15 +330,114 @@ fn radio_screens(
     }
 }
 
-const RADIO_COLUMNS: usize = 16;
+/// Characters a line and lines a page on the radio's screen.
+const RADIO_COLUMNS: usize = 15;
+const RADIO_LINES: usize = 4;
+
+/// Lines of the driver's words a page on the wrist.
+const WRIST_LINES: usize = 3;
+
+/// Seconds a page of a long message stays up.
+const PAGE_SECS: f32 = 3.0;
+
+/// The wrist readout's panel (as big as the cuff's housing takes) and the
+/// radio's screen (m).
+pub const WRIST_SIZE: Vec2 = Vec2::new(0.078, 0.048);
+pub const RADIO_SIZE: Vec2 = Vec2::new(0.056, 0.032);
+
+/// Which page of a long message shows now.
+fn page(time: &Time) -> usize {
+    (time.elapsed_secs() / PAGE_SECS) as usize
+}
+
+/// Page `page` (cycling) of `msg` in capitals, wrapped to `columns` and
+/// `lines` a page: the little LCDs show capitals (30% taller than lower
+/// case for the same type) and page a long message rather than shrink it
+/// (`docs/LEGIBILITY.md`).
+fn paged(msg: &str, columns: usize, lines: usize, page: usize) -> Vec<String> {
+    let all = crate::render::screen::wrap(&msg.to_uppercase(), columns, usize::MAX);
+    let pages = all.len().div_ceil(lines).max(1);
+    let p = page % pages;
+    all.into_iter().skip(p * lines).take(lines).collect()
+}
+
+/// The last thing said, for the wrist.
+pub enum Said<'a> {
+    /// As logged.
+    Plain(&'a str),
+    /// A caption: the speaker line ("LEV, RADIO"), then the words.
+    Captioned(&'a str, &'a str),
+}
+
+/// What the wrist shows: the clock, the load, health, and the driver's
+/// last words (a page at a time). A caption's speaker line takes one of
+/// the words' lines, so the panel stays as tall.
+pub fn wrist_text(
+    clock: &str,
+    kg: f32,
+    hp: f32,
+    bleeding: bool,
+    said: Option<Said>,
+    page: usize,
+) -> String {
+    let mut text = format!(
+        "{clock} {:>5.1}KG\nHP {:>3.0}{}",
+        kg,
+        hp.max(0.0),
+        if bleeding { " BLEED" } else { "" }
+    );
+    let (header, msg, lines) = match said {
+        Some(Said::Plain(m)) => (None, m, WRIST_LINES),
+        Some(Said::Captioned(h, m)) => (Some(h), m, WRIST_LINES - 1),
+        None => return text,
+    };
+    if let Some(h) = header {
+        text += "\n";
+        text += &h.to_uppercase();
+    }
+    for line in paged(msg, WRIST_COLUMNS, lines, page) {
+        text += "\n";
+        text += &line;
+    }
+    text
+}
+
+/// What the radio shows: the latest transmission, a page at a time.
+pub fn radio_text(heard: &[String], page: usize) -> String {
+    heard
+        .last()
+        .map(|m| paged(m, RADIO_COLUMNS, RADIO_LINES, page).join("\n"))
+        .unwrap_or_default()
+}
 
 /// Characters per line on the wrist: narrow keeps the type big.
-const WRIST_COLUMNS: usize = 26;
+const WRIST_COLUMNS: usize = 18;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::render::screen::wrap;
+
+    #[test]
+    fn long_messages_page_rather_than_lose_their_end() {
+        let msg = "Truck: \"No fuel in the stores for the short run. Head for an RV.\" And more.";
+        let mut seen = String::new();
+        for p in 0..4 {
+            let lines = paged(msg, WRIST_COLUMNS, WRIST_LINES, p);
+            assert!(lines.len() <= WRIST_LINES);
+            assert!(lines.iter().all(|l| l.chars().count() <= WRIST_COLUMNS));
+            if p < 2 {
+                seen += &lines.join(" ");
+                seen += " ";
+            }
+        }
+        assert_eq!(seen.trim(), msg.to_uppercase());
+        // It cycles.
+        assert_eq!(
+            paged(msg, WRIST_COLUMNS, WRIST_LINES, 0),
+            paged(msg, WRIST_COLUMNS, WRIST_LINES, 2)
+        );
+    }
 
     #[test]
     fn wrist_messages_wrap_rather_than_lose_their_end() {

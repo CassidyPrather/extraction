@@ -72,7 +72,7 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 10 | Held just above the worst measured (wood views) |
+| Overdraw, mean layers a pixel | 11.5 | Was 10; Kettle's quarry view now stands under a spruce clump (10.27), see "Gauge margins" |
 | Overdraw, 95th percentile | 35 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
@@ -274,3 +274,164 @@ the start): 40 > 20 ms, PostUpdate 68% > 37% of the frame. Today, single
 threaded and dev-built, the moment is about 20-23 ms: PostUpdate 8
 (visibility 2.2, transforms 1.3), Update 5, physics 3.7, game logic 2.7;
 past the top few, a long tail of systems under 0.1 ms each.
+
+## Hitches: the frames after one-off events
+
+Averages hold; a headset feels the single long frame. `render::spikes`
+sets off the raid's heavy one-off events in the busy moment above (the
+same staged fight, `budget::tests::busy_scene`) and times every frame for
+a second after each: a grenade (300 fragments), a walker and a drone
+wrecking, each kind of Surge bloom, the Depot's residents coming out, the
+truck's homecoming; and every frame of a valley loading.
+`render::spikes::tests::hitches_hold_their_ceiling` holds each event's
+worst frame to 3x the moment's median frame and loading's frames after
+the second to 10x (ratios in the same run). It's wall-clock, so it isn't
+in the default suite: on a busy machine (or a busy container) one long
+frame from anything else reads as a hitch, and it failed other sessions'
+suites that way. `scripts/hitches.sh` runs it per valley, in a process of
+its own (Bevy's task pools are the process's), best of three per event,
+and `scripts/bench.sh` calls it (`HITCHES=0` to skip). With
+`SPIKE_PROFILE=1` and `--features "bevy/trace bevy/debug"` it names the
+systems in each worst frame. The suite holds the hitches it found by
+things that don't depend on the clock (`render::spikes::guards`): the
+collider trees are optimised in place, and a walker wrecked mid-stride on
+Kettle Pass's slope keeps its debris under 400 contact points a tick and
+25 m/s (uncapped: 1900 points, 1400 m/s).
+
+Marrow Creek, one thread, the moment's median 18 ms:
+
+| event | before | after |
+|---|---|---|
+| grenade (300 fragments; ~170 land the first tick) | 28 ms | 30 ms |
+| walker / drone wreck | 31 / 32 ms | 28 / 28 ms |
+| blooms (Lift, Burner, Snare, Well, Mirror) | 29-35 ms | 24-36 ms |
+| Depot residents (7 robots) | 36 ms | 33 ms |
+| truck homecoming | **78 ms** | 27-31 ms |
+| loading, after the first frame | **p99 147 ms, worst 978** | p99 65 ms, worst 215 (frame 2) |
+
+Most events sit inside the moment's own spread (p99 28 ms): fragments are
+cheap, wrecks and blooms add a few entities. The two hitches were:
+
+- **The collider trees.** Avian optimises its trees as an async task and
+  blocks on it at the step's end. The trees are small (Marrow Creek: 505
+  static proxies, 311 dynamic, 82 kinematic), but the task queues behind
+  the forest and grass chunk builds on the same pool, so the frame waits
+  for those: 33-114 ms on `block_on_optimize_trees` while chunks stream,
+  worst when the truck brings the player home. `GamePlugin` now optimises
+  them in place (`ColliderTreeOptimization::use_async_tasks = false`):
+  microseconds at this size.
+- **Dressing buildings.** `dress_buildings` baked each building's ambient
+  occlusion on the main thread: the Depot's 1348 pieces 440 ms, the
+  bunker's 250, every house 20-50, each plank house the same bake again.
+  It's baked once a prefab on the async pool now (`buildings::Bake`).
+
+- **Flung debris.** In Kettle Pass a wrecked walker's leg, caught
+  between its joints and the slope, was thrown at up to 680 m/s and
+  1500 rad/s; avian's speculative contacts then reach metres ahead, and
+  the leg touched 15,220 ground-triangle contact points in one tick (20
+  ms of contact solving, 54 ms frame, 3.0-3.4x the median in four runs).
+  Debris is now capped at 25 m/s and 40 rad/s (it's thrown at a few
+  m/s): 22 ms, 1.6x. Why the joints fling it is the Robots workstream's
+  to find.
+
+Kettle Pass and Cinder Works hold the same ceilings (`SPIKE_MAP`): their
+events are all 1.2-2.6x the median, loading's worst after the second
+frame 79 and 102 ms.
+
+Still there: the first frame (Startup: building the Zone, terrain and
+rock meshes, 6.7 s on one thread) runs before the app submits a frame, so
+the headset shows its own loading indicator; and frame 2 (215 ms: first
+text layout, the screens). Neither is a hitch mid-raid.
+
+### First use: pipelines
+
+Bevy builds a pipeline the first time a mesh needs one, on the async
+compute pool: the render thread doesn't wait, but the mesh isn't drawn
+until it's ready. On a headset that's a muzzle flash that never shows (it
+lives 35 ms) or a bloom that opens a beat late. `EXTRACTION_PIPELINES=1`
+logs each pipeline as it's queued and ready; `EXTRACTION_FIRSTS=<frame>`
+sets off, in front of the camera, a shot, impacts on every surface, a
+robot struck, a grenade, each bloom and a wreck. On lavapipe:
+
+    D=$(mktemp -d); EXTRACTION_PIPELINES=1 EXTRACTION_FIRSTS=1000 \
+    WGPU_BACKEND=vulkan xvfb-run -a -s "-screen 0 1024x1024x24" \
+    ./target/fast/extraction --map marrow_creek --data-dir $D --new-game \
+    --screenshot out.png --frames 2100 --camera 170,0,230,315,-2 \
+    --weather downpour --size 1024x1024 --no-robots
+
+Before the warm-up, ten pipelines were first built in the raid, each a
+frame or more of the thing missing (lavapipe took 0.7-4 s apiece; a
+headset's driver tens of milliseconds): the muzzle flash's additive
+material at the first shot, three at the first Lift bloom (its particles,
+its haze, its ground mark), one each at the first Burner and Snare, and
+three more as a gun and a walker first came into view.
+
+`render::warmup` now keeps a shelf stocked for the first 900 frames of a
+session (ten seconds in the truck; `EXTRACTION_WARMUP=<frames>` to change,
+`0` to leave it out): one entry for every distinct material key, mesh
+layout, visibility-range dither and shadow casting among the things in
+the world, plus every effect material nothing wears yet, each drawn 30 cm
+in front of the eye at a millionth of its size, with bounds of its own.
+It restocks every half second (a material isn't drawn until its textures
+are in, and things stream in), and for the first restocks it holds a
+decoy anomaly of each kind 5 km under the map, since a valley's cycle may
+not hold every kind the Surge can open. Marrow Creek shelves 64 kinds of
+thing; every pipeline the raid's firsts need is then built in the first
+200 frames, and none at first use (the same run: a shot, impacts on every
+surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
+`warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
+(it stocks, the decoys go, nothing's left after).
+
+Neither change shows: `docs/shots/performance/hitches_village.png` is the
+village at frame 600 (lavapipe, clear day) with the shelf stocked and the
+buildings dressed from the background bake, and the same frame with the
+old in-place bake and no shelf is identical to the pixel.
+
+## Gauge margins
+
+The gauges here judged other sessions' work, and some sat on their limits
+or flaked; one pass made them say what they measured and fail only on
+something real (main at 43940f8, fetched foliage):
+
+- **Counted once the view stops changing.** Each view used to be counted
+  30 frames after the camera moved, wherever the streaming had got to:
+  Marrow Creek's aerial view read 1193-1201 draws run to run (and over
+  1200 in another session's suite). Now it's counted when draws and
+  triangles have held still for three checks ten frames apart: 1195
+  every time.
+- **Which scene.** With the fetched foliage textures the forest is cards
+  and impostors (what ships); without them, a lighter fallback (Marrow's
+  aerial: 818 draws instead of 1195). Both are held; every message names
+  the one measured, and the fallback says it isn't the shipped scene.
+- **A floor, not a measure.** "A view counted almost nothing" was more
+  than 50 draws, and the Training Yard's emptiest views draw 48-90 by path
+  and schedule. It's 20 now.
+- **Kettle Pass's quarry, overdraw 10.27 > 10.** Not the new ivy: the
+  forest reshuffled with Map design's new region, and the view's camera
+  now stands 1.3 m from a spruce with three more within 9 m (on the old
+  map, one pine within 10 m). Tree cards are 6.1 of its layers, and card
+  quads within 2 m of the eye 2.4 of those (within 1 m, 1.3). Standing
+  under a spruce clump is a fair worst case, so the limit is re-based to
+  11.5 (12% over it). The cut that would earn 10 back: collapse foliage
+  cards within about 1.5 m of the eye in their vertex shader, as the
+  impostors' near cut does (in VR those are flat sheets in your face);
+  it needs each card's centre in a vertex attribute, and the tree shader
+  is Visual design's.
+- **Where each valley stands** (worst share of any limit in any view):
+  Marrow 1.00 (aerial, 1195 of 1200 draws), Kettle 0.89 (quarry overdraw,
+  of 11.5), Training Yard 0.90 (aerial shadow draws), Cinder 0.86 (gate
+  shadows). The hands are 80 draws in every view (each finger a mesh);
+  merged, they'd give every view 6% back, Marrow's aerial included.
+- **Forest detail around the impostor rigs.** The forest streamed near
+  trees (cards, cores) round every 3D camera, the impostors' capture rigs
+  included: rigs 4 km down under x = 0-480, which in the gauges' GPU-less
+  harness never get their picture back and stay. Near trees stood round
+  them (by horizontal distance), and the views near them counted those.
+  In the game the rigs go once their picture's read back, a few frames
+  into the load, so only the gauges were wrong; the forest now streams
+  for the cameras that don't draw into an image. Marrow Creek: aerial
+  1150 > 1003 draws, spruce 1097 > 844, summit 715 > 460, creek 502 >
+  249 (on main, where wildlife and the new scatter took the aerial to
+  1211, expect about 1064).
+- The hitch gauge's wall-clock test is out of the default suite
+  (`scripts/hitches.sh`), its finds held by counts (see "Hitches").

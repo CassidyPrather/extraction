@@ -76,11 +76,12 @@ pub fn clock(head: &GlobalTransform, at: Vec3) -> u8 {
 }
 
 impl Caption {
-    /// The wrist's speaker line: "LEV, RADIO", "LEV, 11 O'CLOCK",
-    /// "MACHINES, 2 O'CLOCK"; none for narration.
+    /// The wrist's speaker line: "LEV, RADIO", "LEV AT 11", "MACHINES AT
+    /// 2" (where on the clock face, 12 ahead); none for narration. Short
+    /// enough for a line of the wrist.
     pub fn header(&self, head: Option<&GlobalTransform>) -> Option<String> {
         let at = |what: &str| match (self.from, head) {
-            (Some(p), Some(h)) => format!("{what}, {} O'CLOCK", clock(h, p)),
+            (Some(p), Some(h)) => format!("{what} AT {}", clock(h, p)),
             _ => format!("{what}, RADIO"),
         };
         match self.speaker {
@@ -206,9 +207,12 @@ mod tests {
         let c = app.world().resource::<Captions>().last.clone().unwrap();
         assert_eq!(c.speaker, Speaker::Machines);
         let head = GlobalTransform::from(Transform::from_xyz(0.0, 1.6, 0.0));
-        assert_eq!(
-            c.header(Some(&head)).as_deref(),
-            Some("MACHINES, 3 O'CLOCK")
-        );
+        assert_eq!(c.header(Some(&head)).as_deref(), Some("MACHINES AT 3"));
+        // The longest fits a line of the wrist.
+        let far = Caption {
+            from: Some(Vec3::new(0.0, 0.0, -10.0)),
+            ..c
+        };
+        assert!(far.header(Some(&head)).unwrap().chars().count() <= 18);
     }
 }
