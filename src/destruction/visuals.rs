@@ -405,6 +405,7 @@ fn shoot_for_screenshot(
     player: Query<Entity, With<crate::rig::LocalPlayer>>,
     spatial: avian3d::prelude::SpatialQuery,
     mut breaches: MessageWriter<super::hooks::Breach>,
+    parts: Query<(), With<super::strip::Strippable>>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -434,6 +435,30 @@ fn shoot_for_screenshot(
                 at: eye + dir * (hit.distance + 0.05),
                 out: -dir,
             });
+        }
+    }
+    // `EXTRACTION_STRIP=1`: twenty frames before the capture, the part
+    // the view meets (a shutter, a bus panel) comes off, as to a crowbar.
+    if std::env::var("EXTRACTION_STRIP").is_ok() && *frame + 20 == opts.frames {
+        let ground = zone.ground(cam.x, cam.z);
+        let eye = Vec3::new(
+            cam.x,
+            if cam.y == 0.0 { ground + 1.7 } else { cam.y },
+            cam.z,
+        );
+        let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+        if let Some(hit) = spatial.cast_ray(
+            eye,
+            Dir3::new(rot * Vec3::NEG_Z).unwrap_or(Dir3::NEG_Z),
+            30.0,
+            true,
+            &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        ) {
+            if parts.contains(hit.entity) {
+                commands.entity(hit.entity).despawn();
+            } else {
+                warn!("EXTRACTION_STRIP: the view meets no wreck part");
+            }
         }
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
