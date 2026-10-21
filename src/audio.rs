@@ -399,6 +399,7 @@ impl Plugin for AudioPlugin {
                     room_acoustics,
                     binaural_switch,
                     score_drive,
+                    (animal_sounds, breath_sounds, water_sounds),
                 ),
             )
             // After everything that plays, so a sound is placed the frame
@@ -2596,10 +2597,12 @@ fn flock_sounds(
     use crate::wildlife::FlushCause;
     use crate::wildlife::flock::Species;
     for f in flushed.read() {
-        let calls = match flocks.get(f.flock).map(|fl| fl.species) {
-            Ok(Species::Raven) => "ambience/raven",
-            Ok(Species::Jackdaw) => "ambience/jackdaw",
-            _ => "ambience/crow",
+        let (calls, cue) = match flocks.get(f.flock).map(|fl| fl.species) {
+            Ok(Species::Raven) => ("ambience/raven", "flock.call"),
+            Ok(Species::Jackdaw) => ("ambience/jackdaw", "flock.call"),
+            Ok(Species::Heron) => ("wildlife/heron", "flock.heron"),
+            Ok(Species::Chough) => ("wildlife/chough", "flock.chough"),
+            _ => ("ambience/crow", "flock.call"),
         };
         let restless = f.cause == FlushCause::Restless;
         let up = Some(f.at + Vec3::Y * 2.0);
@@ -2631,7 +2634,7 @@ fn flock_sounds(
                 &mut rng.0,
                 calls,
                 Some(f.at + Vec3::Y * 4.0),
-                "flock.call",
+                cue,
                 if restless { -6.0 } else { 0.0 },
                 0.1,
             );
@@ -2987,6 +2990,283 @@ fn hush_world(
                 } else {
                     Volume::Decibels(mix::db("hush.tone") + now.db + 20.0 * rise.log10())
                 };
+            }
+        }
+    }
+}
+
+/// The animals (`wildlife`), some of them stand-ins (`synth_foley`):
+///
+/// - a herd startled: a roe deer's hoarse bark, a chamois' whistle, a dog
+///   pack barking (two or three of them); bolting, hooves away through the
+///   leaves; a dog killed, its yelp;
+/// - rats in the walls: squeaks and claws;
+/// - an animal killed (`bodies::Killed`): the thump of it going down, and
+///   a heron's croak.
+fn animal_sounds(
+    mut commands: Commands,
+    mut startled: MessageReader<crate::wildlife::herd::Startled>,
+    mut scurried: MessageReader<crate::wildlife::rats::Scurried>,
+    mut killed: MessageReader<crate::wildlife::bodies::Killed>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::wildlife::bodies::CarcassKind;
+    use crate::wildlife::herd::{Kind, Startle};
+    for s in startled.read() {
+        let at = Some(s.at + Vec3::Y * 0.8);
+        match (s.kind, s.what) {
+            (Kind::Deer, Startle::Bark) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/deer_bark",
+                at,
+                "animal.deer",
+                0.0,
+                0.05,
+            ),
+            (Kind::Chamois, Startle::Bark) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/chamois",
+                at,
+                "animal.chamois",
+                0.0,
+                0.05,
+            ),
+            (Kind::Dog, Startle::Bark) => {
+                for i in 0..(2 + rng.0.below(2)) {
+                    let off = Vec3::new(i as f32 * 1.3, 0.0, (i as f32 - 1.0) * 1.1);
+                    play(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "wildlife/dog_bark",
+                        Some(s.at + off + Vec3::Y * 0.5),
+                        "animal.dog",
+                        0.0,
+                        0.08,
+                    );
+                }
+            }
+            (Kind::Dog, Startle::Killed) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/dog_yelp",
+                at,
+                "animal.yelp",
+                0.0,
+                0.05,
+            ),
+            (_, Startle::Bolt) => {
+                for _ in 0..3 {
+                    play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "footsteps/leaves",
+                        at,
+                        "animal.hooves",
+                        0.0,
+                        1.7,
+                        0.1,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    for r in scurried.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "wildlife/rats",
+            Some(r.at),
+            "animal.rats",
+            0.0,
+            0.08,
+        );
+    }
+    for k in killed.read() {
+        let speed = match k.kind {
+            CarcassKind::Bird => 1.5,
+            CarcassKind::Heron => 1.2,
+            CarcassKind::Dog => 1.0,
+            CarcassKind::Deer => 0.85,
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/body_hit",
+            Some(k.at),
+            "animal.thump",
+            0.0,
+            speed,
+            0.08,
+        );
+        if k.kind == CarcassKind::Heron {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/heron",
+                Some(k.at),
+                "flock.heron",
+                -4.0,
+                0.05,
+            );
+        }
+    }
+}
+
+/// Winded, you breathe hard (`interact::gestures`' breaths, which robots
+/// hear to `gestures::BREATH` m, a third with a hand over your mouth):
+/// a breath every [`BREATH_EVERY`] s, louder the more winded, quieter and
+/// muffled through the hand. The ears hear it about as far as the robots
+/// (the audit checks). A stand-in breath (`synth_foley`) for now.
+pub const BREATH_EVERY: f32 = 1.0;
+
+fn breath_sounds(
+    mut commands: Commands,
+    players: Query<
+        (
+            &crate::player::Body,
+            &crate::interact::gestures::Gestures,
+            &GlobalTransform,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<f32>,
+) {
+    let Ok((body, g, gt)) = players.single() else {
+        return;
+    };
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = BREATH_EVERY;
+    let winded = (1.0 - body.stamina / 0.6).clamp(0.0, 1.0);
+    if winded <= 0.0 {
+        return;
+    }
+    let at = gt.translation() + Vec3::Y * 1.6;
+    let db = 20.0 * winded.max(0.05).log10();
+    if g.hush {
+        let hushed = 20.0 * crate::interact::gestures::HUSHED.log10();
+        play_filtered_db(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/breath",
+            at,
+            "body.breath",
+            db + hushed,
+            1.0,
+            1000.0,
+        );
+    } else {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/breath",
+            Some(at),
+            "body.breath",
+            db,
+            0.05,
+        );
+    }
+}
+
+/// Water that isn't a river: any wide water (an arm, a lake, a flooded
+/// street; [`LAP_WIDTH`] m and more) laps at the shore nearest you when
+/// you're within [`LAP_NEAR`] of it; and where a map's water drips
+/// ([`DRIPS`]: Sallow's scours, leaking into the foot of the draw-off
+/// tower), drops fall when you're near. Stand-ins (`synth_foley`) for now.
+pub const LAP_WIDTH: f32 = 20.0;
+pub const LAP_NEAR: f32 = 40.0;
+pub const DRIPS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [-20.0, 102.5], 0.5)];
+const DRIP_NEAR: f32 = 50.0;
+
+fn water_sounds(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<(f32, f32)>,
+    mut shores: Local<Option<Vec<(f32, Vec<[f32; 2]>)>>>,
+) {
+    let (Some(zone), Some(ear)) = (zone, listener.iter().next().map(|g| g.translation())) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let shores = shores.get_or_insert_with(|| {
+        zone.map
+            .water
+            .iter()
+            .filter(|w| w.width >= LAP_WIDTH)
+            .map(|w| (w.width, extraction_core::geom::catmull_rom(&w.points, 4.0)))
+            .collect()
+    });
+    let p = [ear.x, ear.z];
+    if now >= next.0 {
+        next.0 = now + rng.0.range(1.2, 2.8);
+        // The nearest point of the nearest wide water's edge.
+        let mut best: Option<(f32, [f32; 2])> = None;
+        for (width, line) in shores.iter() {
+            for q in line {
+                let d = extraction_core::geom::dist(*q, p) - width * 0.5;
+                if best.is_none_or(|b| d < b.0) {
+                    let to =
+                        Vec2::new(p[0] - q[0], p[1] - q[1]).normalize_or_zero() * (width * 0.5);
+                    best = Some((d, [q[0] + to.x, q[1] + to.y]));
+                }
+            }
+        }
+        if let Some((d, q)) = best.filter(|b| b.0 < LAP_NEAR) {
+            let _ = d;
+            let at = zone.on_ground(q[0], q[1]);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/lap",
+                Some(at),
+                "water.lap",
+                0.0,
+                0.1,
+            );
+        }
+    }
+    if now >= next.1 {
+        next.1 = now + rng.0.range(0.15, 0.9);
+        for &(map, [x, z], up) in DRIPS {
+            if zone.map.name != map {
+                continue;
+            }
+            let at = Vec3::new(x, zone.ground(x, z) + up, z);
+            if at.distance(ear) < DRIP_NEAR {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "ambience/drip",
+                    Some(at),
+                    "water.drip",
+                    0.0,
+                    0.1,
+                );
             }
         }
     }
@@ -4083,6 +4363,20 @@ fn render_voices(
         renders.tasks.push((PING_SET.to_string(), ping));
         let crackle = pool.spawn(async move { vec![rv::render_crackle(sr)] });
         renders.tasks.push((CRACKLE_SET.to_string(), crackle));
+        // Stand-ins for recordings not yet fetched (`synth_foley`), unless
+        // the bank has the real thing.
+        for st in crate::synth_foley::STAND_INS {
+            if bank.has(st.set) {
+                continue;
+            }
+            let (set, variants) = (st.set, st.variants);
+            let task = pool.spawn(async move {
+                (0..variants)
+                    .filter_map(|v| crate::synth_foley::render(set, v, sr))
+                    .collect::<Vec<_>>()
+            });
+            renders.tasks.push((set.to_string(), task));
+        }
     }
     renders.tasks.retain_mut(|(set, task)| {
         let Some(buffers) = bevy::tasks::futures::check_ready(task) else {

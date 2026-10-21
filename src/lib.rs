@@ -36,6 +36,7 @@ pub mod rig;
 pub mod robot_voice;
 pub mod robots;
 pub mod sim;
+pub mod synth_foley;
 pub mod tour;
 #[cfg(test)]
 mod vr_harness;
