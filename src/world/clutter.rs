@@ -141,19 +141,20 @@ pub fn dress(
     epilogue: bool,
 ) -> Vec<(&'static str, Transform)> {
     // `EXTRACTION_NO_CLUTTER=1`: the bare rooms, for comparisons.
-    let Some(valley) =
-        valley(map).filter(|_| std::env::var("EXTRACTION_NO_CLUTTER").map_or(true, |v| v != "1"))
-    else {
+    if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
         return Vec::new();
-    };
+    }
     let base = extraction_core::map::prefab_base(prefab);
-    let Some((w, d)) = plan(base) else {
-        return Vec::new();
-    };
     // A drowned house's things went with the water.
     if prefab.ends_with("_drowned") {
         return Vec::new();
     }
+    // Whom Story's notes name here, if anyone.
+    let at = Vec2::new(xf.translation.x, xf.translation.z);
+    let named = named(map, base, prefab, at);
+    let Some((valley, (w, d))) = valley(map).zip(plan(base)) else {
+        return clear_of_notes(map, xf, named.map_or_else(Vec::new, |n| n.things));
+    };
     let ruin = if prefab.ends_with("_burnt") {
         Some(Ruin::Burnt)
     } else if prefab.ends_with("_damaged") {
@@ -162,7 +163,6 @@ pub fn dress(
         None
     };
     let s = slots(w, d);
-    let at = Vec2::new(xf.translation.x, xf.translation.z);
     let story = special(valley, base, tag, at);
     let mut out = Vec::new();
     match ruin {
@@ -249,8 +249,8 @@ pub fn dress(
     }
     // Who lived here (`Resident`), in a whole house Story hasn't written
     // about: a few of their things where the valley's leave room.
-    if let (None, None) = (ruin, story) {
-        if let Some(r) = resident(xf, prefab) {
+    if let (None, None, None) = (ruin, story, &named) {
+        if let Some(r) = resident(xf, prefab, valley == Valley::Cinder) {
             if r == Resident::OldCouple {
                 // Two cups on the table, not the family's dishes.
                 out.retain(|(n, _)| *n != "dishes");
@@ -283,7 +283,19 @@ pub fn dress(
         }
         None => {}
     }
-    // Clear of notes.
+    if let Some(n) = named {
+        out.retain(|(m, _)| !n.drop.contains(m));
+        out.extend(n.things);
+    }
+    clear_of_notes(map, xf, out)
+}
+
+/// `things` less those within [`NOTE_CLEAR`] of a note or a terminal.
+fn clear_of_notes(
+    map: &MapDef,
+    xf: &Transform,
+    mut things: Vec<(&'static str, Transform)>,
+) -> Vec<(&'static str, Transform)> {
     let near_note = |p: Vec3| {
         let wp = xf.transform_point(p);
         map.markers.iter().any(|m| {
@@ -293,8 +305,199 @@ pub fn dress(
             ) && Vec2::new(m.at[0] - wp.x, m.at[1] - wp.z).length() < NOTE_CLEAR
         })
     };
-    out.retain(|(_, t)| !near_note(t.translation));
-    out
+    things.retain(|(_, t)| !near_note(t.translation));
+    things
+}
+
+/// A named resident's things in their house, and the valley's things they
+/// take the place of.
+struct Named {
+    things: Vec<(&'static str, Transform)>,
+    drop: &'static [&'static str],
+}
+
+/// On a wall's face at `at`, facing into the room along `into` (a wall
+/// thing's model stands out to its -Z).
+fn facing(model: &'static str, at: Vec3, into: Vec3) -> (&'static str, Transform) {
+    on(model, at, (-into.x).atan2(-into.z))
+}
+
+/// The people Story's notes name (and a few it asked to be seen), by the
+/// house they stand in: their things, building-local. Cabins, shops, the
+/// pump station and the chapel too (by their recipes' layouts).
+fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
+    use std::f32::consts::PI;
+    let n = map.name.to_lowercase();
+    let here = |x: f32, z: f32| at.distance(Vec2::new(x, z)) < 1.0;
+    let (px, nx, pz, nz) = (Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z);
+    // The log cabin (`buildings::cabin`): 7 x 6, its floor 0.4 up, its
+    // walls' insides 3.36 and 2.86 out; the door at x -1.5 in the front.
+    let cf = 0.4;
+    let (cx, cz) = (3.36, 2.86);
+    let things = |v: Vec<(&'static str, Transform)>| {
+        Some(Named {
+            things: v,
+            drop: &[],
+        })
+    };
+    let house = |f: fn(&Slots) -> Vec<(&'static str, Transform)>, drop: &'static [&'static str]| {
+        plan(base).map(|(w, d)| Named {
+            things: f(&slots(w, d)),
+            drop,
+        })
+    };
+    let valley = ["marrow", "kettle", "cinder", "sallow"]
+        .into_iter()
+        .find(|v| n.contains(v))?;
+    match (valley, prefab) {
+        // The shop shut on 13 October: "pay me when you're back".
+        ("marrow", "shop") if here(-16.0, 35.0) => {
+            let f = 0.3;
+            things(vec![
+                on("till", Vec3::new(-2.2, f + 0.9, -0.45), 0.1),
+                on("chit_spike", Vec3::new(-1.8, f + 0.9, -0.3), 0.0),
+                // Inside the -X window's glass, read from the street.
+                on("closed_card", Vec3::new(-2.5, f + 1.95, -3.5 + 0.16), 0.0),
+            ])
+        }
+        // J., the logging foreman.
+        ("marrow", "cabin_log") if here(-185.0, 190.0) => things(vec![
+            facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
+            on("whetstone", Vec3::new(0.38, cf + 0.785, 0.38), 0.3),
+            on("boots", Vec3::new(1.95, cf, 2.2), 0.3),
+        ]),
+        // Tomas of J.'s crew: his tally on the wall by the bed, as his
+        // note has it.
+        ("marrow", "cabin_log") if here(-145.0, 190.0) => things(vec![facing(
+            "tally_board",
+            Vec3::new(-cx, cf + 1.45, 1.0),
+            px,
+        )]),
+        // Ondrej Brabec, the pump keeper, who knocked on wood.
+        ("marrow", "pump_station") if here(-200.0, 22.0) => {
+            let f = 0.3;
+            things(vec![
+                facing("horseshoe", Vec3::new(0.0, f + 2.3, -4.85), pz),
+                facing("barometer", Vec3::new(3.56, f + 1.55, -2.2), px),
+                on("kettle", Vec3::new(5.1, f + 0.785, -3.15), 0.4),
+            ])
+        }
+        // The crossing keeper: the railwayman, his flags.
+        ("kettle", "house_plank") if here(76.0, 222.0) => house(
+            |s| {
+                let mut v = Resident::Railwayman.things(s, 8.0, 7.0);
+                v.push(on(
+                    "signal_flags",
+                    s.partition + Vec3::new(-0.55, 0.6, 0.0),
+                    0.0,
+                ));
+                v
+            },
+            &[],
+        ),
+        // The weir book's keeper.
+        ("kettle", "house_plank") if here(-99.0, 154.0) => house(
+            |s| {
+                vec![
+                    wall("waders", s.door_wall[1] + Vec3::Y * 0.1),
+                    on("level_staff", s.partition + Vec3::new(0.55, 0.95, 0.0), 0.0),
+                ]
+            },
+            &[],
+        ),
+        // The Nováks, who hid in the deep mine: small boots, a drawing.
+        ("kettle", "house_plank") if here(-42.0, 125.0) => house(
+            |s| {
+                let mut v = Resident::Family.things(s, 8.0, 7.0);
+                v.push(on(
+                    "child_drawing",
+                    s.partition + Vec3::new(0.5, 0.25, 0.0),
+                    0.0,
+                ));
+                v
+            },
+            &[],
+        ),
+        // Old Fiala's lodge.
+        ("kettle", "cabin_log") if here(205.0, -205.0) => things(vec![
+            facing("traps_hook", Vec3::new(-0.4, cf + 1.6, -cz), pz),
+            facing("antlers", Vec3::new(1.0, cf + 1.85, cz), nz),
+            facing("hide_frame", Vec3::new(cx, cf + 1.3, -1.2), nx),
+        ]),
+        // Mirek Hájek, the charcoal burner: "my name's on the frame so you
+        // know whose it was".
+        ("kettle", "cabin_log") if here(119.0, -138.0) => things(vec![
+            on(
+                "bed_name_mirek",
+                Vec3::new(-2.8, cf + 0.32, 1.5 - 0.975 - 0.03),
+                0.0,
+            ),
+            on("charcoal_sack", Vec3::new(-0.45, cf, -2.4), 0.5),
+        ]),
+        // The sexton's chapel: the hymns still up from the last Sunday.
+        ("kettle", "chapel") if here(-8.0, 150.0) => things(vec![facing(
+            "hymn_board",
+            Vec3::new(3.0, 0.5 + 1.9, 7.0 - 0.175),
+            nz,
+        )]),
+        // The scavenger off Lev's truck: a bedroll, a tin, lately.
+        ("cinder", "house_plank_damaged") if here(0.0, 150.0) => house(
+            |_| {
+                vec![
+                    on("bedroll", Vec3::new(-4.0 + 0.85, 0.5, -3.5 + 1.1), PI * 0.5),
+                    on("tin_empty", Vec3::new(-4.0 + 1.55, 0.5, -3.5 + 0.45), 0.7),
+                ]
+            },
+            &[],
+        ),
+        // T. Veselý, the woodward.
+        ("cinder", "cabin_log") if here(-75.0, -159.0) => things(vec![
+            facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
+            facing("bow_saw", Vec3::new(0.45, cf + 1.75, -cz), pz),
+        ]),
+        // Alois Pech, the keeper, alone and old, his legs bad.
+        ("sallow", "house_brick") if here(-58.0, 206.0) => house(
+            |s| {
+                let edge = s.table[1] + Vec3::new(-0.1, 1.7 - 0.785, -0.36);
+                vec![
+                    on("cup_one", s.table[0], 0.0),
+                    on("walking_stick", edge, 0.0),
+                    (
+                        "reading_glasses",
+                        Transform::from_translation(s.sills[0].0 + Vec3::Z * 0.1),
+                    ),
+                    on("photo_church", s.sills[1].0 + Vec3::Z * 0.1, PI),
+                ]
+            },
+            &["dishes"],
+        ),
+        // J. Rybář's shop: the key gone from its hook.
+        ("sallow", "shop") if here(-180.0, -222.0) => things(vec![facing(
+            "key_hook_empty",
+            Vec3::new(0.9, 0.3 + 1.6, -3.5 + 0.125),
+            pz,
+        )]),
+        // The angling club's cabin.
+        ("sallow", "cabin_log") if here(-160.0, 112.0) => things(vec![
+            facing("rods_rack", Vec3::new(-cx, cf + 1.6, -0.6), px),
+            facing("landing_net", Vec3::new(cx, cf + 1.5, -1.0), nx),
+            facing("stuffed_pike", Vec3::new(0.9, cf + 1.7, cz), nz),
+        ]),
+        // Mrs Hlavač, who wouldn't go twice, and went in the end on her own
+        // feet: her chair at the window, her slippers, her peg empty.
+        ("sallow", _) if here(-210.0, -222.0) => house(
+            |s| {
+                let w = s.sills[0].0;
+                vec![
+                    on("armchair", Vec3::new(w.x, 0.5, w.z + 0.6), 0.0),
+                    on("slippers", Vec3::new(w.x + 0.15, 0.5, w.z + 1.15), 0.2),
+                    wall("peg_empty", s.door_wall[0]),
+                ]
+            },
+            &[],
+        ),
+        _ => None,
+    }
 }
 
 /// Ash on a sill: the unit-metre film stretched along it.
@@ -344,14 +547,17 @@ const RESIDENTS: [Resident; 7] = [
     Resident::Railwayman,
 ];
 
-/// The resident of the house `prefab` placed at `xf`, if it has one.
-pub fn resident(xf: &Transform, prefab: &str) -> Option<Resident> {
+/// The resident of the house `prefab` placed at `xf`, if it has one;
+/// `no_children` where a valley's children's things are gone (Cinder's
+/// machines hauled them to the furnace: their absence is the point).
+pub fn resident(xf: &Transform, prefab: &str, no_children: bool) -> Option<Resident> {
     let at = Vec2::new(xf.translation.x, xf.translation.z);
     let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x2e51);
     if rng.f32() < 0.25 {
         return None;
     }
     Some(RESIDENTS[rng.usize(..RESIDENTS.len())])
+        .filter(|r| !(no_children && *r == Resident::Family))
 }
 
 impl Resident {
@@ -515,9 +721,95 @@ mod tests {
             .collect();
         let lived = houses
             .iter()
-            .filter(|p| resident(&Transform::from_xyz(p.at[0], 0.0, p.at[1]), &p.prefab).is_some())
+            .filter(|p| {
+                resident(
+                    &Transform::from_xyz(p.at[0], 0.0, p.at[1]),
+                    &p.prefab,
+                    false,
+                )
+                .is_some()
+            })
             .count();
         assert!(lived * 2 > houses.len(), "{lived} of {}", houses.len());
+    }
+
+    /// Everyone Story's notes name has their things where they lived, the
+    /// things built and inside the building.
+    #[test]
+    fn storys_named_people_have_their_things() {
+        let root = crate::asset_root_path();
+        let mut map = crate::world::load_map_def("marrow_creek");
+        let named_at = [
+            ("marrow", "shop", -16.0, 35.0),
+            ("marrow", "cabin_log", -185.0, 190.0),
+            ("marrow", "cabin_log", -145.0, 190.0),
+            ("marrow", "pump_station", -200.0, 22.0),
+            ("kettle", "house_plank", 76.0, 222.0),
+            ("kettle", "house_plank", -99.0, 154.0),
+            ("kettle", "house_plank", -42.0, 125.0),
+            ("kettle", "cabin_log", 205.0, -205.0),
+            ("kettle", "cabin_log", 119.0, -138.0),
+            ("kettle", "chapel", -8.0, 150.0),
+            ("cinder", "house_plank_damaged", 0.0, 150.0),
+            ("cinder", "cabin_log", -75.0, -159.0),
+            ("sallow", "house_brick", -58.0, 206.0),
+            ("sallow", "shop", -180.0, -222.0),
+            ("sallow", "cabin_log", -160.0, 112.0),
+            ("sallow", "house_plank", -210.0, -222.0),
+        ];
+        for (valley, prefab, x, z) in named_at {
+            map.name = format!("{valley} test");
+            map.markers.clear();
+            let xf = Transform::from_xyz(x, 0.0, z);
+            let things = dress(&map, prefab, "", &xf, false);
+            let [w, _, d] = extraction_core::map::prefab_footprint(prefab);
+            assert!(
+                !things.is_empty(),
+                "{valley} {prefab} at ({x}, {z}): nothing"
+            );
+            for (model, t) in &things {
+                let path = root.join(crate::render::world_props::path(model));
+                assert!(path.exists(), "{prefab}: no model {}", path.display());
+                let p = t.translation;
+                // (A sill's things stand on the wall's middle.)
+                assert!(
+                    p.x.abs() <= w * 0.5 + 0.01 && p.z.abs() <= d * 0.5 + 0.01,
+                    "{valley} {prefab} {model} at {p}, outside"
+                );
+            }
+        }
+        // Mirek's name is on his bed; Tomas's tally is by his.
+        map.name = "kettle".into();
+        let mirek = dress(
+            &map,
+            "cabin_log",
+            "",
+            &Transform::from_xyz(119.0, 0.0, -138.0),
+            false,
+        );
+        assert!(mirek.iter().any(|(m, _)| *m == "bed_name_mirek"));
+        map.name = "marrow".into();
+        let tomas = dress(
+            &map,
+            "cabin_log",
+            "",
+            &Transform::from_xyz(-145.0, 0.0, 190.0),
+            false,
+        );
+        assert!(tomas.iter().any(|(m, _)| *m == "tally_board"));
+        // No child's things left in Cinder.
+        let cinder = crate::world::load_map_def("cinder_works");
+        for p in &cinder.placements {
+            let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
+            for (m, _) in dress(&cinder, &p.prefab, &p.tag, &xf, true) {
+                assert!(
+                    !["cot", "rocking_horse", "small_boots", "child_drawing"].contains(&m),
+                    "{} at {:?}: {m}",
+                    p.prefab,
+                    p.at
+                );
+            }
+        }
     }
 
     /// Story's houses get their things, and Hana's table stays bare.
