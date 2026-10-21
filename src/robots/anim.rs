@@ -810,6 +810,7 @@ pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
 #[allow(clippy::type_complexity)]
 pub(crate) fn walk(
     mut walkers: Query<(
+        Entity,
         &mut Walker,
         &mut Gait,
         &mut Transform,
@@ -832,7 +833,9 @@ pub(crate) fn walk(
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
-    for (mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in &mut walkers {
+    for (entity, mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in
+        &mut walkers
+    {
         let pos = t.translation - g.sway;
         // Steering along the path.
         let mut desired = Vec3::ZERO;
@@ -876,8 +879,9 @@ pub(crate) fn walk(
                     .map(|hit| hit.distance)
             })
         };
+        let (by, yaw) = (entity, w.yaw);
         let mut landed = |at: Vec3| {
-            steps.write(WalkerStep { at });
+            steps.write(WalkerStep { at, by, yaw });
         };
         step_walker(&mut w, &mut g, &mut t, &drive, dt, &mut ground, &mut landed);
         if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
@@ -922,8 +926,33 @@ impl Plugin for AnimPlugin {
                 knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
                 haul_lines.after(super::perceive),
                 kick_loose,
+                print_snow,
             ),
         );
+    }
+}
+
+/// A foot coming down in lying snow leaves a print (`world::snow`): the
+/// machines' own ring, so walkers can't push the player's trail out.
+fn print_snow(
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    tracks: Option<ResMut<crate::world::snow::Tracks>>,
+) {
+    let (Some(snow), Some(mut tracks)) = (snow, tracks) else {
+        steps.clear();
+        return;
+    };
+    for step in steps.read() {
+        if snow.lies(step.at.y) > 0.25 {
+            tracks.add_other(crate::world::snow::Print {
+                at: step.at,
+                yaw: step.yaw,
+                left: false,
+                by: step.by,
+                fill: 0.0,
+            });
+        }
     }
 }
 
@@ -1516,6 +1545,75 @@ mod tests {
             }
         }
         assert!(moved >= 2, "{moved} of 12 moved");
+    }
+
+    /// A walker in lying snow leaves prints where its feet come down, in
+    /// the machines' own ring (the player's trail is left alone); with no
+    /// snow, none.
+    #[test]
+    fn walkers_print_the_snow() {
+        let walk = |snowy: bool| {
+            // Rime Fell's col lies above its snow line; the training yard
+            // has none.
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    map: if snowy { "rime_fell" } else { "training_yard" }.into(),
+                    map_explicit: true,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let at = if snowy {
+                zone.on_ground(70.0, -262.0)
+            } else {
+                zone.on_ground(40.0, 230.0)
+            };
+            let walker = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = super::super::walker::spawn_walker(
+                    &mut c,
+                    &zone,
+                    at,
+                    super::super::Job {
+                        kind: super::super::JobKind::Survey,
+                        site: at,
+                        duration: 999.0,
+                        exit: at,
+                    },
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..20 {
+                app.update();
+            }
+            app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+                vec![Vec3::new(at.x + 5.0, 0.0, at.z)];
+            for _ in 0..(90 * 4) {
+                app.update();
+            }
+            let tracks = app.world().resource::<crate::world::snow::Tracks>();
+            let mine: Vec<Vec3> = tracks
+                .others()
+                .filter(|p| p.by == walker)
+                .map(|p| p.at)
+                .collect();
+            (mine, tracks.prints().count(), at)
+        };
+        let (prints, theirs, at) = walk(true);
+        assert!(prints.len() >= 6, "{} prints in the snow", prints.len());
+        assert_eq!(theirs, 0, "none in the player's trail");
+        assert!(prints.iter().all(|p| p.distance(at) < 8.0 && p.is_finite()));
+        assert!(walk(false).0.is_empty(), "no snow, no prints");
     }
 
     /// Underground, below the terrain, footing is the floor the ray finds,

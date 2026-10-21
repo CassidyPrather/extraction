@@ -201,9 +201,9 @@ fn reel(
                 .into_iter()
                 .enumerate()
                 {
-                    // Swung round (up to 25°) until the ground between
-                    // doesn't hide it: any map, any camera.
-                    let at = (0..=20)
+                    // Swung round (up to 40°, inside the frame) until the
+                    // ground between doesn't hide it: any map, any camera.
+                    let tries: Vec<Vec3> = (0..=32)
                         .map(|i| {
                             (if i % 2 == 0 { 1.0 } else { -1.0 }) * (i / 2 + i % 2) as f32 * 2.5
                         })
@@ -213,11 +213,25 @@ fn reel(
                             let p = eye + dir * d;
                             zone.on_ground(p.x, p.z)
                         })
-                        .find(|at| in_sight(&zone, eye, *at + Vec3::Y * 1.1))
+                        .collect();
+                    let seen = |at: &Vec3| hidden(&zone, eye, *at + Vec3::Y * 1.1);
+                    // The nearest swing that's clear, else the least hidden.
+                    let at = tries
+                        .iter()
+                        .copied()
+                        .find(|at| seen(at) < 0.0)
                         .unwrap_or_else(|| {
-                            let p = eye + flat * d + right * x;
-                            zone.on_ground(p.x, p.z)
+                            tries
+                                .iter()
+                                .copied()
+                                .min_by(|a, b| seen(a).total_cmp(&seen(b)))
+                                .unwrap()
                         });
+                    info!(
+                        "reel eyesfar: walker {k} at {:.0} m, {at:.1} (hidden by {:.2} m)",
+                        at.distance(eye),
+                        hidden(&zone, eye, at + Vec3::Y * 1.1).max(0.0)
+                    );
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
                     commands
                         .entity(w)
@@ -525,10 +539,13 @@ fn reel(
     );
 }
 
-/// Whether the ground between `eye` and `to` leaves it in view.
-fn in_sight(zone: &Zone, eye: Vec3, to: Vec3) -> bool {
-    (1..40).all(|i| {
-        let p = eye.lerp(to, i as f32 / 40.0);
-        zone.ground(p.x, p.z) < p.y - 0.2
-    })
+/// How far the ground between `eye` and `to` rises into the line of
+/// sight, at its worst (m; negative: it's clear by that much).
+fn hidden(zone: &Zone, eye: Vec3, to: Vec3) -> f32 {
+    (1..40)
+        .map(|i| {
+            let p = eye.lerp(to, i as f32 / 40.0);
+            zone.ground(p.x, p.z) - (p.y - 0.2)
+        })
+        .fold(f32::MIN, f32::max)
 }

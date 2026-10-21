@@ -353,9 +353,12 @@ mod tests {
     /// How far a drone climbs in 3 s toward a goal 25 m up, warm or in
     /// the cold with its rotors iced.
     fn climb(iced: bool) -> f32 {
+        // Iced: up on Rime Fell's col, above its snow line, in the cold.
         let mut app = crate::headless_app(
             crate::LaunchOptions {
                 robots: false,
+                map: if iced { "rime_fell" } else { "training_yard" }.into(),
+                map_explicit: true,
                 ..Default::default()
             },
             false,
@@ -364,7 +367,11 @@ mod tests {
         app.cleanup();
         app.update();
         let zone = app.world().resource::<Zone>().clone();
-        let site = zone.on_ground(40.0, 200.0) + Vec3::Y * 8.0;
+        let site = if iced {
+            zone.on_ground(70.0, -262.0)
+        } else {
+            zone.on_ground(40.0, 200.0)
+        } + Vec3::Y * 8.0;
         let drone = {
             let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
             let mut c = q.get_mut(app.world_mut()).unwrap();
@@ -384,16 +391,17 @@ mod tests {
             q.apply(app.world_mut());
             e
         };
-        if iced {
-            let mut snow = app.world_mut().resource_mut::<crate::world::snow::Snow>();
-            snow.line = Some(-1000.0);
-            snow.cover = 1.0;
-            snow.falling = 1.0;
-        }
         for _ in 0..90 {
             app.update();
         }
         if iced {
+            // (A minute's icing, rather than waiting it out.)
+            assert!(
+                app.world()
+                    .resource::<crate::world::snow::Snow>()
+                    .cold(site.y),
+                "it's cold up here"
+            );
             app.world_mut().get_mut::<Flight>(drone).unwrap().frost = 1.0;
         }
         let y0 = app.world().get::<Transform>(drone).unwrap().translation.y;
