@@ -176,6 +176,49 @@ fn follow_sound(comfort: Option<Res<Comfort>>) {
 mod tests {
     use super::*;
 
+    /// Nothing written on the truck's walls overlaps anything else there:
+    /// each card and sign is read, and pressed, on its own.
+    #[test]
+    fn no_card_or_sign_in_the_truck_overlaps_another() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        // Each one's place in the truck, its wall, and its extent.
+        let mut on_walls: Vec<(String, Vec3, Vec2)> = Vec::new();
+        let mut q = app
+            .world_mut()
+            .query::<(&ScreenText, &Transform, &ChildOf, Option<&Name>)>();
+        let trucks: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<Truck>>()
+            .iter(app.world())
+            .collect();
+        for (text, xf, parent, name) in q.iter(app.world()) {
+            if !trucks.contains(&parent.parent()) || xf.translation.x.abs() < 1.0 {
+                continue;
+            }
+            let name = format!(
+                "{} {:?}",
+                name.map_or("?".into(), |n| n.to_string()),
+                text.text
+            );
+            on_walls.push((name, xf.translation, text.size));
+        }
+        assert!(on_walls.len() >= 13, "found {}", on_walls.len());
+        for (i, (a, pa, sa)) in on_walls.iter().enumerate() {
+            for (b, pb, sb) in &on_walls[i + 1..] {
+                // On the side walls a card's width runs along z.
+                let same_wall = (pa.x - pb.x).abs() < 0.05;
+                let apart_z = (pa.z - pb.z).abs() >= (sa.x + sb.x) / 2.0;
+                let apart_y = (pa.y - pb.y).abs() >= (sa.y + sb.y) / 2.0;
+                assert!(!same_wall || apart_z || apart_y, "{a} overlaps {b}");
+            }
+        }
+    }
+
     /// The cards for how you play each switch their setting, and say so.
     #[test]
     fn the_access_cards_switch_hand_seat_hands_and_captions() {
