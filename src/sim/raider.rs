@@ -634,9 +634,6 @@ pub struct Scene<'w, 's> {
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
-    /// The bots' sockets by entity (`Task::Draw` counts them in entity
-    /// order).
-    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -2276,12 +2273,7 @@ fn raid_step(
                     if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
                         // Set down for good: not loot to pick up again.
                         r.skip.insert(relay);
-                        let how = t.iter().find_map(|t| match t {
-                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
-                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
-                            _ => None,
-                        });
-                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
+                        log.event("plant", json!({"site": r.sites[s].name}));
                         return t;
                     }
                     continue;
@@ -2528,38 +2520,22 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
         },
     ];
     // The hand free first (it may be holding the last thing picked up),
-    // then out of the body slot it was stowed in (drawn), or the pack.
+    // then the relay into it from wherever it's carried (a grab takes it
+    // out of its body slot or the open pack).
+    let packed = scene.items.get(relay).is_ok_and(|(.., bag)| bag.is_some());
     t.push(Task::Stow(Side::Left));
-    let socket = scene
-        .items
-        .get(relay)
-        .ok()
-        .and_then(|(.., so, _)| so.map(|s| s.socket));
-    let mut mine: Vec<Entity> = scene
-        .owned_sockets
-        .iter()
-        .filter(|(_, o)| o.0 == me)
-        .map(|(e, _)| e)
-        .collect();
-    mine.sort();
-    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
-        Some(slot) => t.extend([
-            Task::Draw {
-                slot,
-                side: Side::Left,
-            },
-            Task::Wait(0.5),
-        ]),
-        None => t.extend([
-            Task::ToggleBackpack,
-            Task::Wait(0.6),
-            Task::GrabFromHere {
-                item: relay,
-                side: Side::Left,
-            },
-            Task::ToggleBackpack,
-            Task::Wait(0.5),
-        ]),
+    if packed {
+        t.extend([Task::ToggleBackpack, Task::Wait(0.6)]);
+    }
+    t.extend([
+        Task::GrabFromHere {
+            item: relay,
+            side: Side::Left,
+        },
+        Task::Wait(0.5),
+    ]);
+    if packed {
+        t.extend([Task::ToggleBackpack, Task::Wait(0.5)]);
     }
     t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
     Some((relay, t))
