@@ -948,6 +948,12 @@
             category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
             tags: ["electronics", "metal"],
         ),
+        (
+            id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
+            description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
+            category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,
+            tags: ["electronics", "metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Artifacts. Every one draws attention while carried.

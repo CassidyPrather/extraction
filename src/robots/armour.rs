@@ -233,7 +233,9 @@ fn shed_plates(
         Option<&super::walker::Walker>,
         Option<&super::RobotSeed>,
     )>,
-    heavies: Query<(), With<super::heavy::Heavy>>,
+    // (The heavy and the machines that dress themselves see to their own
+    // plates and pieces: a sentry's junction box, a minelayer's hopper.)
+    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::heavy::OwnLook>)>>,
 ) {
     for ev in events.read() {
         let PartRole::Armour(plate) = ev.role else {
