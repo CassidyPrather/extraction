@@ -21,6 +21,11 @@ struct Sway {
     // them the foliage parts (0: not pushing).
     hand_a: vec4<f32>,
     hand_b: vec4<f32>,
+    // Robots pushing through low branches: xyz where, w how far round.
+    robot_a: vec4<f32>,
+    robot_b: vec4<f32>,
+    robot_c: vec4<f32>,
+    robot_d: vec4<f32>,
 }
 
 // Branch ends pushed aside by a hand, more the nearer and the freer.
@@ -51,7 +56,11 @@ fn offset(world: vec3<f32>, local: vec3<f32>, origin: vec3<f32>) -> vec3<f32> {
     let push = sway.wind.z * (0.7 * gust + flutter);
     return vec3<f32>(dir.x, 0.0, dir.y) * push * 0.35 * weight
         + parted(world, sway.hand_a, out)
-        + parted(world, sway.hand_b, out);
+        + parted(world, sway.hand_b, out)
+        + parted(world, sway.robot_a, out)
+        + parted(world, sway.robot_b, out)
+        + parted(world, sway.robot_c, out)
+        + parted(world, sway.robot_d, out);
 }
 
 @vertex
