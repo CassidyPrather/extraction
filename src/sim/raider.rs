@@ -2273,7 +2273,9 @@ fn raid_step(
                         json!({"site": site.name, "items": all, "artifacts": artifacts}),
                     );
                     r.act = Act::Search(s);
-                    if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
+                    if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
+                        // Set down for good: not loot to pick up again.
+                        r.skip.insert(relay);
                         let how = t.iter().find_map(|t| match t {
                             Task::Draw { slot, .. } => Some(format!("slot {slot}")),
                             Task::GrabFromHere { .. } => Some("pack".to_owned()),
@@ -2503,7 +2505,7 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
 
 /// A Plant job's place, reached: the relay out of the pack and set down
 /// on the ground by it.
-fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
+fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Task>)> {
     let Some(CardJob::Plant {
         item,
         at,
@@ -2519,9 +2521,10 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
     let relay = *scene.carried(me, item).first()?;
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
+        // Well inside the plant's radius, if there's footing that close.
         Task::WalkTo {
             to: Vec2::from_array(*at),
-            within: 1.5,
+            within: 2.5,
         },
     ];
     // The hand free first (it may be holding the last thing picked up),
@@ -2559,7 +2562,7 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
         ]),
     }
     t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
-    Some(t)
+    Some((relay, t))
 }
 
 /// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend
