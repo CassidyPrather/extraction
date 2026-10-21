@@ -129,7 +129,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz8", dims: Some((0.06, 0.15, 1.12)),
+            id: "toz8", dims: Some((0.075, 0.17, 1.145)),
             name: "TOZ-8M .22 rifle",
             description: "A club rifle: one .22 at a time, thumbed into the open chamber. Its crack doesn't carry far. Good for an eye or a rook; useless against plate. Rimfire misfires: lift the bolt and drop it to strike again.",
             category: Firearm, size: Bulky, mass: 2.9, bulk: 5.0,
@@ -401,7 +401,7 @@
             tags: ["brass", "powder", "polymer"],
         ),
         (
-            id: "ammo_22lr", dims: Some((0.07, 0.025, 0.05)), name: ".22 rounds (box)",
+            id: "ammo_22lr", dims: Some((0.0758, 0.0314, 0.055)), name: ".22 rounds (box)",
             description: "Fifty .22 Long Rifle in a card box. Rimfire: the bench can't re-pack them.",
             category: Ammo, size: Small, mass: 0.18, bulk: 0.08, cartridge: Some("22lr"), rounds: 50,
             tags: ["brass", "powder"],
@@ -446,7 +446,7 @@
         (id: "round_762x25_repack", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
         (id: "round_762r_repack", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R re-packed round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
         (id: "shell_12ga_repack", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge re-packed shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Repacked, tags: ["brass", "powder", "polymer"]),
-        (id: "round_22lr", dims: Some((0.0057, 0.0057, 0.025)), name: ".22 round", category: Ammo, size: Tiny, mass: 0.0034, bulk: 0.001, cartridge: Some("22lr"), rounds: 1, tags: ["brass", "powder"]),
+        (id: "round_22lr", dims: Some((0.0069, 0.0069, 0.0251)), name: ".22 round", category: Ammo, size: Tiny, mass: 0.0034, bulk: 0.001, cartridge: Some("22lr"), rounds: 1, tags: ["brass", "powder"]),
         (
             id: "robot_ammo_belt", name: "Robot ammunition belt",
             description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",

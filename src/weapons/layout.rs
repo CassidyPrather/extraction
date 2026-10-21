@@ -752,7 +752,7 @@ fn toz8() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.84),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
-        sight: at(0.0, 0.07, -0.03),
+        sight: at(0.0, 0.062, -0.03),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::TurnBolt,

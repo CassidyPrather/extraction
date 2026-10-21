@@ -343,6 +343,12 @@ pub const ART: &[ArtText] = &[
         "the magazine in the hand",
     ),
     art(
+        "items/ammo_22.py",
+        Need::MustRead,
+        0.35,
+        "the box in the hand: which rounds",
+    ),
+    art(
         "items/ammo.py",
         Need::MustRead,
         0.35,
