@@ -786,8 +786,7 @@ mod tests {
 
     #[test]
     fn blooms_never_open_by_a_building_or_a_road_in_any_valley() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut rng = Rng::new(3);
@@ -935,8 +934,7 @@ mod tests {
 
     #[test]
     fn every_valley_has_a_well_and_a_mirror_somewhere_sensible() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS, SALLOW_RESERVOIR};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS, SALLOW_RESERVOIR] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();

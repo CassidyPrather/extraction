@@ -779,7 +779,7 @@ mod tests {
     /// grows the same, and none costs more than [`BUDGET`].
     #[test]
     fn ivy_is_deterministic_and_in_budget() {
-        for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let map = crate::world::load_map_def(name);
             let (mut total, mut grown) = (0, 0);
             for p in &map.placements {
