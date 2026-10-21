@@ -161,6 +161,12 @@ impl Task {
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
+/// A seated bot's eye (the rig lifts it to a standing one).
+pub const SEATED_EYE: f32 = 1.2;
+/// The lowest a seated hand gets, leaning: over the feet, unlifted.
+pub const SEATED_HAND_LOW: f32 = 0.35;
+/// How far past a hand's middle a grab still takes something.
+const GRAB_SLACK: f32 = 0.15;
 /// How quickly a bot's body swings onto its aim point, per second.
 const AIM_RATE: f32 = 14.0;
 
@@ -220,6 +226,8 @@ pub struct Bot {
     deferred: u32,
     /// The gun's well from the gun hand's grip, world, for a reload.
     well_off: Option<Vec3>,
+    /// Seated: the crouch button held for something low.
+    reach_low: bool,
 }
 
 impl Bot {
@@ -244,6 +252,7 @@ impl Bot {
             gun_to: None,
             deferred: 0,
             well_off: None,
+            reach_low: false,
         }
     }
 
@@ -285,6 +294,21 @@ impl Bot {
         self.gun_to = None;
         self.deferred = 0;
         self.well_off = None;
+        self.reach_low = false;
+    }
+
+    /// Seated (`Comfort::seated`), something lower than a seated hand
+    /// reaches needs the crouch button first: the view and the hands come
+    /// down with it. `rel_y`: its height over the feet.
+    fn within_seated_reach(&mut self, rel_y: f32, lift: Option<f32>) -> bool {
+        let Some(lift) = lift else {
+            return true;
+        };
+        if rel_y >= lift + SEATED_HAND_LOW - GRAB_SLACK {
+            return true;
+        }
+        self.reach_low = true;
+        false
     }
 
     /// Do these first, then the current task again.
@@ -318,6 +342,7 @@ fn drive_bots(
             &mut Transform,
             &crate::weapons::AimHint,
             &Children,
+            Option<&crate::rig::seated::Seat>,
         ),
         With<Player>,
     >,
@@ -326,7 +351,8 @@ fn drive_bots(
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let gun_side = comfort.as_ref().map_or(Side::Right, |c| c.gun_side());
-    for (bot, mut input, mut root, hint, children) in &mut bots {
+    let seated = comfort.as_ref().is_some_and(|c| c.seated);
+    for (bot, mut input, mut root, hint, children, seat) in &mut bots {
         let supporting = children.iter().any(|c| {
             hands
                 .get(c)
@@ -334,8 +360,29 @@ fn drive_bots(
         });
         // Crouched, the head comes down as flat mode's C does (and the
         // body with it).
-        let eye = Vec3::new(0.0, if input.crouch { 1.05 } else { 1.68 }, 0.0);
-        let world_eye = root.translation + eye;
+        // Seated, the head is a seated head (the rig lifts it, and lowers
+        // it with the crouch button); else crouched, it comes down as flat
+        // mode's C does (and the body with it).
+        if bot.reach_low {
+            input.crouch = true;
+        }
+        let lift = if seated {
+            seat.map_or(0.0, |s| s.lift)
+        } else {
+            0.0
+        };
+        let eye = Vec3::new(
+            0.0,
+            if seated {
+                SEATED_EYE
+            } else if input.crouch {
+                1.05
+            } else {
+                1.68
+            },
+            0.0,
+        );
+        let world_eye = root.translation + eye + Vec3::Y * lift;
         let to = (bot.look - world_eye).normalize_or(Vec3::NEG_Z);
         // Turn the body toward the target's bearing, smoothly.
         let target_yaw = (-to.x).atan2(-to.z);
@@ -396,9 +443,18 @@ fn drive_bots(
             hand.stick_click = bot.buttons[2];
         }
         if let Some(to) = bot.gun_to {
-            let local = root.compute_affine().inverse().transform_point3(to);
+            let local = root.compute_affine().inverse().transform_point3(to) - Vec3::Y * lift;
             input.hand_mut(gun_side).pose.translation = local;
         }
+        if seated {
+            // No lower than a seated hand reaches.
+            for side in Side::BOTH {
+                let p = &mut input.hand_mut(side).pose.translation;
+                p.y = p.y.max(SEATED_HAND_LOW);
+            }
+        }
+        // Raw poses: the seated lift goes on after (`rig::seated`).
+        input.lifted = 0.0;
         if let (true, Some(support)) = (supporting, hint.support) {
             let right_pose = input.hand(gun_side).pose;
             input.hand_mut(gun_side.other()).pose =
@@ -470,6 +526,7 @@ fn one_hand(
         Task::PickUp { id, .. } => free_first(Task::PickUp { id, side: gun }),
         Task::Grab { item, .. } if held == Some(item) => OneHand::Do(Task::Wait(0.0)),
         Task::Grab { item, .. } => free_first(Task::Grab { item, side: gun }),
+        Task::GrabFromHere { item, .. } if held == Some(item) => OneHand::Do(Task::Wait(0.0)),
         Task::GrabFromHere { item, .. } => free_first(Task::GrabFromHere { item, side: gun }),
         t @ (Task::Press(_) | Task::OpenDoor(_)) => free_first(t),
         // Letting go of what the other hand held: a gun is put away, not
@@ -494,6 +551,15 @@ struct TaskExtras<'w, 's> {
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
     socketed: Query<'w, 's, (Entity, &'static InSocket, &'static GlobalTransform)>,
+    door_at: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Door,
+            &'static GlobalTransform,
+        ),
+    >,
+    seats: Query<'w, 's, &'static crate::rig::seated::Seat>,
     sockets: Query<
         'w,
         's,
@@ -503,6 +569,16 @@ struct TaskExtras<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+}
+
+impl TaskExtras<'_, '_> {
+    fn door_states(&self, near: Vec3) -> Vec<(bool, f32, f32)> {
+        self.door_at
+            .iter()
+            .filter(|(_, g)| g.translation().distance(near) < 4.0)
+            .map(|(d, g)| (d.open, d.angle, g.translation().distance(near)))
+            .collect()
+    }
 }
 
 /// Advances each bot's current task.
@@ -558,6 +634,11 @@ fn run_tasks(
             continue;
         };
         let task = task.mirrored(mirror);
+        // Seated: the lift, for what's in reach.
+        let lift = comfort
+            .as_ref()
+            .filter(|c| c.seated)
+            .map(|_| ext.seats.get(player).map_or(0.0, |s| s.lift));
         let task = if one_handed {
             let held = children.iter().find_map(|c| {
                 hands
@@ -634,6 +715,33 @@ fn run_tasks(
                 }
             }
             Task::WalkTo { to, within } => {
+                if bot.elapsed > 10.0 && bot.elapsed - dt <= 10.0 {
+                    let held: Vec<_> = Side::BOTH
+                        .iter()
+                        .map(|s| {
+                            hand(*s)
+                                .and_then(|h| h.holding)
+                                .and_then(|e| items.get(e).ok())
+                                .map(|i| catalog.get(i.kind()).id.clone())
+                        })
+                        .collect();
+                    let near: Vec<_> = loose
+                        .iter()
+                        .filter(|(_, _, g)| g.translation().distance(root.translation) < 2.0)
+                        .map(|(_, it, g)| (catalog.get(it.kind()).id.clone(), g.translation()))
+                        .collect();
+                    info!(
+                        "DBG near {near:?} queue {:?}",
+                        bot.tasks.iter().take(8).collect::<Vec<_>>()
+                    );
+                    info!(
+                        "DBG stuck walking to {to:?} at {:.2} body h {:.2} held {held:?} carried {:.1} doors {:?}",
+                        root.translation,
+                        body.height,
+                        body.carried_kg,
+                        ext.door_states(root.translation)
+                    );
+                }
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
                 if pos.distance(to) <= within {
@@ -670,7 +778,9 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
-                    if !bot.pending || bot.retry > 2.0 {
+                    if (!bot.pending || bot.retry > 2.0)
+                        && bot.within_seated_reach(at.y - root.translation.y, lift)
+                    {
                         actions.write(HandAction::Grab {
                             player,
                             side,
@@ -823,8 +933,9 @@ fn run_tasks(
                         })
                         .max_by_key(|(m, ..)| items.get(*m).map_or(0, |it| it.rounds));
                     let Some((m, _, mgt)) = pouched else {
-                        bot.failed += 1;
-                        bot.note("FAIL no loaded magazine in a pouch".into());
+                        // Out of magazines: as a reload macro with none, it
+                        // stays empty.
+                        bot.note("no loaded magazine in a pouch".into());
                         bot.next();
                         continue;
                     };
@@ -1007,7 +1118,9 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
-                    if !bot.pending || bot.retry > 2.0 {
+                    if (!bot.pending || bot.retry > 2.0)
+                        && bot.within_seated_reach(at.y - root.translation.y, lift)
+                    {
                         actions.write(HandAction::Grab {
                             player,
                             side,
@@ -1025,11 +1138,13 @@ fn run_tasks(
                     bot.next();
                     continue;
                 }
+                let mut rel_y = 1.0;
                 if let Ok((gt, _)) = ext.placed.get(item) {
                     bot.look = gt.translation();
+                    rel_y = gt.translation().y - root.translation.y;
                 }
                 bot.retry += dt;
-                if !bot.pending || bot.retry > 1.0 {
+                if (!bot.pending || bot.retry > 1.0) && bot.within_seated_reach(rel_y, lift) {
                     actions.write(HandAction::Grab {
                         player,
                         side,
@@ -1074,8 +1189,16 @@ fn run_tasks(
                 bot.walk = None;
                 bot.look = gt.translation() + Vec3::Y * 1.0;
                 if d.open {
-                    // Wait for it to swing most of the way.
+                    // Wait for it to swing most of the way, then let go of
+                    // it (held, it comes along).
                     if d.angle > 0.85 {
+                        if hand(off_side).and_then(|h| h.holding) == Some(door) {
+                            actions.write(HandAction::Release {
+                                player,
+                                side: off_side,
+                                throw: 0.0,
+                            });
+                        }
                         bot.next();
                     }
                 } else if !bot.pending || bot.retry > 2.0 {

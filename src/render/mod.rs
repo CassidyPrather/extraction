@@ -20,6 +20,7 @@ pub mod overdraw;
 pub mod props;
 pub mod screen;
 pub mod stats;
+pub mod tells;
 pub mod terrain_material;
 pub mod upgrades;
 pub mod water_material;

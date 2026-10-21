@@ -556,20 +556,26 @@ fn spawn_controller_spaces(
     }
 }
 
-/// Keeps the tracking root on the local player (whenever both exist).
+/// Keeps the tracking root on the local player (whenever both exist),
+/// lifted for seated play as the rig's poses are (`seated`).
 fn ride_player(
     mut commands: Commands,
-    players: Query<Entity, With<LocalPlayer>>,
-    roots: Query<(Entity, Option<&ChildOf>), (With<XrTrackingRoot>, Without<LocalPlayer>)>,
+    players: Query<(Entity, &RigInput), With<LocalPlayer>>,
+    mut roots: Query<
+        (Entity, Option<&ChildOf>, &mut Transform),
+        (With<XrTrackingRoot>, Without<LocalPlayer>),
+    >,
 ) {
-    let Some(p) = players.iter().next() else {
+    let Some((p, input)) = players.iter().next() else {
         return;
     };
-    for (root, parent) in &roots {
+    for (root, parent, mut t) in &mut roots {
         if parent.map(|c| c.parent()) != Some(p) {
             commands
                 .entity(root)
-                .insert((ChildOf(p), Transform::IDENTITY));
+                .insert((ChildOf(p), Transform::from_xyz(0.0, input.lifted, 0.0)));
+        } else if t.translation.y != input.lifted {
+            t.translation.y = input.lifted;
         }
     }
 }
@@ -718,6 +724,8 @@ fn drive_xr_rig(
     if !eyes.is_empty() {
         let pos = eyes.iter().map(|t| t.translation).sum::<Vec3>() / eyes.len() as f32;
         input.head = Transform::from_translation(pos).with_rotation(eyes[0].rotation);
+        // Raw poses: the seated lift is put back on after (`seated`).
+        input.lifted = 0.0;
     }
     for (space, t) in &controllers {
         let hand = input.hand_mut(space.0);

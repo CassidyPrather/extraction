@@ -93,6 +93,8 @@ pub struct Run {
     tried: Vec<Entity>,
     /// Salvage set down for the pack step.
     salvage: bool,
+    /// A magazine given for the shot that's heard.
+    topped_up: bool,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -134,6 +136,19 @@ pub(super) fn direct(
         bot.tasks.push_back(Task::Wait(IDLE));
     }
     let raid_no = raid.raids;
+    if run
+        .pending
+        .iter()
+        .any(|(r, _)| run.rows[*r].response == COVER)
+        && (now * 2.0).fract() < time.delta_secs() * 2.0
+    {
+        info!(
+            "DBG cover at {:.2} task {:?} input {:?}",
+            root.translation,
+            bot.tasks.front(),
+            input.locomotion
+        );
+    }
     if let Ok(h) = world.health.get(player) {
         if (h.hp - run.dbg_hp).abs() > 3.0 {
             let an = world
@@ -233,6 +248,11 @@ pub(super) fn direct(
                 Some(s) => {
                     let mut t = Vec::new();
                     if !world.door_open(s.door) {
+                        // Back out of the door's sweep, then open it.
+                        t.push(Task::WalkTo {
+                            to: s.outside.xz(),
+                            within: 0.4,
+                        });
                         t.push(Task::OpenDoor(s.door));
                     }
                     for to in [s.inside, s.corner] {
@@ -253,6 +273,7 @@ pub(super) fn direct(
                             within: 1.5,
                         });
                     }
+                    info!("DBG cover tasks {t:?}");
                     (COVER, t)
                 }
                 None => ("fight it (no cover)", vec![Task::Engage { shots: 30 }]),
@@ -363,7 +384,14 @@ pub(super) fn direct(
             First::Worn => true,
             First::Anomaly if r.response == "go round it" => !world.inside_anomaly(here),
             First::Anomaly => world.anomaly_answered().unwrap_or(false),
-            First::PackFull => world.hand_empty(Side::Left).unwrap_or(false),
+            // The hand that held what wouldn't go in (one-handed: the one).
+            First::PackFull => world
+                .hand_empty(if world.one_handed() {
+                    Side::Right
+                } else {
+                    Side::Left
+                })
+                .unwrap_or(false),
             First::Surge => matches!(
                 raid.phase,
                 Phase::TruckCalled { .. } | Phase::TruckWaiting { .. }
@@ -395,6 +423,36 @@ pub(super) fn direct(
         if (ok && early) || now > deadline || !world.alive(player) {
             run.rows[row].right = Some(ok);
             match run.rows[row].first {
+                First::PackFull if run.salvage => {
+                    // The worst of it is the fuel set down for the step: left
+                    // too, or the walk home is a crawl.
+                    commands.queue(move |w: &mut World| {
+                        let catalog = w.resource::<Catalog>().clone();
+                        let fuel: Vec<Entity> = w
+                            .query::<(Entity, &Item)>()
+                            .iter(w)
+                            .filter(|(_, it)| catalog.get(it.kind()).id == "fuel_can")
+                            .map(|(e, _)| e)
+                            .collect();
+                        let mut bags = w.query::<&mut Backpack>();
+                        let mut dumped = Vec::new();
+                        for mut b in bags.iter_mut(w) {
+                            if b.owner == player && b.carried {
+                                b.contents.retain(|e| {
+                                    let f = fuel.contains(e);
+                                    if f {
+                                        dumped.push(*e);
+                                    }
+                                    !f
+                                });
+                            }
+                        }
+                        for e in dumped {
+                            w.entity_mut(e).despawn();
+                        }
+                    });
+                    bot.log.push("  (left the fuel cans too)".into());
+                }
                 First::Surge => {
                     // Answered: the clock goes back, so the walk home isn't
                     // a race the run would lose to the Surge.
@@ -585,7 +643,18 @@ pub(super) fn direct(
             }
         }
         Step::Heard => {
-            if !firsts.met(First::Heard) && run.tries < 2 {
+            if !firsts.met(First::Heard) && !run.topped_up && world.rounds(player).unwrap_or(0) < 3
+            {
+                // Rounds to fire the shot with: a magazine from the crate.
+                run.topped_up = true;
+                let mag = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
+                tasks.extend([Wait(0.5), Stow(Side::Left)]);
+                tasks.extend(mag.first().map(|&item| GrabFromHere {
+                    item,
+                    side: Side::Left,
+                }));
+                tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload)]);
+            } else if !firsts.met(First::Heard) && run.tries < 2 {
                 // A walker about its own business off to one side, and a
                 // shot it can't miss hearing.
                 let o = here;
@@ -620,17 +689,13 @@ pub(super) fn direct(
                 .holding(Side::Right)
                 .is_some_and(|e| world.guns.get(e).is_ok());
             if !armed && run.tries < 2 {
-                // A rifle and a magazine, if what it had is gone.
-                let _ = world.drop_kit(&mut commands, root.translation);
+                // A rifle and a magazine, if what it had is gone (these
+                // ones: the nearest of an id might be an empty one).
+                let kit = world.drop_kit(&mut commands, root.translation);
                 tasks.push(Wait(0.5));
-                tasks.push(PickUp {
-                    id: "ak74".into(),
-                    side: Side::Right,
-                });
-                tasks.push(PickUp {
-                    id: "ak_mag".into(),
-                    side: Side::Left,
-                });
+                for (&item, side) in kit.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
                 tasks.push(Stow(Side::Left));
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
@@ -641,14 +706,9 @@ pub(super) fn direct(
                 let fresh = world.drop_kit(&mut commands, root.translation);
                 tasks.push(Release(Side::Right));
                 tasks.push(Wait(0.5));
-                tasks.extend(fresh.first().map(|&item| Grab {
-                    item,
-                    side: Side::Right,
-                }));
-                tasks.push(PickUp {
-                    id: "ak_mag".into(),
-                    side: Side::Left,
-                });
+                for (&item, side) in fresh.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
                 tasks.push(Stow(Side::Left));
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
@@ -715,6 +775,11 @@ pub(super) fn direct(
                     from = *to;
                 }
                 if let Some(d) = w.door.filter(|d| !world.door_open(*d)) {
+                    // Clear of the door's sweep, then open it.
+                    tasks.push(WalkTo {
+                        to: w.outside,
+                        within: 0.4,
+                    });
                     tasks.push(OpenDoor(d));
                 }
                 for to in [w.inside, w.top, w.down] {
@@ -771,23 +836,18 @@ pub(super) fn direct(
                 if world.held_condition(player) < 0.5 {
                     let fresh = world.drop_items(&mut commands, root.translation, &["ak74"]);
                     tasks.extend([Release(Side::Right), Wait(0.5)]);
-                    tasks.extend(fresh.first().map(|&item| Grab {
+                    tasks.extend(fresh.first().map(|&item| GrabFromHere {
                         item,
                         side: Side::Right,
                     }));
                 }
-                let _ = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
-                tasks.extend([
-                    Wait(0.5),
-                    Stow(Side::Left),
-                    PickUp {
-                        id: "ak_mag".into(),
-                        side: Side::Left,
-                    },
-                    Stow(Side::Left),
-                    Gun(MacroKind::Reload),
-                    Wait(1.0),
-                ]);
+                let mag = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
+                tasks.extend([Wait(0.5), Stow(Side::Left)]);
+                tasks.extend(mag.first().map(|&item| GrabFromHere {
+                    item,
+                    side: Side::Left,
+                }));
+                tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
             } else if let Some(leg) = leg {
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
@@ -1236,12 +1296,16 @@ impl World2<'_, '_> {
     fn dress(&self, commands: &mut Commands, at: Vec3) -> Vec<Task> {
         let dressing = self.drop_items(commands, at, &["field_dressing"]);
         let mut t = vec![Task::Stow(Side::Left), Task::Wait(0.5)];
-        t.extend(dressing.first().map(|&item| Task::Grab {
+        t.extend(dressing.first().map(|&item| Task::GrabFromHere {
             item,
             side: Side::Left,
         }));
         t.push(Task::Use(Side::Left));
         t
+    }
+
+    fn one_handed(&self) -> bool {
+        self.comfort.as_ref().is_some_and(|c| c.one_handed)
     }
 
     fn bleeding(&self, player: Entity) -> f32 {
@@ -1463,6 +1527,10 @@ impl World2<'_, '_> {
             })
             .map(|(_, g)| g.transform_point(Vec3::Y * 0.3))
             .min_by(|a, b| a.distance(from).total_cmp(&b.distance(from)))
+    }
+
+    fn rounds(&self, player: Entity) -> Option<u32> {
+        self.held_gun(player).map(|(g, _)| g.firearm.live_rounds())
     }
 
     fn mode(&self, player: Entity) -> Option<extraction_core::firearm::FireMode> {
