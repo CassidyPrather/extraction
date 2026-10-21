@@ -10,6 +10,7 @@ pub mod comfort;
 pub mod cpu;
 pub mod fog;
 pub mod grade;
+pub mod hand_push;
 pub mod kit;
 pub mod kitchen;
 pub mod landmarks;
@@ -78,6 +79,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(arms::ArmsPlugin)
         .add_plugins(tools::ToolVisualsPlugin)
         .add_plugins(blink::BlinkPlugin)
+        .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
