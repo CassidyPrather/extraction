@@ -435,7 +435,6 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // draw-off tower on the bed, and the Custodian's stock in rows.
         "dam_face" => [265.0, 23.0, 4.0],
         "dam_face_end" => [25.0, 23.0, 4.0],
-        "face_stair_wall" => [120.0, 24.0, 0.45],
         "dam_back" => [245.0, 21.5, 3.0],
         "dam_back_end" => [35.0, 21.5, 3.0],
         "draw_off_tower" => [9.0, 34.0, 9.0],
