@@ -454,8 +454,13 @@ impl Heightmap {
             }
         }
         // Where people built, the ground was settled: the land the map was
-        // laid out on (no knolls, no gullies) round the buildings.
-        for pl in &map.placements {
+        // laid out on (no knolls, no gullies) round the buildings. Not
+        // round a car wreck: it was left on the verge as the verge was.
+        for pl in map
+            .placements
+            .iter()
+            .filter(|p| !crate::map_lint::WRECKS.contains(&p.prefab.as_str()))
+        {
             let r = crate::map::prefab_clearance(&pl.prefab);
             let lo = [pl.at[0] - r - 8.0, pl.at[1] - r - 8.0];
             let hi = [pl.at[0] + r + 8.0, pl.at[1] + r + 8.0];
@@ -666,6 +671,10 @@ impl Heightmap {
     pub fn footing(&self, prefab: &str, at: P2, rot_deg: f32) -> f32 {
         if let Some((a, b)) = self.bogies(prefab, at, rot_deg) {
             return (a + b) * 0.5;
+        }
+        // The funicular's car is built on the grade through its middle.
+        if prefab == "funicular_car" {
+            return self.height(at);
         }
         let [w, _, d] = crate::map::prefab_footprint(prefab);
         let (s, c) = rot_deg.to_radians().sin_cos();
@@ -1035,6 +1044,8 @@ mod tests {
             regions: vec![],
             haze: None,
             ash: 0.0,
+            cold: 0.0,
+            scree: 0.0,
             snow_line: None,
             snow: 0.0,
             sounds: SoundsDef::default(),
@@ -1083,6 +1094,7 @@ mod tests {
             shoulder: 3.0,
             smoothing: 20.0,
             bridges: vec![],
+            galleries: vec![],
         });
         let hm = Heightmap::build(&map);
         // Cross-slope across the road is gentle.
@@ -1137,6 +1149,7 @@ mod tests {
                 shoulder,
                 smoothing,
                 bridges: vec![],
+                galleries: vec![],
             });
         }
         let hm = Heightmap::build(&map);

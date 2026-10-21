@@ -34,6 +34,8 @@ pub enum ComfortCard {
     /// The wrist's tick when a machine nearby turns certain of you.
     MachineTick,
     Climb,
+    /// Your body drawn under you, or not.
+    Body,
 }
 
 pub struct ComfortBoardPlugin;
@@ -67,6 +69,8 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Captions, 1.26, -0.50),
             // And by the tailgate, the wrist's warning.
             (ComfortCard::MachineTick, 1.80, -0.15),
+            // Under it, whether you see your body.
+            (ComfortCard::Body, 1.62, -0.15),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -120,6 +124,7 @@ fn press_cards(
                 ComfortCard::OneHanded => comfort.one_handed = !comfort.one_handed,
                 ComfortCard::Captions => comfort.captions = !comfort.captions,
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
+                ComfortCard::Body => comfort.body = !comfort.body,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
             }
             // Tests and sims don't touch the player's settings.
@@ -155,6 +160,7 @@ fn card_text(
             ComfortCard::OneHanded => comfort.one_handed_label(),
             ComfortCard::Captions => comfort.captions_label(),
             ComfortCard::MachineTick => comfort.machine_tick_label(),
+            ComfortCard::Body => comfort.body_label(),
             ComfortCard::Climb => comfort.climb_label(),
         };
         if text.text != t {
@@ -240,6 +246,7 @@ mod tests {
             ComfortCard::Handed => c.left_handed,
             ComfortCard::Seated => c.seated,
             ComfortCard::OneHanded => c.one_handed,
+            ComfortCard::Body => !c.body,
             _ => !c.captions,
         };
         for (which, on_word) in [
@@ -247,6 +254,7 @@ mod tests {
             (ComfortCard::Seated, "seated"),
             (ComfortCard::OneHanded, "one"),
             (ComfortCard::Captions, "off"),
+            (ComfortCard::Body, "hidden"),
         ] {
             let card = app
                 .world_mut()

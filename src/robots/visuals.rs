@@ -1505,6 +1505,18 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
     .with_inserted_indices(bevy::mesh::Indices::U32(idx))
 }
 
+/// A hurt core's eye gutters: below 40% it drops out now and then, more
+/// often the worse it is, like a failing supply (1 when it's whole).
+fn gutter(core: f32, now: f32, k: u32) -> f32 {
+    if core >= 0.4 {
+        return 1.0;
+    }
+    let bad = 1.0 - core / 0.4;
+    // Two slow beats against each other, so the drop-outs don't tick.
+    let n = (now * 5.3 + k as f32).sin() * (now * 2.1 + k as f32 * 0.7).sin();
+    if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
+}
+
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
@@ -1609,11 +1621,18 @@ fn alert_eyes(
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
-    // After dark the eye opens up to a hard point (emissive about 40 at
-    // rest, past 100 once it has you), so a walker reads at 60-80 m on a
-    // clear night, and its glow stays round it even calm.
+    // After dark the eye's core dims to what it reads as by day: the
+    // night's open exposure would clip it to white otherwise and its red
+    // would be lost; the halo carries it at range.
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
-    let gain = 1.0 + 9.0 * night;
+    let gain = 1.0 - 0.75 * night;
+    // How much core each robot has left: a hurt one's eye gutters.
+    let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
+    for p in &parts {
+        if p.role == PartRole::Core {
+            cores.insert(p.robot, p.hp / p.max_hp.max(1.0));
+        }
+    }
     for (robot, aware, own, _) in &robots {
         let Some(own) = own else {
             continue;
@@ -1626,7 +1645,11 @@ fn alert_eyes(
             }
         } else {
             1.0
-        };
+        } * gutter(
+            cores.get(&robot).copied().unwrap_or(1.0),
+            now,
+            robot.index_u32(),
+        );
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
             aware.exposure.clamp(0.0, 1.0)
@@ -1707,6 +1730,7 @@ fn shell_by_light(
     server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut done: Local<Option<f32>>,
+    mut day_rough: Local<Option<f32>>,
     zone: Option<Res<crate::world::Zone>>,
 ) {
     let (Some(c), Some(m)) = (conditions, mats) else {
@@ -1732,5 +1756,36 @@ fn shell_by_light(
     let k = 0.22 * c.light.sqrt() * dusk * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
+        // A clear moon glints off the shell: right, but it mustn't out-read
+        // the eyes, so after dark the glint spreads into a soft sheen.
+        let day = *day_rough.get_or_insert(mat.perceptual_roughness);
+        mat.perceptual_roughness = day.max(0.55) + (day - day.max(0.55)) * dusk;
+    }
+    // The seams too: by day a cool line, after dark all but out. At full
+    // strength in the night's open exposure they clip to white and read
+    // before the eye's red does.
+    if let Some(mut mat) = materials.get_mut(&m.glow) {
+        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.02 + 0.98 * dusk * dusk);
+    }
+}
+
+#[cfg(test)]
+mod gutter_tests {
+    use super::gutter;
+
+    /// A whole core's eye never gutters; a hurt one drops out now and
+    /// then, more the worse it's hurt.
+    #[test]
+    fn a_hurt_core_gutters_its_eye() {
+        let out = |core: f32| {
+            (0..900)
+                .filter(|i| gutter(core, *i as f32 / 90.0, 7) < 1.0)
+                .count()
+        };
+        assert_eq!(out(1.0), 0);
+        assert_eq!(out(0.45), 0);
+        let (hurt, dying) = (out(0.3), out(0.05));
+        assert!(hurt > 0 && dying > hurt, "{hurt} then {dying} of 900");
+        assert!(dying < 600, "it still mostly shines ({dying} of 900 out)");
     }
 }

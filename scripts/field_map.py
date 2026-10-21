@@ -53,6 +53,9 @@ LANDMARK_NAMES = {
     "draw_off_tower": "intake tower",
     "sorting_gantry": "gantry",
     "survey_tower": "survey beacon",
+    "ore_mill": "ore mill",
+    "observatory": "observatory",
+    "funicular_upper": "top station",
 }
 RUIN_STATES = ("_damaged", "_burnt", "_drowned")
 

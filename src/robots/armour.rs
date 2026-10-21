@@ -33,7 +33,7 @@ impl Plugin for ArmourPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            (fit_plates, shed_plates, pop_eyes).after(super::perceive),
+            (fit_plates, shed_plates, pop_eyes, hang_plates).after(super::perceive),
         );
     }
 }
@@ -78,6 +78,95 @@ fn plate_transform(kind: RobotKind, i: usize) -> Transform {
     }
 }
 
+/// A robot that wears the plates `fit_plates` gave it (not a machine
+/// with armour parts of its own: the heavy, `heavy::OwnLook`).
+#[derive(Component)]
+pub struct Plated;
+
+/// Below this a plate has lost all but one bolt: it hangs from it.
+pub const HANGING_BELOW: f32 = 0.35;
+
+/// A plate on its last bolt: how far round it has swung (radians, in its
+/// own plane) and how fast.
+#[derive(Component, Debug, Default)]
+pub struct Hanging {
+    pub angle: f32,
+    vel: f32,
+    /// The bolt that held: the corner uppermost when the others went
+    /// (plate-local; Y is out of the plate).
+    pub bolt: Vec3,
+}
+
+/// A walker's or drone's plate shot down to its last bolt swings from it:
+/// round the bolt at one corner, toward hanging straight down, a damped
+/// pendulum the body's own motion keeps swinging. (Its collider swings
+/// with it: what it covered is half open.)
+fn hang_plates(
+    mut commands: Commands,
+    mut plates: Query<(
+        Entity,
+        &super::RobotPart,
+        &mut Transform,
+        Option<&mut Hanging>,
+    )>,
+    // (Only the plates fitted here: other machines' armour is their own.)
+    robots: Query<(&Robot, &GlobalTransform), With<Plated>>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (e, part, mut t, hanging) in &mut plates {
+        let PartRole::Armour(i) = part.role else {
+            continue;
+        };
+        if !part.alive() || part.hp / part.max_hp.max(1.0) >= HANGING_BELOW {
+            continue;
+        }
+        let Ok((robot, body)) = robots.get(part.robot) else {
+            continue;
+        };
+        let fitted = match robot.kind {
+            RobotKind::Walker => (i as usize) < WALKER_PLATES.len(),
+            RobotKind::Drone => i == 0,
+            _ => false,
+        };
+        if !fitted || robot.wrecked {
+            continue;
+        }
+        let base = plate_transform(robot.kind, i as usize);
+        let rot = body.rotation() * base.rotation;
+        let Some(mut h) = hanging else {
+            let bolt = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
+                .map(|(x, z)| Vec3::new(0.13 * x, 0.0, 0.12 * z))
+                .into_iter()
+                .max_by(|a, b| (rot * *a).y.total_cmp(&(rot * *b).y))
+                .unwrap();
+            commands.entity(e).try_insert(Hanging { bolt, ..default() });
+            continue;
+        };
+        let bolt = h.bolt;
+        let normal = rot * Vec3::Y;
+        let to_centre = rot * (Quat::from_rotation_y(h.angle) * -bolt);
+        let down = Vec3::NEG_Y - normal * Vec3::NEG_Y.dot(normal);
+        // How far round from hanging straight down (none when the plate
+        // lies flat: a belly plate just rattles).
+        let pull = if down.length() > 0.2 {
+            let d = down.normalize();
+            let c = to_centre.normalize_or_zero();
+            c.cross(d).dot(normal).atan2(c.dot(d))
+        } else {
+            -h.angle
+        };
+        h.vel += (pull * 30.0 - h.vel * 2.2) * dt;
+        h.angle = (h.angle + h.vel * dt).clamp(-2.8, 2.8);
+        let swing = Quat::from_rotation_y(h.angle);
+        *t = Transform {
+            translation: base.translation + base.rotation * (bolt + swing * -bolt),
+            rotation: base.rotation * swing,
+            scale: base.scale,
+        };
+    }
+}
+
 /// Armour goes on as robots are made: three plates on walkers (grappler,
 /// collector and crawler too: they're walkers), one on drones, two down
 /// the sides of a dirigible's gondola.
@@ -114,6 +203,7 @@ fn fit_plates(
         let Ok(mut ec) = commands.get_entity(e) else {
             continue;
         };
+        ec.insert(Plated);
         ec.with_children(|c| {
             for i in 0..n {
                 c.spawn((
@@ -288,6 +378,85 @@ mod tests {
                 "plate {i} covers the eye"
             );
         }
+    }
+
+    /// A side plate shot down to its last bolt hangs from it: it swings
+    /// round the bolt until its middle is below where it was, and settles
+    /// there swaying, nothing NaN.
+    #[test]
+    fn a_plate_on_its_last_bolt_hangs() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..30 {
+            app.update();
+        }
+        let plate = app
+            .world_mut()
+            .query::<(Entity, &mut super::super::RobotPart)>()
+            .iter_mut(app.world_mut())
+            .find(|(_, p)| p.robot == walker && p.role == PartRole::Armour(1))
+            .map(|(e, mut p)| {
+                p.hp = p.max_hp * 0.3;
+                e
+            })
+            .unwrap();
+        let centre = |app: &App| {
+            app.world()
+                .get::<GlobalTransform>(plate)
+                .unwrap()
+                .translation()
+        };
+        let before = centre(&app);
+        for _ in 0..(90 * 4) {
+            app.update();
+            assert!(centre(&app).is_finite());
+        }
+        let h = app.world().get::<Hanging>(plate).expect("it hangs");
+        assert!(h.angle.abs() > 0.4, "it swung round ({:.2} rad)", h.angle);
+        let drop = before.y - centre(&app).y;
+        assert!(drop > 0.04, "its middle hangs lower ({drop:.3} m)");
+        // From the bolt: its middle is under it, nearly plumb.
+        let gt = app.world().get::<GlobalTransform>(plate).unwrap();
+        let bolt = gt.transform_point(h.bolt);
+        let hang = bolt - centre(&app);
+        assert!(hang.y > 0.15, "it hangs under its bolt ({:.3} m)", hang.y);
+        // Still on: it's a hanging plate, not a fallen one.
+        assert!(
+            app.world()
+                .get::<super::super::RobotPart>(plate)
+                .unwrap()
+                .alive()
+        );
     }
 
     /// A walker shot square in its low front plate: the rounds hurt the

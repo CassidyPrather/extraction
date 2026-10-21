@@ -653,6 +653,9 @@ pub struct Scene<'w, 's> {
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
+    /// The bots' sockets by entity (`Task::Draw` counts them in entity
+    /// order).
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -1693,6 +1696,34 @@ fn fight_on(
         .filter(|t| hit && r.hp < 45.0 && scene.visible(*t, eye))
         .filter(|_| r.rng.range(0.0, 1.0) < r.traits.duck)
         .and_then(|t| cover_from(scene, eye - Vec3::Y * 1.6, t, 10.0));
+    // A drone that's hitting it: standing there is death, whatever its
+    // health. Out of its sight if anywhere's near; else run across its
+    // line (it can't hit that well: `drone::CROSSING_SPREAD`).
+    let drone = scene
+        .robots
+        .get(target)
+        .is_ok_and(|(_, rb, ..)| rb.kind == crate::robots::RobotKind::Drone);
+    let cover = cover.or_else(|| {
+        threat
+            .filter(|t| drone && hit && scene.visible(*t, eye))
+            .and_then(|t| {
+                let feet = eye - Vec3::Y * 1.6;
+                cover_from(scene, feet, t, 14.0).or_else(|| {
+                    let across = Vec2::new(t.x - feet.x, t.z - feet.z)
+                        .perp()
+                        .normalize_or(Vec2::X);
+                    let side = if r.rng.range(0.0, 1.0) < 0.5 {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    let to = feet.xz() + across * side * 10.0;
+                    scene
+                        .path_clear(eye, Vec3::new(to.x, eye.y, to.y))
+                        .then_some((10.0, to))
+                })
+            })
+    });
     let outcome = outcome
         .or(cover.is_some().then_some("took_cover"))
         .or(lost.then_some("lost"))
@@ -2542,33 +2573,60 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
         return None;
     }
     let relay = *scene.carried(me, item).first()?;
+    let spot = Vec2::from_array(*at);
+    // As the contract scenarios plant (`progression::contracts::scenario`):
+    // close, the gun slung so the right hand's free, the relay into it from
+    // its body slot (drawn) or the pack, a look at the spot, let go.
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
-        // Well inside the plant's radius, if there's footing that close.
         Task::WalkTo {
-            to: Vec2::from_array(*at),
-            within: 2.5,
+            to: spot,
+            within: 1.0,
         },
+        Task::Stow(Side::Right),
     ];
-    // The hand free first (it may be holding the last thing picked up),
-    // then the relay into it from wherever it's carried (a grab takes it
-    // out of its body slot or the open pack).
-    let packed = scene.items.get(relay).is_ok_and(|(.., bag)| bag.is_some());
-    t.push(Task::Stow(Side::Left));
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.6)]);
-    }
-    t.extend([
-        Task::GrabFromHere {
+    let (socket, packed) = scene
+        .items
+        .get(relay)
+        .map(|(.., so, bag)| (so.map(|s| s.socket), bag.is_some()))
+        .unwrap_or_default();
+    let mut mine: Vec<Entity> = scene
+        .owned_sockets
+        .iter()
+        .filter(|(_, o)| o.0 == me)
+        .map(|(e, _)| e)
+        .collect();
+    mine.sort();
+    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
+        Some(slot) => t.extend([
+            Task::Draw {
+                slot,
+                side: Side::Right,
+            },
+            Task::Wait(0.5),
+        ]),
+        None if packed => t.extend([
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
+                item: relay,
+                side: Side::Right,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.5),
+        ]),
+        None => t.push(Task::Grab {
             item: relay,
-            side: Side::Left,
-        },
-        Task::Wait(0.5),
-    ]);
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.5)]);
+            side: Side::Right,
+        }),
     }
-    t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
+    let y = scene.zone.ground(spot.x, spot.y);
+    t.extend([
+        Task::Wait(0.5),
+        Task::LookAt(Vec3::new(spot.x, y, spot.y)),
+        Task::Release(Side::Right),
+        Task::Wait(1.5),
+    ]);
     Some((relay, t))
 }
 

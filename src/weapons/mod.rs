@@ -25,6 +25,8 @@ pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+#[cfg(test)]
+pub mod signature;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;

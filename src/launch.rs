@@ -120,6 +120,9 @@ pub struct LaunchOptions {
     /// Bot personality for a sim raid (`looter`, `hunter`, `cautious`,
     /// `reckless`); by default it rotates with the run index.
     pub personality: Option<String>,
+    /// A newcomer's first fight (`onboarding::first_hour`): the one machine
+    /// put on their route (`walker`, `drone`, `hush`, `sentry`, `night`).
+    pub encounter: Option<String>,
     /// Raid minutes a sim bot plans for before heading out (default: by
     /// personality, 9-14).
     pub sim_minutes: Option<f32>,
@@ -172,6 +175,7 @@ impl Default for LaunchOptions {
             sim: None,
             sim_run: None,
             personality: None,
+            encounter: None,
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
@@ -226,7 +230,8 @@ impl LaunchOptions {
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
-                | "--one-handed" | "--no-captions" | "--no-machine-tick" => {}
+                | "--one-handed" | "--no-captions" | "--no-machine-tick" | "--no-body"
+                | "--no-post-blur" => {}
                 "--vignette" => {
                     let _ = val();
                 }
@@ -259,6 +264,7 @@ impl LaunchOptions {
                     o.headless = true;
                 }
                 "--personality" => o.personality = Some(val()),
+                "--encounter" => o.encounter = Some(val()),
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),

@@ -210,9 +210,10 @@ def build(lod):
         p = part(f"thigh_{side}", hip)
         limb(p, [(sx * 0.09, HIP + 0.04, 0.0), (sx * 0.093, 0.7, -0.005),
                  (sx * 0.095, KNEE - 0.02, 0.0)], [0.078, 0.07, 0.06], "DarkWool", n)
+        # (Down into the boot top, the trousers over it: no gap at the ankle.)
         p = part(f"shin_{side}", knee)
         limb(p, [(sx * 0.095, KNEE + 0.03, 0.0), (sx * 0.097, 0.3, 0.01),
-                 (sx * 0.1, ANKLE + 0.06, 0.0)], [0.05, 0.058, 0.054], "DarkWool", n)
+                 (sx * 0.1, ANKLE + 0.02, 0.0)], [0.05, 0.058, 0.054], "DarkWool", n)
         p = part(f"foot_{side}", ankle)
         p.box((0.1, 0.11, 0.27), (sx * 0.1, 0.062, -0.045), "Leather", bevel=0.03 if full else 0.0,
               segs=2 if full else 1)
