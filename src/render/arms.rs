@@ -62,6 +62,7 @@ impl Plugin for ArmsPlugin {
                 (pose_arms, pose_body_shadow)
                     .chain()
                     .after(GlovePose)
+                    .after(crate::rig::stance::StanceSystems)
                     .before(TransformSystems::Propagate),
             );
     }
@@ -80,23 +81,37 @@ struct Arm {
     shadow: [Entity; 2],
 }
 
+/// How much further than its length an arm may straighten to meet its
+/// hand before the shoulder is pulled after it.
+pub const STRETCH: f32 = 1.04;
+
 /// Where the elbow goes, given the shoulder, the wrist, which way the elbow
-/// should point (`hint`) and the body's column (its axis in x, z): the
-/// shoulder (moved toward the wrist if the arm can't reach) and the elbow.
-pub fn arm_joints(shoulder: Vec3, wrist: Vec3, hint: Vec3, body: Vec2) -> (Vec3, Vec3) {
+/// should point (`hint`), the body's column (its axis in x, z) and the
+/// arm's length (`scale`: `rig::stance` learns it from the reach): the
+/// shoulder and the elbow. Just out of reach the arm straightens a little
+/// further ([`STRETCH`]); only past that is the shoulder pulled forward,
+/// the arm straight. (The stance has already brought the shoulder forward
+/// as far as a shoulder goes.)
+pub fn arm_joints(shoulder: Vec3, wrist: Vec3, hint: Vec3, body: Vec2, scale: f32) -> (Vec3, Vec3) {
+    let (mut upper, mut fore) = (UPPER * scale, FOREARM * scale);
     let mut s = shoulder;
-    let reach = UPPER + FOREARM - 0.002;
+    let reach = upper + fore - 0.002;
     let to = wrist - s;
     let d = to.length();
     if d > reach {
-        // Out of reach: the shoulder comes forward (a lean), the arm straight.
-        s = wrist - to / d * reach;
+        let k = (d / reach).min(STRETCH);
+        upper *= k;
+        fore *= k;
+        let reach = reach * k;
+        if d > reach {
+            s = wrist - to / d * reach;
+        }
     }
     let to = wrist - s;
     let d = to.length().max(0.02);
     let dir = to / d;
-    let along = (UPPER * UPPER - FOREARM * FOREARM + d * d) / (2.0 * d);
-    let up = (UPPER * UPPER - along * along).max(0.0).sqrt();
+    let along = (upper * upper - fore * fore + d * d) / (2.0 * d);
+    let up = (upper * upper - along * along).max(0.0).sqrt();
     let mut bend = hint - dir * hint.dot(dir);
     if bend.length_squared() < 1e-6 {
         bend = dir.any_orthonormal_vector();
@@ -267,6 +282,7 @@ fn pose_arms(
         (Or<(With<ArmPart>, With<ShadowPart>)>, Without<HandVisual>),
     >,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    stances: Query<&crate::rig::stance::Stance>,
 ) {
     let watch = comfort.map_or(crate::rig::Side::Left, |c| c.gun_side().other());
     for arm in &arms {
@@ -283,13 +299,23 @@ fn pose_arms(
         let torso = root.mul_transform(*torso);
         let head = root.mul_transform(input.head);
         let s = v.side.sign();
-        let mut shoulder = torso.transform_point(SHOULDER * Vec3::new(s, 1.0, 1.0));
-        shoulder.y = shoulder.y.min(head.translation.y - SHOULDER_BELOW_EYES);
+        let stance = player
+            .and_then(|p| stances.get(p).ok())
+            .filter(|st| st.ready);
+        let shoulder = match stance {
+            Some(st) => st.shoulder(v.side),
+            None => {
+                let mut sh = torso.transform_point(SHOULDER * Vec3::new(s, 1.0, 1.0));
+                sh.y = sh.y.min(head.translation.y - SHOULDER_BELOW_EYES);
+                sh
+            }
+        };
+        let scale = stance.map_or(1.0, |st| st.arm);
         let hint = torso.rotation * Vec3::new(0.6 * s, -1.0, 0.3).normalize();
         let hem = glove.mul_transform(glove_frame(arm.side));
         let wrist = hem.transform_point(if arm.side == watch { WATCH_HEM } else { HEM });
         let axis = Vec2::new(torso.translation.x, torso.translation.z);
-        let (shoulder, elbow) = arm_joints(shoulder, wrist, hint, axis);
+        let (shoulder, elbow) = arm_joints(shoulder, wrist, hint, axis, scale);
         let show = if *glove_vis == Visibility::Hidden {
             Visibility::Hidden
         } else {
@@ -376,7 +402,8 @@ struct BodyShadow {
     player: Entity,
     head: Entity,
     torso: Entity,
-    legs: [Entity; 2],
+    /// Thighs, then shins.
+    legs: [Entity; 4],
 }
 
 fn grow_body_shadow(
@@ -388,32 +415,75 @@ fn grow_body_shadow(
 ) {
     for player in &players {
         let mut part = || shadow_part(&mut commands, &mut meshes, &mut materials, &mut look);
-        let (head, torso, l, r) = (part(), part(), part(), part());
+        let (head, torso) = (part(), part());
+        let legs = [part(), part(), part(), part()];
         commands.spawn((
             Name::new("Body shadow"),
             BodyShadow {
                 player,
                 head,
                 torso,
-                legs: [l, r],
+                legs,
             },
         ));
     }
 }
 
 /// Head on the eyes, a torso leaning from the neck (which follows the
-/// head) down to the hips (which stay with the torso anchor), legs to the
-/// feet.
+/// head) down to the hips (which stay with the torso anchor), legs bent at
+/// the knees to the planted feet: the stance's (`rig::stance`), as the
+/// body's drawn.
 fn pose_body_shadow(
     bodies: Query<&BodyShadow>,
-    players: Query<(&Transform, &RigInput, &Children), Without<ShadowPart>>,
+    players: Query<
+        (
+            &Transform,
+            &RigInput,
+            &Children,
+            Option<&crate::rig::stance::Stance>,
+        ),
+        Without<ShadowPart>,
+    >,
     torsos: Query<&Transform, (With<Torso>, Without<ShadowPart>)>,
     mut parts: Query<(&mut Transform, &mut Visibility), With<ShadowPart>>,
 ) {
     for body in &bodies {
-        let Ok((root, input, children)) = players.get(body.player) else {
+        let Ok((root, input, children, stance)) = players.get(body.player) else {
             continue;
         };
+        if let Some(st) = stance.filter(|st| st.ready) {
+            let head = root.mul_transform(input.head);
+            let hips = st.pelvis.translation;
+            let torso_t = Transform::from_translation((st.neck + hips) / 2.0)
+                .with_rotation(st.chest.rotation)
+                .with_scale(Vec3::new(
+                    0.34,
+                    (st.neck.distance(hips) / 2.0).max(0.05),
+                    0.22,
+                ));
+            let placed = [
+                (
+                    body.head,
+                    limb(
+                        head.translation - Vec3::Y * 0.04,
+                        head.translation + Vec3::Y * 0.06,
+                        0.1,
+                    ),
+                ),
+                (body.torso, torso_t),
+                (body.legs[0], limb(st.hips[0], st.knees[0], 0.075)),
+                (body.legs[1], limb(st.hips[1], st.knees[1], 0.075)),
+                (body.legs[2], limb(st.knees[0], st.ankles[0], 0.055)),
+                (body.legs[3], limb(st.knees[1], st.ankles[1], 0.055)),
+            ];
+            for (e, t) in placed {
+                if let Ok((mut pt, mut vis)) = parts.get_mut(e) {
+                    *pt = t;
+                    *vis = Visibility::Inherited;
+                }
+            }
+            continue;
+        }
         let Some(torso) = children.iter().find_map(|c| torsos.get(c).ok()) else {
             continue;
         };
@@ -478,7 +548,7 @@ mod tests {
             Vec3::new(0.05, 1.45, -0.25), // the left wrist up to read (mirrored)
             Vec3::new(0.25, 1.0, -0.1),   // hanging by the hip
         ] {
-            let (s, e) = arm_joints(shoulder, wrist, hint, BODY);
+            let (s, e) = arm_joints(shoulder, wrist, hint, BODY, 1.0);
             assert_eq!(s, shoulder, "{wrist}: in reach, the shoulder stays");
             assert!(
                 (e.distance(s) - UPPER).abs() < 0.03
@@ -498,23 +568,37 @@ mod tests {
         }
     }
 
-    /// A hand out of reach pulls the shoulder after it; the arm runs
-    /// straight to the wrist and the forearm still ends there.
+    /// Just out of reach the arm straightens a little and the shoulder
+    /// stays; far out, the shoulder is pulled after the hand, the arm
+    /// straight and stretched no further. A longer arm (`scale`) reaches
+    /// without either.
     #[test]
     fn out_of_reach_the_arm_runs_straight() {
         let shoulder = Vec3::new(0.17, 1.42, 0.03);
-        let wrist = Vec3::new(0.3, 1.3, -0.9);
-        let (s, e) = arm_joints(shoulder, wrist, Vec3::NEG_Y, BODY);
-        assert!(s.distance(wrist) <= UPPER + FOREARM + 1e-3);
+        let dir = Vec3::new(0.1, -0.1, -1.0).normalize();
+        let just = shoulder + dir * (UPPER + FOREARM) * 1.03;
+        let (s, e) = arm_joints(shoulder, just, Vec3::NEG_Y, BODY, 1.0);
+        assert_eq!(s, shoulder, "just out of reach, the shoulder stays");
+        assert!((e.distance(s) + e.distance(just) - s.distance(just)).abs() < 1e-3);
+        let wrist = shoulder + dir * 0.9;
+        let (s, e) = arm_joints(shoulder, wrist, Vec3::NEG_Y, BODY, 1.0);
+        let most = (UPPER + FOREARM) * STRETCH;
+        assert!(s.distance(wrist) <= most + 1e-3);
         assert!(
-            (e.distance(wrist) - FOREARM).abs() < 0.01,
+            e.distance(wrist) <= FOREARM * STRETCH + 0.01,
             "forearm {}",
             e.distance(wrist)
         );
         assert!(
-            (e.distance(s) - UPPER).abs() < 0.01,
+            e.distance(s) <= UPPER * STRETCH + 0.01,
             "upper {}",
             e.distance(s)
+        );
+        let (s, e) = arm_joints(shoulder, just, Vec3::NEG_Y, BODY, 1.1);
+        assert_eq!(s, shoulder);
+        assert!(
+            (e.distance(s) - UPPER * 1.1).abs() < 0.01,
+            "a long arm bends"
         );
     }
 }
