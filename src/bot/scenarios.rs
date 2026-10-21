@@ -84,6 +84,7 @@ pub const OPT_IN: &[&str] = &[
     CONTRACTS[4].0,
     CONTRACTS[5].0,
     CONTRACTS[6].0,
+    CONTRACTS[7].0,
     crate::onboarding::first_hour::SCENARIO,
     crate::onboarding::first_hour::PERSONAS[0].scenario,
     crate::onboarding::first_hour::PERSONAS[1].scenario,
@@ -351,6 +352,8 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Stow(Side::Left),
             Gun(MacroKind::Reload),
             Expect(super::Expect::GunRounds(45, 45)),
+            // The legs down (bots fire it off them as they would a rest).
+            Gun(MacroKind::Bipod),
             Support,
             Gun(MacroKind::Mode),
             Fire { at: t1, shots: 10 },

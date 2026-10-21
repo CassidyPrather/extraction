@@ -62,9 +62,24 @@ pub struct BuildingPlan {
     /// floor under each cell, building-local y (NaN where there's none).
     /// A point belongs to the plan only near its cell's floor.
     pub levels: Option<Vec<f32>>,
+    /// An underground site's cells shut only by heat nothing crosses:
+    /// (cell, heat zone, its cost once that zone's vented).
+    pub hot: Vec<(usize, u16, u8)>,
 }
 
 impl BuildingPlan {
+    /// Heat zones vented: their cells walked again.
+    pub fn vent(&mut self, zones: &[usize]) {
+        let grid = &mut self.grid;
+        self.hot.retain(|&(k, z, cost)| {
+            let open = zones.contains(&(z as usize));
+            if open {
+                grid.cost[k] = cost;
+            }
+            !open
+        });
+    }
+
     pub fn to_local(&self, p: Vec3) -> Vec3 {
         self.xf.compute_affine().inverse().transform_point3(p)
     }
@@ -196,7 +211,8 @@ pub fn plan_buildings(
             .iter()
             .map(|(_, l)| l.0.hinge.y)
             .min_by(|a, b| a.total_cmp(b))
-            .unwrap_or_else(|| standing_floor(&geo));
+            .or(geo.floor)
+            .unwrap_or(0.0);
         let extent = half.x.max(half.y) + MARGIN;
         let n = ((extent * 2.0) / CELL).ceil() as usize;
         let mut grid = NavGrid {
@@ -317,6 +333,7 @@ pub fn plan_buildings(
             entries,
             half,
             levels: None,
+            hot: Vec::new(),
         });
     }
     out
@@ -395,17 +412,10 @@ fn plan_site(
                         && !levels[c as usize * n + a as usize].is_nan()
                 })
             });
-            // A pit's floor, or heat nothing crosses: not a way at all.
+            // A pit's floor: not a way at all. (Heat nothing crosses is
+            // shut after, once the colliders are in: see `hot`.)
             let p = grid.centre(i, j);
-            let barred = r.cell_of(p).is_some_and(|(a, c)| {
-                let k = c * r.nx + a;
-                r.pit[k]
-                    || r.heat[k].is_some_and(|z| {
-                        extraction_core::underground::layout(&b.prefab).is_some_and(|l| {
-                            l.heat[z as usize].level >= extraction_core::underground::SCORCHING
-                        })
-                    })
-            });
+            let barred = r.cell_of(p).is_some_and(|(a, c)| r.pit[c * r.nx + a]);
             if barred {
                 grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
             } else if clear {
@@ -452,6 +462,26 @@ fn plan_site(
             },
             CLEARANCE,
         );
+    }
+    // Heat nothing crosses: shut, each cell's cost kept for when its zone
+    // is vented (`BuildingPlan::vent`).
+    let mut hot = Vec::new();
+    if let Some(l) = extraction_core::underground::layout(&b.prefab) {
+        for j in 0..n {
+            for i in 0..n {
+                let k = j * n + i;
+                let Some(z) = r.heat_at(grid.centre(i, j)) else {
+                    continue;
+                };
+                if l.heat[z as usize].level < extraction_core::underground::SCORCHING {
+                    continue;
+                }
+                if grid.cost[k] != extraction_core::nav::BLOCKED {
+                    hot.push((k, z, grid.cost[k]));
+                    grid.cost[k] = extraction_core::nav::BLOCKED;
+                }
+            }
+        }
     }
     let is_ground = |p: Vec2| {
         grid.cell_of(p.to_array())
@@ -509,32 +539,8 @@ fn plan_site(
         outside: ground,
         inner,
         levels: Some(levels),
+        hot,
     }
-}
-
-/// A floor is at least this broad both ways (furniture isn't)...
-const FLOOR_SLAB: f32 = 2.0;
-/// ...and its top under this, above the ground.
-const FLOOR_TOP: f32 = 1.0;
-
-/// With no door to read it from, the floor is what you'd stand on in the
-/// middle: the highest solid top under the building's centre that's
-/// below the band (a drowned house's silt, a ruin's slab), or the ground.
-fn standing_floor(geo: &crate::world::buildings::Geo) -> f32 {
-    geo.pieces
-        .iter()
-        .filter(|p| p.collide)
-        .filter_map(|p| {
-            let Shape::Box(s) = p.shape else {
-                return None;
-            };
-            let local = p.at.compute_affine().inverse().transform_point3(Vec3::ZERO);
-            let inside = local.x.abs() <= s.x * 0.5 && local.z.abs() <= s.z * 0.5;
-            let broad = s.x.min(s.z) >= FLOOR_SLAB;
-            let top = p.at.translation.y + s.y * 0.5;
-            (inside && broad && top < FLOOR_TOP).then_some(top)
-        })
-        .fold(0.0, f32::max)
 }
 
 /// A collider piece as an obstacle on the floor, if it's in the way.

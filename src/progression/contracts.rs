@@ -52,7 +52,11 @@ pub fn pay(
     raid: &mut Raid,
     handover: &mut MessageWriter<crate::raid::lev::HandOver>,
 ) {
-    raid.say(lines::contract_done(c.name));
+    if c.done.is_empty() {
+        raid.say(lines::contract_done(c.name));
+    } else {
+        raid.say(c.done);
+    }
     for (id, n) in c.pay {
         for _ in 0..*n {
             handover.write(crate::raid::lev::HandOver {

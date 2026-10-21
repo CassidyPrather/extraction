@@ -653,12 +653,37 @@ biggest so the audit sees the worst; the code only takes it down:
 | A wall breached (`Broke` of 3 m²) | `break.breach`, masonry going, `break.rubble` pouring, and the boom | 46 / 40 |
 
 **Flocks** (`wildlife::Flushed`, `flock_sounds`): wings and the birds'
-calls, rooks (as crows), ravens or jackdaws by the flock's species; a
-burst of calls when alarmed, one softer call when it's only restless.
-The wings are a quick cloth flutter for now. Deer barking and bolting,
-dog packs and rats (`wildlife::herd::Startled`, `rats::Scurried`) wait
-on recordings: Freesound is out of reach from this environment's
-network for now.
+calls by the flock's species (rooks as crows, ravens, jackdaws, a
+heron's croak, choughs' ringing calls); a burst of calls when alarmed,
+one softer call when it's only restless. **Animals** (`animal_sounds`):
+a roe deer's hoarse bark, a chamois' whistle, a dog pack barking, a
+dog's yelp, hooves bolting through the leaves, rats in the walls, the
+thump of an animal shot.
+
+**Stand-ins.** Freesound has been out of reach from this environment's
+network, so the sounds of real things not yet in the bank are
+synthesised (`src/synth_foley.rs`): small models of each (a bark is a
+pitched, buzzy burst through a dog's formants; a drip a droplet's
+rising chirp; a breath shaped noise through the mouth), deterministic,
+rendered with the robots' words at start-up and audited like any set.
+They are: the deer's bark, dogs' barks and yelp, rats, the chough, the
+heron, the chamois, your breath, drips and lapping; and ducks and bats,
+rendered but waiting for Wildlife's rafts and bats to land before
+anything plays them. Each
+yields to a recording of the same name the moment the bank has one
+(`render_voices` skips a stand-in whose set exists). Layered from
+recordings meanwhile: wings (cloth), hooves (leaves, quick), glass
+underfoot (a pane's break, quick), snow (gravel), the scour outflow
+(the creek, slowed).
+
+**Breathing** (`breath_sounds`): winded (stamina under 0.6), a breath a
+second, louder the more winded, muffled to 1 kHz and a third as loud
+with a hand over your mouth, as `interact::gestures` lets robots hear
+it. You hear a full one 7 m off, robots 6 m.
+
+**Water** (`water_sounds`): any wide water (20 m and more: Sallow's
+flooded arm, a lake) laps at the shore nearest you within 40 m; Sallow's
+scours drip at the draw-off tower's foot.
 
 **Checked** (`scripts/audio_voices.py`): every sound breaking things,
 the birds and the heavy machine make, at its usual distance over the
@@ -693,10 +718,9 @@ heavy's footfall); each break you hear about as far as robots do
   `water.scour`, -26.5 LUFS at 20 m): the creek's recording slowed to
   0.75 and louder, until an outflow can be recorded. The spillway is
   dry (the reservoir is drained below its sill).
-- **Still to come**, waiting on recordings (Freesound is out of reach
-  from this environment's network for now): the scours' drip and gurgle
-  inside the draw-off tower and at its foot, and lapping water in New
-  Sallow.
+- **Drips and lapping**: the scours drip at the draw-off tower's foot;
+  New Sallow's flooded street laps at its edge (`water_sounds`; both
+  stand-ins until recordings can be fetched).
 
 ## Storms
 

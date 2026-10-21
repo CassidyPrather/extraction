@@ -88,6 +88,33 @@ killed.
   tower, north-west, 480 m. Two minutes." It does so again if you call
   while it waits. (`raid::lines::way`.)
 
+- **The truck came down on top of a newcomer at the rendezvous.** Told
+  "the rail yard", the reckless newcomer went and stood on the spot. The
+  truck arrives by appearing where it parks, and it appeared around them,
+  inside the bed's walls: they couldn't move, board or ring for five
+  minutes. Now it pulls up past them, short of them, or beside them
+  (`raid::truck::rv_pose_clear`, test
+  `the_truck_pulls_up_clear_of_whoever_waits_on_the_spot`).
+
+## The bot's own faults, fixed on the way
+
+These made a newcomer look stuck when a person wouldn't have been:
+- walking out of the truck bed through its side rather than over the
+  tailgate;
+- forgetting a line that had gone from the log before it looked ("noted",
+  the truck's reply);
+- a step to the side round an obstacle that itself got stuck, and counted
+  as a failure;
+- the cautious newcomer never running, even when the yard's board said to.
+
 ## Results
 
-(Filled from the runs below.)
+### First run (before the fixes above)
+
+| Newcomer | Yard | First raid |
+| - | - | - |
+| cautious | all 23 steps; but the first time, burned to death by the stone in silence | stuck leaving the truck bed; the truck's reply misread |
+| reckless | all 23 steps (walked into the shimmer for the stone) | to the farm and noted; at the rail yard the truck came down on top of it |
+| lost | all 23 steps, with walks that stalled coming back from the wrong posts | set off the wrong way, into the camp's edge, and stayed stuck |
+| hoarder | all 23 steps; a step failed with its hands full of what it had picked up | home, with two stalled walks |
+| one-handed | all 23 steps | home, with five stalled walks (the truck bed, the spot) |

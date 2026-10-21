@@ -180,7 +180,7 @@ fn convoy_events(
                         "The convoy is through the Gate. {} things you carried are gone.",
                         names.len()
                     ));
-                    memorial.0.lost.extend(names);
+                    memorial.0.lose(names);
                 }
                 // (Despawning the robot takes the bag, its child, with it.)
             }
