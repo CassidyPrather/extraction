@@ -5295,6 +5295,23 @@ pub fn dress_buildings(
                     lods: None,
                 });
             }
+            // Its yard (`clutter::yard`), out in the sun.
+            let hm = &zone.hm;
+            let ground = |p: Vec2| {
+                let p = [p.x, p.y];
+                hm.water_level(p).is_none().then(|| hm.height(p))
+            };
+            let models = super::clutter::yard(&zone.map, &b.prefab, tag, xf, &ground);
+            if !models.is_empty() {
+                let n = geo.pieces.len();
+                geo.props.push(PropDef {
+                    models,
+                    pieces: n..n,
+                    inside: false,
+                    shadow: true,
+                    lods: None,
+                });
+            }
         }
         wait.0 += 1;
         let bake = bakes.entry(bake_key).or_insert_with(|| {
