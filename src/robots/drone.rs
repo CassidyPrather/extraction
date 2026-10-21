@@ -437,7 +437,6 @@ fn drone_guns(
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
-    let now = time.elapsed_secs();
     fighting_since.retain(|e, _| {
         drones
             .get(*e)
@@ -449,11 +448,7 @@ fn drone_guns(
             d.lock = 0.0;
             continue;
         }
-        // A first look at you before it locks on (`walker::SIGHT_BEAT`).
-        let since = *fighting_since.entry(e).or_insert(now);
-        if now - since < super::walker::SIGHT_BEAT {
-            continue;
-        }
+
         if !aware.can_see_target {
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
@@ -472,6 +467,12 @@ fn drone_guns(
             continue;
         };
         if !part.alive() {
+            continue;
+        }
+        // A first look at you before it locks on (`walker::SIGHT_BEAT`).
+        let looked = fighting_since.entry(e).or_insert(0.0);
+        *looked += dt;
+        if *looked < super::walker::SIGHT_BEAT {
             continue;
         }
         if d.lock < LOCK_TIME {

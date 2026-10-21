@@ -2252,16 +2252,19 @@ fn a_walker_looks_before_it_shoots() {
     #[derive(Resource, Default)]
     struct Fired(Vec<(Entity, f32)>);
     let (mut app, player, zone) = app(None);
+    // Timed on the robots' own (fixed) clock.
     app.init_resource::<Fired>().add_systems(
-        Last,
+        FixedPostUpdate,
         |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
             let now = time.elapsed_secs();
             f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
         },
     );
+    // Out of its sight while it's set up (it would pick the fight early).
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
     let me = zone.on_ground(100.0, 200.0);
-    put(&mut app, player, me);
     let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    put(&mut app, player, me);
     {
         let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
         a.target = Some(player);
@@ -2269,7 +2272,7 @@ fn a_walker_looks_before_it_shoots() {
         a.suspicion = 1.0;
     }
     *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
-    let start = app.world().resource::<Time>().elapsed_secs();
+    let start = app.world().resource::<Time<Fixed>>().elapsed_secs();
     for _ in 0..90 * 6 {
         put(&mut app, player, me);
         app.update();
@@ -2304,6 +2307,11 @@ fn going_down_lets_you_go() {
     }
     *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
     app.update();
+    // Down, as health does it: the flag, and the message.
+    app.world_mut()
+        .get_mut::<crate::health::Health>(player)
+        .unwrap()
+        .down = true;
     app.world_mut()
         .write_message(crate::health::Downed { player, at: me });
     app.update();

@@ -1082,7 +1082,6 @@ fn walker_guns(
     ),
 ) {
     let dt = time.delta_secs();
-    let now = time.elapsed_secs();
     blind.retain(|e, _| walkers.contains(*e));
     fighting_since.retain(|e, _| {
         walkers
@@ -1194,9 +1193,10 @@ fn walker_guns(
         if muzzle.distance(target) > 70.0 {
             continue;
         }
-        // A first look at you before anything else.
-        let since = *fighting_since.entry(e).or_insert(now);
-        if now - since < SIGHT_BEAT {
+        // A first look at you before anything else (seconds of it).
+        let looked = fighting_since.entry(e).or_insert(0.0);
+        *looked += dt;
+        if *looked < SIGHT_BEAT {
             continue;
         }
         // Tell first: the turret settles, then it fires.
