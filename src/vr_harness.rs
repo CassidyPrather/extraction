@@ -69,7 +69,7 @@ impl Vr {
         Self::with(opts, Some(dir))
     }
 
-    fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
+    pub(crate) fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
         let mut app = crate::headless_app(opts, false);
         app.init_resource::<Seen>().add_systems(Update, collect);
         app.finish();
