@@ -36,7 +36,7 @@ pub struct Torso {
 }
 
 /// How far below the standing eyes the torso anchor rides.
-const CHEST_BELOW_EYES: f32 = 0.38;
+pub const CHEST_BELOW_EYES: f32 = 0.38;
 /// How far the head can drop (bending, reaching down) before the body is
 /// taken to be crouching and the anchor follows.
 const BEND: f32 = 0.45;

@@ -4013,8 +4013,9 @@ mod body {
         }
     }
 
-    /// Seated, the lap is under the eyes and the knees ahead of it, at the
-    /// lap's height; the feet below the knees.
+    /// Seated, the hips stay where the belt is (the slots at their
+    /// standing heights), the knees ahead of them at the lap's height, the
+    /// feet below the knees.
     #[test]
     fn seated_the_knees_are_ahead_of_the_lap() {
         let (mut vr, _) = standing();
@@ -4026,18 +4027,11 @@ mod body {
         vr.step(120);
         let st = stance(&vr);
         assert!(st.seated);
-        let eye = vr
-            .app
-            .world()
-            .get::<RigInput>(vr.player)
-            .unwrap()
-            .head
-            .translation
-            .y
-            + vr.feet().y;
+        let holster = slot(&mut vr, SlotKind::Holster);
         assert!(
-            (eye - st.pelvis.translation.y - 0.62).abs() < 0.05,
-            "the lap under the eyes"
+            holster.distance(st.hips[Side::Right.index()]) < 0.16,
+            "the holster {holster} off the seated hip {}",
+            st.hips[1]
         );
         let ahead = st.pelvis.rotation * Vec3::NEG_Z;
         for i in 0..2 {
