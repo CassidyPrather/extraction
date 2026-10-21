@@ -38,10 +38,8 @@ use crate::world::{Layer, Zone};
 
 /// The head's height over the ground at its foot (m).
 pub const MAST: f32 = 4.6;
-/// The cable's segments: each a stretch of this length a cutters' jaws
-/// find within [`CABLE_REACH`] of its middle.
+/// The cable's segments: each a stretch of this length, each cut on its own.
 pub const CABLE_STEP: f32 = 0.6;
-pub const CABLE_REACH: f32 = 0.35;
 /// What its parts take.
 pub const HEAD_HP: f32 = 260.0;
 pub const EYE_HP: f32 = 60.0;
@@ -123,6 +121,8 @@ pub struct SentryPlugin;
 impl Plugin for SentryPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SentryEvent>()
+            .init_resource::<Severed>()
+            .add_observer(cable_gone)
             .add_systems(
                 FixedUpdate,
                 (sentry_power, sentry_mind, sentry_report)
@@ -307,32 +307,23 @@ pub fn spawn_sentry(
         ),
     ));
     for (mid, len, rot) in cable_run(zone, foot, box_at) {
-        commands
-            .spawn((
-                Name::new("Sentry cable"),
-                SentryPiece::Cable,
-                OfSentry(robot),
-                Transform::from_translation(mid).with_rotation(rot),
-                CableLength(len),
-                Visibility::default(),
-            ))
-            .with_child((
-                // What the cutters' jaws find (a sensor: you walk over it);
-                // a cut takes this, and the stretch it was on goes dark.
-                Name::new("Sentry cable (cuttable)"),
-                CableCore,
-                crate::destruction::hooks::Cuttable { needs: 0.0 },
-                Collider::capsule(CABLE_REACH * 0.1, len),
-                Sensor,
-                Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-            ));
+        commands.spawn((
+            Name::new("Sentry cable"),
+            SentryPiece::Cable,
+            OfSentry(robot),
+            crate::destruction::hooks::Cuttable { needs: 0.0 },
+            // What the cutters' jaws find: a thin overlap-only box along
+            // the stretch, which nothing collides with or shoots.
+            Sensor,
+            Collider::cuboid(0.08, 0.06, len),
+            CollisionLayers::new(Layer::Hand, LayerMask::NONE),
+            Transform::from_translation(mid).with_rotation(rot),
+            CableLength(len),
+            Visibility::default(),
+        ));
     }
     robot
 }
-
-/// The cuttable core of a stretch of cable (its child).
-#[derive(Component, Debug)]
-pub struct CableCore;
 
 /// A stretch of cable's length (for its look).
 #[derive(Component, Debug, Clone, Copy)]
@@ -365,8 +356,8 @@ pub fn cable_run(zone: &Zone, from: Vec3, to: Vec3) -> Vec<(Vec3, f32, Quat)> {
 fn sentry_power(
     mut commands: Commands,
     mut cuts: MessageReader<crate::destruction::hooks::Cut>,
-    cores: Query<&ChildOf, With<CableCore>>,
     mut destroyed: MessageReader<super::PartDestroyed>,
+    mut severed: ResMut<Severed>,
     pieces: Query<(&SentryPiece, &OfSentry)>,
     mut sentries: Query<(Entity, &mut Sentry, &Robot, &Transform)>,
     raid: Option<Res<crate::raid::Raid>>,
@@ -379,16 +370,14 @@ fn sentry_power(
             commands.entity(e).despawn();
         }
     }
-    let mut lost: Vec<Entity> = Vec::new();
+    let mut lost: Vec<Entity> = std::mem::take(&mut severed.0);
     for c in cuts.read() {
-        let Ok(stretch) = cores.get(c.target).map(|p| p.parent()) else {
-            continue;
-        };
-        if let Ok((SentryPiece::Cable, of)) = pieces.get(stretch) {
+        if let Ok((SentryPiece::Cable, of)) = pieces.get(c.target) {
             lost.push(of.0);
             // Cut through: a gap in it, two loose ends.
             commands
-                .entity(stretch)
+                .entity(c.target)
+                .remove::<(crate::destruction::hooks::Cuttable, Collider)>()
                 .insert((CableCut, Visibility::Hidden));
         }
     }
@@ -426,6 +415,23 @@ fn sentry_power(
 #[derive(Component, Debug)]
 pub struct CableCut;
 
+/// Sentries whose cable has lost a stretch since [`sentry_power`] last
+/// looked.
+#[derive(Resource, Default)]
+struct Severed(Vec<Entity>);
+
+/// A stretch of cable taken away (Destruction despawns what the cutters
+/// cut, maybe before [`sentry_power`] reads the cut): its sentry is dark.
+fn cable_gone(
+    gone: On<Remove, SentryPiece>,
+    pieces: Query<(&SentryPiece, &OfSentry)>,
+    mut severed: ResMut<Severed>,
+) {
+    if let Ok((SentryPiece::Cable, of)) = pieces.get(gone.entity) {
+        severed.0.push(of.0);
+    }
+}
+
 /// Sweep, look, track, warn, fire.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn sentry_mind(
@@ -445,6 +451,7 @@ fn sentry_mind(
     catalog: Res<crate::items::Catalog>,
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
+    minds: Query<&super::senses::MindSeed>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -565,10 +572,10 @@ fn sentry_mind(
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
                 let aim = p + Vec3::Y * 1.1;
-                // Seeded by where it stands and how many it has fired, so
-                // it scatters the same whatever else is in the world.
+                // Seeded by the machine and how many it has fired, so it
+                // scatters the same whatever else is in the world.
                 s.fired += 1;
-                let seed = super::heavy::spot_seed(s.foot) ^ s.fired;
+                let seed = super::senses::mix(minds.get(e).map_or(0, |m| m.0), s.fired);
                 shots.write(Shot {
                     gun: e,
                     shooter: Some(e),
@@ -837,13 +844,13 @@ pub(crate) mod tests {
         (chirp.is_some(), fire.is_some(), hurt)
     }
 
-    /// The cuttable core of one of `sentry`'s stretches of cable.
+    /// One of `sentry`'s stretches of cable (each is what the cutters cut).
     pub(crate) fn cable_core(app: &mut App, sentry: Entity) -> Entity {
         app.world_mut()
-            .query::<(&SentryPiece, &OfSentry, &Children)>()
+            .query::<(Entity, &SentryPiece, &OfSentry)>()
             .iter(app.world())
-            .find(|(p, o, _)| matches!(p, SentryPiece::Cable) && o.0 == sentry)
-            .and_then(|(_, _, c)| c.iter().next())
+            .find(|(_, p, o)| matches!(p, SentryPiece::Cable) && o.0 == sentry)
+            .map(|(e, ..)| e)
             .expect("a cable")
     }
 
@@ -925,6 +932,89 @@ pub(crate) mod tests {
     fn cut_its_cable_and_its_dark() {
         let (chirp, fire, hurt) = stand_and_watch(false, true);
         assert!(!chirp && !fire && hurt == 0.0, "{chirp} {fire} {hurt}");
+    }
+
+    /// The real thing: bolt cutters in both hands, the jaws onto a
+    /// stretch of its cable, squeezed. It goes dark.
+    #[test]
+    fn real_cutters_kill_it() {
+        use crate::interact::GripRole;
+        use crate::interact::tools::cutters::{JAWS, LEFT};
+        use crate::rig::Side;
+        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_sentry(
+                &mut c,
+                &zone,
+                Vec2::new(40.0, 230.0),
+                0.0,
+                160.0,
+                Vec2::new(40.0, 242.0),
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(3);
+        // A stretch halfway along, the player beside it.
+        let stretches: Vec<(Entity, Vec3)> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &SentryPiece, &OfSentry, &Transform)>()
+            .iter(vr.app.world())
+            .filter(|(_, p, o, _)| matches!(p, SentryPiece::Cable) && o.0 == e)
+            .map(|(c, _, _, t)| (c, t.translation))
+            .collect();
+        let (stretch, wire) = stretches[stretches.len() / 2];
+        vr.stand(zone.on_ground(wire.x, wire.z + 0.7), 0.0);
+        let tool = vr.spawn(
+            "bolt_cutters",
+            Transform::from_translation(wire + Vec3::new(0.0, 0.5, 0.0)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let l = vr.point(tool, |r| *r == GripRole::Primary);
+        let r = vr.point(tool, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, l, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        vr.hand(Side::Right, r, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        // Handles spread, the jaws onto the cable (held low, pointing
+        // ahead, as at a fence).
+        let reach = (LEFT.z - JAWS.z) + 0.04;
+        let at = |s: f32| {
+            let back = wire + Vec3::Z * reach;
+            (back - Vec3::X * s * 0.5, back + Vec3::X * s * 0.5)
+        };
+        let spread = 0.3;
+        let (l1, r1) = at(spread);
+        for i in 1..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, l.lerp(l1, k));
+            vr.move_hand(Side::Right, r.lerp(r1, k));
+            vr.step(1);
+        }
+        vr.step(8);
+        for i in 1..=12 {
+            let (l2, r2) = at(spread - (spread - 0.1) * i as f32 / 12.0);
+            vr.move_hand(Side::Left, l2);
+            vr.move_hand(Side::Right, r2);
+            vr.step(1);
+        }
+        vr.step(10);
+        let w = vr.app.world();
+        assert!(
+            w.get_entity(stretch).is_err() || w.get::<CableCut>(stretch).is_some(),
+            "the stretch is cut"
+        );
+        assert!(!w.get::<Sentry>(e).unwrap().powered, "and it's dark");
     }
 
     /// A noise where it could look swings it there, and it holds there a

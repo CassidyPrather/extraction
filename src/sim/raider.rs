@@ -2520,7 +2520,11 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
         },
     ];
     // Out of the body slot it was stowed in (drawn), or the pack.
-    let socket = scene.items.get(relay).ok().and_then(|(.., so, _)| so.map(|s| s.socket));
+    let socket = scene
+        .items
+        .get(relay)
+        .ok()
+        .and_then(|(.., so, _)| so.map(|s| s.socket));
     let mut mine: Vec<Entity> = scene
         .owned_sockets
         .iter()
