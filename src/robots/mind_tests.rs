@@ -92,10 +92,10 @@ fn flat(v: Vec3) -> f32 {
     Vec2::new(v.x, v.z).length()
 }
 
-/// The classic distraction: a piece of scrap thrown down 7 m from a walker
-/// at its post (on grass, which muffles a landing to half: from 14 m it
-/// wouldn't be heard), and the walker walks over to about where it landed
-/// (not to you) and searches round it.
+/// The classic distraction: a piece of scrap lobbed down hard 7 m from a
+/// walker at its post (on grass, which muffles a landing to half: dropped
+/// softly, or from 14 m, it wouldn't be heard), and the walker walks over
+/// to about where it landed (not to you) and searches round it.
 #[test]
 fn a_thrown_bolt_draws_a_walker() {
     let (mut app, player, zone) = app(None);
@@ -113,7 +113,7 @@ fn a_thrown_bolt_draws_a_walker() {
             &catalog,
             crate::items::SpawnItem {
                 kind: catalog.kind("scrap_metal").unwrap(),
-                transform: Transform::from_translation(spot + Vec3::Y * 2.0),
+                transform: Transform::from_translation(spot + Vec3::Y * 6.0),
                 condition: 1.0,
             },
         )
