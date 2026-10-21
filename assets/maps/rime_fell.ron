@@ -255,6 +255,9 @@
         // The ore mill, stepped down the spur; the adit house over it.
         (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, y: 90.0, absolute: true, tag: "ore_mill"),
         (prefab: "rail_shed", at: (135.0, -44.0), rot: 270.0, tag: "adit_house"),
+        // Coldharbour's mine in the knoll: down by the adit house, out
+        // onto the mill's back apron (assets/underground).
+        (prefab: "adit_rime", at: (160.0, -55.0), rot: 180.0),
 
         // The tip road's end: the compressor house.
         (prefab: "pump_station", at: (238.0, -60.0), rot: 180.0, tag: "compressor_house"),
