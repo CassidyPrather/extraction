@@ -452,7 +452,7 @@ fn spawn_reverb_bus(commands: &mut Commands) {
 /// How much of a cue goes to the reverb: all of it, but for recordings
 /// with their own space baked in (the far-off shot's echo, the siren's
 /// valley) and the beds.
-fn reverb_send(cue: &str) -> SendNode {
+pub(crate) fn reverb_send(cue: &str) -> SendNode {
     let share = match mix::role(cue) {
         Some(mix::Role::Bed) => 0.0,
         _ if matches!(cue, "gun.distant" | "surge.siren" | "surge.crack") => 0.3,

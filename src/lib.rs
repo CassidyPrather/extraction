@@ -30,6 +30,7 @@ pub mod persist;
 pub mod player;
 pub mod progression;
 pub mod qa;
+pub mod radio;
 pub mod raid;
 pub mod render;
 pub mod rig;
@@ -93,6 +94,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                radio::RadioPlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
@@ -126,6 +128,7 @@ impl Plugin for ClientPlugin {
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .add_plugins(wildlife::WildlifeVisualsPlugin)
+        .add_plugins(radio::visuals::MusicVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,
@@ -296,7 +299,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     // system errors become warnings.
     app.set_error_handler(bevy::ecs::error::warn);
     if opts.screenshot.is_none() {
-        app.add_plugins(audio::AudioPlugin);
+        app.add_plugins((audio::AudioPlugin, radio::sound::MusicSoundPlugin));
     }
     // GPU time per render pass for the session log (`log_frame_times`):
     // the headset's device has timestamp queries; elsewhere it's a no-op.
