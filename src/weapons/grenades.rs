@@ -229,7 +229,9 @@ fn burn_fuses(
             source: thrower,
         });
         // Fragments: real rounds, all round. They can hurt the thrower too.
-        let mut rng = Rng::new(e.to_bits());
+        // Seeded from where it burst, not its entity (which hangs on spawn
+        // order).
+        let mut rng = Rng::new(super::gun_seed("frag", at));
         let twist = rng.range(0.0, std::f32::consts::TAU);
         for d in extraction_core::grenade::spray(def.fragments, twist) {
             let dir = Vec3::from_array(d);

@@ -650,7 +650,7 @@ mod tests {
 
     #[test]
     fn every_valley_has_a_home_for_its_herd() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let (zone, nav) = valley(map);
             let home = pick_home(&zone, &nav, 1).unwrap_or_else(|| panic!("{map}: no home"));
             assert!(open(&nav, &zone, home), "{map}");

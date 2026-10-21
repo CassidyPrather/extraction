@@ -284,7 +284,7 @@ fn blows_break_a_door_down() {
     let mut blows = 0;
     while app.world().get::<Door>(door).is_some() && blows < 40 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: leaf_collider,
             point: mid,
             normal: n,
@@ -359,7 +359,7 @@ fn whats_broken_stays_broken_until_the_surge() {
     let (door, collider, mid, n) = plank_door(&mut a);
     for _ in 0..10 {
         a.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: collider,
             point: mid,
             normal: n,
@@ -608,7 +608,7 @@ fn a_crate_in_a_house_breaks_open_and_comes_back_with_the_surge() {
     let mut blows = 0;
     while app.world().get_entity(c).is_ok() && blows < 20 {
         app.world_mut().write_message(Hit {
-            blow: None,
+            blow: Some(extraction_core::melee::Blow::Blunt),
             entity: c,
             point: at + Vec3::Y * size * 0.5,
             normal: Vec3::Y,
@@ -859,6 +859,24 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     run(&mut a, 4);
     assert!(!blocked(&mut a), "a hole through it");
     assert_eq!(a.world().resource::<Breaches>().0.len(), 1);
+    // The robots know it for a way in: an open doorway facing out.
+    let holes = |app: &mut App| {
+        let marks: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<super::breach::BreachHole>>()
+            .iter(app.world())
+            .collect();
+        app.world()
+            .resource::<crate::robots::doors::Entrances>()
+            .doors
+            .iter()
+            .filter(|e| marks.contains(&e.door))
+            .map(|e| (e.mid, e.out))
+            .collect::<Vec<_>>()
+    };
+    let h = holes(&mut a);
+    assert_eq!(h.len(), 1, "the hole is in the doorway index");
+    assert!(h[0].1.dot(back) > 0.9, "facing out of the house");
     assert!(live_debris(&mut a) > 6, "its boards fly");
     // Saved, and back as it was.
     let save = crate::persist::snapshot(a.world_mut());
@@ -873,9 +891,11 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     let mut b = app(Some(path.clone()));
     run(&mut b, 3);
     assert!(!blocked(&mut b), "the hole is still there after a reload");
+    assert_eq!(holes(&mut b).len(), 1, "and still a way in");
     crate::persist::reset_zone(b.world_mut());
     run(&mut b, 3);
     assert!(blocked(&mut b), "the Surge mends the wall");
+    assert!(holes(&mut b).is_empty(), "and the way in is gone");
     assert!(b.world().resource::<Breaches>().0.is_empty());
     let _ = std::fs::remove_file(&path);
 }
@@ -1031,5 +1051,161 @@ fn shards_come_to_rest_and_sleep() {
     assert!(
         asleep * 10 >= all * 8,
         "{asleep} of {all} asleep after five seconds"
+    );
+}
+
+#[test]
+fn a_grenade_at_a_doors_foot_blows_it_in_and_one_further_off_doesnt() {
+    use crate::weapons::grenades::GrenadeEvent;
+    let blast = |app: &mut App, at: Vec3| {
+        let g = app.world_mut().spawn_empty().id();
+        app.world_mut().write_message(GrenadeEvent {
+            grenade: g,
+            event: extraction_core::grenade::Event::Exploded,
+            at,
+        });
+        run(app, 3);
+    };
+    let mut app = app(None);
+    let (door, _, mid, n) = plank_door(&mut app);
+    // Four metres out: it rattles.
+    blast(&mut app, mid + n * 4.0 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_some(),
+        "a far blast leaves it"
+    );
+    // At its foot: in it goes.
+    blast(&mut app, mid + n * 0.5 - Vec3::Y * 0.6);
+    assert!(
+        app.world().get::<Door>(door).is_none(),
+        "a near blast blows it in"
+    );
+}
+
+#[test]
+fn a_blade_bites_wood_less_than_a_butt() {
+    use extraction_core::melee::Blow;
+    let hit = |blow, mass_g| Hit {
+        entity: Entity::PLACEHOLDER,
+        point: Vec3::ZERO,
+        normal: Vec3::Y,
+        velocity: Vec3::X,
+        damage: 40.0,
+        shooter: None,
+        mass_g,
+        load: Default::default(),
+        blow,
+    };
+    let share = super::wood::blow_share;
+    assert_eq!(share(&hit(Some(Blow::Blunt), 0.0), true), 1.0);
+    assert_eq!(share(&hit(Some(Blow::Edge), 0.0), true), 0.5);
+    assert_eq!(share(&hit(Some(Blow::Point), 0.0), true), 0.25);
+    assert_eq!(share(&hit(None, 7.9), true), super::wood::ROUND_ON_DOOR);
+    assert_eq!(
+        share(&hit(None, 7.9), false),
+        1.0,
+        "a crate's slats take a round whole"
+    );
+    assert_eq!(share(&hit(None, 0.0), true), 1.0, "a blast");
+}
+
+#[test]
+fn boards_over_a_window_take_rounds_and_a_crowbar() {
+    use super::boards::{BOARD_PRY, WindowBoard, spawn_boards};
+    use super::hooks::{PRY_HOLD, Pried};
+    let mut app = app(None);
+    let (b, t) = app
+        .world_mut()
+        .query::<(&crate::world::buildings::Building, &Transform)>()
+        .iter(app.world())
+        .find(|(b, _)| b.prefab == "house_plank")
+        .map(|(b, t)| {
+            (
+                crate::world::buildings::Building {
+                    prefab: b.prefab.clone(),
+                },
+                *t,
+            )
+        })
+        .unwrap();
+    // Its first window boarded (World models decides which, in the game).
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut c = Commands::new(&mut queue, app.world());
+        spawn_boards(&mut c, &b, &t, &[true], &Broken::default());
+    }
+    queue.apply(app.world_mut());
+    run(&mut app, 2);
+    let boards: Vec<(Entity, GlobalTransform)> = app
+        .world_mut()
+        .query_filtered::<(Entity, &GlobalTransform), With<WindowBoard>>()
+        .iter(app.world())
+        .map(|(e, g)| (e, *g))
+        .collect();
+    assert_eq!(boards.len(), 3, "three boards across the window");
+    // Outside the glass, on the street side: a round from out front hits
+    // a board first, and two rifle rounds split it.
+    let (b0, g0) = boards[0];
+    let out = g0.rotation() * Vec3::NEG_Z;
+    let c = g0.translation();
+    let mut shots = 0;
+    while app.world().get_entity(b0).is_ok() && shots < 6 {
+        shoot(&mut app, c + out * 3.0, c, 715.0, 7.9, 40.0);
+        run(&mut app, 3);
+        shots += 1;
+    }
+    assert!(app.world().get_entity(b0).is_err(), "the board split");
+    assert!(shots <= 3, "after a couple of rounds ({shots})");
+    assert!(app.world().resource::<Broken>().0.contains(&key(c)));
+    // The next pried off at its end.
+    let (b1, _) = boards[1];
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: b1,
+            torque: BOARD_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(b1).is_err(), "pried off");
+    assert!(live_debris(&mut app) > 2, "in splinters");
+}
+
+#[test]
+fn a_hole_in_a_doorless_building_puts_it_in_the_robots_index() {
+    use super::hooks::Breach;
+    let mut app = app(None);
+    run(&mut app, 5);
+    let entrances = app.world().resource::<crate::robots::doors::Entrances>();
+    assert!(!entrances.shells.is_empty(), "the index is built");
+    let indexed: Vec<Entity> = entrances.shells.iter().map(|s| s.building).collect();
+    // A building with a breachable wall and no door.
+    let found = app
+        .world_mut()
+        .query::<(Entity, &crate::world::buildings::Building, &Transform)>()
+        .iter(app.world())
+        .filter(|(e, ..)| !indexed.contains(e))
+        .find_map(|(e, b, t)| {
+            let geo = crate::world::buildings::prefab(&b.prefab)?;
+            let i = geo.pieces.iter().position(|p| {
+                matches!(p.shape, crate::world::buildings::Shape::Box(s) if s.z < 0.45 && s.y > 1.6 && s.x > 1.6)
+                    && p.collide
+                    && super::breach::breachable(p.mat)
+            })?;
+            Some((e, t.transform_point(geo.pieces[i].at.translation), *t))
+        });
+    let Some((e, at, t)) = found else {
+        panic!("Marrow Creek has a doorless building with a plank wall");
+    };
+    app.world_mut().write_message(Breach {
+        at,
+        out: t.rotation * Vec3::Z,
+    });
+    run(&mut app, 3);
+    let entrances = app.world().resource::<crate::robots::doors::Entrances>();
+    assert!(
+        entrances.shells.iter().any(|s| s.building == e),
+        "the building has a box to be inside"
     );
 }

@@ -138,14 +138,26 @@ fn glaze_buildings(
     server: Res<AssetServer>,
     mut shards: ResMut<ShardMaterial>,
     spatial: avian3d::prelude::SpatialQuery,
+    undressed: Query<(), With<crate::world::buildings::PropsPending>>,
+    mut waiting: Local<Vec<Entity>>,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
     let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
+    dirty.append(&mut waiting);
     if dirty.is_empty() {
         return;
     }
     dirty.sort();
     dirty.dedup();
+    // Not before the building's own walls are drawn (its shading bakes in
+    // the background): glass hanging in the air on a valley's arrival.
+    let (now, later): (Vec<Entity>, Vec<Entity>) =
+        dirty.into_iter().partition(|b| !undressed.contains(*b));
+    *waiting = later;
+    let dirty = now;
+    if dirty.is_empty() {
+        return;
+    }
     // Per building, two meshes: the whole panes, and the broken ones'
     // teeth (paler and glinting, so a broken window reads as broken).
     type Buf = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>);
@@ -314,40 +326,70 @@ fn dress_debris(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut library: ResMut<MaterialLibrary>,
     mut shards: ResMut<ShardMaterial>,
+    mut shapes: Local<Vec<Handle<Mesh>>>,
     server: Res<AssetServer>,
 ) {
+    // A handful of shard shapes, each a unit slab, stretched to every
+    // piece's size: pieces of a kind share mesh and material, so a
+    // window's worth (or a cap's worth) batches into a few draws.
+    if shapes.is_empty() {
+        let cut = fracture::shatter([1.0, 1.0], [0.3, -0.2], 0x5_4A9E, 16);
+        *shapes = cut
+            .falling
+            .iter()
+            .chain(&cut.kept)
+            .take(SHAPES)
+            .map(|sh| {
+                let h = sh.half_extents();
+                let unit: Vec<P2> = sh
+                    .poly
+                    .iter()
+                    .map(|p| [p[0] / h[0].max(1e-3), p[1] / h[1].max(1e-3)])
+                    .collect();
+                meshes.add(slab(&unit, 1.0))
+            })
+            .collect();
+    }
     for (e, d) in &added {
         let material = match d.kind {
             Kind::Glass => shards.get(&mut materials),
             Kind::Wood(m) => library.get(m, &server, &mut materials),
         };
+        let mut half = [0.0f32; 2];
+        for p in &d.poly {
+            half[0] = half[0].max(p[0].abs());
+            half[1] = half[1].max(p[1].abs());
+        }
+        let k = (half[0] * 1000.0 + half[1] * 7000.0) as usize % shapes.len().max(1);
+        let size = Vec3::new(half[0], half[1], d.thick);
         // On a child, so shrinking it never touches the body.
         commands.spawn((
-            DebrisMesh,
-            Mesh3d(meshes.add(slab(&d.poly, d.thick))),
+            DebrisMesh(size),
+            Mesh3d(shapes[k].clone()),
             MeshMaterial3d(material),
             NotShadowCaster,
-            Transform::IDENTITY,
+            Transform::from_scale(size),
             ChildOf(e),
         ));
     }
 }
 
+/// How many shard shapes the pieces share.
+const SHAPES: usize = 8;
+
+/// A piece's drawn slab, and its size (the unit shape's stretch).
 #[derive(Component)]
-pub struct DebrisMesh;
+pub struct DebrisMesh(pub Vec3);
 
 /// The last half second of a piece's life, it shrinks away.
-fn fade_debris(
-    pieces: Query<&Debris>,
-    mut drawn: Query<(&ChildOf, &mut Transform), With<DebrisMesh>>,
-) {
-    for (parent, mut t) in &mut drawn {
+fn fade_debris(pieces: Query<&Debris>, mut drawn: Query<(&ChildOf, &DebrisMesh, &mut Transform)>) {
+    for (parent, size, mut t) in &mut drawn {
         let Ok(d) = pieces.get(parent.parent()) else {
             continue;
         };
         let left = d.life - d.age;
         if left < 0.5 {
-            t.scale = Vec3::splat((left / 0.5).clamp(0.05, 1.0));
+            t.scale = size.0 * (left / 0.5).clamp(0.05, 1.0);
         }
     }
 }
@@ -426,25 +468,24 @@ fn shoot_for_screenshot(
     ));
 }
 
-/// A building's crate, drawn on its own: its box until its model is in.
-/// Furniture's range (`buildings::dress_buildings`): drawn near, gone
-/// past 25-35 m, where the room's dark anyway (each mesh carries it: a
-/// range doesn't pass to children).
+/// A breakable thing drawn on its own (`wood::Drawn`: a building's crate,
+/// a board over a window): its box until its model is in. Each mesh
+/// carries its range (a range doesn't pass to children).
 fn dress_crates(
     mut commands: Commands,
-    crates: Query<(Entity, &super::wood::BuildingCrate, Option<&Children>), Without<CrateDressed>>,
+    things: Query<(Entity, &super::wood::Drawn, Option<&Children>), Without<CrateDressed>>,
     boxes: Query<(), With<CrateBox>>,
     mut props: crate::render::world_props::PropModels,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use crate::render::world_props::Resolved;
-    let range = || bevy::camera::visibility::VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: 25.0..35.0,
-        use_aabb: true,
-    };
-    for (e, c, children) in &crates {
+    for (e, c, children) in &things {
+        let range = || bevy::camera::visibility::VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: c.range.clone(),
+            use_aabb: true,
+        };
         let has_box = children.into_iter().flatten().any(|k| boxes.contains(*k));
         match props.resolve_all([c.model].into_iter()) {
             Resolved::Loading => {
@@ -452,9 +493,7 @@ fn dress_crates(
                     let planks = props.lib.get(Mat::Planks, &props.server, &mut materials);
                     commands.spawn((
                         CrateBox,
-                        Mesh3d(
-                            meshes.add(crate::render::materials::metric_box(Vec3::splat(c.size))),
-                        ),
+                        Mesh3d(meshes.add(crate::render::materials::metric_box(c.size))),
                         MeshMaterial3d(planks),
                         Transform::IDENTITY,
                         range(),
@@ -477,7 +516,7 @@ fn dress_crates(
                     commands.spawn((
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
-                        c.model_at * t,
+                        c.at * t,
                         range(),
                         ChildOf(e),
                     ));

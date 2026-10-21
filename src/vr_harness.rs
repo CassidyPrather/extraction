@@ -1699,7 +1699,7 @@ mod tests {
     fn most_loot_in_the_zone_is_off_the_floor() {
         use bevy::ecs::system::RunSystemOnce;
         let mut report = Vec::new();
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let dir =
                 std::env::temp_dir().join(format!("extraction-loot-{map}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
@@ -2986,7 +2986,8 @@ mod climbing {
 /// Tools worked with the hands.
 mod tools {
     use super::*;
-    use crate::interact::tools::crowbar::{CLAW, GRIP, PriedFree, Pryable, SHAFT};
+    use crate::destruction::hooks::{PRY_HOLD, Pried, Pryable};
+    use crate::interact::tools::crowbar::{CLAW, GRIP, SHAFT};
 
     const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
 
@@ -2997,42 +2998,30 @@ mod tools {
             .on_ground(x, z)
     }
 
+    /// The longest the torque on the block has stayed at 100 N·m or more
+    /// (seconds), as Destruction counts it toward giving.
     #[derive(Resource, Default)]
-    struct Freed(Vec<Entity>);
-
-    fn collect_freed(mut r: MessageReader<PriedFree>, mut freed: ResMut<Freed>) {
-        freed.0.extend(r.read().map(|f| f.target));
+    struct Strain {
+        run: f32,
+        longest: f32,
     }
 
-    /// A crowbar in both hands, its claw to the seam on a block's face
-    /// 0.6 m ahead at waist height; then levered round the claw with the
-    /// hands at `out` and `steady` metres up the bar from it. Did it give?
-    fn pry(out: f32, steady: f32) -> bool {
-        let mut vr = Vr::new("training_yard");
-        vr.app
-            .init_resource::<Freed>()
-            .add_systems(FixedUpdate, collect_freed);
-        let feet = on_ground(&vr, OPEN.x, OPEN.z);
-        vr.stand(feet, 0.0);
-        let face = feet + Vec3::new(0.0, 1.0, -0.6);
-        let block = vr
-            .app
-            .world_mut()
-            .spawn((
-                RigidBody::Static,
-                Collider::cuboid(1.0, 1.0, 0.4),
-                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
-                Transform::from_translation(face - Vec3::Z * 0.2),
-                Pryable {
-                    needs: 100.0,
-                    seam: Vec3::new(0.0, 0.0, 0.23),
-                    radius: 0.08,
-                },
-            ))
-            .id();
+    fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
+        let hard = r.read().any(|p| p.torque >= 100.0);
+        s.run = if hard { s.run + time.delta_secs() } else { 0.0 };
+        s.longest = s.longest.max(s.run);
+    }
+
+    /// A crowbar taken up in both hands, its claw put to `seam` (world)
+    /// with the bar leaning back toward `back` (level, toward you), then
+    /// levered round the claw with the hands at `out` and `steady` metres up
+    /// the bar from it, 0.45 rad, and held there.
+    fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
         let bar = vr.spawn(
             "crowbar",
-            Transform::from_translation(feet + Vec3::new(0.3, 0.9, -0.3)),
+            Transform::from_translation(
+                feet + Vec3::Y * 0.9 + (seam - feet).with_y(0.0) * 0.5 + Vec3::X * 0.3,
+            ),
         );
         vr.app.world_mut().entity_mut(bar).insert(RigidBody::Static);
         let grip = vr.point(bar, |r| *r == GripRole::Primary);
@@ -3050,8 +3039,7 @@ mod tools {
             "the other hand steadies the bar"
         );
         // The claw to the seam: the bar along a line up and back from it.
-        let seam = face + Vec3::Z * 0.03;
-        let line = Vec3::new(0.0, 0.6, 0.8).normalize();
+        let line = (back * 0.8 + Vec3::Y * 0.6).normalize();
         let hands_at = |line: Vec3, a: f32, b: f32| (seam + line * a, seam + line * b);
         let (r, l) = hands_at(line, (GRIP - CLAW).length(), (SHAFT - CLAW).length());
         for i in 1..=20 {
@@ -3061,21 +3049,26 @@ mod tools {
             vr.step(1);
         }
         vr.step(10);
-        let seated = vr
+        let seat = vr
             .app
             .world()
             .get::<crate::interact::tools::crowbar::Crowbar>(bar)
             .unwrap()
             .seated
-            .is_some();
-        assert!(seated, "the claw seats on the seam");
+            .expect("the claw seats on the seam");
+        // From here the hands go round where it actually seated, on the
+        // line it seated along.
+        let (pivot, line) = (seat.pivot, seat.line);
+        let hands_at = |line: Vec3, a: f32, b: f32| (pivot + line * a, pivot + line * b);
         // Slide the hands to where they'll lever from, then pull the
         // handle round the claw, 0.45 rad, and hold it there.
         let (r0, l0) = hands_at(line, out, steady);
         vr.move_hand(Side::Right, r0);
         vr.move_hand(Side::Left, l0);
         vr.step(2);
-        let bent = Quat::from_rotation_x(-0.45) * line;
+        // Only the lever counts (the claw may have seated on the way in).
+        *vr.app.world_mut().resource_mut::<Strain>() = Strain::default();
+        let bent = Quat::from_axis_angle(Vec3::Y.cross(back).normalize(), -0.45) * line;
         for i in 1..=10 {
             let k = i as f32 / 10.0;
             let now = line.slerp(bent, k);
@@ -3085,13 +3078,79 @@ mod tools {
             vr.step(1);
         }
         vr.step(40);
-        vr.app.world().resource::<Freed>().0.contains(&block)
+    }
+
+    /// A crowbar in both hands, its claw to the seam on a block's face
+    /// 0.6 m ahead at waist height; then levered round the claw with the
+    /// hands at `out` and `steady` metres up the bar from it. Would it give
+    /// (100 N·m held for Destruction's PRY_HOLD)?
+    fn pry(out: f32, steady: f32) -> bool {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Strain>()
+            .add_systems(FixedUpdate, strain);
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let face = feet + Vec3::new(0.0, 1.0, -0.6);
+        let block = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(1.0, 1.0, 0.4),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(face - Vec3::Z * 0.2),
+                Pryable {
+                    needs: 100.0,
+                    seam: Vec3::new(0.0, 0.0, 0.23),
+                    along: Vec3::X,
+                    held: 0.0,
+                },
+            ))
+            .id();
+        work_bar(&mut vr, feet, face + Vec3::Z * 0.03, Vec3::Z, out, steady);
+        let _ = block;
+        vr.app.world().resource::<Strain>().longest >= PRY_HOLD
     }
 
     /// Levered from the end of the bar with both hands, the seam gives.
     #[test]
     fn a_crowbar_levered_from_its_end_prises_the_seam() {
         assert!(pry(0.67, 0.4), "two hands at the end didn't move it");
+    }
+
+    /// A real seam: one of Marrow Creek's supply crates, its lid's edge
+    /// (Destruction's). Levered from the end of the bar, the lid gives and
+    /// the crate spills open.
+    #[test]
+    fn a_crowbar_prises_a_supply_crate_open() {
+        let mut vr = Vr::new("marrow_creek");
+        vr.app
+            .init_resource::<Strain>()
+            .add_systems(FixedUpdate, strain);
+        let (krate, gt, seam) = {
+            let mut q = vr.app.world_mut().query_filtered::<
+                (Entity, &GlobalTransform, &Pryable),
+                With<crate::items::loot::SupplyCrate>,
+            >();
+            let (e, gt, p) = q.iter(vr.app.world()).next().expect("a supply crate");
+            (e, *gt, *p)
+        };
+        // Stand off the lid's seam side, facing it.
+        let at = gt.transform_point(seam.seam);
+        let back = (gt.rotation() * Vec3::NEG_Z).with_y(0.0).normalize();
+        let feet = {
+            let p = at + back * 0.75;
+            on_ground(&vr, p.x, p.z)
+        };
+        vr.stand(feet, (-back.x).atan2(-back.z) + std::f32::consts::PI);
+        work_bar(&mut vr, feet, at + back * 0.02, back, 0.67, 0.4);
+        vr.step(30);
+        assert!(
+            vr.app.world().get_entity(krate).is_err(),
+            "the crate's lid held (longest strain {:.2} s)",
+            vr.app.world().resource::<Strain>().longest
+        );
     }
 
     /// Choked up by the claw, the same pull moves nothing.
@@ -3104,7 +3163,8 @@ mod tools {
 /// Bolt cutters, worked with both hands.
 mod cutters {
     use super::*;
-    use crate::interact::tools::cutters::{ChainLink, Cuttable, JAWS, LEFT, Padlock};
+    use crate::destruction::hooks::Cuttable;
+    use crate::interact::tools::cutters::{ChainLink, JAWS, LEFT, Padlock};
 
     const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
 
@@ -3131,18 +3191,24 @@ mod cutters {
                 Transform::from_translation(wire),
             ))
             .id();
-        let cuttable = Cuttable {
-            at: Vec3::new(0.0, 0.0, 0.04),
-            radius: 0.1,
-        };
+        let cuttable = Cuttable { needs: 0.0 };
+        let mut lock = None;
         if locked {
-            vr.app.world_mut().spawn((
-                Padlock { holds: panel },
-                cuttable,
-                Collider::cuboid(0.05, 0.07, 0.02),
-                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
-                Transform::from_translation(wire),
-            ));
+            lock = Some(
+                vr.app
+                    .world_mut()
+                    .spawn((
+                        Padlock { holds: panel },
+                        cuttable,
+                        Collider::cuboid(0.05, 0.07, 0.02),
+                        CollisionLayers::new(
+                            crate::world::Layer::Item,
+                            [crate::world::Layer::World],
+                        ),
+                        Transform::from_translation(wire),
+                    ))
+                    .id(),
+            );
         } else {
             vr.app.world_mut().entity_mut(panel).insert(cuttable);
         }
@@ -3194,8 +3260,17 @@ mod cutters {
             vr.step(1);
         }
         vr.step(4);
-        vr.app.world().get::<ChainLink>(panel).unwrap().cut
-            && vr.app.world().get::<ColliderDisabled>(panel).is_some()
+        let w = vr.app.world();
+        // Cut, Destruction takes the cut thing away; a padlock's panel is
+        // left open.
+        match lock {
+            Some(lock) => {
+                w.get_entity(lock).is_err()
+                    && w.get::<ChainLink>(panel).unwrap().cut
+                    && w.get::<ColliderDisabled>(panel).is_some()
+            }
+            None => w.get_entity(panel).is_err(),
+        }
     }
 
     /// Both hands squeezing the handles cut through the wire: the panel is

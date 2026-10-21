@@ -79,6 +79,8 @@ fn climbable(m: Mat) -> bool {
             | Mat::Charred
             | Mat::SootBrick
             | Mat::SootPlaster
+            | Mat::DressedStone
+            | Mat::Sodden
     )
 }
 
@@ -133,7 +135,7 @@ fn faces(size: Vec3, at: &Transform) -> [Face; 4] {
 /// same on the server and every client. 0 everywhere with decay off.
 /// For Audio's rustle in the leaves.
 pub fn amount(at: Vec2, prefab: &str) -> f32 {
-    if enabled() {
+    if enabled() && !prefab.ends_with("_drowned") {
         vigour(seed(at, prefab))
     } else {
         0.0
@@ -779,7 +781,7 @@ mod tests {
     /// grows the same, and none costs more than [`BUDGET`].
     #[test]
     fn ivy_is_deterministic_and_in_budget() {
-        for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let map = crate::world::load_map_def(name);
             let (mut total, mut grown) = (0, 0);
             for p in &map.placements {

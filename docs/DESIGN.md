@@ -298,9 +298,11 @@ of three red lenses and one manipulator arm. It walks a little slower
 than you; it doesn't hide, take cover or shoot. It comes straight at you,
 and when you're in reach its arm rises over its hull, hissing (1.2 s, the
 tell), and comes down where you stood (70 at the middle, less at the
-edge, and you feel the blow land). Hiding indoors only brings it to the
-door: it tears the door off and reaches in, and tears at the walls (a
-`HeavyTear` for the destruction work to answer). Out of sight it searches
+edge, and you feel the blow land; whatever it lands on splinters).
+Hiding indoors only brings it to the door: it wrenches the door off and
+reaches in, and every few seconds tears a doorway-sized hole in the wall
+between it and you (Destruction's `Breach`: wood, plaster and tin tear;
+brick and concrete hold). Out of sight it searches
 like any robot, patiently, then gives up and walks home.
 
 **When it comes.** Not on a timer. The director sends one when the whole
@@ -308,7 +310,8 @@ Zone has been looking at you (attention at its worst, "the whole Zone is
 looking at you", held for 40 s, not in a raid's first six minutes), or at
 once when someone stands within 60 m of a Gate carrying a valley key. One
 at a time, fifteen minutes between one going and the next, at most two a
-raid, none with the director off (the recall, the yard). A horn sounds
+raid, none with the director off (the recall, the yard) or while a
+night visit is on its way. A horn sounds
 from the Gate, the radio hears it, and it walks out twenty seconds later
 toward where you are. A pure step function, so pacing is a test
 (`heavies_keep_their_distance_over_a_raid`: a quiet raid never meets one,
@@ -320,7 +323,7 @@ what can be hurt is small and particular:
 
 | Piece | Where | What it takes | What it does |
 | - | - | - | - |
-| Bolts | four on each plate | one ordinary round each | on two, the plate hangs loose and a hand can tear it off; on none it drops |
+| Bolts | four on each plate, ringed amber | one ordinary round each, or a good butt stroke | on two, the plate hangs loose and a hand can tear it off; on none it drops. A crowbar at a plate's edge (two hands, 200 N·m) tears one out each time it gives |
 | Plates | the hatch on its back, one down each flank | nothing | cover the cell and the vents: a covered weak point takes nothing, blasts and anomalies included |
 | Knees | out in the open, lit cyan | ~5 rifle rounds, 3 from a Mosin | one gone and it limps; two and it's down for good |
 | Vents | behind the flank plates | 120 | shed its heat: each lost, it runs hotter |

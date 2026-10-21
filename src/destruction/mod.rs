@@ -19,6 +19,7 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+pub mod boards;
 pub mod breach;
 pub mod debris;
 pub mod glass;
@@ -90,6 +91,7 @@ impl Plugin for DestructionPlugin {
                 wood::WoodPlugin,
                 hooks::HooksPlugin,
                 breach::BreachPlugin,
+                boards::BoardsPlugin,
             ));
     }
 }
@@ -112,6 +114,7 @@ pub fn surge(world: &mut World) {
     glass::mend_all(world);
     wood::mend_all(world);
     breach::mend_all(world);
+    boards::mend_all(world);
 }
 
 #[cfg(test)]

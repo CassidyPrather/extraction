@@ -908,7 +908,7 @@ mod tests {
     /// within 8 m. In every valley.
     #[test]
     fn a_flock_flushes_when_you_come_near_and_not_before() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let (zone, obstacles, perches) = valley(map);
             for (speed, crouched) in [(1.4, false), (5.0, false), (0.6, true)] {
                 let mut flocks = flocks_on(&perches, 1, 7);
@@ -967,7 +967,7 @@ mod tests {
     /// down onto a roof again.
     #[test]
     fn birds_never_go_inside_walls_or_ground_and_settle_again() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let (zone, obstacles, perches) = valley(map);
             let mut flocks = flocks_on(&perches, 4, 11);
             assert!(flocks.len() >= 3, "{map}");

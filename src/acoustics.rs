@@ -664,7 +664,7 @@ mod tests {
     fn every_place_is_probed_for_the_audit() {
         use extraction_core::underground as ug;
         let mut rows = Vec::new();
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let mut app = app(map);
             let zone = app.world().resource::<crate::world::Zone>().clone();
             let mut put = |app: &mut App, place: String, head: Vec3| {

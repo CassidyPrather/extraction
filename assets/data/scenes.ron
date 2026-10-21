@@ -270,15 +270,15 @@
             Chair(at: (0.0, 0.0), rot: 0.0),
             Remains(at: (0.0, 0.0), rot: 0.0, seated: true),
             Crate(at: (0.6, -0.35), size: 0.5),
-            Lantern(at: (0.62, 0.5, -0.25)),
+            Lantern(at: (0.8, 0.5, -0.15)),
         ],
         items: [
-            (id: "old_photo", at: (0.5, 0.5, -0.45), condition: 0.3),
+            (id: "old_photo", at: (0.8, 0.5, -0.5), condition: 0.3),
         ],
         note: Some((
             name: "Shelter note",
             text: "Day 30 down here. They took Jan from the street on the 3rd. I came down with the lamp oil.\nThe filters still turn. The machines don't come down the stair. I think they can't count us if they can't see us.\n- E. Holm",
-            at: (0.6, 0.5, -0.35),
+            at: (0.55, 0.5, -0.35),
             rot: 0.0,
         )),
     ),
@@ -318,7 +318,7 @@
             Chair(at: (0.0, 0.7), rot: 0.0),
         ],
         items: [
-            (id: "multitool", at: (-0.15, 0.6, 0.05), condition: 0.5),
+            (id: "multitool", at: (-0.23, 0.6, 0.1), condition: 0.5),
             (id: "spare_parts", at: (0.18, 0.6, -0.1)),
         ],
         note: Some((
@@ -365,7 +365,7 @@
             Crate(at: (0.0, 0.0), size: 0.4),
         ],
         items: [
-            (id: "cook_bread", at: (-0.08, 0.4, 0.05)),
+            (id: "cook_bread", at: (-0.15, 0.4, 0.05)),
         ],
         note: Some((
             name: "Basket note",
@@ -489,7 +489,7 @@
             Crate(at: (-1.0, -0.6), size: 0.5),
         ],
         items: [
-            (id: "binoculars", at: (-1.0, 0.5, -0.5)),
+            (id: "binoculars", at: (-0.84, 0.5, -0.45)),
             (id: "old_photo", at: (-0.9, 0.5, -0.75), condition: 0.4),
             (id: "matches", at: (1.0, 0.0, 0.2)),
         ],
@@ -572,7 +572,7 @@
             Crate(at: (0.0, 0.0), size: 0.6),
         ],
         items: [
-            (id: "multitool", at: (0.1, 0.6, 0.1), condition: 0.4),
+            (id: "multitool", at: (0.2, 0.6, 0.1), condition: 0.4),
         ],
         note: Some((
             name: "Far stair note",
@@ -687,7 +687,7 @@
         pieces: [],
         note: Some((
             name: "Pump log, below",
-            text: "PUMP LOG - O. Brabec, the station below\n14 Oct. Buses gone. Somebody has to run the pumps or the village floods with the first rain. Nobody said not to.\n2 Nov. Power off at the board. Not mine. Pumps stopping. Creek coming in at the inlet faster than I can crank.\nIf you're reading this you're wet or it's gone down. Let the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy things are by my locker in the sump. Take the boots, they're good ones. Have the flask.\n- O.B.",
+            text: "PUMP LOG - O. Brabec, below\n2 Nov. Power off at the board. Not mine. Pumps stopping, the creek coming in at the inlet.\nLet the inlet down first, from the wheel in the side gallery. The screens' wheel is on the inlet's far wall, under its water. The sump has nowhere to go: that's the hand pump, in the screen room.\nMy boots are by my locker. Take them, and the flask.\n- O.B.",
             at: (0.0, 0.785, 0.0),
             rot: 0.0,
         )),

@@ -13,6 +13,7 @@ pub mod bot;
 pub mod camp;
 pub mod capstone;
 pub mod capture;
+pub mod contacts;
 pub mod destruction;
 pub mod dev;
 pub mod foley;
@@ -68,6 +69,7 @@ impl Plugin for GamePlugin {
             ..default()
         });
         app.add_plugins((
+            contacts::ContactGuardPlugin,
             world::WorldPlugin,
             rig::RigPlugin,
             player::PlayerPlugin,

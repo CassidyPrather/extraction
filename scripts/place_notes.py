@@ -492,13 +492,9 @@ the water board's.""", "Sallow gate log"),
 I was seven when the water board moved us up the hill. We watched the
 water come over the bridge a hand a day.
 
-The second winter the machines opened the scours. I could have told
-them which wheel. They didn't ask. The bed came up a hand a day, the
-same.
-
-On the twentieth day the church came out. The clock had stopped at ten
-to four. Our house is the third from the bridge. The door's where it
-was.
+The second winter the machines opened the scours, and it went down a
+hand a day. On the twentieth day the church came out. Our house is the
+third from the bridge.
 
 Don't stand in the churchyard after rain. Things come up there that
 weren't buried.
@@ -506,11 +502,11 @@ weren't buried.
 - A. Pech, keeper""", "Keeper's note"),
         ("pump_station", (12.0, 172.0), "Terminal", [
             "SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED",
-            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n 8 DEC   24.0\n15 DEC   16.2\n22 DEC    9.8\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
+            "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n15 DEC   16.2\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
         ], "Valve log"),
         ("pump_station", (100.0, 210.0), "Terminal", [
             "SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0",
-            "CINDER WORKS\nDEMAND RESUMED   3 NOV\nPURPOSE          FURNACE COOLING\nDEMAND CEASED   26 FEB\n\nNO OTHER DEMAND.",
+            "CINDER WORKS\n\nDEMAND FROM    3 NOV\nFOR   FURNACE COOLING\nCEASED        26 FEB\n\nNO OTHER DEMAND.",
         ], "Supply terminal"),
         ("pump_station", (245.0, -70.0), "Note", """CATCHWATER GAUGE - read Sundays
 
@@ -538,7 +534,7 @@ CLOSED 14 OCT.
 the arm comes up. Lower street's gone.""", "Toll board"),
         ("sorting_gantry", (100.0, -82.0), "Terminal", [
             "OVERFLOW STORE - SALLOW\nUNDER    DEPOT MARROW\nSTATUS   PENDING REVIEW\n\nBUSES              14\nBICYCLES          212\nREFUSE BINS       380\nPRAMS              31\n\nREVIEW DATE   (NOT SET)",
-            "BUSES - DEPOT MARROW\n\nNO. 1         KEPT\nNO. 2         KEPT\nNO. 3         KEPT\nNO. 4         NOT RECOVERED\nNO. 5         KEPT\nNO. 6         KEPT\nNO. 7         KEPT\nNO. 8         KEPT\nNO. 9         KEPT",
+            "BUSES - DEPOT MARROW\n\nNO. 1-3     KEPT\nNO. 4       NOT RECOVERED\nNO. 5-9     KEPT",
             "BUSES - OTHER DEPOTS\n\nKETTLE         3   KEPT\nCINDER         3   KEPT\n\nSEARCH CONTINUES:\nMARROW NO. 4",
         ], "Stock terminal"),
         ("draw_off_tower", (-20.0, 102.5), "Note", """TOWER BOOK
