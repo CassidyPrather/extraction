@@ -156,7 +156,7 @@ mod vr_tests {
 
     /// The supporting hand pumps the forend: back by `k` of its travel,
     /// then home.
-    fn pump(r: &mut Range, k: f32) {
+    fn pump(r: &mut Range, k: f32) -> f32 {
         let from = r.vr.hand_state(Side::Left).world.translation;
         let travel = gun_mut(r).layout.handle.as_ref().unwrap().travel;
         let back =
@@ -167,9 +167,15 @@ mod vr_tests {
                 .back()
                 .as_vec3();
         let to = from + back * travel * k;
-        glide(r, from, to, 8);
+        let mut most = 0.0f32;
+        for i in 0..=8 {
+            r.vr.move_hand(Side::Left, from.lerp(to, i as f32 / 8.0));
+            r.vr.step(1);
+            most = most.max(gun_mut(r).firearm.bolt_travel);
+        }
         glide(r, to, from, 8);
         r.vr.step(2);
+        most
     }
 
     /// A shell from the air to the loading port, let go there.
@@ -197,27 +203,27 @@ mod vr_tests {
         }
         let_go(&mut r);
         take_support(&mut r);
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         assert_eq!(gun_mut(&mut r).firearm.chambers[0], Some(Round::Live));
         // Pumped on a live shell, the action's locked: nothing moves.
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 3, "locked");
         while gun_mut(&mut r).firearm.fire_mode() != FireMode::Semi {
             press(&mut r, "stick");
         }
         assert_eq!(fire(&mut r, 1, true).len(), 9, "nine pellets");
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 3);
-        fire(&mut r, 1, true);
+        assert_eq!(fire(&mut r, 1, true).len(), 9, "the second shot");
         // Short: far enough to let a shell out, not to throw the hull.
-        pump(&mut r, 0.78);
+        let most = pump(&mut r, 0.78);
         assert_eq!(
             gun_mut(&mut r).firearm.malfunction,
             Some(Malfunction::DoubleFeed),
-            "a shell on the case"
+            "a shell on the case (the forend came back {most})"
         );
         assert!(fire(&mut r, 1, true).is_empty(), "jammed");
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         assert_eq!(gun_mut(&mut r).firearm.malfunction, None, "cleared");
         assert_eq!(fire(&mut r, 1, true).len(), 9);
     }
@@ -230,10 +236,10 @@ mod vr_tests {
         thumb_in(&mut r, "shell_12ga");
         let_go(&mut r);
         take_support(&mut r);
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 1);
         press(&mut r, "a");
-        pump(&mut r, 1.2);
+        let _ = pump(&mut r, 1.2);
         let f = &gun_mut(&mut r).firearm;
         assert_eq!(f.internal_rounds, 0, "the next one fed");
         assert_eq!(f.chambers[0], Some(Round::Live));

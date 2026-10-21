@@ -468,12 +468,12 @@ fn work_handles(
             .z;
         let travel = gun.firearm.bolt_travel;
         let (_, start, z0) = *pumping.entry(hand_e).or_insert((gun_e, travel, z));
-        let to = (start + (z - z0) / h.travel.max(1e-3)).clamp(0.0, 1.0);
-        let events = gun.firearm.set_bolt_travel(to);
-        if (gun.firearm.bolt_travel - to).abs() > 0.05 {
-            // Held shut by the lock, or stopped on a jam: the hand slides
-            // on the forend from where it's stopped.
-            let now = gun.firearm.bolt_travel;
+        let want = start + (z - z0) / h.travel.max(1e-3);
+        let events = gun.firearm.set_bolt_travel(want.clamp(0.0, 1.0));
+        let now = gun.firearm.bolt_travel;
+        if (now - want).abs() > 1e-3 {
+            // At a stop, held shut by the lock or stopped on a jam: the
+            // hand slides on the forend from where it is.
             pumping.insert(hand_e, (gun_e, now, z));
         }
         let name = catalog.get(item.kind()).id.clone();

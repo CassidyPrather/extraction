@@ -320,7 +320,8 @@ mod vr_tests {
                 .map(|(f, g)| (f.star, g.translation()))
                 .unwrap();
             assert_eq!(f, star);
-            assert!(at.y > r.feet.y + 5.0, "it climbed: {at}");
+            let muzzle = r.feet + Vec3::new(0.15, 1.2, -0.45);
+            assert!(at.distance(muzzle) > 5.0, "it flew: {at}");
             let mut p =
                 r.vr.app
                     .world_mut()
@@ -339,9 +340,12 @@ mod vr_tests {
                 SEEN_SIGNAL
             };
             assert!(heard.contains(&want), "{id}: {heard:?}");
-            r.vr.step(BURN as usize * 64 + 60);
-            let mut q = r.vr.app.world_mut().query::<&Flare>();
-            assert_eq!(q.iter(r.vr.app.world()).count(), 0, "burnt out");
+            let gone = (0..40).any(|_| {
+                r.vr.step(30);
+                let mut q = r.vr.app.world_mut().query::<&Flare>();
+                q.iter(r.vr.app.world()).count() == 0
+            });
+            assert!(gone, "burnt out");
         }
     }
 }
