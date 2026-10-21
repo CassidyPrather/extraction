@@ -115,10 +115,16 @@ the building is placed:
 | Fence panel | `fence_garden`, four between its posts | 100 | 150 | splinters |
 | Bus door | the depot's wrecked bus | crowbar only | 200 | drops scrap |
 | Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
+| Car door | a car wreck's doors (Kit's `wreck_*`, coming) | crowbar only | 180 | drops a `car_door` |
+| Car bonnet, boot | its bonnet, boot lid, tailgate | crowbar only | 140 | drops a `car_bonnet` |
+| Car wheel | its wheels | crowbar only | 160 | drops a `car_wheel` |
 
 Metal comes off only to a crowbar (`Pryable`): rounds hole sheet, they
 don't tear a door off. Wood breaks to rounds and blows as a board does.
-A part with no model is drawn as a box of its size in its material.
+A part with no model is drawn as a box of its size in its material. A
+model can name one node of a file, `wreck_lada#door_fl`: a car's parts
+are nodes of the car's model, in the car's space, and each is drawn on
+its own part where the car put it (`Part::model_at`).
 Anything else can place a part with `strip::spawn_part(commands, parts,
 broken, Part { .. })` (kept in `strip::Parts`). Gone, a part stays gone
 (`Broken`) until the Surge puts it back, from the buildings and `Parts`.
@@ -238,8 +244,10 @@ door's crash).
   eased into a pane (holds) and driven through it (breaks), and stabbed
   into a supply crate until it gives; and a grenade at a door's foot
   blowing it in where one four metres off doesn't; a shutter beaten to
-  splinters, the bus's door prised off for scrap, and both back after
-  the Surge.
+  splinters, the bus's door prised off for scrap (landing outside the
+  bus), and both back after the Surge; a garden fence's panel shot out
+  between its posts, the gap clear, and back after the Surge; and that
+  nothing we spawn is drawn without its model or its texture on disk.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

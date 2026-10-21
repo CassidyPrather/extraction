@@ -33,6 +33,10 @@ struct Haze {
     // x: colour drained from what's seen through it, y: how much dimmed,
     // z: rim brightening, w: rim pulse (rad/s).
     drain: vec4<f32>,
+    // Light of its own, so it reads in the dark too: x: the rim's (breathing
+    // with it), y: a glint sweeping across the disc now and then (a mirror),
+    // z: seconds between glints, w: this one's beat (0..1, from its spot).
+    glow: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> haze: Haze;
@@ -151,8 +155,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var behind = textureSampleLevel(view_transmission_texture, view_transmission_sampler, st, 0.0).rgb;
     // A Hush: the colour goes out of the world seen through it.
     let grey = dot(behind, vec3<f32>(0.2126, 0.7152, 0.0722));
-    // A firm round edge, so the bubble itself shows.
-    let disc = 1.0 - smoothstep(0.82, 0.95, length(q));
+    // A firm round edge, so the bubble itself shows; a lens (the mesh as it
+    // is) by how squarely it faces you.
+    var disc = 1.0 - smoothstep(0.82, 0.95, length(q));
+    if (mode == 2) {
+        disc = smoothstep(0.15, 0.7, abs(dot(normalize(in.world_normal), v)));
+    }
     behind = mix(behind, vec3<f32>(grey), haze.drain.x * disc)
         * (1.0 - haze.drain.y * disc);
     // Its rim: a bright band about 0.06 of the card across (~20 cm on a
@@ -162,9 +170,19 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let band = smoothstep(0.84, 0.88, l) * (1.0 - smoothstep(0.93, 0.97, l));
     let breathe = 0.65 + 0.35 * sin(t * haze.drain.w);
     behind *= 1.0 + haze.drain.z * band * breathe;
+    behind += vec3<f32>(haze.glow.x * band * breathe);
+    // A glint: a bright bar crossing the disc in the first third of each
+    // period, then gone (each anomaly on its own beat).
+    if (haze.glow.y > 0.0) {
+        let phase = fract(t / max(haze.glow.z, 0.1) + haze.glow.w);
+        let at = -1.6 + 3.2 * clamp(phase * 3.0, 0.0, 1.0);
+        let across = (q.x + q.y) * 0.7071 - at;
+        let bar = exp(-(across * across) / 0.0225);
+        behind += vec3<f32>(haze.glow.y * bar * (1.0 - smoothstep(0.8, 0.95, length(q))));
+    }
     // The heart's glow: a soft spot, never the card's outline.
     let glow = haze.tint.a * pow(max(0.0, 1.0 - length(q)), 3.0) * select(1.0, 0.0, mode == 2);
-    behind += haze.tint.rgb * glow * (0.85 + 0.15 * sin(t * 7.0)) * view.exposure;
+    behind += haze.tint.rgb * glow * (0.85 + 0.15 * sin(t * 7.0));
     var out: FragmentOutput;
     out.color = vec4<f32>(behind, 1.0);
     return out;

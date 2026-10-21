@@ -85,6 +85,7 @@ fn gallery(
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
+    mut jamming: Local<bool>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -98,6 +99,12 @@ fn gallery(
         let mut parts = spec.split(',');
         let first = parts.next().unwrap_or("ak74");
         // `ak74+open`: work the action, to check the moving parts.
+        // `mp133+jam`: a double feed, to see it drawn in the port.
+        let (first, jam) = match first.strip_suffix("+jam") {
+            Some(s) => (s, true),
+            None => (first, false),
+        };
+        *jamming = jam;
         let (subject, open) = match first.strip_suffix("+open") {
             Some(s) => (s.to_owned(), true),
             None => (first.to_owned(), false),
@@ -278,7 +285,7 @@ fn gallery(
                         })
                         .map(|(_, d)| d.id.clone())
                 });
-                if open {
+                if open || jam {
                     opening.push(gun);
                 } else if let Some(mag) = mag.and_then(|m| spawn_static(&mut commands, &m, at)) {
                     pending_mags.push((gun, mag));
@@ -293,6 +300,11 @@ fn gallery(
                 return true;
             };
             let f = &mut gun.firearm;
+            if *jamming {
+                f.malfunction = Some(extraction_core::firearm::Malfunction::DoubleFeed);
+                f.bolt_travel = 0.4;
+                return false;
+            }
             let _ = f.set_handle_lift(1.0);
             let _ = f.set_bolt_travel(1.0);
             let _ = f.set_break_open(true);

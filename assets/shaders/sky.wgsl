@@ -23,9 +23,14 @@ struct SkyParams {
     // Lightning (`world::storm`): xyz toward the strike, w how bright
     // (against a day's horizon).
     flash: vec4<f32>,
+    // x: how far you see (m), as the scene's fog has it.
+    air: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> sky: SkyParams;
+
+// How deep the air is that the sky is seen through (m).
+const AIR_DEPTH: f32 = 60.0;
 
 fn hash3(p: vec3<f32>) -> vec3<f32> {
     var q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -231,7 +236,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Toward and below the horizon the sky is fog.
-    let fog_t = 1.0 - smoothstep(-0.02, 0.14, up);
+    // The sky fogs as the scene does: a layer of air about AIR_DEPTH deep
+    // between you and the cloud, by the fog's own visibility-squared curve
+    // (sqrt(ln 20) = 1.731). Fogged only below 8 degrees whatever the
+    // weather, the far tree line stood fog-pale against clear cloud, like
+    // cards hung in the sky.
+    let air_d = AIR_DEPTH / max(up, 0.01);
+    let vis = max(sky.air.x, 1.0);
+    let fog_t = max(
+        1.0 - smoothstep(-0.02, 0.14, up),
+        1.0 - exp(-pow(air_d * 1.731 / vis, 2.0)),
+    );
     // In a flash the fog is lit as `world::storm` lights the fog itself
     // (else the fogged tree line stood out pale against a darker band).
     let air = vec3<f32>(0.72, 0.78, 1.0) * 0.216 * max(sky.flash.w, 0.0);

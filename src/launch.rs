@@ -102,6 +102,9 @@ pub struct LaunchOptions {
     /// Dev: snow falling now, this much lying already (0..1; only where
     /// the valley has a snow line, `world::snow`).
     pub snow: Option<f32>,
+    /// Dev: hold a near strike's light in a storm (`world::storm`), for
+    /// shots and for the budget of a flash frame.
+    pub storm_flash: bool,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
     /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
@@ -117,6 +120,9 @@ pub struct LaunchOptions {
     /// Bot personality for a sim raid (`looter`, `hunter`, `cautious`,
     /// `reckless`); by default it rotates with the run index.
     pub personality: Option<String>,
+    /// A newcomer's first fight (`onboarding::first_hour`): the one machine
+    /// put on their route (`walker`, `drone`, `hush`, `sentry`, `night`).
+    pub encounter: Option<String>,
     /// Raid minutes a sim bot plans for before heading out (default: by
     /// personality, 9-14).
     pub sim_minutes: Option<f32>,
@@ -161,6 +167,7 @@ impl Default for LaunchOptions {
             gallery: None,
             weather: None,
             snow: None,
+            storm_flash: false,
             hour: None,
             moon: None,
             sun_elevation: 20.0,
@@ -168,6 +175,7 @@ impl Default for LaunchOptions {
             sim: None,
             sim_run: None,
             personality: None,
+            encounter: None,
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
@@ -255,6 +263,7 @@ impl LaunchOptions {
                     o.headless = true;
                 }
                 "--personality" => o.personality = Some(val()),
+                "--encounter" => o.encounter = Some(val()),
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),

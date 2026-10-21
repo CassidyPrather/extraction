@@ -437,6 +437,10 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // The ranger tower's legs and stair, open on top under its survey
         // mast and beacon.
         "survey_tower" => [6.0, 16.6, 5.0],
+        // Kit's car wrecks (`art/vehicles/wrecks.py`).
+        "wreck_lada" => [1.8, 1.45, 4.3],
+        "wreck_uaz" => [1.9, 2.0, 4.1],
+        "wreck_lorry" => [2.6, 2.2, 6.4],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
@@ -731,11 +735,20 @@ pub fn prefab_clearance(id: &str) -> f32 {
 }
 
 /// Whether a prefab wants the ground levelled under it (buildings do;
-/// bridges, gates over roads and the anomaly don't).
+/// bridges, gates over roads and the anomaly don't, nor a garden fence:
+/// its posts follow the ground, and a pad levelled for a run that meets a
+/// house's back wall reached under the house and lifted its door off its
+/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)).
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
-        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar" | "target"
+        "footbridge"
+            | "anomaly_core"
+            | "quarantine_gate"
+            | "radio_mast"
+            | "boxcar"
+            | "target"
+            | "fence_garden"
     )
 }
 

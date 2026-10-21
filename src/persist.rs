@@ -1358,6 +1358,67 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// The class of the doubled tapes: anything that lays items when a
+    /// valley loads, and that the save also keeps, doubles on every load.
+    /// In each valley, a fresh load saved and loaded again (twice) has the
+    /// same items by kind, a few seconds in.
+    #[test]
+    fn every_valley_loads_back_to_the_same_items() {
+        fn by_kind(world: &mut World) -> std::collections::BTreeMap<String, usize> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            let mut m = std::collections::BTreeMap::new();
+            for it in world.query::<&Item>().iter(world) {
+                *m.entry(catalog.get(it.kind()).id.clone()).or_insert(0) += 1;
+            }
+            m
+        }
+        fn load(path: &std::path::Path, map: &str) -> App {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.into(),
+                save: Some(path.to_owned()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            app
+        }
+        for (map, ..) in extraction_core::map::VALLEYS {
+            let path = temp_save(&format!("twice_{map}.ron"));
+            let mut a = load(&path, map);
+            let first = by_kind(a.world_mut());
+            for round in 1..=2 {
+                let save = snapshot(a.world_mut());
+                let mut career = a.world().resource::<CareerState>().0.clone();
+                career.store(&save);
+                write_career(&path, &career);
+                a = load(&path, map);
+                let now = by_kind(a.world_mut());
+                let diff: Vec<_> = first
+                    .keys()
+                    .chain(now.keys())
+                    .filter(|k| first.get(*k) != now.get(*k))
+                    .map(|k| {
+                        (
+                            k,
+                            first.get(k).copied().unwrap_or(0),
+                            now.get(k).copied().unwrap_or(0),
+                        )
+                    })
+                    .collect();
+                assert!(
+                    diff.is_empty(),
+                    "{map}, load {round}: (kind, before, after) {diff:?}"
+                );
+            }
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+
     /// A pistol whose magazine has AP and then a tracer on top of ball,
     /// and a round in the chamber that's AP: saved and loaded, the rounds
     /// keep their loads and their order.

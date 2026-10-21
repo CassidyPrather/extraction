@@ -200,8 +200,13 @@ fn vertex(v: Vertex) -> VOut {
     return out;
 }
 
+// The Zone's things show through its murk: fog takes an anomaly's
+// particles as if they were this share as far off.
+const FOG_REACH: f32 = 0.5;
+
 @fragment
 fn fragment(in: VOut) -> @location(0) vec4<f32> {
+    let fog_at = view.world_position + (in.world - view.world_position) * FOG_REACH;
     let texel = textureSample(tex, tex_sampler, in.uv);
     let glow = params.mode.w;
     var rgb = params.color.rgb * mix(texel.rgb, vec3<f32>(1.0), glow);
@@ -213,8 +218,8 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // dims it. The fog is mix(x, F, f), so f is 1 - (fog(1) - fog(0)).
         var keep = vec3<f32>(1.0);
 #ifdef DISTANCE_FOG
-        keep = apply_fog(fog, vec4<f32>(1.0), in.world, view.world_position, in.clip.xy).rgb
-            - apply_fog(fog, vec4<f32>(0.0, 0.0, 0.0, 1.0), in.world, view.world_position, in.clip.xy).rgb;
+        keep = apply_fog(fog, vec4<f32>(1.0), fog_at, view.world_position, in.clip.xy).rgb
+            - apply_fog(fog, vec4<f32>(0.0, 0.0, 0.0, 1.0), fog_at, view.world_position, in.clip.xy).rgb;
 #endif
         let dim = mix(vec3<f32>(1.0), keep, 0.75);
         return vec4<f32>(rgb * a * dim, 0.0);
@@ -223,7 +228,7 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         discard;
     }
 #ifdef DISTANCE_FOG
-    rgb = apply_fog(fog, vec4<f32>(rgb, 1.0), in.world, view.world_position, in.clip.xy).rgb;
+    rgb = apply_fog(fog, vec4<f32>(rgb, 1.0), fog_at, view.world_position, in.clip.xy).rgb;
 #endif
     return vec4<f32>(rgb, a);
 }

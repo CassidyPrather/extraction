@@ -892,7 +892,7 @@
             Prop(model: "boots", at: (0.9, 0.0, 0.7), rot: 40.0, size: (0.22, 0.25, 0.34), collide: false),
         ],
         items: [
-            (id: "matches", at: (-0.1, 0.604, 0.1)),
+            (id: "matches", at: (0.2, 0.534, 0.2)),
             (id: "canned_beans", at: (0.35, 0.534, 0.1)),
         ],
         note: Some((
@@ -907,7 +907,7 @@
         name: "The lamp board",
         // By the mine: the lamp checks on their board, every one back on
         // its hook the day the pit shut, but the Nováks'.
-        at: (-196.0, -54.0),
+        at: (-200.0, -57.0),
         rot: 90.0,
         pieces: [
             Prop(model: "shelf_metal", at: (0.0, 0.0, -0.4), size: (1.06, 1.8, 0.36)),
@@ -944,7 +944,7 @@
             Crate(at: (0.4, 0.8), size: 0.6),
         ],
         items: [
-            (id: "field_dressing", at: (0.25, 0.6, 0.75)),
+            (id: "field_dressing", at: (0.2, 0.6, 1.0)),
             (id: "water_bottle", at: (0.6, 0.6, 0.9), condition: 0.5),
         ],
         note: Some((
@@ -967,7 +967,7 @@
             Prop(model: "lantern", at: (0.7, 0.5, 0.3), size: (0.12, 0.27, 0.12), collide: false),
         ],
         items: [
-            (id: "tea_tin", at: (0.95, 0.5, 0.1)),
+            (id: "tea_tin", at: (0.95, 0.5, 0.38)),
             (id: "compass", at: (0.0, 0.45, 0.05)),
         ],
         note: Some((
@@ -984,7 +984,7 @@
         // room's bench: the plumb-line book, and one reading after.
         at: (-52.4, 140.35),
         rot: 0.0,
-        floor: Some(26.04),
+        floor: Some(26.1),
         note: Some((
             name: "Plumb book",
             text: "DAM INSPECTION - PLUMB LINE AT THE CROWN (MM)\nMar 2.1. Apr 2.0. May 2.2. Jun 2.1. Jul 2.0. Aug 2.1. Sep 2.0.\n(pencil, shaky) December, the second winter. 9.5. The scours are open and she's moving. Nobody to tell. - A.P.",
@@ -999,7 +999,7 @@
         // plumb machine he read.
         at: (7.9, 137.4),
         rot: 0.0,
-        floor: Some(26.04),
+        floor: Some(26.1),
         pieces: [
             Lantern(at: (0.0, 0.82, 0.0)),
         ],
