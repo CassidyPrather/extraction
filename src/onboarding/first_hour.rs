@@ -233,7 +233,11 @@ pub(super) struct Newcomer {
     rv: Option<Vec2>,
     /// The last thing said, and when (for "warned").
     said_at: f32,
-    said: usize,
+    /// Everything said so far, in order (the log forgets after a few
+    /// seconds; a person remembers).
+    heard: Vec<String>,
+    /// What the log held last frame.
+    showing: Vec<String>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -348,10 +352,14 @@ pub(super) fn direct_raid(
     bot.sprint = p.sprint;
 
     // Heard: what the driver says is what it knows.
-    while state.said < raid.log.len() {
-        state.said += 1;
-        state.said_at = now;
+    let showing: Vec<String> = raid.log.iter().map(|(l, _)| l.clone()).collect();
+    for l in &showing {
+        if !state.showing.contains(l) {
+            state.heard.push(l.clone());
+            state.said_at = now;
+        }
     }
+    state.showing = showing;
     for FirstMet(f) in met.read() {
         state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
         let answer: Vec<Task> = match f {
@@ -411,7 +419,7 @@ pub(super) fn direct_raid(
             } else {
                 Kind::HurtUnwarned
             };
-            let last = raid.log.last().map(|(l, _)| l.clone()).unwrap_or_default();
+            let last = state.heard.last().cloned().unwrap_or_default();
             let was = state.hp;
             state.note(
                 now,
@@ -533,24 +541,31 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Call;
                 return;
             };
+            // Down over the tailgate, not into the side of the bed.
+            let mut from = here;
+            if truck.is_some_and(|t| t.translation.xz().distance(here) < 3.5) {
+                for (x, z) in [(0.05, 1.2), (0.0, 4.0)] {
+                    tasks.push(Task::WalkTo {
+                        to: at_truck(x, z),
+                        within: 0.5,
+                    });
+                }
+                from = at_truck(0.0, 4.0);
+            }
             // Lost: off the wrong way first, until the map puts it right.
             if p.lost && !state.wrong_way_done {
                 state.wrong_way_done = true;
-                let wrong = here - (at - here).normalize_or_zero() * 70.0;
+                let wrong = from - (at - from).normalize_or_zero() * 70.0;
                 state.note(now, Kind::Confused, "set off the wrong way");
-                tasks.extend(world.legs(here, wrong));
+                tasks.extend(world.legs(from, wrong));
+                from = wrong;
             }
-            let from = if p.lost {
-                here - (at - here).normalize_or_zero() * 70.0
-            } else {
-                here
-            };
             tasks.extend(world.legs(from, at));
             state.note(now, Kind::Learned, format!("on to {name}"));
             state.leg = Leg::Place;
         }
         Leg::Place => {
-            let noted = raid.log.iter().any(|(l, _)| l.contains("noted"));
+            let noted = state.heard.iter().any(|l| l.contains("noted"));
             let close = state
                 .goal
                 .as_ref()
@@ -582,14 +597,17 @@ pub(super) fn direct_raid(
                 tasks.extend(world.legs(here, away));
             } else if let Phase::TruckCalled { .. } | Phase::TruckWaiting { .. } = raid.phase {
                 // What it said: a name, maybe a way.
-                let reply = raid
-                    .log
+                // The truck's last word on where.
+                let reply = state
+                    .heard
                     .iter()
                     .rev()
-                    .map(|(l, _)| l.as_str())
-                    .find(|l| l.contains("Heading for") || l.contains("At the"))
-                    .unwrap_or("")
-                    .to_string();
+                    .find(|l| {
+                        l.starts_with("Truck:")
+                            && (l.contains("minute") || l.contains("I'm at") || l.contains("At "))
+                    })
+                    .cloned()
+                    .unwrap_or_default();
                 let rvs: Vec<Vec2> = world
                     .zone
                     .map
