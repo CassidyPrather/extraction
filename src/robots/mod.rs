@@ -241,6 +241,7 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
+            .add_observer(senses::seed_mind)
             .add_plugins((
                 hound_mind::HoundMindPlugin,
                 flee::FleePlugin,

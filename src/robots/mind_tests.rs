@@ -1706,3 +1706,32 @@ fn a_walker_does_not_fire_blind_in_the_open() {
     let fired = blind_fire(false);
     assert!(fired.is_empty(), "no blind fire: {fired:?}");
 }
+
+/// A walker's guess at a sound hangs on the walker (where it was posted)
+/// and the sound, not on how many other things exist: 50 unrelated
+/// entities spawned first don't move it.
+#[test]
+fn a_guess_does_not_hang_on_entity_ids() {
+    let guess = |extra: usize| {
+        let (mut app, player, zone) = app(None);
+        for _ in 0..extra {
+            app.world_mut().spawn_empty();
+        }
+        put(&mut app, player, zone.on_ground(100.0, 400.0));
+        let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+        app.world_mut().write_message(super::Noise {
+            at: zone.on_ground(101.0, 240.0),
+            radius: super::senses::GUNSHOT,
+            source: Some(player),
+        });
+        app.update();
+        app.update();
+        app.world()
+            .get::<Awareness>(w)
+            .unwrap()
+            .last_known
+            .expect("heard it")
+    };
+    let (a, b) = (guess(0), guess(50));
+    assert!(a.distance(b) < 1e-3, "{a} vs {b}");
+}

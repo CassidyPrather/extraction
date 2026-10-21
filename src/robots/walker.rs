@@ -377,11 +377,12 @@ fn walker_brain(
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
     spatial: SpatialQuery,
-    (mut shots, mut crouches, mut bites, mut seed): (
+    (mut shots, mut crouches, mut bites, mut seed, minds): (
         MessageWriter<Shot>,
         MessageWriter<super::hound::HoundCrouch>,
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
+        Query<&super::senses::MindSeed>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -612,9 +613,7 @@ fn walker_brain(
                             if d < super::hound_mind::BITE_RANGE && !h.bit {
                                 h.bit = true;
                                 h.cooldown = super::hound_mind::BITE_COOLDOWN;
-                                *seed = seed
-                                    .wrapping_mul(6364136223846793005)
-                                    .wrapping_add(1442695040888963407);
+                                *seed = super::senses::shot_seed(&minds, e, &time);
                                 let head = pos + Vec3::Y * 0.2;
                                 super::hound_mind::bite(
                                     e,
@@ -844,6 +843,7 @@ fn walker_guns(
     mut shots: MessageWriter<Shot>,
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
+    minds: Query<&super::senses::MindSeed>,
     (entrances, path, mut blind): (
         Res<super::doors::Entrances>,
         crate::destruction::through::RoundPath,
@@ -919,9 +919,7 @@ fn walker_guns(
             if b.tell < BLIND_TELL || w.gun_cooldown > 0.0 {
                 continue;
             }
-            *seed = seed
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
+            *seed = super::senses::shot_seed(&minds, e, &time);
             let dir = (b.at - muzzle).normalize_or(Vec3::NEG_Z);
             shots.write(Shot {
                 gun: e,
@@ -973,9 +971,7 @@ fn walker_guns(
         if w.gun_cooldown > 0.0 {
             continue;
         }
-        *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *seed = super::senses::shot_seed(&minds, e, &time);
         shots.write(Shot {
             gun: e,
             shooter: Some(e),

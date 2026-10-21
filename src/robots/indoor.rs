@@ -579,6 +579,7 @@ fn crawler_guns(
     mut charges: MessageWriter<CrawlerCharge>,
     mut zaps: MessageWriter<CrawlerZap>,
     mut seed: Local<u64>,
+    minds: Query<&super::senses::MindSeed>,
 ) {
     let dt = time.delta_secs();
     for (e, mut c, brain, aware, robot, children) in &mut crawlers {
@@ -616,9 +617,7 @@ fn crawler_guns(
         }
         c.charge = 0.0;
         c.cooldown = ZAP_COOLDOWN;
-        *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *seed = super::senses::shot_seed(&minds, e, &time);
         let dir = (target - muzzle).normalize_or(Vec3::NEG_Z);
         shots.write(Shot {
             gun: e,
