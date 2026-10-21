@@ -1425,7 +1425,9 @@ fn fell_heavy(
             commands
                 .entity(e)
                 .insert((super::wreck::Broken, super::Salvaged));
-            let seed = e.index_u32() as f32;
+            // Seeded by where it fell, not by its entity: the same fall
+            // lies the same whatever else is in the world.
+            let seed = (spot_seed(t.translation) % 10_007) as f32;
             // Forward onto its face or over on a side: seeded, so no two
             // lie the same.
             // (Well over: a wreck, not something parked.)
@@ -1656,6 +1658,17 @@ pub fn clear_wrecks(world: &mut World) {
 /// see `fell_heavy`).
 pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];
 
+/// A seed for a machine from a spot in the world (to the centimetre):
+/// stable from run to run, and independent of entity ids.
+pub fn spot_seed(at: Vec3) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for v in [at.x, at.y, at.z] {
+        h ^= (v * 100.0).round() as i64 as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3).rotate_left(29);
+    }
+    h ^ (h >> 31)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -1666,6 +1679,16 @@ pub(crate) mod tests {
     /// A headless world with no director, and a heavy sent `to` from `at`
     /// (ground x/z), its senses off unless `senses`.
     pub(crate) fn world_with_heavy(at: [f32; 2], to: [f32; 2], senses: bool) -> (App, Entity) {
+        world_with_heavy_after(0, at, to, senses)
+    }
+
+    /// As [`world_with_heavy`], with `pad` unrelated entities spawned first.
+    pub(crate) fn world_with_heavy_after(
+        pad: usize,
+        at: [f32; 2],
+        to: [f32; 2],
+        senses: bool,
+    ) -> (App, Entity) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -1674,6 +1697,9 @@ pub(crate) mod tests {
         app.finish();
         app.cleanup();
         app.update();
+        for k in 0..pad {
+            app.world_mut().spawn(Name::new(format!("pad {k}")));
+        }
         let zone = app.world().resource::<Zone>().clone();
         let catalog = app.world().resource::<Catalog>().clone();
         let from = zone.on_ground(at[0], at[1]);
@@ -1758,8 +1784,15 @@ pub(crate) mod tests {
         let mut fastest = 0.0f32;
         let mut worst = 0.0f32;
         let mut steps = 0;
+        // Its closest approach: once there it searches the site, and how
+        // long that takes depends on what's around (trees), so by the end
+        // it may be on its way back.
+        let to = zone.on_ground(40.0, 205.0);
+        let mut closest = f32::INFINITY;
         for _ in 0..(90 * 30) {
             app.update();
+            let p = app.world().get::<Transform>(heavy).unwrap().translation;
+            closest = closest.min(Vec2::new(p.x - to.x, p.z - to.z).length());
             let w = app.world().get::<Walker>(heavy).unwrap();
             fastest = fastest.max(w.velocity.length());
             for [hip, _, foot] in app.world().get::<LegPoses>(heavy).unwrap().0 {
@@ -1777,12 +1810,7 @@ pub(crate) mod tests {
         assert!(t.translation.is_finite());
         let over = t.translation.y - zone.ground(t.translation.x, t.translation.z);
         assert!(over > 2.2 && over < 3.0, "rides {over:.2} m up");
-        let to = zone.on_ground(40.0, 205.0);
-        assert!(
-            Vec2::new(t.translation.x - to.x, t.translation.z - to.z).length() < 6.0,
-            "got there: {:.1?}",
-            t.translation
-        );
+        assert!(closest < 6.0, "got there: within {closest:.1} m");
         // Slow: you can outwalk it, but not stroll.
         assert!(fastest > 0.9 && fastest < 1.8, "{fastest:.2} m/s");
         assert!(steps > 8, "it stepped ({steps})");
@@ -1941,6 +1969,39 @@ pub(crate) mod tests {
         assert!(salvage.iter().any(|s| s == "heavy_claw"), "{salvage:?}");
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
+    }
+
+    /// Where and how it lies is seeded by the machine, not by its entity
+    /// id: with fifty unrelated things spawned first, the same fall lies
+    /// the same.
+    #[test]
+    fn its_fall_is_its_own() {
+        let fall = |pad: usize| {
+            let (mut app, heavy) = world_with_heavy_after(pad, [40.0, 230.0], [40.0, 230.0], false);
+            for _ in 0..30 {
+                app.update();
+            }
+            for k in [0u8, 2] {
+                let (knee, _) = part(&mut app, heavy, Slot::Knee(k)).unwrap();
+                hit(&mut app, knee, 400.0);
+            }
+            for _ in 0..120 {
+                app.update();
+            }
+            (
+                heavy,
+                app.world().get::<Heavy>(heavy).unwrap().lean,
+                app.world().get::<Transform>(heavy).unwrap().rotation,
+            )
+        };
+        let (a, lean_a, rot_a) = fall(0);
+        let (b, lean_b, rot_b) = fall(50);
+        assert_ne!(a.index_u32(), b.index_u32(), "different entities");
+        assert!((lean_a - lean_b).length() < 1e-5, "{lean_a} vs {lean_b}");
+        // (Its pose settles under physics, which isn't bit-exact between
+        // worlds; the seeded lean is.)
+        let off = rot_a.angle_between(rot_b);
+        assert!(off < 0.02, "lies {off} rad apart");
     }
 
     /// An EMP puts it on its knees, but for less than a walker's twelve

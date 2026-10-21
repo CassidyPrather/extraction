@@ -76,7 +76,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
         b.bx(
             Vec3::new(len, y1 - y0, t),
             Vec3::new(0.0, (y0 + y1) * 0.5, -2.0 + t * 0.5),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
         // Its coping: a string course a hand proud of the face.
         b.deco(
@@ -104,7 +104,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
     b.bx(
         Vec3::new(len, ph, pt),
         Vec3::new(0.0, FACE_H + ph * 0.5, pz),
-        Mat::Concrete,
+        Mat::DressedStone,
     );
     b.deco(
         Vec3::new(len + 0.1, 0.12, pt + 0.2),
@@ -121,6 +121,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
         );
     }
     if turrets {
+        stair_wall(b);
         // A turret at each end over the parapet: what you see of the dam
         // from the truck, either side of the valley.
         for x in [-hl + 3.0, hl - 3.0] {
@@ -128,7 +129,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
             b.bx(
                 Vec3::new(w, h, w),
                 Vec3::new(x, FACE_H + h * 0.5, pz - 0.9),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
             b.piece(
                 Shape::Prism(Vec3::new(w + 0.4, 1.6, w + 0.4)),
@@ -137,6 +138,57 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
                 true,
             );
         }
+    }
+}
+
+/// The face stair's run, as the map lays its terraces (from the west end
+/// at the valley floor to the landing at crest height), the line its outer
+/// wall runs along (map z), the wall's foot, and the long downstream
+/// face's placement (x, z, y): the wall is built as part of that face, so
+/// it's no placement of its own for the lint to count.
+const STAIR_RUN: (f32, f32) = (-30.0, 90.0);
+const STAIR_RISE: (f32, f32) = (30.0, 52.0);
+const STAIR_WALL_Z: f32 = 158.6;
+const STAIR_WALL_FOOT: f32 = 29.0;
+pub const DAM_FACE_AT: (f32, f32, f32) = (-42.5, 148.0, 30.0);
+/// Its thickness: from the stair path's outer shoulder to past the foot of
+/// the embankment's bank.
+const STAIR_WALL_T: f32 = 3.0;
+
+/// The face stair's height over the valley floor at map x, as the road on
+/// its terraces grades it.
+fn stair_height(x: f32) -> f32 {
+    let (x0, x1) = STAIR_RUN;
+    let (h0, h1) = STAIR_RISE;
+    h0 + (h1 - h0) * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0)
+}
+
+/// The face stair's outer wall, in the long downstream face's space:
+/// masonry along the embankment's south edge from the valley floor to the
+/// landing, thick enough to hold the bank's whole fall to the grass, its
+/// top a metre over the steps (a parapet to lean a rifle on, and what
+/// stops you stepping off 20 m of embankment), in 4 m panels stepping up
+/// with the stair.
+fn stair_wall(b: &mut Builder) {
+    let (x0, x1) = STAIR_RUN;
+    let (fx, fz, fy) = DAM_FACE_AT;
+    let panel = 4.0;
+    let n = ((x1 - x0) / panel).round() as i32;
+    for k in 0..n {
+        let a = x0 + panel * k as f32;
+        let top = stair_height(a + panel) + 1.0 - STAIR_WALL_FOOT;
+        let (lx, lz) = (a + panel * 0.5 - fx, STAIR_WALL_Z - fz);
+        let ly = STAIR_WALL_FOOT - fy;
+        b.bx(
+            Vec3::new(panel + 0.02, top, STAIR_WALL_T),
+            Vec3::new(lx, ly + top * 0.5, lz),
+            Mat::DressedStone,
+        );
+        b.deco(
+            Vec3::new(panel + 0.06, 0.1, STAIR_WALL_T + 0.1),
+            Vec3::new(lx, ly + top + 0.05, lz),
+            Mat::Boulder,
+        );
     }
 }
 
@@ -150,7 +202,7 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
     b.bx(
         Vec3::new(len, BACK_H, 3.0),
         Vec3::new(0.0, BACK_H * 0.5, 0.0),
-        Mat::Concrete,
+        Mat::DressedStone,
     );
     // Where the water stood: the stained skin, a tide line along its top.
     b.deco(
@@ -173,7 +225,7 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
         b.bx(
             Vec3::new(c - a, ph, pt),
             Vec3::new((a + c) * 0.5, BACK_H + ph * 0.5, pz),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
         b.deco(
             Vec3::new(c - a + 0.1, 0.12, pt + 0.2),
@@ -206,7 +258,7 @@ fn tower(b: &mut Builder) {
             b.bx(
                 Vec3::new(side, 2.4, t),
                 Vec3::new(x, y0 + 1.2, z),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
         }
     };
@@ -218,21 +270,21 @@ fn tower(b: &mut Builder) {
             b.bx(
                 Vec3::new(w, doorway, t),
                 Vec3::new(0.0, doorway * 0.5, z),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
         }
         let top = doorway + 2.4;
         b.bx(
             Vec3::new(w, h - top, t),
             Vec3::new(0.0, (top + h) * 0.5, z),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
     }
     for x in [-hw + t * 0.5, hw - t * 0.5] {
         b.bx(
             Vec3::new(t, h, w - 2.0 * t),
             Vec3::new(x, h * 0.5, 0.0),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
     }
     // Slits of light up the walls (dark glass, visual only), and a band
@@ -609,11 +661,48 @@ mod tests {
                 assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
                 let at = p.at.translation;
                 let bridge = id == "draw_off_tower" && at.y > 3.0 && at.z > TOWER_W * 0.5;
+                // The face stair's wall, built with the long face, stands
+                // out in front of it along the stair.
+                let stair = id == "dam_face" && at.z > 3.0;
                 // Pilasters and turrets stand a little proud of the faces.
                 let slack = 1.5;
                 assert!(
-                    bridge || (at.x.abs() <= w * 0.5 + slack && at.z.abs() <= d * 0.5 + slack),
+                    bridge
+                        || stair
+                        || (at.x.abs() <= w * 0.5 + slack && at.z.abs() <= d * 0.5 + slack),
                     "{id} piece {i} at {at:?} is outside its {w} x {d} footprint"
+                );
+            }
+        }
+    }
+
+    /// The face stair's wall stands where the map lays the stair: built with
+    /// the long downstream face, so that face's placement is where the
+    /// wall reckons from, and the road on the terraces is at the wall's
+    /// stair height; its foot is buried all the way.
+    #[test]
+    fn the_stair_wall_follows_the_stair() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        let face = map
+            .placements
+            .iter()
+            .find(|p| p.prefab == "dam_face")
+            .expect("the downstream face is placed");
+        assert_eq!((face.at[0], face.at[1], face.y), DAM_FACE_AT);
+        for x in [-25.0f32, 0.0, 30.0, 60.0, 85.0] {
+            let road = hm.height([x, 154.0]);
+            let want = stair_height(x);
+            assert!(
+                (road - want).abs() < 1.2,
+                "the stair at x {x}: {road:.1} vs {want:.1}"
+            );
+            for dz in [-STAIR_WALL_T * 0.5, STAIR_WALL_T * 0.5] {
+                let ground = hm.height([x, STAIR_WALL_Z + dz]);
+                assert!(
+                    ground > STAIR_WALL_FOOT,
+                    "the wall's foot shows at ({x}, {dz})"
                 );
             }
         }

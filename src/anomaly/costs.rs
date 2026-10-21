@@ -42,11 +42,24 @@ pub enum Bite {
     Glint,
 }
 
-/// Per player: seconds to the next shock and glint.
-#[derive(Component, Debug, Default)]
+/// Per player: seconds to the next shock and glint, and the player's own
+/// dice for them (how many others carry stones never changes yours).
+#[derive(Component, Debug)]
 pub struct Bites {
     shock: f32,
     glint: f32,
+    dice: Rng,
+}
+
+impl Bites {
+    fn new() -> Self {
+        let mut dice = Rng::new(0xB17E);
+        Self {
+            shock: aegis_shock_in(dice.f32()),
+            glint: shard_glint_in(dice.f32()),
+            dice,
+        }
+    }
 }
 
 /// What each player carries live, by catalogue id.
@@ -110,20 +123,15 @@ pub fn bites(
     time: Res<Time>,
     mut noises: MessageWriter<Noise>,
     mut out: MessageWriter<ArtifactBite>,
-    mut rng: Local<Option<Rng>>,
 ) {
     let dt = time.delta_secs();
-    let rng = rng.get_or_insert_with(|| Rng::new(0xB17E));
     let wet = wetness.map_or(0.0, |w| w.level);
     let hearth: Vec<Entity> = live(&carried, &catalog, "art_hearth").collect();
     let aegis: Vec<Entity> = live(&carried, &catalog, "art_aegis").collect();
     let shard: Vec<Entity> = live(&carried, &catalog, "art_shard").collect();
     for (p, gt, mut body, mut health, bites) in &mut players {
         let Some(mut b) = bites else {
-            commands.entity(p).insert(Bites {
-                shock: aegis_shock_in(rng.f32()),
-                glint: shard_glint_in(rng.f32()),
-            });
+            commands.entity(p).insert(Bites::new());
             continue;
         };
         let at = gt.translation() + Vec3::Y * 1.2;
@@ -133,7 +141,7 @@ pub fn bites(
         if aegis.contains(&p) && aegis_wet(wet, body.wading) {
             b.shock -= dt;
             if b.shock <= 0.0 {
-                b.shock = aegis_shock_in(rng.f32());
+                b.shock = aegis_shock_in(b.dice.f32());
                 if !health.down {
                     health.hp -= AEGIS_SHOCK;
                     health.since_hit = 0.0;
@@ -153,7 +161,7 @@ pub fn bites(
         if shard.contains(&p) {
             b.glint -= dt;
             if b.glint <= 0.0 {
-                b.glint = shard_glint_in(rng.f32());
+                b.glint = shard_glint_in(b.dice.f32());
                 noises.write(Noise {
                     at,
                     radius: SHARD_GLINT_RADIUS,

@@ -28,6 +28,7 @@ def main(path: str) -> int:
         print(f"no runs in {path}")
         return 2
     dives = 0
+    by_kind = collections.Counter()
     deaths = collections.Counter()
     stones = collections.Counter()
     for r in runs:
@@ -37,6 +38,7 @@ def main(path: str) -> int:
                 ev = e.get("ev") or e.get("event")
                 if ev == "anomaly_enter" and e.get("deliberate"):
                     dives += 1
+                    by_kind[e.get("kind", "?")] += 1
                 elif ev == "death":
                     deaths[e.get("cause", "?")] += 1
                 elif ev == "loot" and str(e.get("item", "")).startswith("art_"):
@@ -48,6 +50,9 @@ def main(path: str) -> int:
     print(f"{len(runs)} runs, {dives} deliberate dives")
     print(f"deaths in anomalies: {harvest_deaths} ({per_dive:.0%} a dive); all deaths {dict(deaths)}")
     print(f"stones taken: {taken} ({yield_:.0%} a dive) {dict(stones)}")
+    for kind in sorted(KINDS):
+        if by_kind[kind] or deaths[kind]:
+            print(f"  {kind:7} {by_kind[kind]:3} dives, {deaths[kind]:2} deaths")
     ok = True
     if dives == 0:
         print("FAIL no deliberate dives: nobody tried")

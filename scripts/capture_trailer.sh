@@ -14,6 +14,8 @@ MAP="${1:-marrow_creek}"
 OUT="${2:-target/trailer/$MAP}"
 shift $(( $# > 2 ? 2 : $# ))
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
+. scripts/capture_common.sh
+capture_check_bin "$BIN"
 SIZE="${SIZE:-1280x720}"
 mkdir -p "$OUT"
 rm -rf "$OUT/chase" "$OUT/drone"

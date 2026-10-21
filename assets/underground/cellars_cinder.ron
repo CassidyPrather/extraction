@@ -31,7 +31,7 @@
         // The coal store, behind the flue.
         (id: "coal_store", at: (10.0, 30.0), size: (4.0, 4.0), height: 2.6, props: [
             (kind: Shelf, at: (1.6, 0.6), rot: 270.0, loot: Some("workshop")),
-            (kind: Pallet, at: (-0.6, 1.2)),
+            (kind: SmallCrate, at: (-0.6, 1.2)),
         ]),
         // The near ledge over the ash pit: the crane's home.
         (id: "near_ledge", at: (0.0, 38.0), size: (8.0, 4.0), height: 4.0, props: [
@@ -80,7 +80,8 @@
         (kind: "Burner", room: "burner_gallery", at: (1.6, 1.4), radius: 1.0),
         (kind: "Burner", room: "ash_pit", at: (0.0, 0.0), radius: 2.0),
     ],
-    patrol: ["stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
+    // By the vents and on the cool side: waiting where you come to vent.
+    patrol: ["stair_foot", "vent_room", "stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
     crawlers: 1,
     portals: [
         (),

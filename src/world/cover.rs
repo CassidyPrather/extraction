@@ -54,6 +54,12 @@ pub struct Sway {
     /// xyz: the player's feet; w: how far round them plants lean away.
     #[uniform(100)]
     pub pusher: Vec4,
+    /// The player's hands down among the plants: xyz where, w how far
+    /// round them they part (0: not pushing; `render::hand_push`).
+    #[uniform(100)]
+    pub hand_a: Vec4,
+    #[uniform(100)]
+    pub hand_b: Vec4,
 }
 
 impl bevy::pbr::MaterialExtension for Sway {

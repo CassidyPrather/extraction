@@ -21,6 +21,9 @@ const M: &str = "marrow_creek";
 const K: &str = "kettle_pass";
 const C: &str = "cinder_works";
 const S: &str = "sallow_reservoir";
+/// The fifth valley (`claude/polish-fifth-valley`): its leads are read
+/// once its map is in the shared list.
+const R: &str = "rime_fell";
 
 pub const THREAD: &[Lead] = &[
     // Marrow Creek: where it started.
@@ -471,6 +474,22 @@ pub const THREAD: &[Lead] = &[
         note: "Sorter's chit",
         mentions: &[(C, "The works")],
     },
+    // Set pieces.
+    Lead {
+        map: M,
+        note: "Luggage notice",
+        mentions: &[(M, "Bus depot")],
+    },
+    Lead {
+        map: K,
+        note: "Fiala's card",
+        mentions: &[(K, "Hunting lodge"), (K, "Lodge book")],
+    },
+    Lead {
+        map: C,
+        note: "Charge chit",
+        mentions: &[(C, "The works"), (C, "Lookout log")],
+    },
     // Sallow Reservoir: the water works, and the village it drowned.
     Lead {
         map: S,
@@ -525,6 +544,56 @@ pub const THREAD: &[Lead] = &[
         map: S,
         note: "Shop note",
         mentions: &[(S, "New Sallow"), (S, "Keeper's note")],
+    },
+    // Rime Fell: the mine on the bench, the funicular, the observatory.
+    Lead {
+        map: R,
+        note: "Rime gate log",
+        mentions: &[
+            (R, "Coldharbour"),
+            (R, "Valley station"),
+            (R, "The observatory"),
+        ],
+    },
+    Lead {
+        map: R,
+        note: "Funicular book",
+        mentions: &[(R, "Valley station"), (R, "Top station")],
+    },
+    Lead {
+        map: R,
+        note: "Grit book",
+        mentions: &[(R, "The galleries"), (R, "Hairpin hut")],
+    },
+    Lead {
+        map: R,
+        note: "Mine office terminal",
+        mentions: &[(R, "Top station"), (R, "The mill")],
+    },
+    Lead {
+        map: R,
+        note: "Canteen note",
+        mentions: &[(R, "Coldharbour"), (R, "The observatory")],
+    },
+    Lead {
+        map: R,
+        note: "Ota's letter",
+        mentions: &[(R, "The observatory"), (R, "The col")],
+    },
+    Lead {
+        map: R,
+        note: "Watch log",
+        mentions: &[(R, "The galleries"), (R, "Avalanche watch")],
+    },
+    Lead {
+        map: R,
+        note: "Col hut book",
+        mentions: &[(R, "The col"), (R, "The tarn"), (R, "The observatory")],
+    },
+    Lead {
+        map: R,
+        note: "Compressor terminal",
+        mentions: &[(R, "The adit"), (R, "Compressor house")],
     },
 ];
 

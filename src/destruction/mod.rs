@@ -25,6 +25,7 @@ pub mod debris;
 pub mod glass;
 pub mod hooks;
 pub mod scenario;
+pub mod strip;
 // Robot minds' walkers call it (after the merge); tests do already.
 #[allow(dead_code)]
 pub mod through;
@@ -46,6 +47,31 @@ pub struct Broke {
     /// How big a thing: a pane's area or a door's (m²): a shop window
     /// crashes, a vent pane tinkles.
     pub size: f32,
+}
+
+/// Something solid that stood here is gone (a crate burst, a board or a
+/// panel off, a hole to the floor): the space it took, world-aligned. For
+/// anything that keeps a map of what's in the way (robots' nav grids, a
+/// cover index) to clear.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Cleared {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+/// Whatever breakable goes, but quietly (the save, the Surge): its space
+/// is clear.
+fn cleared(
+    remove: On<Remove, wood::Timber>,
+    things: Query<(&avian3d::prelude::ColliderAabb, Has<wood::Quiet>)>,
+    mut out: MessageWriter<Cleared>,
+) {
+    if let Ok((aabb, false)) = things.get(remove.entity) {
+        out.write(Cleared {
+            min: aabb.min,
+            max: aabb.max,
+        });
+    }
 }
 
 /// How far a robot hears a break, metres: glass carries further than
@@ -80,6 +106,8 @@ impl Plugin for DestructionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Broken>()
             .add_message::<Broke>()
+            .add_message::<Cleared>()
+            .add_observer(cleared)
             .configure_sets(
                 FixedUpdate,
                 DestructionSystems.after(crate::weapons::ballistics::BallisticsSystems),
@@ -92,6 +120,7 @@ impl Plugin for DestructionPlugin {
                 hooks::HooksPlugin,
                 breach::BreachPlugin,
                 boards::BoardsPlugin,
+                strip::StripPlugin,
             ));
     }
 }
@@ -115,6 +144,7 @@ pub fn surge(world: &mut World) {
     wood::mend_all(world);
     breach::mend_all(world);
     boards::mend_all(world);
+    strip::mend_all(world);
 }
 
 #[cfg(test)]

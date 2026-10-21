@@ -89,6 +89,38 @@ pub struct Geo {
     /// hole): each opening's centre at the eaves, building-local, and its
     /// half extents along x and z. For the sun's shafts (`shafts`).
     pub skylights: Vec<(Vec3, Vec2)>,
+    /// Things a hand or a round can take off, each its own entity (not in
+    /// the building's collider, nor drawn by it): Destruction spawns,
+    /// draws and breaks them.
+    pub breakables: Vec<Breakable>,
+}
+
+/// What a breakable thing is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BreakKind {
+    /// A plank window shutter, hinged open against the wall.
+    Shutter,
+    /// A garden fence's plank panel between its posts.
+    FencePanel,
+    /// A wrecked bus's folding door.
+    BusDoor,
+    /// A wrecked bus's side skirt panel.
+    BusPanel,
+}
+
+/// A breakable thing on a building (`Geo::breakables`).
+#[derive(Clone, Debug)]
+pub struct Breakable {
+    pub kind: BreakKind,
+    /// Building-local: its middle, its outer face to local -Z.
+    pub at: Transform,
+    /// Its box, for its collider.
+    pub size: Vec3,
+    /// Its model, or none: a box of `size` in `mat`.
+    pub model: Option<&'static str>,
+    pub mat: Mat,
+    /// What it drops when it's prised off.
+    pub yields: Option<&'static str>,
 }
 
 /// An opening in a wall, measured along it from its start.
@@ -396,6 +428,34 @@ impl Builder {
                             .with_scale(Vec3::new(o.width, h / 1.1, 1.0));
                         let here = self.geo.pieces.len();
                         self.dress_outside(here, vec![("window_casing", casing)]);
+                        // Its shutters, hinged open flat against the wall
+                        // either side, clear of the casing (`shutter`:
+                        // hinged on its +X edge; the right one turned
+                        // over to hinge on its left).
+                        let sh = h;
+                        for side in [-1.0f32, 1.0] {
+                            let s = o.centre + side * (o.width * 0.5 + 0.13 + 0.25);
+                            if s < 0.4 || s > len - 0.4 {
+                                continue;
+                            }
+                            let c =
+                                at(s, centre_y) + rot * Vec3::new(0.0, 0.0, -thick * 0.5 - 0.02);
+                            let turn = if side > 0.0 {
+                                Quat::from_rotation_z(std::f32::consts::PI)
+                            } else {
+                                Quat::IDENTITY
+                            };
+                            self.geo.breakables.push(Breakable {
+                                kind: BreakKind::Shutter,
+                                at: Transform::from_translation(c)
+                                    .with_rotation(rot * turn)
+                                    .with_scale(Vec3::new(1.0, sh / 1.1, 1.0)),
+                                size: Vec3::new(0.5, sh, 0.03),
+                                model: Some("shutter"),
+                                mat: Mat::Timber,
+                                yields: None,
+                            });
+                        }
                     }
                     self.piece(
                         Shape::Box(Vec3::new(o.width + 0.1, 0.05, thick + 0.08)),
@@ -1378,7 +1438,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 43] = [
+pub const PREFABS: [&str; 45] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1393,6 +1453,7 @@ pub const PREFABS: [&str; 43] = [
     "mast_hut",
     "radio_mast",
     "ranger_tower",
+    "survey_tower",
     "quarantine_gate",
     "guard_booth",
     "robot_gate",
@@ -1422,6 +1483,7 @@ pub const PREFABS: [&str; 43] = [
     "farmhouse_drowned",
     "house_brick_drowned",
     "chapel_drowned",
+    "fence_garden",
 ];
 
 pub fn prefab(id: &str) -> Option<Geo> {
@@ -1471,6 +1533,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
             b.loot(Vec3::new(3.5, 0.6, 2.8), "medical");
         }
         "cabin_log" => cabin(&mut b),
+        "fence_garden" => fence_garden(&mut b),
         "shop" => shop(&mut b),
         "shed" => shed(&mut b),
         "barn" => barn(&mut b),
@@ -1497,6 +1560,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "mast_hut" => mast_hut(&mut b),
         "radio_mast" => radio_mast(&mut b),
         "ranger_tower" => ranger_tower(&mut b),
+        "survey_tower" => survey_tower(&mut b),
         "quarantine_gate" => quarantine_gate(&mut b),
         "guard_booth" => guard_booth(&mut b),
         "robot_gate" => robot_gate(&mut b),
@@ -1855,7 +1919,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
 
 /// How deep a drowned house's silt lies over its footing: four of a
 /// stair's risers (`underground::STEP_RISE`), a hand under the sills.
-const SILT: f32 = 0.76;
+pub const SILT: f32 = 0.76;
 
 /// A house that was under a reservoir (`Ruin::Drowned`): its walls, no
 /// roof, floors or partitions, no doors or glass, the timber sodden; silt
@@ -2070,6 +2134,33 @@ fn chapel_drowned(b: &mut Builder) {
         b.geo.pieces.push(p);
     }
     b.dress_structure(from, vec![("steeple", turn)]);
+}
+
+/// A garden fence: four plank panels between five posts along x, 8.4 m,
+/// the boards' face to -Z. The posts are the building's; the panels are
+/// breakable things (`fence_panel`), each its own.
+fn fence_garden(b: &mut Builder) {
+    let (n, span, post) = (4, 2.1, 0.1);
+    let x0 = -(n as f32) * span * 0.5;
+    for k in 0..=n {
+        let x = x0 + k as f32 * span;
+        b.bx(
+            Vec3::new(post, 1.55, post),
+            Vec3::new(x, 1.3 - 0.775, 0.0),
+            Mat::Timber,
+        );
+    }
+    for k in 0..n {
+        let x = x0 + (k as f32 + 0.5) * span;
+        b.geo.breakables.push(Breakable {
+            kind: BreakKind::FencePanel,
+            at: Transform::from_xyz(x, 0.15 + 0.55, 0.0),
+            size: Vec3::new(2.0, 1.1, 0.08),
+            model: Some("fence_panel"),
+            mat: Mat::Timber,
+            yields: None,
+        });
+    }
 }
 
 fn cabin(b: &mut Builder) {
@@ -4037,12 +4128,51 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     let (w, len) = (2.5, 10.0);
     let wheel_r = 0.48;
     let body_lo = floor.y + wheel_r + 0.15;
-    // Lower body (the skirt and panels below the windows).
+    // Lower body (the skirt and panels below the windows): a core, and
+    // its side panels each a thing to prise off (`Breakable`, for scrap
+    // and cover), the core still solid behind.
+    let skin = 0.03;
     b.bx(
-        Vec3::new(w, 1.05, len),
+        Vec3::new(w - 2.0 * skin, 1.05, len),
         floor + Vec3::new(0.0, body_lo + 0.525 - floor.y, 0.0),
         Mat::PaintedMetal,
     );
+    let door_z = -len * 0.5 + 1.0;
+    for side in [-1.0f32, 1.0] {
+        // The right side's front panel starts behind the door.
+        let z0 = if side > 0.0 {
+            door_z + 0.55
+        } else {
+            -len * 0.5 + 0.15
+        };
+        let spans = [(z0, -0.05), (0.05, len * 0.5 - 0.15)];
+        for (a, c) in spans {
+            let mid = floor
+                + Vec3::new(
+                    side * (w * 0.5 - skin * 0.5),
+                    body_lo + 0.525 - floor.y,
+                    (a + c) * 0.5,
+                );
+            // Its outer face to local -Z: facing out of the side.
+            let face = Quat::from_rotation_y(-side * std::f32::consts::FRAC_PI_2);
+            b.geo.breakables.push(Breakable {
+                kind: BreakKind::BusPanel,
+                at: Transform::from_translation(mid).with_rotation(face),
+                size: Vec3::new(c - a, 1.0, skin),
+                model: None,
+                mat: Mat::PaintedMetal,
+                yields: Some("bus_panel"),
+            });
+        }
+        // Under the door, the skirt's core still reaches the side.
+        if side > 0.0 {
+            b.bx(
+                Vec3::new(skin, 1.05, 0.55 + 0.5),
+                floor + Vec3::new(w * 0.5 - skin * 0.5, body_lo + 0.525 - floor.y, door_z),
+                Mat::PaintedMetal,
+            );
+        }
+    }
     // Window band: dark glass set in a little, pillars between.
     let band = body_lo + 1.05;
     b.piece(
@@ -4073,12 +4203,18 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
             Mat::DarkMetal,
         );
     }
-    // A folding door on the right, front.
-    b.bx(
-        Vec3::new(0.04, 1.85, 0.95),
-        floor + Vec3::new(w * 0.5 + 0.01, body_lo + 0.95 - floor.y, -len * 0.5 + 1.0),
-        Mat::DarkMetal,
-    );
+    // A folding door on the right, front: a thing to prise off.
+    b.geo.breakables.push(Breakable {
+        kind: BreakKind::BusDoor,
+        at: Transform::from_translation(
+            floor + Vec3::new(w * 0.5 + 0.02, body_lo + 0.95 - floor.y, door_z),
+        )
+        .with_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)),
+        size: Vec3::new(0.95, 1.85, 0.04),
+        model: None,
+        mat: Mat::DarkMetal,
+        yields: Some("scrap_metal"),
+    });
     // Wheels: three corners on tyres, the fourth on a block.
     for (i, (x, z)) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
         .iter()
@@ -4104,6 +4240,94 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
 }
 
 fn ranger_tower(b: &mut Builder) {
+    let top = tower_legs(b);
+    b.shell(
+        4.0,
+        4.0,
+        top + 0.08,
+        2.4,
+        0.08,
+        Mat::Planks,
+        [
+            &[wide_window(2.0, 3.0)],
+            &[door(3.2), wide_window(1.2, 1.4)],
+            &[wide_window(2.0, 3.0)],
+            &[wide_window(2.0, 3.0)],
+        ],
+    );
+    b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
+    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+}
+
+/// The survey post: the ranger tower's legs, stair and platform, but open
+/// on top, a railing round it, and the survey mast with its beacon (art
+/// `survey_mast`): unlike the ranger tower's roofed cabin from afar. Its
+/// entrance is where the stair arrives (the ranger tower's door).
+fn survey_tower(b: &mut Builder) {
+    let top = tower_legs(b);
+    let deck = top + 0.075;
+    // The railing: posts and two rails round the edge, open where the
+    // stair arrives (+X, z 1.2).
+    let e = 2.1;
+    let rail = |b: &mut Builder, a: Vec2, c: Vec2| {
+        let v = c - a;
+        let mid = (a + c) * 0.5;
+        let yaw = -v.y.atan2(v.x);
+        for (y, t) in [(1.0, 0.07), (0.5, 0.05)] {
+            b.bx_rot(
+                Vec3::new(v.length(), t, 0.05),
+                Vec3::new(mid.x, deck + y, mid.y),
+                yaw,
+                Mat::Timber,
+            );
+        }
+    };
+    let corners = [
+        Vec2::new(-e, -e),
+        Vec2::new(e, -e),
+        Vec2::new(e, e),
+        Vec2::new(-e, e),
+    ];
+    rail(b, corners[3], corners[0]);
+    rail(b, corners[0], corners[1]);
+    rail(b, corners[2], corners[3]);
+    // The +X side, broken for the stair's arrival.
+    rail(b, Vec2::new(e, -e), Vec2::new(e, 1.2 - 0.6));
+    rail(b, Vec2::new(e, 1.2 + 0.6), Vec2::new(e, e));
+    for c in corners
+        .into_iter()
+        .chain([Vec2::new(e, 0.6), Vec2::new(e, 1.8)])
+    {
+        b.bx(
+            Vec3::new(0.08, 1.05, 0.08),
+            Vec3::new(c.x, deck + 0.525, c.y),
+            Mat::Timber,
+        );
+    }
+    let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
+    b.geo.entrances.push(extraction_core::map::Entrance {
+        at: [r(2.04), 1.2],
+        out: [1.0, 0.0],
+        width: 0.95,
+        clear: 1.0,
+    });
+    // The mast, its collider a pole; the model draws it and the beacon.
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(0.24, 5.4, 0.24),
+        Vec3::new(0.0, deck + 2.7, 0.0),
+        Mat::PaintedMetal,
+    );
+    b.dress_structure(
+        from,
+        vec![("survey_mast", Transform::from_xyz(0.0, deck, 0.0))],
+    );
+    b.table(Vec3::new(-0.9, deck, 1.1), 0.0, Some("gadgets"));
+}
+
+/// The ranger tower's four legs, its stair in three flights up the +X
+/// side and its platform: the platform's top, less its boards.
+fn tower_legs(b: &mut Builder) -> f32 {
     let top = 9.0;
     for (x, z) in [(-1.8, -1.8), (1.8, -1.8), (1.8, 1.8), (-1.8, 1.8)] {
         b.bx(
@@ -4197,22 +4421,7 @@ fn ranger_tower(b: &mut Builder) {
         Vec3::new(0.0, top, 0.0),
         Mat::Planks,
     );
-    b.shell(
-        4.0,
-        4.0,
-        top + 0.08,
-        2.4,
-        0.08,
-        Mat::Planks,
-        [
-            &[wide_window(2.0, 3.0)],
-            &[door(3.2), wide_window(1.2, 1.4)],
-            &[wide_window(2.0, 3.0)],
-            &[wide_window(2.0, 3.0)],
-        ],
-    );
-    b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
-    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+    top
 }
 
 fn quarantine_gate(b: &mut Builder) {
@@ -4792,7 +5001,7 @@ pub fn swing_doors(
 /// A building waiting for its props' models before it builds its meshes
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
-pub struct PropsPending(u32);
+pub struct PropsPending(pub(crate) u32);
 
 /// Build a building's meshes again (its walls changed: a breach, or the
 /// Surge mending one). Its merged meshes go; `dress_buildings` makes new.
@@ -5589,6 +5798,64 @@ mod tests {
             let p = root.join(crate::render::world_props::path(name));
             assert!(p.exists(), "no model {}", p.display());
         }
+    }
+
+    /// Breakable things are sound, face out of their building, and are
+    /// where they should be: a timber house's windows with their shutters,
+    /// a wrecked bus with its door and panels, a garden fence with its
+    /// four panels.
+    #[test]
+    fn breakables_are_where_they_should_be() {
+        for id in PREFABS {
+            let g = prefab(id).unwrap();
+            for b in &g.breakables {
+                let t = b.at.translation;
+                assert!(
+                    b.size.min_element() > 0.0 && t.is_finite() && b.at.rotation.is_finite(),
+                    "{id}: {b:?}"
+                );
+                // Its outer face away from the middle (a fence faces -Z; a
+                // bus's parts face out of the bus, not the depot).
+                let out = b.at.rotation * Vec3::NEG_Z;
+                if b.kind == BreakKind::Shutter {
+                    assert!(
+                        Vec2::new(t.x, t.z).dot(Vec2::new(out.x, out.z)) > 0.0,
+                        "{id}: {:?} faces in",
+                        b.kind
+                    );
+                }
+            }
+        }
+        let count = |id: &str, k: BreakKind| {
+            prefab(id)
+                .unwrap()
+                .breakables
+                .iter()
+                .filter(|b| b.kind == k)
+                .count()
+        };
+        let windows = |id: &str| {
+            prefab(id)
+                .unwrap()
+                .props
+                .iter()
+                .flat_map(|d| d.models.iter())
+                .filter(|(m, _)| *m == "window_casing")
+                .count()
+        };
+        for id in ["house_plank", "farmhouse", "cabin_log"] {
+            assert!(windows(id) > 0);
+            assert!(
+                count(id, BreakKind::Shutter) >= windows(id) * 2 - 2,
+                "{id}: {} shutters for {} windows",
+                count(id, BreakKind::Shutter),
+                windows(id)
+            );
+        }
+        assert_eq!(count("house_brick", BreakKind::Shutter), 0);
+        assert_eq!(count("bus_depot", BreakKind::BusDoor), 1);
+        assert_eq!(count("bus_depot", BreakKind::BusPanel), 4);
+        assert_eq!(count("fence_garden", BreakKind::FencePanel), 4);
     }
 
     /// Every piece of every recipe has a real, positive size and a finite

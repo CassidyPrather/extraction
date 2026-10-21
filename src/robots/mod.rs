@@ -33,8 +33,11 @@ pub mod pylon;
 pub mod reel;
 pub mod search;
 pub mod senses;
+pub mod sentry;
+pub mod sentry_look;
 pub mod sorter;
 pub mod sorter_look;
+pub mod sorter_mind;
 pub mod visuals;
 pub mod walker;
 pub mod weathering;
@@ -241,7 +244,12 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
-            .add_plugins((hound_mind::HoundMindPlugin, flee::FleePlugin))
+            .add_observer(senses::seed_mind)
+            .add_plugins((
+                hound_mind::HoundMindPlugin,
+                flee::FleePlugin,
+                sorter_mind::SorterMindPlugin,
+            ))
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,
@@ -260,6 +268,7 @@ impl Plugin for RobotsPlugin {
                     sorter::SorterPlugin,
                     heavy::HeavyPlugin,
                     heavy_mind::HeavyMindPlugin,
+                    sentry::SentryPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
@@ -415,6 +424,7 @@ fn wreck_loot(
             continue;
         }
         commands.entity(e).insert(Salvaged);
+        timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
         let mut drops = loot.0.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
         // And whatever came through whole is there to unbolt.

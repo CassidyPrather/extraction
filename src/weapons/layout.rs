@@ -46,6 +46,9 @@ pub enum Moves {
     /// A bayonet: a folding one turns about its pin (the origin, local X)
     /// from folded to fixed; a fixed one stays as modelled.
     Bayonet,
+    /// A folding bipod: turns about its pivot (the origin, local X) from
+    /// folded to deployed.
+    Bipod,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -90,6 +93,9 @@ pub enum HandleKind {
     TurnBolt,
     /// A break-action's barrels: push down to open.
     BreakBarrels,
+    /// A pump's forend: the supporting hand works it, back and forward
+    /// along the bore (`grab` is the forend, where the support is).
+    Pump,
 }
 
 #[derive(Clone, Debug)]
@@ -151,6 +157,11 @@ pub fn layout(id: &str) -> Option<GunLayout> {
         "sks" => Some(sks()),
         "nagant" => Some(nagant()),
         "ppsh" => Some(ppsh()),
+        "mp133" => Some(mp133()),
+        "svd" => Some(svd()),
+        "toz8" => Some(toz8()),
+        "rpk74" => Some(rpk74()),
+        "flare_pistol" => Some(flare_pistol()),
         _ => None,
     }
 }
@@ -596,6 +607,271 @@ fn ppsh() -> GunLayout {
     }
 }
 
+/// The Baikal MP-133 (art/guns/mp133.py): a pump. The forend is both the
+/// support and the handle; shells go into the tube through the loading
+/// port under the receiver.
+fn mp133() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.045;
+    let forend = Vec3::new(0.0, 0.012, -0.42);
+    GunLayout {
+        grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
+        support: Some(forend),
+        muzzle: Vec3::new(0.0, bore, -0.795),
+        port: Vec3::new(0.022, 0.05, -0.12),
+        eject: Vec3::new(1.0, 0.5, 0.1),
+        sight: at(0.0, 0.068, -0.03),
+        magwell: None,
+        handle: Some(HandleLayout {
+            kind: HandleKind::Pump,
+            grab: forend,
+            travel: 0.09,
+        }),
+        load_port: Vec3::new(0.0, 0.0, -0.13),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // Stock and wrist.
+            part(bx(0.038, 0.045, 0.14), at(0.0, -0.005, 0.03), Wood, Static),
+            part(
+                bx(0.042, 0.13, 0.26),
+                Transform::from_xyz(0.0, -0.04, 0.22).with_rotation(Quat::from_rotation_x(0.12)),
+                Wood,
+                Static,
+            ),
+            // Receiver and trigger.
+            part(bx(0.044, 0.06, 0.21), at(0.0, 0.035, -0.13), Blued, Static),
+            part(
+                bx(0.005, 0.022, 0.006),
+                at(0.0, -0.01, -0.05),
+                Black,
+                Trigger,
+            ),
+            // Barrel over the tube.
+            part(
+                Shape::Cylinder(0.011, 0.56),
+                at(0.0, bore, -0.515),
+                Blued,
+                Static,
+            ),
+            part(
+                Shape::Cylinder(0.012, 0.39),
+                at(0.0, 0.016, -0.43),
+                Blued,
+                Static,
+            ),
+            // The forend and the bolt it drives.
+            part(bx(0.046, 0.04, 0.2), at(0.0, 0.016, -0.42), Wood, WithBolt),
+            part(
+                bx(0.02, 0.025, 0.08),
+                at(0.0, 0.045, -0.13),
+                Steel,
+                WithBolt,
+            ),
+        ],
+    }
+}
+
+/// The SVD (art/guns/svd.py): a self-loader from a ten-round box, its
+/// charging handle on the right, a side rail for the PSO-1 on the left.
+fn svd() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.058;
+    GunLayout {
+        grip: Transform::IDENTITY,
+        support: Some(Vec3::new(0.0, 0.03, -0.4)),
+        muzzle: Vec3::new(0.0, bore, -0.955),
+        port: Vec3::new(0.0175, 0.0705, -0.148),
+        eject: Vec3::new(1.0, 0.4, 0.1),
+        sight: at(0.0, 0.1068, 0.0),
+        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.124)),
+        handle: Some(HandleLayout {
+            kind: HandleKind::ChargingHandle,
+            grab: Vec3::new(0.047, 0.0645, -0.2),
+            travel: 0.13,
+        }),
+        load_port: Vec3::new(0.0175, 0.0705, -0.148),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // Thumbhole stock and its grip.
+            part(
+                bx(0.03, 0.1, 0.04),
+                Transform::from_xyz(0.0, -0.01, 0.0).with_rotation(Quat::from_rotation_x(0.3)),
+                Wood,
+                Static,
+            ),
+            part(bx(0.04, 0.12, 0.25), at(0.0, 0.02, 0.15), Wood, Static),
+            // Receiver, trigger, handguard, barrel.
+            part(bx(0.044, 0.06, 0.3), at(0.0, 0.05, -0.12), Blued, Static),
+            part(
+                bx(0.005, 0.022, 0.006),
+                at(0.0, 0.015, -0.035),
+                Black,
+                Trigger,
+            ),
+            part(bx(0.05, 0.05, 0.23), at(0.0, 0.055, -0.405), Wood, Static),
+            part(
+                Shape::Cylinder(0.01, 0.44),
+                at(0.0, bore, -0.735),
+                Blued,
+                Static,
+            ),
+            // Carrier and handle.
+            part(
+                bx(0.02, 0.02, 0.1),
+                at(0.012, 0.072, -0.17),
+                Steel,
+                WithBolt,
+            ),
+            part(
+                bx(0.03, 0.012, 0.016),
+                at(0.035, 0.066, -0.2),
+                Steel,
+                WithBolt,
+            ),
+            part(
+                bx(0.004, 0.012, 0.11),
+                at(0.024, 0.06, -0.08),
+                Blued,
+                Selector,
+            ),
+        ],
+    }
+}
+
+/// The TOZ-8M (art/guns/toz8.py): a single-shot .22 turn-bolt; the round
+/// goes into the open chamber at `load_port`.
+fn toz8() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.04;
+    GunLayout {
+        grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
+        support: Some(Vec3::new(0.0, 0.0, -0.4)),
+        muzzle: Vec3::new(0.0, bore, -0.84),
+        port: Vec3::new(0.0, 0.05, -0.15),
+        eject: Vec3::new(0.7, 0.8, 0.2),
+        sight: at(0.0, 0.062, -0.03),
+        magwell: None,
+        handle: Some(HandleLayout {
+            kind: HandleKind::TurnBolt,
+            grab: Vec3::new(0.05, 0.035, -0.06),
+            travel: 0.075,
+        }),
+        load_port: Vec3::new(0.0, 0.05, -0.15),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            part(bx(0.036, 0.05, 0.6), at(0.0, -0.005, -0.33), Wood, Static),
+            part(
+                bx(0.036, 0.11, 0.28),
+                Transform::from_xyz(0.0, -0.03, 0.16).with_rotation(Quat::from_rotation_x(0.1)),
+                Wood,
+                Static,
+            ),
+            part(
+                Shape::Cylinder(0.014, 0.17),
+                at(0.0, bore, -0.115),
+                Blued,
+                Static,
+            ),
+            part(
+                Shape::Cylinder(0.008, 0.64),
+                at(0.0, bore, -0.52),
+                Blued,
+                Static,
+            ),
+            part(
+                bx(0.005, 0.022, 0.006),
+                at(0.0, -0.01, -0.05),
+                Black,
+                Trigger,
+            ),
+            part(
+                Shape::Cylinder(0.007, 0.1),
+                at(0.0, bore, -0.1),
+                Steel,
+                TurnBolt,
+            ),
+            part(
+                bx(0.05, 0.006, 0.006),
+                at(0.027, 0.035, -0.06),
+                Steel,
+                TurnBolt,
+            ),
+        ],
+    }
+}
+
+/// The RPK-74 (art/guns/rpk74.py): an AK with a long, heavy barrel, a
+/// club-foot stock and a folding bipod near the muzzle.
+fn rpk74() -> GunLayout {
+    let mut l = ak74();
+    let bore = 0.058;
+    l.muzzle = Vec3::new(0.0, bore, -0.82);
+    l.support = Some(Vec3::new(0.0, 0.03, -0.34));
+    for p in &mut l.parts {
+        // The barrel and its front sight and brake go further out.
+        if p.at.translation.z < -0.55 {
+            p.at.translation.z -= 0.13;
+        }
+    }
+    // The bipod, folded under the barrel (its pivot at the clamp).
+    l.parts.push(part(
+        bx(0.1, 0.012, 0.24),
+        at(0.0, 0.032, -0.72),
+        Mat::Steel,
+        Moves::Bipod,
+    ));
+    l
+}
+
+/// The SPSh-44 (art/guns/flare_pistol.py): a 26 mm break-open signal
+/// pistol; the barrel tips down about the hinge under its breech.
+fn flare_pistol() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let bore = 0.055;
+    let hinge = Vec3::new(0.0, 0.032, -0.065);
+    GunLayout {
+        grip: Transform::IDENTITY,
+        support: None,
+        muzzle: Vec3::new(0.0, bore, -0.19),
+        port: Vec3::new(0.0, bore, -0.04),
+        eject: Vec3::new(0.0, 0.6, 1.0),
+        sight: at(0.0, 0.085, 0.01),
+        magwell: None,
+        handle: Some(HandleLayout {
+            kind: HandleKind::BreakBarrels,
+            grab: Vec3::new(0.0, bore, -0.15),
+            travel: 0.0,
+        }),
+        load_port: Vec3::new(0.0, bore, -0.04),
+        hinge,
+        parts: vec![
+            part(
+                bx(0.03, 0.1, 0.04),
+                Transform::from_xyz(0.0, -0.01, 0.01).with_rotation(Quat::from_rotation_x(-0.25)),
+                Bakelite,
+                Static,
+            ),
+            part(bx(0.026, 0.04, 0.08), at(0.0, 0.04, -0.02), Blued, Static),
+            part(
+                bx(0.005, 0.02, 0.005),
+                at(0.0, 0.012, -0.03),
+                Black,
+                Trigger,
+            ),
+            part(
+                Shape::Cylinder(0.017, 0.155),
+                at(0.0, bore, -0.112),
+                Blued,
+                Barrels,
+            ),
+        ],
+    }
+}
+
 fn toz() -> GunLayout {
     use Mat::*;
     use Moves::*;
@@ -685,6 +961,11 @@ mod tests {
             "sks",
             "nagant",
             "ppsh",
+            "mp133",
+            "svd",
+            "toz8",
+            "rpk74",
+            "flare_pistol",
         ] {
             let l = layout(id).unwrap();
             assert!(l.muzzle.z < l.grip.translation.z - 0.1, "{id}");

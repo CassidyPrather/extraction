@@ -84,20 +84,38 @@ impl LootTables {
 
     /// Rolls a table. Unknown tables roll nothing.
     pub fn roll(&self, name: &str, catalog: &ItemCatalog, rng: &mut Rng) -> Vec<Drop> {
+        self.roll_in(name, None, catalog, rng)
+    }
+
+    /// Rolls a table in a valley (its map's name, as `valley_key` gives
+    /// it): wherever a table `<name>@<valley>` exists, it stands in for
+    /// `<name>`, nested tables too. A valley's table usually rolls the
+    /// common one and adds what's peculiar to the place.
+    pub fn roll_in(
+        &self,
+        name: &str,
+        valley: Option<&str>,
+        catalog: &ItemCatalog,
+        rng: &mut Rng,
+    ) -> Vec<Drop> {
         let mut out = Vec::new();
-        self.roll_into(name, catalog, rng, &mut out, 0);
+        self.roll_into(name, valley, catalog, rng, &mut out, 0);
         out
     }
 
     fn roll_into(
         &self,
         name: &str,
+        valley: Option<&str>,
         catalog: &ItemCatalog,
         rng: &mut Rng,
         out: &mut Vec<Drop>,
         depth: u32,
     ) {
-        let Some(t) = self.tables.get(name) else {
+        let local = valley
+            .map(|v| format!("{name}@{v}"))
+            .and_then(|k| self.tables.get(&k));
+        let Some(t) = local.or_else(|| self.tables.get(name)) else {
             return;
         };
         if depth > 8 {
@@ -126,11 +144,26 @@ impl LootTables {
                         });
                     }
                 }
-                Entry::Table { name, .. } => self.roll_into(name, catalog, rng, out, depth + 1),
+                Entry::Table { name: inner, .. } => {
+                    // A valley's table naming the common one rolls it
+                    // plain (not itself again).
+                    let v = valley.filter(|_| !(local.is_some() && inner == name));
+                    self.roll_into(inner, v, catalog, rng, out, depth + 1)
+                }
                 Entry::Nothing { .. } => {}
             }
         }
     }
+}
+
+/// A valley's key in table names: its map's name, lower case, words
+/// joined by `_` ("Kettle Pass" is `kettle_pass`).
+pub fn valley_key(map_name: &str) -> String {
+    map_name
+        .split_whitespace()
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>()
+        .join("_")
 }
 
 pub const BUILTIN_LOOT: &str = include_str!("../../../assets/data/loot.ron");
@@ -159,5 +192,37 @@ mod tests {
         let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         let bad = r#"(tables: {"x": (rolls: (1, 1), entries: [Item(id: "nope", weight: 1.0)])})"#;
         assert!(LootTables::from_ron(bad, &cat).is_err());
+    }
+
+    /// A valley's table stands in for the common one there, nested too,
+    /// and rolls the common one inside it plainly; elsewhere the common
+    /// one rolls.
+    #[test]
+    fn a_valley_has_its_own_tables() {
+        let catalog = ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
+        let text = r#"(tables: {
+            "guns": (rolls: (1, 1), entries: [Item(id: "pm_pistol", weight: 1.0)]),
+            "guns@kettle_pass": (rolls: (2, 2), entries: [
+                Table(name: "guns", weight: 1.0),
+                Item(id: "mosin", weight: 1.0),
+            ]),
+            "house": (rolls: (1, 1), entries: [Table(name: "guns", weight: 1.0)]),
+        })"#;
+        let t = LootTables::from_ron(text, &catalog).unwrap();
+        let id = |d: &Drop| catalog.get(d.kind).id.clone();
+        let mut rng = Rng::new(3);
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..40 {
+            let drops = t.roll_in("house", Some("kettle_pass"), &catalog, &mut rng);
+            assert_eq!(drops.len(), 2, "the valley's table rolled");
+            seen.extend(drops.iter().map(id));
+            let plain = t.roll_in("house", Some("marrow_creek"), &catalog, &mut rng);
+            assert_eq!(plain.iter().map(id).collect::<Vec<_>>(), vec!["pm_pistol"]);
+        }
+        assert!(
+            seen.contains("mosin") && seen.contains("pm_pistol"),
+            "{seen:?}"
+        );
+        assert_eq!(valley_key("Kettle Pass"), "kettle_pass");
     }
 }
