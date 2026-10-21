@@ -55,7 +55,7 @@ import audio_mix as am
 ROOT = Path(__file__).resolve().parent.parent
 KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden", "heavy"]
 MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
-         "calling", "answering", "hurt", "dying"]
+         "calling", "answering", "hurt", "dying", "flanking", "retreating"]
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
