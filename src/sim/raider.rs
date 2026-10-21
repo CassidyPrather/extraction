@@ -611,11 +611,10 @@ pub struct Scene<'w, 's> {
 }
 
 impl Scene<'_, '_> {
-    /// The raid's clock less the nights slept in it: a morning in the
+    /// The raid's clock less the time slept in it: a morning in the
     /// safehouse is a fresh start, not a raid gone late.
     fn awake(&self) -> f32 {
-        let nights = self.house.as_ref().map_or(0, |h| h.nights_out);
-        self.raid.clock - nights as f32 * extraction_core::safehouse::NIGHT
+        self.raid.clock - self.house.as_ref().map_or(0.0, |h| h.slept)
     }
 
     fn hand(&self, children: &Children, side: Side) -> Option<Entity> {

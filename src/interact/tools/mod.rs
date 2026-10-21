@@ -2,10 +2,11 @@
 //! cutters ([`cutters`]). Each sets up its grips when the item appears,
 //! and reads what the hands do with it while it's held.
 //!
-//! What gives way is the target's business. A tool sends a message (see
-//! [`crowbar::PriedFree`]) and whoever owns the thing decides what that
-//! means. Where nothing else claims a target that already exists (a robot's
-//! armour plate, a wedged door), the tool's own module does the small part.
+//! What gives way is the target's business. A tool sends Destruction's
+//! messages (`destruction::hooks::{Pried, Cut}`) and whoever owns the thing
+//! decides what that means. Where nothing else claims a target (an
+//! ordinary robot's armour plate, a padlocked panel), the tool's own module
+//! does the small part.
 
 use bevy::prelude::*;
 

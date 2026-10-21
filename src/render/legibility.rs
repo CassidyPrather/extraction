@@ -873,6 +873,76 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// Every signpost faces the way you come to it, so its words meet you
+    /// rather than its back: beside a road or path (within 25 m), its face
+    /// turns to the road 10 m back toward where the truck sets you down,
+    /// whence you walk up it; with none near, toward that spot itself. Its board is at eye height by construction (1.45 m
+    /// up, `world::notes`).
+    #[test]
+    fn every_sign_faces_its_approach() {
+        use extraction_core::map::{MapDef, MarkerKind};
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/maps");
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "ron") {
+                continue;
+            }
+            let map = MapDef::from_ron(&std::fs::read_to_string(&p).unwrap()).unwrap();
+            let ins = map
+                .markers_of(&MarkerKind::Insertion)
+                .next()
+                .map(|m| Vec2::from(m.at));
+            for m in &map.markers {
+                if !matches!(m.kind, MarkerKind::Sign { .. }) {
+                    continue;
+                }
+                seen += 1;
+                let at = Vec2::from(m.at);
+                // The nearest point on any road or path.
+                let mut near: Option<(f32, Vec2, Vec2)> = None;
+                for road in &map.roads {
+                    for w in road.points.windows(2) {
+                        let (a, b) = (Vec2::from(w[0]), Vec2::from(w[1]));
+                        let ab = b - a;
+                        let t = ((at - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                        let q = a + ab * t;
+                        let d = q.distance(at);
+                        if near.is_none_or(|(n, _, _)| d < n) {
+                            near = Some((d, q, ab.normalize_or_zero()));
+                        }
+                    }
+                }
+                let Some(ins) = ins else {
+                    continue;
+                };
+                let from = match near {
+                    // Back along the road, the way you walk up it.
+                    Some((d, q, along)) if d < 25.0 => [q + along * 10.0, q - along * 10.0]
+                        .into_iter()
+                        .min_by(|a, b| a.distance(ins).total_cmp(&b.distance(ins)))
+                        .unwrap(),
+                    _ => ins,
+                };
+                // The board faces the marker's +Z, turned by its rot.
+                let face = Quat::from_rotation_y(-m.rot.to_radians()) * Vec3::Z;
+                let to = (from - at).normalize_or_zero();
+                let cos = Vec2::new(face.x, face.z).dot(to);
+                if to != Vec2::ZERO && cos < 0.5 {
+                    bad.push(format!(
+                        "{}: {} faces {:.0} deg away from its approach",
+                        map.name,
+                        m.name,
+                        cos.clamp(-1.0, 1.0).acos().to_degrees()
+                    ));
+                }
+            }
+        }
+        assert!(seen > 0, "no signs found");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// Every model's letters: big enough from where they're read, strokes
     /// at least a pixel, and every script with letters registered.
     #[test]

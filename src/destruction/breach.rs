@@ -52,7 +52,15 @@ fn way_in(bxf: &Transform, hole: Vec3) -> (Vec3, Vec3) {
     (hole, out)
 }
 
-fn index_hole(commands: &mut Commands, building: Entity, bxf: &Transform, hole: Vec3) {
+fn index_hole(
+    commands: &mut Commands,
+    building: Entity,
+    prefab: &str,
+    bxf: &Transform,
+    hole: Vec3,
+) {
+    let size = extraction_core::map::prefab_footprint(prefab);
+    let xf = *bxf;
     let (mid, out) = way_in(bxf, hole);
     let marker = commands
         .spawn((
@@ -63,6 +71,18 @@ fn index_hole(commands: &mut Commands, building: Entity, bxf: &Transform, hole: 
         .id();
     commands.queue(move |w: &mut World| {
         if let Some(mut e) = w.get_resource_mut::<crate::robots::doors::Entrances>() {
+            // A building with no door had no box to be inside: give it one,
+            // or nobody is ever indoors there for a robot to come for.
+            // (Only once the index is built: an early shell would stop it
+            // being built at all.)
+            if !e.shells.is_empty() && !e.shells.iter().any(|s| s.building == building) {
+                e.shells.push(crate::robots::doors::Shell {
+                    building,
+                    xf,
+                    half: Vec2::new(size[0], size[2]) * 0.5,
+                    height: size[1],
+                });
+            }
             e.doors.push(crate::robots::doors::Entrance {
                 door: marker,
                 building,
@@ -227,7 +247,7 @@ fn restore(
                     .and_then(|g| wall_at(g, inv.transform_point3(*h)))
                     .is_some()
                 {
-                    index_hole(&mut commands, e, t, *h);
+                    index_hole(&mut commands, e, &b.prefab, t, *h);
                 }
             }
         }
@@ -270,7 +290,7 @@ fn tear(
             let centre = t.transform_point(centre_local);
             breaches.0.push(centre);
             rebuild(&mut commands, e, b, t, &breaches.0);
-            index_hole(&mut commands, e, t, centre);
+            index_hole(&mut commands, e, &b.prefab, t, centre);
             out.write(Broke {
                 at: centre,
                 stuff: Stuff::Wood,

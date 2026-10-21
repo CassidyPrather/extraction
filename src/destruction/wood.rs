@@ -286,7 +286,7 @@ fn take_hits(
 /// board, `along` in the world) and half width, laid flat in a frame
 /// whose z is the board's thickness.
 #[allow(clippy::too_many_arguments)]
-fn board_pieces(
+pub(super) fn board_pieces(
     rng: &mut Rng,
     seed: u64,
     centre: Vec3,
@@ -535,6 +535,17 @@ fn burst(
     }
 }
 
+/// How a breakable thing of its own is drawn (`visuals::dress_crates`):
+/// `model` posed `at` in its own space, a box of `size` until it loads,
+/// gone past `range` metres.
+#[derive(Component, Clone, Debug)]
+pub struct Drawn {
+    pub model: &'static str,
+    pub at: Transform,
+    pub size: Vec3,
+    pub range: std::ops::Range<f32>,
+}
+
 /// The crate models (`art/props/crates.py`): unit cubes on the floor.
 pub const CRATE_MODELS: [&str; 2] = ["crate_slat", "crate_army"];
 
@@ -639,6 +650,14 @@ pub fn spawn_building_crates(
                 size,
                 model,
                 model_at,
+            },
+            // Furniture's range (`buildings::dress_buildings`): gone past
+            // 25-35 m, where the room's dark anyway.
+            Drawn {
+                model,
+                at: model_at,
+                size: Vec3::splat(size),
+                range: 25.0..35.0,
             },
             world,
             Visibility::default(),

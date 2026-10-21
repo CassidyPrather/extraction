@@ -63,6 +63,7 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::BarkBirch
         | Mat::BarkPine
         | Mat::Charred
+        | Mat::Sodden
         | Mat::Canvas => ImpactKind::Wood,
         Mat::RustyMetal
         | Mat::PaintedMetal
@@ -71,6 +72,7 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::RobotShell
         | Mat::GunMetal => ImpactKind::Metal,
         Mat::Glass => ImpactKind::Glass,
+        Mat::Silt => ImpactKind::Soil,
         Mat::Brick
         | Mat::SootBrick
         | Mat::Plaster
@@ -78,6 +80,7 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::Concrete
         | Mat::Asphalt
         | Mat::Boulder
+        | Mat::DressedStone
         | Mat::Polymer => ImpactKind::Masonry,
     }
 }
@@ -87,6 +90,8 @@ pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
     use extraction_core::firearm_terminal::Stuff;
     match m {
         Mat::Planks | Mat::WoodFloor | Mat::Timber | Mat::Shingles | Mat::GunWood => Stuff::Planks,
+        Mat::Sodden => Stuff::Planks,
+        Mat::Silt => Stuff::Soil,
         Mat::Polymer => Stuff::Planks,
         // Charred timber is what's left of a log or a beam: still logs.
         Mat::LogWall | Mat::BarkSpruce | Mat::BarkBirch | Mat::BarkPine | Mat::Charred => {
@@ -95,7 +100,7 @@ pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
         Mat::Plaster | Mat::SootPlaster => Stuff::Plaster,
         Mat::Brick | Mat::SootBrick => Stuff::Brick,
         Mat::Concrete => Stuff::Concrete,
-        Mat::Asphalt | Mat::Boulder => Stuff::Rock,
+        Mat::Asphalt | Mat::Boulder | Mat::DressedStone => Stuff::Rock,
         Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
         Mat::DarkMetal | Mat::GunMetal | Mat::RobotShell => Stuff::Plate,
         Mat::Glass | Mat::Canvas => Stuff::Glass,
