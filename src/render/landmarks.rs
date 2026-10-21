@@ -13,6 +13,7 @@ use extraction_core::map::prefab_footprint;
 use extraction_core::map_lint::LANDMARK_HEIGHT;
 
 use crate::world::buildings::{Building, Shape, prefab};
+use crate::world::halos::{Halo, HaloReach};
 
 pub struct LandmarkLampsPlugin;
 
@@ -26,9 +27,16 @@ impl Plugin for LandmarkLampsPlugin {
 /// mast's own is too small to carry past 150 m at night: it gets one too).
 const LIT: &[&str] = &[];
 
-/// The lamp's radius, and its halo's (m).
+/// The lamp's radius, and its halo's (m): a soft `world::halos::Halo`,
+/// fogged like every lamp's and shown after dark; a hard-edged sphere
+/// read as a marker stuck on the sky.
 const LAMP_R: f32 = 0.35;
-const HALO_R: f32 = 1.4;
+const HALO_R: f32 = 1.0;
+
+/// The halo's colour (linear; a lantern's core is 1) and how far off it
+/// still shows (m): the gauge shoots landmarks out to 320 m.
+const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
+const HALO_REACH: f32 = 320.0;
 
 /// The highest point of a prefab, in its own frame: the top middle of its
 /// highest piece.
@@ -51,14 +59,7 @@ fn light_landmarks(
     buildings: Query<(Entity, &Building), Added<Building>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut made: Local<
-        Option<(
-            Handle<Mesh>,
-            Handle<StandardMaterial>,
-            Handle<Mesh>,
-            Handle<StandardMaterial>,
-        )>,
-    >,
+    mut made: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     for (e, b) in &buildings {
         if prefab_footprint(&b.prefab)[1] < LANDMARK_HEIGHT || LIT.contains(&b.prefab.as_str()) {
@@ -67,21 +68,13 @@ fn light_landmarks(
         let Some(top) = top_of(&b.prefab) else {
             continue;
         };
-        let (lamp_mesh, lamp, halo_mesh, halo) = made
+        let (lamp_mesh, lamp) = made
             .get_or_insert_with(|| {
                 (
                     meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.5, 0.02, 0.01),
                         emissive: LinearRgba::rgb(120.0, 6.0, 2.0),
-                        ..default()
-                    }),
-                    meshes.add(Sphere::new(HALO_R).mesh().uv(12, 8)),
-                    materials.add(StandardMaterial {
-                        base_color: Color::srgba(1.0, 0.1, 0.05, 0.18),
-                        emissive: LinearRgba::rgb(3.0, 0.15, 0.05),
-                        unlit: true,
-                        alpha_mode: AlphaMode::Add,
                         ..default()
                     }),
                 )
@@ -95,12 +88,11 @@ fn light_landmarks(
                 MeshMaterial3d(lamp),
                 Transform::from_translation(at),
                 NotShadowCaster,
-            ));
-            c.spawn((
-                Mesh3d(halo_mesh),
-                MeshMaterial3d(halo),
-                Transform::from_translation(at),
-                NotShadowCaster,
+                Halo {
+                    color: HALO,
+                    radius: HALO_R,
+                },
+                HaloReach(HALO_REACH),
             ));
         });
     }
