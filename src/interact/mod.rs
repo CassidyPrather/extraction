@@ -946,7 +946,13 @@ fn apply_hand_actions(
                         let offset = Transform::from_matrix(offset.into());
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
-                        let v = hand.velocity.clamp_length_max(MAX_THROW);
+                        // Something bulky doesn't take on the hand's speed as
+                        // it's taken hold of: it starts from where it lay.
+                        let v = if bulky {
+                            Vec3::ZERO
+                        } else {
+                            hand.velocity.clamp_length_max(MAX_THROW)
+                        };
                         physics_on(&mut commands, item, world, v, Vec3::ZERO, false);
                         commands.entity(item).insert(Held {
                             player,
