@@ -519,17 +519,18 @@ def mill_exterior():
               xf=T(-6.0 + sx * 0.13, ridge + 0.04, (zh0 + zh1) / 2)
               @ RZ(sx * -math.radians(25.0)))
     # The tub track out of the back door onto the bank: rails on
-    # sleepers, sinking into the snow as it goes.
+    # sleepers, sinking into the snow as it goes (kept short of the mill
+    # road round the bank).
     f3 = MILL_FLOORS[3]
-    for j in range(14):
+    for j in range(7):
         z = MILL_HD + 0.3 + j * 0.6
         p.box((1.1, 0.06, 0.18), (4.0 + w.j(0.05), f3 - 0.03 - j * 0.004, z), "Timber",
               xf=None)
     for x in (3.62, 4.38):
-        p.box((0.06, 0.07, 8.4), (x, f3 + 0.035 - 0.03, MILL_HD + 4.3), "Rusty")
+        p.box((0.06, 0.07, 4.0), (x, f3 + 0.035 - 0.03, MILL_HD + 2.1), "Rusty")
     # A tub left tipped off the end.
     p.box((0.8, 0.6, 1.2), (0.0, 0.0, 0.0), "Rusty", bevel=0.02, segs=1,
-          xf=T(5.4, f3 + 0.3, MILL_HD + 8.4) @ RZ(1.2) @ RY(0.3))
+          xf=T(5.2, f3 + 0.3, MILL_HD + 4.3) @ RZ(1.2) @ RY(0.3))
     # The tailings launder: a plank trough out of the shed's west wall
     # under its high window, falling along -Z on trestles to the yard.
     lx = -MILL_HW - 0.45
