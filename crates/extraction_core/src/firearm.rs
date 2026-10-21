@@ -265,11 +265,14 @@ pub struct Firearm {
     #[serde(default)]
     pub bolt_stuck: bool,
     /// The bolt slammed home on a round the floating pin will fire next
-    /// tick, and this tick's roll for it.
+    /// tick.
     #[serde(default)]
     slam_pending: bool,
+    /// The gun's own dice, for a bolt let go by hand (which has none
+    /// passed in): kept apart so a gun that can't slam-fire never draws
+    /// from anyone's rolls.
     #[serde(default)]
-    slam_roll: f32,
+    pub fault_dice: u64,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
     /// The magazine has slipped down in the well (a failure to feed): the
@@ -329,7 +332,7 @@ impl Firearm {
             squib: None,
             bolt_stuck: false,
             slam_pending: false,
-            slam_roll: 1.0,
+            fault_dice: 0,
             mode: 0,
             malfunction: None,
             mag_unseated: false,
@@ -454,9 +457,6 @@ impl Firearm {
                 }
             }
         }
-        if self.def.floating_pin {
-            self.slam_roll = roll();
-        }
         if trigger && !self.trigger_down {
             self.trigger_down = true;
             events.extend(self.pull(roll));
@@ -543,6 +543,7 @@ impl Firearm {
                 }
                 if cycles
                     && self.def.action == ActionKind::BoltAction
+                    && self.sticky_chance() > 0.0
                     && roll() < self.sticky_chance()
                 {
                     self.bolt_stuck = true;
@@ -627,6 +628,14 @@ impl Firearm {
         self.wear();
         self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
         (events, true)
+    }
+
+    /// A roll from the gun's own dice.
+    fn own_roll(&mut self) -> f32 {
+        let mut r = crate::noise::Rng::new(self.fault_dice);
+        let v = r.f32();
+        self.fault_dice = r.next_u64();
+        v
     }
 
     /// A rod pushed down the bore from the muzzle: a squib's bullet comes
@@ -809,7 +818,7 @@ impl Firearm {
             self.chambers[0] = Some(Round::Live);
             self.set_chamber_load(0, self.fed);
             events.push(Event::Chambered);
-            if self.def.floating_pin && roll() < self.slam_chance() {
+            if self.slam_chance() > 0.0 && roll() < self.slam_chance() {
                 self.slam_pending = true;
             }
         } else if self.def.last_round_hold_open && (self.magazine.is_some() || self.fixed_feed()) {
@@ -920,7 +929,7 @@ impl Firearm {
                     self.chambers[0] = Some(round);
                     self.set_chamber_load(0, self.transit_load);
                     events.push(Event::Chambered);
-                    if self.slam_roll < self.slam_chance() {
+                    if self.slam_chance() > 0.0 && self.own_roll() < self.slam_chance() {
                         self.slam_pending = true;
                     }
                 }
@@ -1354,14 +1363,19 @@ mod tests {
         gun.fouling = 1.0;
         assert!(gun.slam_chance() > 0.3, "{}", gun.slam_chance());
         assert_eq!(gun.fire_mode(), FireMode::Safe);
-        gun.insert_magazine(mag("ak545", 3)).unwrap();
-        // This tick's slam roll is low; the bolt slams home on a round.
-        gun.update(0.016, false, &mut || 0.0);
-        rack(&mut gun);
-        let ev = gun.update(0.016, false, &mut lucky());
+        gun.insert_magazine(mag("ak545", 8)).unwrap();
+        // Racked until the bolt slams one home (better than even odds each
+        // time on its own dice).
+        let mut ev = Vec::new();
+        for _ in 0..10 {
+            rack(&mut gun);
+            ev = gun.update(0.016, false, &mut lucky());
+            if fired(&ev) {
+                break;
+            }
+        }
         assert_eq!(ev.first(), Some(&Event::SlamFire), "{ev:?}");
         assert!(fired(&ev), "it went off by itself");
-        assert_eq!(gun.live_rounds(), 2, "and chambered the next");
     }
 
     /// Never jams, never duds.    /// Never jams, never duds.
