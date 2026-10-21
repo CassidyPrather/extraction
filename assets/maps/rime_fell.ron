@@ -79,6 +79,8 @@
         Plateau(polygon: [(-120.0, -20.0), (40.0, -20.0), (40.0, 55.0), (-120.0, 55.0)], blend: 30.0),
         // The Gate's yard in the cirque.
         Plateau(polygon: [(200.0, -255.0), (232.0, -255.0), (232.0, -225.0), (200.0, -225.0)], height: Some(131.0), blend: 30.0),
+        // The valley station's yard.
+        Plateau(polygon: [(64.0, 200.0), (84.0, 200.0), (84.0, 228.0), (64.0, 228.0)], blend: 8.0),
         // The south gate's apron, at the road's height.
         Plateau(polygon: [(-34.0, 260.0), (14.0, 260.0), (14.0, 300.0), (-34.0, 300.0)], height: Some(51.5), blend: 16.0),
         // Where the truck turns: the saddle, the col, the tip road's end.
@@ -211,7 +213,7 @@
         (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0),
 
         // The Bottoms: the valley station and the bus turn.
-        (prefab: "funicular_lower", at: (73.0, 214.0), rot: 0.0, tag: "valley_station"),
+        (prefab: "funicular_lower", at: (76.0, 214.0), rot: 0.0, tag: "valley_station"),
         (prefab: "house_plank", at: (40.0, 252.0), rot: 200.0, tag: "station_house"),
         (prefab: "shed", at: (-70.0, 270.0), rot: 10.0, tag: "bus_shelter"),
         (prefab: "log_pile", at: (-115.0, 262.0), rot: 80.0),
@@ -225,7 +227,7 @@
         (prefab: "shed", at: (-200.0, 92.0), rot: 100.0),
 
         // The funicular's car, stopped at the passing loop.
-        (prefab: "funicular_car", at: (59.5, 115.0), rot: 180.0),
+        (prefab: "funicular_car", at: (59.5, 115.0), rot: 0.0),
 
         // Coldharbour.
         (prefab: "funicular_upper", at: (71.0, 0.0), rot: 0.0, tag: "top_station"),
@@ -274,7 +276,7 @@
         (kind: ArtifactField, at: (-55.0, -115.0), name: "The crown hole"),
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (160.0, -160.0), name: "Tarn mirror"),
-        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-188.0, 150.0), name: "Gallery hush"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-212.0, 150.0), name: "Gallery hush"),
         (kind: Offering, at: (-96.0, 30.0), name: "The miners' shrine"),
         (kind: Offering, at: (30.0, -230.0), name: "The cairn on the col"),
         (kind: WorkSite, at: (60.0, -110.0), name: "Upper slopes site"),
