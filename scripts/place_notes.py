@@ -217,7 +217,7 @@ Lamp to Kettle tower, 2100: no answer from Emil three nights now.
 Mon 14 logs   Tue 16   Wed 15
 Thu - buses
 
-There's a tin of pears under the bed for whoever's next. Wedge the door
+There's a tin of beans under the bed for whoever's next. Wedge the door
 at night with the split log, the latch is no good.
 
 - Tomas, J.'s crew""", "Cabin tally"),
@@ -468,7 +468,7 @@ Requests held for uplink.""",
 The works' smoke came down the valley at noon and didn't lift. I've wet
 the roof and the woodpile and I'm stopping here.
 
-Matches in the tin on the stove. The door sticks, kick it at the
+Matches by the stove. The door sticks, kick it at the
 bottom, then wedge it.
 
 - T. Vesely, woodward""", "Woodward's book"),

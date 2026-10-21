@@ -197,6 +197,7 @@ impl Plugin for AudioPlugin {
                     splash_sounds,
                     lock_sounds,
                     drop_sounds,
+                    break_sounds,
                 ),
             )
             .add_systems(
@@ -217,7 +218,7 @@ impl Plugin for AudioPlugin {
                     drone_and_zip_sounds,
                     kitchen_sounds,
                     mind_sounds,
-                    voice_sounds,
+                    (render_voices, voice_sounds).chain(),
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
@@ -227,6 +228,7 @@ impl Plugin for AudioPlugin {
                         armour_sounds,
                         epilogue_sounds,
                         night_ambience,
+                        turret_sounds,
                     ),
                 ),
             )
@@ -658,6 +660,29 @@ fn armour_sounds(
                 0.06,
             );
         }
+    }
+}
+
+/// A scope's elevation drum turned one detent (`weapons::zero`): a small,
+/// quick click.
+fn turret_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::weapons::zero::TurretClicked>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            Some(c.at),
+            "scope.click",
+            0.0,
+            1.7,
+            0.04,
+        );
     }
 }
 
@@ -1670,6 +1695,8 @@ fn anomaly_loops(
                     extraction_core::anomaly::AnomalyKind::Mirror => {
                         ("anomaly/mirror_shimmer", "anomaly.mirror")
                     }
+                    // Dead air: nothing to hear (Anomalies).
+                    extraction_core::anomaly::AnomalyKind::Hush => continue,
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
@@ -2161,6 +2188,73 @@ fn night_ambience(
             } else {
                 Volume::Decibels(mix::db(cue) + 20.0 * level.log10() - 12.0 * walls)
             };
+        }
+    }
+}
+
+/// Glass going and wood giving way (`destruction`): a shop window crashes
+/// lower and longer than a vent pane tinkles; a door coming down thuds.
+fn break_sounds(
+    mut commands: Commands,
+    mut broke: MessageReader<crate::destruction::Broke>,
+    mut crunches: MessageReader<crate::destruction::glass::Crunch>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    // A step on broken glass: a short, bright grind.
+    for c in crunches.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/glass_break",
+            Some(c.at),
+            "hit.glass",
+            -12.0,
+            1.6,
+            0.15,
+        );
+    }
+    for b in broke.read() {
+        match b.stuff {
+            crate::destruction::Stuff::Glass => {
+                let speed = (1.25 - b.size * 0.6).clamp(0.8, 1.25) as f64;
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/glass_break",
+                    Some(b.at),
+                    "hit.glass",
+                    (b.size * 6.0 - 2.0).clamp(-3.0, 3.0),
+                    speed,
+                    0.1,
+                );
+            }
+            crate::destruction::Stuff::Wood => {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "impacts/wood",
+                    Some(b.at),
+                    "door.blow",
+                    0.0,
+                    0.15,
+                );
+                if b.size > 1.0 {
+                    play(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "physical/door_close",
+                        Some(b.at),
+                        "door.broken",
+                        0.0,
+                        0.2,
+                    );
+                }
+            }
         }
     }
 }
@@ -3058,33 +3152,68 @@ fn kitchen_sounds(
     }
 }
 
-/// What robots say (`robot_voice::Spoke`): each utterance one cue, from
-/// the robot, through the head-related filter, walls and the room like
-/// any other sound. A kind's words are rendered the first time it says
-/// them, at the stream's rate, and kept as `voice/<kind>/<mind>` sets.
-fn voice_sounds(
-    mut commands: Commands,
-    mut spoke: MessageReader<crate::robot_voice::Spoke>,
+/// The robots' words being rendered, off the main thread: every kind's
+/// every word, started once the stream's rate is known.
+#[derive(Default)]
+struct VoiceRenders {
+    started: bool,
+    tasks: Vec<(String, bevy::tasks::Task<Vec<Vec<f32>>>)>,
+}
+
+/// Render every word in the background at start-up (a few hundred ms of
+/// synthesis in all, never on a frame) and add each to the bank as its
+/// `voice/<kind>/<mind>` set when it's done.
+fn render_voices(
+    mut renders: Local<VoiceRenders>,
     mut bank: ResMut<SoundBank>,
     mut samples: ResMut<Assets<AudioSample>>,
     rate: Option<Res<bevy_seedling::context::SampleRate>>,
+) {
+    use crate::robot_voice as rv;
+    let Some(rate) = rate.as_deref().map(|r| r.get()) else {
+        return;
+    };
+    if !renders.started {
+        renders.started = true;
+        let pool = bevy::tasks::AsyncComputeTaskPool::get();
+        for k in rv::VoiceKind::ALL {
+            for u in rv::Utterance::ALL {
+                let sr = rate.get() as f32;
+                let task = pool.spawn(async move {
+                    (0..rv::VARIANTS)
+                        .map(|v| rv::render(k, u, v, sr))
+                        .collect::<Vec<_>>()
+                });
+                renders.tasks.push((rv::set_name(k, u), task));
+            }
+        }
+    }
+    renders.tasks.retain_mut(|(set, task)| {
+        let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
+            return true;
+        };
+        let handles = buffers
+            .into_iter()
+            .map(|x| samples.add(AudioSample::new(vec![x], rate)))
+            .collect();
+        bank.sets.insert(set.clone(), handles);
+        false
+    });
+}
+
+/// What robots say (`robot_voice::Spoke`): each utterance one cue, from
+/// the robot, through the head-related filter, walls and the room like
+/// any other sound, from the sets [`render_voices`] made. (A word asked
+/// for in the first moments, before its render is done, isn't heard.)
+fn voice_sounds(
+    mut commands: Commands,
+    mut spoke: MessageReader<crate::robot_voice::Spoke>,
+    bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::robot_voice as rv;
     for s in spoke.read() {
         let set = rv::set_name(s.kind, s.said);
-        if !bank.has(&set) {
-            let Some(rate) = rate.as_deref().map(|r| r.get()) else {
-                continue;
-            };
-            let handles = (0..rv::VARIANTS)
-                .map(|v| {
-                    let x = rv::render(s.kind, s.said, v, rate.get() as f32);
-                    samples.add(AudioSample::new(vec![x], rate))
-                })
-                .collect();
-            bank.sets.insert(set.clone(), handles);
-        }
         play(
             &mut commands,
             &bank,

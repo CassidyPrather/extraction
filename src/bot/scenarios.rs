@@ -14,6 +14,15 @@ use crate::rig::{LocalPlayer, Side};
 use crate::weapons::flat::MacroKind;
 use crate::world::{Layer, Zone};
 
+/// Stage a scenario's world (`Task::Setup`): the module under test reads
+/// it and builds what the scenario needs round `at`, the bot's feet.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Setup {
+    pub name: &'static str,
+    pub at: Vec3,
+    pub facing: Vec3,
+}
+
 /// A steel plate on a post, for shooting at. Counts its hits.
 #[derive(Component, Default)]
 pub struct Target {
@@ -36,13 +45,26 @@ pub const NAMES: &[&str] = &[
     crate::anomaly::scenarios::NAMES[2],
     crate::anomaly::scenarios::NAMES[3],
     crate::anomaly::scenarios::NAMES[4],
+    crate::anomaly::scenarios::NAMES[5],
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
+    crate::robots::heavy_mind::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
 /// - `second_hour`: a short career past the yard (`onboarding::second_hour`).
-pub const OPT_IN: &[&str] = &[crate::onboarding::second_hour::SCENARIO];
+/// - `safehouse`: claim Marrow Creek's cabin, sleep, see off the visit
+///   (`progression::safehouse::scenario`).
+/// - `door_shot`: a walker shot through a shut plank door
+///   (`destruction::scenario`).
+/// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
+///   default (`bot::crossing`).
+pub const OPT_IN: &[&str] = &[
+    crate::onboarding::second_hour::SCENARIO,
+    crate::progression::safehouse::scenario::SCENARIO,
+    crate::destruction::scenario::SCENARIO,
+    super::crossing::SCENARIO,
+];
 
 /// Targets sit north of the insertion point at these distances.
 const TARGET_DISTANCES: [f32; 3] = [10.0, 25.0, 50.0];
@@ -352,8 +374,25 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::Heard(None, 4)),
             ]
         }
+        crate::robots::heavy_mind::SCENARIO => vec![
+            Log(s(
+                "heavy well: a heavy on your trail, and a well between you and it",
+            )),
+            Setup(crate::robots::heavy_mind::SCENARIO),
+            // It comes on; the well takes its feet and its heart the knees.
+            Wait(25.0),
+            Wait(25.0),
+            Wait(25.0),
+            Expect(super::Expect::Wrecked(1)),
+            Expect(super::Expect::Alive),
+        ],
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
+        crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
+        crate::progression::safehouse::scenario::SCENARIO => {
+            crate::progression::safehouse::scenario::opening()
+        }
+        super::crossing::SCENARIO => super::crossing::opening(),
         _ => return None,
     })
 }
@@ -362,7 +401,8 @@ pub struct ScenarioPlugin;
 
 impl Plugin for ScenarioPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_targets)
+        app.add_message::<Setup>()
+            .add_systems(Startup, spawn_targets)
             .add_systems(PostStartup, attach_scenario)
             .add_systems(Update, (finish_scenario, count_target_hits));
     }

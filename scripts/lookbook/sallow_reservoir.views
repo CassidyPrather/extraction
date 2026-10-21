@@ -1,0 +1,13 @@
+# Sallow Reservoir lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+s01_gate        25,0,255,0,4         # from the insertion: the dam across the view
+s02_face        40,0,195,330,10      # the downstream face from the valve house
+s03_face_stair  50,0,153,270,0       # half way up the face stair, along the wall
+s04_crest       -10,0,139,90,-4      # along the crest, the parapets either side
+s05_tower       -20,0,120,0,4        # on the tower's bridge, the tower ahead
+s06_bed         -60,0,60,0,-4        # the slipway's foot, out over the bed
+s07_old_sallow  -40,0,-40,250,-2     # in drowned Old Sallow, the church tower
+s08_buses       60,0,-78,90,-3       # between the bus rows and the bicycles
+s09_sorting     30,0,-30,20,-4       # the sorting ground, the gantry, the shed
+s10_new_sallow  -210,0,-232,90,-2    # New Sallow's upper street, the arm below
+s11_spillway    170,0,250,30,6       # up the spillway's steps
+s12_aerial      0,60,190,0,-14       # over the valley below, the dam and the bed

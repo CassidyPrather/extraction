@@ -254,6 +254,8 @@
         (prefab: "factory_hall", at: (75.0, -20.0), rot: 0.0),
         // The service tunnel and pump room under the works (assets/underground).
         (prefab: "tunnel_cinder", at: (73.0, -2.0), rot: 180.0),
+        // The furnace cellars, beside the blast furnace (assets/underground).
+        (prefab: "cellars_cinder", at: (-154.0, 168.0), rot: 90.0),
         (prefab: "bus_depot", at: (-20.0, -30.0), rot: 90.0, tag: "works_garage"),
         (prefab: "chimney", at: (105.0, -45.0), rot: 0.0),
         (prefab: "rail_shed", at: (140.0, 5.0), rot: 0.0),
@@ -298,6 +300,7 @@
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (171.0, -172.0), name: "Slag heap hush"),
         (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
         (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
         (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),
@@ -329,7 +332,7 @@
         (kind: Note(text: "FIRE LOOKOUT - CINDER, 12 FEB\n1540. Black smoke, works yard.\n1610. Flame in the north-west wood. Phoned the works. No answer.\n1700. Wind south-east. Lamp to Marrow and Kettle: three short.\n2300. Machines walking into the fire with their arms full, and out empty.\nMarta answered. Kettle didn't."), at: (-177.70, -167.40), rot: 333.4, y: 8.5, name: "Lookout log"),
         (kind: Note(text: "SLUICE HOUSE - ASH PIT\nWorks order: drain the pit to the canal.\nThe pit won't drain. The ash floats. It drifts against the current, back toward the slag heaps.\nSluice shut. I'm not opening it again."), at: (-166.20, 29.00), rot: 242.7, name: "Sluice house note"),
         (kind: Terminal(pages: ["RELAY LOG - MAST C3\n\nHeat damage: housing, cabling.\nPylon reports: degraded.\nRepair requested: 1 FEB.\nRepair requested: 1 MAR.\nRepair requested: 1 APR.\n...\n\nRequests held for uplink."]), at: (96.03, -236.76), rot: 140.3, name: "Mast terminal"),
-        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches in the tin on the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-74.80, -158.41), rot: 341.4, name: "Woodward's book"),
+        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches by the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-74.80, -158.41), rot: 341.4, name: "Woodward's book"),
         // notes:end
     ],
 

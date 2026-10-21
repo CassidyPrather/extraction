@@ -25,15 +25,20 @@ pub enum AnomalyKind {
     /// A fold in space: whatever crosses it is blinked out the far side, a
     /// few metres on, still moving.
     Mirror,
+    /// Dead air: it eats every sound made in it, so nothing outside hears
+    /// a shot or a step, and nothing inside hears anything. Stay too long
+    /// and the silence presses on you.
+    Hush,
 }
 
 impl AnomalyKind {
-    pub const ALL: [AnomalyKind; 5] = [
+    pub const ALL: [AnomalyKind; 6] = [
         AnomalyKind::Lift,
         AnomalyKind::Burner,
         AnomalyKind::Snare,
         AnomalyKind::Well,
         AnomalyKind::Mirror,
+        AnomalyKind::Hush,
     ];
 
     /// What the Surge scatters each cycle. Wells and mirrors don't move:
@@ -55,6 +60,7 @@ impl AnomalyKind {
             AnomalyKind::Snare => "art_aegis",
             AnomalyKind::Well => "art_lodestone",
             AnomalyKind::Mirror => "art_shard",
+            AnomalyKind::Hush => "art_hushstone",
         }
     }
 
@@ -66,6 +72,7 @@ impl AnomalyKind {
             AnomalyKind::Snare => (1.8, 3.0),
             AnomalyKind::Well => (1.6, 2.4),
             AnomalyKind::Mirror => (1.2, 1.8),
+            AnomalyKind::Hush => (2.5, 4.0),
         }
     }
 
@@ -183,6 +190,29 @@ pub fn well_in_reach(rel_from: [f32; 3], step: [f32; 3], radius: f32) -> bool {
         rel_from[2] + step[2] * t,
     ];
     c[0] * c[0] + c[1] * c[1] + c[2] * c[2] < reach * reach
+}
+
+// --- Hushes ----------------------------------------------------------------
+
+/// Seconds in a Hush before its silence starts to press on you.
+pub const HUSH_GRACE: f32 = 8.0;
+/// Health a second it takes after that.
+pub const HUSH_PRESS: f32 = 3.0;
+/// A carried hushstone is a small Hush round its carrier, this wide.
+pub const HUSHSTONE_RADIUS: f32 = 1.2;
+
+/// Whether a sound made at `at` is eaten by any of `hushes` (centre,
+/// radius): it never reaches anything outside.
+pub fn hushed(at: [f32; 3], hushes: &[([f32; 3], f32)]) -> bool {
+    hushes.iter().any(|(c, r)| {
+        let d = [at[0] - c[0], at[1] - c[1], at[2] - c[2]];
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < r * r
+    })
+}
+
+/// What `secs` seconds in a Hush cost, health a second.
+pub fn hush_press(secs: f32) -> f32 {
+    if secs > HUSH_GRACE { HUSH_PRESS } else { 0.0 }
 }
 
 // --- Mirrors ---------------------------------------------------------------
@@ -756,8 +786,7 @@ mod tests {
 
     #[test]
     fn blooms_never_open_by_a_building_or_a_road_in_any_valley() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut rng = Rng::new(3);
@@ -849,6 +878,17 @@ mod tests {
     }
 
     #[test]
+    fn a_hush_eats_what_is_made_in_it_and_presses_on_who_stays() {
+        let h = [([0.0, 1.0, 0.0], 3.0)];
+        assert!(hushed([1.0, 1.5, 1.0], &h));
+        assert!(!hushed([4.0, 1.0, 0.0], &h));
+        assert!(!hushed([0.0, 1.0, 0.0], &[]));
+        assert_eq!(hush_press(HUSH_GRACE - 1.0), 0.0);
+        assert_eq!(hush_press(HUSH_GRACE + 1.0), HUSH_PRESS);
+        assert_eq!(AnomalyKind::from_name("Hush"), Some(AnomalyKind::Hush));
+    }
+
+    #[test]
     fn the_detector_clicks_faster_as_you_close() {
         assert_eq!(detector_interval(DETECTOR_RANGE + 1.0), None);
         let far = detector_interval(20.0).unwrap();
@@ -894,8 +934,7 @@ mod tests {
 
     #[test]
     fn every_valley_has_a_well_and_a_mirror_somewhere_sensible() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();
@@ -926,7 +965,7 @@ mod tests {
                 );
                 kinds.push(kind);
             }
-            for k in [AnomalyKind::Well, AnomalyKind::Mirror] {
+            for k in [AnomalyKind::Well, AnomalyKind::Mirror, AnomalyKind::Hush] {
                 assert!(kinds.contains(&k), "{} has no {k:?}", map.name);
             }
         }

@@ -421,6 +421,16 @@ pub fn pose(zone: &Zone, scene: &Scene) -> Transform {
         .with_rotation(Quat::from_rotation_y(yaw(scene.rot)))
 }
 
+/// Whether a scene has something to stand on: the ground, or for one
+/// below (`floor`), a site's floor under it. A site that isn't built in
+/// this map yet leaves its scenes out, things and all.
+pub fn stands(zone: &Zone, scene: &Scene) -> bool {
+    scene.floor.is_none_or(|floor| {
+        let p = Vec3::new(scene.at[0], floor + 0.2, scene.at[1]);
+        super::underground::site_under(zone, p).is_some()
+    })
+}
+
 fn spawn_scenes(
     mut commands: Commands,
     zone: Res<Zone>,
@@ -437,7 +447,7 @@ fn spawn_scenes(
         &opts.map,
     );
     for (id, scene) in of(&opts.map) {
-        if scene.open(at) {
+        if scene.open(at) && stands(&zone, scene) {
             stage(&mut commands, &zone, &id, scene, raid.recalled);
             staged.0.insert(id);
         }
@@ -467,7 +477,7 @@ fn unlock_scenes(
         &opts.map,
     );
     for (id, scene) in of(&opts.map) {
-        if staged.0.contains(&id) || !scene.open(at) {
+        if staged.0.contains(&id) || !scene.open(at) || !stands(&zone, scene) {
             continue;
         }
         info!("scene opens: {}", scene.name);
@@ -523,6 +533,8 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
     if let Some(note) = &scene.note {
         commands.spawn((
             Name::new("Note"),
+            crate::render::legibility::TextSource::Note,
+            crate::interact::read::readable(super::notes::NOTE),
             super::notes::note_panel(&note.text),
             note_pose(t, note),
             Visibility::default(),
@@ -552,6 +564,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
                 scene: scene.name.clone(),
                 recalled: term.recalled.clone(),
             },
+            crate::render::legibility::TextSource::Terminal,
             super::notes::terminal_panel(text),
             crate::raid::truck::Pressable::Terminal,
             crate::interact::Grabbable {
@@ -648,7 +661,7 @@ pub fn spawn_things(
     at: Standing,
 ) {
     for (_, scene) in of(map) {
-        if scene.open(at) {
+        if scene.open(at) && stands(zone, scene) {
             lay_things(commands, zone, scene, catalog);
         }
     }
@@ -725,6 +738,37 @@ mod tests {
         }
         assert!(crate::world::buildings::prefab("scene:marrow_creek:0").is_some());
         assert!(crate::world::buildings::prefab("scene:marrow_creek:99").is_none());
+    }
+
+    /// A scene below stands on its site's floor, or, while its site isn't
+    /// built in the map, isn't put up at all (nothing on bare ground).
+    #[test]
+    fn scenes_below_wait_for_their_site() {
+        let mut standing = 0;
+        for map in crate::world::story::VALLEYS {
+            let zone = Zone::load(map);
+            for (_, s) in of(map) {
+                let Some(floor) = s.floor else {
+                    assert!(stands(&zone, s), "{}", s.name);
+                    continue;
+                };
+                let p = Vec3::new(s.at[0], floor + 0.2, s.at[1]);
+                match crate::world::underground::site_under(&zone, p) {
+                    Some((site, f)) => {
+                        assert!(stands(&zone, s));
+                        assert!(
+                            (f - floor).abs() < 0.05,
+                            "{}: floor {floor}, {site}'s is {f}",
+                            s.name
+                        );
+                        standing += 1;
+                    }
+                    None => assert!(!stands(&zone, s), "{}", s.name),
+                }
+            }
+        }
+        // The Depot's and the mines' are built.
+        assert!(standing >= 5, "{standing} scenes below stand");
     }
 
     /// A scene stands where it can: in the open on level ground, clear of

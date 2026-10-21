@@ -122,6 +122,19 @@ recover, scout) but never easy, and the cache they pay is three piles
 instead of two. Raid 40 is a raid to the Hollow or the quarry because the
 card says so, not because the loot table does.
 
+Half the deep fetches are one named **stone** (`progression::STONES`):
+a featherstone, a hearth, an aegis knot, a lodestone or a mirror shard,
+each asked for with a line that hints at its harvest trick ("A hearth.
+Don't pick it up with your hands. Let it cool first.", see
+`docs/ANOMALIES.md`), and now and then (15%) a stormglass, which means
+staying out into the Surge. A stone sealed in its lead case in the stash
+counts. After the epilogue the quiet jobs ask for none.
+
+**The fourth valley.** Sallow Reservoir (`docs/FOURTH_VALLEY.md`) doesn't
+come up on the route card until the career has raided Marrow Creek, Kettle
+Pass and Cinder Works (`Progress::opens`). It has no key; the capstone
+stays three.
+
 **Your order.** With the ladder done the driver will take an order: a
 second card under the job, pressed to cycle, says what you want his caches
 to lean to: ROUNDS (ammunition), MEDICINE, GADGETS, or ANYTHING (as
@@ -172,6 +185,58 @@ will see the rack lie up, and that's the decision it's there to make.
 Cut from this: a reputation number (the order card is what reputation
 would have bought); per-fitting repairs at the bench (upkeep is taken, not
 crafted, so it never becomes a menu); rotating "seasons".
+
+## Safehouses: staying out overnight
+
+Raids were in and out. Into the Radius's best tension is the long walk
+with a safe room in the middle, so each valley has one cabin you can
+claim and sleep in (`extraction_core::safehouse`, `progression::safehouse`):
+
+| Valley | Cabin | Where |
+| - | - | - |
+| Marrow Creek | Logging camp, the south cabin (-145, 190) | danger 1, 200 m in, the west side's halfway house |
+| Kettle Pass | Charcoal burners' hut (119, -138) | danger 2, 410 m in, the climb's last stop |
+| Cinder Works | Woodward's cabin (-75, -159) | danger 2, 430 m in, in the Cinder wood |
+
+**Claiming** is three physical things, in any order: **clear** it (be
+inside with no machine within 30 m), **bar** it (a door wedge set at its
+door, the same wedge that stops a walker), **light its stove** (press it
+with matches on you; one is used). Then its bed is yours, a crate of its
+own appears (60 L, saved with the valley, not with the truck's stash),
+and a radio on the table.
+
+**Sleeping**: lie on the bed with the door wedged. The view fades; a night
+passes (15 minutes of Zone clock, so a real bite out of the hour between
+Surges, and refused if the Surge would come before morning); the hour
+moves on one step (dusk to night, night to dawn: "Grey light under the
+door."); a night behind a wedged door cools the Zone's attention. If you
+lie down loud (the second feeling or worse), the radio warns you in the
+dark and something comes to the door before light: two walkers from the
+Gate (Robot minds' `NightVisit`) that batter the wedge down and search the
+cabin for up to ten minutes.
+
+**The truck** waits one night if you radio it from the safehouse (press
+the radio); untold, it leaves the rendezvous while you sleep.
+
+**Expeditions**: past the ladder, once you've slept out, half the recover
+jobs are expeditions to the valley's deepest place ("Two days' walk. Sleep
+at the cabin on the way."). The recorder only counts if the raid that
+brought it home had a night out; the logbook records nights out.
+
+**The cost**: a safehouse can be found. Come home from a loud raid (the
+third feeling, "the air hums around you", or worse) and the machines have
+followed your trail to it: the door's broken, the crate tipped out over
+the floor, and you'll find it like that next time. The Surge ends a claim
+(and empties the crate: the Zone takes what it's given).
+
+**Leftovers**: each cabin's table has a note from its last people
+(Story's), and what the note promises is there, each Surge cycle until you
+clear the cabin: the logging crew's tin under the Marrow bed, the
+woodward's matches by his stove in the Cinder wood.
+
+Cut from this: hunger (there still is none; food is the kitchen's and the
+offerings'), a sleep timer or a menu (you lie down; a night is a night),
+more than one safehouse a valley.
 
 ## Where it lives
 

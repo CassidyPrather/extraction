@@ -168,6 +168,7 @@ pub fn detectors(
     anomalies: Query<(&Anomaly, &GlobalTransform)>,
     stones: Query<(&Item, &GlobalTransform), (Without<Held>, Without<CarriedBy>)>,
     catalog: Res<Catalog>,
+    hushes: Res<super::hush::Hushes>,
     time: Res<Time>,
     mut clicks: MessageWriter<DetectorClick>,
     mut pings: MessageWriter<StonePing>,
@@ -191,6 +192,11 @@ pub fn detectors(
             continue;
         };
         let p = gt.translation();
+        // In a Hush (or on a hushstone's carrier) it's mute.
+        if hushes.eats(p) {
+            t.next = t.next.max(0.3);
+            continue;
+        }
         // Held, its antenna (the item's -Z) is what it listens along.
         let fwd = gt.forward().as_vec3();
         let listen = held.then_some(fwd);

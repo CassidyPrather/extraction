@@ -257,6 +257,7 @@ fn load_save(
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
     mut notes: ResMut<crate::raid::board::NotesRead>,
     mut epilogue: ResMut<crate::raid::epilogue::Epilogue>,
+    mut safehouse: ResMut<crate::progression::safehouse::Safehouse>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -286,6 +287,18 @@ fn load_save(
     let save = career.game(&opts.map);
     commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;
+    if zone {
+        commands.insert_resource(crate::destruction::Broken(
+            save.zone.broken.iter().copied().collect(),
+        ));
+        commands.insert_resource(crate::destruction::breach::Breaches(
+            save.zone
+                .breaches
+                .iter()
+                .map(|c| Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32) / 100.0)
+                .collect(),
+        ));
+    }
     raid.raids = save.stats.raids;
     raid.extractions = save.stats.extractions;
     raid.deaths = save.stats.deaths;
@@ -301,6 +314,9 @@ fn load_save(
         cache: save.requests.cache.clone(),
         cache_at: save.requests.cache_at.clone(),
     };
+    if zone {
+        safehouse.state = save.zone.safehouse.clone().unwrap_or_default();
+    }
     progression.0 = save
         .progress
         .clone()
@@ -369,7 +385,7 @@ fn fresh_save(map: &str) -> SaveGame {
 
 /// Spawns one saved item (and what's seated in it) with physics on, at
 /// `at`. Returns `None` for ids the catalog no longer knows.
-fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
+pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
         warn!("save: unknown item {:?}, skipped", saved.id);
@@ -494,7 +510,7 @@ pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
     }
 }
 
-fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
+pub(crate) fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
     let stash = world.get::<Stash>(bag_e).is_some();
     let Some(mut bag) = world.get_mut::<Backpack>(bag_e) else {
         return;
@@ -610,6 +626,9 @@ fn apply_restore(world: &mut World) {
                 placed += 1;
             }
         }
+        for w in &save.zone.wrecks {
+            crate::robots::heavy::restore_wreck(world, w);
+        }
         for r in &save.zone.remains {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
@@ -652,7 +671,7 @@ pub fn spawn_remains(world: &mut World, at: Vec3) -> Entity {
 }
 
 /// One item, as saved, with whatever is seated in it.
-fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
+pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
     let catalog = world.resource::<Catalog>();
     let item = world.get::<Item>(e)?;
     let def = catalog.get(item.kind());
@@ -725,6 +744,14 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.zone.cycle = raid.cycle;
     }
     save.zone.rolled = true;
+    if let Some(b) = world.get_resource::<crate::destruction::Broken>() {
+        let mut keys: Vec<[i32; 3]> = b.0.iter().copied().collect();
+        keys.sort();
+        save.zone.broken = keys;
+    }
+    if let Some(b) = world.get_resource::<crate::destruction::breach::Breaches>() {
+        save.zone.breaches = b.0.iter().map(|p| crate::destruction::key(*p)).collect();
+    }
     save.memorial = world.resource::<Memorial>().0.clone();
     save.logbook = world
         .get_resource::<crate::raid::logbook::Logbook>()
@@ -800,6 +827,13 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(b) = bag {
+            // The safehouse's crate is saved with its valley (below).
+            if world
+                .get::<crate::progression::safehouse::SafehouseCrate>(b)
+                .is_some()
+            {
+                continue;
+            }
             // A cargo pod's contents go with the dirigible, saved or not.
             if world.get::<crate::robots::dirigible::CargoPod>(b).is_some() {
                 continue;
@@ -871,6 +905,36 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         });
     }
     save.zone.remains = remains.into_values().collect();
+    // The valley's safehouse, and what's in its crate.
+    if let Some(house) = world
+        .get_resource::<crate::progression::safehouse::Safehouse>()
+        .cloned()
+    {
+        let mut state = house.state.clone();
+        if let Some(bag) = house.crate_bag {
+            let contents = world
+                .get::<Backpack>(bag)
+                .map(|b| b.contents.clone())
+                .unwrap_or_default();
+            let saved: Vec<SavedItem> = contents
+                .iter()
+                .filter_map(|e| {
+                    let local = world
+                        .get::<Transform>(*e)
+                        .map_or(Vec3::ZERO, |t| t.translation);
+                    snapshot_item(world, *e, local)
+                })
+                .collect();
+            // A crate not yet furnished keeps what was saved in it.
+            if !saved.is_empty() || state.stash.is_empty() {
+                state.stash = saved;
+            }
+        }
+        if state != extraction_core::safehouse::SafehouseSave::default() {
+            save.zone.safehouse = Some(state);
+        }
+    }
+    save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
     save.loadout = loadout;
     save
 }
@@ -987,6 +1051,7 @@ pub fn reset_zone(world: &mut World) {
         gone += contents.len();
         world.despawn(bag);
     }
+    crate::robots::heavy::clear_wrecks(world);
     let cycle = {
         let mut raid = world.resource_mut::<Raid>();
         raid.cycle += 1;
@@ -994,6 +1059,7 @@ pub fn reset_zone(world: &mut World) {
         raid.say("The Surge has passed. The Zone is different now.");
         raid.cycle
     };
+    crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
@@ -1145,6 +1211,127 @@ mod tests {
         assert_eq!(raid.raids, 7, "the record came across");
         assert_eq!(raid.cycle, 4, "and the Zone's cycle");
         assert!(stash_len(app.world_mut()) > 0, "and the stash");
+    }
+
+    /// A heavy's wreck stays where it fell between sessions (its plates
+    /// and cell as they were) until the Surge sweeps it away.
+    #[test]
+    fn a_heavys_wreck_keeps_until_the_surge() {
+        use crate::robots::heavy::{Heavy, HeavyPart, HeavySeat};
+        use extraction_core::heavy::Slot;
+        let path = temp_save("wreck.ron");
+        let mut a = app_with_save(&path);
+        let zone = a.world().resource::<crate::world::Zone>().clone();
+        let catalog = a.world().resource::<crate::items::Catalog>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let heavy = {
+            let mut c = a.world_mut().commands();
+            let e = crate::robots::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e).remove::<crate::robots::Senses>();
+            a.world_mut().flush();
+            e
+        };
+        for _ in 0..30 {
+            a.update();
+        }
+        // The left plate shot off, then two knees: down for good.
+        let parts: Vec<(Entity, Slot)> = a
+            .world_mut()
+            .query::<(Entity, &HeavyPart, &crate::robots::RobotPart)>()
+            .iter(a.world())
+            .filter(|(_, _, p)| p.robot == heavy)
+            .map(|(e, h, _)| (e, h.0))
+            .collect();
+        for (e, s) in &parts {
+            if matches!(
+                s,
+                Slot::Bolt { plate: 1, .. } | Slot::Knee(0) | Slot::Knee(2)
+            ) {
+                a.world_mut()
+                    .write_message(crate::weapons::ballistics::Hit {
+                        blow: None,
+                        entity: *e,
+                        point: Vec3::ZERO,
+                        normal: Vec3::Y,
+                        velocity: Vec3::ZERO,
+                        damage: 1000.0,
+                        shooter: None,
+                        mass_g: 0.0,
+                        load: Default::default(),
+                    });
+                a.update();
+            }
+        }
+        for _ in 0..180 {
+            a.update();
+        }
+        let save = snapshot(a.world_mut());
+        assert_eq!(save.zone.wrecks.len(), 1);
+        let w = &save.zone.wrecks[0];
+        assert_eq!(w.plates, [true, false, true]);
+        assert!(w.cell);
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+
+        let mut b = app_with_save(&path);
+        let found: Vec<(Entity, Vec3, bool)> = b
+            .world_mut()
+            .query::<(Entity, &crate::robots::Robot, &Transform, &Heavy)>()
+            .iter(b.world())
+            .map(|(e, r, t, _)| (e, t.translation, r.wrecked))
+            .collect();
+        assert_eq!(found.len(), 1, "the wreck is back");
+        let (e, pos, wrecked) = found[0];
+        assert!(wrecked);
+        assert!(
+            Vec2::new(pos.x - w.at[0], pos.z - w.at[2]).length() < 0.5,
+            "where it fell"
+        );
+        let seated: Vec<(Slot, bool)> = b
+            .world_mut()
+            .query::<(&HeavySeat, &crate::interact::Socket)>()
+            .iter(b.world())
+            .filter(|(s, sock)| s.robot == e && sock.occupant.is_some())
+            .map(|(s, sock)| {
+                let free = b
+                    .world()
+                    .get::<crate::interact::Grabbable>(sock.occupant.unwrap())
+                    .is_some();
+                (s.slot, free)
+            })
+            .collect();
+        assert!(
+            !seated.iter().any(|(s, _)| *s == Slot::Plate(1)),
+            "{seated:?}"
+        );
+        assert!(seated.contains(&(Slot::Plate(0), true)), "{seated:?}");
+        assert!(
+            seated.contains(&(Slot::Cell, false)),
+            "behind its hatch: {seated:?}"
+        );
+        // Saved again, it's the same wreck.
+        let again = snapshot(b.world_mut()).zone.wrecks;
+        assert_eq!(again.len(), 1);
+        assert_eq!((again[0].plates, again[0].cell), (w.plates, w.cell));
+        // The Surge takes it.
+        b.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
+        b.update();
+        b.update();
+        let left = b.world_mut().query::<&Heavy>().iter(b.world()).count();
+        assert_eq!(left, 0, "swept away");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

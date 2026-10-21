@@ -250,6 +250,8 @@
         (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
         // The civil-defence shelter under the village (assets/underground).
         (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
+        // The pumping station's drowned cellars (assets/underground).
+        (prefab: "pump_marrow", at: (-173.0, 3.0), rot: 0.0),
         // The Depot, under the Gate: where the haulers take what they keep.
         (prefab: "depot_marrow", at: (-230.0, -234.0), rot: 0.0),
         
@@ -291,6 +293,7 @@
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (158.0, -7.0), name: "The Hollow well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-144.0, -199.0), name: "Mast summit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (136.0, -7.0), name: "Hollow hush"),
         (kind: Offering, at: (-30.0, 110.0), name: "The well"),
         (kind: Offering, at: (230.0, -150.0), name: "The stone ring"),
         (kind: WorkSite, at: (-40.0, -60.0), name: "North bank site"),
@@ -328,7 +331,7 @@
         (kind: Terminal(pages: ["RELAY LOG - MAST M1\n\nPylons extend the Custodian's\neyes: each one reports what\nmoves near it, and the depot\nsends a team.\n\nPylon down = reports stop.", "SWEEP SCHEDULE\n\nField discharge (\"SURGE\") every\ncycle. Clears contamination.\nPersonnel: be under a roof or\nout of the valley. Loose\nmaterial is reset.\n\nSchedule source: OBSERVED."]), at: (-112.01, -158.39), rot: -179.7, name: "Mast terminal"),
         (kind: Note(text: "SURVEY POST - HOLLOW\n21 Nov. Ground up 41 cm since spring. The glow is brighter the nights before a discharge; I can predict them now. Nobody at the Authority wants to hear it.\nThe inspector's letter never came, but I know what the lockbox is for. Nobody else is going to keep it.\nGoing down at first light to read the centre stakes. Taking the box.\n- O.V."), at: (101.67, -1.96), rot: 273.4, y: 8.5, name: "Survey log"),
         (kind: Note(text: "From up here you can see the Hollow glow after dark. The survey team went in with the chief's lockbox and came back without the chief. The box is still down there, where the ground lifts. Bring a light. Don't run.\nLamp to Kettle tower, 2100: no answer from Emil three nights now.\n- M. Sedlak"), at: (-239.70, -137.40), rot: 333.4, y: 8.5, name: "Ranger's note"),
-        (kind: Note(text: "Crew tally, on the wall by the bed:\nMon 14 logs Tue 16 Wed 15 Thu - buses\nThere's a tin of pears under the bed for whoever's next. Wedge the door at night with the split log, the latch is no good.\n- Tomas, J.'s crew"), at: (-145.30, 189.45), rot: 151.4, name: "Cabin tally"),
+        (kind: Note(text: "Crew tally, on the wall by the bed:\nMon 14 logs Tue 16 Wed 15 Thu - buses\nThere's a tin of beans under the bed for whoever's next. Wedge the door at night with the split log, the latch is no good.\n- Tomas, J.'s crew"), at: (-145.30, 189.45), rot: 151.4, name: "Cabin tally"),
         // notes:end
     ],
 

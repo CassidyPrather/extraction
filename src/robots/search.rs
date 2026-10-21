@@ -512,7 +512,21 @@ fn announce(
 ) {
     let now = time.elapsed_secs();
     for n in noticed.read() {
-        log.shift(&mut minds, n.robot, Mind::Noticed, n.at, now);
+        // Its suspicion can cross NOTICED after it's already gone to look
+        // (or to fight): it noticed then, and said so (below).
+        let past = matches!(
+            log.last.get(&n.robot),
+            Some(
+                Mind::Investigating
+                    | Mind::Searching
+                    | Mind::Engaging
+                    | Mind::Calling
+                    | Mind::Answering { .. }
+            )
+        );
+        if !past {
+            log.shift(&mut minds, n.robot, Mind::Noticed, n.at, now);
+        }
     }
     let mut seen = std::collections::HashSet::new();
     for (e, brain, gt) in &robots {
@@ -561,6 +575,16 @@ fn announce(
             _ => None,
         };
         if let Some(state) = state {
+            // Straight from its work to looking or fighting: it noticed
+            // something first.
+            let roused = matches!(before, Some(0 | 1))
+                && matches!(
+                    state,
+                    Mind::Investigating | Mind::Searching | Mind::Engaging
+                );
+            if roused {
+                log.shift(&mut minds, e, Mind::Noticed, at, now);
+            }
             log.shift(&mut minds, e, state, at, now);
         }
     }

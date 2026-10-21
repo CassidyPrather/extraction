@@ -151,6 +151,9 @@ pub struct HazeParams {
     pub wave: Vec4,
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
+    /// x: how much colour it drains from what's seen through it (a Hush's
+    /// dead air), y: how much it dims it.
+    pub drain: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -226,6 +229,7 @@ struct AnomalyAssets {
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
+    hushed: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
 }
@@ -319,6 +323,7 @@ fn init_assets(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
+    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
@@ -334,6 +339,7 @@ fn init_assets(
         flattened,
         glassy,
         crushed,
+        hushed,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
             emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
@@ -542,6 +548,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.0, 0.0, 0.0),
                         wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -561,6 +568,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.4, 0.0, 0.0),
                         wave: Vec4::new(0.5, 1.6, 1.4, 0.0),
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -577,6 +585,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 0.8, 0.0, 0.0),
                         wave: Vec4::new(0.08, 2.5, 3.0, 0.0),
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -599,6 +608,7 @@ fn dress_anomalies(
                         shape: Vec4::new(2.0, 0.0, 0.0, 0.0),
                         wave: Vec4::new(0.04, 1.5, 0.5, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -615,8 +625,30 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, MIRROR_HEIGHT, 0.0, 0.0),
                         wave: Vec4::new(0.3, 0.9, 0.6, 1.0),
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
+                    0.0,
+                )),
+            ),
+            // Dead air: pale dust hanging still, a ground drained of colour,
+            // and no light of its own.
+            AnomalyKind::Hush => (
+                Some(&a.hushed),
+                vec![soft(7.0, 220, 0.06, Vec3::new(0.85, 0.85, 0.82), 0.9)],
+                (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
+                // Seen through, the world inside goes grey and a little
+                // dim: a bubble with the colour gone out of it.
+                Some((
+                    1.02,
+                    0.2,
+                    HazeParams {
+                        shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
+                        wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
+                        tint: Vec4::ZERO,
+                        drain: Vec4::new(0.95, 0.4, 0.0, 0.0),
+                    },
+                    Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
                 )),
             ),
@@ -771,6 +803,7 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
         AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
         AnomalyKind::Lift => 0.3 + 0.7 * charge,
         AnomalyKind::Mirror => 0.5 + 0.1 * (t * 0.7).sin(),
+        AnomalyKind::Hush => 0.5,
     };
     v.clamp(0.0, 1.0)
 }
@@ -1069,7 +1102,7 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 7] = [
+const OWN_LOOKS: [&str; 8] = [
     "bolt",
     "detector",
     "art_lodestone",
@@ -1077,6 +1110,7 @@ const OWN_LOOKS: [&str; 7] = [
     "art_stormglass",
     "detector_sweep",
     "detector_bear",
+    "art_hushstone",
 ];
 
 /// Claims the look of an anomaly item as it's spawned, before the item
@@ -1326,6 +1360,15 @@ fn dress_items(
                     ..default()
                 });
                 parts.push((meshes.add(shard_mesh()), glass, Transform::IDENTITY));
+            }
+            "art_hushstone" => {
+                // A flat grey pebble, matte as felt.
+                let felt = mat(Color::srgb(0.42, 0.42, 0.4), 0.0, 0.98, LinearRgba::BLACK);
+                parts.push((
+                    meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
+                    felt,
+                    Transform::from_scale(Vec3::new(0.025, 0.012, 0.02)),
+                ));
             }
             "art_stormglass" => {
                 // A clouded bead: milky glass with a cold light in it.

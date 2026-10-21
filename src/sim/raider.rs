@@ -19,7 +19,7 @@ use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use extraction_core::anomaly::AnomalyKind;
 use extraction_core::items::{Category, ItemDef, SizeClass};
-use extraction_core::map::MarkerKind;
+use extraction_core::map::{MapDef, MarkerKind};
 use extraction_core::nav::{NavGrid, Obstacle};
 use extraction_core::noise::Rng;
 use serde_json::json;
@@ -314,6 +314,9 @@ pub struct Raider {
     distracted_at: f32,
     /// Creeping up on a walker to throw a distraction past it.
     stalking: Option<Stalk>,
+    /// The region it set out for, read off the field map like a player
+    /// planning a raid: sites there look better than their distance says.
+    objective: Option<Vec2>,
 }
 
 /// A creep-and-throw in progress (see [`stalk`]).
@@ -443,11 +446,13 @@ pub fn attach_raider(
         }
     }
     let seed = opts.seed;
+    let objective = choose_objective(&zone.map, &sites, seed);
     log.event(
         "start",
         json!({"run": run, "map": opts.map, "seed": seed, "personality": traits.name,
                "minutes": traits.minutes, "format": super::telemetry::FORMAT,
-               "sites": sites.len(), "buildings": plans.len()}),
+               "sites": sites.len(), "buildings": plans.len(),
+               "objective": objective.map(|o| [round(o.x, 1), round(o.y, 1)])}),
     );
     info!(
         "sim: {} raider, {} sites ({} buildings planned)",
@@ -492,6 +497,7 @@ pub fn attach_raider(
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
+                objective,
             },
         ));
     }
@@ -601,9 +607,17 @@ pub struct Scene<'w, 's> {
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
+    house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
 }
 
 impl Scene<'_, '_> {
+    /// The raid's clock less the nights slept in it: a morning in the
+    /// safehouse is a fresh start, not a raid gone late.
+    fn awake(&self) -> f32 {
+        let nights = self.house.as_ref().map_or(0, |h| h.nights_out);
+        self.raid.clock - nights as f32 * extraction_core::safehouse::NIGHT
+    }
+
     fn hand(&self, children: &Children, side: Side) -> Option<Entity> {
         children.iter().find_map(|c| {
             self.hands
@@ -798,7 +812,16 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
-            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
+            sneak(
+                me,
+                &mut bot,
+                r,
+                &scene,
+                &mut log,
+                eye,
+                body.swimming,
+                &mut input,
+            );
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -923,7 +946,7 @@ fn time_to_go(
     health: &Health,
     gun: Option<Entity>,
 ) -> Option<&'static str> {
-    if scene.raid.clock > r.traits.minutes * 60.0 {
+    if scene.awake() > r.traits.minutes * 60.0 {
         return Some("time");
     }
     let (used, cap) = scene.pack_use(me);
@@ -1166,6 +1189,7 @@ const DISTRACT_RANGE: f32 = 45.0;
 ///   goes to look there instead.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
+#[allow(clippy::too_many_arguments)]
 fn sneak(
     me: Entity,
     bot: &mut Bot,
@@ -1173,6 +1197,7 @@ fn sneak(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
     let hurrying = bot.sprint
@@ -1231,9 +1256,12 @@ fn sneak(
             }
         }
     }
-    if wary != input.crouch {
-        input.crouch = wary;
-        if wary {
+    // Afloat it ducks too, as a player does: a flooded doorway's head is
+    // a hand over the water.
+    let low = wary || swimming;
+    if low != input.crouch {
+        input.crouch = low;
+        if low {
             r.crouched_since = Some(r.clock);
         } else if let Some(t) = r.crouched_since.take() {
             log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
@@ -1732,6 +1760,11 @@ fn fight_on(
 }
 
 /// Anomalies it can see get routed round (unless it's reckless).
+/// An anomaly that has caught a bot it gives this much berth past its
+/// danger radius from then on (m): a path round it cuts its corners by
+/// up to a waypoint's reach (1.2 m), and still keeps out.
+const BURNED_BERTH: f32 = 2.0;
+
 fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     // In one it didn't mean to walk into: out the way it came, and never
     // that one again, reckless or not (a dive ends when it leaves).
@@ -1746,11 +1779,11 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             r.grid.block(
                 Obstacle::Circle {
                     at: at.to_array(),
-                    radius: danger + 1.0,
+                    radius: danger + BURNED_BERTH,
                 },
                 0.0,
             );
-            let out = at + (here - at).normalize_or(Vec2::X) * (danger + 1.5);
+            let out = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
             r.interrupted = true;
             bot.replace([Task::WalkTo {
                 to: out,
@@ -1758,6 +1791,23 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             }]);
             bot.sprint = true;
             return;
+        }
+    }
+    // Whatever it was going to (often the thing it was caught on the way
+    // to), it goes no nearer one that's caught it than the ring outside.
+    for (e, a, gt) in &scene.anomalies {
+        if !r.burned.contains(&e) {
+            continue;
+        }
+        let at = gt.translation().xz();
+        let danger = a.kind.danger_radius(a.radius);
+        let ring = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
+        for t in bot.tasks.iter_mut() {
+            if let Task::WalkTo { to, .. } = t {
+                if to.distance(at) < danger + BURNED_BERTH {
+                    *to = ring;
+                }
+            }
         }
     }
     let mut new = Vec::new();
@@ -2146,6 +2196,7 @@ fn raid_step(
         match r.act {
             Act::Idle => {
                 add_job_site(r, scene);
+                add_safehouse_site(r, scene);
                 let Some(s) = choose_site(r, scene, here) else {
                     r.pack_full = true; // nothing left worth the walk
                     return vec![Task::Wait(0.2)];
@@ -2289,7 +2340,18 @@ fn kind_name(k: SiteKind) -> &'static str {
 /// Picks the next site: worth, distance, and the pull of the far side as
 /// the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
-    let late = (scene.raid.clock / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
+    // `SIM_SITE=<prefab>`: that site first, while it's there to be done
+    // (a smoke test of one underground site, say).
+    if let Ok(want) = std::env::var("SIM_SITE") {
+        if let Some(i) = r
+            .sites
+            .iter()
+            .position(|s| s.name == want && !s.visited && s.tries < 3)
+        {
+            return Some(i);
+        }
+    }
+    let late = (scene.awake() / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;
     let mut best: Option<(f32, usize)> = None;
@@ -2300,6 +2362,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let pull = match s.kind {
             // The driver's scout job: a player goes for it, as long as
             // they're fit to.
+            // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
+            _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
@@ -2325,7 +2389,10 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         } else {
             scene.zone.map.richness_at(s.at.to_array())
         };
-        let score = pull * rich / (1.0 + d / 80.0)
+        let aim = r.objective.map_or(1.0, |o| {
+            1.0 + OBJECTIVE_PULL * (1.0 - s.at.distance(o) / OBJECTIVE_REACH).clamp(0.0, 1.0)
+        });
+        let score = pull * rich * aim / (1.0 + d / 80.0)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
@@ -2338,7 +2405,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
 /// The scout job on the card, as a site to walk to (once).
 fn add_job_site(r: &mut Raider, scene: &Scene) {
     // `SIM_NO_JOB=1`: play as before the bots took jobs (to compare runs).
-    if r.sites.iter().any(|s| s.job) || std::env::var_os("SIM_NO_JOB").is_some() {
+    if r.sites.iter().any(|s| s.job && s.name.starts_with("job:"))
+        || std::env::var_os("SIM_NO_JOB").is_some()
+    {
         return;
     }
     let Some(extraction_core::progression::Job::Scout { map, place, at, .. }) =
@@ -2358,6 +2427,61 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
         tries: 0,
         job: true,
     });
+}
+
+/// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend
+/// the night in (`progression::safehouse::sim_overnight` does the claiming
+/// and the sleeping once it's inside).
+fn add_safehouse_site(r: &mut Raider, scene: &Scene) {
+    if std::env::var_os("SIM_OVERNIGHT").is_none() || r.sites.iter().any(|s| s.name == "safehouse")
+    {
+        return;
+    }
+    let Some(at) = extraction_core::safehouse::safehouse(&scene.opts.map) else {
+        return;
+    };
+    let at = Vec2::from_array(at);
+    let Some(b) = r
+        .plans
+        .iter()
+        .position(|p| p.xf.translation.xz().distance(at) < 2.0)
+    else {
+        return;
+    };
+    r.sites.push(Site {
+        name: "safehouse".into(),
+        kind: SiteKind::Building(b),
+        at,
+        spots: 0,
+        visited: false,
+        tries: 0,
+        job: true,
+    });
+}
+
+/// How much better a site at the raid's objective looks, and how far
+/// from the region's middle that fades out, metres.
+const OBJECTIVE_PULL: f32 = 3.0;
+const OBJECTIVE_REACH: f32 = 120.0;
+
+/// The region a raider sets out for: any region with something to loot
+/// in it and some danger (the calm insertion is where it starts), the
+/// richer the likelier.
+fn choose_objective(map: &MapDef, sites: &[Site], seed: u64) -> Option<Vec2> {
+    let regions: Vec<_> = map
+        .regions
+        .iter()
+        .filter(|g| g.danger > 0)
+        .filter(|g| {
+            sites
+                .iter()
+                .any(|s| extraction_core::geom::point_in_polygon(&g.polygon, s.at.to_array()))
+        })
+        .collect();
+    let weights: Vec<f32> = regions.iter().map(|g| g.richness()).collect();
+    let g = regions[Rng::new(seed ^ 0x0B1E).weighted(&weights)?];
+    let n = g.polygon.len().max(1) as f32;
+    Some(g.polygon.iter().map(|p| Vec2::from_array(*p)).sum::<Vec2>() / n)
 }
 
 fn rv_centroid(zone: &Zone) -> Vec2 {

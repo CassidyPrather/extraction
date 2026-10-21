@@ -289,6 +289,86 @@ set down against the foot of a closed door jams it — for you too, until
 you pick the wedge up — and a walker that finds one batters the door for
 twelve loud seconds before tearing it off its hinges.
 
+### The heavy: you should not be fighting this
+
+The Custodian's demolition unit (`robots/heavy.rs`, its mind
+`heavy_mind.rs`, its rules `extraction_core::heavy`): a pale hull the size
+of a van on four long legs, nearly four metres to its back, a sensor brow
+of three red lenses and one manipulator arm. It walks a little slower
+than you; it doesn't hide, take cover or shoot. It comes straight at you,
+and when you're in reach its arm rises over its hull, hissing (1.2 s, the
+tell), and comes down where you stood (70 at the middle, less at the
+edge, and you feel the blow land). Hiding indoors only brings it to the
+door: it tears the door off and reaches in, and tears at the walls (a
+`HeavyTear` for the destruction work to answer). Out of sight it searches
+like any robot, patiently, then gives up and walks home.
+
+**When it comes.** Not on a timer. The director sends one when the whole
+Zone has been looking at you (attention at its worst, "the whole Zone is
+looking at you", held for 40 s, not in a raid's first six minutes), or at
+once when someone stands within 60 m of a Gate carrying a valley key. One
+at a time, fifteen minutes between one going and the next, at most two a
+raid, none with the director off (the recall, the yard). A horn sounds
+from the Gate, the radio hears it, and it walks out twenty seconds later
+toward where you are. A pure step function, so pacing is a test
+(`heavies_keep_their_distance_over_a_raid`: a quiet raid never meets one,
+a hoarder meets two, a long while apart, a recall run meets one at the
+Gate).
+
+**Taking it apart.** There's no health bar. The hull stops everything;
+what can be hurt is small and particular:
+
+| Piece | Where | What it takes | What it does |
+| - | - | - | - |
+| Bolts | four on each plate | one ordinary round each | on two, the plate hangs loose and a hand can tear it off; on none it drops |
+| Plates | the hatch on its back, one down each flank | nothing | cover the cell and the vents: a covered weak point takes nothing, blasts and anomalies included |
+| Knees | out in the open, lit cyan | ~5 rifle rounds, 3 from a Mosin | one gone and it limps; two and it's down for good |
+| Vents | behind the flank plates | 120 | shed its heat: each lost, it runs hotter |
+| Cell | behind the hatch, low on its back | 200 | shot through, it's dead and the cell with it; pulled out by hand, it's dead and the cell is yours |
+| Arm, eye | out front | 300, 80 | no more blows; blind, it hunts by ear |
+
+**Heat.** Walking and its blows heat it; its vents shed it. With both it
+never overheats; with one it holds out a long fight; with none it stalls
+within half a minute of chasing you. Past the mark it **stalls**: down on
+its knees for ten seconds, and the hatch over its cell blows its bolts to
+vent. Its strips and vents run from cyan to orange as it heats: a hot
+heavy reads as one before it stalls.
+
+**The prepared player's tools.** Standing, its cell is out of reach (2.6 m
+up). It has to be brought down to you:
+- an **EMP** drops it to its knees for 7 s (a walker gets 12);
+- a **burner** heats it fast (a stall in about five seconds, vents or
+  not) and cooks its bolts;
+- a **snare**'s discharge knocks it down a moment and heats it;
+- a **well** takes its feet: it's held, dragged toward the heart, and the
+  heart crushes its knees until it falls. Robots don't path round
+  anomalies, so lure it across one.
+Then get behind it, shoot the hatch's bolts or wait for the stall to blow
+them, and pull the cell. Or don't fight it: break its line of sight, keep
+quiet, and let it give up.
+
+**Its wreck stays.** It sinks onto its folded legs where it fell and stays
+there, not broken up or counted against the debris budget: a landmark. Its
+plates come loose in the fall (a hand can have them) and whole knees and
+its claw drop beside it. Salvage that matters: the **heavy power cell**
+(2400 Wh, twenty robot cells; only if pulled), **heavy armour plate**,
+**heavy knee actuator**, **manipulator claw**.
+
+**Felt and heard.** Each footfall is a `HeavyAct::Step` event (for its sound,
+heard far) and a pulse in both hands within 25 m, a knock close by fading
+to a tick; never a kick, which is for shots and hits. Every act it makes
+(`HeavyAct`: the arm's rise and blow, a door torn off, a bolt, a plate
+off, a vent out, a stall, a well's grip, the cell pulled, the fall) is an
+event for audio, the wrist and the radio.
+
+**Checks.** The rules in `extraction_core::heavy` (weak points, plates,
+heat, the call); the body in headless tests (it walks, bolts drop plates
+and open what's behind, two knees bring it down and it stays, EMP,
+burner, well); a hand pulling its cell through the headset path
+(`a_hand_pulls_the_cell`); the `heavy_well` scenario (a bot that stands
+behind a well while a heavy comes for it); `--gallery
+heavy[:open|:hot|:down]` and `docs/shots/heavy/`.
+
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover
