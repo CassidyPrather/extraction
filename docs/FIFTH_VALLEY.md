@@ -200,6 +200,22 @@ the col hut, the snow survey hut.
 - Every valley-wide gauge over `map::VALLEYS` (fit, budget, notes,
   wildlife, scenes, anomalies) runs it with the others.
 
+## What the sims said, and what changed
+
+Three batches of eight (`--sim 8 --map rime_fell`); summaries and
+traffic in `docs/shots/fifth-valley/sims/`.
+
+| Batch | Out | Died | What it showed | Change |
+| - | -: | -: | - | - |
+| seed 1 | 7 | 1 | All east: the funicular, the lorry road, the mill (63 items), the tip road. Nobody west of the street | The summit pays like its danger (loot 1.65), the west slopes a little over theirs |
+| seed 11 | 4 | 4 | Still east; the deaths on the open upper slopes and at the tarn | The miners' barracks on the west slopes |
+| seed 1 | 4 | 4 | The saddle used (3 of 4 out), the observatory looted; the switchbacks still only the long way round | |
+
+Never visited yet: the switchbacks' huts and the galleries (the
+funicular is always cheaper, by design), the barracks, the compressor
+house. The open upper slopes kill: drones and walkers see you a long way
+off up there.
+
 ## Status
 
 Lint-clean under every rule on main (doors, Surge, landmarks), the fit
