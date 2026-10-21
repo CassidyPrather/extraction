@@ -1201,6 +1201,7 @@ fn items_kinds(
         Option<&Held>,
         Option<&InSocket>,
         Option<&Item>,
+        Has<carry::Bulky>,
     )>,
     contents: &[Entity],
 ) -> Vec<extraction_core::items::ItemKind> {

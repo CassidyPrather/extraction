@@ -123,7 +123,7 @@ fn mark_bulky(
     commands.entity(add.entity).try_insert((
         Bulky,
         Grabbable {
-            points: end_points(def.size_m()),
+            points: end_points(Vec3::from_array(def.size_m())),
         },
     ));
 }
@@ -194,7 +194,7 @@ fn drag(
         };
         let def = catalog.get(item.kind());
         let m = mass.map_or(def.mass, |m| m.0).max(0.5);
-        let size = def.size_m();
+        let size = Vec3::from_array(def.size_m());
         // Where the hand took it, on the thing.
         let grip = held
             .offset
@@ -229,7 +229,7 @@ fn drag(
                     at: ground,
                     speed,
                     stuff: stuff_of(def),
-                    rolling: item.kind().contains("wheel"),
+                    rolling: def.id.contains("wheel"),
                 });
                 let radius = DRAG_HEARD * (speed / DRAG_SPEED).clamp(0.3, 1.0);
                 if loudest.as_ref().is_none_or(|n| n.radius < radius) {
