@@ -193,7 +193,13 @@ What changed, and worth a comment each:
   again. For each, note:
   - the `gpu:` and `frames:` lines in the log;
   - how the edges look: fence wires, grass, the trees' leaves, the gun's
-    sights and front post.
+    sights and front post. The first to shimmer are a spruce's edge
+    against the sky and a fence line 20-40 m off, while turning your head
+    slowly.
+  - if there's time, a third raid at 4x with `EXTRACTION_A2C=0` set (the
+    trees' leaves cut hard instead of smoothed): the software renderer
+    says smoothed leaves cost a lot, and only the headset can say if
+    they do there.
 
   Whether 2x reads the same at the Beyond 2's sharpness decides the
   default.
