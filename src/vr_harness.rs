@@ -4424,7 +4424,7 @@ mod carry {
     }
 
     /// A robot's wreck (here a stand-in: a 70 kg hull with a leg, its part
-    /// on the robots' layer), taken by the leg and drawn back: it comes,
+    /// on the robots' layer, settled), taken by the leg and drawn back: it comes,
     /// slowly, along the ground, scraping, and you're slowed to less than
     /// half pace; let go, it settles.
     #[test]
@@ -4459,10 +4459,12 @@ mod carry {
             ))
             .id();
         vr.step(60);
+        // Settled, as a wreck is by the time you reach it (a live body would
+        // be shoved by the hand reaching in).
         vr.app
             .world_mut()
             .entity_mut(hull)
-            .insert(crate::robots::wreck::Broken);
+            .insert((RigidBody::Static, crate::robots::wreck::Broken));
         vr.step(2);
         assert!(vr.app.world().get::<Draggable>(hull).is_some());
         let leg_at = vr
@@ -4483,9 +4485,6 @@ mod carry {
             vr.move_hand(Side::Right, leg_at.lerp(feet + Vec3::new(0.4, 0.8, 0.0), t));
             vr.step(1);
             let v = vr.app.world().get::<LinearVelocity>(hull).unwrap().0;
-            if i % 10 == 0 || Vec2::new(v.x, v.z).length() > 1.0 {
-                eprintln!("{i}: v {v} at {}", at(&vr, hull));
-            }
             fastest = fastest.max(Vec2::new(v.x, v.z).length());
         }
         let now = at(&vr, hull);
