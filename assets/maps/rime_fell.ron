@@ -41,10 +41,12 @@
     // the Bottoms and the first rise are bare scree and the last spruce.
     snow_line: Some(84.0),
     snow: 0.55,
+    // Audio's choice: the harshest wind in the bank, ravens standing in
+    // for choughs, and far rumbles that read as avalanches.
     sounds: (
         wind: "ambience/wind_mountain",
-        birds: ["ambience/raven", "ambience/raven"],
-        distant: ["ambience/rockfall"],
+        birds: ["ambience/raven"],
+        distant: ["ambience/rockfall", "ambience/thunder_distant"],
     ),
 
     features: [
