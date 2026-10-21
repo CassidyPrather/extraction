@@ -4313,6 +4313,116 @@ mod carry {
         );
     }
 
+    /// Your pack off the left shoulder into the left hand: it hangs open in
+    /// front of you, what's in it showing; the right hand reaches in and
+    /// takes a dressing; back over the shoulder it closes, and let go
+    /// there, it's on your back.
+    #[test]
+    fn the_pack_hangs_open_in_the_off_hand_and_you_take_from_it() {
+        use crate::interact::body::{Backpack, InBackpack, Torso};
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        let dressing = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(feet + Vec3::Y),
+        );
+        vr.app
+            .world_mut()
+            .get_mut::<Backpack>(bag)
+            .unwrap()
+            .contents
+            .push(dressing);
+        vr.app.world_mut().entity_mut(dressing).insert((
+            InBackpack { bag },
+            ChildOf(bag),
+            Transform::from_xyz(0.05, 0.1, 0.0),
+            RigidBodyDisabled,
+            ColliderDisabled,
+            Visibility::Hidden,
+        ));
+        vr.step(4);
+        // Over the left shoulder, squeeze, and round to the front.
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.hand(Side::Left, shoulder, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        assert!(
+            vr.app.world().get::<Backpack>(bag).unwrap().open,
+            "open in front"
+        );
+        let hangs = at(&vr, bag);
+        assert!(
+            hangs.distance(front - Vec3::Y * crate::interact::body::HANG) < 0.08,
+            "it hangs under the hand: {hangs}"
+        );
+        assert_ne!(
+            vr.app.world().get::<Visibility>(dressing),
+            Some(&Visibility::Hidden),
+            "what's in it shows"
+        );
+        // The right hand in, to the dressing.
+        let inside = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(dressing)
+            .unwrap()
+            .translation();
+        vr.hand(Side::Right, inside, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(dressing),
+            "taken out"
+        );
+        assert!(
+            !vr.app
+                .world()
+                .get::<Backpack>(bag)
+                .unwrap()
+                .contents
+                .contains(&dressing)
+        );
+        // Back over the shoulder: it closes; let go, it's on.
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, front.lerp(shoulder, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(10);
+        assert!(
+            !vr.app.world().get::<Backpack>(bag).unwrap().open,
+            "closed behind"
+        );
+        vr.grip(Side::Left, 0.0);
+        vr.step(6);
+        let parent = vr.app.world().get::<ChildOf>(bag).map(|c| c.parent());
+        assert!(
+            parent.is_some_and(|p| vr.app.world().get::<Torso>(p).is_some()),
+            "on your back"
+        );
+        assert!(vr.app.world().get::<Transform>(bag).unwrap().translation.z > 0.05);
+    }
+
     /// Let go of a car door swung hard forward and it's a shove: it leaves
     /// slow, where a magazine thrown the same way flies.
     #[test]
