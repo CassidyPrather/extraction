@@ -6,4 +6,5 @@
 pub mod deck;
 pub mod media;
 pub mod mml;
+pub mod stations;
 pub mod synth;
