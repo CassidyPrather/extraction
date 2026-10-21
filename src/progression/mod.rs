@@ -457,6 +457,31 @@ fn offer_job(
         .map(|(id, map)| Valley { id, map })
         .collect();
     let roll = |p: &Progress| extraction_core::progression::roll_job(p, opts.seed, &here, &valleys);
+    // `SIM_CONTRACT=<id>[:step]`: a sim bot on that contract's step, in
+    // its tier (its kit lies by the insertion: `sim`).
+    if let (Some(_), Ok(v)) = (&opts.sim_run, std::env::var("SIM_CONTRACT"))
+        && progression.0.done == 0
+    {
+        let mut it = v.split(':');
+        let id = it.next().unwrap_or_default();
+        let step: u32 = it.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        if let Some(c) = extraction_core::contracts::contract(id) {
+            progression.0.tier = match c.offered {
+                extraction_core::contracts::Offered::Tier { tier, .. } => tier,
+                extraction_core::contracts::Offered::Deep { .. } => {
+                    extraction_core::progression::TIERS.len() as u32
+                }
+            };
+            progression.0.done = 1 + 3 * progression.0.tier;
+            progression.0.contract = Some(extraction_core::contracts::Active {
+                id: c.id.to_owned(),
+                step,
+            });
+            progression.0.job = extraction_core::contracts::contract_job(&progression.0, &valleys);
+        }
+        info!("sim contract job: {:?}", progression.0.job);
+        return;
+    }
     if opts.sim_run.is_some() && progression.0.done == 0 {
         // A sim bot takes a scout job (the run's seed picks the tier), to
         // measure what a job pulls: the telemetry's `end` says whether it
