@@ -20,6 +20,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| eb0bcd4 | 20:00 | 11/11 clean: Marrow and Sallow seeds 1-4, Kettle, Cinder, Rime Fell seed 1; 7 extracted; stuck_block fired 3 times, no timeouts | full suite running | |
 | bdb219a | 17:30 | | 781 passed, 10 failed (7 fixed by eb0bcd4) | |
 | 7505d1e | 16:50 | | stopped at 615/790: 6 FAILED | |
 | 5d2ad52 | 15:00 | 7/7 clean, five valleys (Rime Fell seeds 1-3 all extracted); Sallow seed 1 timed out stuck | stopped at 132 (main moved): `a_stormglass_is_a_roof_in_the_surge` FAILED | |
@@ -40,7 +41,7 @@ As of eb0bcd4; det. = fails every time, alone too.
 | `wildlife::bats::tests::bats_never_go_inside_anything_or_underground` ("rime_fell: no bats hunting Water") | det. | VALLEYS-wide gauges assume every valley has what the first four have | Wildlife (Fifth valley cc) | routed 19:50 |
 | `wildlife::ducks::tests::flushed_ducks_fly_off_and_land_on_water_again` ("rime_fell: came down 24 m from the fright") | det. | same | Wildlife (Fifth valley cc) | routed 19:50 |
 | `soak::physics::items_spawned_inside_things_are_not_launched`: now a walker_leg_actuator 0.2 m into a wall ends 5.1 m under the ground | det. | tunnelling | Soak | routed 19:50 |
-| Sim: Marrow Creek, 0 extractions in 11 raids across every sha so far (drones, the sentry, a crawler, a burner); Cinder 8/11, Kettle 6/11, Sallow 5/11, Rime Fell 3/3 | | balance | Map design / Heavy | re-measuring on eb0bcd4 |
+| Sim: Marrow Creek, 0 extractions in 11 raids up to bdb219a (drones, the sentry, a crawler, a burner) | | balance | Map design / Heavy | better on eb0bcd4: 2 of 4 (seeds 1-4); Sallow 2 of 4 |
 
 ## Closed
 
