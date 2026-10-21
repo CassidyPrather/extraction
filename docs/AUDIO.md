@@ -233,6 +233,7 @@ is what it did before.
 | A jam: failure to eject or feed, a double feed (`Malfunctioned`) | `gun.malfunction`, a dull wrong clack | each its own pulse in the gun hand (`weapons::faults`: 0.55/30 ms, 0.12/15 ms, 0.85/120 ms); the old generic 0.5 pulse in both hands is gone | a generic pulse as well |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A step in snow lying (`world::snow::Snow::lies` over 0.25: Kettle Pass's high ground) | `step` from `footsteps/gravel` for its crunch, until a recording of snow can be fetched | — | the ground's set |
 | The sweep detector pointing at a loose stone (`anomaly::detector::StonePing`) | `detector.ping`: synthesised (`robot_voice::render_ping`), a soft sine at 1.76 kHz with its octave, sweeter than the click, played faster and higher the nearer the stone | — | silent |
 | A wet aegis biting its carrier (`anomaly::costs::ArtifactBite`, shock) | `bite.shock`, a synthesised electric crackle at the chest (`render_crackle`) | a kick in both hands (0.7/60 ms) | silent |
 | A shard's late glint (`ArtifactBite`, glint) | `bite.glint`, a faint glass tick | — | silent |
