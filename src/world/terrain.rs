@@ -137,13 +137,34 @@ fn spawn_terrain_meshes(
     }
 }
 
-/// A valley's old water line, where a reservoir was drained (m): below
-/// it the ground is bare silt and mud, with a damp band at the tide mark.
-pub fn drowned_line(map: &str) -> Option<f32> {
+/// Where a reservoir was drained: its old water line (m), and the dam's
+/// upstream face (map z; the water stood north of it, at smaller z).
+/// Below the line and behind the dam the ground is bare silt and mud,
+/// with a damp band at the tide mark. Downstream, as low but never
+/// drowned, it isn't.
+pub struct Drowned {
+    pub line: f32,
+    pub dam_z: f32,
+}
+
+pub fn drowned_line(map: &str) -> Option<Drowned> {
     match map {
-        // The dam's tide mark is at 49.8 m.
-        "Sallow Reservoir" => Some(50.5),
+        // The dam's tide mark is at 49.8 m; its upstream face at z 132.
+        "Sallow Reservoir" => Some(Drowned {
+            line: 50.5,
+            dam_z: 132.0,
+        }),
         _ => None,
+    }
+}
+
+impl Drowned {
+    /// (silt, damp) at a point: `drowned` behind the dam, nothing below it.
+    pub fn at(&self, p: [f32; 2], y: f32) -> (f32, f32) {
+        // A metre or two to blend at the dam's foot.
+        let behind = smooth(self.dam_z + 1.5, self.dam_z - 1.5, p[1]);
+        let (silt, damp) = drowned(self.line, y);
+        (silt * behind, damp * behind)
     }
 }
 
@@ -278,7 +299,7 @@ fn chunk_mesh(
                 Some(RoadKind::Path) => 5.0,
                 None => 0.0,
             };
-            let (silt, damp) = line.map_or((0.0, 0.0), |l| drowned(l, y));
+            let (silt, damp) = line.as_ref().map_or((0.0, 0.0), |d| d.at(p, y));
             uv1.push([kind, hm.wet[hm.idx(i, j)].max(damp)]);
             let slope = hm.slope_deg(p);
             let rock = smooth(28.0, 42.0, slope);
@@ -460,8 +481,12 @@ mod drowned_tests {
 
     #[test]
     fn the_reservoir_bed_is_silt_and_the_tide_mark_damp() {
-        let line = drowned_line("Sallow Reservoir").unwrap();
+        let res = drowned_line("Sallow Reservoir").unwrap();
+        let line = res.line;
         assert!(drowned_line("Marrow Creek").is_none());
+        // Behind the dam the bed is silt; below it, as low, it isn't.
+        assert_eq!(res.at([0.0, 60.0], 33.0).0, 1.0, "the bed");
+        assert_eq!(res.at([0.0, 200.0], 30.0), (0.0, 0.0), "downstream");
         assert_eq!(drowned(line, 33.0).0, 1.0, "the bed");
         assert_eq!(drowned(line, 52.0), (0.0, 0.0), "the crest");
         let (_, band) = drowned(line, line - 1.2);
