@@ -20,6 +20,23 @@ Everything is deterministic: the same seed, map, hour, weather and path
 file give the same frames. Time steps a fixed amount each frame,
 however slow the renderer is.
 
+Things that have bitten captures, and what now guards against them:
+
+- **A stale binary.** A binary built before a merge, rendering shaders
+  from after it, quit 121 frames into a shot. A haze shader's uniform had
+  grown a field, and wgpu's validation rejected the pipeline when a Hush
+  came into view. Every capture script now warns when the binary is older
+  than `src/`, `crates/` or `assets/shaders/` (`scripts/capture_common.sh`).
+- **The player dying off camera.** In a still capture (cinematics, stills,
+  the sweep) the player stands idle where `--camera` put them. The Surge
+  kills anyone in the open in seconds, and the raid then ends at base,
+  where the Surge doesn't show. Still captures keep the local player's
+  health topped up (`capture::keep_alive`). A trailer's bot takes its
+  chances.
+- **`--camera` places the player.** That's what a screenshot wants, but a
+  trailer's bot must start in the truck, as a headless sim's does. The
+  trailer takes no `--camera`; it spawns its own chase camera instead.
+
 ## Cinematics: `--cinematic FILE`
 
 The free camera flies each shot's spline. The spline is a centripetal
