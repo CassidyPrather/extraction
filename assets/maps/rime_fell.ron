@@ -37,6 +37,8 @@
     haze: Some((0.93, 0.98, 1.08)),
     // Up high in the wind you chill (docs/FIFTH_VALLEY.md, "Cold").
     cold: 1.0,
+    // Bare high ground is all stone: rock fields everywhere.
+    scree: 0.5,
     // Snow lies over the switchbacks' second leg (Visual design's snow):
     // the Bottoms and the first rise are bare scree and the last spruce.
     snow_line: Some(84.0),

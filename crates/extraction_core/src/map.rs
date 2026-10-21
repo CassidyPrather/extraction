@@ -54,6 +54,11 @@ pub struct MapDef {
     /// (`cold`). Most valleys aren't.
     #[serde(default)]
     pub cold: f32,
+    /// How much of the valley is scree, 0..=1: rock fields everywhere
+    /// rather than where the slow noise puts them (`rocks`). Bare high
+    /// ground is all stone.
+    #[serde(default)]
+    pub scree: f32,
     /// Where snow can lie (m): above it, falling weather comes as snow
     /// and lies on what faces up. None: the valley's too low
     /// (`world::snow`).
