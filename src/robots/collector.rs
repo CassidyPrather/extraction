@@ -23,6 +23,8 @@ use crate::world::Zone;
 pub const ORDER_DELAY: f32 = 20.0;
 /// Seconds the collector spends loading the body.
 pub const LOAD_TIME: f32 = 8.0;
+/// At most this many convoys are out at once (the rest wait their turn).
+pub const MAX_CONVOYS: usize = 2;
 
 /// On a collector: the remains it was sent for, and whether it has them.
 #[derive(Component, Debug)]
@@ -84,11 +86,17 @@ fn dispatch_collectors(
     zone: Res<Zone>,
     time: Res<Time>,
     mut raid: ResMut<Raid>,
+    robots: Query<&super::Robot, Without<super::indoor::LocalNav>>,
+    collectors: Query<(), With<Collector>>,
 ) {
-    if !director.is_some_and(|d| d.enabled) {
+    let Some(director) = director.filter(|d| d.enabled) else {
         return;
-    }
+    };
     let dt = time.delta_secs();
+    // A convoy is two robots off the director's budget, and only so many
+    // are out at once: quick deaths queue, they don't stack.
+    let mut active = robots.iter().filter(|r| !r.wrecked).count();
+    let mut out = collectors.iter().count();
     for (remains, mut order, gt) in &mut orders {
         if order.sent {
             continue;
@@ -97,6 +105,11 @@ fn dispatch_collectors(
         if order.dispatch_in > 0.0 {
             continue;
         }
+        if active + 2 > director.max_active || out >= MAX_CONVOYS {
+            continue;
+        }
+        active += 2;
+        out += 1;
         order.sent = true;
         let exit = gate(&zone);
         let site = gt.translation();
@@ -180,7 +193,7 @@ fn convoy_events(
                         "The convoy is through the Gate. {} things you carried are gone.",
                         names.len()
                     ));
-                    memorial.0.lost.extend(names);
+                    memorial.0.lose(names);
                 }
                 // (Despawning the robot takes the bag, its child, with it.)
             }
@@ -267,6 +280,40 @@ mod tests {
             avian3d::prelude::ColliderDisabled,
         ));
         (app, bag)
+    }
+
+    /// Five deaths in quick succession don't send five convoys at once:
+    /// no more than MAX_CONVOYS are out, the rest wait their turn.
+    #[test]
+    fn quick_deaths_queue_their_convoys() {
+        let (mut app, _) = app_with_remains();
+        let zone = app.world().resource::<Zone>().clone();
+        let g = gate(&zone);
+        for k in 0..4 {
+            let at = zone.on_ground(g.x + 30.0 + k as f32 * 6.0, g.z + 20.0) + Vec3::Y * 0.25;
+            crate::persist::spawn_remains(app.world_mut(), at);
+        }
+        let mut most = 0;
+        let mut any = false;
+        for _ in 0..90 * 40 {
+            for mut o in app
+                .world_mut()
+                .query::<&mut CollectionOrder>()
+                .iter_mut(app.world_mut())
+            {
+                o.dispatch_in = o.dispatch_in.min(0.0);
+            }
+            app.update();
+            let out = app
+                .world_mut()
+                .query::<&Collector>()
+                .iter(app.world())
+                .count();
+            most = most.max(out);
+            any |= out > 0;
+        }
+        assert!(any, "a convoy went");
+        assert!(most <= MAX_CONVOYS, "{most} convoys out at once");
     }
 
     #[test]

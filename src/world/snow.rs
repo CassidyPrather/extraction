@@ -266,7 +266,11 @@ fn snow_with_weather(
         }
         snow.step(falling, dt);
     }
-    tracks.weather(snow.falling, dt);
+    // (A screenshot's demo trail stays as laid: a software-rendered shot
+    // takes minutes of clock, and the prints filled in before the frame.)
+    if std::env::var("EXTRACTION_DEMO_TRACKS").is_err() {
+        tracks.weather(snow.falling, dt);
+    }
 }
 
 /// Footsteps leave prints where snow lies.

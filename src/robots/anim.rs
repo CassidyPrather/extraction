@@ -380,6 +380,9 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
+    // Down to two legs it can't stand: belly on the ground, it hauls
+    // itself along on what it has left.
+    let crawling = alive_legs == 2 && !drive.down;
     g.coil = (g.coil - dt).max(0.0);
     g.leap = (g.leap - dt).max(0.0);
     let speed_scale = drive.pace.clamp(0.0, g.shape.max_pace())
@@ -389,7 +392,8 @@ pub fn step_walker(
             0.3
         } else {
             1.0
-        };
+        }
+        * if crawling { 0.5 } else { 1.0 };
     let desired = if drive.down {
         Vec3::ZERO
     } else {
@@ -569,6 +573,8 @@ pub fn step_walker(
         g.shape.height() - 0.4
     } else if drive.stunned {
         0.55
+    } else if crawling {
+        g.shape.height() - 0.45
     } else {
         missing as f32 * 0.14
             + g.limp * 0.05
@@ -854,8 +860,61 @@ impl Plugin for AnimPlugin {
             (
                 knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
                 haul_lines.after(super::perceive),
+                kick_loose,
             ),
         );
+    }
+}
+
+/// How far round a footfall reaches for loose things, metres.
+const KICK_REACH: f32 = 0.32;
+/// What a footfall gives them: an impulse, N·s (a light thing skitters, a
+/// crate barely shifts), and the most it may add to a speed.
+const KICK: f32 = 2.4;
+const KICK_MAX: f32 = 2.5;
+
+/// A foot coming down among loose things kicks them aside: away from
+/// where it landed and a little up, harder the lighter they are. (Held
+/// and seated things are out of the world, on the Stowed layer or
+/// switched off.)
+fn kick_loose(
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    spatial: SpatialQuery,
+    mut bodies: Query<
+        (
+            &RigidBody,
+            &GlobalTransform,
+            &ComputedMass,
+            &mut LinearVelocity,
+        ),
+        (
+            Without<RigidBodyDisabled>,
+            Without<crate::interact::Held>,
+            Without<super::RobotPart>,
+        ),
+    >,
+) {
+    let filter = SpatialQueryFilter::from_mask([Layer::Item]);
+    for step in steps.read() {
+        let foot = step.at + Vec3::Y * 0.08;
+        let near = spatial.shape_intersections(
+            &Collider::sphere(KICK_REACH),
+            foot,
+            Quat::IDENTITY,
+            &filter,
+        );
+        for e in near {
+            let Ok((rb, gt, mass, mut v)) = bodies.get_mut(e) else {
+                continue;
+            };
+            if !rb.is_dynamic() {
+                continue;
+            }
+            let off = gt.translation() - foot;
+            let away = Vec3::new(off.x, 0.0, off.z).normalize_or(Vec3::X);
+            let dv = (KICK * mass.inverse()).min(KICK_MAX);
+            v.0 += (away + Vec3::Y * 0.4).normalize() * dv;
+        }
     }
 }
 
@@ -1304,6 +1363,100 @@ mod tests {
         );
     }
 
+    /// Loose things in a walker's way get kicked aside as its feet come
+    /// down among them: some move, none goes flying.
+    #[test]
+    fn feet_kick_loose_things_aside() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("cleaning_kit").unwrap();
+        let at = zone.on_ground(40.0, 230.0);
+        let mut items = Vec::new();
+        for k in 0..12 {
+            let p = Vec3::new(
+                at.x + 1.0 + 0.35 * k as f32,
+                0.0,
+                at.z + if k % 2 == 0 { 0.45 } else { -0.45 },
+            );
+            let p = zone.on_ground(p.x, p.z) + Vec3::Y * 0.1;
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            items.push(crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(p),
+                    condition: 1.0,
+                },
+            ));
+            q.apply(app.world_mut());
+        }
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        // Let the things come to rest first.
+        for _ in 0..90 {
+            app.update();
+        }
+        let start: Vec<Vec3> = items
+            .iter()
+            .map(|e| {
+                app.world()
+                    .get::<GlobalTransform>(*e)
+                    .unwrap()
+                    .translation()
+            })
+            .collect();
+        app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+            vec![Vec3::new(at.x + 7.0, 0.0, at.z)];
+        for _ in 0..(90 * 8) {
+            app.update();
+        }
+        let mut moved = 0;
+        for (e, s0) in items.iter().zip(&start) {
+            let p = app
+                .world()
+                .get::<GlobalTransform>(*e)
+                .unwrap()
+                .translation();
+            assert!(p.is_finite());
+            let d = p.xz().distance(s0.xz());
+            assert!(d < 6.0, "a kit flew {d:.1} m");
+            if d > 0.1 {
+                moved += 1;
+            }
+        }
+        assert!(moved >= 2, "{moved} of 12 moved");
+    }
+
     /// Underground, below the terrain, footing is the floor the ray finds,
     /// never the heightfield overhead.
     #[test]
@@ -1539,6 +1692,52 @@ mod tests {
             );
             let up = w.feet.iter().filter(|f| f.alive && f.t < 1.0).count();
             assert!(up <= 1, "{up} feet up on three legs");
+        }
+    }
+
+    /// On two legs it can't stand: it drags itself along on its belly,
+    /// slowly, one foot reaching at a time, its feet on the ground.
+    #[test]
+    fn two_legs_crawl() {
+        let flat = |_: Vec3| 0.0;
+        for dead in [[0, 1], [0, 2]] {
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            for i in dead {
+                w.feet[i].alive = false;
+            }
+            for _ in 0..(10 * 90) {
+                let drive = Drive {
+                    desired: Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| 0.0,
+                    &mut |_| {},
+                );
+                assert!(t.translation.is_finite());
+                for f in w.feet.iter().filter(|f| f.alive && f.t >= 1.0) {
+                    assert!(f.planted.y.abs() < 0.01, "a planted foot off the ground");
+                }
+            }
+            assert!(
+                t.translation.y < 0.75,
+                "{dead:?}: belly down ({:.2} m)",
+                t.translation.y
+            );
+            let went = t.translation.x;
+            assert!(
+                (1.0..6.0).contains(&went),
+                "{dead:?}: it crawled {went:.2} m in 10 s"
+            );
         }
     }
 

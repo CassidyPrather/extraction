@@ -81,24 +81,48 @@ way down it clicks off (it starts off). What's on the dial is
 | 1413 | The Custodian's numbers, in Morse: new figures every raid day | everywhere; silent after the recall |
 | 1560 | The machines' traffic | where the chatter is |
 
-Between stations, static; underground, only static. The robots' chatter
+Between stations, static; underground, only static. A little off a
+station the set whistles, lower as you close on it and gone when you're
+on it: you can find a station by ear. The robots' chatter
 breaks in whatever it's tuned to, as before. A radio in a pouch or the
 pack plays nothing aloud.
 
 **The upright piano** (`radio::piano`, `art/props/music.py`): each pointing
 forefinger is a finger on the keys; a key sounds as it bottoms out, as
-loud as it went down fast, and is damped as you lift.
+loud as it went down fast, and is damped as you lift. It stands in Hana's
+front room, against the partition between the doorways: Anna's piano.
+
+**The harmonium** is the same keyboard (the art script builds both from
+one key layout, and `piano::Keyboard` holds the code to it), five octaves
+of reeds that sound while held. One stands by the altar in the Kettle
+chapel (the sexton's), one in the silt of Old Sallow's drowned church,
+open to the sky, facing the doorway.
+
+The standing instruments' spots (`radio::places::FIXTURES`) were chosen by
+looking: a floor, a wall at the back, room in front. They're props, not
+items, so the save never keeps them.
 
 **The gramophone** (`radio::gramophone`): a 78 on the platter, push the
 crank round (each push winds about twenty seconds), push the arm over.
 As the spring runs down the record slows and sags flat; wind it while it
-plays to keep it going. Three 78s turn up among curios.
+plays to keep it going. One stands on the floor of Fiala's lodge against
+the log wall, with a waltz by the lodge book; three 78s turn up among
+curios.
 
 **Robots hear all of it.** While it plays, a tape writes a 26 m noise
 every 3 s (past the sleepers' wake radius), a gramophone 24 m, a piano
 key struck hard 30 m, a radio out loud 7-14 m. Set a tape playing on a
 table and walk away: it's a lure. It also tells them where you are if
-it's in your hand.
+it's in your hand. It works once: a robot that searched a spot and gave
+up ignores sourceless sounds near it for two minutes (Robot minds'
+habituation, `robots::senses::BORED_FOR`), so a tape left running draws
+a walker, not a queue of them.
+
+**The tapes and players are laid with the loot** (`items::loot::
+roll_zone_loot` calls `radio::places::lay_tapes`): with every fresh roll,
+never on a restore. Laid at every load, they doubled with each save
+(`persist::tests::every_valley_loads_back_to_the_same_items` holds every
+valley to it now).
 
 **The score steps aside**: `radio::MusicNear` is true while any of these
 plays within 15 m of you, and the score is silent under it: one musical

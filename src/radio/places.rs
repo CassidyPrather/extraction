@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::items::{Catalog, SpawnItem, spawn_item};
+use crate::items::{SpawnItem, spawn_item};
 
 /// One thing laid by a note: the map, the item, where (x, z), and how
 /// far (m) to its right of the note as the note faces.
@@ -199,36 +199,31 @@ pub fn surface_near(zone: &crate::world::Zone, p: &Place, yaw: Quat) -> Option<(
     })
 }
 
-/// Lays this valley's tapes once it has loaded. A player laid here comes
-/// with a cell, part run down: it was someone's.
-pub(super) fn lay_tapes(
-    mut commands: Commands,
-    zone: Option<Res<crate::world::Zone>>,
-    launch: Option<Res<crate::LaunchOptions>>,
-    catalog: Res<Catalog>,
-    mut done: Local<Option<String>>,
+/// Lays this valley's tapes and players: part of the zone's loot roll
+/// (`items::loot::roll_zone_loot`), so a zone restored from a save keeps
+/// what it had instead of getting another set, and a new cycle lays them
+/// again as it re-rolls the loot. A player laid here comes with a cell,
+/// part run down: it was someone's.
+pub fn lay_tapes(
+    commands: &mut Commands,
+    zone: &crate::world::Zone,
+    catalog: &crate::items::Catalog,
+    map: &str,
 ) {
-    let (Some(zone), Some(launch)) = (zone, launch) else {
-        return;
-    };
-    if done.as_deref() == Some(launch.map.as_str()) {
-        return;
-    }
-    *done = Some(launch.map.clone());
-    for p in PLACES.iter().filter(|p| p.map == launch.map) {
+    for p in PLACES.iter().filter(|p| p.map == map) {
         let Some(kind) = catalog.kind(p.item) else {
             warn!("no item {}", p.item);
             continue;
         };
         let yaw = Quat::from_rotation_y(-p.rot.to_radians());
-        let Some((x, y, z)) = surface_near(&zone, p, yaw) else {
+        let Some((x, y, z)) = surface_near(zone, p, yaw) else {
             warn!("{}: no surface by {:?}", p.item, p.at);
             continue;
         };
         let half = catalog.get(kind).size_m()[1] * 0.5;
         let e = spawn_item(
-            &mut commands,
-            &catalog,
+            commands,
+            catalog,
             SpawnItem {
                 kind,
                 transform: Transform::from_xyz(x, y + half + 0.01, z).with_rotation(yaw),

@@ -82,6 +82,16 @@ impl LootTables {
         self.tables.keys()
     }
 
+    /// Whether any table can drop item `id` (for checks that everything
+    /// is found somewhere).
+    pub fn mentions(&self, id: &str) -> bool {
+        self.tables.values().any(|t| {
+            t.entries
+                .iter()
+                .any(|e| matches!(e, Entry::Item { id: i, .. } if i == id))
+        })
+    }
+
     /// Rolls a table. Unknown tables roll nothing.
     pub fn roll(&self, name: &str, catalog: &ItemCatalog, rng: &mut Rng) -> Vec<Drop> {
         self.roll_in(name, None, catalog, rng)
