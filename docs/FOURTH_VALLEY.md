@@ -244,6 +244,12 @@ the gauge house and out: 262 s.
   mirror), and the dam's `Mat::Concrete`
   faces and tower `Mat::DressedStone` (then `python3
   scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
+- Underground's dam gallery (claude/polish-underground 810121c,
+  `gallery_sallow` at (-6, 172)): in by a kiosk beside the valve house,
+  44 m under the crest, out by a stair beside the draw-off tower (its
+  door held until the gauge room's breaker is thrown). The fourth way
+  through the dam, under cover. Then: its six test loops onto VALLEYS,
+  the lint, fit and sims again.
 - Progression's gate (`LATE_VALLEYS`), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
