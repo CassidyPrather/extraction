@@ -60,11 +60,20 @@ pub const NAMES: &[&str] = &[
 ///   (`destruction::scenario`).
 /// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
 ///   default (`bot::crossing`).
+/// - `first_hour`, `first_hour_<persona>`: newcomers from the yard to the
+///   end of a first raid (`onboarding::first_hour`); each runs its two
+///   halves, `first_yard` and `first_raid`, as two sessions.
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
     crate::destruction::scenario::SCENARIO,
     super::crossing::SCENARIO,
+    crate::onboarding::first_hour::SCENARIO,
+    crate::onboarding::first_hour::PERSONAS[0].scenario,
+    crate::onboarding::first_hour::PERSONAS[1].scenario,
+    crate::onboarding::first_hour::PERSONAS[2].scenario,
+    crate::onboarding::first_hour::PERSONAS[3].scenario,
+    crate::onboarding::first_hour::PERSONAS[4].scenario,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -410,7 +419,10 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::Alive),
             ]
         }
-        crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
+        crate::onboarding::bot::SCENARIO | crate::onboarding::first_hour::YARD => {
+            crate::onboarding::bot::opening()
+        }
+        crate::onboarding::first_hour::RAID => crate::onboarding::first_hour::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
         crate::progression::safehouse::scenario::SCENARIO => {

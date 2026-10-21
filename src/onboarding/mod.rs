@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod first_hour;
 pub mod firsts;
 pub mod hints;
 pub mod second_hour;
@@ -482,6 +483,7 @@ impl Plugin for OnboardingPlugin {
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
             .add_systems(Update, second_hour::direct)
+            .add_systems(Update, first_hour::direct_raid)
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),

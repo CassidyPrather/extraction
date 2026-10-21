@@ -4,6 +4,14 @@ use bevy::prelude::*;
 
 fn main() -> AppExit {
     let mut opts = extraction::LaunchOptions::from_args();
+    // The first hour's newcomers: two sessions each, the yard then a raid.
+    if let Some(personas) = opts
+        .scenario
+        .as_deref()
+        .and_then(extraction::onboarding::first_hour::chain)
+    {
+        return extraction::onboarding::first_hour::run_chain(&personas);
+    }
     // `--scenario all` runs each scenario in its own fresh process, so each
     // starts from an untouched world.
     if opts.scenario.as_deref() == Some("all") {

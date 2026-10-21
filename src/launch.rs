@@ -173,6 +173,13 @@ impl Default for LaunchOptions {
 }
 
 impl LaunchOptions {
+    /// A session that plays the real game's start (the camp, the truck,
+    /// the kit in the crate): any but a scenario, and a scenario given a
+    /// career to play (`--save`, as the first-hour personas are).
+    pub fn plays_for_real(&self) -> bool {
+        self.scenario.is_none() || self.save.is_some()
+    }
+
     /// A run driven by tooling (a screenshot, a tour, a bot, a scenario, a
     /// sim raid) rather than a player: it never reopens the game, whether
     /// on another valley or on another OpenXR runtime.
@@ -333,6 +340,10 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::bot::crossing::SCENARIO) && !o.map_explicit {
             o.map = crate::bot::crossing::DEFAULT_MAP.into();
             o.map_explicit = true;
+        }
+        // A newcomer's first raid has the Zone's machines in it.
+        if o.scenario.as_deref() == Some(crate::onboarding::first_hour::RAID) {
+            o.robots = true;
         }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
