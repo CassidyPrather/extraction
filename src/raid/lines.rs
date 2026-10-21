@@ -422,6 +422,50 @@ mod tests {
         }
     }
 
+    /// The drive home says one thing, in this order, whatever else is
+    /// true that night: his own story beat; Anna's tape; a stone (a
+    /// warning); his word on a valley you're home from the first time; an
+    /// eye; a cell; a lot of food; then small talk. Every pair is held.
+    #[test]
+    fn the_drive_home_keeps_its_order() {
+        use crate::raid::lev::Cargo;
+        // Each kind as the conditions that bring it on, and its line.
+        type Kind = (
+            &'static str,
+            fn(&mut (u32, Cargo, Option<&'static str>)),
+            &'static [&'static str],
+        );
+        const STORY: &[&str] = &[COMING_HOME[2].1];
+        const VALLEY: &[&str] = &[FIRST_HOME_FROM[0].1];
+        let kinds: [Kind; 7] = [
+            ("story", |c| c.0 = COMING_HOME[2].0, STORY),
+            ("anna", |c| c.1.anna = true, CARGO_ANNA),
+            ("stone", |c| c.1.artifact = true, CARGO_ARTIFACT),
+            ("valley", |c| c.2 = Some(FIRST_HOME_FROM[0].0), VALLEY),
+            ("eye", |c| c.1.eye = true, CARGO_EYE),
+            ("cell", |c| c.1.cell = true, CARGO_CELL),
+            ("food", |c| c.1.food = FOOD_PLENTY, CARGO_FOOD),
+        ];
+        // A homecoming with no story of his own.
+        let quiet = COMING_HOME.iter().map(|(n, _)| *n).max().unwrap() + 1;
+        for (i, (hi, set_hi, lines)) in kinds.iter().enumerate() {
+            for (lo, set_lo, _) in &kinds[i + 1..] {
+                let mut c = (quiet, Cargo::default(), None);
+                set_lo(&mut c);
+                set_hi(&mut c);
+                let said = coming_home_with(c.0, false, c.1, c.2);
+                assert!(lines.contains(&said), "{hi} over {lo}: said {said:?}");
+            }
+            // And over small talk.
+            let mut c = (quiet, Cargo::default(), None);
+            set_hi(&mut c);
+            assert!(
+                lines.contains(&coming_home_with(c.0, false, c.1, c.2)),
+                "{hi}"
+            );
+        }
+    }
+
     /// Home from a valley the first time, he says his piece about it,
     /// unless it's the night for his own story; every valley has one.
     #[test]
