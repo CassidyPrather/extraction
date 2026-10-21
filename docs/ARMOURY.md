@@ -162,3 +162,14 @@ the common table plus a few things of its own:
   `lmg_drill`, `flare_drill`.
 - The range (`weapons::range`) fires the four new bullet guns at every
   material.
+
+## Shots
+
+`docs/shots/armoury/`: each gun in the gallery (`--gallery <id>+open`
+works the action and swings a bipod down; give it 60 frames so the
+model has loaded):
+
+```bash
+EXTRACTION_BIN=target/fast/extraction scripts/shot.sh docs/shots/armoury/rpk74_open.png \
+    40,19.2,262,0,0 60 --gallery rpk74+open,0,0.95 --data-dir /tmp/x --no-robots
+```
