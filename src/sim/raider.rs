@@ -1733,10 +1733,18 @@ fn fight_on(
             .get(target)
             .map(|(_, _, gt, ..)| gt.translation().xz())
             .unwrap_or(here);
+        log.event("reposition", json!({}));
+        // Indoors, a few steps along the plan toward it (out of a doorway
+        // whose jamb the muzzle was in): a step aside there is a wall.
+        if let Some(mut tasks) = indoor_step(r, eye, to, 3.0) {
+            tasks.insert(0, Task::Release(Side::Left));
+            tasks.extend([Task::Support, Task::Shoot { target, shots: 4 }]);
+            bot.replace(tasks);
+            return;
+        }
         let toward = (to - here).normalize_or(Vec2::X);
         let side = Vec2::new(-toward.y, toward.x) * if r.rng.chance(0.5) { 1.0 } else { -1.0 };
         let step = here + (toward + side).normalize() * 3.0;
-        log.event("reposition", json!({}));
         bot.replace([
             Task::Release(Side::Left),
             Task::WalkTo {
@@ -2510,6 +2518,30 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
         }
         _ => site.at,
     }
+}
+
+/// Indoors: `metres` along the building's plan from `pos` toward `to`
+/// (world x, z), doors opened on the way. None outdoors, or with no way.
+fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>> {
+    let plan = r
+        .plans
+        .iter()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
+    let a = plan.to_local(pos).xz();
+    let goal = plan.to_local(Vec3::new(to.x, pos.y, to.y)).xz();
+    let path = plan.path(a, goal)?;
+    // The point `metres` along it.
+    let (mut at, mut left) = (a, metres);
+    for p in path {
+        let d = at.distance(p);
+        if d >= left {
+            at = at.lerp(p, left / d.max(1e-4));
+            break;
+        }
+        left -= d;
+        at = p;
+    }
+    indoor_to(plan, pos, at, 0.6)
 }
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
