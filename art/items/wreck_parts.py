@@ -9,8 +9,10 @@ centre, -Z the outer face).
 - `car_door` (dims 1.0 x 0.95 x 0.12): a saloon's front door, faded blue,
   its window frame empty but for a few shards, the handle and lock, the
   hinges along its front edge, the trim panel on the inside
+- `car_wheel` (dims 0.6 x 0.6 x 0.2): a road wheel on its flat tyre, the
+  rim rusty, standing on its tread, its axle along Z
 
-Materials: Cream, Red, Rusty, Steel, Blue, Black, Glass, Padding.
+Materials: Cream, Red, Rusty, Steel, Blue, Black, Glass, Padding, Rubber, Dark.
 """
 
 import math
@@ -98,7 +100,31 @@ def car_door():
     return [p]
 
 
+def car_wheel():
+    p = Part("body")
+    # A road wheel off a wreck, standing on its tread: the flat-spotted
+    # tyre round a rusty pressed-steel rim, its hub cap gone, the stud
+    # holes showing.
+    r, w, rim = 0.29, 0.17, 0.19
+    p.lathe([(rim - 0.01, -w / 2), (r - 0.02, -w / 2), (r, -w / 2 + 0.03), (r, w / 2 - 0.03),
+             (r - 0.02, w / 2), (rim - 0.01, w / 2)], "Rubber", segs=28, closed=True)
+    # Tread blocks across the crown.
+    for k in range(28):
+        a = 2 * math.pi * (k + 0.5) / 28
+        p.box((0.022, 0.012, w - 0.07), (0.0, 0.0, 0.0), "Rubber", segs=1,
+              xf=T(r * math.cos(a), r * math.sin(a), 0.0) @ RZ(a + math.pi / 2))
+    p.lathe([(0.0, -0.035), (0.08, -0.035), (0.12, -0.05), (rim, -0.05), (rim, 0.06),
+             (0.12, 0.04), (0.08, 0.025), (0.0, 0.025)], "Rusty", segs=24)
+    for k in range(4):
+        a = math.pi / 2 * k + math.pi / 4
+        p.cyl(0.011, -0.04, -0.034, "Dark", segs=8, xf=T(0.055 * math.cos(a), 0.055 * math.sin(a),
+                                                          0.0))
+    p.cyl(0.03, -0.04, 0.03, "Dark", segs=12)
+    return [p]
+
+
 if __name__ == "__main__":
-    for item_id, build in (("bus_panel", bus_panel), ("car_door", car_door)):
+    for item_id, build in (("bus_panel", bus_panel), ("car_door", car_door),
+                           ("car_wheel", car_wheel)):
         if wanted(item_id):
             item(item_id, build)

@@ -445,6 +445,12 @@
             category: Material, size: Bulky, mass: 16.0, bulk: 20.0,
             tags: ["metal"],
         ),
+        (
+            id: "car_wheel", dims: Some((0.6, 0.6, 0.18)), name: "Car wheel",
+            description: "A road wheel off a wreck. The tyre's flat; the rim's steel.",
+            category: Material, size: Bulky, mass: 9.0, bulk: 25.0,
+            tags: ["metal", "polymer"],
+        ),
 
         // ---------------------------------------------------------------
         // Robot parts
