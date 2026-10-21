@@ -452,7 +452,9 @@ fn furnish(world: &mut World) {
     }
     for saved in &stash {
         if let Some(e) = crate::persist::restore_item(world, saved, Transform::IDENTITY) {
-            crate::persist::put_in_bag(world, e, bag, Vec3::from_array(saved.local));
+            let local = Vec3::from_array(saved.local);
+            crate::persist::put_in_bag(world, e, bag, local);
+            crate::persist::place_unseated(world, e, Some((bag, local)));
         }
     }
 }

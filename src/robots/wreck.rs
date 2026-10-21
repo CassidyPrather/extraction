@@ -119,6 +119,22 @@ impl Plugin for WreckPlugin {
     }
 }
 
+/// The Surge sweeps every robot's wreck away with everything else loose in
+/// the Zone. Without it a wreck (its root, its parts, their colliders and
+/// meshes) stayed for the whole session: one more for every robot you
+/// ever brought down (soak finding, `docs/SOAK.md`).
+pub fn clear_wrecks(world: &mut World) {
+    let wrecks: Vec<Entity> = world
+        .query::<(Entity, &Robot)>()
+        .iter(world)
+        .filter(|(_, r)| r.wrecked)
+        .map(|(e, _)| e)
+        .collect();
+    for e in wrecks {
+        world.despawn(e);
+    }
+}
+
 fn debris_body(mass: f32, collider: Collider, inertia: Vec3) -> impl Bundle {
     (
         RigidBody::Dynamic,

@@ -673,6 +673,8 @@ fn buttons(
 ) {
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     racks.clear();
+    // Only guns in hand: every gun ever held stayed in here.
+    last.retain(|e, _| guns.contains(*e));
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;

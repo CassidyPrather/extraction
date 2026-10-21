@@ -161,6 +161,7 @@ fn inject(
     if *driver != RigDriver::Xr {
         return;
     }
+    last.retain(|e, _| items.contains(*e));
     for (e, item, held, gt) in &items {
         let def = catalog.get(item.kind());
         if def.id != "regen_injector" {

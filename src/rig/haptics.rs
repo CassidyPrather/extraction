@@ -293,6 +293,8 @@ fn hand_haptics(
 ) {
     let now = time.elapsed_secs();
     pulled.retain(|_, t| now - *t < 2.0);
+    // Food eaten from the hand is gone without a Released.
+    in_hand.retain(|e, _| items.contains(*e));
     let mass = |item: Entity| {
         items
             .get(item)
