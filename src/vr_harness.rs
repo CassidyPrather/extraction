@@ -1151,6 +1151,55 @@ mod tests {
         }
     }
 
+    /// One-handed, a magazine in the hand touched to a box of rounds set
+    /// down fills; with two hands, the box has to be in the other hand.
+    #[test]
+    fn one_handed_fill_a_magazine_from_a_box_set_down() {
+        for one_handed in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .one_handed = one_handed;
+            let feet = vr.root().translation;
+            vr.step(10);
+            let box_at = feet + Vec3::new(0.1, 0.9, -0.45);
+            let ammo = vr.spawn("ammo_9x18", Transform::from_translation(box_at));
+            vr.app
+                .world_mut()
+                .entity_mut(ammo)
+                .insert(RigidBody::Static);
+            let mag_at = feet + Vec3::new(0.3, 1.0, -0.45);
+            let mag = vr.spawn("pm_mag", Transform::from_translation(mag_at));
+            vr.app.world_mut().entity_mut(mag).insert(RigidBody::Static);
+            vr.hand(Side::Right, mag_at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(mag));
+            let before = vr
+                .app
+                .world()
+                .get::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds;
+            // Down onto the box where it lies.
+            vr.move_hand(Side::Right, box_at + Vec3::Y * 0.03);
+            vr.step(10);
+            let after = vr
+                .app
+                .world()
+                .get::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds;
+            assert_eq!(
+                after > before,
+                one_handed,
+                "{before} -> {after}, one-handed {one_handed}"
+            );
+        }
+    }
+
     /// One-handed: the pistol's empty well brought down onto a magazine in a
     /// pouch takes it, and the second button racks a round in; no second
     /// hand anywhere. With two hands, the same move does nothing.
