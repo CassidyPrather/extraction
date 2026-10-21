@@ -210,3 +210,98 @@ What the first pass found and changed:
   (Story/Map design).
 
 Before and after, as the render gauge saw them: `docs/shots/legibility/`.
+
+## Affordances
+
+Can someone new tell what can be taken, pressed, pulled, turned or
+climbed? `src/render/affordance.rs` lists every kind of interactable with
+the cues it gives (a contrasting colour, a light, a shape you know, the
+ring round it when an empty hand is near or points at it, the
+controller's tick and click), and tests hold every kind to:
+
+- at least two cues, at least one seen before you touch it;
+- the part you take hold of at least 1° across from 1.5 m (about 14 eye
+  pixels: 2.6 cm);
+- its claims true in the game (a kind that says the ring shows is where
+  the hand's hover finds it);
+- every interactable in every valley, the yard and the camp a known kind
+  (a new `Pressable` doesn't compile without one; a new grabbable thing
+  fails the test).
+
+What it found and what changed:
+
+- **The near hover lit only the glove**, a faint green, and the thing
+  itself never showed it could be taken. The ring that marks a far-grab
+  target now also marks what an empty hand would take where it is
+  (`render::props::far_cue`).
+- **The furnace's levers** (and the underground's breakers, valves,
+  pumps and mine tubs) wore the bench lever's 16 cm black stub: every
+  run-lever got it. The bench keeps its own; the furnace's levers are
+  wall levers you can see across a room (yellow plate, dark arm, red
+  knob); fixtures with a look of their own get no stub.
+- **The truck's bell pull**'s toggle was the colour of its rope: it's
+  red now.
+- **Climbing ropes** were 2.2 cm and tan (0.84° from 1.5 m, lost in rock
+  and trees): 3.2 cm and climbing-rope orange.
+- Doors, the folding shield and mine tubs are on the world layer and
+  get no ring; their shapes carry them (handles, a tub on rails).
+
+## Wayfinding
+
+Can you find your way without a HUD? `--wayfind DIR`
+(`scripts/wayfind.sh MAP [OUT] [--weather fog] [--hour night]`) stands
+where you get your bearings (where the truck sets you down, every
+rendezvous), turns to each landmark in range (a placement at least
+`map_lint::LANDMARK_HEIGHT` tall, 5–320 m off: past the lint's 200 m
+clear sight, out to its uniqueness range) at the headset's
+pixels a degree, and shoots it with and without the landmark, time
+frozen. What differs, inside the landmark's box in the picture, is the
+landmark as the eye gets it through fog, trees and dark. It counts if it
+covers 25 pixels at a contrast of 0.08, or its lamp shows (4 pixels at
+0.4). Every vantage needs one.
+
+Marrow Creek, first run:
+
+| | drizzle | fog | night |
+| - | - | - | - |
+| Vantages with a landmark | 4 of 4, two of them barely (0.08–0.10) | 1 of 4 | 2 of 4 (two lamps the models already had) |
+
+Landmarks past about 200 m in drizzle, and all of them at night, had a
+few percent of contrast left: the map lint's line of sight says they're
+there, the fog and the dark say otherwise. So:
+
+- **Lamps on the landmarks** (`render::landmarks`): everything tall
+  enough to steer by carries a steady red lamp at its highest point, as
+  masts and chimneys do (red and steady: the drones' beacons are amber
+  and blink). A lamp a few pixels across outshines the fog and the dark.
+  With them (first at 0.22 m, since enlarged to 0.35 m): drizzle 4 of 4,
+  night 4 of 4. Fog stays hard past 150 m,
+  which is what fog is for (`map_lint::FOG_SIGHT`).
+- **The compass needle** was red from end to end: nothing said which end
+  was north. Red to the north, dark steel to the south.
+- **The field map** draws every landmark as a pencilled tower with a red
+  lamp dot and a short name, so what you see can be found on the paper
+  (`scripts/field_map.py`; `map_lint::tests::field_map_draws_the_landmarks`
+  keeps its landmark height and names in step with the game's).
+- **The sky** as a compass: toward the sun the sky is 1.65–1.7x as bright
+  as away from it in every valley by day; by night, toward the moon, only
+  1.09–1.14x (passed to Visual design).
+
+All five valleys, with the lamps (vantages with a landmark to steer by):
+
+| Valley | drizzle | night |
+| - | - | - |
+| Marrow Creek | 4 of 4 | 4 of 4 |
+| Kettle Pass | 4 of 4 (the hunting lodge by the mast's lamp, 170 m) | 3 of 4 before the mast was lit |
+| Cinder Works | 3 of 4: the fire lookout's only other landmark is a chimney at 300 m (passed to Map design) | 4 of 4 |
+| Sallow Reservoir | 4 of 4 | 4 of 4 |
+
+## Night
+
+At night the render gauges (`--legibility`, `--afford`, `--wayfind`
+with `--hour night`) find: every panel reads (screens are self-lit, the
+yard's boards have their lanterns, notes indoors are lit now that the
+ambient doesn't drain); the truck's interactables read under its lamp;
+interactables out in the dark don't, by design, until you bring a light
+or put your hand to them: the grab ring is self-lit; landmarks show by
+their lamps.

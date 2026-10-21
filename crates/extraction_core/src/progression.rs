@@ -436,27 +436,54 @@ pub enum Job {
         #[serde(default)]
         seen: bool,
     },
+    /// A contract's: bring home `item`, left by `place` in `map`.
+    Bring {
+        map: String,
+        place: String,
+        item: String,
+        at: [f32; 2],
+    },
+    /// A contract's: leave `item` by `place` in `map`, then get home.
+    Plant {
+        map: String,
+        place: String,
+        item: String,
+        at: [f32; 2],
+        #[serde(default)]
+        planted: bool,
+    },
+    /// A contract's: photograph `subject` with its camera, then get home.
+    Photograph {
+        subject: crate::contracts::Subject,
+        #[serde(default)]
+        taken: bool,
+    },
 }
 
 impl Job {
     /// The valley it's in, if it's in one.
     pub fn map(&self) -> Option<&str> {
         match self {
-            Job::Fetch { .. } => None,
+            Job::Fetch { .. } | Job::Photograph { .. } => None,
             Job::Letter => Some(LETTER_MAP),
             Job::Ledger => Some(LEDGER_MAP),
-            Job::Recover { map, .. } | Job::Scout { map, .. } => Some(map),
+            Job::Recover { map, .. }
+            | Job::Scout { map, .. }
+            | Job::Bring { map, .. }
+            | Job::Plant { map, .. } => Some(map),
         }
     }
 
     /// Where it's pencilled on the field map, if anywhere yet.
     pub fn mark(&self) -> Option<(&str, [f32; 2])> {
         match self {
-            Job::Fetch { .. } => None,
+            Job::Fetch { .. } | Job::Photograph { .. } => None,
             Job::Letter => Some((LETTER_MAP, LETTER_AT)),
             Job::Ledger => Some((LEDGER_MAP, [LEDGER_AT[0], LEDGER_AT[2]])),
             Job::Recover { map, at, .. } => at.map(|a| (map.as_str(), a)),
-            Job::Scout { map, at, .. } => Some((map.as_str(), *at)),
+            Job::Scout { map, at, .. }
+            | Job::Bring { map, at, .. }
+            | Job::Plant { map, at, .. } => Some((map.as_str(), *at)),
         }
     }
 }
@@ -506,6 +533,14 @@ pub struct Progress {
     /// ([`STANDING_QUIET`]). Kept in step with the game's epilogue.
     #[serde(default)]
     pub quiet: bool,
+    /// The driver's contract under way (`contracts`), the ones done, and
+    /// the trust they've earned.
+    #[serde(default)]
+    pub contract: Option<crate::contracts::Active>,
+    #[serde(default)]
+    pub contracts_done: Vec<String>,
+    #[serde(default)]
+    pub trust: u32,
 }
 
 impl Progress {
@@ -613,6 +648,52 @@ impl Progress {
 
     /// A job done. Returns what's fitted for it, if it finished a tier.
     pub fn complete(&mut self) -> &'static [Upgrade] {
+        self.complete_job().0
+    }
+
+    /// A job done: what's fitted for it, if it finished a tier, and the
+    /// contract it finished, if it was a contract's last step (its trust is
+    /// counted; its pay and unlocks are the caller's to hand over).
+    pub fn complete_job(
+        &mut self,
+    ) -> (
+        &'static [Upgrade],
+        Option<&'static crate::contracts::Contract>,
+    ) {
+        let finished = self.advance_contract();
+        (self.complete_tier(), finished)
+    }
+
+    fn advance_contract(&mut self) -> Option<&'static crate::contracts::Contract> {
+        let a = self.contract.as_mut()?;
+        let c = crate::contracts::contract(&a.id);
+        a.step += 1;
+        let c = match c {
+            Some(c) if (a.step as usize) < c.steps.len() => return None,
+            // (A contract this build doesn't know: let it go.)
+            None => {
+                self.contract = None;
+                return None;
+            }
+            Some(c) => c,
+        };
+        self.contract = None;
+        self.contracts_done.push(c.id.to_owned());
+        self.trust += c.trust;
+        Some(c)
+    }
+
+    /// Start the contract the driver would offer now, if any.
+    pub fn start_contract(&mut self) -> Option<&'static crate::contracts::Contract> {
+        let c = crate::contracts::next_contract(self)?;
+        self.contract = Some(crate::contracts::Active {
+            id: c.id.to_owned(),
+            step: 0,
+        });
+        Some(c)
+    }
+
+    fn complete_tier(&mut self) -> &'static [Upgrade] {
         self.done += 1;
         self.job = None;
         let Some(tier) = TIERS.get(self.tier as usize) else {
@@ -650,7 +731,10 @@ impl Progress {
     /// A fetch still unmet after [`FETCH_PATIENCE`] raids: the driver
     /// wants something else (some parts may just not be turning up).
     pub fn fetch_gone_stale(&self, raids: u32) -> bool {
-        matches!(self.job, Some(Job::Fetch { .. })) && raids >= self.job_raid + FETCH_PATIENCE
+        // (A contract's fetch waits: the contract would be lost with it.)
+        self.contract.is_none()
+            && matches!(self.job, Some(Job::Fetch { .. }))
+            && raids >= self.job_raid + FETCH_PATIENCE
     }
 
     pub fn count_raid(&mut self, map: &str) {
@@ -667,10 +751,11 @@ impl Progress {
             .map_or(0, |(_, n)| *n)
     }
 
-    /// The route card offers `map`: the later valleys only once the career
-    /// has raided each of the first three.
+    /// The route card offers `map`: the later valleys only once a contract
+    /// has opened them (the overflow, offered once the career has raided
+    /// each of the first three: `contracts`).
     pub fn opens(&self, map: &str) -> bool {
-        !LATE_VALLEYS.contains(&map) || FIRST_VALLEYS.iter().all(|v| self.raids_in(v) > 0)
+        !LATE_VALLEYS.contains(&map) || crate::contracts::opened(self, map)
     }
 }
 
@@ -991,13 +1076,15 @@ mod tests {
     }
 
     #[test]
-    fn the_fourth_valley_opens_after_the_other_three() {
+    fn the_fourth_valley_opens_with_the_overflow_contract() {
         let mut p = Progress::default();
         assert!(p.opens("marrow_creek") && !p.opens("sallow_reservoir"));
         p.count_raid("marrow_creek");
         p.count_raid("kettle_pass");
         assert!(!p.opens("sallow_reservoir"));
         p.count_raid("cinder_works");
+        assert!(!p.opens("sallow_reservoir"), "it takes the overflow");
+        p.contracts_done.push("the_overflow".into());
         assert!(p.opens("sallow_reservoir"));
     }
 
@@ -1194,6 +1281,7 @@ mod tests {
                         assert!(deep, "{id}: {region}");
                     }
                     Job::Fetch { .. } | Job::Letter | Job::Ledger => {}
+                    j => panic!("{id}: a contract's job from roll_job: {j:?}"),
                 }
             }
         }

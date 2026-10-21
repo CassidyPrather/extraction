@@ -50,6 +50,15 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// Where snow can lie (m): above it, falling weather comes as snow
+    /// and lies on what faces up. None: the valley's too low
+    /// (`world::snow`).
+    #[serde(default)]
+    pub snow_line: Option<f32>,
+    /// Snow that lies above the line whatever the weather, 0..1: a high,
+    /// cold valley's snowfields. Falling snow adds to it.
+    #[serde(default)]
+    pub snow: f32,
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,
@@ -315,6 +324,20 @@ pub enum MarkerKind {
     /// A standing anomaly that the Surge never moves: `kind` names an
     /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
     Anomaly { kind: String, radius: f32 },
+    /// A sentry's mast (`robots::sentry`). Its arc is centred straight
+    /// along `rot` (its front faces the way a sign's board would), `arc`
+    /// degrees wide; behind it is blind. `power` is where its junction
+    /// box stands (default: 12 m straight behind the mast).
+    Sentry {
+        #[serde(default = "sentry_arc")]
+        arc: f32,
+        #[serde(default)]
+        power: Option<P2>,
+    },
+}
+
+fn sentry_arc() -> f32 {
+    220.0
 }
 
 impl MarkerKind {
@@ -373,6 +396,19 @@ pub fn prefab_base(id: &str) -> &str {
         .iter()
         .find_map(|s| id.strip_suffix(s))
         .unwrap_or(id)
+}
+
+/// Walls a prefab builds out past its footprint, as centre and half
+/// extents (x, z) in the prefab's own frame, unrotated. They aren't
+/// footprint (the lint doesn't count them as standing anywhere), but the
+/// nav grid blocks them: nothing walks through a wall it can't see. The
+/// prefab's own tests check these agree with what it builds.
+pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
+    match prefab_base(id) {
+        // The face stair's retaining wall (world::dam::stair_wall).
+        "dam_face" => &[([72.5, 10.6], [60.0, 1.5])],
+        _ => &[],
+    }
 }
 
 /// Width (x), height, depth (z) of each prefab, metres, unrotated.

@@ -190,8 +190,15 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/guns/sks.py` | `models/guns/sks.glb` (folding bayonet, dovetail) | 11.6k |
 | `art/guns/nagant.py` | `models/guns/nagant.glb` (cylinder with 7 rounds and 7 cases, gate, rod) | 12.3k |
 | `art/guns/ppsh.py` | `models/guns/ppsh.glb` | 10.8k |
+| `art/guns/mp133.py` | `models/guns/mp133.glb` (the forend, action bars and bolt slide as one `bolt`) | — |
+| `art/guns/svd.py` | `models/guns/svd.glb` (PSO rail on the left, cheek rest) | 11.1k |
+| `art/guns/toz8.py` | `models/guns/toz8.glb` | — |
+| `art/guns/rpk74.py` | `models/guns/rpk74.glb` (`bipod` turns -1.279 rad about its clamp to deploy) | 14.5k |
+| `art/guns/flare_pistol.py` | `models/guns/flare_pistol.glb` (`barrels` tips about the hinge, `hammer`) | 12.8k |
 | `art/mags/{pm_mag,ak_mag,mosin_clip,sks_clip}.py` | `models/mags/<item id>.glb` | 1.0k to 4.3k (with their visible rounds) |
 | `art/mags/ppsh_drum.py` | `models/mags/ppsh_drum.glb` | 8.9k (14 rounds in the window) |
+| `art/mags/{svd_mag,rpk_mag}.py` | `models/mags/<item id>.glb` | 2.3k, 3.7k |
+| `art/items/flares.py` | flare_white, flare_red, flare_green (26 mm signal cartridges, told apart by touch) | 1.2k to 1.5k |
 | `art/items/ammo.py` | ammo_762x39 (20), ammo_762x38r (14), ammo_762x25 (70) and their loose rounds | 1.6k to 3.8k |
 | `art/robots/drone.py` | `models/robots/drone.glb` | 7.7k |
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
@@ -244,7 +251,8 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 - **One object per motion.** A gun's top-level objects are named for the
   layout's `Moves`: `static*`, `bolt*` (slides with the bolt), `turnbolt*`
   (turns about its origin's Z axis, then slides), `barrels*` (tips about
-  the layout's hinge), `trigger*`, `selector*` (turns about X). Each
+  the layout's hinge), `trigger*`, `selector*` (turns about X), `bipod*` (turns about its origin's X to
+deploy). Each
   object's origin is the point it moves from. The Mosin's bolt is coaxial
   with the bore, so its origin is on the bore axis.
 - **Named points.** Empties named `pt_*` mark the layout's points for
@@ -332,6 +340,19 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
   box and doesn't stick out of it; anything flat or long has `dims`
   rather than a bulk cube (`every_item_model_fits_its_box` checks).
   `_kit.centred` moves a model's bounds onto the box.
+  Its lowest point sits within 6 mm of the box's floor: a tip poking
+  below it fails as surely as one sticking out.
+- **Budgets.** Guns 15-25k tris, magazines up to about 9k, items about 3k.
+  Spend it where a player's face and hands are.
+- **Item LODs.** An item's `<name>_lod1` node draws only beyond
+  `ITEM_LOD` (6 m), its other nodes only inside it
+  (`models::item_lod_range`). `check.py` doesn't count a node and its
+  `_lodN` stand-ins as z-fighting.
+- **Stamped text.** `text()`/`text_round()` heights are literal floats
+  (the legibility test reads argument 3 from the script), and a script
+  with letters is listed in `legibility::ART`.
+- **Sling points.** Long guns carry `pt_sling_front` and `pt_sling_rear`
+  empties at their swivels or slots.
 - **UVs in metres.** Faces are box-projected, 1 UV unit = 1 m, with U
   along the gun on sides and tops, so the tiling scans keep one texel
   density and the wood grain follows the stock.

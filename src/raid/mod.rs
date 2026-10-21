@@ -10,6 +10,7 @@
 
 pub mod bench;
 pub mod board;
+pub mod captions;
 pub mod chatter;
 pub mod comfort_board;
 pub mod epilogue;
@@ -154,6 +155,7 @@ impl Plugin for RaidPlugin {
             crate::camp::CampPlugin,
             crate::capstone::CapstonePlugin,
             chatter::ChatterPlugin,
+            captions::CaptionsPlugin,
             logbook::LogbookPlugin,
             requests::RequestsPlugin,
             board::BoardPlugin,
@@ -270,7 +272,8 @@ fn radio_calls(
                     continue;
                 };
                 let n = raid.clock as u32;
-                raid.say(lines::fill(lines::pick(lines::CALLED, n), name, 0.0, ""));
+                let b = lines::way(here, rvs[i].1);
+                raid.say(lines::fill(lines::pick(lines::CALLED, n), name, 0.0, &b));
                 raid.phase = Phase::TruckCalled {
                     rv: i,
                     eta: TRUCK_TRANSIT,
@@ -281,12 +284,20 @@ fn radio_calls(
                 raid.say(lines::fill(lines::pick(lines::ON_THE_WAY, n), "", eta, ""))
             }
             Phase::TruckWaiting { rv, .. } => {
-                let name = rendezvous(&zone)
-                    .get(rv)
-                    .map(|r| r.0.clone())
-                    .unwrap_or_else(|| "gate".into());
+                let (name, at) = rendezvous(&zone).get(rv).cloned().unwrap_or_else(|| {
+                    let gate = zone
+                        .map
+                        .markers_of(&MarkerKind::ShortExfil)
+                        .next()
+                        .map_or([0.0, 0.0], |m| m.at);
+                    ("gate".into(), gate)
+                });
+                let b = players
+                    .get(call.player)
+                    .map(|p| lines::way([p.translation().x, p.translation().z], at))
+                    .unwrap_or_default();
                 let n = raid.clock as u32;
-                raid.say(lines::fill(lines::pick(lines::WAITING, n), &name, 0.0, ""));
+                raid.say(lines::fill(lines::pick(lines::WAITING, n), &name, 0.0, &b));
             }
             _ => {}
         }

@@ -4523,10 +4523,11 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     // its side panels each a thing to prise off (`Breakable`, for scrap
     // and cover), the core still solid behind.
     let skin = 0.03;
+    // (Bare, rusted under its skin: a panel prised off shows it.)
     b.bx(
         Vec3::new(w - 2.0 * skin, 1.05, len),
         floor + Vec3::new(0.0, body_lo + 0.525 - floor.y, 0.0),
-        Mat::PaintedMetal,
+        Mat::RustyMetal,
     );
     let door_z = -len * 0.5 + 1.0;
     for side in [-1.0f32, 1.0] {
@@ -5392,7 +5393,7 @@ pub fn swing_doors(
 /// A building waiting for its props' models before it builds its meshes
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
-pub struct PropsPending(u32);
+pub struct PropsPending(pub(crate) u32);
 
 /// Build a building's meshes again (its walls changed: a breach, or the
 /// Surge mending one). Its merged meshes go; `dress_buildings` makes new.

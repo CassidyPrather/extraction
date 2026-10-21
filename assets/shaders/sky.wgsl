@@ -20,6 +20,9 @@ struct SkyParams {
     cloud: vec4<f32>,
     // A low sun's glow on its side of the horizon: rgb, strength in w.
     glow: vec4<f32>,
+    // Lightning (`world::storm`): xyz toward the strike, w how bright
+    // (against a day's horizon).
+    flash: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> sky: SkyParams;
@@ -212,8 +215,26 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
+    // Lightning: the deck lit from inside, the bellies most, brightest
+    // round the strike and the whole sky a little.
+    if (sky.flash.w > 0.0) {
+        let c = max(dot(dir, normalize(sky.flash.xyz)), 0.0);
+        // (As bright as the ground it lights: a day's horizon, several
+        // times over; less where the deck is thin.)
+        // (Scaling the deck keeps its shape: the bellies, thickest, glow
+        // most. Added flat, it went to a featureless sheet.)
+        let lit = sky.flash.w * (0.45 + 1.2 * pow(c, 6.0) + 3.0 * pow(c, 48.0));
+        // Plus its own glow, as bright as the lit air (at night there's
+        // nothing to scale: the cloud was a flat band behind a lit valley).
+        col = col * (1.0 + lit * (0.5 + 2.2 * belly) * mix(0.5, 1.0, detail))
+            + vec3<f32>(0.72, 0.78, 1.0) * 0.216 * lit * (0.6 + 0.8 * belly) * mix(0.5, 1.0, detail);
+    }
+
     // Toward and below the horizon the sky is fog.
     let fog_t = 1.0 - smoothstep(-0.02, 0.14, up);
-    col = mix(col, horizon, fog_t);
+    // In a flash the fog is lit as `world::storm` lights the fog itself
+    // (else the fogged tree line stood out pale against a darker band).
+    let air = vec3<f32>(0.72, 0.78, 1.0) * 0.216 * max(sky.flash.w, 0.0);
+    col = mix(col, horizon + air, fog_t);
     return vec4<f32>(col, 1.0);
 }

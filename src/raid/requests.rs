@@ -212,6 +212,30 @@ fn press_card(
                 }
                 Vec::new()
             }
+            Job::Bring { item: id, .. } => {
+                let have = in_stash(id, 1);
+                if have.is_empty() {
+                    raid.say(lines::not_brought(&crate::progression::want_name(
+                        &catalog, id,
+                    )));
+                    continue;
+                }
+                have
+            }
+            Job::Plant { place, planted, .. } => {
+                if !planted {
+                    raid.say(lines::not_planted(place));
+                    continue;
+                }
+                Vec::new()
+            }
+            Job::Photograph { taken, .. } => {
+                if !taken {
+                    raid.say(lines::NO_PHOTO);
+                    continue;
+                }
+                Vec::new()
+            }
         };
         for (holder, e) in handed {
             if let Ok(mut b) = bags.get_mut(holder) {
@@ -423,19 +447,57 @@ fn find_cache(
     }
 }
 
+/// Which way a job's spot in this valley is from where the truck drops
+/// you, and that it's ringed on the map: the place's name alone means
+/// nothing to someone new (its sheet is in the kit).
+fn way_from_the_drop(
+    job: &extraction_core::progression::Job,
+    map: &str,
+    zone: &crate::world::Zone,
+) -> String {
+    let seen = matches!(
+        job,
+        extraction_core::progression::Job::Scout { seen: true, .. }
+    );
+    let Some((_, at)) = job.mark().filter(|(m, _)| *m == map && !seen) else {
+        return String::new();
+    };
+    let Some(drop) = zone
+        .marker(&extraction_core::map::MarkerKind::Insertion)
+        .map(|m| m.at)
+    else {
+        return String::new();
+    };
+    format!(
+        "\nFrom the drop: {}. Ringed on your map.",
+        crate::raid::lines::way(drop, at)
+    )
+}
+
 fn card_text(
     requests: Res<Requests>,
     progression: Res<Progression>,
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
     epilogue: Res<crate::raid::epilogue::Epilogue>,
+    zone: Res<crate::world::Zone>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
 ) {
     let p = &progression.0;
     let tier = p.tier_def();
-    let mut text = if (p.tier as usize) < TIERS.len() {
+    let contract = p
+        .contract
+        .as_ref()
+        .and_then(|a| extraction_core::contracts::contract(&a.id).map(|c| (a, c)));
+    let mut text = if let Some((a, c)) = contract {
+        let mut head = lines::contract_head(c.name, c.giver, a.step, c.steps.len());
+        if let Some(says) = c.says.get(a.step as usize).filter(|s| !s.is_empty()) {
+            head += &format!("\"{says}\"\n");
+        }
+        head
+    } else if (p.tier as usize) < TIERS.len() {
         format!(
             "{} - JOB {} OF {}\n",
             tier.name.to_uppercase(),
@@ -446,7 +508,10 @@ fn card_text(
         "DRIVER WANTS\n".to_owned()
     };
     match &p.job {
-        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done),
+        Some(job) => {
+            text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
+            text += &way_from_the_drop(job, &opts.map, &zone);
+        }
         None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {
