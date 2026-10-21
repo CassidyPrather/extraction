@@ -1606,3 +1606,28 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
         assert!(after.iter().any(|q| q.1.distance(p) < 0.01), "back at {p}");
     }
 }
+
+/// Not a check: where Marrow Creek's shutters, fence panels and the bus's
+/// parts are, for the shots.
+#[test]
+#[ignore]
+fn list_parts() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for (g, t, s) in app
+        .world_mut()
+        .query::<(&GlobalTransform, &Timber, Has<super::strip::Splinters>)>()
+        .iter(app.world())
+    {
+        if t.max == super::wood::DOOR_HP || t.max == super::wood::CRATE_HP {
+            continue;
+        }
+        let out = g.rotation() * Vec3::NEG_Z;
+        println!(
+            "part hp {} wood {s} at {:.2} out {:.2}",
+            t.max,
+            g.translation(),
+            out
+        );
+    }
+}

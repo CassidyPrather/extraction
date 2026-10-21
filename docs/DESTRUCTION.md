@@ -268,7 +268,10 @@ under a window broken from inside), `breach.png` (a hole torn in a plank
 house's back wall, its boards on the ground), `boarded.png` (a boarded
 window over the years' broken sash) and `board_off.png` (its middle board
 shot off, splinters falling), `worn.png` (a hole worn through a plank
-wall by a dozen rifle rounds).
+wall by a dozen rifle rounds), `shutters.png` (the foreman's cabin, its
+shutters open either side of the window), `shutter_off.png` (one shot
+off, its splinters at the wall's foot) and `bus.png` (the depot's bus,
+its skirt panels to prise off).
 
 ## Next
 
