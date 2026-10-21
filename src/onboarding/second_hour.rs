@@ -149,6 +149,32 @@ pub(super) fn direct(
             input.locomotion
         );
     }
+    // Lamed, it limps round to look: keep the kiosk between, from where
+    // it is now.
+    let hiding = run
+        .pending
+        .iter()
+        .any(|(r, _)| run.rows[*r].first == First::Lamed);
+    let idle_only =
+        bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
+    if hiding && idle_only && now.fract() < time.delta_secs() {
+        let looking = run
+            .walker
+            .and_then(|w| world.robots.get(w).ok())
+            .is_some_and(|(_, _, b)| {
+                matches!(
+                    b,
+                    crate::robots::Brain::Engage | crate::robots::Brain::Investigate { .. }
+                )
+            });
+        if let (true, Some(from)) = (looking, run.walker.and_then(|w| world.robot_at(w))) {
+            if let Some(t) = world.hide(here, from.xz()).filter(
+                |t| matches!(t.last(), Some(Task::WalkTo { to, .. }) if to.distance(here) > 2.0),
+            ) {
+                cut_in(&mut bot, t);
+            }
+        }
+    }
     if let Ok(h) = world.health.get(player) {
         if (h.hp - run.dbg_hp).abs() > 3.0 {
             let an = world
@@ -306,29 +332,8 @@ pub(super) fn direct(
                     .walker
                     .and_then(|w| world.robot_at(w))
                     .map_or(here + Vec2::Y, |w| w.xz());
-                match world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
-                    Some(k) => {
-                        // Well behind: a lamed walker still limps a little way to look.
-                        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 9.0;
-                        let side = k.centre
-                            + (here - k.centre)
-                                .reject_from(k.centre - from)
-                                .normalize_or(Vec2::Y)
-                                * 4.0;
-                        (
-                            "walk away from it, out of its sight",
-                            vec![
-                                Task::WalkTo {
-                                    to: side,
-                                    within: 1.0,
-                                },
-                                Task::WalkTo {
-                                    to: behind,
-                                    within: 1.0,
-                                },
-                            ],
-                        )
-                    }
+                match world.hide(here, from) {
+                    Some(t) => ("walk away from it, out of its sight", t),
                     None => (
                         "walk away from it",
                         vec![Task::WalkTo {
@@ -1544,6 +1549,30 @@ impl World2<'_, '_> {
             .filter_map(|(e, ..)| self.robot_at(e))
             .map(|p| p.xz())
             .min_by(|a, b| a.distance(near).total_cmp(&b.distance(near)))
+    }
+
+    /// Round the kiosk near `here` to its far side from `from`: out of
+    /// sight of what's there.
+    fn hide(&self, here: Vec2, from: Vec2) -> Option<Vec<Task>> {
+        let k = self
+            .stair(here)
+            .filter(|k| k.centre.distance(here) < 15.0)?;
+        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 5.0;
+        let side = k.centre
+            + (here - k.centre)
+                .reject_from(k.centre - from)
+                .normalize_or(Vec2::Y)
+                * 4.0;
+        Some(vec![
+            Task::WalkTo {
+                to: side,
+                within: 1.0,
+            },
+            Task::WalkTo {
+                to: behind,
+                within: 1.0,
+            },
+        ])
     }
 
     fn robot_at(&self, robot: Entity) -> Option<Vec3> {
