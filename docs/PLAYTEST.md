@@ -120,6 +120,14 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Your body.** Look down: a jacket, the chest rig and belt on it,
+  trousers and boots. Turn your head and your feet stay put; turn your
+  whole body, or step across the room, and they step after you. Crouch
+  and your knees come forward; bend over and the chest rig and pack lean
+  with you while the holster stays on your hip. Reach right out and your
+  shoulder comes forward. Seated, you sit, the belt on your hips. The
+  **BODY** card on the comfort board hides it. Say if your arms ever look
+  stretched or bent wrong, or if a limb goes through you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
@@ -298,6 +306,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
+| BODY | shown / hidden | your body drawn under you when you look down (torso, legs, boots); hidden, only the arms and hands |
 
 For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
 it on: is anything out of reach, or does anything need the hand you've

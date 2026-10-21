@@ -220,6 +220,12 @@ struct Site {
     job: bool,
 }
 
+/// Stuck this many times running near one spot, the raider gives up the
+/// waypoint it was making for (blocks it in its own grid) and replans.
+const STUCK_REPEATS: u32 = 3;
+/// How much of its grid round that waypoint it gives up, metres.
+const STUCK_BLOCK: f32 = 1.5;
+
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Act {
@@ -291,6 +297,8 @@ pub struct Raider {
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
+    /// Where it last got stuck, and how many times in a row near there.
+    stuck_spot: (Vec2, u32),
     scan: f32,
     clock: f32,
     retreat_until: f32,
@@ -500,6 +508,7 @@ pub fn attach_raider(
                 rv: None,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
+                stuck_spot: (Vec2::ZERO, 0),
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
@@ -886,6 +895,30 @@ pub fn think(
                     json!({"x": round(here.x, 1), "z": round(here.y, 1), "doing": r.doing(),
                            "task": format!("{:?}", bot.tasks.front())}),
                 );
+                // Stuck again and again in one place: the waypoint it's
+                // making for can't be reached from here, whatever the grid
+                // says. Block it in its own grid so the next plan goes round.
+                r.stuck_spot = if here.distance(r.stuck_spot.0) < 4.0 {
+                    (r.stuck_spot.0, r.stuck_spot.1 + 1)
+                } else {
+                    (here, 1)
+                };
+                if r.stuck_spot.1 >= STUCK_REPEATS
+                    && let Some(Task::WalkTo { to, .. }) = bot.tasks.front()
+                {
+                    r.grid.block(
+                        extraction_core::nav::Obstacle::Circle {
+                            at: to.to_array(),
+                            radius: STUCK_BLOCK,
+                        },
+                        0.0,
+                    );
+                    log.event(
+                        "stuck_block",
+                        json!({"x": round(to.x, 1), "z": round(to.y, 1)}),
+                    );
+                    r.stuck_spot.1 = 0;
+                }
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
                 let side = here + Vec2::new(a.cos(), a.sin()) * 3.0;
                 // Give up on what it was reaching for; sidestep; replan.
@@ -1696,6 +1729,34 @@ fn fight_on(
         .filter(|t| hit && r.hp < 45.0 && scene.visible(*t, eye))
         .filter(|_| r.rng.range(0.0, 1.0) < r.traits.duck)
         .and_then(|t| cover_from(scene, eye - Vec3::Y * 1.6, t, 10.0));
+    // A drone that's hitting it: standing there is death, whatever its
+    // health. Out of its sight if anywhere's near; else run across its
+    // line (it can't hit that well: `drone::CROSSING_SPREAD`).
+    let drone = scene
+        .robots
+        .get(target)
+        .is_ok_and(|(_, rb, ..)| rb.kind == crate::robots::RobotKind::Drone);
+    let cover = cover.or_else(|| {
+        threat
+            .filter(|t| drone && hit && scene.visible(*t, eye))
+            .and_then(|t| {
+                let feet = eye - Vec3::Y * 1.6;
+                cover_from(scene, feet, t, 14.0).or_else(|| {
+                    let across = Vec2::new(t.x - feet.x, t.z - feet.z)
+                        .perp()
+                        .normalize_or(Vec2::X);
+                    let side = if r.rng.range(0.0, 1.0) < 0.5 {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    let to = feet.xz() + across * side * 10.0;
+                    scene
+                        .path_clear(eye, Vec3::new(to.x, eye.y, to.y))
+                        .then_some((10.0, to))
+                })
+            })
+    });
     let outcome = outcome
         .or(cover.is_some().then_some("took_cover"))
         .or(lost.then_some("lost"))
@@ -2304,13 +2365,10 @@ fn raid_step(
                         json!({"site": site.name, "items": all, "artifacts": artifacts}),
                     );
                     r.act = Act::Search(s);
-                    if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
-                        let how = t.iter().find_map(|t| match t {
-                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
-                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
-                            _ => None,
-                        });
-                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
+                    if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
+                        // Set down for good: not loot to pick up again.
+                        r.skip.insert(relay);
+                        log.event("plant", json!({"site": r.sites[s].name}));
                         return t;
                     }
                     continue;
@@ -2534,7 +2592,7 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
 
 /// A Plant job's place, reached: the relay out of the pack and set down
 /// on the ground by it.
-fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
+fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Task>)> {
     let Some(CardJob::Plant {
         item,
         at,
@@ -2548,21 +2606,23 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
         return None;
     }
     let relay = *scene.carried(me, item).first()?;
+    let spot = Vec2::from_array(*at);
+    // As the contract scenarios plant (`progression::contracts::scenario`):
+    // close, the gun slung so the right hand's free, the relay into it from
+    // its body slot (drawn) or the pack, a look at the spot, let go.
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
         Task::WalkTo {
-            to: Vec2::from_array(*at),
-            within: 1.5,
+            to: spot,
+            within: 1.0,
         },
+        Task::Stow(Side::Right),
     ];
-    // The hand free first (it may be holding the last thing picked up),
-    // then out of the body slot it was stowed in (drawn), or the pack.
-    t.push(Task::Stow(Side::Left));
-    let socket = scene
+    let (socket, packed) = scene
         .items
         .get(relay)
-        .ok()
-        .and_then(|(.., so, _)| so.map(|s| s.socket));
+        .map(|(.., so, bag)| (so.map(|s| s.socket), bag.is_some()))
+        .unwrap_or_default();
     let mut mine: Vec<Entity> = scene
         .owned_sockets
         .iter()
@@ -2574,23 +2634,33 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
         Some(slot) => t.extend([
             Task::Draw {
                 slot,
-                side: Side::Left,
+                side: Side::Right,
             },
             Task::Wait(0.5),
         ]),
-        None => t.extend([
+        None if packed => t.extend([
             Task::ToggleBackpack,
             Task::Wait(0.6),
             Task::GrabFromHere {
                 item: relay,
-                side: Side::Left,
+                side: Side::Right,
             },
             Task::ToggleBackpack,
             Task::Wait(0.5),
         ]),
+        None => t.push(Task::Grab {
+            item: relay,
+            side: Side::Right,
+        }),
     }
-    t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
-    Some(t)
+    let y = scene.zone.ground(spot.x, spot.y);
+    t.extend([
+        Task::Wait(0.5),
+        Task::LookAt(Vec3::new(spot.x, y, spot.y)),
+        Task::Release(Side::Right),
+        Task::Wait(1.5),
+    ]);
+    Some((relay, t))
 }
 
 /// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend

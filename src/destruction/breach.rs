@@ -534,6 +534,8 @@ fn wear(
     mut out: MessageWriter<Broke>,
     mut geos: Local<HashMap<Entity, (usize, Geo)>>,
 ) {
+    // A building gone (the zone left): its walls with it.
+    geos.retain(|e, _| buildings.contains(*e));
     for h in hits.read() {
         let Ok((e, b, t)) = buildings.get(h.entity) else {
             continue;

@@ -316,6 +316,40 @@
 
         // Where the robots come and go.
         (prefab: "robot_gate", at: (-250.0, -255.0), rot: 45.0),
+
+        // Gardens (Destruction's breakable fence_garden, four plank panels
+        // a run): behind or beside the houses, never on the door side, each
+        // an L with the house wall that's open on its fourth side. Each run
+        // touches its house or the next run, so there's no squeeze.
+        // The gatekeeper's garden, open to the north.
+        (prefab: "fence_garden", at: (68.15, 225.90), rot: 180.0),
+        (prefab: "fence_garden", at: (63.80, 221.75), rot: 90.0),
+        // The weir cottage's side garden (the lane runs behind it), open to the north.
+        (prefab: "fence_garden", at: (-107.35, 157.40), rot: 0.0),
+        (prefab: "fence_garden", at: (-111.70, 153.25), rot: 90.0),
+        // Behind the camp cabin, open to the south.
+        (prefab: "fence_garden", at: (245.35, 224.60), rot: 0.0),
+        (prefab: "fence_garden", at: (249.70, 228.75), rot: 270.0),
+        // Beside the lodge's second cabin, open to the east.
+        (prefab: "fence_garden", at: (229.10, -180.15), rot: 90.0),
+        (prefab: "fence_garden", at: (233.25, -175.80), rot: 180.0),
+        // The low farm's paddock behind the house, open to the east.
+        (prefab: "fence_garden", at: (-189.90, 203.35), rot: 90.0),
+        (prefab: "fence_garden", at: (-189.90, 211.85), rot: 90.0),
+        (prefab: "fence_garden", at: (-185.75, 216.20), rot: 0.0),
+        (prefab: "fence_garden", at: (-177.25, 216.20), rot: 0.0),
+
+        // Car wrecks (Destruction strips their doors, bonnets, boots and
+        // wheels): cover on the verges, never on the road.
+        // Lorry 12, stuck on the third bend with the keys in (the driver's
+        // note is in the road-menders' hut): on the inside of the bend,
+        // its nose up the next leg.
+        (prefab: "wreck_lorry", at: (0.8, -38.5), rot: 68.0),
+        // Left on the climb to the pass by those who walked over it.
+        (prefab: "wreck_lada", at: (18.8, -187.6), rot: 1.0),
+        (prefab: "wreck_uaz", at: (24.2, -217.2), rot: 356.0),
+        // The low farm's car, in its yard between the barn and the house.
+        (prefab: "wreck_lada", at: (-191.0, 178.0), rot: 120.0),
     ],
 
     markers: [

@@ -178,7 +178,7 @@ def fence_panel():
         board(p, (2.0 / n - 0.035, h, 0.02), (x, -0.55 + h / 2, -0.03), "Planks", wear=w,
               bevel=0.002)
     for y in (-0.3, 0.35):
-        p.box((2.0, 0.08, 0.035), (0.0, y, 0.0225), "Timber", bevel=0.003, segs=1)
+        p.box((2.0, 0.08, 0.035), (0.0, y, -0.0025), "Timber", bevel=0.003, segs=1)
     return [p]
 
 

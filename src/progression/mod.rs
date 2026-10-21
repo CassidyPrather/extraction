@@ -1011,7 +1011,7 @@ pub fn career_page(
         lines.push(format!(
             "Convoys: {} ({} things)",
             memorial.convoys,
-            memorial.lost.len()
+            memorial.total_lost()
         ));
     }
     if epilogue {

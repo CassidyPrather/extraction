@@ -9,8 +9,8 @@ subject hidden (`_empty`):
 
 - fallback colours: magenta in the subject (an engine's missing texture);
 - blank views: a view where the subject covers almost nothing;
-- size: a model's size against its folder's range, a prefab's against the
-  footprint the map clears for it;
+- size: a model's size against its folder's range (a prefab's reach is
+  held by `capture::checks::prefabs_stay_inside_their_clearance`);
 - blockouts left standing (a model that never loaded) and pieces whose
   boxes touch nothing (floating), from sweep.json.
 
@@ -98,14 +98,16 @@ def analyse(out, rec, grid):
         a, b = SIZE.get(folder, (0.01, 60.0))
         if not a <= size.max() <= b:
             flags.append(("error", f"{size.max():.2f} m across, outside {a}-{b} m for {folder}"))
-    elif rec.get("footprint"):
-        fp = np.array(rec["footprint"])
-        over = [(k, size[i], fp[i]) for i, k in ((0, "x"), (2, "z")) if size[i] > fp[i] * 1.25 + 1.0]
-        for k, s, f_ in over:
-            flags.append(("warn", f"{s:.1f} m along {k}, the map clears {f_:.1f} m"))
     if rec.get("blockouts"):
         flags.append(("error", f"{rec['blockouts']} blockout boxes still standing"))
-    if rec.get("floating"):
+    # animals/ hold pose sheets (each pose its own node, laid out side by
+    # side, one shown at a time): their flying poses aren't floating.
+    # Robots and the open rig are kits of parts the game places itself.
+    # (`capture::checks::assembled_in_game`.)
+    kit = rec["kind"] == "model" and (
+        rec["subject"].split("/")[0] in ("animals", "robots") or rec["subject"] == "kit/rig_open"
+    )
+    if rec.get("floating") and not kit:
         names = sorted(set(rec["floating"]))
         flags.append(("warn", f"floating: {', '.join(names[:6])}" + (" ..." if len(names) > 6 else "")))
     return flags, stats

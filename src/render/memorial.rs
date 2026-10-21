@@ -170,7 +170,7 @@ fn chalk_tallies(
         );
     }
     // Strokes in fives, the fifth struck through.
-    let n = m.lost.len().min(MAX_ROWS * GROUPS_PER_ROW * 5);
+    let n = (m.total_lost() as usize).min(MAX_ROWS * GROUPS_PER_ROW * 5);
     for k in 0..n {
         let group = k / 5;
         let row = group / GROUPS_PER_ROW;

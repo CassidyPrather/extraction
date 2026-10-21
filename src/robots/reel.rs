@@ -11,7 +11,9 @@
 //! ```
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
-//! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
+//! you), `damaged` (plates on their last bolt, the core smoking, its
+//! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
+//! off: it drags itself across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `knockdown` (a heavy round into a walker's
 //! side: down, and up again), `rubble` (a walker over a heap of broken
@@ -199,8 +201,23 @@ fn reel(
                 .into_iter()
                 .enumerate()
                 {
-                    let p = eye + flat * d + right * x;
-                    let at = zone.on_ground(p.x, p.z);
+                    // Swung round (up to 25°) until the ground between
+                    // doesn't hide it: any map, any camera.
+                    let at = (0..=20)
+                        .map(|i| {
+                            (if i % 2 == 0 { 1.0 } else { -1.0 }) * (i / 2 + i % 2) as f32 * 2.5
+                        })
+                        .map(|deg: f32| {
+                            let b = (x / d).atan() + deg.to_radians();
+                            let dir = flat * b.cos() + right * b.sin();
+                            let p = eye + dir * d;
+                            zone.on_ground(p.x, p.z)
+                        })
+                        .find(|at| in_sight(&zone, eye, *at + Vec3::Y * 1.1))
+                        .unwrap_or_else(|| {
+                            let p = eye + flat * d + right * x;
+                            zone.on_ground(p.x, p.z)
+                        });
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
                     commands
                         .entity(w)
@@ -213,7 +230,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" => {
+            "wreck" | "shot" | "knockdown" | "damaged" => {
                 let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
@@ -343,20 +360,26 @@ fn reel(
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
+                "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
         for (e, mut p, gt) in &mut parts {
-            if p.robot != subject || p.role != PartRole::Leg(1) {
+            let shot_off = match what {
+                "crawl" => matches!(p.role, PartRole::Leg(0) | PartRole::Leg(1)),
+                _ => p.role == PartRole::Leg(1),
+            };
+            if p.robot != subject || !shot_off {
                 continue;
             }
+            let role = p.role;
             match what {
-                "limp" => {
+                "limp" | "crawl" => {
                     p.hp = 0.0;
                     destroyed.write(PartDestroyed {
                         robot: subject,
                         part: e,
-                        role: PartRole::Leg(1),
+                        role,
                         at: gt.translation(),
                     });
                 }
@@ -415,6 +438,20 @@ fn reel(
                 recoil: 0.0,
                 seed: frame as u64,
             });
+        }
+    }
+    // Shot about but going: plates on their last bolt, the core at a fifth
+    // (smoke, sparks, a guttering eye).
+    if what == "damaged" && frame == 5 {
+        for (_, mut p, _) in &mut parts {
+            if p.robot != subject {
+                continue;
+            }
+            match p.role {
+                PartRole::Armour(_) => p.hp = p.max_hp * 0.3,
+                PartRole::Core => p.hp = p.max_hp * 0.2,
+                _ => {}
+            }
         }
     }
     // One heavy round into its side: it goes down, lies a moment, gets up.
@@ -486,4 +523,12 @@ fn reel(
             }
         },
     );
+}
+
+/// Whether the ground between `eye` and `to` leaves it in view.
+fn in_sight(zone: &Zone, eye: Vec3, to: Vec3) -> bool {
+    (1..40).all(|i| {
+        let p = eye.lerp(to, i as f32 / 40.0);
+        zone.ground(p.x, p.z) < p.y - 0.2
+    })
 }

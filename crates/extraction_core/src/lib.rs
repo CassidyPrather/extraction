@@ -7,6 +7,7 @@
 
 pub mod ammo;
 pub mod anomaly;
+pub mod cold;
 pub mod contracts;
 pub mod cooking;
 pub mod cover;
@@ -31,6 +32,8 @@ pub mod map_sentry;
 pub mod map_sight;
 pub mod map_surge;
 pub mod melee;
+pub mod mender;
+pub mod minelayer;
 pub mod music;
 pub mod nav;
 pub mod noise;
@@ -39,6 +42,7 @@ pub mod rocks;
 pub mod safehouse;
 pub mod save;
 pub mod sentry;
+pub mod spotter;
 pub mod terrain;
 pub mod underground;
 pub mod unity;

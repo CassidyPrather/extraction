@@ -547,6 +547,80 @@ pub const MIGRATE_STEP: f32 = 7.0;
 /// stays, stirring in place.
 const MIGRATE_FLAT: f32 = 0.03;
 
+/// A camera looking at an anomaly: where it stands (x, z, eye height
+/// over the ground), and its yaw and pitch in degrees (yaw 0 looks down
+/// -z, 90 down +x; pitch up is positive), as `--camera` takes them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct View {
+    pub at: [f32; 2],
+    pub yaw: f32,
+    pub pitch: f32,
+}
+
+/// What stands in a line of sight across a valley, (x/z, how near the line
+/// may pass): every trunk, every rock (by its long side), every building
+/// and prop the map places.
+pub fn sight_blockers(map: &MapDef, hm: &Heightmap) -> Vec<([f32; 2], f32)> {
+    let trees = crate::forest::scatter_trees(map, hm)
+        .into_iter()
+        .map(|t| ([t.pos[0], t.pos[2]], 1.5));
+    let rocks = crate::rocks::scatter_rocks(map, hm).into_iter().map(|r| {
+        let long = r.radius * r.stretch.max(1.0 / r.stretch);
+        ([r.pos[0], r.pos[2]], long + 0.5)
+    });
+    let built = map.placements.iter().map(|p| {
+        let f = crate::map::prefab_footprint(&p.prefab);
+        (p.at, f[0].max(f[2]) * 0.5 + 0.5)
+    });
+    trees.chain(rocks).chain(built).collect()
+}
+
+/// A view of the anomaly `a` from `dist` off: of sixteen bearings, the one
+/// on the gentlest ground whose line to a metre over its centre is clear of
+/// rises, of `blockers` ([`sight_blockers`]) and of the other anomalies,
+/// and off roads and water. None if every side is blocked.
+pub fn view_of(
+    hm: &Heightmap,
+    a: &AnomalySpec,
+    others: &[AnomalySpec],
+    blockers: &[([f32; 2], f32)],
+    dist: f32,
+) -> Option<View> {
+    let target = hm.height(a.at) + 1.0;
+    let mut best: Option<(f32, [f32; 2])> = None;
+    for k in 0..16 {
+        let b = k as f32 / 16.0 * std::f32::consts::TAU;
+        let cam = [a.at[0] + b.cos() * dist, a.at[1] + b.sin() * dist];
+        if hm.road_at(cam).weight > 0 || hm.water_level(cam).is_some() || hm.slope_deg(cam) > 18.0 {
+            continue;
+        }
+        let eye = hm.height(cam) + 1.7;
+        let line = [cam, a.at];
+        let clear = (1..40).all(|i| {
+            let t = i as f32 / 40.0;
+            hm.height(geom::lerp(cam, a.at, t)) < eye + (target - eye) * t - 0.4
+        }) && blockers
+            .iter()
+            .all(|(b, r)| geom::polyline_closest(&line, *b).0 > *r)
+            && others
+                .iter()
+                .filter(|o| geom::dist(o.at, a.at) > 0.5)
+                .all(|o| geom::polyline_closest(&line, o.at).0 > o.radius * 2.5 + 2.0);
+        let slope = hm.slope_deg(cam);
+        if clear && best.is_none_or(|(s, _)| slope < s) {
+            best = Some((slope, cam));
+        }
+    }
+    let (_, cam) = best?;
+    let d = [a.at[0] - cam[0], a.at[1] - cam[1]];
+    let eye = hm.height(cam) + 1.7;
+    Some(View {
+        at: cam,
+        yaw: d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0),
+        pitch: ((target - eye) / dist).atan().to_degrees(),
+    })
+}
+
 /// The anomalies of a Surge cycle. Each [`SURGE_EPOCH`]-th cycle scatters
 /// them afresh; the cycles after it walk that scatter downhill
 /// ([`migrate`]), and every cycle grows its own artifacts.
@@ -738,6 +812,25 @@ mod tests {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
         let hm = Heightmap::build(&map);
         (map, hm)
+    }
+
+    #[test]
+    fn every_kind_has_a_clear_view_from_20_m_in_marrow() {
+        let (map, hm) = marrow();
+        let all = layout(&map, &hm, 1, 0);
+        let blockers = sight_blockers(&map, &hm);
+        for kind in AnomalyKind::ALL {
+            let view = all
+                .iter()
+                .filter(|a| a.kind == kind)
+                .find_map(|a| view_of(&hm, a, &all, &blockers, 20.0).map(|v| (a, v)));
+            let (a, v) = view.unwrap_or_else(|| panic!("no clear view of a {kind:?}"));
+            assert!((geom::dist(a.at, v.at) - 20.0).abs() < 0.01);
+            // It looks at it.
+            let (s, c) = v.yaw.to_radians().sin_cos();
+            let ahead = [v.at[0] + s * 20.0, v.at[1] - c * 20.0];
+            assert!(geom::dist(ahead, a.at) < 0.05, "{kind:?}: looks away");
+        }
     }
 
     #[test]

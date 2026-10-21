@@ -21,6 +21,11 @@ struct Sway {
     // them the foliage parts (0: not pushing).
     hand_a: vec4<f32>,
     hand_b: vec4<f32>,
+    // Robots pushing through low branches: xyz where, w how far round.
+    robot_a: vec4<f32>,
+    robot_b: vec4<f32>,
+    robot_c: vec4<f32>,
+    robot_d: vec4<f32>,
 }
 
 // Branch ends pushed aside by a hand, more the nearer and the freer.
@@ -31,6 +36,19 @@ fn parted(world: vec3<f32>, hand: vec4<f32>, free: f32) -> vec3<f32> {
     let away = world - hand.xyz;
     let near = 1.0 - smoothstep(0.05, hand.w, length(away));
     return normalize(away + vec3<f32>(0.0, 1e-3, 0.0)) * near * 0.3 * (0.3 + 0.7 * free);
+}
+
+// Branches pushed aside by a robot walking under them: its spot is low
+// (at its feet), so it's a column, by distance across the ground, from
+// its feet up to about its height.
+fn shouldered(world: vec3<f32>, robot: vec4<f32>, free: f32) -> vec3<f32> {
+    if (robot.w <= 0.0 || world.y < robot.y - 0.3 || world.y > robot.y + 2.5) {
+        return vec3<f32>(0.0);
+    }
+    let away = world.xz - robot.xz;
+    let near = 1.0 - smoothstep(0.05, robot.w, length(away));
+    let out2 = away / max(length(away), 1e-3);
+    return vec3<f32>(out2.x, 0.15, out2.y) * near * 0.3 * (0.3 + 0.7 * free);
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> sway: Sway;
@@ -51,7 +69,11 @@ fn offset(world: vec3<f32>, local: vec3<f32>, origin: vec3<f32>) -> vec3<f32> {
     let push = sway.wind.z * (0.7 * gust + flutter);
     return vec3<f32>(dir.x, 0.0, dir.y) * push * 0.35 * weight
         + parted(world, sway.hand_a, out)
-        + parted(world, sway.hand_b, out);
+        + parted(world, sway.hand_b, out)
+        + shouldered(world, sway.robot_a, out)
+        + shouldered(world, sway.robot_b, out)
+        + shouldered(world, sway.robot_c, out)
+        + shouldered(world, sway.robot_d, out);
 }
 
 @vertex

@@ -211,6 +211,7 @@ pub fn spawn_sentry(
                 wrecked: false,
             },
             super::Breed("sentry"),
+            super::heavy::OwnLook,
             Sentry {
                 centre,
                 arc,

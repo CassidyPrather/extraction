@@ -1,0 +1,355 @@
+// Rime Fell — the fifth Zone.
+//
+// A high, cold valley at the treeline's edge, 640 m on a side, climbing
+// north the whole way. The truck stops in the Bottoms, among the last
+// stunted spruce. Above, nothing grows: the switchback road climbs the
+// west slope under its avalanche galleries, the funicular climbs straight
+// up the middle, and both arrive at Coldharbour, the mining settlement on
+// its bench, with the ore mill stepped down the slope east of it. Over the
+// settlement the upper slopes are scree and old snow up to the col, the
+// observatory on the north-west summit, and the cirque in the north-east
+// where the machines come in by the frozen tarn. docs/FIFTH_VALLEY.md is
+// the design.
+//
+//   North (-z)
+//     the observatory on its summit and its saddle (RV) in the west; the
+//     col (RV) in the middle; the cirque, the tarn (artifacts) and the
+//     robot Gate in the east
+//   Middle
+//     the upper slopes (the crown hole, artifacts); Coldharbour on its
+//     bench and the top station; the ore mill on the slope and the adit
+//     over it; the tip road (RV) in the east
+//   South (+z)
+//     the switchbacks and their galleries in the west, the funicular in
+//     the middle, the Bottoms and the south gate
+//
+// Coordinates: [x, z] metres, origin at centre, x east, +z south.
+(
+    name: "Rime Fell",
+    description: "A high valley over the treeline: a mining settlement on its bench, the funicular up to it, the mill on the slope, scree and old snow to the col.",
+    size: 640.0,
+    cell: 1.0,
+    base_height: 96.0,
+    noise: (seed: 151, amplitude: 3.5, scale: 110.0, octaves: 5, detail: 0.25),
+    rim: (width: 60.0, height: 14.0),
+    fence_inset: 38.0,
+    // Thin, clear, cold air.
+    haze: Some((0.93, 0.98, 1.08)),
+    // Up high in the wind you chill (docs/FIFTH_VALLEY.md, "Cold").
+    cold: 1.0,
+    // Bare high ground is all stone: rock fields everywhere.
+    scree: 0.5,
+    // Snow lies over the switchbacks' second leg (Visual design's snow):
+    // the Bottoms and the first rise are bare scree and the last spruce.
+    snow_line: Some(84.0),
+    snow: 0.55,
+    // Audio's choice: the harshest wind in the bank, ravens standing in
+    // for choughs, and far rumbles that read as avalanches.
+    sounds: (
+        wind: "ambience/wind_mountain",
+        birds: ["ambience/raven"],
+        distant: ["ambience/rockfall", "ambience/thunder_distant"],
+    ),
+
+    features: [
+        // The whole valley climbs north, steeply.
+        Tilt(dir: (0.0, -1.0), rise_per_100m: 15.0),
+
+        // The valley walls: high and bare.
+        Ridge(points: [(-330.0, 330.0), (-300.0, 120.0), (-300.0, -120.0), (-330.0, -330.0)], width: 200.0, height: 40.0),
+        Ridge(points: [(345.0, 330.0), (325.0, 100.0), (330.0, -140.0), (345.0, -330.0)], width: 190.0, height: 26.0),
+        // The north-west summit the observatory stands on.
+        Hill(at: (-212.0, -212.0), radius: 135.0, height: 20.0),
+        // The cirque's back wall in the north-east, and the tarn's hollow
+        // under it.
+        Hill(at: (250.0, -310.0), radius: 110.0, height: 16.0),
+        Hill(at: (170.0, -185.0), radius: 50.0, height: -6.0),
+        // The knoll over the mill: the mine is in it, the mill stepped
+        // down its south face.
+        Hill(at: (150.0, -30.0), radius: 75.0, height: 7.0),
+        // The Bottoms: a glacier's trough, scooped.
+        Hill(at: (0.0, 205.0), radius: 150.0, height: -8.0),
+        // Avalanche chutes off the west wall, across the switchbacks.
+        Channel(points: [(-285.0, 20.0), (-210.0, 90.0), (-140.0, 175.0), (-110.0, 215.0)], width: 30.0, depth: 2.5),
+        Channel(points: [(-290.0, 160.0), (-240.0, 200.0), (-200.0, 240.0)], width: 26.0, depth: 2.0),
+        // The banks over the galleries: the chutes' shoulders, steep where
+        // the snow comes down onto the road.
+        Ridge(points: [(-185.0, 160.0), (-150.0, 163.0), (-115.0, 160.0)], width: 30.0, height: 9.0),
+        Ridge(points: [(-200.0, 97.0), (-175.0, 98.0), (-150.0, 96.0)], width: 26.0, height: 8.0),
+        // The crown hole: the old stope fallen in, on the upper slopes.
+        Hill(at: (-55.0, -115.0), radius: 22.0, height: -6.0),
+
+        // Coldharbour's bench.
+        Plateau(polygon: [(-120.0, -20.0), (40.0, -20.0), (40.0, 55.0), (-120.0, 55.0)], blend: 30.0),
+        // The Gate's yard in the cirque.
+        Plateau(polygon: [(200.0, -255.0), (232.0, -255.0), (232.0, -225.0), (200.0, -225.0)], height: Some(131.0), blend: 30.0),
+        // The valley station's yard.
+        Plateau(polygon: [(64.0, 200.0), (84.0, 200.0), (84.0, 228.0), (64.0, 228.0)], blend: 8.0),
+        // Level ground at their doors (the lint's door rule): the roadmen's top hut, the top station, the chapel, the adit house, the snow survey hut, the observatory.
+        Plateau(polygon: [(-207.0, 85.0), (-193.0, 85.0), (-193.0, 99.0), (-207.0, 99.0)], blend: 8.0),
+        Plateau(polygon: [(59.0, -12.0), (83.0, -12.0), (83.0, 12.0), (59.0, 12.0)], blend: 8.0),
+        Plateau(polygon: [(-120.0, 10.0), (-88.0, 10.0), (-88.0, 42.0), (-120.0, 42.0)], blend: 8.0),
+        Plateau(polygon: [(117.0, -62.0), (153.0, -62.0), (153.0, -26.0), (117.0, -26.0)], blend: 10.0),
+        Plateau(polygon: [(-32.0, -102.0), (-18.0, -102.0), (-18.0, -88.0), (-32.0, -88.0)], blend: 8.0),
+        Plateau(polygon: [(-219.0, -221.0), (-197.0, -221.0), (-197.0, -199.0), (-219.0, -199.0)], blend: 8.0),
+        // The south gate's apron, at the road's height.
+        Plateau(polygon: [(-34.0, 260.0), (14.0, 260.0), (14.0, 300.0), (-34.0, 300.0)], height: Some(51.5), blend: 16.0),
+        // Where the truck turns: the saddle, the col, the tip road's end.
+        Plateau(polygon: [(-130.0, -278.0), (-100.0, -278.0), (-100.0, -252.0), (-130.0, -252.0)], blend: 14.0),
+        Plateau(polygon: [(55.0, -275.0), (85.0, -275.0), (85.0, -250.0), (55.0, -250.0)], blend: 14.0),
+        Plateau(polygon: [(218.0, -70.0), (256.0, -70.0), (256.0, -14.0), (218.0, -14.0)], height: Some(103.0), blend: 24.0),
+        // The mill's terraces: one per level (4 m apart), falling south
+        // down the knoll's face, each running out west past the mill's
+        // side door to the mill steps.
+        Plateau(polygon: [(114.0, 30.0), (156.0, 30.0), (156.0, 52.0), (114.0, 52.0)], height: Some(90.0), blend: 5.0),
+        Plateau(polygon: [(114.0, 20.0), (156.0, 20.0), (156.0, 30.0), (114.0, 30.0)], height: Some(94.0), blend: 3.0),
+        Plateau(polygon: [(114.0, 10.0), (156.0, 10.0), (156.0, 20.0), (114.0, 20.0)], height: Some(98.0), blend: 3.0),
+        Plateau(polygon: [(114.0, -12.0), (160.0, -12.0), (160.0, 10.0), (114.0, 10.0)], height: Some(102.0), blend: 5.0),
+    ],
+
+    roads: [
+        // In from the south gate, west along the Bottoms, then up the west
+        // slope in switchbacks to Coldharbour, under the galleries where
+        // the chutes cross it.
+        (
+            name: "Pass road", kind: Asphalt, width: 6.0, smoothing: 45.0,
+            points: [(-10.0, 306.0), (-10.0, 266.0), (-60.0, 258.0), (-140.0, 245.0), (-205.0, 232.0),
+                     (-228.0, 212.0), (-215.0, 192.0), (-150.0, 182.0), (-80.0, 170.0), (-58.0, 158.0),
+                     (-66.0, 140.0), (-130.0, 128.0), (-200.0, 118.0), (-226.0, 100.0), (-212.0, 80.0),
+                     (-150.0, 68.0), (-90.0, 52.0), (-40.0, 30.0)],
+            galleries: [(at: (-150.0, 180.0), length: 44.0), (at: (-175.0, 122.0), length: 46.0)],
+        ),
+        // The funicular: track and service stair straight up the slope from
+        // the valley station to the top station.
+        (
+            name: "Funicular", kind: Path, width: 5.0, shoulder: 2.0, smoothing: 90.0,
+            points: [(62.0, 214.0), (60.0, 120.0), (58.0, 10.0)],
+        ),
+        // To the valley station.
+        (
+            name: "Station lane", kind: Dirt, width: 4.5, smoothing: 20.0,
+            points: [(-10.0, 262.0), (30.0, 240.0), (62.0, 222.0)],
+        ),
+        // The lorry road: the concentrate went down it in summer, the
+        // long way up the east slope to the tip. Open the whole way.
+        (
+            name: "Lorry road", kind: Dirt, width: 5.0, smoothing: 60.0,
+            points: [(45.0, 232.0), (90.0, 236.0), (140.0, 205.0), (180.0, 160.0), (200.0, 120.0), (212.0, 80.0),
+                     (232.0, 52.0), (256.0, 36.0), (258.0, 4.0), (248.0, -16.0)],
+        ),
+        // Coldharbour's street, from the road's end east to the top station
+        // and on round the spur to the mill.
+        (
+            name: "Coldharbour street", kind: Gravel, width: 5.0, smoothing: 20.0,
+            points: [(-40.0, 30.0), (0.0, 20.0), (56.0, 14.0), (95.0, 32.0), (122.0, 50.0), (140.0, 47.0)],
+        ),
+        // Round the knoll's east side from the mill's foot to its top and
+        // the adit, and on east along the tip to the road's end.
+        (
+            name: "Mill road", kind: Dirt, width: 4.0, smoothing: 50.0,
+            points: [(140.0, 47.0), (160.0, 50.0), (172.0, 32.0), (174.0, 8.0), (160.0, -6.0), (148.0, -20.0),
+                     (152.0, -38.0), (180.0, -36.0), (205.0, -32.0), (232.0, -28.0)],
+        ),
+        // The mill steps: up the terraces past each level's side door.
+        (
+            name: "Mill steps", kind: Path, width: 2.0, shoulder: 1.5, smoothing: 100.0,
+            points: [(100.0, 66.0), (104.0, 16.0), (104.0, -34.0)],
+        ),
+        // To the compressor house's door.
+        (
+            name: "Compressor lane", kind: Dirt, width: 3.5, smoothing: 15.0,
+            points: [(222.0, -30.0), (232.0, -42.0), (240.0, -52.0)],
+        ),
+        // The ore tramway's old bed along the upper slopes, from the col
+        // track east over the knoll's back to the tip.
+        (
+            name: "Tram bed", kind: Dirt, width: 3.5, smoothing: 40.0,
+            points: [(10.0, -40.0), (60.0, -72.0), (120.0, -85.0), (175.0, -78.0), (210.0, -55.0), (236.0, -36.0)],
+        ),
+        // The mine track up the upper slopes to the col.
+        (
+            name: "Col track", kind: Dirt, width: 4.0, smoothing: 40.0,
+            points: [(0.0, 20.0), (10.0, -40.0), (-10.0, -90.0), (20.0, -150.0), (5.0, -200.0), (40.0, -240.0), (70.0, -262.0)],
+        ),
+        // Along under the summit to the observatory's saddle.
+        (
+            name: "Saddle track", kind: Dirt, width: 3.5, smoothing: 40.0,
+            points: [(5.0, -200.0), (-30.0, -235.0), (-70.0, -258.0), (-126.0, -264.0)],
+        ),
+        // The observatory path, up from the saddle.
+        (
+            name: "Observatory path", kind: Path, width: 1.8, shoulder: 1.5, smoothing: 50.0,
+            points: [(-126.0, -264.0), (-150.0, -262.0), (-185.0, -250.0), (-204.0, -226.0)],
+        ),
+        // The old miners' path: straight up the west side from the
+        // switchbacks' top over the upper slopes to the saddle.
+        (
+            name: "Miners' path", kind: Path, width: 1.8, shoulder: 1.5, smoothing: 45.0,
+            points: [(-150.0, 68.0), (-150.0, 0.0), (-130.0, -80.0), (-110.0, -150.0), (-104.0, -170.0), (-102.0, -215.0), (-96.0, -257.0)],
+        ),
+        // The machines' track from the cirque down to the tarn and the
+        // upper slopes.
+        (
+            name: "Gate track", kind: Dirt, width: 5.0, smoothing: 35.0,
+            points: [(205.0, -238.0), (180.0, -232.0), (145.0, -218.0), (118.0, -180.0), (80.0, -150.0), (20.0, -150.0)],
+        ),
+    ],
+
+    water: [
+        // The tarn, frozen at its edges.
+        (name: "The tarn", width: 32.0, depth: 1.6, points: [(155.0, -188.0), (182.0, -183.0)]),
+    ],
+
+    forests: [
+        // The last trees: the Bottoms' stunted spruce, thinning up the
+        // slopes. Nothing grows over the switchbacks' second leg.
+        (name: "South boundary", seed: 151, density: 1.1, undergrowth: 0.4,
+         mix: [(Spruce, 0.75), (Pine, 0.15), (Snag, 0.1)],
+         polygon: [(-320.0, 320.0), (320.0, 320.0), (320.0, 286.0), (-320.0, 286.0)]),
+        (name: "Bottoms spruce west", seed: 152, density: 1.5, undergrowth: 0.4,
+         mix: [(Spruce, 0.8), (Snag, 0.2)],
+         polygon: [(-282.0, 284.0), (-150.0, 284.0), (-120.0, 262.0), (-200.0, 248.0), (-282.0, 230.0)]),
+        (name: "Bottoms spruce east", seed: 153, density: 0.8, undergrowth: 0.35,
+         mix: [(Spruce, 0.75), (Pine, 0.15), (Snag, 0.1)],
+         polygon: [(90.0, 284.0), (282.0, 284.0), (282.0, 180.0), (180.0, 190.0), (100.0, 230.0)]),
+        (name: "Treeline", seed: 154, density: 0.25, undergrowth: 0.15,
+         mix: [(Spruce, 0.6), (Snag, 0.4)],
+         polygon: [(-282.0, 225.0), (-200.0, 245.0), (-60.0, 250.0), (40.0, 230.0), (282.0, 175.0),
+                   (282.0, 120.0), (100.0, 150.0), (-60.0, 196.0), (-282.0, 196.0)]),
+    ],
+
+    placements: [
+        // The south gate.
+        (prefab: "quarantine_gate", at: (-10.0, 285.0), rot: 0.0),
+        (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0, tag: "gate_booth"),
+
+        // The Bottoms: the valley station and the bus turn.
+        (prefab: "funicular_lower", at: (76.0, 214.0), rot: 0.0, tag: "valley_station"),
+        (prefab: "house_plank", at: (40.0, 252.0), rot: 200.0, tag: "station_house"),
+        (prefab: "shed", at: (-70.0, 270.0), rot: 10.0, tag: "bus_shelter"),
+        (prefab: "log_pile", at: (-62.0, 248.0), rot: 80.0),
+
+        // The mine's radio mast on the east slope, over the lorry road.
+        (prefab: "radio_mast", at: (236.0, 128.0), rot: 0.0),
+        // The lorry road's weighbridge, half way up the east slope.
+        (prefab: "shed", at: (172.0, 160.0), rot: 225.0, tag: "weighbridge"),
+
+        // The switchbacks: the roadmen's huts at the hairpins.
+        (prefab: "shed", at: (-195.0, 216.0), rot: 80.0, tag: "roadmen"),
+        (prefab: "mast_hut", at: (-50.0, 145.0), rot: 250.0, tag: "hairpin_hut"),
+        (prefab: "shed", at: (-200.0, 92.0), rot: 100.0),
+
+        // The funicular's car, stopped at the passing loop.
+        (prefab: "funicular_car", at: (59.5, 115.0), rot: 0.0),
+
+        // Coldharbour.
+        (prefab: "funicular_upper", at: (71.0, 0.0), rot: 0.0, tag: "top_station"),
+        (prefab: "house_brick", at: (20.0, 0.0), rot: 165.0, tag: "mine_office"),
+        (prefab: "shop", at: (-15.0, 5.0), rot: 165.0, tag: "canteen"),
+        (prefab: "house_plank", at: (-50.0, 8.0), rot: 165.0),
+        (prefab: "house_plank", at: (-80.0, 15.0), rot: 165.0),
+        (prefab: "cabin_log", at: (-60.0, 48.0), rot: 345.0, tag: "keepers_cabin"),
+        (prefab: "cabin_log", at: (-20.0, 42.0), rot: 345.0),
+        (prefab: "chapel", at: (-104.0, 26.0), rot: 90.0),
+
+        // The ore mill, stepped down the spur; the adit house over it.
+        (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, y: 90.0, absolute: true, tag: "ore_mill"),
+        (prefab: "rail_shed", at: (135.0, -44.0), rot: 270.0, tag: "adit_house"),
+
+        // The tip road's end: the compressor house.
+        (prefab: "pump_station", at: (238.0, -60.0), rot: 180.0, tag: "compressor_house"),
+
+        // The upper slopes: the avalanche watchers' hut, the snow survey.
+        (prefab: "shed", at: (-25.0, -95.0), rot: 20.0, tag: "snow_survey"),
+        (prefab: "ranger_tower", at: (60.0, -170.0), rot: 340.0, tag: "avalanche_watch"),
+
+        // The miners' barracks on the west slopes, by the miners' path:
+        // where the single men lived, out of the settlement.
+        (prefab: "house_brick", at: (-168.0, -50.0), rot: 90.0, tag: "barracks"),
+        (prefab: "shed", at: (-170.0, -32.0), rot: 90.0, tag: "barracks_store"),
+
+        // The bivouac under the summit, on the miners' path.
+        (prefab: "shed", at: (-94.0, -168.0), rot: 290.0, tag: "bivouac"),
+
+        // The col.
+        (prefab: "mast_hut", at: (20.0, -245.0), rot: 200.0, tag: "col_hut"),
+
+        // The observatory on its summit.
+        (prefab: "observatory", at: (-208.0, -210.0), rot: 160.0, tag: "observatory"),
+
+        // The cirque: the tarn's field, and where the robots come and go.
+        (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
+        (prefab: "robot_gate", at: (215.0, -240.0), rot: 320.0),
+    ],
+
+    markers: [
+        (kind: Insertion, at: (-10.0, 266.0), rot: 0.0, name: "South gate"),
+        (kind: TruckStop, at: (-10.0, 300.0), rot: 0.0, name: "South gate"),
+        (kind: ShortExfil, at: (-4.0, 272.0), name: "South gate (fuel)"),
+        (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
+        (kind: Rendezvous, at: (70.0, -262.0), name: "The col"),
+        (kind: Rendezvous, at: (238.0, -28.0), name: "Tip road"),
+        (kind: RobotGate, at: (215.0, -240.0), rot: 320.0, name: "The Gate"),
+        (kind: Sentry(arc: 140.0, power: Some((224.9, -231.9))), at: (215.0, -222.0), rot: -15.0, name: "Gate sentry"),
+        (kind: ArtifactField, at: (195.0, -160.0), name: "The tarn"),
+        (kind: ArtifactField, at: (-55.0, -115.0), name: "The crown hole"),
+        (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (160.0, -160.0), name: "Tarn mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-212.0, 150.0), name: "Gallery hush"),
+        (kind: Offering, at: (-80.0, 34.0), name: "The miners' shrine"),
+        (kind: Offering, at: (30.0, -230.0), name: "The cairn on the col"),
+        (kind: WorkSite, at: (60.0, -110.0), name: "Upper slopes site"),
+        (kind: WorkSite, at: (110.0, -200.0), name: "Tarn site"),
+        (kind: WorkSite, at: (200.0, 20.0), name: "Tip site"),
+        (kind: Poi, at: (60.0, 225.0), name: "Valley station"),
+        (kind: Poi, at: (-200.0, 212.0), name: "Roadmen's hut"),
+        (kind: Poi, at: (-50.0, 150.0), name: "Hairpin hut"),
+        (kind: Poi, at: (-30.0, 20.0), name: "Coldharbour"),
+        (kind: Poi, at: (68.0, 5.0), name: "Top station"),
+        (kind: Poi, at: (140.0, 50.0), name: "The mill"),
+        (kind: Poi, at: (135.0, -42.0), name: "The adit"),
+        (kind: Poi, at: (240.0, -60.0), name: "Compressor house"),
+        (kind: Poi, at: (-25.0, -95.0), name: "Snow survey hut"),
+        (kind: Poi, at: (60.0, -170.0), name: "Avalanche watch"),
+        (kind: Poi, at: (20.0, -245.0), name: "The col"),
+        (kind: Poi, at: (-94.0, -168.0), name: "The bivouac"),
+        (kind: Poi, at: (-160.0, -45.0), name: "The barracks"),
+        (kind: Poi, at: (-208.0, -210.0), name: "The observatory"),
+        (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
+        (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
+        (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),
+        (kind: Loot(table: "ammo_common"), at: (-57.0, 151.0), name: "Hairpin hut locker"),
+        (kind: Loot(table: "tools"), at: (-22.0, -100.0), name: "Snow survey kit"),
+        (kind: Loot(table: "tools"), at: (166.0, 166.0), name: "Weighbridge chain box"),
+        (kind: Loot(table: "medical"), at: (24.0, -240.0), name: "Col hut rescue box"),
+        (kind: Loot(table: "workshop"), at: (250.0, -50.0), name: "Compressor house bench"),
+        (kind: Loot(table: "driver_cache"), at: (122.0, -34.0), name: "Adit shift box"),
+        (kind: Loot(table: "ammo_common"), at: (-190.0, 128.0), name: "Gallery cache"),
+        // notes:begin (generated by scripts/place_notes.py)
+        (kind: Terminal(pages: ["RIME FELL OBSERVATORY\nOUTGOING LOG\n\n15 OCT  SW 4  SNOW  SENT\n 2 NOV  LIGHTS ON THE COL\n 2 NOV  GATE: NO REPLY\n 3 NOV  CITY: NO REPLY", "DEC  -14  SENT\nJAN  -19  SENT\nFEB  CHUTE 2 RAN  SENT\nMAR  ROPE GONE  SENT\n\nRECEIVED  NOTHING", "OCT, THIRD YEAR\n\nH.B. DOWN THE STAIR\nFOR FLOUR. NOT BACK.\nSENDING ALONE.\n\n- O.B."]), at: (-212.26, -208.98), rot: -103.4, name: "Observatory log"),
+        (kind: Note(text: "SOUTH GATE, RIME FELL - DUTY LOG\n15 Oct. Coldharbour down on the funicular, last car 1600. Lorries from the valley station.\n16 Oct. The two at the observatory won't come down. Weather service says they're essential. Let them.\n2 Nov. Lights on the col all night. The observatory phoned it through an hour before we saw them."), at: (-0.30, 284.40), rot: 153.4, name: "Rime gate log"),
+        (kind: Note(text: "FUNICULAR - VALLEY STATION\n15 Oct. Last car down 1600, full. Sent the other up empty to hold the rope, both left on the brake. - F. Lukas, attendant\n(another hand) March. One car stopped at the loop. The rope's off the top drum, cut and wound away. Walk the stair. Don't ride it."), at: (40.98, 253.10), rot: 318.3, name: "Funicular book"),
+        (kind: Note(text: "GRIT BOOK - roadmen\n12 Oct. Galleries one to three cleared. Plough on the hairpin.\n14 Oct. Forty sacks down for the buses.\n15 Oct. Last of it. We're off on the lorry. Plough's in the store, key on the nail.\nIn a thaw, keep out from under the chutes. They run."), at: (-48.96, 143.77), rot: 220.3, name: "Grit book"),
+        (kind: Terminal(pages: ["RIME FELL MINE\nCONCENTRATE (SACKS)\n\n 9 OCT     212\n12 OCT     198\n14 OCT      64\n15 OCT       0\n\nAT TOP STATION  474", "INVENTORY  3 NOV\n\nCONCENTRATE  474\nRAIL (M)    1380\nROPE (M)    2200\n\nSTATUS  PENDING REVIEW"]), at: (21.85, 0.33), rot: 100.2, name: "Mine office terminal"),
+        (kind: Note(text: "CANTEEN - COLDHARBOUR\nSoup Tuesdays and Thursdays. Bread up by the car.\n(pencil) 15 Oct. Pans washed, stove out. Back in three days.\n(another hand) The observatory two came down for flour in November and went back up. I told them stay down. They wouldn't."), at: (-13.35, 4.97), rot: 269.0, name: "Canteen note"),
+        (kind: Note(text: "Jana -\nWe're staying with the station, Hedvika and me. The district needs its weather, and someone has to say what comes over the col.\nThe car's still running. I'll be down Sundays. Keep the boys warm in town and don't let them fight.\n- Ota"), at: (-59.57, 48.45), rot: 316.4, name: "Ota's letter"),
+        (kind: Note(text: "AVALANCHE WATCH\nChute one loaded. Chute two loaded. Galleries open.\n(another hand, February) Chute two ran in the night. Gallery three held. Nobody left to clear the road.\nThe machines walked over the slide in the morning as if it wasn't there. - H.S."), at: (60.49, -169.54), rot: 313.4, y: 8.5, name: "Watch log"),
+        (kind: Note(text: "COL HUT BOOK\n30 Oct. Over to the cirque for the observatory: the tarn is lit up green at night. Something on the far side, building. - O.B.\n2 Nov. They came over the col in a line, one after another, and never looked at the hut. - H.S.\n(last) Phoned it down. Nobody answered at the gate."), at: (19.73, -246.59), rot: 170.3, name: "Col hut book"),
+        (kind: Terminal(pages: ["COMPRESSOR HOUSE\nAIR TO ADIT\n\nCOMP 1    OFF  15 OCT\nCOMP 2    OFF  15 OCT\n\nADIT DOOR\nOPENED    4 NOV\nCARD      NONE"]), at: (232.20, -57.00), rot: -117.3, name: "Compressor terminal"),
+        // notes:end
+    ],
+
+    regions: [
+        (name: "The Bottoms", danger: 0, loot: Some(0.5), polygon: [(-282.0, 320.0), (282.0, 320.0), (282.0, 195.0), (-282.0, 195.0)]),
+        (name: "The switchbacks", danger: 1, polygon: [(-282.0, 195.0), (20.0, 195.0), (20.0, 60.0), (-282.0, 60.0)]),
+        (name: "The funicular", danger: 1, polygon: [(20.0, 195.0), (282.0, 195.0), (282.0, 60.0), (20.0, 60.0)]),
+        (name: "Coldharbour", danger: 2, polygon: [(-140.0, 60.0), (90.0, 60.0), (90.0, -40.0), (-140.0, -40.0)]),
+        (name: "The mill", danger: 3, loot: Some(1.7), polygon: [(90.0, 60.0), (190.0, 60.0), (190.0, -70.0), (90.0, -70.0)]),
+        (name: "The tip", danger: 2, polygon: [(190.0, 60.0), (282.0, 60.0), (282.0, -110.0), (190.0, -110.0)]),
+        (name: "West slopes", danger: 1, loot: Some(1.1), polygon: [(-282.0, 60.0), (-140.0, 60.0), (-140.0, -140.0), (-282.0, -140.0)]),
+        (name: "The upper slopes", danger: 2, polygon: [(-140.0, -40.0), (90.0, -40.0), (90.0, -70.0), (190.0, -70.0), (190.0, -110.0), (110.0, -130.0), (100.0, -205.0), (-140.0, -205.0)]),
+        (name: "The summit", danger: 2, loot: Some(1.65), polygon: [(-282.0, -140.0), (-140.0, -140.0), (-140.0, -282.0), (-282.0, -282.0)]),
+        (name: "The col", danger: 2, polygon: [(-140.0, -205.0), (100.0, -205.0), (100.0, -282.0), (-140.0, -282.0)]),
+        (name: "The cirque", danger: 3, polygon: [(110.0, -130.0), (190.0, -110.0), (282.0, -110.0), (282.0, -282.0), (100.0, -282.0), (100.0, -205.0)]),
+    ],
+)

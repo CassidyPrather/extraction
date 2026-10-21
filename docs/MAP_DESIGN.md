@@ -24,7 +24,9 @@ are printed for the onboarding work, which owns it.
 
 - **The walkers' navigation grid** (`map_nav::zone_grid`): 2 m cells,
   blocked by ground over 32°, water deeper than 0.9 m, every placement's
-  footprint, tree trunks and big rocks; forest costs more, roads less;
+  footprint (anything thinner than a cell, a garden fence, widened to
+  half a cell so no path slips through it), tree trunks and big rocks;
+  forest costs more, roads less;
   bridge decks are lanes. The robots and the sim bots walk on this very
   grid, so "reachable" means what they find.
 - **The comfort grid**: the same, blocked over 25° (`COMFORT_SLOPE`).
@@ -441,6 +443,85 @@ fine on a monitor makes people sick or tired in a headset.
   counts in the view load, as cover, as a way indoors for the rhythm and
   the Surge, and its door as somewhere you must be able to walk to.
 
+## Gardens and fences
+
+A house with a garden fence round its back is a house someone lived in,
+and its planks are something to shoot through or break down
+(`fence_garden`: four breakable plank panels between five posts, an
+8.4 m run, footprint 8.5 x 0.2).
+
+- A garden is behind or beside its house, never on the door side (the
+  door strip keeps it off anyway), and squared to the house: each run is
+  turned with the house's `rot`.
+- Two runs and the house's wall make an L with its fourth side open: you
+  walk in, and so do the walkers. The paddocks behind the farmhouses are
+  two runs deep and two wide. A gate in a run wants 3.5 m to show on the
+  walkers' 2 m grid, which narrows every gap by its 0.6 m clearance both
+  sides; to them a 1.5 m gap is mostly a wall.
+- Runs touch their house (0.1 m off it) and each other, or stand at
+  least `SQUEEZE` off, like any placement.
+- Off roads and paths (`Overlap` finds a run on one), and off the main
+  routes: no route within 0.5 m of a run (`FENCE_CLEAR`). The grid blocks
+  a run only where a cell's middle falls within 0.7 m of it, so a route
+  could otherwise be drawn through one.
+- A fence isn't levelled for (`prefab_wants_pad`): a pad for a run that
+  meets a house's back wall reached under the house and lifted its door
+  off its steps. It stands on the lowest ground under it, and the ground
+  may rise at most 0.3 m along it (`FENCE_RISE`), so put gardens on the
+  flat: Kettle's Miners' Row stands on the kettle's sides and has none.
+
+Marrow Creek has five gardens (four village houses, the foreman's cabin)
+and the farm's paddock, 14 runs; Kettle Pass four (the gatekeeper's and
+weir cottages, the camp cabin, the lodge's second cabin) and the low
+farm's paddock, 12 runs.
+
+## Wrecks
+
+Cars left where they stopped (`wreck_lada` 1.8 x 4.3, `wreck_uaz`
+1.9 x 4.1, `wreck_lorry` 2.6 x 6.4; front to local -Z): no way in, no
+loot, a body to crouch behind, and doors, bonnet, boot and wheels that
+come off (Destruction's breakables). They're cover, and they say what
+happened on the roads out.
+
+- **On the verge, never the road.** Just off the carriageway, angled as
+  if pulled over or slewed; `Overlap` finds one on a road (they aren't
+  among the prefabs a road may run into). The road stays the exposed
+  way: a wreck beside it is cover a dash off the tarmac, not a wall
+  across it. Wider than a nav cell with its clearance, a wreck is walked
+  round, so no `FENCE_CLEAR`-style check is needed for routes.
+- **Where the long open stretches are.** The cover measure counts them
+  like any placement; put them where a route's longest open stretch runs
+  along a road.
+- **On the ground as it is.** A wreck isn't levelled for
+  (`prefab_wants_pad`) and the ground round it isn't settled the way
+  it is round a building (`Heightmap::erode`): it stands level on the
+  lowest of its corners and middle, and the ground under it may be at
+  most 0.3 m over or under that (`WRECK_RISE`), a wheel sunk to its hub.
+  Road verges cut into a hillside are often steeper than that; slide
+  the wreck along to where the verge is flat.
+- Like any placement: off door strips, out of the truck's room at a
+  rendezvous, `SQUEEZE` or `SEALED` from buildings and each other, out
+  of water; the trees and rocks keep their distance (`prefab_clearance`).
+  The Surge's anomalies keep off them by construction.
+- They're light props in the view load (`VIEW_LIGHT`).
+- Keep them out of the bot scenarios' ground: the insertion and the 60 m
+  of road north of it (`src/bot/scenarios.rs` sets targets and robots
+  there).
+
+Marrow Creek has five (the queue for the gate, three run into each
+other on the district road's west verge; one pulled over north of the
+logging-road turn; the farm's jeep in its yard), Kettle Pass four (Lorry
+12 on the inside of the switchbacks' third bend, as its driver's note
+says; two on the climb to the pass; the low farm's car), Cinder Works
+four (a works lorry in the yard between the garage and the hall; one
+turned back from the gate; the woodward's jeep on the lookout track; one
+on the works road out north). Cover within 25 m along the routes, before
+and after: Marrow's routes 95/96/93% with 30/30/22 m open at most, now
+100/100/97% and 0/2/20 m (the district road between the logging-road
+turn and the village was the gap); Cinder's North sidings route 93% and
+30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
+route 98% and 10 m, now 99% and 4 m.
+
 ## Performance: what's in view
 
 Lavapipe screenshots and a 90 Hz headset both pay for every building in
@@ -450,6 +531,10 @@ casters); trees are instanced with impostors, rocks have LODs.
 - At most 16 placements within 150 m of any point on a main route or any
   point of interest (`VIEW_MAX`, `VIEW_RANGE`), an underground site's
   exit kiosks among them. A village is a dozen buildings, not forty.
+  Light props (`VIEW_LIGHT`: the garden fence, nine boxes a run, no roof;
+  a car wreck, one body and its dozen small parts) aren't counted; the
+  measure prints how many are in the worst view on their own (12 in
+  Marrow's, 7 in Kettle's, 3 in Cinder's).
 - Spread groups out so no view takes in two big ones at once.
 - `EXTRACTION_RENDER_STATS=1 scripts/shot.sh ...` reports what a view
   actually draws (`docs/QA.md`, render load).

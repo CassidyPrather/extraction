@@ -368,7 +368,15 @@ pub(crate) fn perceive(
         Has<super::indoor::Dormant>,
         Option<&MindSeed>,
     )>,
-    players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
+    players: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            &Body,
+            Option<&crate::health::Health>,
+        ),
+        With<Player>,
+    >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
     (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
@@ -419,7 +427,7 @@ pub(crate) fn perceive(
         .collect();
     // Footsteps: by what's underfoot, how fast, how low.
     for s in steps.read() {
-        let Ok((_, _, body)) = players.get(s.entity) else {
+        let Ok((_, _, body, _)) = players.get(s.entity) else {
             continue;
         };
         let p = [s.position.x, s.position.z];
@@ -457,8 +465,11 @@ pub(crate) fn perceive(
     }
     let targets: Vec<Seen> = players
         .iter()
-        .filter(|(_, gt, _)| !cloaks.hides(gt.translation()))
-        .map(|(e, gt, body)| {
+        // A player who's down isn't a target (`search::forget_the_downed`).
+        .filter(|(_, gt, _, health)| {
+            !cloaks.hides(gt.translation()) && !health.is_some_and(|h| h.down)
+        })
+        .map(|(e, gt, body, _)| {
             let feet = gt.translation();
             let height = if body.height > 0.0 {
                 body.height
@@ -569,7 +580,10 @@ pub(crate) fn perceive(
             for t in &targets {
                 let to = t.head - eye;
                 let dist = to.length();
-                if dist > reach || dist < 0.01 {
+                // A scope pointed this way into a low sun flashes in its
+                // eyes (`weapons::optics`), further than it sees a body.
+                let glint = glints.as_ref().map_or(0.0, |g| g.seen_by(t.e, eye));
+                if (dist > reach && glint < GLIMPSE) || dist < 0.01 {
                     continue;
                 }
                 let angle = forward.angle_between(to / dist).to_degrees();
@@ -603,11 +617,7 @@ pub(crate) fn perceive(
                         e = e.max(TORCH_GLARE * (1.0 - dist / TORCH_REACH).max(0.25));
                     }
                 }
-                // A scope pointed this way into a low sun flashes in its
-                // eyes (`weapons::optics`).
-                if let Some(g) = &glints {
-                    e = e.max(g.seen_by(t.e, eye));
-                }
+                e = e.max(glint);
                 if e < GLIMPSE {
                     continue;
                 }
@@ -626,9 +636,9 @@ pub(crate) fn perceive(
                     if aware.target.is_none() {
                         aware.target = Some(t.e);
                     }
-                    // If it moved, roughly there; a still shape it can't
-                    // place, beyond what it already had.
-                    let moved = t.speed > 0.3;
+                    // If it moved (or flashed), roughly there; a still
+                    // shape it can't place, beyond what it already had.
+                    let moved = t.speed > 0.3 || glint >= GLIMPSE;
                     if !aware.can_see_target && (moved || aware.last_known.is_none()) {
                         let spread = (dist * GLIMPSE_SPREAD).max(GLIMPSE_SPREAD_MIN);
                         aware.last_known = Some(heard_guess(t.feet, spread, mind_seed));
@@ -725,11 +735,10 @@ pub(crate) fn perceive(
     }
 }
 
-/// A robot's own seed for its guesses and its aim's scatter: from where
-/// it was spawned, so it doesn't change with how many other things exist
-/// (entity ids do). Set when it's spawned ([`seed_mind`]).
-#[derive(Component, Debug, Clone, Copy)]
-pub struct MindSeed(pub u64);
+/// A robot's own seed for its guesses and its aim's scatter: the one
+/// seed it has (`RobotSeed`, from its kind and spawn point), so it doesn't
+/// change with how many other things exist (entity ids do).
+pub type MindSeed = super::RobotSeed;
 
 /// splitmix64 of `a` and `b`.
 pub fn mix(a: u64, b: u64) -> u64 {
@@ -746,19 +755,6 @@ pub fn mix(a: u64, b: u64) -> u64 {
 pub fn shot_seed(minds: &Query<&MindSeed>, robot: Entity, time: &Time) -> u64 {
     let own = minds.get(robot).map_or(robot.to_bits(), |m| m.0);
     mix(own, (time.elapsed_secs_f64() * 1000.0) as u64)
-}
-
-/// A new robot's [`MindSeed`], from the spot it's spawned at.
-pub fn seed_mind(add: On<Add, Robot>, at: Query<&Transform>, mut commands: Commands) {
-    let p = at
-        .get(add.entity)
-        .map(|t| t.translation)
-        .unwrap_or(Vec3::ZERO);
-    let seed = mix(
-        (p.x.to_bits() as u64) | ((p.z.to_bits() as u64) << 32),
-        p.y.to_bits() as u64,
-    );
-    commands.entity(add.entity).try_insert(MindSeed(seed));
 }
 
 /// Where a robot guesses a sound at `at` came from, `spread` out: a point

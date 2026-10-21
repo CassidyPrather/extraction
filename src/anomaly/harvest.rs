@@ -23,6 +23,29 @@ use crate::interact::Held;
 use crate::items::{Catalog, Item};
 use crate::world::Zone;
 
+/// A stone just let go of, too hot: no hand takes it again for a moment
+/// (seconds left). Without it, a hand still closed round it took it
+/// straight back, and burned to death holding on.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Scalded(pub f32);
+
+/// How long a dropped hot stone won't be taken back, seconds.
+pub const SCALD_SECS: f32 = 3.0;
+
+/// The moment passes.
+pub fn cool_scald(
+    mut commands: Commands,
+    mut stones: Query<(Entity, &mut Scalded)>,
+    time: Res<Time>,
+) {
+    for (e, mut s) in &mut stones {
+        s.0 -= time.delta_secs();
+        if s.0 <= 0.0 {
+            commands.entity(e).remove::<Scalded>();
+        }
+    }
+}
+
 /// How long a hand holds a hot stone before it lets go, seconds.
 pub const HOT_GRIP: f32 = 1.5;
 /// What's said when it does.
@@ -70,6 +93,13 @@ pub fn heat(
     mut gripped: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
+    // Only stones hot and in a hand now: one let go (or gone) starts
+    // afresh, rather than carrying its grip's time to the next hand.
+    gripped.retain(|e, _| {
+        stones
+            .get(*e)
+            .is_ok_and(|(.., hot, held)| hot.is_some() && held.is_some())
+    });
     let coals: Vec<(Vec3, f32)> = burners
         .iter()
         .filter(|(a, _)| a.kind == AnomalyKind::Burner)
@@ -117,6 +147,7 @@ pub fn heat(
                             side: held.side,
                             throw: 0.0,
                         });
+                        commands.entity(e).insert(Scalded(SCALD_SECS));
                         if let Some(raid) = raid.as_mut() {
                             raid.say(TOO_HOT);
                         }

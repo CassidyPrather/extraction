@@ -262,7 +262,7 @@
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
         (prefab: "anomaly_core", at: (150.0, -40.0), rot: 0.0),
-        (prefab: "ranger_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
+        (prefab: "survey_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
 
         // North: bus depot, radio mast, rail yard, ranger tower, robot Gate.
         (prefab: "bus_depot", at: (25.0, -225.0), rot: 0.0),
@@ -278,7 +278,45 @@
         (prefab: "boxcar", at: (110.5, -246.9), rot: 100.5),
         (prefab: "ranger_tower", at: (-240.0, -138.0), rot: 0.0),
         (prefab: "robot_gate", at: (-250.0, -255.0), rot: 45.0),
-            ],
+
+        // Gardens (Destruction's breakable fence_garden, four plank panels
+        // a run): behind or beside the houses, never on the door side, each
+        // an L with the house wall that's open on its fourth side. Each run
+        // touches its house or the next run, so there's no squeeze.
+        // Behind the north house, open to the south.
+        (prefab: "fence_garden", at: (-25.85, 91.10), rot: 180.0),
+        (prefab: "fence_garden", at: (-30.20, 95.25), rot: 90.0),
+        // Behind the house over the road, open to the south.
+        (prefab: "fence_garden", at: (29.85, 81.10), rot: 0.0),
+        (prefab: "fence_garden", at: (34.20, 85.25), rot: 270.0),
+        // Beside the south house, open to the west and the road.
+        (prefab: "fence_garden", at: (28.40, 63.35), rot: 270.0),
+        (prefab: "fence_garden", at: (24.25, 67.70), rot: 0.0),
+        // Beside the house up the lane, open to the south.
+        (prefab: "fence_garden", at: (-53.35, 71.60), rot: 0.0),
+        (prefab: "fence_garden", at: (-57.70, 75.75), rot: 90.0),
+        // Behind the foreman's cabin, open to the east.
+        (prefab: "fence_garden", at: (-188.40, 197.35), rot: 90.0),
+        (prefab: "fence_garden", at: (-184.25, 201.70), rot: 0.0),
+        // The farm's paddock behind the house, open to the south and the shed.
+        (prefab: "fence_garden", at: (198.35, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (206.85, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (211.20, 144.25), rot: 270.0),
+        (prefab: "fence_garden", at: (211.20, 152.75), rot: 270.0),
+
+        // Car wrecks (Destruction strips their doors, bonnets, boots and
+        // wheels): cover on the verges, never on the road.
+        // The queue for the gate, the morning it shut: three facing south,
+        // run into each other and left on the west verge.
+        (prefab: "wreck_lada", at: (23.7, 207.7), rot: 177.0),
+        (prefab: "wreck_uaz", at: (23.9, 200.5), rot: 143.0),
+        (prefab: "wreck_lada", at: (21.7, 193.8), rot: 201.0),
+        // Pulled over north of the logging-road turn: the one thing to
+        // crouch behind between the turn and the village birches.
+        (prefab: "wreck_lada", at: (19.6, 140.1), rot: 14.0),
+        // The farm's own jeep, in the yard by the shed.
+        (prefab: "wreck_uaz", at: (176.0, 160.0), rot: 75.0),
+    ],
 
     markers: [
         (kind: Insertion, at: (40.0, 270.0), rot: 0.0, name: "South gate"),
@@ -290,7 +328,7 @@
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 140.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: 30.0, name: "Depot sentry"),
+        (kind: Sentry(arc: 90.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: 0.0, name: "Depot sentry"),
         (kind: Sentry(arc: 140.0, power: Some((148.9, -76.4))), at: (139.0, -66.5), rot: -15.0, name: "Hollow sentry"),
         (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),
@@ -334,7 +372,7 @@
         (kind: Note(text: "PUMP LOG - O. Brabec\nThe Authority says the Surge is theirs: \"scheduled discharge\". It was here first. 9 Oct, before any machine, the sky went the colour of a bruise and every needle in this station lay down.\nThe well in the village takes what you give it. Sometimes it gives back: a quiet hour, a word about where the stones are.\nMy grandmother fed it bread. It was slower then.\nDon't give it your gun."), at: (-194.20, 19.00), rot: 242.7, name: "Pump station note"),
         (kind: Terminal(pages: ["QUARANTINE AUTHORITY\nCUSTODIAN NETWORK - MARROW\n\nDepot GATE-M: ACTIVE\nMode: SWEEP\nUnits: survey, haul, build,\n       recover\n\nThe Custodian keeps the valley\nclean until the review.", "KEPT PENDING REVIEW\n\nBuses                  9\nBicycles             212\nRefuse bins          340\nDomestic animals      58\nPersonnel             31\n\nCondition: kept.", "DEPOT ACCESS\n\nThe depots answer only to the\nAuthority. Recall needs the\nthree valley keys, presented\ntogether at any depot lock:\n\n  KEY-M  Marrow  (Hollow post)\n  KEY-K  Kettle  (quarry)\n  KEY-C  Cinder  (the works)", "REVIEW STATUS\n\nReview date: 1 APR (postponed)\nReview date: (not set)\nAuthority staff on site: 0\nLast login: P.RUS (Cinder)\n\nCustodian continues SWEEP until\nrecalled."]), at: (37.20, -218.50), rot: 118.0, name: "Depot office terminal"),
         (kind: Terminal(pages: ["RELAY LOG - MAST M1\n\nPylons extend the Custodian's\neyes: each one reports what\nmoves near it, and the depot\nsends a team.\n\nPylon down = reports stop.", "SWEEP SCHEDULE\n\nField discharge (\"SURGE\") every\ncycle. Clears contamination.\nPersonnel: be under a roof or\nout of the valley. Loose\nmaterial is reset.\n\nSchedule source: OBSERVED."]), at: (-112.01, -158.39), rot: -179.7, name: "Mast terminal"),
-        (kind: Note(text: "SURVEY POST - HOLLOW\n21 Nov. Ground up 41 cm since spring. The glow is brighter the nights before a discharge; I can predict them now. Nobody at the Authority wants to hear it.\nThe inspector's letter never came, but I know what the lockbox is for. Nobody else is going to keep it.\nGoing down at first light to read the centre stakes. Taking the box.\n- O.V."), at: (101.67, -1.96), rot: 273.4, y: 8.5, name: "Survey log"),
+        (kind: Note(text: "SURVEY POST - HOLLOW\n21 Nov. Ground up 41 cm since spring. The glow is brighter the nights before a discharge; I can predict them now. Nobody at the Authority wants to hear it.\nThe inspector's letter never came, but I know what the lockbox is for. Nobody else is going to keep it.\nGoing down at first light to read the centre stakes. Taking the box.\n- O.V."), at: (101.65, -0.93), rot: 328.6, y: 8.5, name: "Survey log"),
         (kind: Note(text: "From up here you can see the Hollow glow after dark. The survey team went in with the chief's lockbox and came back without the chief. The box is still down there, where the ground lifts. Bring a light. Don't run.\nLamp to Kettle tower, 2100: no answer from Emil three nights now.\n- M. Sedlak"), at: (-239.70, -137.40), rot: 333.4, y: 8.5, name: "Ranger's note"),
         (kind: Note(text: "Crew tally, on the wall by the bed:\nMon 14 logs Tue 16 Wed 15 Thu - buses\nThere's a tin of beans under the bed for whoever's next. Wedge the door at night with the split log, the latch is no good.\n- Tomas, J.'s crew"), at: (-145.30, 189.45), rot: 151.4, name: "Cabin tally"),
         // notes:end

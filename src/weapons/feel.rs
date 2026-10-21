@@ -35,6 +35,35 @@ pub const KICK_RISE: f32 = 12.5;
 pub const KICK_BACK: f32 = 1.0;
 /// Random yaw as a share of the rise (either way).
 pub const KICK_YAW: f32 = 0.3;
+/// The bore's height over where the gun bears at which a shot climbs by
+/// [`KICK_RISE`], metres; the climb goes with the lever, between these
+/// shares of it.
+pub const LEVER_REF: f32 = 0.05;
+pub const LEVER_MIN: f32 = 0.5;
+pub const LEVER_MAX: f32 = 1.6;
+/// A straighter stock turns climb into push: push gained per share of
+/// climb under [`LEVER_REF`]'s.
+pub const STRAIGHT_PUSH: f32 = 0.8;
+/// A self-loader's action, as shares of the shot's kick: the carrier
+/// hitting the back of its travel (a little more of the same) and slamming
+/// home (a dip forward), at these shares of the cycle; an open bolt's slam
+/// home before the round goes. And what each feels like in the hand.
+pub const CARRIER_BACK: f32 = 0.15;
+pub const CARRIER_HOME: f32 = 0.12;
+pub const CARRIER_BACK_AT: f32 = 0.3;
+pub const CARRIER_HOME_AT: f32 = 0.75;
+pub const OPEN_SLAM: f32 = 0.18;
+pub const OPEN_LEAD: f32 = 0.008;
+pub const BUZZ_BACK: f32 = 0.35;
+pub const BUZZ_HOME: f32 = 0.25;
+pub const BUZZ_SLAM: f32 = 0.5;
+/// A shove spread over time comes in steps this long, seconds.
+pub const SHOVE_STEP: f32 = 0.004;
+/// A pump or bolt worked hard against its stops jolts the gun: momentum
+/// over the gun's, N s, back at the rear stop and forward going home.
+pub const WORK_JOLT: f32 = 0.8;
+/// On a deployed bipod the spring's damping: it hops and settles.
+pub const BIPOD_DAMPING: f32 = 0.45;
 /// The hands' spring, natural frequency in rad/s: one hand, two hands,
 /// shouldered. Higher recovers faster and rises less.
 pub const RECOVER_ONE: f32 = 15.0;
@@ -92,6 +121,8 @@ pub struct Hold {
     /// The handguard rests on something solid (a wall top, a sill).
     pub braced: bool,
     pub crouched: bool,
+    /// Resting on its own deployed bipod.
+    pub bipod: bool,
 }
 
 /// How many hands count as holding the gun: a second hand on it; or,
@@ -117,6 +148,15 @@ impl Hold {
             RECOVER_ONE
         };
         w * if self.crouched { CROUCH_RECOVER } else { 1.0 }
+    }
+
+    /// The spring's damping ratio.
+    pub fn damping(self) -> f32 {
+        if self.bipod && self.braced {
+            BIPOD_DAMPING
+        } else {
+            RECOVER_DAMPING
+        }
     }
 
     /// Mass moving with the gun under recoil.
@@ -254,24 +294,170 @@ pub struct Handling {
     /// How far the eye is down behind the iron sights, 0..1, eased: the
     /// front post goes soft as it rises (`optics`' post blur).
     pub at_eye: f32,
+    /// What's still to come of the last shot: its shove and its action's
+    /// beats.
+    beats: Vec<Beat>,
+    /// The hardest beat felt in the last [`Self::settle`], 0 if none.
+    pub buzz: f32,
+    /// The action's moments heard since, for `handle_guns` to send.
+    pub sounds: Vec<FireEvent>,
+}
+
+/// A share of a shot's kick that lands later: in `at` seconds, these
+/// rates, felt as `buzz` in the hand.
+#[derive(Clone, Debug, Default)]
+struct Beat {
+    at: f32,
+    rise: Vec2,
+    push: f32,
+    buzz: f32,
+    sound: Option<FireEvent>,
+}
+
+/// How a gun's shot kicks, from its shape, its traits and its action
+/// ([`shot_of`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shot {
+    pub climb: f32,
+    pub push: f32,
+    pub walk: f32,
+    pub shove: f32,
+    pub action: Cycling,
+}
+
+/// What a gun's action does after (or before) the shot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cycling {
+    /// Worked by hand, or nothing to work.
+    None,
+    /// A gas or blowback self-loader's carrier, over a cycle of so many
+    /// seconds.
+    Carrier(f32),
+    /// An open bolt: it slams home and fires, then runs back.
+    OpenBolt(f32),
+}
+
+impl Shot {
+    /// No character: the momentum alone.
+    pub const PLAIN: Shot = Shot {
+        climb: 1.0,
+        push: 1.0,
+        walk: 0.0,
+        shove: 0.0,
+        action: Cycling::None,
+    };
+}
+
+/// A gun's shot as it's held: the climb from the bore's height over where
+/// it bears, scaled by its traits (`FirearmDef::kick`), and its action.
+pub fn shot_of(gun: &Gun, shouldered: bool) -> Shot {
+    let def = &gun.firearm.def;
+    let g = (lever(gun, shouldered) / LEVER_REF).clamp(LEVER_MIN, LEVER_MAX);
+    let cycle = 60.0 / def.rpm.max(60.0);
+    Shot {
+        climb: g * def.kick.climb,
+        push: (1.0 + STRAIGHT_PUSH * (1.0 - g).max(0.0)) * def.kick.push,
+        walk: def.kick.walk.clamp(-1.0, 1.0),
+        shove: def.kick.shove.max(0.0),
+        action: match def.action {
+            ActionKind::SemiAuto if def.open_bolt => Cycling::OpenBolt(cycle),
+            ActionKind::SemiAuto => Cycling::Carrier(cycle),
+            _ => Cycling::None,
+        },
+    }
 }
 
 impl Handling {
     /// A shot's momentum, with a yaw share in -1..1.
     pub fn kick(&mut self, impulse: f32, gun_mass: f32, yaw: f32) {
+        self.shot(impulse, gun_mass, yaw, Shot::PLAIN);
+    }
+
+    /// A shot's momentum as `shot` delivers it, with a yaw share in -1..1.
+    pub fn shot(&mut self, impulse: f32, gun_mass: f32, yaw: f32, shot: Shot) {
         let v = impulse / self.hold.mass(gun_mass).max(0.1);
-        self.rise_rate += Vec2::new(KICK_RISE * v, KICK_RISE * v * KICK_YAW * yaw);
-        self.push_rate += KICK_BACK * v;
+        let walk = shot.walk + (1.0 - shot.walk.abs()) * yaw;
+        let up = KICK_RISE * v * shot.climb;
+        let rise = Vec2::new(up, up * KICK_YAW * walk);
+        let push = KICK_BACK * v * shot.push;
+        let lead = match shot.action {
+            Cycling::OpenBolt(_) => {
+                // The bolt's mass slams forward first: a dip, then the shot.
+                self.rise_rate -= rise * OPEN_SLAM;
+                self.push_rate -= push * OPEN_SLAM;
+                self.buzz = self.buzz.max(BUZZ_SLAM);
+                self.sounds.push(FireEvent::OpenBoltSlam);
+                OPEN_LEAD
+            }
+            _ => 0.0,
+        };
+        // The shove, all at once or spread over its time.
+        let n = (shot.shove / SHOVE_STEP).ceil().max(1.0) as usize;
+        for i in 0..n {
+            let at = lead + shot.shove * i as f32 / n as f32;
+            let k = 1.0 / n as f32;
+            if at <= 0.0 {
+                self.rise_rate += rise * k;
+                self.push_rate += push * k;
+            } else {
+                self.beats.push(Beat {
+                    at,
+                    rise: rise * k,
+                    push: push * k,
+                    ..default()
+                });
+            }
+        }
+        if let Cycling::Carrier(cycle) | Cycling::OpenBolt(cycle) = shot.action {
+            self.beats.push(Beat {
+                at: lead + cycle * CARRIER_BACK_AT,
+                rise: rise * CARRIER_BACK,
+                push: push * CARRIER_BACK,
+                buzz: BUZZ_BACK,
+                sound: None,
+            });
+        }
+        if let Cycling::Carrier(cycle) = shot.action {
+            self.beats.push(Beat {
+                at: cycle * CARRIER_HOME_AT,
+                rise: -rise * CARRIER_HOME,
+                push: -push * CARRIER_HOME,
+                buzz: BUZZ_HOME,
+                sound: Some(FireEvent::CarrierHome),
+            });
+        }
+    }
+
+    /// The action worked hard against a stop: `back` toward the stock, or
+    /// home (forward, the muzzle dipping).
+    pub fn jolt(&mut self, gun_mass: f32, back: bool) {
+        let v = WORK_JOLT / self.hold.mass(gun_mass).max(0.1);
+        let s = if back { 1.0 } else { -1.0 };
+        self.push_rate += KICK_BACK * v * s;
+        self.rise_rate.x += KICK_RISE * v * 0.3 * s;
     }
 
     /// Integrates the spring for `dt` seconds.
     pub fn settle(&mut self, dt: f32) {
         let w = self.hold.recover();
-        let c = 2.0 * RECOVER_DAMPING * w;
+        let c = 2.0 * self.hold.damping() * w;
         // Semi-implicit Euler in small steps: stable for these stiffnesses.
         let n = (dt / 0.004).ceil().max(1.0) as usize;
         let h = dt / n as f32;
         for _ in 0..n {
+            let mut i = 0;
+            while i < self.beats.len() {
+                self.beats[i].at -= h;
+                if self.beats[i].at <= 0.0 {
+                    let b = self.beats.swap_remove(i);
+                    self.rise_rate += b.rise;
+                    self.push_rate += b.push;
+                    self.buzz = self.buzz.max(b.buzz);
+                    self.sounds.extend(b.sound);
+                } else {
+                    i += 1;
+                }
+            }
             self.rise_rate += (-w * w * self.rise - c * self.rise_rate) * h;
             self.rise += self.rise_rate * h;
             self.push_rate += (-w * w * self.push - c * self.push_rate) * h;
@@ -309,6 +495,17 @@ pub fn butt(gun: &Gun) -> Option<Vec3> {
     Some(Vec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, hi.z))
 }
 
+/// The bore's height over where the gun bears against the holder (the
+/// butt, shouldered; else the grip), metres: the lever a shot's push
+/// climbs the muzzle by.
+pub fn lever(gun: &Gun, shouldered: bool) -> f32 {
+    let bears = match butt(gun) {
+        Some(b) if shouldered => b,
+        _ => gun.layout.grip.translation,
+    };
+    gun.layout.muzzle.y - bears.y
+}
+
 /// Mass times the distance from the grip to the gun's middle: what a
 /// wrist holds up.
 fn moment(gun: &Gun, mass: f32) -> f32 {
@@ -338,6 +535,7 @@ fn handle_guns(
     time: Res<Time>,
     spatial: avian3d::prelude::SpatialQuery,
     mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    mut gun_events: MessageWriter<GunEvent>,
     sockets: Query<&crate::interact::Socket>,
     mags: Query<(&GlobalTransform, &super::Mag)>,
     statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
@@ -412,6 +610,7 @@ fn handle_guns(
             shouldered,
             braced,
             crouched,
+            bipod: bipod.is_some_and(|b| b.swing >= 1.0),
         };
         // It takes: a settle in the hand.
         if braced && !was_braced {
@@ -421,7 +620,24 @@ fn handle_guns(
                 seconds: 0.025,
             });
         }
+        handling.buzz = 0.0;
         handling.settle(dt);
+        // The action's beats, heard from the gun and felt in the gun hand.
+        for event in handling.sounds.drain(..) {
+            gun_events.write(GunEvent {
+                gun: gun_e,
+                item: catalog.get(item.kind()).id.clone(),
+                event,
+                at: gt.transform_point(gun.layout.muzzle),
+            });
+        }
+        if handling.buzz > 0.0 {
+            haptics.write(crate::rig::haptics::Haptic {
+                side: held.side,
+                amplitude: handling.buzz,
+                seconds: 0.015,
+            });
+        }
         handling.cycle = (handling.cycle - dt / 0.07).max(0.0);
         handling.clock += dt;
         let hold = handling.hold;
@@ -530,15 +746,26 @@ pub fn kick_guns(
     catalog: Res<Catalog>,
 ) {
     for ev in events.read() {
-        if !matches!(ev.event, FireEvent::Fired { .. }) {
-            continue;
-        }
         let Ok((mut gun, item, mut handling)) = guns.get_mut(ev.gun) else {
             continue;
         };
         let mass = catalog.get(item.kind()).mass;
+        let worked = matches!(
+            gun.firearm.def.action,
+            ActionKind::Pump | ActionKind::BoltAction
+        );
+        match ev.event {
+            // A pump or bolt run back to its stop, and slammed home.
+            FireEvent::Cocked if worked => handling.jolt(mass, true),
+            FireEvent::BoltClosed if worked => handling.jolt(mass, false),
+            _ => {}
+        }
+        if !matches!(ev.event, FireEvent::Fired { .. }) {
+            continue;
+        }
         let yaw = gun.dice.f32() * 2.0 - 1.0;
-        handling.kick(gun.firearm.def.recoil, mass, yaw);
+        let shot = shot_of(&gun, handling.hold.shouldered);
+        handling.shot(gun.firearm.def.recoil, mass, yaw, shot);
         if gun.firearm.def.action == ActionKind::SemiAuto {
             handling.cycle = 1.0;
         }
@@ -577,6 +804,7 @@ pub fn jam_visuals(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut mats: Local<Option<(Handle<StandardMaterial>, Handle<StandardMaterial>)>>,
+    mut hull: Local<Option<Handle<StandardMaterial>>>,
 ) {
     let (brass, copper) = mats
         .get_or_insert_with(|| {
@@ -593,9 +821,28 @@ pub fn jam_visuals(
         })
         .clone();
     for (e, gun) in &added {
-        if gun.firearm.def.action != ActionKind::SemiAuto {
+        // (A pump's short stroke jams a shell on the case: its double
+        // feed.)
+        if !matches!(
+            gun.firearm.def.action,
+            ActionKind::SemiAuto | ActionKind::Pump
+        ) {
             continue;
         }
+        let pump = gun.firearm.def.action == ActionKind::Pump;
+        // A shotgun's is a red plastic hull, not brass.
+        let shell = if pump {
+            hull.get_or_insert_with(|| {
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.55, 0.08, 0.06),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                })
+            })
+            .clone()
+        } else {
+            brass.clone()
+        };
         let (r, len) = case_size(&gun.firearm.def.cartridge);
         let case = meshes.add(Cylinder::new(r, len));
         let bullet = meshes.add(Cylinder::new(r * 0.75, len * 0.45));
@@ -616,7 +863,13 @@ pub fn jam_visuals(
         // Double feed: the case still in the chamber's mouth, the next
         // round tipped up into it from below.
         // Set into the port's opening, so it shows past the cover or slide.
-        let bore = Vec3::new(port.x * 0.6, port.y + r, port.z);
+        // (A shell is fat: it sits down in the port, under the receiver's
+        // top.)
+        let bore = Vec3::new(
+            port.x * 0.6,
+            if pump { port.y - r * 0.3 } else { port.y + r },
+            port.z,
+        );
         let pair = commands
             .spawn((
                 Name::new("Double feed"),
@@ -628,7 +881,7 @@ pub fn jam_visuals(
             .id();
         commands.spawn((
             Mesh3d(case.clone()),
-            MeshMaterial3d(brass.clone()),
+            MeshMaterial3d(shell.clone()),
             Transform::from_xyz(0.0, 0.0, -len * 0.3)
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, Vec3::NEG_Z)),
             ChildOf(pair),
@@ -637,18 +890,20 @@ pub fn jam_visuals(
         let round = commands
             .spawn((
                 Mesh3d(case),
-                MeshMaterial3d(brass.clone()),
+                MeshMaterial3d(shell.clone()),
                 Transform::from_xyz(0.0, -r * 0.5, len * 0.5)
                     .with_rotation(Quat::from_rotation_arc(Vec3::Y, tip)),
                 ChildOf(pair),
             ))
             .id();
-        commands.spawn((
-            Mesh3d(bullet),
-            MeshMaterial3d(copper.clone()),
-            Transform::from_xyz(0.0, len * 0.65, 0.0),
-            ChildOf(round),
-        ));
+        if !pump {
+            commands.spawn((
+                Mesh3d(bullet),
+                MeshMaterial3d(copper.clone()),
+                Transform::from_xyz(0.0, len * 0.65, 0.0),
+                ChildOf(round),
+            ));
+        }
     }
     for (prop, parent, mut vis) in &mut props {
         let on = guns
@@ -678,7 +933,7 @@ mod one_hand_tests {
             hands,
             shouldered: false,
             braced: true,
-            crouched: false,
+            ..default()
         };
         let one = hold(hands_holding(false, true, true));
         let two = hold(hands_holding(true, true, false));

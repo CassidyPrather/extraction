@@ -222,6 +222,9 @@ pub enum Expect {
     Alive,
     /// The bot has at least this much health (it came through unhurt).
     HealthAtLeast(f32),
+    /// A named [`Counters`] count is in this inclusive range (what a
+    /// machine did: a spotter's calls, a mine going off).
+    Counter(&'static str, u32, u32),
     /// The player would have heard at least this many robots' words (of
     /// this mind, if given): `robot_voice::Heard`, in the listening
     /// scenario.
@@ -644,6 +647,17 @@ struct TaskExtras<'w, 's> {
         ),
     >,
     cuts: MessageWriter<'w, crate::destruction::hooks::Cut>,
+    counters: Option<Res<'w, Counters>>,
+}
+
+/// Counts any system can bump for a scenario's [`Expect::Counter`].
+#[derive(Resource, Default, Debug)]
+pub struct Counters(pub std::collections::HashMap<&'static str, u32>);
+
+impl Counters {
+    pub fn bump(&mut self, name: &'static str) {
+        *self.0.entry(name).or_default() += 1;
+    }
 }
 
 /// Advances each bot's current task.
@@ -846,6 +860,12 @@ fn run_tasks(
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
                 let d = pos.distance(to);
+                // A step aside that can't be made isn't worth a fail.
+                if within == SIDESTEP && bot.elapsed > 4.0 {
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                }
                 if d <= within {
                     bot.walk = None;
                     if within != SIDESTEP {
@@ -861,7 +881,9 @@ fn run_tasks(
                 } else {
                     bot.progress.1 += dt;
                 }
-                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
+                // (Not when lining up close: indoors, a step aside put it
+                // in a corner.)
+                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP && d > 2.0 {
                     let ahead = (to - pos).normalize_or(Vec2::X);
                     let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
                     let step = pos + ahead.perp() * side * 3.0 - ahead * 0.5;
@@ -1554,6 +1576,17 @@ fn run_tasks(
                         (
                             got >= *n,
                             format!("heard at least {n} {said:?} words (got {got})"),
+                        )
+                    }
+                    Expect::Counter(name, lo, hi) => {
+                        let n = ext
+                            .counters
+                            .as_ref()
+                            .and_then(|c| c.0.get(name).copied())
+                            .unwrap_or(0);
+                        (
+                            n >= *lo && n <= *hi,
+                            format!("{name} in {lo}..={hi} (got {n})"),
                         )
                     }
                     Expect::HealthAtLeast(n) => {

@@ -394,6 +394,24 @@ surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
 `warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
 (it stocks, the decoys go, nothing's left after).
 
+The shelf draws nothing. Each entry wears its layout's *point twin*: the
+mesh's first vertex three times, one triangle with no area whatever the
+vertex shader does, which still builds the pipeline. Shrinking the real
+mesh wasn't enough. Rain and the storm's sheets and bolts place their
+vertices in the world themselves, and their shelf copies drew full size
+round the eye on every restock.
+
+In a headset the shelf hangs from one eye and keeps it. There are two XR
+cameras, and the order a query names them in can change. The shelf
+used to start over each time it did, leaving its decoys and their lights
+behind, and so it never finished. In Monado's simulated headset (training
+yard, standing still) the point lights went from 7 to 61, and the opaque
+pass from about 1 s to 9-15 s a frame on llvmpipe. Fixed, the lights go
+7, 13, 7 and opaque holds at 0.4-1.3 s.
+`warmup::tests::two_eyes_one_shelf` holds that, and
+`EXTRACTION_COUNTS=1` logs the world's entity, light and mesh counts every
+ten seconds, and what grew, for anything else that piles up.
+
 Neither change shows: `docs/shots/performance/hitches_village.png` is the
 village at frame 600 (lavapipe, clear day) with the shelf stocked and the
 buildings dressed from the background bake, and the same frame with the
@@ -504,3 +522,21 @@ capture's rig isn't one.
 view (the truck at base, clear day, lavapipe) with the rule; without it
 the frame is identical to the pixel (the buttons, the vise, the tins are
 within reach and still cast), as is the Marrow gate view.
+
+## Small things' range
+
+Items fade where they'd be a few pixels (`item_range`). Other small
+things had no range. Marrow Creek's aerial view went from 998 to 1208
+draws in one merge, with the top five kinds unchanged. `BUDGET_LIST=1`
+lists every kind a view draws, which is how the tail showed up: 96 piano
+parts (keys, hammers), 39 of the player's body and kit parts, 35 depot
+fittings, 18 terminals, 18 notes, 15 supply crates, 7 keys. None were
+items. (The guns in that view are items, on the gate's truck within
+their 60 m range, and rightly drawn.)
+
+`render::budget::small_ranges` gives any StandardMaterial mesh under 1 m
+(largest side, world) that isn't part of an item or under a `LodReach` a
+range of 200 times its size, 20 to 200 m: a 10 cm fitting goes at 20 m,
+about three pixels a side on the headset. The aerial view now draws 945.
+The gate, village and aerial shots with and without it
+(`EXTRACTION_SMALL_RANGES=0`) differ only in the grass's sway.

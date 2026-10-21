@@ -244,6 +244,10 @@ pub const ENTERABLE: &[&str] = &[
     "survey_tower",
     "factory_hall",
     "guard_booth",
+    "ore_mill",
+    "observatory",
+    "funicular_lower",
+    "funicular_upper",
 ];
 
 // ---- Orientation -----------------------------------------------------------
@@ -346,6 +350,42 @@ pub const RV_LEVEL: f32 = 12.0;
 /// a point of interest.
 pub const VIEW_RANGE: f32 = 150.0;
 pub const VIEW_MAX: usize = 16;
+/// Light props [`VIEW_MAX`] doesn't count: a garden fence's run is five
+/// posts and four plank panels (nine boxes, no roof, no interior), where a
+/// house is dozens of pieces and a shadow-casting shell. Counting each run
+/// as a building would cost a village its gardens or its houses. They are
+/// counted and printed in the render-load measure on their own.
+///
+/// A car wreck is one too: one body mesh and its box, and its doors,
+/// bonnet, boot and wheels as small breakable parts, about a dozen pieces
+/// with no roof, no rooms and no loot, under two metres tall (a lorry 2.2).
+/// They stand by the roads in ones and twos; counted as buildings, every
+/// wreck on a road through a village would cost it a house.
+pub const VIEW_LIGHT: &[&str] = &["fence_garden", "wreck_lada", "wreck_uaz", "wreck_lorry"];
+
+/// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
+/// grid blocks only the cells whose middles fall within 0.7 m of a run
+/// (its 0.1 m half depth and the grid's 0.6 m clearance), so a route can
+/// be drawn between two rows of cells straight through a fence.
+pub const FENCES: &[&str] = &["fence_garden"];
+pub const FENCE_CLEAR: f32 = 0.5;
+/// A fence isn't levelled for (`map::prefab_wants_pad`): it stands on the
+/// lowest ground under its run, its posts sunk 0.25 m and its panels 0.15 m
+/// clear. The ground may rise this much along it, metres: the far panel's
+/// foot goes 0.15 m into the grass, no more.
+pub const FENCE_RISE: f32 = 0.3;
+
+/// Car wrecks: cover on the verges (they're placements, so the cover
+/// measure counts them), never on a road (`Overlap`; they aren't in
+/// `ON_ROADS`). Wider than the nav grid's cell with its clearance, so a
+/// main route goes round one, not through it as it could a fence.
+pub const WRECKS: &[&str] = &["wreck_lada", "wreck_uaz", "wreck_lorry"];
+/// A wreck isn't levelled for (`map::prefab_wants_pad`): it stands level
+/// on the lowest of its corners and middle (`Heightmap::footing`). The
+/// ground anywhere under it may be this much over or under that foot,
+/// metres: a wheel on the high side sunk to its hub (a car's are 0.58 m
+/// across), or the low side's off the grass by as much, no more.
+pub const WRECK_RISE: f32 = 0.3;
 
 /// Where a kiosk's door is checked for footing: this far out from it.
 pub const KIOSK_STEP: f32 = 2.0;
@@ -378,6 +418,8 @@ const ON_ROADS: &[&str] = &[
     "robot_gate",
     "footbridge",
     "boxcar",
+    // Rime Fell's funicular car stands on its own line.
+    "funicular_car",
 ];
 
 /// An oriented rectangle in map space: centre, half extents, yaw (as the
@@ -535,6 +577,38 @@ pub(crate) fn solids(map: &MapDef) -> Vec<Solid> {
                 rect,
                 shell: Some(shell),
             });
+        }
+    }
+    out
+}
+
+/// Fences ([`FENCES`]) a main route runs through or brushes: within
+/// [`FENCE_CLEAR`] of a run. A route keeps to the gentle grid, which treats
+/// footprints as blocked, but a run is thinner than its cells.
+pub(crate) fn fences_across(solids: &[Solid], routes: &[Route]) -> Vec<(String, P2)> {
+    let mut out = Vec::new();
+    for s in solids
+        .iter()
+        .filter(|s| FENCES.contains(&s.prefab.as_str()))
+    {
+        let reach = geom::len(s.rect.half) + FENCE_CLEAR + STEP;
+        for route in routes {
+            // Between its samples too: a run is 0.2 m deep, they're 2 m apart.
+            let hit = route
+                .points
+                .windows(2)
+                .filter(|w| dist(w[0], s.rect.at) < reach)
+                .flat_map(|w| (0..8).map(move |k| geom::lerp(w[0], w[1], k as f32 / 8.0)))
+                .find(|p| s.rect.sdf(*p) < FENCE_CLEAR);
+            if let Some(p) = hit {
+                out.push((
+                    format!(
+                        "{} at ({:.0}, {:.0}) is across the route to {}",
+                        s.name, s.rect.at[0], s.rect.at[1], route.to
+                    ),
+                    p,
+                ));
+            }
         }
     }
     out
@@ -1384,6 +1458,8 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    // Fence runs, and the most ground over any one's foot.
+    let mut fences = (0, 0.0f32);
     for p in &map.placements {
         if p.prefab == "footbridge" || p.absolute {
             continue;
@@ -1410,6 +1486,75 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 p.at,
             );
         }
+        if FENCES.contains(&p.prefab.as_str()) {
+            let foot = hm.footing(&p.prefab, p.at, p.rot);
+            // Every half metre along the run.
+            let n = (rc.half[0] * 4.0).ceil() as usize;
+            let (rise, at) = (0..=n)
+                .map(|k| rc.world([-rc.half[0] + k as f32 * 0.5, 0.0]))
+                .map(|q| (hm.height(q) - foot, q))
+                .fold((0.0f32, p.at), |a, b| if b.0 > a.0 { b } else { a });
+            fences = (fences.0 + 1, fences.1.max(rise));
+            if rise > FENCE_RISE {
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!(
+                        "the {} at ({:.0}, {:.0}) has ground {rise:.2} m over its foot",
+                        p.prefab, p.at[0], p.at[1]
+                    ),
+                    at,
+                );
+            }
+        }
+    }
+    if fences.0 > 0 {
+        r.measures.push(format!(
+            "fences: {} runs, the ground at most {:.2} m over a run's foot",
+            fences.0, fences.1
+        ));
+    }
+    // Wrecks, and the most ground over or under any one's foot.
+    let mut wrecks = (0, 0.0f32);
+    for p in &map.placements {
+        if !WRECKS.contains(&p.prefab.as_str()) || p.absolute {
+            continue;
+        }
+        let rc = Rect::of(&p.prefab, p.at, p.rot);
+        let foot = hm.footing(&p.prefab, p.at, p.rot);
+        // Every half metre under it, edges included.
+        let (nx, nz) = (
+            (rc.half[0] * 4.0).ceil() as usize,
+            (rc.half[1] * 4.0).ceil() as usize,
+        );
+        let (off, at) = (0..=nx)
+            .flat_map(|i| (0..=nz).map(move |k| (i, k)))
+            .map(|(i, k)| {
+                rc.world([
+                    -rc.half[0] + 2.0 * rc.half[0] * i as f32 / nx as f32,
+                    -rc.half[1] + 2.0 * rc.half[1] * k as f32 / nz as f32,
+                ])
+            })
+            .map(|q| ((hm.height(q) - foot).abs(), q))
+            .fold((0.0f32, p.at), |a, b| if b.0 > a.0 { b } else { a });
+        wrecks = (wrecks.0 + 1, wrecks.1.max(off));
+        if off > WRECK_RISE {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "the {} at ({:.0}, {:.0}) has ground {off:.2} m off its foot",
+                    p.prefab, p.at[0], p.at[1]
+                ),
+                at,
+            );
+        }
+    }
+    if wrecks.0 > 0 {
+        r.measures.push(format!(
+            "wrecks: {}, the ground at most {:.2} m off a wreck's foot",
+            wrecks.0, wrecks.1
+        ));
     }
     // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
     // own placement is padded as any building), so what can go wrong is
@@ -1506,6 +1651,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 );
             }
         }
+    }
+
+    for (what, at) in fences_across(&solids, &routes) {
+        find(&mut r, Rule::Overlap, what, at);
     }
 
     // -- Anomalies off the routes ---------------------------------------------------
@@ -1841,19 +1990,22 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .copied()
         .chain(pois.iter().map(|p| p.1));
     let mut worst = (0, ins);
+    let mut light_most = 0;
     for p in views {
-        // A kiosk is a building to draw like any other.
-        let n = solids
+        // A kiosk is a building to draw like any other; a light prop isn't.
+        let (light, n): (Vec<&Solid>, Vec<&Solid>) = solids
             .iter()
             .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE)
-            .count();
-        if n > worst.0 {
-            worst = (n, p);
+            .partition(|q| VIEW_LIGHT.contains(&q.prefab.as_str()));
+        light_most = light_most.max(light.len());
+        if n.len() > worst.0 {
+            worst = (n.len(), p);
         }
     }
     r.measures.push(format!(
-        "render load: at most {} placements within {VIEW_RANGE} m",
-        worst.0
+        "render load: at most {} placements within {VIEW_RANGE} m, and up to {light_most} light props ({})",
+        worst.0,
+        VIEW_LIGHT.join(", ")
     ));
     if worst.0 > VIEW_MAX {
         find(
@@ -1948,6 +2100,14 @@ mod tests {
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
         );
+    }
+
+    /// Every wreck is a light prop (`VIEW_LIGHT` names them again).
+    #[test]
+    fn every_wreck_is_a_light_prop() {
+        for w in WRECKS {
+            assert!(VIEW_LIGHT.contains(w), "{w} missing from VIEW_LIGHT");
+        }
     }
 
     /// The Training Yard belongs to onboarding: its findings are printed
@@ -2092,6 +2252,109 @@ mod tests {
             "{}",
             r.text()
         );
+    }
+
+    /// A garden fence across a door, a road or a main route is found, though
+    /// a run is only 0.2 m deep: thinner than the door strip's samples were
+    /// apart and than the nav grid's cells.
+    #[test]
+    fn a_fence_across_a_door_a_road_or_a_route_is_found() {
+        let fence = |at: P2, rot: f32| crate::map::Placement {
+            prefab: "fence_garden".into(),
+            at,
+            rot,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        };
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        // The village's north house, turned 90: its door faces east, its
+        // face 3.59 m out. A run along z 2.125 m in front of it, between
+        // two rows of 0.25 m samples.
+        let house = map
+            .placements
+            .iter()
+            .find(|p| p.prefab == "house_plank" && p.at == [-18.0, 95.0] && p.rot == 90.0)
+            .expect("the village's north house moved");
+        let face = [house.at[0] + 3.59, house.at[1]];
+        map.placements.push(fence([face[0] + 2.125, face[1]], 90.0));
+        // Across the district road in the village, which runs north-south.
+        map.placements.push(fence([3.75, 50.0], 0.0));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        let found = |rule: Rule, s: &str| {
+            r.findings
+                .iter()
+                .any(|f| f.rule == rule && f.what.contains(s))
+        };
+        assert!(
+            found(Rule::Door, "fence_garden stands in front of it"),
+            "{}",
+            r.text()
+        );
+        assert!(
+            found(Rule::Overlap, "fence_garden is on the District road"),
+            "{}",
+            r.text()
+        );
+        // Routes are planned round footprints, so lay one across a route as
+        // planned, square to it, between two of its samples.
+        let route = &r.routes[0];
+        let k = route.points.len() / 2;
+        let (a, b) = (route.points[k], route.points[k + 1]);
+        let along = geom::sub(b, a);
+        let rot = along[1].atan2(along[0]).to_degrees() + 90.0;
+        map.placements.push(fence(geom::lerp(a, b, 0.5), rot));
+        let across = fences_across(&solids(&map), &r.routes);
+        assert!(
+            across
+                .iter()
+                .any(|(what, _)| what.ends_with(&format!("the route to {}", route.to))),
+            "{across:?}"
+        );
+    }
+
+    /// A wreck on the carriageway is on the road; one across a hillside
+    /// stands with its high side buried; and neither is levelled for, nor
+    /// is the ground round it settled: the land is as it was without it.
+    #[test]
+    fn a_wreck_on_a_road_or_a_slope_is_found() {
+        let wreck = |prefab: &str, at: P2, rot: f32| crate::map::Placement {
+            prefab: prefab.into(),
+            at,
+            rot,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        };
+        let bare = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let mut map = bare.clone();
+        // On the district road in the village, which runs north-south.
+        map.placements.push(wreck("wreck_lada", [3.5, 50.0], 0.0));
+        // Across the side of the radio mast's hill, 18° there.
+        map.placements
+            .push(wreck("wreck_lorry", [-120.0, -220.0], 90.0));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        let found = |rule: Rule, s: &str| {
+            r.findings
+                .iter()
+                .any(|f| f.rule == rule && f.what.contains(s))
+        };
+        assert!(
+            found(Rule::Overlap, "wreck_lada is on the District road"),
+            "{}",
+            r.text()
+        );
+        assert!(
+            found(Rule::Footing, "the wreck_lorry at (-120, -220) has ground"),
+            "{}",
+            r.text()
+        );
+        let was = Heightmap::build(&bare);
+        for at in [[-120.0, -220.0], [-120.0, -226.0], [-110.0, -220.0]] {
+            assert_eq!(hm.height(at), was.height(at), "the ground moved at {at:?}");
+        }
     }
 
     #[test]

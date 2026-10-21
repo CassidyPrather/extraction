@@ -227,6 +227,7 @@ impl Plugin for AnomalyPlugin {
                         detector::detectors,
                         costs::bites,
                         harvest::heat,
+                        harvest::cool_scald,
                         hush::press,
                         measure_attention,
                         spend_attention,

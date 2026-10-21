@@ -142,6 +142,9 @@ impl Plugin for BudgetPlugin {
             .add_systems(FixedFirst, start_tick)
             .add_systems(FixedLast, end_tick)
             .add_systems(Update, log_cpu);
+        if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
+            app.add_systems(Last, log_counts);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -183,6 +186,7 @@ impl Plugin for BudgetPlugin {
                 late_reach,
                 range_items,
                 small_shadows.after(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+                small_ranges,
                 shadow_reach,
             )
                 .chain()
@@ -363,6 +367,71 @@ fn small_shadows(
             };
             commands.entity(e).try_insert(ShadowReach(reach));
         }
+    }
+}
+
+/// Below this size (the largest side, world metres) a mesh that isn't
+/// part of an item (items have [`item_range`]) or under a [`LodReach`]
+/// fades out where it would be a pixel or two: [`small_range`]. Display
+/// guns (every round in a drum its own mesh), a piano's keys and hammers,
+/// a desk's fittings were drawn from anywhere: Marrow Creek's aerial view
+/// drew 96 piano parts and some 250 gun parts from 60 m up.
+pub const SMALL_DRAWN: f32 = 1.0;
+
+/// How far a small thing (`size` its largest side, metres) is drawn: 200
+/// times its size, 20 to 200 m (a 10 cm fitting at 20 m, about three
+/// pixels a side on the headset; a 60 cm crate at 120 m).
+pub fn small_range(size: f32) -> f32 {
+    (size * 200.0).clamp(20.0, 200.0)
+}
+
+/// Gives each newly bounded small mesh its range ([`small_range`]).
+/// `EXTRACTION_SMALL_RANGES=0` leaves them all drawn at any distance.
+#[allow(clippy::type_complexity)]
+fn small_ranges(
+    mut commands: Commands,
+    added: Query<
+        (Entity, &bevy::camera::primitives::Aabb, &GlobalTransform),
+        (
+            Added<bevy::camera::primitives::Aabb>,
+            With<Mesh3d>,
+            With<MeshMaterial3d<StandardMaterial>>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+            Without<super::warmup::ShelfMark>,
+        ),
+    >,
+    parents: Query<&ChildOf>,
+    kept: Query<(), Or<(With<crate::items::Item>, With<LodReach>)>>,
+) {
+    if std::env::var("EXTRACTION_SMALL_RANGES").is_ok_and(|v| v == "0") {
+        return;
+    }
+    'next: for (e, aabb, gt) in &added {
+        let size = (Vec3::from(aabb.half_extents) * gt.compute_transform().scale.abs())
+            .max_element()
+            * 2.0;
+        if size >= SMALL_DRAWN {
+            continue;
+        }
+        // An item's (or a reach's) own range comes from `range_items`.
+        let mut at = e;
+        for _ in 0..12 {
+            if kept.contains(at) {
+                continue 'next;
+            }
+            match parents.get(at) {
+                Ok(p) => at = p.parent(),
+                Err(_) => break,
+            }
+        }
+        let far = small_range(size);
+        commands
+            .entity(e)
+            .try_insert(bevy::camera::visibility::VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: (far * 0.8)..far,
+                use_aabb: true,
+            });
     }
 }
 
@@ -961,6 +1030,18 @@ pub(crate) mod tests {
 
     /// A client under this weather, with this much snow lying (`--snow`).
     fn client_with(map: &str, weather: &str, snow: Option<f32>, threads: Option<usize>) -> App {
+        client_flash(map, weather, snow, false, threads)
+    }
+
+    /// `client_with`, with a storm's strike held lit (every frame a flash
+    /// frame: the sun's cascades on, the bolt drawn).
+    fn client_flash(
+        map: &str,
+        weather: &str,
+        snow: Option<f32>,
+        flash: bool,
+        threads: Option<usize>,
+    ) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -1003,6 +1084,7 @@ pub(crate) mod tests {
             data_dir: Some(dir),
             weather: Some(weather.into()),
             snow,
+            storm_flash: flash,
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -1143,7 +1225,9 @@ pub(crate) mod tests {
         let loads = match weather {
             Some((w, snow)) => {
                 println!("{map}: in {w}, snow {snow:?}");
-                loads_with(client_with(map, w, snow, None), map)
+                // A storm is measured on its flash frames, its dearest.
+                let flash = w == "storm";
+                loads_with(client_flash(map, w, snow, flash, None), map)
             }
             None => loads(map),
         };
@@ -1161,6 +1245,13 @@ pub(crate) mod tests {
             most.sort_by(|a, b| b.1.cmp(&a.1));
             for (what, c, t) in most.iter().take(5) {
                 println!("    many {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+            }
+            // `BUDGET_LIST=1`: every kind drawn, most first (to find what
+            // a merge added, when it's spread over the long tail).
+            if std::env::var("BUDGET_LIST").is_ok_and(|v| v != "0") {
+                for (what, c, t) in &most {
+                    println!("    all {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+                }
             }
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
@@ -1775,6 +1866,7 @@ pub(crate) mod tests {
             "kettle_pass",
             "cinder_works",
             "sallow_reservoir",
+            "rime_fell",
         ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
@@ -1805,12 +1897,17 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn rime_fell_holds_the_budget() {
+        holds("rime_fell");
+    }
+
+    #[test]
     fn training_yard_holds_the_budget() {
         holds("training_yard");
     }
 
-    /// A thunderstorm: the rain sheets crossing the valley (the flashes
-    /// are a few frames, not a steady load).
+    /// A thunderstorm, measured on a flash frame (its dearest: the sun's
+    /// cascades on for it, the bolt, the rain sheets).
     #[test]
     fn marrow_creek_holds_the_budget_in_a_storm() {
         holds_with("marrow_creek", Some(("storm", None)));
@@ -1821,4 +1918,45 @@ pub(crate) mod tests {
     fn kettle_pass_holds_the_budget_in_snow() {
         holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
+}
+
+/// `EXTRACTION_COUNTS=1`: every ten seconds, what the world holds (all
+/// entities, lights, meshes, the names that grew most since last time).
+/// For something that piles up while you stand still.
+fn log_counts(
+    time: Res<Time<Real>>,
+    mut last: Local<(f32, std::collections::HashMap<String, usize>)>,
+    all: Query<Option<&Name>>,
+    points: Query<(), With<PointLight>>,
+    spots: Query<(), With<SpotLight>>,
+    meshes: Query<&ViewVisibility, With<Mesh3d>>,
+) {
+    let now = time.elapsed_secs();
+    if now - last.0 < 10.0 {
+        return;
+    }
+    last.0 = now;
+    let mut names: std::collections::HashMap<String, usize> = default();
+    let mut n = 0;
+    for name in &all {
+        n += 1;
+        *names
+            .entry(name.map_or("(unnamed)".into(), |n| n.as_str().to_owned()))
+            .or_default() += 1;
+    }
+    let shown = meshes.iter().filter(|v| v.get()).count();
+    let mut grew: Vec<(String, i64)> = names
+        .iter()
+        .map(|(k, v)| (k.clone(), *v as i64 - *last.1.get(k).unwrap_or(&0) as i64))
+        .filter(|(_, d)| *d != 0)
+        .collect();
+    grew.sort_by_key(|(_, d)| -d.abs());
+    grew.truncate(8);
+    info!(
+        "counts: {n} entities, {} point lights, {} spot lights, {} meshes ({shown} visible); grew {grew:?}",
+        points.iter().count(),
+        spots.iter().count(),
+        meshes.iter().count(),
+    );
+    last.1 = names;
 }

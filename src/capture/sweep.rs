@@ -48,6 +48,8 @@ pub const GRID: (u32, u32) = (4, 2);
 pub const FOV: f32 = 40.0;
 /// The cameras' near plane.
 pub const NEAR: f32 = 0.03;
+/// How much further than the weather's the sweep's cameras see.
+const CLEAR_AIR: f32 = 8.0;
 /// How far under the subjects the studio floor's top is, metres.
 pub const FLOOR_GAP: f32 = 0.004;
 
@@ -140,10 +142,12 @@ struct Record {
     blockouts: usize,
     /// Meshes touching no other mesh and off the floor, by name.
     floating: Vec<String>,
-    /// A prefab's footprint as the map knows it (x, y, z), for comparing.
-    footprint: Option<[f32; 3]>,
     /// Frames it took to load.
     load_frames: u32,
+    /// Meshes spawned with it outside its hierarchy (a building's crates,
+    /// window boards, wreckage), cleared when it went.
+    left_behind: usize,
+    left_behind_names: Vec<String>,
     failed: bool,
 }
 
@@ -180,8 +184,15 @@ struct Sweep {
     hidden: bool,
     /// The light the studio last settled into.
     warmed: Option<usize>,
+    /// The meshes near the studio before the first subject (the sky dome
+    /// and the like), not any subject's.
+    baseline: Option<std::collections::HashSet<Entity>>,
     started: Option<std::time::Instant>,
 }
+
+/// Meshes of the scene round the camera, not of any subject (the sky, the
+/// renderer's warm-up, the sun's shafts).
+const SCENE_MESHES: [&str; 3] = ["Sky dome", "Warm-up shelf", "Light shafts"];
 
 /// Frames the studio settles for when it opens and at each new light
 /// (the sky and fog ease into a new weather).
@@ -205,7 +216,11 @@ fn sweep(
     windows: Query<&Window>,
     children: Query<&Children>,
     meshes_q: Query<(&GlobalTransform, Option<&Aabb>, Option<&Name>), With<Mesh3d>>,
-    (names, parents): (Query<&Name>, Query<&ChildOf>),
+    (names, parents, strays): (
+        Query<&Name>,
+        Query<&ChildOf>,
+        Query<(Entity, &GlobalTransform, Option<&Name>), With<Mesh3d>>,
+    ),
     blockouts: Query<(), With<crate::render::world_props::Blockout>>,
     pending: Query<
         (),
@@ -333,7 +348,11 @@ fn sweep(
                 ..default()
             };
             cam.viewport = Some(cell(0));
-            commands.entity(cam_e).insert(super::Lens(FOV.to_radians()));
+            // The haze is the valley's, not the subject's: a big subject
+            // framed from 200 m off was lost in it.
+            commands
+                .entity(cam_e)
+                .insert((super::Lens(FOV.to_radians()), super::ClearAir(CLEAR_AIR)));
             let weather = crate::world::sky::Weather::default();
             for i in 1..8 {
                 st.extra.push(
@@ -342,6 +361,7 @@ fn sweep(
                             Name::new(format!("Sweep camera {i}")),
                             SweepCamera,
                             super::Lens(FOV.to_radians()),
+                            super::ClearAir(CLEAR_AIR),
                             Camera {
                                 viewport: Some(cell(i)),
                                 order: i as isize,
@@ -367,6 +387,68 @@ fn sweep(
                 finish(st, &out, &mut exit);
                 return;
             };
+            // Whatever the last subject spawned outside its own hierarchy
+            // (a building's crates, window boards and wreckage are world
+            // entities) is cleared before the next. The scene's own meshes
+            // near the camera (the sky dome and so on) aren't anyone's.
+            let near: Vec<(Entity, String)> = strays
+                .iter()
+                .filter(|(e, g, _)| {
+                    Some(*e) != st.floor && g.translation().distance(STUDIO) < 400.0
+                })
+                .map(|(e, _, n)| (e, n.map_or("unnamed".into(), |n| n.as_str().to_string())))
+                .collect();
+            let left: Vec<(Entity, String)> = match &mut st.baseline {
+                Some(base) => near
+                    .into_iter()
+                    .filter(|(e, n)| {
+                        // The scene's own, whenever they turn up.
+                        if SCENE_MESHES.contains(&n.as_str()) {
+                            base.insert(*e);
+                        }
+                        !base.contains(e)
+                    })
+                    .collect(),
+                None => {
+                    st.baseline = Some(near.into_iter().map(|(e, _)| e).collect());
+                    Vec::new()
+                }
+            };
+            if !left.is_empty() {
+                // Named by their parent's name where they have no name of
+                // their own (a leak's holder says where it came from).
+                let label = |e: Entity, n: &str| {
+                    if n != "unnamed" {
+                        return n.to_string();
+                    }
+                    match parents.get(e) {
+                        Ok(p) => format!(
+                            "child of {}",
+                            names
+                                .get(p.parent())
+                                .map_or("an unnamed entity", |n| n.as_str())
+                        ),
+                        Err(_) => "unparented".into(),
+                    }
+                };
+                let mut kinds: Vec<String> = left.iter().map(|(e, n)| label(*e, n)).collect();
+                kinds.sort();
+                kinds.dedup();
+                info!(
+                    "sweep: cleared {}'s {} loose meshes: {}",
+                    st.records.last().map_or("?", |r| r.subject.as_str()),
+                    left.len(),
+                    kinds.join(", ")
+                );
+                if let Some(r) = st.records.last_mut().filter(|_| st.light == 0) {
+                    r.left_behind = left.len();
+                    r.left_behind_names = kinds;
+                }
+                for (e, _) in left {
+                    commands.entity(e).despawn();
+                }
+                return;
+            }
             let Some(subject) = st.subjects.get(st.i).cloned() else {
                 st.light += 1;
                 st.i = 0;
@@ -530,12 +612,26 @@ fn sweep(
                 st.stage = Stage::Next;
                 return;
             };
-            // Sit it on the floor: its lowest point at the studio's.
-            let lift = STUDIO.y - lo.y;
-            commands
-                .entity(root)
-                .insert(Transform::from_translation(STUDIO + Vec3::Y * lift));
-            let (lo, hi) = (lo + Vec3::Y * lift, hi + Vec3::Y * lift);
+            // A model sits on the floor, its lowest point at the studio's. A
+            // building stands where it was built: its origin is its footing,
+            // the floor its ground (its foundation buried, as in a valley),
+            // and the pieces the game spawns round it in world space
+            // (crates, boarded windows, wreckage) stay where they belong.
+            // An underground site is nearly all below its footing, which
+            // would put it under the floor, so it sits on it like a model.
+            let lift = match &subject {
+                Subject::Prefab(p) if !crate::world::underground::ids().any(|u| u == p) => 0.0,
+                _ => STUDIO.y - lo.y,
+            };
+            if lift != 0.0 {
+                commands
+                    .entity(root)
+                    .insert(Transform::from_translation(STUDIO + Vec3::Y * lift));
+            }
+            let (lo, hi) = (
+                (lo + Vec3::Y * lift).max(Vec3::new(f32::MIN, STUDIO.y, f32::MIN)),
+                hi + Vec3::Y * lift,
+            );
             if st.light == 0 {
                 let blocks = all.iter().filter(|e| blockouts.contains(**e)).count();
                 let label = |e: Entity| {
@@ -741,12 +837,10 @@ fn record(
         meshes,
         blockouts,
         floating,
-        footprint: match s {
-            Subject::Prefab(p) => Some(crate::world::structures::footprint(p).to_array()),
-            _ => None,
-        },
         load_frames,
         failed,
+        left_behind: 0,
+        left_behind_names: Vec::new(),
     }
 }
 

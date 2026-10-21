@@ -53,7 +53,46 @@ impl Plugin for KitVisualsPlugin {
         .add_systems(
             PostUpdate,
             show_worn.before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+        )
+        .add_systems(
+            PostUpdate,
+            lean_kit
+                .after(crate::rig::stance::StanceSystems)
+                .before(TransformSystems::Propagate),
         );
+    }
+}
+
+/// Worn on the chest (the harness, the vest and its plates): leans with
+/// it as you bend over, about the hips, as the chest's slots do
+/// (`interact::body::leaned`). Its place on the upright torso.
+#[derive(Component)]
+struct Leans(Transform);
+
+fn lean_kit(
+    players: Query<(&Transform, &crate::rig::stance::Stance), Without<Leans>>,
+    torsos: Query<(&Transform, &ChildOf), (With<Torso>, Without<Leans>)>,
+    mut kit: Query<(&Leans, &ChildOf, &mut Transform)>,
+) {
+    for (base, parent, mut t) in &mut kit {
+        let Ok((torso, owner)) = torsos.get(parent.parent()) else {
+            continue;
+        };
+        let Ok((root, st)) = players.get(owner.parent()) else {
+            continue;
+        };
+        if !st.ready {
+            continue;
+        }
+        let facing = root.rotation * torso.rotation;
+        let lean = facing.inverse() * st.chest.rotation;
+        let want =
+            Transform::from_translation(crate::interact::body::leaned(lean, base.0.translation))
+                .with_rotation(lean * base.0.rotation)
+                .with_scale(base.0.scale);
+        if *t != want {
+            *t = want;
+        }
     }
 }
 
@@ -280,14 +319,17 @@ fn wear_kit(
         let player = parent.parent();
         let worn = |piece| WornBy { player, piece };
         if let Some(h) = rig.as_deref().and_then(|r| ModelNode::find(r, "harness")) {
-            hang(&mut commands, t, h, None);
+            let at = hang(&mut commands, t, h, None);
+            commands.entity(at).insert(Leans(Transform::IDENTITY));
         }
         if let Some(h) = rig
             .as_deref()
             .and_then(|r| ModelNode::find(r, "harness_panel"))
         {
             let at = hang(&mut commands, t, h, None);
-            commands.entity(at).insert(worn(WornPiece::Panel));
+            commands
+                .entity(at)
+                .insert((worn(WornPiece::Panel), Leans(Transform::IDENTITY)));
         }
         // Vest space is torso space; the plates sit in their pockets by
         // their nodes' own placing.
@@ -298,9 +340,12 @@ fn wear_kit(
         ] {
             if let Some(n) = vest.as_deref().and_then(|v| ModelNode::find(v, name)) {
                 let at = hang(&mut commands, t, n, None);
-                commands
-                    .entity(at)
-                    .insert((n.transform, worn(piece), Visibility::Hidden));
+                commands.entity(at).insert((
+                    n.transform,
+                    Leans(n.transform),
+                    worn(piece),
+                    Visibility::Hidden,
+                ));
             }
         }
         let head = heads.iter().find(|(_, c)| c.parent() == player);

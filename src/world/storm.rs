@@ -191,7 +191,7 @@ fn lightning(
     if st.rng.is_none() {
         st.rng = Some(Rng::new(opts.seed ^ 0xB017 ^ u64::from(conditions.cycle)));
     }
-    let held = held_flash();
+    let held = opts.storm_flash || held_flash();
     if storming && st.strike.is_none() {
         st.next -= dt;
         if st.next <= 0.0 || held {
@@ -314,10 +314,11 @@ pub fn bolt_path(rng: &mut Rng, top: Vec3, at: Vec3) -> (Vec<Vec3>, Vec<Vec3>) {
     let mut off = Vec2::ZERO;
     for i in 0..=STEPS {
         let t = i as f32 / STEPS as f32;
-        // Wanders as it comes down, pinned to the strike at the end.
-        off += Vec2::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)) * 28.0 * (1.0 - t);
+        // Wanders as it comes down, from the cloud and pinned to the
+        // strike at the end.
         let p = top.lerp(at, t) + Vec3::new(off.x, 0.0, off.y) * (1.0 - t * t);
         main.push(p);
+        off += Vec2::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)) * 28.0 * (1.0 - t);
     }
     let from = rng.range(0.3, 0.6);
     let start = main[(from * STEPS as f32) as usize];
