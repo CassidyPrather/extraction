@@ -125,7 +125,7 @@ Message another workstream directly with `mcp__claude-code-remote__send_message`
 | Models: world | `session_01FTvvMAiAnDzT4h2vaEUNJV` |
 | Models: kit | `session_0182cBxJFUBuNLdR4W44jxQz` |
 | Visual design | `session_0113CzDXC7Tma7dy3uRwgwP3` |
-| Map design | `session_0192tCbD5KwqWRcfipuzpYrb` |
+| Map design | `session_01P1U9QbA5tmkphiBqxcZfkt` (successor on main; the original, `session_0192tCbD5KwqWRcfipuzpYrb`, answers questions) |
 | Hands | `session_01DtdvKhReJzNvkQesvuCiZy` |
 | Performance | `session_01DCfmMekPwwUHW5wKfmmkPx` |
 | Robot bodies | `session_01Ka1TLmCaYKYxaoCkbURtaJ` |
