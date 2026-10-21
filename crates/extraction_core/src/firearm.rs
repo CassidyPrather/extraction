@@ -639,10 +639,10 @@ impl Firearm {
         }
     }
 
-    /// Chance a turn-bolt sticks shut after a shot: none clean, likely
-    /// filthy (fouling seizes the bolt's lugs).
+    /// Chance a turn-bolt sticks shut after a shot: none in a gun cleaned
+    /// lately, likely in a filthy one (fouling seizes the bolt's lugs).
     pub fn sticky_chance(&self) -> f32 {
-        ((self.fouling - 0.4).max(0.0) * 1.5 + (0.5 - self.condition).max(0.0) * 0.4).min(0.9)
+        ((self.fouling - 0.4).max(0.0) * 1.5).min(0.9)
     }
 
     /// A palm slapped up hard under a stuck bolt's handle breaks it free.
@@ -1318,6 +1318,9 @@ mod tests {
     fn a_dirty_mosin_bolt_sticks() {
         let mut gun = Firearm::new(mosin(), 1.0);
         assert_eq!(gun.sticky_chance(), 0.0, "clean: never");
+        gun.condition = 0.1;
+        assert_eq!(gun.sticky_chance(), 0.0, "worn but clean: never");
+        gun.condition = 1.0;
         gun.fouling = 1.0;
         gun.set_handle_lift(1.0);
         gun.set_bolt_travel(1.0);
