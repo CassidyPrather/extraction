@@ -796,6 +796,14 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
+                    if bot.retry > 1.9 {
+                        info!(
+                            "DBG reach rel_y {:.2} lift {lift:?} hand {:?} crouch {}",
+                            at.y - root.translation.y,
+                            hand(side).map(|h| h.world.translation - root.translation),
+                            bot.reach_low
+                        );
+                    }
                     if (!bot.pending || bot.retry > 2.0)
                         && bot.within_seated_reach(at.y - root.translation.y, lift)
                     {
@@ -1169,6 +1177,14 @@ fn run_tasks(
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
+                    if bot.retry > 1.9 {
+                        info!(
+                            "DBG reach rel_y {:.2} lift {lift:?} hand {:?} crouch {}",
+                            at.y - root.translation.y,
+                            hand(side).map(|h| h.world.translation - root.translation),
+                            bot.reach_low
+                        );
+                    }
                     if (!bot.pending || bot.retry > 2.0)
                         && bot.within_seated_reach(at.y - root.translation.y, lift)
                     {

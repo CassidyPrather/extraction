@@ -18,8 +18,9 @@ use super::{LocalPlayer, RigDriver, RigInput, Side};
 /// A standing eye, where the seated view is lifted to.
 pub const STAND_EYE: f32 = 1.65;
 /// Crouched, seated: the eye this low, so a hand held down beside the
-/// chair reaches the ground.
-pub const SEATED_CROUCH_EYE: f32 = 0.9;
+/// chair, at shin height and without leaning, reaches the ground (and a
+/// little below it, on a slope).
+pub const SEATED_CROUCH_EYE: f32 = 0.7;
 /// How fast the lift moves when the crouch button goes (m/s): quick, but
 /// not a jump.
 pub const LIFT_RATE: f32 = 3.0;

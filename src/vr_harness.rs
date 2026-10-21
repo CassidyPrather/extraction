@@ -1355,12 +1355,12 @@ mod tests {
                 .entity_mut(radio)
                 .insert(RigidBody::Static);
             // Raw poses each frame, as a headset driver writes them: a seated
-            // head, the hand down beside the chair.
+            // head, the hand down beside the chair at knee height (no lean).
             let raw = |vr: &mut Vr, grip: f32, crouch: bool| {
                 let mut input = vr.app.world_mut().get_mut::<RigInput>(vr.player).unwrap();
                 input.head = Transform::from_xyz(0.0, 1.2, 0.0);
                 let h = input.hand_mut(Side::Right);
-                h.pose = Transform::from_xyz(0.25, crate::bot::SEATED_HAND_LOW, -0.35);
+                h.pose = Transform::from_xyz(0.25, 0.55, -0.35);
                 h.grip = grip;
                 h.tracked = true;
                 input.crouch = crouch;
