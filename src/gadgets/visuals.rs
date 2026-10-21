@@ -203,18 +203,39 @@ fn dress_gadgets(
                     emissive: LinearRgba::rgb(0.6, 0.05, 0.02),
                     ..default()
                 });
+                let steel = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.25, 0.27, 0.3),
+                    perceptual_roughness: 0.5,
+                    metallic: 0.6,
+                    ..default()
+                });
                 commands.entity(e).with_children(|c| {
                     c.spawn((
                         Mesh3d(meshes.add(Cylinder::new(0.024, 0.002))),
                         MeshMaterial3d(face),
                         Transform::from_xyz(0.0, 0.016, 0.0),
                     ));
+                    // Red to the north, dark steel to the south: a needle red
+                    // end to end didn't say which end was north
+                    // (`docs/LEGIBILITY.md`, wayfinding).
+                    let half = meshes.add(Cuboid::new(0.004, 0.002, 0.019));
                     c.spawn((
                         Needle,
-                        Mesh3d(meshes.add(Cuboid::new(0.004, 0.002, 0.038))),
-                        MeshMaterial3d(red),
                         Transform::from_xyz(0.0, 0.019, 0.0),
-                    ));
+                        Visibility::default(),
+                    ))
+                    .with_children(|n| {
+                        n.spawn((
+                            Mesh3d(half.clone()),
+                            MeshMaterial3d(red),
+                            Transform::from_xyz(0.0, 0.0, -0.0095),
+                        ));
+                        n.spawn((
+                            Mesh3d(half),
+                            MeshMaterial3d(steel),
+                            Transform::from_xyz(0.0, 0.0, 0.0095),
+                        ));
+                    });
                 });
             }
             "map_case" => {
@@ -246,6 +267,10 @@ fn dress_gadgets(
         }
     }
 }
+
+/// A hung rope's radius: thick enough to pick out from a few steps (a
+/// degree across at 1.5 m; `render::affordance`).
+pub const ROPE_R: f32 = 0.016;
 
 /// North is -Z.
 fn compass_needles(
@@ -797,8 +822,10 @@ fn dress_ropes(
     for (e, rope) in &ropes {
         let m = mat
             .get_or_insert_with(|| {
+                // A climbing rope's orange: tan went into the rock and the
+                // trees (`docs/LEGIBILITY.md`, affordances).
                 materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.55, 0.45, 0.3),
+                    base_color: Color::srgb(0.78, 0.33, 0.08),
                     perceptual_roughness: 0.95,
                     ..default()
                 })
@@ -814,13 +841,13 @@ fn dress_ropes(
         let over = rope.anchor - rope.top;
         commands.entity(e).with_children(|c| {
             c.spawn((
-                Mesh3d(meshes.add(Cylinder::new(0.011, hang.length()))),
+                Mesh3d(meshes.add(Cylinder::new(ROPE_R, hang.length()))),
                 MeshMaterial3d(m.clone()),
                 span(rope.bottom, rope.top),
             ));
             if over.length() > 0.05 {
                 c.spawn((
-                    Mesh3d(meshes.add(Cylinder::new(0.011, over.length()))),
+                    Mesh3d(meshes.add(Cylinder::new(ROPE_R, over.length()))),
                     MeshMaterial3d(m.clone()),
                     span(rope.top, rope.anchor),
                 ));

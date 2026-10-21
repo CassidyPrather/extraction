@@ -35,7 +35,9 @@ struct TerrainParams {
     // How full the puddles are (world::puddles::fill), and rain falling.
     puddles: f32,
     rain: f32,
-    _pad: vec2<f32>,
+    // Snow lying (world::snow), above this height.
+    snow: f32,
+    snow_line: f32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> terrain: TerrainParams;
@@ -446,6 +448,29 @@ fn fragment(
         tn = normalize(mix(tn, vec3<f32>(-rg.x * 0.18, -rg.y * 0.18, 1.0), puddle));
     }
 #endif
+
+    // Snow (world::snow): above the line, with a ragged edge; thin first,
+    // in patches, the grass and stones through it, then lying all over the
+    // flatter ground (roads too). It fills the puddles.
+    if (terrain.snow > 0.002) {
+        let edge = (fbm(wp.xz * 0.03) - 0.5) * 9.0;
+        let above = smoothstep(terrain.snow_line - 3.0, terrain.snow_line + 4.0, wp.y + edge);
+        let flat = smoothstep(0.55, 0.88, n_geo.y);
+        let patches = fbm(wp.xz * 0.9) * 0.55 + fbm(wp.xz * 0.12 + vec2<f32>(4.0, 9.0)) * 0.45;
+        let lie = clamp((terrain.snow * 1.6 - patches * 0.75 - (1.0 - flat) * 1.1) * 3.0, 0.0, 1.0);
+        let s = above * lie;
+        if (s > 0.0) {
+            // Blue in its hollows, a little uneven.
+            let tone = vec3<f32>(0.74, 0.76, 0.8) * (0.94 + 0.08 * fine);
+            albedo = mix(albedo, tone, s);
+            rough = mix(rough, 0.78, s);
+            // (Some of the ground's relief left: smoothed all over, a
+            // snowfield in this light lost its shape.)
+            tn = normalize(mix(tn, vec3<f32>(0.0, 0.0, 1.0), s * 0.55));
+            ao = mix(ao, 1.0, s * 0.5);
+            puddle = puddle * (1.0 - s);
+        }
+    }
 
     // Tangent frame for an XZ projection: T = +X, B = +Z.
     let t = normalize(vec3<f32>(1.0, 0.0, 0.0) - n_geo * n_geo.x);

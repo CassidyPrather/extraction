@@ -14,6 +14,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
+. scripts/capture_common.sh
+capture_check_bin "$BIN"
 OUT="${OUT:-target/presskit}"
 SIZE="${SIZE:-1600x900}"
 MAPS=("$@")

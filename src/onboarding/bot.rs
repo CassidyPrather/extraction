@@ -89,9 +89,7 @@ pub(super) fn direct(
     }
     // The gun hand's A (flat: B) for the magazine release, likewise.
     let release = ob.next_goal() == Some(Goal::DropMag) && bot.elapsed > 0.3;
-    if input.hand(Side::Right).primary != release {
-        input.hand_mut(Side::Right).primary = release;
-    }
+    bot.hold(crate::bot::Btn::Primary, release);
     // Only when the bot has nothing left but to idle, and a moment after
     // its last task, so what it did has had time to register.
     let idling =

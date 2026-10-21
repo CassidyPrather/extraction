@@ -54,10 +54,9 @@ fn spawn_sim_kit(mut commands: Commands, zone: Res<Zone>, catalog: Res<crate::it
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
-    for (i, id) in ["radio", "field_dressing", "field_dressing"]
-        .iter()
-        .enumerate()
-    {
+    let mut kit = vec!["radio", "field_dressing", "field_dressing"];
+    kit.extend(raider::contract_kit());
+    for (i, id) in kit.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
             continue;
         };

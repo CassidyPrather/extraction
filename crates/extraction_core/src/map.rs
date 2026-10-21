@@ -50,6 +50,15 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// Where snow can lie (m): above it, falling weather comes as snow
+    /// and lies on what faces up. None: the valley's too low
+    /// (`world::snow`).
+    #[serde(default)]
+    pub snow_line: Option<f32>,
+    /// Snow that lies above the line whatever the weather, 0..1: a high,
+    /// cold valley's snowfields. Falling snow adds to it.
+    #[serde(default)]
+    pub snow: f32,
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,
@@ -426,7 +435,6 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // draw-off tower on the bed, and the Custodian's stock in rows.
         "dam_face" => [265.0, 23.0, 4.0],
         "dam_face_end" => [25.0, 23.0, 4.0],
-        "face_stair_wall" => [120.0, 24.0, 3.0],
         "dam_back" => [245.0, 21.5, 3.0],
         "dam_back_end" => [35.0, 21.5, 3.0],
         "draw_off_tower" => [9.0, 34.0, 9.0],

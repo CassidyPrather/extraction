@@ -68,6 +68,9 @@ pub struct NightVisit {
 pub const VISIT_CLEARS: f32 = 150.0;
 /// The visitors look for the sleeper this long before they give up (s).
 pub const VISIT_TIME: f32 = 600.0;
+/// They come in from this far out at most (m), on the Gate's side: about
+/// two minutes' walk, whichever valley the cabin is in.
+pub const VISIT_FROM: f32 = 150.0;
 
 pub struct DirectorPlugin;
 
@@ -120,14 +123,16 @@ fn hear_reports(
 }
 
 /// Night visits: queued as they're sent (clearing responses near them),
-/// dispatched when due: two walkers from the Gate, looking for whoever is
-/// inside the building behind that door.
+/// dispatched when due: two walkers in from the Gate's side (at most
+/// [`VISIT_FROM`] out), looking for whoever is inside the building behind
+/// that door.
 fn night_visits(
     mut commands: Commands,
     mut visits: MessageReader<NightVisit>,
     mut director: ResMut<Director>,
     zone: Res<Zone>,
     entrances: Res<super::doors::Entrances>,
+    nav: Option<Res<super::walker::Nav>>,
     time: Res<Time>,
 ) {
     for v in visits.read() {
@@ -159,13 +164,22 @@ fn night_visits(
             .find(|e| e.door == door)
             .map(|e| e.mid - e.out * 2.0)
             .unwrap_or(at);
-        info!("director: night visit to {inside:.0}");
+        // In from the woods on the Gate's side, not all the way from it.
+        let toward = Vec2::new(exit.x - inside.x, exit.z - inside.z);
+        let mut from = Vec2::new(inside.x, inside.z)
+            + toward.normalize_or(Vec2::X) * toward.length().min(VISIT_FROM);
+        if let Some(n) = nav.as_deref() {
+            if let Some(p) = n.0.nearest_walkable(from.to_array()) {
+                from = Vec2::from_array(p);
+            }
+        }
+        info!("director: night visit to {inside:.0} from {from:.0}");
         for k in 0..2 {
             let side = Vec3::new(k as f32 * 2.0 - 1.0, 0.0, 0.0) * 2.0;
             let w = spawn_walker(
                 &mut commands,
                 &zone,
-                exit + side,
+                zone.on_ground(from.x, from.y) + side,
                 Job {
                     kind: JobKind::Response,
                     site: inside,
