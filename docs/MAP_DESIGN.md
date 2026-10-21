@@ -307,6 +307,40 @@ spread 28 m (`FIELD_SPREAD`), and a handful loose anywhere.
 - Loose anomalies can land on a cross-country route; that's what they're
   for. Watch the ground.
 
+## Sentries
+
+A sentry (`MarkerKind::Sentry { arc, power }`, the machine in
+`robots::sentry`, its rules in `extraction_core::sentry`) is a turret on
+a 4.6 m mast over something that matters. It is built to be outwitted:
+it sweeps a fixed arc, is blind behind, chirps a second before it fires,
+and dies when its cable is cut. The map's job is to make each one a
+puzzle, not a wall. `marker.rot` is the middle of its arc as
+`sentry::bearing` measures (0 toward -Z, 90 toward +X); `power` is its
+junction box.
+
+- **A field, not a wall**: its head sees at least 60% (`FIELD_SHARE`)
+  of the walkable ground its sweep can reach within 55 m (`sentry::SIGHT`),
+  through the land and the buildings (trees don't stop rounds).
+- **It guards something**: a Gate, a key, a point of interest, a work
+  site, loot or an underground site within 40 m (`GUARD_REACH`).
+- **A way round**: a walk from the insertion that never enters its field
+  gets within 8 m of the mast (`WAY_ROUND`): behind it. Put its back to
+  a fence, a wall or a slope with a way along it.
+- **The box on that unseen ground**, 8–25 m from the mast (`BOX_NEAR`,
+  `BOX_FAR`), inside the fence: finding the cable and following it is
+  the puzzle.
+- **Never over the way in or out**: not the insertion, not a rendezvous,
+  its tailgate or the approach to it.
+- **Seen before it sees you**: where a main route walks into its field,
+  its head is in sight 25 m back along the route (`WARN_RUN`).
+
+Each valley has one over its Gate (Marrow's covers the Depot mouth too,
+25 m off) and one over the pit or shelter where its key lies, facing the
+way down. To site a new one, `SCOUT_SENTRY=<map>:<x>:<z> cargo test -p
+extraction_core scout_sentry -- --ignored --nocapture` tries spots
+round a point and prints the ones that pass, facing the way people come
+first. The preview draws each one's sweep (red) and cable (yellow).
+
 ## Robot patrol space
 
 Robots don't patrol at random: they walk out of the Gate to work sites
