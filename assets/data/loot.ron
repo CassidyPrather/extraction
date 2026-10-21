@@ -62,6 +62,7 @@
             Item(id: "flare_white", weight: 0.4),
             Item(id: "flare_red", weight: 0.3),
             Item(id: "flare_green", weight: 0.2),
+            Item(id: "bolt_bundle", weight: 0.3),
         ]),
         "weapons_rare": (rolls: (1, 1), entries: [
             Item(id: "pm_pistol", weight: 3.0, condition: (0.3, 0.9)),
@@ -84,6 +85,7 @@
             Item(id: "flare_pistol", weight: 0.6, condition: (0.4, 0.95)),
             Item(id: "svd", weight: 0.15, condition: (0.25, 0.8)),
             Item(id: "rpk74", weight: 0.18, condition: (0.25, 0.8)),
+            Item(id: "crossbow", weight: 0.3, condition: (0.3, 0.85)),
         ]),
         // What each valley has more of (`LootTables::roll_in`: a table
         // `<name>@<valley>` stands in for `<name>` there).
@@ -92,6 +94,7 @@
             Table(name: "weapons_rare", weight: 6.0),
             Item(id: "toz8", weight: 1.5, condition: (0.3, 0.9)),
             Item(id: "mp133", weight: 0.8, condition: (0.3, 0.9)),
+            Item(id: "crossbow", weight: 0.4, condition: (0.3, 0.85)),
         ]),
         "ammo_common@marrow_creek": (rolls: (1, 1), entries: [
             Table(name: "ammo_common", weight: 8.0),

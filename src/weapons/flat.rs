@@ -151,6 +151,12 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
                 }
                 steps.push((0.3, Step::Break(false)));
             }
+            ActionKind::Crossbow => {
+                if !gun.firearm.locked_back {
+                    steps.extend(rack_steps(action));
+                }
+                steps.push((0.5, Step::LoadRound));
+            }
             ActionKind::Pump => {
                 // Thumb the tube full; pump one up if the chamber's empty
                 // and top the tube up again.
@@ -198,6 +204,8 @@ fn rack_steps(action: ActionKind) -> Vec<(f32, Step)> {
         ],
         ActionKind::BreakAction => vec![(0.1, Step::Break(true))],
         ActionKind::Revolver => vec![(0.1, Step::Cock)],
+        // Draw the string to the latch and let it catch.
+        ActionKind::Crossbow => vec![(0.3, Step::Bolt(1.0)), (0.1, Step::ReleaseBolt)],
         // The release (nothing if the hammer's down), back hard, forward.
         ActionKind::Pump => vec![
             (0.0, Step::ReleaseAction),
