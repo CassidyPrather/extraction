@@ -9,6 +9,8 @@ centre, -Z the outer face).
 - `car_door` (dims 1.0 x 0.95 x 0.12): a saloon's front door, faded blue,
   its window frame empty but for a few shards, the handle and lock, the
   hinges along its front edge, the trim panel on the inside
+- `car_bonnet` (dims 1.3 x 1.0 x 0.08): a bonnet or boot lid, the faded
+  skin bowed over its bracing, rust along one edge
 - `car_wheel` (dims 0.6 x 0.6 x 0.2): a road wheel on its flat tyre, the
   rim rusty, standing on its tread, its axle along Z
 
@@ -22,7 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import item, wanted  # noqa: E402
-from common import RZ, T, Part, fillet  # noqa: E402
+from common import RX, RZ, T, Part, fillet  # noqa: E402
 
 
 def bow(y, h, depth):
@@ -100,6 +102,33 @@ def car_door():
     return [p]
 
 
+def car_bonnet():
+    p = Part("body")
+    # A bonnet (or boot lid) wrenched off: the faded skin bowed over its
+    # dark inner bracing, the hinge brackets torn at one edge, rust
+    # blotches eaten in. Its outer face is -Z.
+    W, H, D, t = 1.3, 1.0, 0.02, 0.003
+    for y0, y1, mat in ((-0.5, -0.42, "Rusty"), (-0.42, 0.5, "Blue")):
+        sheet(p, y0, y1, -W / 2 + 0.02, W / 2 - 0.02, H, D, t, mat, n=max(2, int((y1 - y0) / 0.08)))
+    # The bracing: an X of pressed ribs and a rim behind the skin.
+    # (The two arms of the X a little apart in depth, so they don't share
+    # faces where they cross.)
+    for a, z in ((0.62, 0.025), (-0.62, 0.031)):
+        p.box((1.2, 0.05, 0.02), (0.0, 0.0, 0.0), "Dark", segs=1, xf=T(0.0, 0.0, z) @ RZ(a))
+    for y in (-0.44, 0.44):
+        p.box((W - 0.1, 0.05, 0.02), (0.0, y, 0.016), "Dark", segs=1)
+    for x in (-W / 2 + 0.07, W / 2 - 0.07):
+        p.box((0.05, H - 0.14, 0.02), (x, 0.0, 0.021), "Dark", segs=1)
+    # Hinge brackets along the top edge, one torn and bent.
+    for x, bend in ((-0.45, 0.0), (0.45, 0.5)):
+        p.box((0.04, 0.12, 0.012), (0.0, 0.0, 0.0), "Steel", segs=1,
+              xf=T(x, 0.46, 0.034) @ RX(bend))
+    # Two creases pressed along it.
+    for x in (-0.3, 0.3):
+        p.box((0.012, H - 0.12, 0.006), (x, 0.0, bow(0.0, H, D) - t / 2 - 0.001), "Blue", segs=1)
+    return [p]
+
+
 def car_wheel():
     p = Part("body")
     # A road wheel off a wreck, standing on its tread: the flat-spotted
@@ -125,6 +154,6 @@ def car_wheel():
 
 if __name__ == "__main__":
     for item_id, build in (("bus_panel", bus_panel), ("car_door", car_door),
-                           ("car_wheel", car_wheel)):
+                           ("car_wheel", car_wheel), ("car_bonnet", car_bonnet)):
         if wanted(item_id):
             item(item_id, build)
