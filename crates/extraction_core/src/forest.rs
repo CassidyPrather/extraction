@@ -39,7 +39,6 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
         .placements
         .iter()
         .map(|p| (p.at, prefab_clearance(&p.prefab)))
-        .chain(crate::underground::kiosk_clearings(map))
         .chain(map.markers.iter().map(|m| (m.at, 8.0)))
         .collect();
     for forest in &map.forests {

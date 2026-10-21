@@ -69,7 +69,6 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
         .placements
         .iter()
         .map(|p| (p.at, prefab_clearance(&p.prefab) + 2.0))
-        .chain(crate::underground::kiosk_clearings(map))
         // Round a rendezvous, the whole way in to the truck's tailgate.
         .chain(map.markers.iter().map(|m| {
             let r = match m.kind {
