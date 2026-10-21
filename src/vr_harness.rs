@@ -69,7 +69,7 @@ impl Vr {
         Self::with(opts, Some(dir))
     }
 
-    fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
+    pub(crate) fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
         let mut app = crate::headless_app(opts, false);
         app.init_resource::<Seen>().add_systems(Update, collect);
         app.finish();
@@ -1151,6 +1151,55 @@ mod tests {
         }
     }
 
+    /// One-handed, a magazine in the hand touched to a box of rounds set
+    /// down fills; with two hands, the box has to be in the other hand.
+    #[test]
+    fn one_handed_fill_a_magazine_from_a_box_set_down() {
+        for one_handed in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .one_handed = one_handed;
+            let feet = vr.root().translation;
+            vr.step(10);
+            let box_at = feet + Vec3::new(0.1, 0.9, -0.45);
+            let ammo = vr.spawn("ammo_9x18", Transform::from_translation(box_at));
+            vr.app
+                .world_mut()
+                .entity_mut(ammo)
+                .insert(RigidBody::Static);
+            let mag_at = feet + Vec3::new(0.3, 1.0, -0.45);
+            let mag = vr.spawn("pm_mag", Transform::from_translation(mag_at));
+            vr.app.world_mut().entity_mut(mag).insert(RigidBody::Static);
+            vr.hand(Side::Right, mag_at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(Side::Right, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Right).holding, Some(mag));
+            let before = vr
+                .app
+                .world()
+                .get::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds;
+            // Down onto the box where it lies.
+            vr.move_hand(Side::Right, box_at + Vec3::Y * 0.03);
+            vr.step(10);
+            let after = vr
+                .app
+                .world()
+                .get::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds;
+            assert_eq!(
+                after > before,
+                one_handed,
+                "{before} -> {after}, one-handed {one_handed}"
+            );
+        }
+    }
+
     /// One-handed: the pistol's empty well brought down onto a magazine in a
     /// pouch takes it, and the second button racks a round in; no second
     /// hand anywhere. With two hands, the same move does nothing.
@@ -1286,6 +1335,94 @@ mod tests {
             vr.step(60);
             let gun = vr.app.world().get::<Gun>(pistol).unwrap();
             assert!(gun.firearm.chambers[0].is_some(), "racked: a round in");
+        }
+    }
+
+    /// Seated: a head at a seated height is lifted to a standing eye (the
+    /// body's slots ride at standing height with it); something on the
+    /// floor is out of reach of a hand held as low as a seated person
+    /// reaches, until the crouch button brings the view and the hands down
+    /// to it. Standing play, the same head isn't lifted.
+    #[test]
+    fn seated_lift_and_crouch_to_the_floor() {
+        for seated in [false, true] {
+            let mut vr = Vr::new("training_yard");
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .seated = seated;
+            // On the floor, under where the hand hangs.
+            let at = vr.root().transform_point(Vec3::new(0.25, 0.05, -0.35));
+            let radio = vr.spawn("radio", Transform::from_translation(at));
+            vr.app
+                .world_mut()
+                .entity_mut(radio)
+                .insert(RigidBody::Static);
+            // Raw poses each frame, as a headset driver writes them: a seated
+            // head, the hand down beside the chair at knee height (no lean).
+            let raw = |vr: &mut Vr, grip: f32, crouch: bool| {
+                let mut input = vr.app.world_mut().get_mut::<RigInput>(vr.player).unwrap();
+                input.head = Transform::from_xyz(0.0, 1.2, 0.0);
+                let h = input.hand_mut(Side::Right);
+                h.pose = Transform::from_xyz(0.25, 0.55, -0.35);
+                h.grip = grip;
+                h.tracked = true;
+                input.crouch = crouch;
+                input.lifted = 0.0;
+                drop(input);
+                vr.step(1);
+            };
+            // (The seated height is the highest of the last few seconds.)
+            for _ in 0..(90 * (crate::rig::seated::WINDOW + 1)) {
+                raw(&mut vr, 0.0, false);
+            }
+            let head_y = vr
+                .app
+                .world()
+                .get::<RigInput>(vr.player)
+                .unwrap()
+                .head
+                .translation
+                .y;
+            let want = if seated {
+                crate::rig::seated::STAND_EYE
+            } else {
+                1.2
+            };
+            let lifted = vr.app.world().get::<RigInput>(vr.player).unwrap().lifted;
+            let seat = vr
+                .app
+                .world()
+                .get::<crate::rig::seated::Seat>(vr.player)
+                .copied();
+            assert!(
+                (head_y - want).abs() < 0.02,
+                "seated {seated}: head at {head_y}, lifted {lifted}, seat {seat:?}"
+            );
+            // The floor's out of reach, sat up.
+            for _ in 0..6 {
+                raw(&mut vr, 1.0, false);
+            }
+            assert_ne!(
+                vr.hand_state(Side::Right).holding,
+                Some(radio),
+                "out of reach"
+            );
+            if !seated {
+                continue;
+            }
+            // The crouch button: down to it.
+            for _ in 0..60 {
+                raw(&mut vr, 0.0, true);
+            }
+            for _ in 0..6 {
+                raw(&mut vr, 1.0, true);
+            }
+            assert_eq!(
+                vr.hand_state(Side::Right).holding,
+                Some(radio),
+                "reached the floor"
+            );
         }
     }
 

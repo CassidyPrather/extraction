@@ -10,7 +10,15 @@
 //! once per path, and a collider switched off under a disabled body
 //! comes back the same way. The solver then panics.
 //!
-//! So between the narrow phase (and the islands it wakes) and the
+//! A body pushed out of a deep overlap (something switched on, set
+//! down or spawned inside it) can be thrown hard, and a heap of them can
+//! feed on itself until positions run to 1e15 m and turn NaN, which
+//! avian then trips over (an inverted AABB, `collider/mod.rs:512`, or a
+//! stall in its tree). Nothing in the game moves a body faster than a
+//! thrown grenade, so every body gets a speed limit unless it has its
+//! own.
+//!
+//! And between the narrow phase (and the islands it wakes) and the
 //! solver, every step, any pair with handles past its
 //! last manifold has those handles taken off again. They are the last
 //! ones on the pair (a handle's index is its place in the pair's list),
@@ -24,9 +32,19 @@ use bevy::prelude::*;
 
 pub struct ContactGuardPlugin;
 
+/// Fast enough for anything thrown, fired or falling in the game.
+pub const MAX_SPEED: f32 = 120.0;
+/// Rad/s: a spun casing turns at about 25.
+pub const MAX_SPIN: f32 = 120.0;
+
 impl Plugin for ContactGuardPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_observer(|add: On<Add, RigidBody>, mut commands: Commands| {
+            commands
+                .entity(add.entity)
+                .try_insert_if_new((MaxLinearSpeed(MAX_SPEED), MaxAngularSpeed(MAX_SPIN)));
+        })
+        .add_systems(
             PhysicsSchedule,
             mend_handles
                 .after(PhysicsStepSystems::NarrowPhase)

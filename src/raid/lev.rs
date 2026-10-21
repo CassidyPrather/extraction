@@ -293,6 +293,8 @@ pub struct Cargo {
     pub eye: bool,
     pub cell: bool,
     pub food: usize,
+    /// Hana's tape of Anna practising (Radio's `tape_practice`).
+    pub anna: bool,
 }
 
 /// Sorts what someone carries into what he'd remark on.
@@ -304,6 +306,7 @@ pub fn cargo(ids: impl Iterator<Item = (String, extraction_core::items::Category
             (_, Category::Artifact) => c.artifact = true,
             ("sensor_eye", _) => c.eye = true,
             ("robot_cell", _) => c.cell = true,
+            ("tape_practice", _) => c.anna = true,
             (_, Category::Food) => c.food += 1,
             _ => {}
         }
@@ -319,6 +322,9 @@ fn homecoming(
     players: Query<Entity, With<LocalPlayer>>,
     items: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
+    opts: Res<crate::launch::LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+    mut heard_anna: Local<bool>,
 ) {
     let before = was.replace(raid.phase.clone());
     let home = matches!(before, Some(Phase::Extracting { .. })) && raid.phase == Phase::AtBase;
@@ -332,7 +338,18 @@ fn homecoming(
         let def = catalog.get(i.kind());
         (def.id.clone(), def.category)
     }));
-    let line = super::lines::coming_home_with(raid.extractions, raid.recalled, carried);
+    // Anna's tape he speaks of the once.
+    let mut carried = carried;
+    if carried.anna {
+        carried.anna = !*heard_anna;
+        *heard_anna = true;
+    }
+    // The raid set off counts it (`progression::count_raids`): one is
+    // this one.
+    let first = progression
+        .is_some_and(|p| p.0.raids_in(&opts.map) == 1)
+        .then_some(opts.map.as_str());
+    let line = super::lines::coming_home_with(raid.extractions, raid.recalled, carried, first);
     raid.say(line);
 }
 
@@ -455,11 +472,22 @@ mod tests {
             artifact: true,
             ..default()
         };
+        // Hana's tape, Anna playing: before anything else he'd remark on.
+        let anna = Cargo {
+            anna: true,
+            artifact: true,
+            ..default()
+        };
+        assert_eq!(
+            super::super::lines::coming_home_with(4, false, anna, None),
+            super::super::lines::CARGO_ANNA[0]
+        );
+        assert!(c(&[("tape_practice", Category::Curio)]).anna);
         // An odd homecoming with nothing of his own to say: the stone.
-        assert!(lines.contains(&super::super::lines::coming_home_with(4, false, art)));
+        assert!(lines.contains(&super::super::lines::coming_home_with(4, false, art, None)));
         // His story beat still comes first.
         assert_eq!(
-            super::super::lines::coming_home_with(3, false, art),
+            super::super::lines::coming_home_with(3, false, art, None),
             super::super::lines::coming_home(3, false)
         );
     }

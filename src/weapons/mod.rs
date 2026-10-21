@@ -11,15 +11,19 @@
 //!   for sound.
 
 pub mod armour;
+pub mod armoury;
 pub mod ballistics;
+pub mod crossbow;
 pub mod faults;
 pub mod feel;
+pub mod flares;
 pub mod flat;
 pub mod grenades;
 pub mod impacts;
 pub mod layout;
 pub mod melee;
 pub mod muzzle;
+pub mod optics;
 pub mod range;
 pub mod sling;
 pub mod tracers;
@@ -211,10 +215,14 @@ impl Plugin for WeaponsPlugin {
                 ballistics::BallisticsPlugin,
                 zero::ZeroPlugin,
                 faults::FaultsPlugin,
+                optics::OpticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
                 melee::MeleePlugin,
+                armoury::ArmouryPlugin,
+                flares::FlaresPlugin,
+                crossbow::CrossbowPlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -269,7 +277,12 @@ fn setup_gun_items(
             0.14,
         ));
     }
-    if let Some(h) = &layout.handle {
+    // (A pump's forend is the support grip: no handle of its own.)
+    if let Some(h) = layout
+        .handle
+        .as_ref()
+        .filter(|h| h.kind != HandleKind::Pump)
+    {
         points.push(GrabPoint::new(
             Transform::from_translation(h.grab),
             GripRole::Handle(0),
@@ -428,7 +441,48 @@ fn work_handles(
     // is locked back, a bolt left open or a handle left up doesn't snap it
     // to where the part rests.
     mut taken: Local<std::collections::HashMap<Entity, (Entity, f32, f32)>>,
+    // Per supporting hand on a pump: the gun, the forend's travel and the
+    // hand's place along the bore when it took hold.
+    mut pumping: Local<std::collections::HashMap<Entity, (Entity, f32, f32)>>,
 ) {
+    pumping.retain(|h, (g, ..)| {
+        hands
+            .get(*h)
+            .is_ok_and(|(_, hand)| hand.supporting == Some(*g))
+    });
+    for (hand_e, hand) in &hands {
+        let Some(gun_e) = hand.supporting else {
+            continue;
+        };
+        let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
+            continue;
+        };
+        let Some(h) = gun
+            .layout
+            .handle
+            .clone()
+            .filter(|h| h.kind == HandleKind::Pump)
+        else {
+            continue;
+        };
+        let z = gt
+            .affine()
+            .inverse()
+            .transform_point3(hand.world.translation)
+            .z;
+        let travel = gun.firearm.bolt_travel;
+        let (_, start, z0) = *pumping.entry(hand_e).or_insert((gun_e, travel, z));
+        let want = start + (z - z0) / h.travel.max(1e-3);
+        let events = gun.firearm.set_bolt_travel(want.clamp(0.0, 1.0));
+        let now = gun.firearm.bolt_travel;
+        if (now - want).abs() > 1e-3 {
+            // At a stop, held shut by the lock or stopped on a jam: the
+            // hand slides on the forend from where it is.
+            pumping.insert(hand_e, (gun_e, now, z));
+        }
+        let name = catalog.get(item.kind()).id.clone();
+        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+    }
     taken.retain(|h, (g, ..)| {
         hands
             .get(*h)
@@ -456,6 +510,10 @@ fn work_handles(
             .transform_point3(hand.world.translation);
         let d = local - hand.handle_origin;
         let events = match h.kind {
+            HandleKind::String => {
+                let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                gun.firearm.set_bolt_travel(travel)
+            }
             HandleKind::Slide | HandleKind::ChargingHandle => {
                 if d.z > 0.003 {
                     gun.firearm.take_off_stop();
@@ -482,6 +540,8 @@ fn work_handles(
                 }
                 ev
             }
+            // (Worked by the supporting hand, above.)
+            HandleKind::Pump => Vec::new(),
             HandleKind::BreakBarrels => {
                 // Push the forend down to open; lift it to close.
                 if d.y < -0.06 {
@@ -671,6 +731,8 @@ fn buttons(
 ) {
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     racks.clear();
+    // Only guns in hand: every gun ever held stayed in here.
+    last.retain(|e, _| guns.contains(*e));
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -687,6 +749,10 @@ fn buttons(
                 ActionKind::BreakAction => {
                     let open = gun.firearm.bolt_travel < 0.5;
                     events.extend(gun.firearm.set_break_open(open));
+                }
+                // A pump's: the action release.
+                ActionKind::Pump => {
+                    events.extend(gun.firearm.release_action());
                 }
                 // A revolver's thumb button swings the loading gate.
                 ActionKind::Revolver => {

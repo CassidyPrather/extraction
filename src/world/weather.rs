@@ -132,6 +132,10 @@ pub struct Conditions {
     pub ground_fog: f32,
     /// Direct sun, lux (the weather's, at this hour).
     pub sun: f32,
+    /// A downpour with thunder in it (`world::storm`): lightning, harder
+    /// wind, darker, the ground soaking fast. Only ever on a `Downpour`,
+    /// so everything that reads the kind takes it for one.
+    pub storm: bool,
     pub cycle: u32,
 }
 
@@ -155,7 +159,29 @@ impl Conditions {
                 WeatherKind::Clearing,
             ][rng.below(5)]
         };
-        Self::compose(kind, Self::hour_for_cycle(seed, cycle, nights), cycle)
+        let c = Self::compose(kind, Self::hour_for_cycle(seed, cycle, nights), cycle);
+        // Half the downpours carry thunder, from a stream of their own (so
+        // the other cycles' weather and hours stay as they were).
+        let mut t = Rng::new(seed ^ 0x57_0A11 ^ (cycle as u64).wrapping_mul(0x1656_67B1));
+        if kind == WeatherKind::Downpour && t.below(2) == 0 {
+            c.stormy()
+        } else {
+            c
+        }
+    }
+
+    /// This downpour as a thunderstorm: darker under the anvil, harder
+    /// rain, shorter sight. (Anything else is left as it is.)
+    pub fn stormy(mut self) -> Self {
+        if self.kind != WeatherKind::Downpour {
+            return self;
+        }
+        self.storm = true;
+        self.visibility = 190.0;
+        self.rain = 1.0;
+        self.light *= 0.88;
+        self.sun *= 0.6;
+        self
     }
 
     /// The cycle's hour, from a stream of its own: the first cycle is the
@@ -227,6 +253,7 @@ impl Conditions {
             rain,
             ground_fog: ground_fog * mist,
             sun,
+            storm: false,
             cycle,
         }
     }
@@ -247,6 +274,9 @@ impl Conditions {
     /// How hard the wind blows, 0..=1: still in thick fog, hard in a
     /// downpour.
     pub fn wind(&self) -> f32 {
+        if self.storm {
+            return 1.0;
+        }
         match self.kind {
             WeatherKind::Drizzle => 0.4,
             WeatherKind::PeaSouper => 0.12,
@@ -294,8 +324,9 @@ impl Wetness {
     pub fn step(&mut self, c: &Conditions, dt: f32) {
         let target = Self::target(c);
         let minutes = if target > self.level {
-            // Heavier rain soaks faster.
-            SOAK_MINUTES / (0.4 + c.rain).min(1.4)
+            // Heavier rain soaks faster; a storm's cloudburst fills the
+            // hollows in a minute or two.
+            SOAK_MINUTES / (0.4 + c.rain).min(1.4) / if c.storm { 3.0 } else { 1.0 }
         } else {
             // Sun and wind dry it.
             DRY_MINUTES / (1.0 + 0.5 * c.sun / 1600.0 + 0.3 * c.wind())
@@ -316,12 +347,23 @@ fn soak(conditions: Res<Conditions>, mut wet: ResMut<Wetness>, time: Res<Time>) 
     wet.step(&conditions, time.delta_secs());
 }
 
+/// Lightning struck (`world::storm`): where, how far from the eye (m),
+/// and how bright (0..1). Thunder follows by `distance / 343` seconds
+/// (`storm::thunder_delay`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Lightning {
+    pub at: Vec3,
+    pub distance: f32,
+    pub strength: f32,
+}
+
 pub struct WeatherPlugin;
 
 impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Conditions::for_cycle(1, 0))
             .init_resource::<Wetness>()
+            .add_message::<Lightning>()
             .add_systems(Update, (follow_cycle, soak).chain());
     }
 }
@@ -352,7 +394,7 @@ fn follow_cycle(
     // Dev overrides: the asked-for weather and hour, the rest as rolled.
     let kind = match opts.weather.as_deref() {
         Some("fog") => WeatherKind::PeaSouper,
-        Some("downpour") => WeatherKind::Downpour,
+        Some("downpour" | "storm") => WeatherKind::Downpour,
         Some("clearing") => WeatherKind::Clearing,
         Some(_) => WeatherKind::Drizzle,
         None => want.kind,
@@ -365,8 +407,16 @@ fn follow_cycle(
     // Nights slept in a safehouse move the hour on (`progression::safehouse`).
     let hour = (0..shift.map_or(0, |s| s.0)).fold(hour, |h, _| h.next());
     let phase = opts.moon.unwrap_or(want.moon_phase);
-    if (kind, hour, phase) != (want.kind, want.hour, want.moon_phase) {
+    let storm = match opts.weather.as_deref() {
+        Some("storm") => true,
+        Some(_) => false,
+        None => want.storm,
+    };
+    if (kind, hour, phase, storm) != (want.kind, want.hour, want.moon_phase, want.storm) {
         want = Conditions::compose_with_moon(kind, hour, raid.cycle, phase);
+        if storm {
+            want = want.stormy();
+        }
     }
     if *conditions != want {
         *conditions = want;
@@ -376,6 +426,45 @@ fn follow_cycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn storms_come_with_some_downpours_and_soak_the_ground_fast() {
+        let all: Vec<Conditions> = (0..400).map(|c| Conditions::for_cycle(9, c)).collect();
+        let pours = all
+            .iter()
+            .filter(|c| c.kind == WeatherKind::Downpour)
+            .count();
+        let storms = all.iter().filter(|c| c.storm).count();
+        assert!(
+            all.iter()
+                .all(|c| !c.storm || c.kind == WeatherKind::Downpour)
+        );
+        assert!(
+            storms > pours / 4 && storms < pours * 3 / 4,
+            "{storms} of {pours}"
+        );
+        // The storm takes nothing from the other cycles' rolls.
+        for (i, c) in all.iter().enumerate() {
+            assert_eq!(c.hour, Conditions::hour_for_cycle(9, i as u32, false));
+        }
+        let pour = Conditions::compose(WeatherKind::Downpour, Hour::Day, 3);
+        let storm = pour.stormy();
+        assert!(storm.light < pour.light && storm.visibility < pour.visibility);
+        assert_eq!(storm.wind(), 1.0);
+        // Not a storm without the rain.
+        assert!(
+            !Conditions::compose(WeatherKind::Clearing, Hour::Day, 3)
+                .stormy()
+                .storm
+        );
+        let soaked = |c: &Conditions| {
+            // Twenty seconds in, from dry.
+            let mut w = Wetness::default();
+            w.step(c, 20.0);
+            w.level
+        };
+        assert!(soaked(&storm) > 1.5 * soaked(&pour));
+    }
 
     #[test]
     fn weather_varies_by_cycle_but_not_by_chance() {

@@ -212,6 +212,24 @@ pub enum Piece {
         rot: f32,
         seated: bool,
     },
+    /// Anything with a model in `props/` (a bus, a suitcase, a wreck): a
+    /// box of `size` for its collider (and its stand-in till the model
+    /// loads), standing at `at` (`at.y` up from the ground: on another
+    /// piece), turned `rot`. Small things (`collide: false`) are stepped
+    /// over.
+    Prop {
+        model: String,
+        at: [f32; 3],
+        #[serde(default)]
+        rot: f32,
+        size: [f32; 3],
+        #[serde(default = "solid")]
+        collide: bool,
+    },
+}
+
+fn solid() -> bool {
+    true
 }
 
 /// An item left in the scene, in its frame; `y` up from where it rests.
@@ -350,6 +368,21 @@ pub fn geo(id: &str) -> Option<Geo> {
                 b.dress(from, vec![("campfire", Transform::from_translation(v(at)))]);
             }
             Piece::Remains { at, rot, seated } => remains(&mut b, v(at), yaw(rot), seated),
+            Piece::Prop {
+                ref model,
+                at,
+                rot,
+                size,
+                collide,
+            } => {
+                // Scenes are loaded once and kept: the name lives as long.
+                let model: &'static str = model.as_str();
+                if collide {
+                    b.furnish(model, Vec3::from(size), Vec3::from(at), yaw(rot), None);
+                } else {
+                    b.strew(model, Vec3::from(size), Vec3::from(at), yaw(rot));
+                }
+            }
         }
     }
     Some(b.finish())
@@ -738,6 +771,89 @@ mod tests {
         }
         assert!(crate::world::buildings::prefab("scene:marrow_creek:0").is_some());
         assert!(crate::world::buildings::prefab("scene:marrow_creek:99").is_none());
+    }
+
+    /// The top of whatever piece of a scene is under `p` (scene frame),
+    /// within `tol` of `p.y`.
+    fn rests_on(geo: &Geo, p: Vec3, tol: f32) -> bool {
+        geo.pieces.iter().any(|piece| {
+            let (half, r) = match piece.shape {
+                Shape::Box(s) => (s * 0.5, 0.0),
+                Shape::Cylinder(r, h) => (Vec3::new(r, h * 0.5, r), r),
+                Shape::Prism(_) => return false,
+            };
+            let q = piece.at.rotation.inverse() * (p - piece.at.translation);
+            let top = half.y;
+            let inside = if r > 0.0 {
+                q.xz().length() <= r + 0.03
+            } else {
+                q.x.abs() <= half.x + 0.03 && q.z.abs() <= half.z + 0.03
+            };
+            inside && (q.y - top).abs() <= tol
+        })
+    }
+
+    /// Every scene in the open can be walked to from where the raid sets
+    /// down, on ground no steeper than Map design's comfort slope.
+    #[test]
+    fn scenes_are_on_a_route() {
+        use extraction_core::map::MarkerKind;
+        let mut problems = Vec::new();
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+            let zone = Zone::load(map);
+            let grid = extraction_core::map_nav::zone_grid(
+                &zone.map,
+                &zone.hm,
+                extraction_core::map_lint::COMFORT_SLOPE,
+            );
+            let ins = zone
+                .map
+                .markers
+                .iter()
+                .find(|m| matches!(m.kind, MarkerKind::Insertion))
+                .unwrap()
+                .at;
+            for (_, s) in of(map) {
+                if s.floor.is_some() {
+                    continue;
+                }
+                let to = grid
+                    .nearest_walkable(s.at)
+                    .filter(|p| Vec2::from(*p).distance(Vec2::from(s.at)) < 6.0);
+                if to.and_then(|to| grid.path(ins, to)).is_none() {
+                    problems.push(format!("{map}: {} can't be walked to", s.name));
+                }
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// The set pieces' rule, held for every scene: what's left to take
+    /// lies on something (a crate, a case, a chair), never on the floor;
+    /// and anything stood on something else has it under it.
+    #[test]
+    fn scene_things_rest_on_their_pieces() {
+        let mut problems = Vec::new();
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+            for (id, s) in of(map) {
+                let geo = geo(&id).unwrap();
+                for t in &s.items {
+                    let p = Vec3::from(t.at);
+                    if p.y < 0.1 || !rests_on(&geo, p, 0.04) {
+                        problems.push(format!("{}: {} at {:?} on nothing", s.name, t.id, t.at));
+                    }
+                }
+                for piece in &s.pieces {
+                    if let Piece::Prop { model, at, .. } = piece
+                        && at[1] > 0.01
+                        && !rests_on(&geo, Vec3::from(*at), 0.03)
+                    {
+                        problems.push(format!("{}: {model} at {at:?} hangs in the air", s.name));
+                    }
+                }
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
     /// A scene below stands on its site's floor, or, while its site isn't

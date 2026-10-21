@@ -880,7 +880,7 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
     assert!(live_debris(&mut a) > 6, "its boards fly");
     // Saved, and back as it was.
     let save = crate::persist::snapshot(a.world_mut());
-    assert_eq!(save.zone.breaches.len(), 1);
+    assert_eq!(save.zone.holes.len(), 1);
     let mut career = a
         .world()
         .resource::<crate::persist::CareerState>()
@@ -1128,7 +1128,13 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
             )
         })
         .unwrap();
-    // Its first window boarded (World models decides which, in the game).
+    // Its first window boarded (World models decides which, in the game;
+    // these are ours on top of those).
+    let before: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<WindowBoard>>()
+        .iter(app.world())
+        .collect();
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let mut c = Commands::new(&mut queue, app.world());
@@ -1140,6 +1146,7 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
         .world_mut()
         .query_filtered::<(Entity, &GlobalTransform), With<WindowBoard>>()
         .iter(app.world())
+        .filter(|(e, _)| !before.contains(e))
         .map(|(e, g)| (e, *g))
         .collect();
     assert_eq!(boards.len(), 3, "three boards across the window");
@@ -1208,4 +1215,466 @@ fn a_hole_in_a_doorless_building_puts_it_in_the_robots_index() {
         entrances.shells.iter().any(|s| s.building == e),
         "the building has a box to be inside"
     );
+}
+
+/// Not a check: where Marrow Creek's boarded windows are, for the shots.
+#[test]
+#[ignore]
+fn list_boards() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for g in app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<super::boards::WindowBoard>>()
+        .iter(app.world())
+    {
+        let out = g.rotation() * Vec3::NEG_Z;
+        println!("board at {:.2} out {:.2}", g.translation(), out);
+    }
+}
+
+#[test]
+fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{Part, Parts, Strippable, spawn_part};
+    let mut app = app(None);
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0) + Vec3::Y * 1.0;
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut parts = Parts::default();
+        let mut c = Commands::new(&mut queue, app.world());
+        spawn_part(
+            &mut c,
+            &mut parts,
+            &Broken::default(),
+            Part {
+                at: Transform::from_translation(at),
+                size: Vec3::new(0.95, 1.85, 0.04),
+                mat: crate::render::materials::Mat::DarkMetal,
+                yields: vec![("scrap_metal".into(), 3)],
+                pry: 200.0,
+                model: None,
+                scale: Vec3::ONE,
+                hp: None,
+            },
+        );
+    }
+    queue.apply(app.world_mut());
+    run(&mut app, 2);
+    let door = app
+        .world_mut()
+        .query_filtered::<(Entity, &GlobalTransform), With<Strippable>>()
+        .iter(app.world())
+        .find(|(_, g)| g.translation().distance(at) < 0.01)
+        .unwrap()
+        .0;
+    // Rounds hole it; they don't tear it off.
+    for _ in 0..5 {
+        shoot(&mut app, at + Vec3::Z * 3.0, at, 715.0, 7.9, 40.0);
+        run(&mut app, 2);
+    }
+    assert!(
+        app.world().get_entity(door).is_ok(),
+        "rounds don't strip a wreck"
+    );
+    let scrap = |app: &mut App| {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("scrap_metal").unwrap();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = scrap(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: 240.0,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(scrap(&mut app), before + 3, "for its scrap");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+}
+
+#[test]
+fn a_door_gone_leaves_nothing_in_its_frame() {
+    // Nothing of the leaf (its collider, its knobs, its hinges) stays
+    // standing in the doorway once it's broken: its children go with it,
+    // and what flies is debris on its own layer.
+    let mut app = app(None);
+    let (door, collider, mid, n) = plank_door(&mut app);
+    let kids: Vec<Entity> = app
+        .world()
+        .get::<Children>(door)
+        .map(|c| c.iter().collect())
+        .unwrap_or_default();
+    for _ in 0..12 {
+        app.world_mut().write_message(Hit {
+            entity: collider,
+            point: mid,
+            normal: n,
+            velocity: -n * 6.0,
+            damage: 60.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 3);
+    assert!(app.world().get_entity(door).is_err(), "the door went");
+    for k in kids {
+        assert!(app.world().get_entity(k).is_err(), "and all of its parts");
+    }
+    // The doorway, from knee to head height, holds no world collider.
+    let world = app.world_mut();
+    let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+    let spatial = state.get(world).unwrap();
+    for dy in [-0.6, 0.0, 0.5] {
+        let hits = spatial.shape_intersections(
+            &Collider::sphere(0.15),
+            mid + Vec3::Y * dy,
+            Quat::IDENTITY,
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        );
+        assert!(
+            hits.is_empty(),
+            "something stands in the doorway at {dy}: {hits:?}"
+        );
+    }
+}
+
+/// The door_shot house's back wall at a point a little off its middle
+/// (building space (0.9, y, 3.5)), the way out through it, and a ray that
+/// says whether the wall stands there.
+fn back_wall(app: &mut App, y: f32) -> (Vec3, Vec3) {
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let (_, mid, _) = super::scenario::front_door(&zone).unwrap();
+    let bxf = app
+        .world_mut()
+        .query::<(&crate::world::buildings::Building, &Transform)>()
+        .iter(app.world())
+        .find(|(b, t)| b.prefab == "house_plank" && t.translation.distance(mid) < 6.0)
+        .map(|(_, t)| *t)
+        .unwrap();
+    (
+        bxf.transform_point(Vec3::new(0.9, y, 3.5)),
+        bxf.rotation * Vec3::Z,
+    )
+}
+
+fn wall_stands(app: &mut App, at: Vec3, out: Vec3) -> bool {
+    let world = app.world_mut();
+    let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+    let spatial = state.get(world).unwrap();
+    spatial
+        .cast_ray(
+            at + out * 1.0,
+            Dir3::new(-out).unwrap(),
+            2.0,
+            true,
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        )
+        .is_some_and(|h| h.distance < 1.1)
+}
+
+#[test]
+fn sustained_fire_wears_a_hole_through_a_plank_wall() {
+    let mut app = app(None);
+    let (at, out) = back_wall(&mut app, 1.4);
+    assert!(wall_stands(&mut app, at, out));
+    let mut rounds = 0;
+    while wall_stands(&mut app, at, out) && rounds < 30 {
+        // A burst into one patch, a few centimetres of scatter.
+        let j = Vec3::new(
+            (rounds as f32 * 1.3).sin(),
+            (rounds as f32 * 2.1).cos(),
+            0.0,
+        ) * 0.06;
+        shoot(&mut app, at + out * 4.0 + j, at + j, 715.0, 7.9, 40.0);
+        run(&mut app, 2);
+        rounds += 1;
+    }
+    assert!(!wall_stands(&mut app, at, out), "a hole worn through");
+    assert!(
+        (8..=12).contains(&rounds),
+        "after a burst's worth ({rounds} rounds)"
+    );
+    // (The rounds went on through the planks and wore what's behind too.)
+    let holes = app.world().resource::<super::breach::Breaches>().0.clone();
+    let ours = holes
+        .iter()
+        .find(|h| h.at.distance(at) < 0.5)
+        .expect("a hole where the burst went in");
+    assert!(
+        !ours.floor && ours.size.x < 0.6,
+        "a head-sized hole: {ours:?}"
+    );
+    // A metre along, the wall still stands.
+    let right = at + (Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) * out) * 1.0;
+    assert!(wall_stands(&mut app, right, out));
+}
+
+#[test]
+fn a_grenade_at_a_walls_foot_blows_a_way_in() {
+    use crate::weapons::grenades::GrenadeEvent;
+    let mut app = app(None);
+    let (at, out) = back_wall(&mut app, 0.9);
+    let foot = at - Vec3::Y * 0.8 + out * 0.4;
+    let g = app.world_mut().spawn_empty().id();
+    app.world_mut().write_message(GrenadeEvent {
+        grenade: g,
+        event: extraction_core::grenade::Event::Exploded,
+        at: foot,
+    });
+    run(&mut app, 4);
+    let holes = app.world().resource::<super::breach::Breaches>().0.clone();
+    assert_eq!(holes.len(), 1, "a hole blown");
+    assert!(holes[0].floor, "down to the floor: {:?}", holes[0]);
+    assert!(!wall_stands(&mut app, at, out), "through the wall");
+    let marks = app
+        .world_mut()
+        .query_filtered::<(), With<super::breach::BreachHole>>()
+        .iter(app.world())
+        .count();
+    assert_eq!(marks, 1, "and the robots know it for a way in");
+    // Saved and back, at its size.
+    let saved = super::breach::Breaches(holes.clone()).to_save();
+    let back = super::breach::Breaches::from_save(&saved, &[]);
+    assert!((back.0[0].size - holes[0].size).length() < 0.02);
+    assert!(back.0[0].at.distance(holes[0].at) < 0.02);
+}
+
+#[test]
+fn a_grenade_in_the_open_holes_nothing() {
+    use crate::weapons::grenades::GrenadeEvent;
+    let mut app = app(None);
+    let (at, out) = back_wall(&mut app, 0.9);
+    let g = app.world_mut().spawn_empty().id();
+    app.world_mut().write_message(GrenadeEvent {
+        grenade: g,
+        event: extraction_core::grenade::Event::Exploded,
+        at: at + out * 3.0,
+    });
+    run(&mut app, 4);
+    assert!(
+        app.world()
+            .resource::<super::breach::Breaches>()
+            .0
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_crate_gone_clears_its_space() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<super::Cleared>);
+    let mut app = app(None);
+    app.init_resource::<Seen>().add_systems(
+        FixedUpdate,
+        |mut c: MessageReader<super::Cleared>, mut s: ResMut<Seen>| s.0.extend(c.read().copied()),
+    );
+    let (c, t) = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SupplyCrate>>()
+        .iter(app.world())
+        .map(|(e, t)| (e, *t))
+        .next()
+        .unwrap();
+    for _ in 0..6 {
+        app.world_mut().write_message(Hit {
+            entity: c,
+            point: t.translation,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y,
+            damage: 40.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 2);
+    }
+    let seen = &app.world().resource::<Seen>().0;
+    assert!(
+        seen.iter().any(|c| {
+            let p = t.translation;
+            p.cmpge(c.min).all() && p.cmple(c.max).all()
+        }),
+        "its space is clear: {seen:?}"
+    );
+}
+
+#[test]
+fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{BUS_PRY, SHUTTER_HP, Splinters, Strippable};
+    let mut app = app(None);
+    run(&mut app, 3);
+    let parts = |app: &mut App| -> Vec<(Entity, Vec3, f32, bool, Vec<(String, u32)>)> {
+        app.world_mut()
+            .query::<(
+                Entity,
+                &GlobalTransform,
+                &Timber,
+                Has<Splinters>,
+                &Strippable,
+            )>()
+            .iter(app.world())
+            .map(|(e, g, t, s, p)| (e, g.translation(), t.max, s, p.yields.clone()))
+            .collect()
+    };
+    let all = parts(&mut app);
+    let shutters: Vec<_> = all.iter().filter(|p| p.2 == SHUTTER_HP && p.3).collect();
+    assert!(
+        shutters.len() >= 8,
+        "Marrow's houses have shutters ({})",
+        shutters.len()
+    );
+    let fence = all.iter().filter(|p| p.2 == super::strip::FENCE_HP).count();
+    let bus: Vec<_> = all.iter().filter(|p| !p.3).collect();
+    assert_eq!(bus.len(), 5, "the depot's bus: a door and four panels");
+    println!("{} shutters, {fence} fence panels", shutters.len());
+
+    // A shutter beaten: it splinters, and stays gone.
+    let (s, at, ..) = shutters[0].clone();
+    let debris = live_debris(&mut app);
+    for _ in 0..4 {
+        if app.world().get_entity(s).is_err() {
+            break;
+        }
+        app.world_mut().write_message(Hit {
+            entity: s,
+            point: at,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y * 6.0,
+            damage: 60.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 2);
+    assert!(app.world().get_entity(s).is_err(), "the shutter broke");
+    assert!(live_debris(&mut app) > debris, "in splinters");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+
+    // The bus's door to a crowbar: scrap.
+    let (door, door_at, ..) = bus
+        .iter()
+        .find(|p| p.4.iter().any(|(id, _)| id == "scrap_metal"))
+        .cloned()
+        .cloned()
+        .expect("the bus door yields scrap");
+    let scrap = |app: &mut App| {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("scrap_metal").unwrap();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = scrap(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: BUS_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(scrap(&mut app), before + 1, "for its scrap");
+
+    // The Surge: both back, and nothing doubled.
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    let after = parts(&mut app);
+    assert_eq!(after.len(), all.len(), "every part back, once");
+    for p in [at, door_at] {
+        assert!(after.iter().any(|q| q.1.distance(p) < 0.01), "back at {p}");
+    }
+}
+
+/// Not a check: where Marrow Creek's shutters, fence panels and the bus's
+/// parts are, for the shots.
+#[test]
+#[ignore]
+fn list_parts() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for (g, t, s) in app
+        .world_mut()
+        .query::<(&GlobalTransform, &Timber, Has<super::strip::Splinters>)>()
+        .iter(app.world())
+    {
+        if t.max == super::wood::DOOR_HP || t.max == super::wood::CRATE_HP {
+            continue;
+        }
+        let out = g.rotation() * Vec3::NEG_Z;
+        println!(
+            "part hp {} wood {s} at {:.2} out {:.2}",
+            t.max,
+            g.translation(),
+            out
+        );
+    }
+}
+
+#[test]
+fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
+    // What a breakable is drawn with (`wood::Drawn`): a model that's on
+    // disk, or a box in a material whose texture is (a plain dark metal
+    // is plain on purpose). Never a box in a material that never loads,
+    // which draws pale and flat.
+    let root = crate::asset_root_path();
+    let model = |m: &str| root.join(crate::render::world_props::path(m)).exists();
+    let textured = |mat: crate::render::materials::Mat| {
+        let (dir, ..) = mat.info();
+        dir.is_none_or(|d| {
+            root.join("textures/materials")
+                .join(d)
+                .join("albedo.ktx2")
+                .exists()
+        })
+    };
+    let mut bad = Vec::new();
+    for m in super::wood::CRATE_MODELS
+        .into_iter()
+        .chain([super::boards::MODEL])
+    {
+        if !model(m) {
+            bad.push(format!("model {m} isn't on disk"));
+        }
+    }
+    let ids = crate::world::buildings::PREFABS
+        .into_iter()
+        .chain(crate::world::underground::ids());
+    for id in ids {
+        let Some(geo) = crate::world::buildings::prefab(id) else {
+            continue;
+        };
+        for b in &geo.breakables {
+            match b.model {
+                Some(m) if !model(m) => bad.push(format!("{id}: {:?}'s {m} isn't on disk", b.kind)),
+                None if !textured(b.mat) => bad.push(format!(
+                    "{id}: {:?} is a box of {:?}, untextured",
+                    b.kind, b.mat
+                )),
+                _ => {}
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

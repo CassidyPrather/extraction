@@ -89,9 +89,7 @@ pub(super) fn direct(
     }
     // The gun hand's A (flat: B) for the magazine release, likewise.
     let release = ob.next_goal() == Some(Goal::DropMag) && bot.elapsed > 0.3;
-    if input.hand(Side::Right).primary != release {
-        input.hand_mut(Side::Right).primary = release;
-    }
+    bot.hold(crate::bot::Btn::Primary, release);
     // Only when the bot has nothing left but to idle, and a moment after
     // its last task, so what it did has had time to register.
     let idling =
@@ -178,9 +176,14 @@ pub(super) struct DirectorWorld<'w, 's> {
     buildings: Query<'w, 's, (&'static Building, &'static GlobalTransform)>,
     hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     doorway: Option<Res<'w, super::Doorway>>,
+    comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
 }
 
 impl DirectorWorld<'_, '_> {
+    fn one_handed(&self) -> bool {
+        self.comfort.as_ref().is_some_and(|c| c.one_handed)
+    }
+
     fn id(&self, e: Entity) -> Option<&str> {
         self.items
             .get(e)
@@ -350,7 +353,20 @@ impl DirectorWorld<'_, '_> {
                 match goal {
                     Goal::FillMag => {
                         t.extend(self.free_hands());
-                        if let (Some(mag), Some(ammo)) =
+                        if let (Some(mag), Some(ammo), true) = (
+                            self.loose("pm_mag", table),
+                            self.loose("ammo_9x18", table),
+                            self.one_handed(),
+                        ) {
+                            // The mag in the hand, down onto the box where
+                            // it lies, and into a pouch.
+                            t.push(Grab {
+                                item: mag,
+                                side: Side::Right,
+                            });
+                            t.push(OneHandCombine(ammo));
+                            t.push(Stow(Side::Right));
+                        } else if let (Some(mag), Some(ammo)) =
                             (self.loose("pm_mag", table), self.loose("ammo_9x18", table))
                         {
                             t.push(Grab {

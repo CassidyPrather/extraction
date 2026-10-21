@@ -62,6 +62,135 @@ struct RoofRain {
     heavy: bool,
 }
 
+/// Water that runs where a map says it does, beyond its rivers: Sallow's
+/// scour valves, still open, roaring out of the valve house at the dam's
+/// toe into the river (loud at the toe and the face stair's foot, fading
+/// up the valley). (map, xz, height above ground.) The creek's recording,
+/// slowed and louder, until an outflow can be recorded.
+pub const OUTFLOWS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [12.0, 176.0], 1.0)];
+
+#[derive(Component)]
+struct OutflowLoop;
+
+fn outflows(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    existing: Query<(), With<OutflowLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut done: Local<bool>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    if *done || !existing.is_empty() {
+        return;
+    }
+    *done = true;
+    for &(map, [x, z], up) in OUTFLOWS {
+        if zone.map.name != map {
+            continue;
+        }
+        if let Some(sample) = bank.pick("ambience/creek", &mut rng.0) {
+            commands.spawn((
+                OutflowLoop,
+                SamplePlayer::new(sample)
+                    .looping()
+                    .with_volume(Volume::Decibels(mix::db("water.scour"))),
+                PlaybackSettings::default().with_speed(0.75),
+                Transform::from_xyz(x, zone.ground(x, z) + up, z),
+                Placed::new("water.scour"),
+            ));
+        }
+    }
+}
+
+/// A downpour's swell: (dB, seconds).
+pub const RAIN_SWELL: (f32, f32) = (4.0, 4.0);
+
+/// Thunder after each flash (`world::weather::Lightning`), as far behind
+/// it as sound takes (`storm::thunder_delay`, 343 m/s), from the strike's
+/// direction:
+///
+/// - near (under [`THUNDER_NEAR`]): a sharp crack, echoing the flash's
+///   strokes, then the long tearing roll;
+/// - far: the low rumble only, darker the further (a 1.5 kHz roll at
+///   600 m to 300 Hz at 2.6 km).
+///
+/// Louder the nearer and the brighter the strike. (In a storm the far
+/// thunder of `ambient_oneshots` keeps quiet: every roll is a flash's.)
+pub const THUNDER_NEAR: f32 = 600.0;
+
+fn storm_sounds(
+    mut commands: Commands,
+    mut flashes: MessageReader<crate::world::weather::Lightning>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, Vec3, f32, f32)>>,
+) {
+    let now = time.elapsed_secs();
+    for f in flashes.read() {
+        let delay = crate::world::storm::thunder_delay(f.distance);
+        pending.push((now + delay, f.at, f.distance, f.strength));
+    }
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, at, d, strength) in due {
+        // From the strike's direction, a fixed way off and up: its level is
+        // set here, by distance, not by the falloff.
+        let dir = (at - ear).with_y(0.0).normalize_or(Vec3::X);
+        let from = ear + dir * 120.0 + Vec3::Y * 60.0;
+        let db = thunder_db(d, strength);
+        if d < THUNDER_NEAR {
+            let fc = 8000.0 - 5000.0 * ((d - 250.0) / 350.0).clamp(0.0, 1.0);
+            play_filtered_db(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "explosions/grenade_sharp",
+                from,
+                "thunder.crack",
+                db,
+                0.7,
+                fc,
+            );
+        }
+        let fc = thunder_cutoff(d);
+        play_filtered_db(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ambience/thunder_distant",
+            from,
+            "thunder.roll",
+            db,
+            0.85,
+            fc,
+        );
+    }
+}
+
+/// Thunder's level against its cue, dB: 0 at 250 m from a full strike,
+/// 6 dB down each doubling of distance, and down to -6 dB for a faint one.
+pub fn thunder_db(distance: f32, strength: f32) -> f32 {
+    -6.0 * (distance.max(250.0) / 250.0).log2() - 6.0 * (1.0 - strength.clamp(0.0, 1.0))
+}
+
+/// The roll's low-pass by distance, Hz: 1.5 kHz at 600 m to 300 Hz at
+/// 2.6 km and beyond, and open up close.
+pub fn thunder_cutoff(distance: f32) -> f32 {
+    if distance < THUNDER_NEAR {
+        return 4000.0;
+    }
+    let t = ((distance - THUNDER_NEAR) / 2000.0).clamp(0.0, 1.0);
+    (1500f32.ln() + (300f32.ln() - 1500f32.ln()) * t).exp()
+}
+
 /// The rain bed follows the weather, and where you are: duller and quieter
 /// under a roof (a tin roof drumming over you if there's a recording for
 /// it), gone underground. Eased, so a doorway is a crossfade.
@@ -78,11 +207,25 @@ fn rain_volume(
     mut lowpass: Query<&mut FastLowpassNode>,
     mut now: Local<Option<(f32, f32)>>,
     mut drums: Local<HashMap<&'static str, f32>>,
+    mut swell: Local<(f32, f32)>,
 ) {
+    // In a downpour, a wall of rain sweeps over every 10-20 s (the rain
+    // sheets crossing the valley): up 4 dB and back over 4 s.
+    let t = time.elapsed_secs();
+    if t >= swell.0 {
+        swell.1 = t;
+        swell.0 = t + rng.0.range(10.0, 20.0);
+    }
+    let into = t - swell.1;
+    let gust = if conditions.rain > 0.7 && into < RAIN_SWELL.1 {
+        RAIN_SWELL.0 * (std::f32::consts::PI * into / RAIN_SWELL.1).sin()
+    } else {
+        0.0
+    };
     let rain_db = if conditions.rain < 0.01 {
         None
     } else {
-        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt())
+        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt() + gust)
     };
     let (want_db, want_cut, drum) = crate::acoustics::rain_under(&listening.space);
     let k = (time.delta_secs() * 2.0).min(1.0);
@@ -175,6 +318,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
             .init_resource::<Hush>()
+            .init_resource::<HushNow>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -229,6 +373,15 @@ impl Plugin for AudioPlugin {
                         epilogue_sounds,
                         night_ambience,
                         turret_sounds,
+                        heavy_sounds,
+                        heavy_loops,
+                        flock_sounds,
+                        anomaly_voices,
+                        tool_sounds,
+                        hush_world,
+                        slapbacks,
+                        storm_sounds,
+                        outflows,
                     ),
                 ),
             )
@@ -445,7 +598,7 @@ fn spawn_reverb_bus(commands: &mut Commands) {
 /// How much of a cue goes to the reverb: all of it, but for recordings
 /// with their own space baked in (the far-off shot's echo, the siren's
 /// valley) and the beds.
-fn reverb_send(cue: &str) -> SendNode {
+pub(crate) fn reverb_send(cue: &str) -> SendNode {
     let share = match mix::role(cue) {
         Some(mix::Role::Bed) => 0.0,
         _ if matches!(cue, "gun.distant" | "surge.siren" | "surge.crack") => 0.3,
@@ -734,8 +887,8 @@ fn grenade_sounds(
 }
 
 /// The footstep set for whatever is under `at`: the truck's bed, a built
-/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), or the
-/// ground.
+/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), a
+/// drained reservoir's silt, or the ground.
 fn ground_set(
     zone: &Zone,
     trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
@@ -755,6 +908,12 @@ fn ground_set(
         footstep_set(m)
     } else if wet > 0.0 && crate::world::puddles::puddle_at(&zone.hm, p, wet) > PUDDLE_SPLASH {
         "footsteps/water"
+    } else if crate::world::terrain::drowned_line(&zone.map.name)
+        .is_some_and(|d| d.at(p, at.y).0 > 0.5)
+    {
+        // A drained reservoir's bed (`world::terrain::Drowned`): silt,
+        // as it looks.
+        "footsteps/mud"
     } else {
         surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
     }
@@ -809,8 +968,119 @@ fn shot_set(item: &str) -> &'static str {
         "ak74" => "guns/rifle_shot",
         "mosin" => "guns/bolt_rifle_shot",
         "toz_double" => "guns/shotgun_shot",
+        "mp133" => "guns/shotgun_shot",
+        "svd" => "guns/bolt_rifle_shot",
+        "toz8" | "flare_pistol" | "crossbow" => "guns/pistol_shot",
         _ => "guns/rifle_shot",
     }
+}
+
+/// A gun's faults, each its own (`weapons::faults`): true if it was one.
+///
+/// - A squib: a weak, dull pop. The rifle's shot low-passed hard and far
+///   down, no crack, nothing cycling: it must not sound like a shot.
+/// - A bulge: a round fired into a squib's bullet. A muffled, wrong bang
+///   with the barrel ringing after it.
+/// - Rodded: the cleaning rod's scrape down the bore, and the bullet's
+///   small tink as it drops out.
+/// - A stuck bolt: a dull clack as the handle won't come up. Freed: the
+///   slap's sharp metal smack, then the bolt opening.
+/// - A slam-fire: the bolt's close is already there (it comes a tick
+///   before the shot); a faint snap of the floating pin marks it wrong.
+fn fault_sounds(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    event: &FireEvent,
+    at: Vec3,
+) -> bool {
+    let layers: &[(&str, &str, f64, Option<f32>)] = match event {
+        FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
+        FireEvent::Bulged { .. } => &[
+            ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
+            ("impacts/metal", "gun.bulged_ring", 0.8, None),
+        ],
+        FireEvent::Rodded => &[
+            ("physical/handle_metal", "gun.rod_scrape", 0.8, None),
+            ("guns/casing", "gun.rod_tink", 1.35, None),
+        ],
+        FireEvent::BoltStuck => &[("guns/bolt_open", "gun.bolt_stuck", 0.6, Some(1800.0))],
+        FireEvent::BoltFreed => &[
+            ("impacts/metal", "gun.bolt_freed", 1.25, None),
+            ("guns/bolt_open", "gun.bolt_open", 1.0, None),
+        ],
+        FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        _ => return false,
+    };
+    for &(set, cue, speed, cutoff) in layers {
+        match cutoff {
+            Some(hz) => play_filtered(commands, bank, rng, set, at, cue, speed, hz),
+            None => play_at_speed(commands, bank, rng, set, Some(at), cue, 0.0, speed, 0.04),
+        }
+    }
+    true
+}
+
+/// [`play_filtered`] with a level offset (dB) against its cue.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered_db(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    db: f32,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + db)),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
+}
+
+/// A placed one-shot through its own low-pass (`hz`), for sounds that
+/// are some other sound with its edge taken off.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
 }
 
 fn gun_sounds(
@@ -821,6 +1091,7 @@ fn gun_sounds(
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     guns: Query<&crate::weapons::Gun>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     let ear = listener
         .iter()
@@ -828,12 +1099,17 @@ fn gun_sounds(
         .map(|g| g.translation())
         .unwrap_or_default();
     for ev in events.read() {
+        if fault_sounds(&mut commands, &bank, &mut rng.0, &ev.event, ev.at) {
+            continue;
+        }
         let action = guns.get(ev.gun).map(|g| g.firearm.def.action).ok();
         use extraction_core::firearm::ActionKind::*;
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
-                let quiet = suppressed.contains(ev.gun);
+                // (A .22's crack is as small as a suppressed rifle's.)
+                let quiet =
+                    suppressed.contains(ev.gun) || reports.get(ev.gun).is_ok_and(|r| r.0 < 0.6);
                 if quiet && !far {
                     // A suppressor: a cough, the crack's highs and boom gone.
                     if let Some(sample) = bank.pick(shot_set(&ev.item), &mut rng.0) {
@@ -867,7 +1143,7 @@ fn gun_sounds(
             (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
             (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
             (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
-            (FireEvent::RoundLoaded, Some(BreakAction)) => {
+            (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
                 ("guns/shell_insert", "gun.shell_insert", 0.0)
             }
             (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip", 0.0),
@@ -1425,6 +1701,7 @@ fn ambient_oneshots(
     let night = conditions
         .as_deref()
         .is_some_and(|c| c.hour == crate::world::weather::Hour::Night);
+    let storm = conditions.as_deref().is_some_and(|c| c.storm);
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
@@ -1520,7 +1797,10 @@ fn ambient_oneshots(
     }
     // Far thunder; at night, the Surge's, deeper and more often, a long
     // way off across the Zone.
-    if next.1 <= 0.0 {
+    if next.1 <= 0.0 && storm {
+        // In a storm, all thunder follows a flash (`storm_sounds`).
+        next.1 = rng.0.range(60.0, 180.0);
+    } else if next.1 <= 0.0 {
         if night {
             next.1 = rng.0.range(35.0, 90.0);
             play_at_speed(
@@ -1977,6 +2257,8 @@ fn door_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_some_and(|b| b != door.open) {
@@ -2097,18 +2379,6 @@ enum NightLoop {
     Rustle,
 }
 
-/// How near a machine silences the insects, m: the big ones (walkers and
-/// their breeds, the dirigible), and a drone's whine from further, since
-/// the crickets would hide it (`scripts/audio_voices.py`: at night the
-/// hush is the warning where the machine itself is masked).
-pub const INSECTS_HUSH_BIG: f32 = 60.0;
-pub const INSECTS_HUSH_DRONE: f32 = 120.0;
-/// ...and a shot this near.
-pub const INSECTS_HUSH_SHOT: f32 = 150.0;
-/// After the last of it, they wait this long, then come back over this.
-pub const INSECTS_WAIT: f32 = 6.0;
-pub const INSECTS_RETURN: f32 = 15.0;
-
 /// How dark it is for the night's sounds: 1 at night, half at dusk.
 pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
     use crate::world::weather::Hour;
@@ -2119,66 +2389,39 @@ pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
     }
 }
 
-/// The night: crickets everywhere outside, which fall silent when
-/// something big comes near or a shot goes off (and so tell you it's
-/// there) and come back a while after; wind in the leaves where it's
-/// overgrown. Quieter through walls, gone underground and in rain.
-#[allow(clippy::too_many_arguments)]
+/// The night: crickets everywhere outside, at the level Wildlife's chorus
+/// says (`wildlife::insects::Chorus`: silent near a machine or after a
+/// shot, a flush or a bolt, back over a minute, thinned by rain and wind;
+/// so they stopping tells you something's there), and wind in the leaves
+/// where it's overgrown. Quieter through walls, gone underground.
 fn night_ambience(
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    chorus: Option<Res<crate::wildlife::insects::Chorus>>,
     listening: Res<Listening>,
     zone: Option<Res<Zone>>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
-    robots: Query<(&crate::robots::Robot, &GlobalTransform)>,
-    mut shots: MessageReader<crate::weapons::GunEvent>,
     loops: Query<(&NightLoop, &SampleEffects)>,
     mut volumes: Query<&mut VolumeNode>,
-    time: Res<Time>,
-    mut state: Local<(f32, f32, f32)>,
 ) {
     use crate::acoustics::SpaceKind;
+    use crate::wildlife::insects::Singers;
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
     };
-    let now = time.elapsed_secs();
-    let dt = time.delta_secs();
-    let (last_threat, hush, _) = &mut *state;
-    let near = robots.iter().any(|(r, gt)| {
-        let reach = match r.kind {
-            crate::robots::RobotKind::Drone => INSECTS_HUSH_DRONE,
-            crate::robots::RobotKind::Walker | crate::robots::RobotKind::Dirigible => {
-                INSECTS_HUSH_BIG
-            }
-            _ => 0.0,
-        };
-        !r.wrecked && gt.translation().distance(ear) < reach
+    let night = conditions.as_deref().map_or(0.0, |c| nightness(c.hour));
+    let crickets = chorus.as_deref().map_or(0.0, |c| {
+        if c.kind == Singers::Crickets {
+            c.level
+        } else {
+            0.0
+        }
     });
-    let shot = shots.read().any(|g| {
-        matches!(g.event, extraction_core::firearm::Event::Fired { .. })
-            && g.at.distance(ear) < INSECTS_HUSH_SHOT
-    });
-    if near || shot {
-        *last_threat = now;
-    }
-    // Silent in a second and a half; back slowly, once it's been quiet a
-    // while.
-    let quiet = now - *last_threat > INSECTS_WAIT || *last_threat == 0.0;
-    *hush = if quiet {
-        (*hush + dt / INSECTS_RETURN).min(1.0)
-    } else {
-        (*hush - dt / 1.5).max(0.0)
-    };
-    let (night, rain) = conditions
-        .as_deref()
-        .map_or((0.0, 0.0), |c| (nightness(c.hour), c.rain));
     let under = listening.space.kind == SpaceKind::Underground;
     let walls = listening.space.enclosed;
-    let cover = zone
-        .as_deref()
-        .map_or(0.5, |z| z.forest_cover(ear.x, ear.z));
+    let cover = overgrown(zone.as_deref(), ear);
     for (which, effects) in &loops {
         let (level, cue) = match which {
-            NightLoop::Insects => (night * (1.0 - rain * 2.0).max(0.0) * *hush, "insects"),
+            NightLoop::Insects => (crickets, "insects"),
             NightLoop::Rustle => (night * (0.35 + 0.65 * cover), "rustle"),
         };
         let level = if under { 0.0 } else { level };
@@ -2192,8 +2435,47 @@ fn night_ambience(
     }
 }
 
-/// Glass going and wood giving way (`destruction`): a shop window crashes
-/// lower and longer than a vent pane tinkles; a door coming down thuds.
+/// How overgrown it is round `at`, 0..1: the ivy and weeds on the
+/// buildings within [`OVERGROWN_NEAR`] (`world::overgrowth::amount`,
+/// nearer counting more; underground sites grow nothing), or the forest's
+/// cover where there are none.
+pub const OVERGROWN_NEAR: f32 = 40.0;
+
+fn overgrown(zone: Option<&Zone>, at: Vec3) -> f32 {
+    let Some(zone) = zone else {
+        return 0.5;
+    };
+    let here = Vec2::new(at.x, at.z);
+    let (mut sum, mut weight) = (0.0, 0.0);
+    for p in &zone.map.placements {
+        let d = Vec2::from(p.at).distance(here);
+        if d > OVERGROWN_NEAR || extraction_core::underground::is_site(&p.prefab) {
+            continue;
+        }
+        let w = 1.0 - d / OVERGROWN_NEAR;
+        sum += w * crate::world::overgrowth::amount(Vec2::from(p.at), &p.prefab);
+        weight += w;
+    }
+    let cover = zone.forest_cover(at.x, at.z);
+    if weight > 0.0 {
+        (sum / weight).max(cover)
+    } else {
+        cover
+    }
+}
+
+/// Glass going and wood giving way (`destruction`), each cue levelled at
+/// its biggest so the audit sees the worst (the code only takes it down):
+///
+/// - a step on broken glass: a short bright crunch (a pane's break, quick);
+/// - a pane: a shop window crashes lower and longer than a vent pane
+///   tinkles, quieter the smaller;
+/// - wood: a thump and splinters; a door coming down thuds as well;
+/// - a wall breached (the only break of 3 m² and over): masonry going,
+///   rubble pouring and the boom of it.
+///
+/// Robots hear each to `destruction::noise_radius`; the audit checks your
+/// ears hear about as far.
 fn break_sounds(
     mut commands: Commands,
     mut broke: MessageReader<crate::destruction::Broke>,
@@ -2201,7 +2483,6 @@ fn break_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
-    // A step on broken glass: a short, bright grind.
     for c in crunches.read() {
         play_at_speed(
             &mut commands,
@@ -2209,27 +2490,48 @@ fn break_sounds(
             &mut rng.0,
             "physical/glass_break",
             Some(c.at),
-            "hit.glass",
-            -12.0,
+            "break.crunch",
+            0.0,
             1.6,
             0.15,
         );
     }
     for b in broke.read() {
+        let at = Some(b.at);
         match b.stuff {
             crate::destruction::Stuff::Glass => {
                 let speed = (1.25 - b.size * 0.6).clamp(0.8, 1.25) as f64;
+                let db = (b.size * 6.0 - 8.0).clamp(-9.0, 0.0);
                 play_at_speed(
                     &mut commands,
                     &bank,
                     &mut rng.0,
                     "physical/glass_break",
-                    Some(b.at),
-                    "hit.glass",
-                    (b.size * 6.0 - 2.0).clamp(-3.0, 3.0),
+                    at,
+                    "break.glass",
+                    db,
                     speed,
                     0.1,
                 );
+            }
+            crate::destruction::Stuff::Wood if b.size >= BREACH_SIZE => {
+                for (set, cue, speed) in [
+                    ("impacts/concrete", "break.breach", 0.7),
+                    ("ambience/rockfall", "break.rubble", 1.0),
+                    ("physical/door_close", "break.wood_big", 0.6),
+                ] {
+                    play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        set,
+                        at,
+                        cue,
+                        0.0,
+                        speed,
+                        0.08,
+                    );
+                }
             }
             crate::destruction::Stuff::Wood => {
                 play(
@@ -2237,9 +2539,20 @@ fn break_sounds(
                     &bank,
                     &mut rng.0,
                     "impacts/wood",
-                    Some(b.at),
-                    "door.blow",
+                    at,
+                    "break.wood",
                     0.0,
+                    0.15,
+                );
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "impacts/wood",
+                    at,
+                    "break.splinter",
+                    0.0,
+                    1.6,
                     0.15,
                 );
                 if b.size > 1.0 {
@@ -2248,8 +2561,8 @@ fn break_sounds(
                         &bank,
                         &mut rng.0,
                         "physical/door_close",
-                        Some(b.at),
-                        "door.broken",
+                        at,
+                        "break.wood_big",
                         0.0,
                         0.2,
                     );
@@ -2258,6 +2571,419 @@ fn break_sounds(
         }
     }
 }
+
+/// A flock going up (`wildlife::Flushed`): the clatter of wings and the
+/// birds' own calls, rooks (as crows), ravens or jackdaws by the flock's
+/// species. Alarmed: a burst of calls; restless: one, softer. (The wings
+/// are a quick cloth flutter until a recording of wings can be fetched.)
+fn flock_sounds(
+    mut commands: Commands,
+    mut flushed: MessageReader<crate::wildlife::Flushed>,
+    flocks: Query<&crate::wildlife::flock::Flock>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::wildlife::FlushCause;
+    use crate::wildlife::flock::Species;
+    for f in flushed.read() {
+        let calls = match flocks.get(f.flock).map(|fl| fl.species) {
+            Ok(Species::Raven) => "ambience/raven",
+            Ok(Species::Jackdaw) => "ambience/jackdaw",
+            _ => "ambience/crow",
+        };
+        let restless = f.cause == FlushCause::Restless;
+        let up = Some(f.at + Vec3::Y * 2.0);
+        let wings = (f.birds as f32 / 5.0).clamp(1.0, 4.0) as usize;
+        for _ in 0..wings {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/cloth",
+                up,
+                "flock.wings",
+                if restless { -6.0 } else { 0.0 },
+                1.5,
+                0.15,
+            );
+        }
+        let n = if f.alarm {
+            3
+        } else if restless {
+            1
+        } else {
+            2
+        };
+        for _ in 0..n {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                calls,
+                Some(f.at + Vec3::Y * 4.0),
+                "flock.call",
+                if restless { -6.0 } else { 0.0 },
+                0.1,
+            );
+        }
+    }
+}
+
+/// Loud sounds slapping back off Sallow's dam (`acoustics::slapback`):
+/// a shot, a grenade, the heavy's footfall or blow, a wall breached. Each
+/// face both the sound and you stand in front of sends back its image, a
+/// darkened copy (through 2.5 kHz, 4 dB down for what the stone takes)
+/// from the sound's mirror image behind the face, after the extra path:
+/// the dam's own voice, half a second after a shot from 90 m out.
+fn slapbacks(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    mut walls: Local<Option<Vec<crate::acoustics::Reflector>>>,
+    mut guns: MessageReader<GunEvent>,
+    mut grenades: MessageReader<crate::weapons::grenades::GrenadeEvent>,
+    mut heavies: MessageReader<crate::robots::heavy::HeavyEvent>,
+    mut broke: MessageReader<crate::destruction::Broke>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, &'static str, Vec3, f64)>>,
+) {
+    use crate::robots::heavy::HeavyAct;
+    let walls = walls.get_or_insert_with(|| {
+        let Some(zone) = zone.as_deref() else {
+            return Vec::new();
+        };
+        let placed: Vec<_> = zone
+            .map
+            .placements
+            .iter()
+            .map(|p| {
+                (
+                    p.prefab.clone(),
+                    crate::world::buildings::placement_transform(zone, p),
+                )
+            })
+            .collect();
+        crate::acoustics::reflectors(&placed)
+    });
+    let mut loud: Vec<(&'static str, Vec3, f64)> = Vec::new();
+    for g in guns.read() {
+        if matches!(g.event, FireEvent::Fired { .. }) {
+            loud.push((shot_set(&g.item), g.at, 1.0));
+        }
+    }
+    for g in grenades.read() {
+        if g.event == extraction_core::grenade::Event::Exploded {
+            loud.push(("explosions/grenade_heavy", g.at, 1.0));
+        }
+    }
+    for h in heavies.read() {
+        if matches!(h.what, HeavyAct::Step | HeavyAct::Slam { .. }) {
+            loud.push(("explosions/grenade_heavy", h.at, 0.6));
+        }
+    }
+    for b in broke.read() {
+        if b.size >= BREACH_SIZE {
+            loud.push(("impacts/concrete", b.at, 0.7));
+        }
+    }
+    let now = time.elapsed_secs();
+    if let Some(ear) = listener.iter().next().map(|g| g.translation()) {
+        for (set, at, speed) in loud {
+            for w in walls.iter() {
+                if let Some((image, delay)) = crate::acoustics::slapback(w, at, ear) {
+                    pending.push((now + delay, set, image, speed));
+                }
+            }
+        }
+    }
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, set, image, speed) in due {
+        let Some(sample) = bank.pick(set, &mut rng.0) else {
+            continue;
+        };
+        let cue = "echo.slap";
+        commands.spawn((
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
+            PlaybackSettings::default().with_speed(speed),
+            Transform::from_translation(image),
+            // It comes from behind the dam on purpose: never occluded.
+            Occluded {
+                next: f32::INFINITY,
+            },
+            sample_effects![
+                mix::spatial(cue),
+                FastLowpassNode::<2> {
+                    cutoff_hz: 2_500.0,
+                    ..default()
+                },
+                reverb_send(cue)
+            ],
+        ));
+    }
+}
+
+/// The detector's stone ping and an artifact's crackle, synthesised
+/// (`robot_voice::render_ping`, `render_crackle`).
+const PING_SET: &str = "device/stone_ping";
+const CRACKLE_SET: &str = "device/crackle";
+
+/// The Zone's smaller voices (`anomaly`):
+///
+/// - the sweep detector's ping for a loose stone, faster and higher the
+///   nearer it is (it fires 1.25 s apart at range, 0.15 s close);
+/// - a wet aegis biting its carrier: a crackle at the chest; a shard's
+///   late glint, a faint glass tick;
+/// - a hot stone held: a sizzle at the hand for as long as it burns.
+fn anomaly_voices(
+    mut commands: Commands,
+    mut pings: MessageReader<crate::anomaly::detector::StonePing>,
+    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
+    mut burns: MessageReader<crate::anomaly::harvest::Burned>,
+    mut sizzle: Query<(Entity, &mut Transform, &SampleEffects), With<BurnLoop>>,
+    mut volumes: Query<&mut VolumeNode>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut last_burn: Local<f32>,
+) {
+    use crate::anomaly::costs::Bite;
+    for p in pings.read() {
+        let speed = 1.0 + 0.3 * p.near.clamp(0.0, 1.0) as f64;
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            PING_SET,
+            Some(p.at),
+            "detector.ping",
+            0.0,
+            speed,
+            0.0,
+        );
+    }
+    for b in bites.read() {
+        match b.what {
+            Bite::Shock => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                CRACKLE_SET,
+                Some(b.at),
+                "bite.shock",
+                0.0,
+                0.1,
+            ),
+            Bite::Glint => play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/chime",
+                Some(b.at),
+                "bite.glint",
+                0.0,
+                2.2,
+                0.1,
+            ),
+        }
+    }
+    let now = time.elapsed_secs();
+    let mut at = None;
+    for b in burns.read() {
+        at = Some(b.at);
+    }
+    if let Some(a) = at {
+        *last_burn = now;
+        match sizzle.iter_mut().next() {
+            Some((_, mut t, effects)) => {
+                t.translation = a;
+                if let Ok(mut v) = volumes.get_effect_mut(effects) {
+                    v.volume = Volume::Decibels(mix::db("burn.sizzle"));
+                }
+            }
+            None => {
+                if let Some(sample) = bank.pick("anomaly/burner_roar", &mut rng.0) {
+                    commands.spawn((
+                        BurnLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("burn.sizzle"))),
+                        PlaybackSettings::default().with_speed(1.9),
+                        Transform::from_translation(a),
+                        Placed::new("burn.sizzle"),
+                    ));
+                }
+            }
+        }
+    } else if now - *last_burn > 0.2 {
+        // Let go: it stops.
+        for (e, ..) in &sizzle {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+/// The hot stone's sizzle while it's held.
+#[derive(Component)]
+struct BurnLoop;
+
+/// Hands' tools (`interact::tools`): the crowbar's strained creak as it
+/// levers, higher the harder (once every 0.6 s while it's working), and
+/// the crack as it gives; the cutters' snip and the ping of the cut.
+fn tool_sounds(
+    mut commands: Commands,
+    mut pried: MessageReader<crate::interact::tools::crowbar::Pried>,
+    mut cuts: MessageReader<crate::interact::tools::cutters::Cut>,
+    places: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<HashMap<Entity, f32>>,
+) {
+    let now = time.elapsed_secs();
+    let at = |e: Entity| places.get(e).ok().map(|g| g.translation());
+    for p in pried.read() {
+        if next.get(&p.target).is_some_and(|t| now < *t) {
+            continue;
+        }
+        next.insert(p.target, now + 0.6);
+        let strain = (p.torque / PRY_FULL).clamp(0.0, 1.0);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_creak",
+            at(p.target),
+            "tool.pry",
+            -6.0 + 6.0 * strain,
+            0.5 + 0.4 * strain as f64,
+            0.1,
+        );
+    }
+    // A pried thing giving way is Destruction's `Broke`, heard with
+    // the rest of the breaks.
+    for c in cuts.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            at(c.target),
+            "tool.cut",
+            0.0,
+            0.75,
+            0.06,
+        );
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/ricochet",
+            at(c.target),
+            "tool.cut_ping",
+            0.0,
+            1.8,
+            0.08,
+        );
+    }
+}
+
+/// A crowbar's torque that sounds full strain, N·m.
+const PRY_FULL: f32 = 400.0;
+
+/// How the Hush (`anomaly::hush`) takes the world away: inside one, 18 dB
+/// down and muffled to 350 Hz, your own steps and shots too; carrying a
+/// hushstone (within its 1.2 m), a light 4 dB and 3 kHz, all the time.
+pub const HUSH_DEEP: (f32, f32) = (18.0, 350.0);
+pub const HUSH_LIGHT: (f32, f32) = (4.0, 3000.0);
+/// After this long inside, a pressure tone rises (s), to full over 10.
+pub const HUSH_TONE_AFTER: f32 = 8.0;
+
+/// The Hush right now, eased: dB down and the cutoff every placed sound
+/// is held under (`occlusion` applies it).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct HushNow {
+    pub db: f32,
+    pub cutoff: f32,
+}
+
+impl Default for HushNow {
+    fn default() -> Self {
+        Self {
+            db: 0.0,
+            cutoff: 20_480.0,
+        }
+    }
+}
+
+#[derive(Component)]
+struct HushTone;
+
+#[allow(clippy::too_many_arguments)]
+fn hush_world(
+    mut commands: Commands,
+    hushes: Option<Res<crate::anomaly::hush::Hushes>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    inside: Query<&crate::anomaly::hush::InHush, With<crate::rig::LocalPlayer>>,
+    mut main: Query<&mut VolumeNode, (With<MainBus>, Without<HushTone>)>,
+    tone: Query<&SampleEffects, With<HushTone>>,
+    mut volumes: Query<&mut VolumeNode, Without<MainBus>>,
+    mut now: ResMut<HushNow>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+) {
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let (db, cutoff) = match hushes.as_deref() {
+        Some(h) if h.in_standing(ear) => HUSH_DEEP,
+        Some(h) if h.eats(ear) => HUSH_LIGHT,
+        _ => (0.0, 20_480.0),
+    };
+    // A second in or out: the air going dead, not a switch.
+    let k = (time.delta_secs() * 3.0).min(1.0);
+    now.db += (db - now.db) * k;
+    now.cutoff = (now.cutoff.ln() + (cutoff.ln() - now.cutoff.ln()) * k).exp();
+    if let Ok(mut v) = main.single_mut() {
+        let want = Volume::Decibels(-now.db);
+        if v.volume != want {
+            v.volume = want;
+        }
+    }
+    let secs = inside.iter().next().map_or(0.0, |h| h.0);
+    let rise = ((secs - HUSH_TONE_AFTER) / 10.0).clamp(0.0, 1.0);
+    match tone.iter().next() {
+        None => {
+            if let Some(sample) = bank.pick("anomaly/well_drone", &mut rng.0) {
+                commands.spawn((
+                    HushTone,
+                    SamplePlayer::new(sample).looping(),
+                    PlaybackSettings::default().with_speed(0.5),
+                    sample_effects![VolumeNode {
+                        volume: Volume::SILENT,
+                        ..default()
+                    }],
+                ));
+            }
+        }
+        Some(effects) => {
+            if let Ok(mut v) = volumes.get_effect_mut(effects) {
+                // Under the duck like everything, so lifted back by it.
+                v.volume = if rise < 0.01 {
+                    Volume::SILENT
+                } else {
+                    Volume::Decibels(mix::db("hush.tone") + now.db + 20.0 * rise.log10())
+                };
+            }
+        }
+    }
+}
+
+/// A break this big (m²) is a wall breached (`destruction::breach`).
+const BREACH_SIZE: f32 = 2.5;
 
 /// The wind in the trees, and the hush of a room: which you hear depends
 /// on whether you're under a roof.
@@ -2430,15 +3156,168 @@ fn attention_hum(
     }
 }
 
+/// The Gate's horn, synthesised with the voices (`robot_voice::render_horn`).
+const HORN_SET: &str = "voice/heavy/horn";
+/// How far from its middle a heavy's feet land, m (it's a walker at twice
+/// the size).
+const HEAVY_FEET: f32 = 4.0;
+
+/// The heavy machine (`robots::heavy`), heard before it's seen:
+///
+/// - each footfall a deep thud (a heavy explosion low-passed at 220 Hz and
+///   slowed: mostly below 100 Hz, carrying ~150 m) with the clank of its
+///   foot over it up close; Hands' footfall pulse is felt within 25 m
+///   (`robots::heavy_look`);
+/// - the arm rising: a hydraulic hiss and a slow servo, the 1.2 s tell
+///   before a blow; the blow a low boom and a clank (and stone if it hit);
+/// - a door torn off, a bolt shot out (a ping), something loose rattling,
+///   a plate clanging down, a vent of steam, the stall's roar as it sinks,
+///   the strain when a well holds it, a cell pulled, the fall;
+/// - the Gate's horn when the director calls it out, heard across the
+///   valley 20 s before it walks.
+fn heavy_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
+    mut called: MessageReader<crate::robots::heavy_mind::HeavyCalled>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::heavy::HeavyAct as A;
+    for e in events.read() {
+        let at = e.at;
+        // (set, cue, speed, low-pass)
+        let layers: &[(&str, &str, f64, Option<f32>)] = match e.what {
+            A::Step => &[
+                ("explosions/grenade_heavy", "heavy.step", 0.5, Some(220.0)),
+                ("footsteps/metal", "heavy.foot", 0.55, None),
+            ],
+            A::Raise => &[
+                ("machines/servo", "heavy.raise", 0.5, None),
+                ("physical/whoosh", "heavy.hiss", 0.4, None),
+            ],
+            A::Slam { hit: true } => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.7, Some(600.0)),
+                ("machines/clank", "heavy.clank", 0.7, None),
+                ("impacts/concrete", "heavy.clank", 0.6, None),
+            ],
+            A::Slam { hit: false } => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.7, Some(600.0)),
+                ("machines/clank", "heavy.clank", 0.7, None),
+            ],
+            A::Tore => &[
+                ("physical/door_creak", "heavy.tear", 0.6, None),
+                ("machines/groan", "heavy.strain", 0.9, None),
+                ("physical/drop_wood", "heavy.clank", 0.6, None),
+            ],
+            A::Bolt => &[("impacts/ricochet", "heavy.bolt", 1.3, None)],
+            A::Loose => &[("machines/clank", "heavy.loose", 1.2, None)],
+            A::PlateOff => &[
+                ("physical/drop_metal", "heavy.plate", 0.6, None),
+                ("machines/clank", "heavy.clank", 0.6, None),
+            ],
+            A::VentOut => &[("physical/whoosh", "heavy.vent", 0.45, None)],
+            A::Stall => &[
+                ("anomaly/burner_roar", "heavy.stall", 0.8, Some(2500.0)),
+                ("machines/groan", "heavy.strain", 0.6, None),
+            ],
+            A::Held => &[("machines/groan", "heavy.strain", 0.7, None)],
+            A::CellPulled => &[
+                ("machines/clank", "heavy.clank", 1.1, None),
+                ("physical/switch", "heavy.cell", 0.8, None),
+            ],
+            A::Fell => &[
+                ("explosions/grenade_heavy", "heavy.slam", 0.55, Some(400.0)),
+                ("machines/groan", "heavy.strain", 0.5, None),
+            ],
+        };
+        for &(set, cue, speed, cutoff) in layers {
+            match cutoff {
+                Some(hz) => {
+                    play_filtered(&mut commands, &bank, &mut rng.0, set, at, cue, speed, hz)
+                }
+                None => play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    set,
+                    Some(at),
+                    cue,
+                    0.0,
+                    speed,
+                    0.05,
+                ),
+            }
+        }
+    }
+    for c in called.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            HORN_SET,
+            Some(c.gate + Vec3::Y * 8.0),
+            "heavy.horn",
+            0.0,
+            1.0,
+            0.0,
+        );
+    }
+}
+
+/// A heavy's idle: a low hum and the tick of its systems, on it.
+#[derive(Component)]
+struct HeavyLoop;
+
+fn heavy_loops(
+    mut commands: Commands,
+    heavies: Query<
+        (Entity, &crate::robots::Robot, Option<&Children>),
+        With<crate::robots::heavy::Heavy>,
+    >,
+    loops: Query<Entity, With<HeavyLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (e, robot, children) in &heavies {
+        let existing = children.and_then(|c| c.iter().find(|c| loops.contains(*c)));
+        match (existing, robot.wrecked) {
+            (None, false) => {
+                if let Some(sample) = bank.pick("machines/hum", &mut rng.0) {
+                    commands.spawn((
+                        HeavyLoop,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db("heavy.idle"))),
+                        PlaybackSettings::default().with_speed(0.55),
+                        Transform::from_xyz(0.0, 2.0, 0.0),
+                        Placed::new("heavy.idle"),
+                        ChildOf(e),
+                    ));
+                }
+            }
+            (Some(l), true) => commands.entity(l).despawn(),
+            _ => {}
+        }
+    }
+}
+
 /// A walker's foot coming down: a heavy metal footfall, and now and then
 /// the whine of its servos.
 fn walker_steps(
     mut commands: Commands,
     mut steps: MessageReader<crate::robots::walker::WalkerStep>,
+    heavies: Query<&GlobalTransform, With<crate::robots::heavy::Heavy>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     for s in steps.read() {
+        // A heavy's feet are its own (`heavy_sounds`).
+        if heavies
+            .iter()
+            .any(|h| h.translation().xz().distance(s.at.xz()) < HEAVY_FEET)
+        {
+            continue;
+        }
         play(
             &mut commands,
             &bank,
@@ -2907,6 +3786,8 @@ fn gadget_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::climbing::Grapnel;
+    // (Only what still exists: every grapnel the Surge ever rolled stayed.)
+    grapnel_was.retain(|e, _| grapnels.contains(*e));
     let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
     for (e, g, gt) in &grapnels {
         let now = match g {
@@ -3057,6 +3938,7 @@ fn drone_and_zip_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::camera_drone::Flight;
+    flight_was.retain(|e, _| drones.contains(*e));
     let mut out: Vec<(&str, &str, Vec3)> = Vec::new();
     for (e, d, gt) in &drones {
         let before = flight_was.insert(e, d.flight);
@@ -3187,6 +4069,13 @@ fn render_voices(
                 renders.tasks.push((rv::set_name(k, u), task));
             }
         }
+        let sr = rate.get() as f32;
+        let horn = pool.spawn(async move { vec![rv::render_horn(sr)] });
+        renders.tasks.push((HORN_SET.to_string(), horn));
+        let ping = pool.spawn(async move { vec![rv::render_ping(sr)] });
+        renders.tasks.push((PING_SET.to_string(), ping));
+        let crackle = pool.spawn(async move { vec![rv::render_crackle(sr)] });
+        renders.tasks.push((CRACKLE_SET.to_string(), crackle));
     }
     renders.tasks.retain_mut(|(set, task)| {
         let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
@@ -3352,6 +4241,7 @@ fn occlude(
     mut heads: Query<&mut HrtfNode>,
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    hush: Res<HushNow>,
     spatial: SpatialQuery,
     doors: Query<&crate::world::buildings::Door>,
     entrances: Option<Res<crate::robots::doors::Entrances>>,
@@ -3381,7 +4271,11 @@ fn occlude(
         if !due || budget == 0 {
             continue;
         }
-        let o = || crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+        let o = || {
+            let mut o = crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+            o.cutoff = o.cutoff.min(hush.cutoff);
+            o
+        };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {
             budget -= 1;
             let o = o();
@@ -3592,6 +4486,20 @@ fn pylon_sounds(
 mod tests {
     use super::*;
 
+    /// Thunder is quieter and darker the further the strike: 6 dB a
+    /// doubling past 250 m, the roll from 1.5 kHz at 600 m to 300 Hz at
+    /// 2.6 km.
+    #[test]
+    fn far_thunder_is_low_and_quiet() {
+        assert_eq!(thunder_db(250.0, 1.0), 0.0);
+        assert!((thunder_db(1000.0, 1.0) + 12.0).abs() < 1e-4);
+        assert!(thunder_db(1000.0, 0.2) < thunder_db(1000.0, 1.0));
+        assert!((thunder_cutoff(600.0) - 1500.0).abs() < 1.0);
+        assert!((thunder_cutoff(2600.0) - 300.0).abs() < 1.0);
+        assert!(thunder_cutoff(1200.0) < thunder_cutoff(800.0));
+        assert!(thunder_cutoff(300.0) > thunder_cutoff(600.0));
+    }
+
     /// The night's sounds come with the dark.
     #[test]
     fn night_comes_with_the_dark() {
@@ -3600,9 +4508,6 @@ mod tests {
         assert_eq!(nightness(Hour::Dusk), 0.5);
         assert_eq!(nightness(Hour::Day), 0.0);
         assert_eq!(nightness(Hour::Dawn), 0.0);
-        // A drone's whine carries further than a walker's tread, so the
-        // crickets go quiet for it sooner.
-        const { assert!(INSECTS_HUSH_DRONE > INSECTS_HUSH_BIG) };
     }
 
     /// The ending's hush eases in, holds, and lets go.

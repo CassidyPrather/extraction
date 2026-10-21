@@ -7071,12 +7071,12 @@
 <polygon points='376.5,37.5 397.5,37.5 397.5,112.5 376.5,112.5' fill='none' stroke='#e8e2d0' stroke-width='2' stroke-dasharray='4 3'/>
 <text x='387.0' y='23.1' fill='#e8e2d0' text-anchor='middle'>IN (+0.0 m)</text>
 <polygon points='37.5,373.5 37.5,352.5 112.5,352.5 112.5,373.5' fill='none' stroke='#e8e2d0' stroke-width='2' stroke-dasharray='4 3'/>
-<text x='23.1' y='363.0' fill='#e8e2d0' text-anchor='middle'>OUT (+0.0 m)</text>
+<text x='23.1' y='363.0' fill='#e8e2d0' text-anchor='middle'>OUT (+1.1 m)</text>
 <line x1='486.0' y1='291.0' x2='504.0' y2='291.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='258.0' y1='315.0' x2='276.0' y2='315.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='483.0' y1='426.0' x2='483.0' y2='444.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='378.0' y1='194.9' x2='396.0' y2='194.9' stroke='#c0392b' stroke-width='4'/>
-<line x1='230.9' y1='372.0' x2='230.9' y2='354.0' stroke='#c0392b' stroke-width='4'/>
+<line x1='231.2' y1='372.0' x2='231.2' y2='354.0' stroke='#c0392b' stroke-width='4'/>
 <line x1='421.8' y1='531.0' x2='421.8' y2='723.0' stroke='#e67e22' stroke-width='5'/>
 <circle cx='421.8' cy='531.0' r='6' fill='#e67e22'/>
 <text x='432.0' y='519.0' fill='#e67e22'>L</text>
@@ -7087,18 +7087,23 @@
 <text x='361.0' y='213.4' fill='#d9875a'>D [1]</text>
 <circle cx='415.8' cy='234.6' r='4' fill='#5a5650'/>
 <circle cx='365.4' cy='229.8' r='4' fill='#5a5650'/>
+<circle cx='408.6' cy='203.4' r='4' fill='#d4a017'/>
 <text x='387.0' y='213.0' fill='#1d1c1a' text-anchor='middle'>stair_foot</text>
 <text x='387.0' y='357.0' fill='#1d1c1a' text-anchor='middle'>flue_passage</text>
 <circle cx='487.8' cy='329.4' r='4' fill='#5a5650'/>
+<circle cx='502.2' cy='336.0' r='4' fill='#d4a017'/>
 <text x='495.0' y='309.0' fill='#1d1c1a' text-anchor='middle'>vent_room</text>
 <circle cx='245.4' cy='331.8' r='4' fill='#5a5650'/>
 <circle cx='245.4' cy='396.6' r='4' fill='#d4a017'/>
+<circle cx='289.8' cy='329.4' r='4' fill='#d4a017'/>
 <text x='267.0' y='357.0' fill='#1d1c1a' text-anchor='middle'>burner_gallery</text>
 <circle cx='526.2' cy='442.2' r='4' fill='#d4a017'/>
 <circle cx='499.8' cy='449.4' r='4' fill='#5a5650'/>
 <text x='507.0' y='429.0' fill='#1d1c1a' text-anchor='middle'>coal_store</text>
 <circle cx='367.8' cy='513.0' r='4' fill='#5a5650'/>
+<circle cx='355.8' cy='514.2' r='4' fill='#d4a017'/>
 <text x='387.0' y='525.0' fill='#1d1c1a' text-anchor='middle'>near_ledge</text>
+<circle cx='357.0' cy='585.0' r='4' fill='#5a5650'/>
 <text x='387.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>ash_pit</text>
 <circle cx='353.4' cy='730.2' r='4' fill='#d4a017'/>
 <circle cx='372.6' cy='738.6' r='4' fill='#d4a017'/>

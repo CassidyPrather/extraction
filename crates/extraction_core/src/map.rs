@@ -50,6 +50,15 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// Where snow can lie (m): above it, falling weather comes as snow
+    /// and lies on what faces up. None: the valley's too low
+    /// (`world::snow`).
+    #[serde(default)]
+    pub snow_line: Option<f32>,
+    /// Snow that lies above the line whatever the weather, 0..1: a high,
+    /// cold valley's snowfields. Falling snow adds to it.
+    #[serde(default)]
+    pub snow: f32,
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,
@@ -315,6 +324,20 @@ pub enum MarkerKind {
     /// A standing anomaly that the Surge never moves: `kind` names an
     /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
     Anomaly { kind: String, radius: f32 },
+    /// A sentry's mast (`robots::sentry`). Its arc is centred straight
+    /// along `rot` (its front faces the way a sign's board would), `arc`
+    /// degrees wide; behind it is blind. `power` is where its junction
+    /// box stands (default: 12 m straight behind the mast).
+    Sentry {
+        #[serde(default = "sentry_arc")]
+        arc: f32,
+        #[serde(default)]
+        power: Option<P2>,
+    },
+}
+
+fn sentry_arc() -> f32 {
+    220.0
 }
 
 impl MarkerKind {
@@ -398,6 +421,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "rail_shed" => [20.0, 9.0, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
         "ranger_tower" => [6.0, 12.0, 5.0],
+        // The ranger tower's legs and stair, open on top under its survey
+        // mast and beacon.
+        "survey_tower" => [6.0, 16.6, 5.0],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
@@ -411,6 +437,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A nave 10 x 14 with its steps at the west door, the bell tower
         // off the east end.
         "chapel" => [10.4, 19.0, 23.0],
+        // A garden fence's run: four panels between five posts.
+        "fence_garden" => [8.5, 1.3, 0.2],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out
@@ -608,7 +636,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 0.95,
             clear: 2.98,
         }],
-        "ranger_tower" => &[Entrance {
+        "ranger_tower" | "survey_tower" => &[Entrance {
             at: [2.04, 1.2],
             out: [1.0, 0.0],
             width: 0.95,

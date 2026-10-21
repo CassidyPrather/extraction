@@ -182,6 +182,7 @@ fn fold_bayonets(
     catalog: Res<Catalog>,
     mut last: Local<std::collections::HashMap<Entity, bool>>,
 ) {
+    last.retain(|e, _| guns.contains(*e));
     for (e, mut b, held, item) in &mut guns {
         if catalog.get(item.kind()).id != "sks" {
             continue;

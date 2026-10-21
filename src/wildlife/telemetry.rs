@@ -1,6 +1,6 @@
 //! The sim's record of the animals (`docs/SIMULATION.md`): every flock that
-//! went up, and every robot an alarm sent to look. What the pacing check
-//! in `docs/WILDLIFE.md` counts.
+//! went up, every herd startled, and every robot an alarm (birds, a dog's
+//! bark) sent to look. What the pacing check in `docs/WILDLIFE.md` counts.
 
 use bevy::prelude::*;
 use serde_json::json;
@@ -18,6 +18,8 @@ pub(crate) fn log_wildlife(
     log: Option<ResMut<SimLog>>,
     mut flushed: MessageReader<Flushed>,
     mut investigating: MessageReader<Investigating>,
+    mut startled: MessageReader<super::herd::Startled>,
+    mut killed: MessageReader<super::bodies::Killed>,
     robots: Query<&crate::robots::Robot>,
     time: Res<Time>,
     mut alarms: Local<Vec<(f32, Vec3)>>,
@@ -25,6 +27,8 @@ pub(crate) fn log_wildlife(
     let Some(mut log) = log else {
         flushed.clear();
         investigating.clear();
+        startled.clear();
+        killed.clear();
         return;
     };
     let now = time.elapsed_secs();
@@ -37,6 +41,23 @@ pub(crate) fn log_wildlife(
             "flush",
             json!({"cause": format!("{:?}", f.cause), "birds": f.birds, "alarm": f.alarm,
                    "x": round(f.at.x, 1), "z": round(f.at.z, 1)}),
+        );
+    }
+    for s in startled.read() {
+        if s.alarm {
+            alarms.push((now, s.at));
+        }
+        log.event(
+            "startled",
+            json!({"kind": format!("{:?}", s.kind), "what": format!("{:?}", s.what),
+                   "alarm": s.alarm, "x": round(s.at.x, 1), "z": round(s.at.z, 1)}),
+        );
+    }
+    for k in killed.read() {
+        log.event(
+            "animal_killed",
+            json!({"kind": format!("{:?}", k.kind), "shot": k.by.is_some(),
+                   "x": round(k.at.x, 1), "z": round(k.at.z, 1)}),
         );
     }
     for i in investigating.read() {

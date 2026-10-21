@@ -27,6 +27,11 @@ pub enum Load {
     /// Ball re-packed at the bench: now and then too little powder (a
     /// squib) or a tired primer (a dud).
     Repacked,
+    /// A 26 mm signal star, red (a white one is the standard load: an
+    /// illumination star).
+    SignalRed,
+    /// A 26 mm signal star, green.
+    SignalGreen,
 }
 
 /// AP's cost through hard plate (armour steel, sheet, a helmet), against
@@ -63,7 +68,8 @@ impl Load {
     pub fn for_cartridge(cartridge: &str) -> &'static [Load] {
         match cartridge {
             "12ga" => &[Load::Standard, Load::Slug],
-            "7.62x38R" | "7.62x25" | "9x18" => &[Load::Standard],
+            "7.62x38R" | "7.62x25" | "9x18" | "22lr" => &[Load::Standard],
+            "26mm" => &[Load::Standard, Load::SignalRed, Load::SignalGreen],
             _ => &[Load::Standard, Load::Ap, Load::Tracer],
         }
     }

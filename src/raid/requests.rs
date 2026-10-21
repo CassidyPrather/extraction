@@ -212,6 +212,30 @@ fn press_card(
                 }
                 Vec::new()
             }
+            Job::Bring { item: id, .. } => {
+                let have = in_stash(id, 1);
+                if have.is_empty() {
+                    raid.say(lines::not_brought(&crate::progression::want_name(
+                        &catalog, id,
+                    )));
+                    continue;
+                }
+                have
+            }
+            Job::Plant { place, planted, .. } => {
+                if !planted {
+                    raid.say(lines::not_planted(place));
+                    continue;
+                }
+                Vec::new()
+            }
+            Job::Photograph { taken, .. } => {
+                if !taken {
+                    raid.say(lines::NO_PHOTO);
+                    continue;
+                }
+                Vec::new()
+            }
         };
         for (holder, e) in handed {
             if let Ok(mut b) = bags.get_mut(holder) {
@@ -386,6 +410,7 @@ fn building_name(prefab: &str) -> String {
         "mast_hut" => "hut under the mast".into(),
         "guard_booth" => "guard booth".into(),
         "ranger_tower" => "ranger tower".into(),
+        "survey_tower" => "survey tower".into(),
         other => other.replace('_', " "),
     }
 }
@@ -434,7 +459,17 @@ fn card_text(
 ) {
     let p = &progression.0;
     let tier = p.tier_def();
-    let mut text = if (p.tier as usize) < TIERS.len() {
+    let contract = p
+        .contract
+        .as_ref()
+        .and_then(|a| extraction_core::contracts::contract(&a.id).map(|c| (a, c)));
+    let mut text = if let Some((a, c)) = contract {
+        let mut head = lines::contract_head(c.name, c.giver, a.step, c.steps.len());
+        if let Some(says) = c.says.get(a.step as usize).filter(|s| !s.is_empty()) {
+            head += &format!("\"{says}\"\n");
+        }
+        head
+    } else if (p.tier as usize) < TIERS.len() {
         format!(
             "{} - JOB {} OF {}\n",
             tier.name.to_uppercase(),

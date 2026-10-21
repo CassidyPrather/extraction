@@ -31,7 +31,12 @@ impl Plugin for CapturePlugin {
             sweep::SweepPlugin,
             trailer::TrailerPlugin,
         ))
-        .add_systems(PostUpdate, keep_alive);
+        .add_systems(PostUpdate, keep_alive)
+        .add_systems(Update, clear_air.after(crate::world::sky::WeatherLook))
+        .add_systems(
+            PostUpdate,
+            hold_lens.before(bevy::camera::CameraUpdateSystems),
+        );
     }
 }
 
@@ -49,6 +54,39 @@ fn keep_alive(
     for mut h in &mut players {
         h.hp = h.max;
         h.bleeding = 0.0;
+    }
+}
+
+/// A capture camera that sees further than the weather lets a player:
+/// its fog's visibility times this. The world's fog is gameplay (robots
+/// see by it), so it stays; a drone or an aerial shot 40 m up just looks
+/// through less of it.
+#[derive(Component, Clone, Copy)]
+pub struct ClearAir(pub f32);
+
+fn clear_air(
+    weather: Res<crate::world::sky::Weather>,
+    mut cams: Query<(&ClearAir, &mut DistanceFog)>,
+) {
+    for (k, mut fog) in &mut cams {
+        fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(weather.visibility * k.0);
+    }
+}
+
+/// A capture camera's field of view, vertical, radians, held every frame:
+/// in flat mode the optic zoom (`gadgets::visuals`) eases every camera's
+/// view back toward the game's 75° unless a scope is at the eye, which
+/// quietly undid the sweep's framing and the cinematics' lenses.
+#[derive(Component, Clone, Copy)]
+pub struct Lens(pub f32);
+
+fn hold_lens(mut cams: Query<(&Lens, &mut Projection)>) {
+    for (lens, mut proj) in &mut cams {
+        if let Projection::Perspective(p) = &mut *proj {
+            if p.fov != lens.0 {
+                p.fov = lens.0;
+            }
+        }
     }
 }
 

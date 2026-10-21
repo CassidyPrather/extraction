@@ -232,7 +232,12 @@ pub(crate) fn rats(
             {
                 match rats_for(shell, i, opts.seed, &spatial) {
                     Some(r) => {
-                        commands.spawn((Name::new("Rats"), Transform::IDENTITY, r));
+                        commands.spawn((
+                            Name::new("Rats"),
+                            Transform::IDENTITY,
+                            Visibility::default(),
+                            r,
+                        ));
                     }
                     // A house without rats (the roll is the same every
                     // time): don't look again.

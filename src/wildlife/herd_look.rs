@@ -52,6 +52,16 @@ pub struct Build {
 
 pub fn build(kind: Kind) -> Build {
     match kind {
+        // A deer's body in a chamois's coat: dark brown, a paler face and
+        // belly, nearly black legs.
+        Kind::Chamois => Build {
+            colours: [
+                ("Hide", LinearRgba::rgb(0.045, 0.034, 0.027)),
+                ("Pale", LinearRgba::rgb(0.16, 0.14, 0.11)),
+                ("Hoof", LinearRgba::rgb(0.01, 0.01, 0.01)),
+            ],
+            ..build(Kind::Deer)
+        },
         Kind::Deer => Build {
             model: "models/animals/deer.glb",
             hips: [
@@ -344,6 +354,7 @@ fn draw_herds(
                     let mut c = commands.spawn((
                         Name::new(match herd.kind {
                             Kind::Deer => "Deer",
+                            Kind::Chamois => "Chamois",
                             Kind::Dog => "Dog",
                         }),
                         Mesh3d(mesh.clone()),
@@ -417,7 +428,7 @@ pub(crate) fn pose_beasts(
     mut far_parts: ResMut<super::visuals::FarParts>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
 ) {
-    let eye = cams.iter().next().map(|g| g.translation());
+    let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     let Some(zone) = zone else {
         return;
     };
@@ -430,6 +441,16 @@ pub(crate) fn pose_beasts(
             continue;
         };
         let b = build(herd.kind);
+        // Taken away: its parts out of sight (under the ground), and not
+        // in the far mesh.
+        if beast.gone {
+            for p in v.parts {
+                if let Ok(mut t) = parts.get_mut(p) {
+                    t.translation = beast.pos - Vec3::Y * 50.0;
+                }
+            }
+            continue;
+        }
         let speed = beast.vel.xz().length();
         let dead = beast.state == State::Dead;
         let rot = facing(beast.yaw);
@@ -532,7 +553,11 @@ pub(crate) fn pose_beasts(
         if let Ok(mut t) = parts.get_mut(far) {
             *t = Transform::from_translation(body_at).with_rotation(body_rot);
         }
-        let away = eye.map_or(0.0, |e| e.distance(body_at));
+        let away = if eyes.is_empty() {
+            0.0
+        } else {
+            super::visuals::nearest(&eyes, body_at)
+        };
         if away > FAR && away < HIDE {
             if let Some((_, p)) = art.parts.iter().find(|(k, _)| *k == herd.kind) {
                 far_parts.parts.push((

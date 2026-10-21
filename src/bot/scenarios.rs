@@ -10,6 +10,7 @@ use extraction_core::map::MarkerKind;
 
 use super::{Bot, Expect, Task};
 use crate::launch::LaunchOptions;
+use crate::progression::contracts::scenario::SCENARIOS as CONTRACTS;
 use crate::rig::{LocalPlayer, Side};
 use crate::weapons::flat::MacroKind;
 use crate::world::{Layer, Zone};
@@ -37,6 +38,12 @@ pub const NAMES: &[&str] = &[
     "revolver_drill",
     "smg_drill",
     "shotgun_drill",
+    "pump_drill",
+    "marksman_drill",
+    "smallbore_drill",
+    "lmg_drill",
+    "flare_drill",
+    "crossbow_drill",
     "pack_mule",
     "drone_duel",
     "walker_hunt",
@@ -49,6 +56,7 @@ pub const NAMES: &[&str] = &[
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
+    crate::robots::sentry::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -59,11 +67,20 @@ pub const NAMES: &[&str] = &[
 ///   (`destruction::scenario`).
 /// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
 ///   default (`bot::crossing`).
+/// - `contract_<id>`: one of the driver's contracts from the card to its
+///   pay, on its valley's map (`progression::contracts::scenario`).
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
     crate::destruction::scenario::SCENARIO,
     super::crossing::SCENARIO,
+    CONTRACTS[0].0,
+    CONTRACTS[1].0,
+    CONTRACTS[2].0,
+    CONTRACTS[3].0,
+    CONTRACTS[4].0,
+    CONTRACTS[5].0,
+    CONTRACTS[6].0,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -246,6 +263,134 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::GunRounds(0, 0)),
             Expect(super::Expect::Hits(6)),
         ],
+        "pump_drill" => vec![
+            Log(s("pump drill: thumb the tube full, pump, fire, pump, fire")),
+            PickUp {
+                id: s("mp133"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_12ga"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(5, 5)),
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 1 },
+            Gun(MacroKind::Rack),
+            Fire { at: t0, shots: 1 },
+            Expect(super::Expect::GunRounds(3, 3)),
+            Expect(super::Expect::Hits(6)),
+            Stow(Side::Right),
+        ],
+        "marksman_drill" => vec![
+            Log(s(
+                "marksman drill: an SVD's ten-round box, five aimed shots at 25 m",
+            )),
+            PickUp {
+                id: s("svd"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("svd_mag"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(10, 10)),
+            Support,
+            Gun(MacroKind::Mode),
+            Fire { at: t1, shots: 5 },
+            Expect(super::Expect::GunRounds(5, 5)),
+            Expect(super::Expect::Hits(4)),
+            Release(Side::Left),
+            Stow(Side::Right),
+        ],
+        "smallbore_drill" => vec![
+            Log(s(
+                "smallbore drill: a .22 into the TOZ-8's chamber, fire, again",
+            )),
+            PickUp {
+                id: s("toz8"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_22lr"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(1, 1)),
+            Fire { at: t0, shots: 1 },
+            Gun(MacroKind::Reload),
+            Fire { at: t0, shots: 1 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(1)),
+            Stow(Side::Right),
+        ],
+        "lmg_drill" => vec![
+            Log(s("lmg drill: the RPK's forty-five, a burst on auto")),
+            PickUp {
+                id: s("rpk74"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("rpk_mag"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(45, 45)),
+            Support,
+            Gun(MacroKind::Mode),
+            Fire { at: t1, shots: 10 },
+            Expect(super::Expect::GunRounds(20, 38)),
+            Expect(super::Expect::Hits(4)),
+            Release(Side::Left),
+            Stow(Side::Right),
+        ],
+        "flare_drill" => vec![
+            Log(s(
+                "flare drill: break the signal pistol, a white star in, fire it",
+            )),
+            PickUp {
+                id: s("flare_pistol"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("flare_white"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(1, 1)),
+            Fire { at: t1, shots: 1 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Stow(Side::Right),
+        ],
+        "crossbow_drill" => vec![
+            Log(s(
+                "crossbow drill: draw to the latch, a bolt in the groove, loose; again",
+            )),
+            PickUp {
+                id: s("crossbow"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("bolt_bundle"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(1, 1)),
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 1 },
+            Gun(MacroKind::Reload),
+            Fire { at: t0, shots: 1 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Stow(Side::Right),
+        ],
         "pack_mule" => vec![
             Log(s("pack mule: stow everything that fits")),
             PickUp {
@@ -386,6 +531,29 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::sentry::SCENARIO => {
+            vec![
+                Log(s(
+                    "sentry cable: get behind a sentry, cut its cable, walk through its arc",
+                )),
+                Setup(crate::robots::sentry::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                // (The setup fills in where: past the sentry, through its arc.)
+                WalkTo {
+                    to: crate::robots::sentry::PAST_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(2.0),
+                Expect(super::Expect::HealthAtLeast(99.0)),
+                Expect(super::Expect::Alive),
+            ]
+        }
         crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
@@ -393,6 +561,9 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             crate::progression::safehouse::scenario::opening()
         }
         super::crossing::SCENARIO => super::crossing::opening(),
+        n if crate::progression::contracts::scenario::is(n) => {
+            crate::progression::contracts::scenario::opening(n)
+        }
         _ => return None,
     })
 }
