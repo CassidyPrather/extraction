@@ -76,10 +76,8 @@ pub fn rate(air: &Air) -> f32 {
     if air.sheltered {
         return -1.0 / WARM_SECS;
     }
-    let bite = air.cold
-        * exposure(air.height)
-        * air.weather.factor()
-        * if air.night { 1.3 } else { 1.0 };
+    let bite =
+        air.cold * exposure(air.height) * air.weather.factor() * if air.night { 1.3 } else { 1.0 };
     if bite < MILD {
         -1.0 / THAW_SECS
     } else {
