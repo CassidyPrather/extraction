@@ -534,6 +534,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
         commands.spawn((
             Name::new("Note"),
             crate::render::legibility::TextSource::Note,
+            crate::interact::read::readable(super::notes::NOTE),
             super::notes::note_panel(&note.text),
             note_pose(t, note),
             Visibility::default(),
@@ -701,7 +702,7 @@ mod tests {
         assert!(all().len() >= 6, "{} scenes", all().len());
         for s in all() {
             assert!(
-                crate::world::story::VALLEYS.contains(&s.map.as_str()),
+                extraction_core::map::VALLEYS.iter().any(|v| v.0 == s.map),
                 "{}: no valley {}",
                 s.name,
                 s.map
@@ -720,7 +721,7 @@ mod tests {
                 );
             }
         }
-        for map in crate::world::story::VALLEYS {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             for (id, s) in of(map) {
                 let geo = geo(&id).unwrap_or_else(|| panic!("{}: no geometry", s.name));
                 let models: Vec<&str> = geo
@@ -744,7 +745,7 @@ mod tests {
     #[test]
     fn scenes_below_wait_for_their_site() {
         let mut standing = 0;
-        for map in crate::world::story::VALLEYS {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(map);
             for (_, s) in of(map) {
                 let Some(floor) = s.floor else {
@@ -775,7 +776,7 @@ mod tests {
     #[test]
     fn scenes_stand_clear() {
         let mut problems = Vec::new();
-        for map in crate::world::story::VALLEYS {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(map);
             let trees = crate::world::trees::scatter_trees(&zone);
             // Which placements (by index) cover a point.

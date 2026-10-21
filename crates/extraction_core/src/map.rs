@@ -365,7 +365,7 @@ impl Region {
 /// A ruined house's prefab id is its house's with the ruin's state after
 /// it (`house_plank_burnt`); built from the same plan, it stands on the
 /// same footprint with the same doors.
-pub const RUIN_STATES: [&str; 2] = ["_damaged", "_burnt"];
+pub const RUIN_STATES: [&str; 3] = ["_damaged", "_burnt", "_drowned"];
 
 /// The prefab a ruin is a ruin of (any other id as it is).
 pub fn prefab_base(id: &str) -> &str {
@@ -457,6 +457,32 @@ pub struct Entrance {
 /// with the game's recipes by `buildings::tests::entrances_match_the_map`;
 /// regenerate it from the recipes when they change.
 pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
+    // A drowned house's doorway is a breach, its silt banked up to it:
+    // wider, and further out.
+    if let Some(base) = id.strip_suffix("_drowned") {
+        const fn door(z: f32) -> Entrance {
+            Entrance {
+                at: [0.0, z],
+                out: [0.0, -1.0],
+                width: 1.1,
+                clear: 4.21,
+            }
+        }
+        const PLANK: [Entrance; 1] = [door(-3.59)];
+        const WIDE: [Entrance; 1] = [door(-4.09)];
+        const CHAPEL: [Entrance; 1] = [Entrance {
+            at: [0.0, -7.18],
+            out: [0.0, -1.0],
+            width: 1.4,
+            clear: 4.13,
+        }];
+        return match base {
+            "house_plank" => &PLANK,
+            "farmhouse" | "house_brick" => &WIDE,
+            "chapel" => &CHAPEL,
+            _ => &[],
+        };
+    }
     match prefab_base(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],
@@ -710,10 +736,45 @@ pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.r
 pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_reservoir.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
 
+/// Every valley the truck drives to, (map id, map text), in the order a
+/// career meets them. Tests that hold "every valley" to something go over
+/// this list, so a new valley is checked by all of them; a test that a map
+/// file outside it fails keeps the list whole.
+pub const VALLEYS: [(&str, &str); 4] = [
+    ("marrow_creek", MARROW_CREEK),
+    ("kettle_pass", KETTLE_PASS),
+    ("cinder_works", CINDER_WORKS),
+    ("sallow_reservoir", SALLOW_RESERVOIR),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    /// Every map file but the Training Yard is a valley on [`VALLEYS`], and
+    /// the list's text is the file's.
+    #[test]
+    fn every_valley_is_on_the_list() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/maps");
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter_map(|e| {
+                let p = e.path();
+                (p.extension()? == "ron").then(|| p.file_stem()?.to_str().map(String::from))?
+            })
+            .filter(|id| id != "training_yard")
+            .collect();
+        files.sort();
+        let mut listed: Vec<String> = VALLEYS.iter().map(|v| v.0.to_string()).collect();
+        listed.sort();
+        assert_eq!(files, listed, "assets/maps and map::VALLEYS disagree");
+        for (id, text) in VALLEYS {
+            let on_disk = std::fs::read_to_string(dir.join(format!("{id}.ron"))).unwrap();
+            assert_eq!(on_disk, text, "{id}");
+        }
+    }
 
     #[test]
     fn kettle_pass_parses_and_builds() {

@@ -31,6 +31,68 @@ const REACH: f32 = 0.3;
 #[derive(Resource, Default, Debug, Clone)]
 pub struct Breaches(pub Vec<Vec3>);
 
+/// A hole as a way in, for the robots' doorway index
+/// (`robots::doors::Entrances`): it stands where a door would, and having
+/// no `Door`, it's always open.
+#[derive(Component, Debug)]
+pub struct BreachHole;
+
+/// Where a hole is a way in: its middle (world) and the way out of the
+/// building (horizontal).
+fn way_in(bxf: &Transform, hole: Vec3) -> (Vec3, Vec3) {
+    let local = bxf.compute_affine().inverse().transform_point3(hole);
+    // Out: away from the footprint's middle, square to the wall.
+    let flat = Vec2::new(local.x, local.z);
+    let n = if flat.x.abs() > flat.y.abs() {
+        Vec3::X * flat.x.signum()
+    } else {
+        Vec3::Z * flat.y.signum()
+    };
+    let out = (bxf.rotation * n).with_y(0.0).normalize_or(Vec3::Z);
+    (hole, out)
+}
+
+fn index_hole(
+    commands: &mut Commands,
+    building: Entity,
+    prefab: &str,
+    bxf: &Transform,
+    hole: Vec3,
+) {
+    let size = extraction_core::map::prefab_footprint(prefab);
+    let xf = *bxf;
+    let (mid, out) = way_in(bxf, hole);
+    let marker = commands
+        .spawn((
+            Name::new("Breach hole"),
+            BreachHole,
+            Transform::from_translation(mid),
+        ))
+        .id();
+    commands.queue(move |w: &mut World| {
+        if let Some(mut e) = w.get_resource_mut::<crate::robots::doors::Entrances>() {
+            // A building with no door had no box to be inside: give it one,
+            // or nobody is ever indoors there for a robot to come for.
+            // (Only once the index is built: an early shell would stop it
+            // being built at all.)
+            if !e.shells.is_empty() && !e.shells.iter().any(|s| s.building == building) {
+                e.shells.push(crate::robots::doors::Shell {
+                    building,
+                    xf,
+                    half: Vec2::new(size[0], size[2]) * 0.5,
+                    height: size[1],
+                });
+            }
+            e.doors.push(crate::robots::doors::Entrance {
+                door: marker,
+                building,
+                mid,
+                out,
+            });
+        }
+    });
+}
+
 /// A building whose walls changed: the client builds its meshes again.
 #[derive(Component)]
 pub struct Breached;
@@ -177,6 +239,17 @@ fn restore(
         };
         if apply(&mut geo, t, &breaches.0) > 0 {
             rebuild(&mut commands, e, b, t, &breaches.0);
+            let inv = t.compute_affine().inverse();
+            let base = crate::world::buildings::prefab(&b.prefab);
+            for h in &breaches.0 {
+                if base
+                    .as_ref()
+                    .and_then(|g| wall_at(g, inv.transform_point3(*h)))
+                    .is_some()
+                {
+                    index_hole(&mut commands, e, &b.prefab, t, *h);
+                }
+            }
         }
     }
 }
@@ -217,6 +290,7 @@ fn tear(
             let centre = t.transform_point(centre_local);
             breaches.0.push(centre);
             rebuild(&mut commands, e, b, t, &breaches.0);
+            index_hole(&mut commands, e, &b.prefab, t, centre);
             out.write(Broke {
                 at: centre,
                 stuff: Stuff::Wood,
@@ -276,6 +350,16 @@ fn tear(
 
 /// The Surge: every wall whole again.
 pub fn mend_all(world: &mut World) {
+    let markers: Vec<Entity> = world
+        .query_filtered::<Entity, With<BreachHole>>()
+        .iter(world)
+        .collect();
+    if let Some(mut e) = world.get_resource_mut::<crate::robots::doors::Entrances>() {
+        e.doors.retain(|d| !markers.contains(&d.door));
+    }
+    for m in markers {
+        world.despawn(m);
+    }
     let holes = std::mem::take(&mut world.resource_mut::<Breaches>().0);
     if holes.is_empty() {
         return;

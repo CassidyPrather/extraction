@@ -9,10 +9,6 @@
 
 use bevy::prelude::*;
 
-/// The three valleys a career moves between (the training yard has signs,
-/// not story).
-pub const VALLEYS: [&str; 3] = ["marrow_creek", "kettle_pass", "cinder_works"];
-
 /// A note or terminal (by its marker's name, in its map) and the places it
 /// speaks of: (map, name of a marker, region, road, river or wood there).
 pub struct Lead {
@@ -24,8 +20,6 @@ pub struct Lead {
 const M: &str = "marrow_creek";
 const K: &str = "kettle_pass";
 const C: &str = "cinder_works";
-/// The fourth valley (`claude/polish-fourth-valley`): its notes are
-/// written; the tests read them once its map is in.
 const S: &str = "sallow_reservoir";
 
 pub const THREAD: &[Lead] = &[
@@ -734,18 +728,9 @@ mod tests {
     use crate::render::legibility::{TextSource, check_panel};
     use extraction_core::map::{MapDef, MarkerKind};
 
-    /// The valleys whose maps are in: the three, and the fourth once it's
-    /// merged.
+    /// Every valley (the shared list: a new one is held to all of this).
     fn valleys() -> Vec<&'static str> {
-        VALLEYS
-            .into_iter()
-            .chain([S].into_iter().filter(|n| {
-                crate::asset_root_path()
-                    .join("maps")
-                    .join(format!("{n}.ron"))
-                    .exists()
-            }))
-            .collect()
+        extraction_core::map::VALLEYS.map(|v| v.0).to_vec()
     }
 
     fn map(name: &str) -> MapDef {

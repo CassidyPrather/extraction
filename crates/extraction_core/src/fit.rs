@@ -116,13 +116,8 @@ mod tests {
     #[test]
     fn buildings_meet_the_ground() {
         let mut bad = Vec::new();
-        for (name, text) in [
-            ("marrow_creek", crate::map::MARROW_CREEK),
-            ("kettle_pass", crate::map::KETTLE_PASS),
-            ("cinder_works", crate::map::CINDER_WORKS),
-            ("sallow_reservoir", crate::map::SALLOW_RESERVOIR),
-            ("training_yard", crate::map::TRAINING_YARD),
-        ] {
+        let yard = [("training_yard", crate::map::TRAINING_YARD)];
+        for (name, text) in crate::map::VALLEYS.into_iter().chain(yard) {
             let map = MapDef::from_ron(text).unwrap();
             let hm = Heightmap::build(&map);
             for f in fits(&map, &hm) {
@@ -210,11 +205,7 @@ mod rail_tests {
     #[test]
     fn boxcars_stand_on_rails() {
         let mut bad = Vec::new();
-        for (name, text) in [
-            ("marrow_creek", crate::map::MARROW_CREEK),
-            ("kettle_pass", crate::map::KETTLE_PASS),
-            ("cinder_works", crate::map::CINDER_WORKS),
-        ] {
+        for (name, text) in crate::map::VALLEYS {
             let map = MapDef::from_ron(text).unwrap();
             let hm = Heightmap::build(&map);
             for r in on_rails(&map, &hm) {

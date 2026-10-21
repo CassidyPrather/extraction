@@ -12,10 +12,10 @@
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
-
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
-//! and lights at `--hour dusk` or `night`), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
+//! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
+//! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -182,6 +182,33 @@ fn reel(
                     .insert(EyeLevel(2));
                 first.unwrap()
             }
+            "eyesfar" => {
+                // Calm walkers at 30, 60 and 80 m, and one that sees you
+                // beside the far one: do their eyes read after dark?
+                let mut first = None;
+                for (k, (d, x, level)) in [
+                    (30.0f32, -2.0f32, 0u8),
+                    (60.0, 3.0, 0),
+                    (80.0, -4.0, 0),
+                    (80.0, 4.0, 2),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let p = eye + flat * d + right * x;
+                    let at = zone.on_ground(p.x, p.z);
+                    let w = spawn_walker(&mut commands, &zone, at, job(at));
+                    commands
+                        .entity(w)
+                        .remove::<Senses>()
+                        .remove::<Brain>()
+                        .insert(EyeLevel(level));
+                    if k == 0 {
+                        first = Some(w);
+                    }
+                }
+                first.unwrap()
+            }
             "wreck" | "shot" => {
                 let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
                 spawn_walker(&mut commands, &zone, at, job(at))
@@ -257,7 +284,7 @@ fn reel(
         aware.can_see_target = sees;
         aware.exposure = if sees { 1.0 } else { 0.0 };
     }
-    if what == "eyes" && frame == 5 {
+    if (what == "eyes" || what == "eyesfar") && frame == 5 {
         // Turned to face you.
         for mut w in &mut walkers {
             w.yaw = flat.x.atan2(flat.z);
@@ -275,7 +302,7 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" => vec![],
+                "wreck" | "zap" | "shot" | "eyesfar" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };

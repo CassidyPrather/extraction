@@ -1,4 +1,4 @@
-# Marrow Creek lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+# Marrow Creek lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
 m01_gate        40,0,255,0,-2        # from the insertion, up the valley
 m02_village     5,0,135,0,-4         # village street from the south
 m03_meadow      170,0,230,315,-2     # farm meadow toward the village
@@ -11,3 +11,4 @@ m09_birches     -45,0,40,30,-2       # village birches
 m10_rail        180,0,-160,0,-3      # toward the rail yard
 m11_summit      -100,0,-160,100,-8   # vista from the mast summit, east
 m12_aerial      40,45,300,0,-8       # over the gate, up the valley
+m13_pump_hall   -168.8,=16.31,39.0,244,-4   # under the pumping station: the pump hall (=y: the height as given, below ground)

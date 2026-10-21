@@ -26,6 +26,7 @@ it. Thirty seconds now versus archaeology later.
 | `assets/textures/materials/boulder/` | ambientCG `Rock045` — <https://ambientcg.com/a/Rock045> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/red_brick/` | ambientCG `Bricks097` — <https://ambientcg.com/a/Bricks097> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/concrete_wet/` | Poly Haven `concrete_wall_007` — <https://polyhaven.com/a/concrete_wall_007> | Dario Barresi, Rico Cilliers, Charlotte Baglioni | CC0 1.0 | 2026-10 |
+| `assets/textures/materials/dressed_stone/` | Poly Haven `large_sandstone_blocks` — <https://polyhaven.com/a/large_sandstone_blocks> | Rob Tuytel | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/rusty_metal/` | Poly Haven `rusty_metal_04` — <https://polyhaven.com/a/rusty_metal_04> | Amal Kumar | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/painted_metal_peeling/` | ambientCG `PaintedMetal006` — <https://ambientcg.com/a/PaintedMetal006> | Lennart Demes (ambientCG) | CC0 1.0 | 2026-10 |
 | `assets/textures/materials/corrugated_iron/` | Poly Haven `rusty_corrugated_iron` — <https://polyhaven.com/a/rusty_corrugated_iron> | Charlotte Baglioni | CC0 1.0 | 2026-10 |
