@@ -257,7 +257,12 @@ pub(crate) fn shoals(
                     if !s.fish.is_empty() {
                         // At the origin: its fish (`small_look`) are its
                         // children, placed in world space.
-                        commands.spawn((Name::new("Shoal"), Transform::IDENTITY, s));
+                        commands.spawn((
+                            Name::new("Shoal"),
+                            Transform::IDENTITY,
+                            Visibility::default(),
+                            s,
+                        ));
                     }
                 }
             }

@@ -230,6 +230,27 @@ impl Obstacles {
             .map(|&i| &self.solids[i as usize])
     }
 
+    /// The top of anything built within `r` (horizontally) of `p`, if any.
+    pub fn top_near(&self, p: Vec3, r: f32) -> Option<f32> {
+        let (a, b) = (cell_of(p.x - r, p.z - r), cell_of(p.x + r, p.z + r));
+        let mut top: Option<f32> = None;
+        for cx in a.0..=b.0 {
+            for cz in a.1..=b.1 {
+                for &i in self.cells.get(&(cx, cz)).into_iter().flatten() {
+                    let s = &self.solids[i as usize];
+                    if p.x >= s.lo.x - r
+                        && p.x <= s.hi.x + r
+                        && p.z >= s.lo.z - r
+                        && p.z <= s.hi.z + r
+                    {
+                        top = Some(top.map_or(s.hi.y, |t: f32| t.max(s.hi.y)));
+                    }
+                }
+            }
+        }
+        top
+    }
+
     /// Is `p` inside anything built (grown by `pad`)?
     pub fn inside(&self, p: Vec3, pad: f32) -> bool {
         self.near(p).any(|s| s.contains(p, pad))
@@ -245,6 +266,9 @@ pub struct PerchSite {
     /// Where a bird's feet go, and the way along the top it faces (a
     /// ridge's line, so birds sit in a row along it).
     pub spots: Vec<(Vec3, f32)>,
+    /// Shallow water, for a heron to stand in ([`wading`]), not the top of
+    /// anything.
+    pub wading: bool,
 }
 
 impl PerchSite {
@@ -376,6 +400,7 @@ fn site_perches(zone: &Zone, prefab_id: &str, solids: &[Solid]) -> Option<PerchS
         prefab: prefab_id.to_string(),
         centre,
         spots,
+        wading: false,
     })
 }
 
@@ -398,6 +423,59 @@ pub fn survey(zone: &Zone) -> (Obstacles, Perches) {
         }
     }
     (obstacles, perches)
+}
+
+/// Water this deep is for wading in (m).
+pub const WADE: (f32, f32) = (0.08, 0.32);
+/// Wading spots are gathered in cells this big, each a site...
+pub const WADE_CELL: f32 = 24.0;
+/// ...if it has at least this many spots, this far apart.
+pub const WADE_SPOTS: usize = 3;
+pub const WADE_SPACING: f32 = 1.5;
+
+/// Wading sites: shallow water at the margins of the valley's water, the
+/// bed under a heron's feet. Sampled every metre and a half over the map.
+pub fn wading(zone: &Zone) -> Vec<PerchSite> {
+    let half = zone.map.size * 0.5;
+    let mut cells: std::collections::BTreeMap<(i32, i32), Vec<(Vec3, f32)>> = Default::default();
+    let n = (zone.map.size / WADE_SPACING) as i32;
+    for i in 0..n {
+        for j in 0..n {
+            let x = -half + i as f32 * WADE_SPACING;
+            let z = -half + j as f32 * WADE_SPACING;
+            let Some(top) = zone.hm.water_level([x, z]) else {
+                continue;
+            };
+            let bed = zone.ground(x, z);
+            let d = top - bed;
+            if !(WADE.0..=WADE.1).contains(&d) {
+                continue;
+            }
+            let cell = (
+                (x / WADE_CELL).floor() as i32,
+                (z / WADE_CELL).floor() as i32,
+            );
+            // Facing along the shore, more or less: across the slope.
+            let yaw = ((i * 7 + j * 13) % 16) as f32 / 16.0 * std::f32::consts::TAU;
+            cells
+                .entry(cell)
+                .or_default()
+                .push((Vec3::new(x, bed, z), yaw));
+        }
+    }
+    cells
+        .into_values()
+        .filter(|spots| spots.len() >= WADE_SPOTS)
+        .map(|spots| {
+            let centre = spots.iter().map(|s| s.0).sum::<Vec3>() / spots.len() as f32;
+            PerchSite {
+                prefab: "shallows".into(),
+                centre,
+                spots,
+                wading: true,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

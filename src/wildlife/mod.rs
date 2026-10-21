@@ -170,7 +170,11 @@ impl Plugin for WildlifePlugin {
 /// The valley's perches and its animals, once the map is in.
 fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate::LaunchOptions>) {
     let started = std::time::Instant::now();
-    let (obstacles, perches) = perches::survey(&zone);
+    let (obstacles, mut perches) = perches::survey(&zone);
+    // Somewhere for a heron to stand, where there's one.
+    if opts.map == "sallow_reservoir" {
+        perches.sites.extend(perches::wading(&zone));
+    }
     // `EXTRACTION_WILDLIFE=off`: no animals (to compare sims with and without).
     let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
     let flocks = if off {

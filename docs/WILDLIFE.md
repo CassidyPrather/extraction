@@ -81,10 +81,25 @@ jackdaw greyer). The wingbeat runs 3.2 to 6 beats a second by how hard it
 works; turning, it banks. Past 45 m the far stand-in, past 380 m nothing.
 No shadows.
 
+### The heron
+
+Sallow Reservoir has rooks on the dam's parapet, the draw-off tower and the
+gantry (perches come from any generated prefab), and a grey heron standing
+in its shallows (`perches::wading`: water 8 to 32 cm deep, gathered in
+24 m cells, the bed under its feet; `art/animals/heron.py`, in the rook's
+pose names). It goes up from 1.6 times as far as a rook, with slow deep
+wingbeats, and only ever comes down in the shallows. On a bare reservoir
+bed, a heron lifting off the water is the tell from the slipway.
+
+Flying birds keep 3 m over the top of anything built within 4 m of them
+(`flock::OVER`), landing too until they're nearly down: a flock came to a
+roof past Cinder Works' blast furnace and the stragglers were caught
+going in and out of its top.
+
 ## Deer and dogs
 
 One larger animal a valley (`wildlife::herd`): two to four roe deer in
-Marrow Creek and Kettle Pass, three or four stray dogs in Cinder Works.
+Marrow Creek, Kettle Pass and on Sallow Reservoir's bed, three or four stray dogs in Cinder Works.
 They live on the walkers' nav grid (`robots::walker::Nav`), so never in
 a building, a rock, a trunk or deep water; a herd's home is open ground
 at a forest's edge at least 150 m from the insertion point.
@@ -192,7 +207,8 @@ wind thin it. When the insects stop, something is close.
 
 `docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
 Creek), `flock_up.png` (the same house a few seconds after they went up),
-`deer_grazing.png`, `dogs.png` (Cinder Works).
+`deer_grazing.png`, `dogs.png` (Cinder Works), `heron.png` (Sallow
+Reservoir's shallows).
 
 ## Pacing
 

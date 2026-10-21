@@ -31,6 +31,28 @@ pub const BEAT_EASY: f32 = 3.2;
 pub const BEAT_HARD: f32 = 6.0;
 
 const MODEL: &str = "models/animals/rook.glb";
+const HERON: &str = "models/animals/heron.glb";
+
+impl BirdArt {
+    pub fn poses(&self, species: Species) -> Option<&BirdPoses> {
+        match species {
+            Species::Heron => self.heron.as_ref(),
+            _ => self.rook.as_ref(),
+        }
+    }
+}
+
+/// A model's colours by material: a rook's black and grey bill; a heron's
+/// grey, white and yellow.
+fn colours(model: &str, material: Option<&str>) -> LinearRgba {
+    match (model == HERON, material) {
+        (false, Some("Beak")) => LinearRgba::rgb(0.13, 0.13, 0.135),
+        (false, _) => LinearRgba::rgb(0.034, 0.034, 0.04),
+        (true, Some("Beak")) => LinearRgba::rgb(0.32, 0.25, 0.07),
+        (true, Some("Pale")) => LinearRgba::rgb(0.42, 0.42, 0.4),
+        (true, _) => LinearRgba::rgb(0.11, 0.115, 0.12),
+    }
+}
 
 /// A bird's poses, one mesh each.
 #[derive(Clone)]
@@ -45,7 +67,9 @@ pub struct BirdPoses {
 
 #[derive(Resource, Default)]
 pub struct BirdArt {
-    pub poses: Option<BirdPoses>,
+    /// Rooks (ravens and jackdaws are rooks, tinted) and herons.
+    pub rook: Option<BirdPoses>,
+    pub heron: Option<BirdPoses>,
     materials: HashMap<&'static str, Handle<StandardMaterial>>,
 }
 
@@ -97,7 +121,7 @@ impl Plugin for VisualsPlugin {
     }
 }
 
-/// The poses from the model once it's in; blockouts if it never comes.
+/// The poses from the models once they're in; blockouts if they never come.
 fn load_birds(
     mut art: ResMut<BirdArt>,
     mut models: ResMut<Models>,
@@ -107,48 +131,60 @@ fn load_birds(
     gltf_meshes: Res<Assets<GltfMesh>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if art.poses.is_some() {
-        return;
-    }
-    let Some(handle) = models.request(MODEL, &server) else {
-        art.poses = Some(blockout(&mut meshes));
-        return;
-    };
-    match Models::state(&handle, &server, &gltfs) {
-        ModelState::Loading => {}
-        ModelState::Failed => art.poses = Some(blockout(&mut meshes)),
-        ModelState::Ready(gltf) => {
-            let tree = model_nodes(gltf, &nodes, &gltf_meshes);
-            let mut pose = |name: &str| merged(&tree, name, &mut meshes);
-            let poses = (|| {
-                Some(BirdPoses {
-                    sit: pose("sit")?,
-                    sit_far: pose("sit_lod1")?,
-                    beat: [pose("up")?, pose("mid")?, pose("down")?],
-                    glide: pose("glide")?,
-                    fly_far: pose("fly_lod1")?,
-                })
-            })();
-            art.poses = Some(poses.unwrap_or_else(|| {
-                warn!("{MODEL}: a pose is missing; drawing blockout birds");
-                blockout(&mut meshes)
-            }));
+    for model in [MODEL, HERON] {
+        let have = if model == HERON {
+            &art.heron
+        } else {
+            &art.rook
+        };
+        if have.is_some() {
+            continue;
+        }
+        let got = match models.request(model, &server) {
+            None => Some(blockout(&mut meshes)),
+            Some(handle) => match Models::state(&handle, &server, &gltfs) {
+                ModelState::Loading => None,
+                ModelState::Failed => Some(blockout(&mut meshes)),
+                ModelState::Ready(gltf) => {
+                    let tree = model_nodes(gltf, &nodes, &gltf_meshes);
+                    let mut pose = |name: &str| merged(&tree, name, model, &mut meshes);
+                    let poses = (|| {
+                        Some(BirdPoses {
+                            sit: pose("sit")?,
+                            sit_far: pose("sit_lod1")?,
+                            beat: [pose("up")?, pose("mid")?, pose("down")?],
+                            glide: pose("glide")?,
+                            fly_far: pose("fly_lod1")?,
+                        })
+                    })();
+                    Some(poses.unwrap_or_else(|| {
+                        warn!("{model}: a pose is missing; drawing blockout birds");
+                        blockout(&mut meshes)
+                    }))
+                }
+            },
+        };
+        if model == HERON {
+            art.heron = got;
+        } else {
+            art.rook = got;
         }
     }
 }
 
 /// A node's primitives as one mesh, each painted its material's colour
 /// (the bird's material is white: the colours are the colour).
-fn merged(tree: &[ModelNode], name: &str, meshes: &mut Assets<Mesh>) -> Option<Handle<Mesh>> {
+fn merged(
+    tree: &[ModelNode],
+    name: &str,
+    model: &str,
+    meshes: &mut Assets<Mesh>,
+) -> Option<Handle<Mesh>> {
     let node = ModelNode::find(tree, name)?;
     let mut s = StandIn::default();
     for p in &node.primitives {
         let mesh = meshes.get(&p.mesh)?;
-        let c = match p.material.as_deref() {
-            Some("Beak") => LinearRgba::rgb(0.13, 0.13, 0.135),
-            _ => LinearRgba::rgb(0.034, 0.034, 0.04),
-        };
-        s.add(mesh, c);
+        s.add(mesh, colours(model, p.material.as_deref()));
     }
     s.build().map(|m| meshes.add(keep(m)))
 }
@@ -190,6 +226,7 @@ fn tint(species: Species) -> Color {
         Species::Rook => Color::WHITE,
         Species::Raven => Color::srgb(0.8, 0.8, 0.85),
         Species::Jackdaw => Color::srgb(1.9, 1.9, 1.95),
+        Species::Heron => Color::WHITE,
     }
 }
 
@@ -202,6 +239,7 @@ fn material(
         Species::Rook => "rook",
         Species::Raven => "raven",
         Species::Jackdaw => "jackdaw",
+        Species::Heron => "heron",
     };
     let tint = tint(species);
     art.materials
@@ -227,10 +265,10 @@ fn draw_flocks(
     flocks: Query<(Entity, &Flock), Without<Drawn>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(poses) = art.poses.clone() else {
-        return;
-    };
     for (e, flock) in &flocks {
+        let Some(poses) = art.poses(flock.species).cloned() else {
+            continue;
+        };
         let mat = material(&mut art, flock.species, &mut materials);
         for (i, b) in flock.birds.iter().enumerate() {
             commands.spawn((
@@ -272,9 +310,6 @@ fn pose_birds(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
-    let Some(poses) = &art.poses else {
-        return;
-    };
     let dt = time.delta_secs();
     let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     for (mut v, mut tf, mut mesh, mut vis) in &mut birds {
@@ -282,6 +317,9 @@ fn pose_birds(
             continue;
         };
         let Some(b) = flock.birds.get(v.index) else {
+            continue;
+        };
+        let Some(poses) = art.poses(flock.species) else {
             continue;
         };
         // The whole flock far off: drawn in the one far mesh (`far_flocks`).
@@ -365,14 +403,14 @@ fn far_flocks(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut far: ResMut<FarParts>,
 ) {
-    let Some(poses) = &art.poses else {
-        return;
-    };
     let eyes: Vec<Vec3> = cams.iter().map(|g| g.translation()).collect();
     if eyes.is_empty() {
         return;
     }
     for flock in &flocks {
+        let Some(poses) = art.poses(flock.species) else {
+            continue;
+        };
         let d = nearest(&eyes, flock.mean());
         if d <= FLOCK_FAR || d > HIDE {
             continue;
