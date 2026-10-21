@@ -2394,3 +2394,105 @@ fn running_across_a_drone_spoils_its_aim() {
         "running spoils its aim: {running} hits against {still}"
     );
 }
+
+/// A drone picks out movement more than shape: crouched and still, 40 m
+/// off in the open, you're not made out; crouched and moving, you are.
+#[test]
+fn keeping_still_beats_a_drone_overhead() {
+    let seen = |moving: bool| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 400.0));
+        let me = zone.on_ground(100.0, 200.0);
+        let over = zone.on_ground(100.0, 238.0) + Vec3::Y * 15.0;
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                over,
+                Job {
+                    kind: JobKind::Survey,
+                    site: over,
+                    duration: 999.0,
+                    exit: over,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..30 {
+            app.update();
+        }
+        let mut best = 0.0f32;
+        for i in 0..90 * 4 {
+            let walk = if moving {
+                Vec3::X * (i as f32 / 90.0)
+            } else {
+                Vec3::ZERO
+            };
+            put(&mut app, player, me + walk);
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = if moving { Vec3::X * 1.0 } else { Vec3::ZERO };
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation
+                .y = 0.85;
+            app.update();
+            best = best.max(app.world().get::<Awareness>(d).unwrap().exposure);
+        }
+        best
+    };
+    let still = seen(false);
+    let moving = seen(true);
+    assert!(
+        still < super::senses::SEEN,
+        "still, it can't make you out ({still:.3})"
+    );
+    assert!(
+        moving > still * 1.5,
+        "moving shows ({moving:.3} vs {still:.3})"
+    );
+}
+
+/// Survey drones aren't sent to loiter over a rendezvous.
+#[test]
+fn survey_drones_keep_off_the_rendezvous() {
+    use super::director::{Director, SURVEY_CLEAR};
+    use extraction_core::map::MarkerKind;
+    let (mut app, _, zone) = app(None);
+    app.update();
+    {
+        let mut d = app.world_mut().resource_mut::<Director>();
+        d.enabled = true;
+        d.next_logistics = 1e9;
+        d.max_active = 999;
+    }
+    for _ in 0..60 {
+        app.world_mut().resource_mut::<Director>().next_job = 0.0;
+        app.update();
+    }
+    let rvs: Vec<Vec2> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .collect();
+    let surveys: Vec<Vec3> = app
+        .world_mut()
+        .query::<&Job>()
+        .iter(app.world())
+        .filter(|j| j.kind == JobKind::Survey)
+        .map(|j| j.site)
+        .collect();
+    assert!(!surveys.is_empty(), "some went");
+    for s in surveys {
+        for r in &rvs {
+            assert!(
+                r.distance(Vec2::new(s.x, s.z)) > SURVEY_CLEAR,
+                "a survey at {s} by the rendezvous at {r}"
+            );
+        }
+    }
+}
