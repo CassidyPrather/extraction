@@ -168,6 +168,15 @@ fn main() {
         })
         .collect::<Vec<_>>()
         .join(",");
+    // The minelayer's fields as the game would lay them (map_mines).
+    j += "],\"mines\":[";
+    let walk = extraction_core::map_nav::zone_grid(&map, &hm, extraction_core::map_nav::MAX_SLOPE);
+    j += &extraction_core::map_mines::fields(&map, &hm, &walk)
+        .iter()
+        .flat_map(|f| f.mines[..f.laid].iter())
+        .map(|m| format!("[{},{}]", m[0], m[1]))
+        .collect::<Vec<_>>()
+        .join(",");
     j += "],\"regions\":[";
     j += &map
         .regions

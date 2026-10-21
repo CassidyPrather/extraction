@@ -64,6 +64,15 @@ pub enum Rule {
     /// way round, over the way in or out, or met without warning
     /// (`map_sentry`).
     Sentry,
+    /// A spotter that ends a raid rather than shaping it: its winch where
+    /// you can't stand to cut it, watching nothing, no way in under it
+    /// while its eye is turned away, watching the way in or out, or seeing
+    /// most of a sentry's field (`map_spotter`).
+    Spotter,
+    /// The minelayer's fields as the game lays them: a mine on a main
+    /// route or in a doorway, or a site with room for under half a field
+    /// (`map_mines`).
+    Mines,
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
@@ -312,6 +321,11 @@ pub const WORK_YARD: f32 = 16.0;
 pub const WORK_OPEN: f32 = 0.7;
 /// The robot Gate is at least this far from the insertion.
 pub const GATE_FROM_INSERTION: f32 = 300.0;
+/// A rendezvous keeps this far from the robots' Gate: you wait two minutes
+/// there for the truck, and every machine in the valley comes and goes by
+/// the Gate. The sims killed raiders waiting at Marrow's Ranger tower,
+/// 128 m from it, to whatever came out next.
+pub const RV_FROM_GATE: f32 = 160.0;
 /// Surge layouts tried when checking anomalies against the routes.
 pub const ANOMALY_SEEDS: u64 = 32;
 /// An artifact field's middle is at least this far from every main route
@@ -1727,6 +1741,18 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    for g in gates.iter().filter(|_| robots) {
+        for m in map.markers_of(&MarkerKind::Rendezvous) {
+            if dist(*g, m.at) < RV_FROM_GATE {
+                find(
+                    &mut r,
+                    Rule::Patrol,
+                    format!("{} is {:.0} m from the robot Gate", m.name, dist(*g, m.at)),
+                    m.at,
+                );
+            }
+        }
+    }
     let gate_seen = gates.first().map(|g| flood(&walk, *g));
     for m in map.markers_of(&MarkerKind::WorkSite) {
         if let Some(seen) = &gate_seen {
@@ -1967,6 +1993,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         r.measures.extend(c.measures);
         for (what, at) in c.findings {
             find(&mut r, Rule::Sentry, what, at);
+        }
+        let c = crate::map_spotter::check(map, hm, &walk, ins, &named, |p| inside_fence(map, p));
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Spotter, what, at);
+        }
+        let c = crate::map_mines::check(map, hm, &walk, &named);
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Mines, what, at);
         }
     }
 

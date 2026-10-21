@@ -41,10 +41,15 @@ MARKER_STYLE = {
     "WorkSite": ((255, 140, 60), "⚒"),
     "TruckStop": ((80, 220, 120), "▭"),
     "Sentry": ((255, 60, 60), "▼"),
+    "Spotter": ((255, 170, 60), "◎"),
 }
 # A sentry's reach and eye (extraction_core::sentry SIGHT, FOV).
 SENTRY_SIGHT = 55.0
 SENTRY_FOV = 50.0
+# A spotter's reach and the blind ring under it (extraction_core::spotter
+# SIGHT, blind_radius(TETHER)).
+SPOTTER_SIGHT = 85.0
+SPOTTER_BLIND = 24.0 / np.tan(np.radians(50.0))
 DANGER = [(120, 200, 120), (230, 210, 90), (240, 140, 60), (230, 60, 60)]
 
 
@@ -262,6 +267,17 @@ def render(dump, px_size=1400, heat=None, title=None, dim=0.0):
         d.line([px(m["at"]), px(m["power"])], fill=(255, 220, 60), width=2)
         bx, by = px(m["power"])
         d.rectangle([bx - 3, by - 3, bx + 3, by + 3], fill=(255, 220, 60))
+    # Spotters: how far they see, and the blind ring under the balloon.
+    for m in meta["markers"]:
+        if m["kind"] != "Spotter":
+            continue
+        x, y = px(m["at"])
+        for r, w in ((SPOTTER_SIGHT, 2), (SPOTTER_BLIND, 1)):
+            d.ellipse([x - r * s, y - r * s, x + r * s, y + r * s], outline=(255, 170, 60), width=w)
+    # The minelayer's mines.
+    for at in meta.get("mines", []):
+        x, y = px(at)
+        d.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(255, 40, 40), outline=(0, 0, 0))
     # Markers.
     for m in meta["markers"]:
         col, glyph = MARKER_STYLE.get(m["kind"], ((255, 255, 255), "?"))
