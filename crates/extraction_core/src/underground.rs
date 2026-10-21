@@ -1846,6 +1846,15 @@ pub fn kiosks(map: &MapDef) -> Vec<(P2, f32)> {
         .collect()
 }
 
+/// Ground the scatter (rocks, trees) keeps off: every kiosk, the exits'
+/// too, with its apron, as (centre, radius). A site's placement is only
+/// its entrance; an exit kiosk tens of metres off had a boulder in its
+/// stairwell.
+pub fn kiosk_clearings(map: &MapDef) -> Vec<(P2, f32)> {
+    let r = 0.5 * FOOTPRINT[0].hypot(FOOTPRINT[2]);
+    kiosks(map).into_iter().map(|(c, _)| (c, r)).collect()
+}
+
 /// Whether a world point's heightmap cell is opened up for a stairwell:
 /// the cell's centre is within [`HOLE_PAD`] of a kiosk's stairwell.
 pub fn in_stairwell(sites: &[Placed], p: P2) -> bool {
