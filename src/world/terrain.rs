@@ -142,6 +142,7 @@ fn spawn_terrain_meshes(
 /// Below the line and behind the dam the ground is bare silt and mud,
 /// with a damp band at the tide mark. Downstream, as low but never
 /// drowned, it isn't.
+#[derive(Clone, Copy, Debug)]
 pub struct Drowned {
     pub line: f32,
     pub dam_z: f32,
