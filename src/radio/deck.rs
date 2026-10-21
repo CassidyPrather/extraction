@@ -89,10 +89,20 @@ pub struct TapeWell;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct DeckCell;
 
-/// A cassette: how far its tape is wound (it keeps that between players).
+/// A cassette: how far its tape is wound (it keeps that between players),
+/// and how it was turned the last time it was free (in a hand, lying
+/// about): by the time a socket's news arrives it's already seated.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct Tape {
     pub wound: f32,
+    pub turned: Quat,
+}
+
+/// Keeps each loose cassette's turn (after transforms settle).
+pub(super) fn note_turns(mut tapes: Query<(&mut Tape, &GlobalTransform), Without<InSocket>>) {
+    for (mut t, gt) in &mut tapes {
+        t.turned = gt.rotation();
+    }
 }
 
 /// What a cassette player just did, for its sounds.
@@ -302,9 +312,8 @@ pub(super) fn press_keys(
 /// Which side faces out, if the tape is the right way round for the well
 /// (its open edge, local -Y, down into the deck): the cassette's own
 /// pose against the well's.
-pub fn fits(tape: &GlobalTransform, well: &GlobalTransform) -> Option<Side> {
-    let (_, t, _) = tape.to_scale_rotation_translation();
-    let (_, w, _) = well.to_scale_rotation_translation();
+pub fn fits(t: Quat, well: &GlobalTransform) -> Option<Side> {
+    let w = well.rotation();
     let down = (t * Vec3::NEG_Y).dot(w * Vec3::NEG_Y);
     if down < 0.5 {
         return None;
@@ -335,14 +344,14 @@ pub(super) fn load_tapes(
                 let Ok((mut well, owner, wgt)) = wells.get_mut(socket) else {
                     continue;
                 };
-                let Ok((tape, it, tgt)) = tapes_q.get_mut(item) else {
+                let Ok((tape, it, _)) = tapes_q.get_mut(item) else {
                     continue;
                 };
                 let Ok(mut d) = decks.get_mut(owner.0) else {
                     continue;
                 };
                 let id = catalog.get(it.kind()).id.as_str();
-                let side = fits(tgt, wgt);
+                let side = fits(tape.turned, wgt);
                 let inserted = match (side, tapes::get(id)) {
                     (Some(side), Some(def)) => {
                         let len = tapes::side_length(def);
@@ -360,7 +369,7 @@ pub(super) fn load_tapes(
                     // It won't go that way: out it drops, in front.
                     well.occupant = None;
                     let at = wgt.transform_point(Vec3::new(0.0, 0.02, 0.06));
-                    let (_, rot, _) = tgt.to_scale_rotation_translation();
+                    let rot = tape.turned;
                     physics_on(
                         &mut commands,
                         item,

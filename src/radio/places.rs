@@ -30,19 +30,49 @@ const fn by(map: &'static str, item: &'static str, at: [f32; 2], rot: f32, aside
 pub const PLACES: &[Place] = &[
     // Hana's house by the well: by her letter to Anna, not on it (her
     // table top stays bare), and a player to hear it on.
-    by("marrow_creek", "tape_practice", [-17.30, 93.70], 208.3, 0.45),
-    by("marrow_creek", "cassette_player", [-17.30, 93.70], 208.3, -0.5),
+    by(
+        "marrow_creek",
+        "tape_practice",
+        [-17.30, 93.70],
+        208.3,
+        0.45,
+    ),
+    by(
+        "marrow_creek",
+        "cassette_player",
+        [-17.30, 93.70],
+        208.3,
+        -0.5,
+    ),
     // The south gate booth: the soldier's mix and his player.
     by("marrow_creek", "tape_duty", [47.50, 284.40], 153.4, 0.3),
-    by("marrow_creek", "cassette_player", [47.50, 284.40], 153.4, -0.35),
+    by(
+        "marrow_creek",
+        "cassette_player",
+        [47.50, 284.40],
+        153.4,
+        -0.35,
+    ),
     // The Kettle chapel, by the sexton's note.
     by("kettle_pass", "tape_hymns", [-7.70, 155.40], 356.8, 0.3),
     // The hunting lodge, by Fiala's book.
     by("kettle_pass", "tape_lodge", [205.30, -204.45], 331.4, 0.3),
     // Vlasta's, by the foreman's house note.
-    by("cinder_works", "tape_birthday", [-109.20, 173.30], 205.2, 0.3),
+    by(
+        "cinder_works",
+        "tape_birthday",
+        [-109.20, 173.30],
+        205.2,
+        0.3,
+    ),
     // The keeper's cottage, by Pech's note.
-    by("sallow_reservoir", "tape_bells", [-56.30, 206.80], 295.2, 0.3),
+    by(
+        "sallow_reservoir",
+        "tape_bells",
+        [-56.30, 206.80],
+        295.2,
+        0.3,
+    ),
 ];
 
 /// Lower than this over the ground is the floor (m).
@@ -117,7 +147,9 @@ mod tests {
     /// it lies on the floor.
     #[test]
     fn everything_lies_on_a_surface() {
-        let catalog = extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG).unwrap();
+        let catalog =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
         let mut maps: Vec<&str> = PLACES.iter().map(|p| p.map).collect();
         maps.dedup();
         for map in maps {

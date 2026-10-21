@@ -45,7 +45,11 @@ impl Plugin for RadioPlugin {
                 Update,
                 (dial::turn_dials, dial::receive, dial::radio_noise).chain(),
             )
-            .add_systems(Update, (places::lay_tapes, piano::play_pianos));
+            .add_systems(Update, (places::lay_tapes, piano::play_pianos))
+            .add_systems(
+                PostUpdate,
+                deck::note_turns.after(bevy::transform::TransformSystems::Propagate),
+            );
     }
 }
 

@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use extraction_core::music::deck::{Key, Mode, Side as TapeSide};
 
 use super::deck::{DeckDoor, DeckKey, DeckWhat, TapeDeck, TapeWell};
+use crate::interact::InSocket;
 use crate::interact::poke::{CAP, FINGERTIP};
-use crate::interact::{InSocket, Socket};
 use crate::rig::Side;
 use crate::vr_harness::Vr;
 
@@ -167,7 +167,8 @@ fn the_right_way_round() {
             .resource::<Log>()
             .0
             .contains(&DeckWhat::WrongWay),
-        "it said why"
+        "it said why: {:?}",
+        vr.app.world().resource::<Log>().0
     );
     assert!(deck_of(&vr, deck).tape.is_none());
     let flipped = put_tape(

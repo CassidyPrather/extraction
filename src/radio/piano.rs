@@ -122,8 +122,7 @@ pub(super) fn play_pianos(
                     continue;
                 };
                 let h = input.hand(rh.side);
-                if h.tracked && h.trigger < 0.5 && hand.holding.is_none() && hand.handle.is_none()
-                {
+                if h.tracked && h.trigger < 0.5 && hand.holding.is_none() && hand.handle.is_none() {
                     tips.push(((player, i), hand.world.transform_point(FINGERTIP)));
                 }
             }
@@ -180,11 +179,7 @@ pub(super) fn play_pianos(
                         // How fast it came down, from where it was last
                         // frame (a finger resting on a key and pressed
                         // slowly plays it softly).
-                        let was = piano
-                            .held
-                            .get(who)
-                            .map_or(p.y + 0.01, |(_, y)| *y)
-                            .max(p.y);
+                        let was = piano.held.get(who).map_or(p.y + 0.01, |(_, y)| *y).max(p.y);
                         let speed = (was - p.y) / dt;
                         let velocity = (speed / 0.6).clamp(0.15, 1.0);
                         let at = gt.transform_point(Vec3::new(key_x(key), key_top(key), BACK));
