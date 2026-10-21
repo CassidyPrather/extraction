@@ -315,6 +315,10 @@ pub enum MarkerKind {
     /// A standing anomaly that the Surge never moves: `kind` names an
     /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
     Anomaly { kind: String, radius: f32 },
+    /// A sentry (`sentry`): a turret on a mast here, its arc `arc` degrees
+    /// wide centred on `rot` (as `sentry::bearing` measures: 0 toward -Z,
+    /// 90 toward +X), its cable running to a junction box at `power`.
+    Sentry { arc: f32, power: P2 },
 }
 
 impl MarkerKind {

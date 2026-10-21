@@ -60,6 +60,10 @@ pub enum Rule {
     Crate,
     /// A point of interest no road or path leads to.
     Funnel,
+    /// A sentry that's a wall, not a puzzle: blind, guarding nothing, no
+    /// way round, over the way in or out, or met without warning
+    /// (`map_sentry`).
+    Sentry,
 }
 
 #[derive(Clone, Debug)]
@@ -1644,6 +1648,19 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 format!("no second way to {} within {CHOICE_DETOUR}x{why}", route.to),
                 at,
             );
+        }
+    }
+
+    // -- Sentries ----------------------------------------------------------------
+    {
+        let named: Vec<(String, Vec<P2>)> = routes
+            .iter()
+            .map(|rt| (rt.to.clone(), rt.points.clone()))
+            .collect();
+        let c = crate::map_sentry::check(map, hm, &walk, ins, &named, |p| inside_fence(map, p));
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Sentry, what, at);
         }
     }
 
