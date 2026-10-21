@@ -164,8 +164,27 @@ def lantern():
     return [p]
 
 
+def fence_panel():
+    """A garden fence's plank panel between two posts: 2.0 x 1.1 x 0.08,
+    origin at its centre, its boards' face to -Z (the street), the rails
+    behind; the boards weathered, one short, gaps between. A breakable
+    thing (`buildings::Breakable`): Destruction spawns and breaks it."""
+    p = Part("static")
+    w = Wear(97)
+    n = 13
+    for k in range(n):
+        x = -1.0 + (k + 0.5) * 2.0 / n
+        h = 1.1 - (0.18 if k == 7 else 0.0) - abs(w.j(0.03))
+        board(p, (2.0 / n - 0.035, h, 0.02), (x, -0.55 + h / 2, -0.03), "Planks", wear=w,
+              bevel=0.002)
+    for y in (-0.3, 0.35):
+        p.box((2.0, 0.08, 0.035), (0.0, y, 0.0225), "Timber", bevel=0.003, segs=1)
+    return [p]
+
+
 prop("signpost", signpost)
 prop("fence_post", fence_post)
+prop("fence_panel", fence_panel)
 prop("camp_table", camp_table_parts)
 prop("camp_board", camp_board)
 prop("camp_post", camp_post)

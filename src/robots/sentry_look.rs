@@ -330,7 +330,6 @@ fn gallery(
     mut robots: Query<&mut Robot>,
     cables: Query<(Entity, &SentryPiece, &OfSentry)>,
     mut cuts: MessageWriter<crate::destruction::hooks::Cut>,
-    kids: Query<&Children>,
 ) {
     let (Some(spec), Some((cam, yaw, _)), Some(zone)) = (&opts.gallery, opts.camera, zone) else {
         return;
@@ -389,8 +388,7 @@ fn gallery(
             if let Some(core) = cables
                 .iter()
                 .find(|(_, p, o)| matches!(p, SentryPiece::Cable) && o.0 == *e)
-                .and_then(|(c, ..)| kids.get(c).ok())
-                .and_then(|k| k.iter().next())
+                .map(|(c, ..)| c)
             {
                 cuts.write(crate::destruction::hooks::Cut {
                     target: core,

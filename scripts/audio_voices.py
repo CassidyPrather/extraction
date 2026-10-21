@@ -39,7 +39,7 @@ import audio_audit as aa
 import audio_mix as am
 
 ROOT = Path(__file__).resolve().parent.parent
-KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden"]
+KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden", "heavy"]
 MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
          "calling", "answering", "hurt", "dying"]
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
@@ -64,27 +64,28 @@ def add_sets(sets, out):
                         "robot_voice::tests::renders_for_the_audit"],
                        cwd=ROOT, check=True, capture_output=True)
         wavs = sorted(d.glob("*.wav"))
-    for k in KINDS:
-        for m in MINDS:
-            files = [aa.measure(p, "oneshot") for p in sorted(d.glob(f"{k}_{m}_*.wav"))]
-            if not files:
-                continue
-            loud = [f["momentary_max"] for f in files]
-            sets[f"voice/{k}/{m}"] = {
-                "type": "oneshot",
-                "variants": len(files),
-                "loudness": round(float(np.mean(loud)), 1),
-                "spread": round(float(max(loud) - min(loud)), 1),
-                "true_peak": max(f["true_peak"] for f in files),
-                "crest": round(float(np.mean([f["crest"] for f in files])), 1),
-                "onset_ms": max(f["onset_ms"] for f in files),
-                "clipped_runs": sum(f["clipped_runs"] for f in files),
-                "dc": max(abs(f["dc"]) for f in files),
-                "channels": [1],
-                "bands": [round(float(v), 1)
-                          for v in np.mean([f["bands"] for f in files], axis=0)],
-                "files": files,
-            }
+    groups = [(f"voice/{k}/{m}", f"{k}_{m}_*.wav") for k in KINDS for m in MINDS]
+    groups.append(("voice/heavy/horn", "horn.wav"))
+    for name, pattern in groups:
+        files = [aa.measure(p, "oneshot") for p in sorted(d.glob(pattern))]
+        if not files:
+            continue
+        loud = [f["momentary_max"] for f in files]
+        sets[name] = {
+            "type": "oneshot",
+            "variants": len(files),
+            "loudness": round(float(np.mean(loud)), 1),
+            "spread": round(float(max(loud) - min(loud)), 1),
+            "true_peak": max(f["true_peak"] for f in files),
+            "crest": round(float(np.mean([f["crest"] for f in files])), 1),
+            "onset_ms": max(f["onset_ms"] for f in files),
+            "clipped_runs": sum(f["clipped_runs"] for f in files),
+            "dc": max(abs(f["dc"]) for f in files),
+            "channels": [1],
+            "bands": [round(float(v), 1)
+                      for v in np.mean([f["bands"] for f in files], axis=0)],
+            "files": files,
+        }
 
 
 def trims():

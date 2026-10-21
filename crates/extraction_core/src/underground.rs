@@ -629,7 +629,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 7] = [
+pub const SITES: [(&str, &str); 8] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -657,6 +657,10 @@ pub const SITES: [(&str, &str); 7] = [
     (
         "cellars_cinder",
         include_str!("../../../assets/underground/cellars_cinder.ron"),
+    ),
+    (
+        "gallery_sallow",
+        include_str!("../../../assets/underground/gallery_sallow.ron"),
     ),
 ];
 

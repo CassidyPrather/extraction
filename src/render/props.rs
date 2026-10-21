@@ -122,10 +122,13 @@ fn dress_truck(
                     Mesh3d(meshes.add(Cylinder::new(0.012, 0.5))),
                     MeshMaterial3d(rope.clone()),
                 ));
-                // A wooden toggle to pull on.
+                // A red-painted toggle to pull on: against the canvas and its
+                // own rope, a rope-coloured one couldn't be told from the
+                // rope (`docs/LEGIBILITY.md`, affordances).
+                let red = mat(&mut materials, Color::srgb(0.68, 0.08, 0.05), 0.5, 0.0);
                 commands.spawn((
-                    Mesh3d(meshes.add(Capsule3d::new(0.018, 0.07))),
-                    MeshMaterial3d(rope),
+                    Mesh3d(meshes.add(Capsule3d::new(0.022, 0.09))),
+                    MeshMaterial3d(red),
                     Transform::from_xyz(0.0, -0.26, 0.0)
                         .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                     ChildOf(e),
@@ -608,8 +611,9 @@ fn push_caps(
     }
 }
 
-/// A ring around what an empty hand is pointing at from afar, facing the
-/// hand, in the glove's tint: point, squeeze, flick and it comes to you.
+/// A ring around what an empty hand is pointing at from afar, or would
+/// take where it is, facing the hand, in the glove's tint: point, squeeze,
+/// flick and it comes to you; or just squeeze.
 #[derive(Component)]
 struct FarCue;
 
@@ -624,7 +628,10 @@ fn far_cue(
     time: Res<Time>,
 ) {
     for (hand_e, hand) in &hands {
-        let target = hand.far.and_then(|e| items.get(e).ok());
+        // What a pointed hand would pull in, else what the hand would take
+        // where it is: the near hover lit only the glove, faintly, and the
+        // thing itself never showed it could be taken.
+        let target = hand.far.or(hand.hover).and_then(|e| items.get(e).ok());
         let cue = match made.get(&hand_e) {
             Some(c) => *c,
             None if target.is_some() => {

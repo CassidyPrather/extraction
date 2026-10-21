@@ -232,6 +232,14 @@ your side, crouches (the tell) and lunges to bite. The way to beat one is
 the opposite of a drone: keep still and quiet. The director answers
 gunfire with a pair of hounds a third of the time.
 
+**The Sorter rings its hall** (`robots/sorter_mind.rs`). The Depot's
+gantry can't leave its rails. It turns its head to a sound; seeing you,
+it bangs the hall once (loud enough to wake what sleeps in the bays) and
+throws a tote while you're within 14 m, after a wind-up that's its tell:
+it throws where you stood then, so step aside. Lose it and it watches
+where you went, then gropes round there with its arm, then goes back to
+its sorting.
+
 **Robots remember and search** (`robots/search.rs`). Each keeps a
 last-known position and an uncertainty that grows at walking pace while
 you're out of sight (it knows which way you went for a second, then it's
@@ -287,7 +295,12 @@ doorway that stands open and looks in (it hangs back from a shut one,
 waiting); a walker walks up to a shut door and opens it. A **door wedge**
 set down against the foot of a closed door jams it — for you too, until
 you pick the wedge up — and a walker that finds one batters the door for
-twelve loud seconds before tearing it off its hinges.
+twelve loud seconds before tearing it off its hinges. Nor are thin walls
+cover: a walker that loses you behind a plank wall or door, close by and
+knowing roughly where, settles its turret (the same tell as an aimed
+shot) and fires three rounds through it, once, if a round would get
+through (`destruction::through`; brick and steel stop them). Moving off
+from where it lost you beats it.
 
 ### The heavy: you should not be fighting this
 
@@ -571,6 +584,20 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Optics**: the scope moves the sight line to its eyepiece and
   magnifies when your eye is on it: in the headset, a picture-in-picture
   lens (with a PU reticle in the scope); flat mode zooms the camera.
+- **Looking through it** (`weapons/optics.rs`):
+  - *Eye box*: a scope shows its picture only with your eye about 7 cm
+    behind the eyepiece and on its axis. Drift a few millimetres off and
+    a black edge closes in from the side you moved away from; lean back
+    or crowd it and the picture shrinks to black.
+  - *Parallax*: off the axis, the picture slides against the reticle, so
+    the reticle on a target only holds true with your eye centred.
+  - *Glint*: at dawn and dusk, a scope facing the low sun flashes back
+    along its line. A robot it points at, out to 400 m, sees the flash
+    like a torch beam in the dark. Don't glass a valley into the sun.
+  - *Iron sights* line up at the cheek: bring a gun without a scope up
+    with your eye just behind the rear sight, and it settles (at most
+    about 3 degrees, about the front post) so your eye, the rear sight
+    and the post are in line.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one
