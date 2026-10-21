@@ -59,8 +59,7 @@ impl Plugin for AnomalyVisualsPlugin {
         .add_systems(
             Update,
             (
-                dress_anomalies,
-                dress_scars,
+                (dress_anomalies, dress_scars).run_if(|| !hidden()),
                 (react_to_events, pulse, snare_arcs).chain(),
                 blink_flashes,
                 dress_items,
@@ -72,6 +71,14 @@ impl Plugin for AnomalyVisualsPlugin {
             ),
         );
     }
+}
+
+/// `EXTRACTION_HIDE_ANOMALIES` set: the anomalies keep working but aren't
+/// dressed, so a shot of the same view with and without them measures what
+/// their looks add (`scripts/anomaly_legibility.py`).
+fn hidden() -> bool {
+    static HIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *HIDE.get_or_init(|| std::env::var_os("EXTRACTION_HIDE_ANOMALIES").is_some())
 }
 
 // --- Materials -------------------------------------------------------------
