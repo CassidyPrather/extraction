@@ -1742,7 +1742,7 @@ fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
     // The gap is clear to walk through: nothing solid where it stood.
     let spatial = app
         .world_mut()
-        .run_system_once(|s: avian3d::prelude::SpatialQuery| {
+        .run_system_once(move |s: avian3d::prelude::SpatialQuery| {
             s.point_intersections(
                 c,
                 &SpatialQueryFilter::from_mask(crate::world::Layer::World),
