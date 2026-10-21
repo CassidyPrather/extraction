@@ -93,6 +93,9 @@ pub struct Geo {
     /// the building's collider, nor drawn by it): Destruction spawns,
     /// draws and breaks them.
     pub breakables: Vec<Breakable>,
+    /// The floor walked on inside, building-local y, where it isn't a
+    /// door's sill (a drowned house's silt: it has no doors left).
+    pub floor: Option<f32>,
 }
 
 /// What a breakable thing is.
@@ -1991,6 +1994,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
     ));
     // The silt: wall to wall, and through the doorway to the bank.
     let top = f + SILT;
+    b.geo.floor = Some(top);
     b.bx(
         Vec3::new(w - thick, SILT, d - thick),
         Vec3::new(0.0, f + SILT * 0.5, 0.0),
@@ -2100,6 +2104,7 @@ fn chapel_drowned(b: &mut Builder) {
         Vec2::new(x - thick * 0.5, z - thick * 0.5),
     ));
     let top = f + SILT;
+    b.geo.floor = Some(top);
     b.bx(
         Vec3::new(w - thick, SILT, d - thick),
         Vec3::new(0.0, f + SILT * 0.5, 0.0),
