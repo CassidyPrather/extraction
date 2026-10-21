@@ -180,6 +180,22 @@ pub const MIX: &[Cue] = &[
     cue!("voice.answering", "voice/walker/answering", -8.0, 85.0, 30.0, Signal, 18.0),
     cue!("voice.hurt", "voice/walker/hurt", -8.0, 75.0, 15.0, Signal, 8.0),
     cue!("voice.dying", "voice/walker/dying", -15.0, 80.0, 15.0, Signal, 10.0),
+    cue!("heavy.step", "explosions/grenade_heavy", 0.0, 110.0, 40.0, Signal, 48.0),
+    cue!("heavy.foot", "footsteps/metal", -2.0, 90.0, 25.0, Signal, 16.0),
+    cue!("heavy.raise", "machines/servo", -7.5, 85.0, 20.0, Signal, 15.0),
+    cue!("heavy.hiss", "physical/whoosh", -6.0, 80.0, 20.0, Signal, 12.0),
+    cue!("heavy.slam", "explosions/grenade_heavy", 0.0, 115.0, 20.0, Action, 25.0),
+    cue!("heavy.clank", "machines/clank", -2.0, 95.0, 20.0, Action, 15.0),
+    cue!("heavy.tear", "physical/door_creak", -3.5, 90.0, 20.0, Action, 12.0),
+    cue!("heavy.strain", "machines/groan", -11.5, 85.0, 20.0, Signal, 15.0),
+    cue!("heavy.bolt", "impacts/ricochet", -4.0, 90.0, 15.0, Action, 10.0),
+    cue!("heavy.loose", "machines/clank", -3.0, 75.0, 15.0, Detail, 8.0),
+    cue!("heavy.plate", "physical/drop_metal", 0.0, 95.0, 15.0, Action, 12.0),
+    cue!("heavy.vent", "physical/whoosh", -4.0, 85.0, 15.0, Signal, 12.0),
+    cue!("heavy.stall", "anomaly/burner_roar", -6.0, 95.0, 20.0, Signal, 20.0),
+    cue!("heavy.cell", "physical/switch", 0.0, 60.0, 10.0, Detail),
+    cue!("heavy.idle", "machines/hum", -10.0, 70.0, 20.0, Signal, 12.0),
+    cue!("heavy.horn", "voice/heavy/horn", -10.0, 120.0, 300.0, Signal, 200.0),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),
@@ -376,10 +392,11 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let mut seen = std::collections::HashSet::new();
         // Robots' words are synthesised (`robot_voice`), not files.
-        let voices: Vec<String> = crate::robot_voice::Utterance::ALL
+        let mut voices: Vec<String> = crate::robot_voice::Utterance::ALL
             .iter()
             .map(|u| crate::robot_voice::set_name(crate::robot_voice::VoiceKind::Walker, *u))
             .collect();
+        voices.push("voice/heavy/horn".into());
         for c in MIX {
             assert!(
                 index.get(c.set).is_some() || voices.iter().any(|v| v == c.set),

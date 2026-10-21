@@ -51,6 +51,8 @@ RANGE_TARGETS = {
     "voice.searching": (25, 10), "voice.engaging": (40, 20), "voice.lost": (25, 10),
     "voice.calling": (200, 80), "voice.answering": (200, 80), "voice.hurt": (30, 15),
     "voice.dying": (40, 20),
+    "heavy.step": (150, 60), "heavy.raise": (40, 20), "heavy.idle": (40, 15),
+    "heavy.horn": (500, 200),
     "walker.aim_lock": (40, 20), "harpoon.windup": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top
@@ -107,7 +109,8 @@ def muffle_db(fc):
 # suppressed shot's low-pass, water muffled in a bottle. Judged by what
 # they take out of the asset's spectrum.
 CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0, "gun.squib": 450.0,
-               "gun.bulged": 1400.0, "gun.bolt_stuck": 1800.0}
+               "gun.bulged": 1400.0, "gun.bolt_stuck": 1800.0, "heavy.step": 220.0,
+               "heavy.slam": 600.0, "heavy.stall": 2500.0}
 
 
 def own_filter(cue_name):
