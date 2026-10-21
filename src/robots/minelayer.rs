@@ -1150,7 +1150,23 @@ mod tests {
             .find(|(_, p)| p.robot == e)
             .map(|(h, _)| h)
             .unwrap();
-        crate::robots::heavy::tests::hit(&mut vr.app, hopper, HOPPER_HP * 3.0);
+        let at = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(hopper)
+            .unwrap()
+            .translation();
+        vr.app.world_mut().write_message(Hit {
+            blow: None,
+            entity: hopper,
+            point: at,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Z * 500.0,
+            damage: HOPPER_HP * 3.0,
+            shooter: None,
+            mass_g: 8.0,
+            load: Default::default(),
+        });
         vr.step(20);
         let acts = vr.app.world().resource::<Acts>();
         assert!(acts.0.contains(&MineAct2::CookOff), "{:?}", acts.0);
