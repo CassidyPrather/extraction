@@ -9,6 +9,8 @@
 //! - [`perches`]: where birds can sit, from the buildings' own pieces.
 //! - [`bats`]: at dusk and at night, over the water and round the
 //!   buildings; off a light, and gone when a machine's near.
+//! - [`ducks`]: mallards on open water, that swim off from you and go up
+//!   splashing when you're close (the same [`Flushed`] as a flock).
 //!
 //! Logic here runs headless (in [`WildlifePlugin`], part of `GamePlugin`)
 //! and is deterministic for a seed; what you see is in [`visuals`]
@@ -19,6 +21,8 @@ use bevy::prelude::*;
 pub mod bat_look;
 pub mod bats;
 pub mod bodies;
+pub mod duck_look;
+pub mod ducks;
 pub mod fish;
 pub mod flock;
 pub mod herd;
@@ -167,6 +171,7 @@ impl Plugin for WildlifePlugin {
                         fish::shoals,
                         rats::rats,
                         bats::bats,
+                        ducks::rafts,
                     ),
                 )
                     .chain()
@@ -248,6 +253,7 @@ impl Plugin for WildlifeVisualsPlugin {
             herd_look::HerdLookPlugin,
             small_look::SmallLookPlugin,
             bat_look::BatLookPlugin,
+            duck_look::DuckLookPlugin,
         ));
     }
 }
