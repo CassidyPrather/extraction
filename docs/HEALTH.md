@@ -20,6 +20,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 5d2ad52 | 15:00 | 7/7 clean, five valleys (Rime Fell seeds 1-3 all extracted); Sallow seed 1 timed out stuck | stopped at 132 (main moved): `a_stormglass_is_a_roof_in_the_surge` FAILED | |
 | 3037c2b | 13:40 | 8/8 clean | not run (main moved) | marrow_creek seed 2 still dies early (now to the sentry) |
 | 881fc3b | 13:15 | not run | 727 passed, 7 failed (render gauges not run) | |
 | 6789739 | 11:30 | (cbf9c3d's binary) | the 20 reported tests: 19 pass, birds fails; full suite running | |
@@ -40,7 +41,9 @@ As of 881fc3b's full suite (727 passed, 7 failed). Det. = fails every time, alon
 | `soak::tests::entity_keyed_locals_forget_what_is_gone`: touch.rs:170 `last`, radio/visuals.rs:222-223 `arm` `crank`, destruction/breach.rs:535 `geos`, world/snow.rs:277 `last` | det. | entity-keyed Locals never pruned (a leak in a long session) | coordinator, Radio, Destruction, Visual design, Audio | each fixed on its branch; Soak listed touch.rs as bounded and tightened the lint (any `.remove(` no longer counts as pruning), which found a real leak in anomaly/harvest.rs |
 | `soak::save_fuzz::a_poisoned_career_loads_whole_and_in_the_world` (3 gone, 2 expected) | det. | a cassette player and its cell went "nowhere" together | Soak | fixed on claude/polish-soak |
 | `world::storm::tests::a_bolt_comes_down_to_where_it_struck` | det. | | Visual design | fixed on main by e16f7954 (after 881fc3b); to confirm |
-| `perf::tests::headless_ticks_hold_their_floor` (62.7 units > 60 at 4 threads) | **flaky**: passes alone 2/2 | load-sensitive gauge: reference and busy tick sampled at different moments | Performance | fixing: the tick runs on every core, its yardstick on one; moving to per-tick ratios, lower quartile |
+| Sim: Sallow seed 1's raider stuck 15 min at (-246, -157), 3 m short of a waypoint (-249, -155) on the way to Sallow Head; timed out | **intermittent**: same binary and seed extracted twice | the raider never gave up an unreachable waypoint (fixed on main, c2cdcf2: three sticks within 4 m block the cell and replan). Sims weren't reproducible: with the default thread pool, the same seed diverges by t=24 s; with `EXTRACTION_THREADS=1`, 438 events over 380 s are identical, so the source is multi-threaded execution (system-order ambiguity or Avian's parallel solver), not dt or RNG | coordinator (src/sim) | trap fixed; suggested sims default to one pool thread |
+| `anomaly::surge::tests::a_stormglass_is_a_roof_in_the_surge` | ? | | Anomalies | to confirm on 7505d1e |
+| `perf::tests::headless_ticks_hold_their_floor` (62.7 units > 60 at 4 threads) | **flaky**: passes alone 2/2 | load-sensitive gauge: reference and busy tick sampled at different moments | Performance | fixed on claude/polish-performance 5e2a955 (per-tick ratio to a reference timed right after, lower quartile: 21-26 units alone and loaded) |
 
 ## Closed
 

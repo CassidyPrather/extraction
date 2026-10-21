@@ -27,6 +27,9 @@ impl Plugin for RobotVisualsPlugin {
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
             super::sentry_look::SentryLookPlugin,
+            super::spotter_look::SpotterLookPlugin,
+            super::minelayer_look::MinelayerLookPlugin,
+            super::mender_look::MenderLookPlugin,
         ))
         .add_systems(
             Update,
@@ -46,6 +49,7 @@ impl Plugin for RobotVisualsPlugin {
                 alert_eyes,
                 shell_by_light,
                 super::weathering::weather_meshes,
+                part_plants,
             ),
         );
     }
@@ -198,13 +202,20 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
+    heavies: Query<
+        (),
+        Or<(
+            With<super::heavy::Heavy>,
+            With<super::sentry::Sentry>,
+            With<super::heavy::OwnLook>,
+        )>,
+    >,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy and the sentry dress themselves: `heavy_look`,
-        // `sentry_look`.)
+        // (The heavy, the sentry and the others marked `OwnLook` dress
+        // themselves: `heavy_look`, `sentry_look`, ...)
         if heavies.contains(part.robot) {
             continue;
         }
@@ -1777,5 +1788,85 @@ mod gutter_tests {
         let (hurt, dying) = (out(0.3), out(0.05));
         assert!(hurt > 0 && dying > hurt, "{hurt} then {dying} of 900");
         assert!(dying < 600, "it still mostly shines ({dying} of 900 out)");
+    }
+}
+
+/// How far a walker parts plants, metres (times its size), round a spot
+/// low under its orb: the sway shaders part by 3D distance, and the
+/// ground cover is down round its feet, not up at the orb.
+const PARTS: f32 = 0.9;
+const PARTS_LOW: f32 = 0.85;
+/// Robots farther from the eye than this part nothing (nobody sees it).
+const PARTS_WITHIN: f32 = 20.0;
+
+/// Walkers and hounds push through ground cover and low branches: the
+/// four nearest the eye go to the sway shaders (`world::cover`). Each
+/// write re-extracts every plant, so a spot only changes once its robot
+/// has moved 5 cm, and an empty slot keeps nothing.
+fn part_plants(
+    pushers: Option<ResMut<crate::world::cover::RobotPushers>>,
+    walkers: Query<(&GlobalTransform, &super::anim::Gait, &Robot), With<super::walker::Walker>>,
+    cameras: Query<&GlobalTransform, With<Camera3d>>,
+) {
+    let (Some(mut pushers), Some(eye)) = (pushers, cameras.iter().next()) else {
+        return;
+    };
+    let spots = pushing(
+        eye.translation(),
+        walkers
+            .iter()
+            .filter(|(_, _, r)| !r.wrecked)
+            .map(|(gt, g, _)| {
+                (gt.translation() - Vec3::Y * PARTS_LOW * g.size).extend(PARTS * g.size)
+            }),
+        pushers.spots,
+    );
+    pushers.set_if_neq(crate::world::cover::RobotPushers { spots });
+}
+
+/// The four pushes nearest `eye` (within `PARTS_WITHIN`), each left as
+/// it `was` while its robot has moved under 5 cm.
+fn pushing(eye: Vec3, robots: impl Iterator<Item = Vec4>, was: [Vec4; 4]) -> [Vec4; 4] {
+    let mut near: Vec<(f32, Vec4)> = robots
+        .map(|p| (p.truncate().distance_squared(eye), p))
+        .filter(|(d2, _)| *d2 < PARTS_WITHIN * PARTS_WITHIN)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut spots = [Vec4::ZERO; 4];
+    for (i, (_, p)) in near.into_iter().take(4).enumerate() {
+        spots[i] = if was[i].w > 0.0 && was[i].truncate().distance(p.truncate()) < 0.05 {
+            was[i]
+        } else {
+            p
+        };
+    }
+    spots
+}
+
+#[cfg(test)]
+mod pusher_tests {
+    use super::*;
+
+    /// The nearest four robots part the plants, none past 20 m; a robot
+    /// that's barely moved keeps its last spot (no rewrite).
+    #[test]
+    fn the_nearest_robots_part_the_plants() {
+        let eye = Vec3::ZERO;
+        let robots: Vec<Vec4> = [3.0, 25.0, 8.0, 1.0, 15.0, 12.0]
+            .iter()
+            .map(|x| Vec4::new(*x, 1.1, 0.0, 0.6))
+            .collect();
+        let spots = pushing(eye, robots.iter().copied(), [Vec4::ZERO; 4]);
+        let xs: Vec<f32> = spots.iter().map(|s| s.x).collect();
+        assert_eq!(xs, vec![1.0, 3.0, 8.0, 12.0]);
+        // Nudged 2 cm: the same spots, so nothing is written.
+        let nudged = robots.iter().map(|r| *r + Vec4::new(0.02, 0.0, 0.0, 0.0));
+        assert_eq!(pushing(eye, nudged, spots), spots);
+        // Walked off 30 cm: that one moves.
+        let walked = robots.iter().map(|r| *r + Vec4::new(0.3, 0.0, 0.0, 0.0));
+        assert_ne!(pushing(eye, walked, spots)[0], spots[0]);
+        // None near: nothing parts.
+        let far = [Vec4::new(40.0, 1.0, 0.0, 0.6)];
+        assert_eq!(pushing(eye, far.into_iter(), spots), [Vec4::ZERO; 4]);
     }
 }

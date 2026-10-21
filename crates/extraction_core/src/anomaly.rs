@@ -557,15 +557,33 @@ pub struct View {
     pub pitch: f32,
 }
 
+/// What stands in a line of sight across a valley, (x/z, how near the line
+/// may pass): every trunk, every rock (by its long side), every building
+/// and prop the map places.
+pub fn sight_blockers(map: &MapDef, hm: &Heightmap) -> Vec<([f32; 2], f32)> {
+    let trees = crate::forest::scatter_trees(map, hm)
+        .into_iter()
+        .map(|t| ([t.pos[0], t.pos[2]], 1.5));
+    let rocks = crate::rocks::scatter_rocks(map, hm).into_iter().map(|r| {
+        let long = r.radius * r.stretch.max(1.0 / r.stretch);
+        ([r.pos[0], r.pos[2]], long + 0.5)
+    });
+    let built = map.placements.iter().map(|p| {
+        let f = crate::map::prefab_footprint(&p.prefab);
+        (p.at, f[0].max(f[2]) * 0.5 + 0.5)
+    });
+    trees.chain(rocks).chain(built).collect()
+}
+
 /// A view of the anomaly `a` from `dist` off: of sixteen bearings, the one
 /// on the gentlest ground whose line to a metre over its centre is clear of
-/// rises, trunks (`trees`, x/z) and the other anomalies, and off roads and
-/// water. None if every side is blocked.
+/// rises, of `blockers` ([`sight_blockers`]) and of the other anomalies,
+/// and off roads and water. None if every side is blocked.
 pub fn view_of(
     hm: &Heightmap,
     a: &AnomalySpec,
     others: &[AnomalySpec],
-    trees: &[[f32; 2]],
+    blockers: &[([f32; 2], f32)],
     dist: f32,
 ) -> Option<View> {
     let target = hm.height(a.at) + 1.0;
@@ -581,9 +599,9 @@ pub fn view_of(
         let clear = (1..40).all(|i| {
             let t = i as f32 / 40.0;
             hm.height(geom::lerp(cam, a.at, t)) < eye + (target - eye) * t - 0.4
-        }) && trees
+        }) && blockers
             .iter()
-            .all(|t| geom::polyline_closest(&line, *t).0 > 1.5)
+            .all(|(b, r)| geom::polyline_closest(&line, *b).0 > *r)
             && others
                 .iter()
                 .filter(|o| geom::dist(o.at, a.at) > 0.5)
@@ -800,15 +818,12 @@ mod tests {
     fn every_kind_has_a_clear_view_from_20_m_in_marrow() {
         let (map, hm) = marrow();
         let all = layout(&map, &hm, 1, 0);
-        let trees: Vec<[f32; 2]> = crate::forest::scatter_trees(&map, &hm)
-            .iter()
-            .map(|t| [t.pos[0], t.pos[2]])
-            .collect();
+        let blockers = sight_blockers(&map, &hm);
         for kind in AnomalyKind::ALL {
             let view = all
                 .iter()
                 .filter(|a| a.kind == kind)
-                .find_map(|a| view_of(&hm, a, &all, &trees, 20.0).map(|v| (a, v)));
+                .find_map(|a| view_of(&hm, a, &all, &blockers, 20.0).map(|v| (a, v)));
             let (a, v) = view.unwrap_or_else(|| panic!("no clear view of a {kind:?}"));
             assert!((geom::dist(a.at, v.at) - 20.0).abs() < 0.01);
             // It looks at it.

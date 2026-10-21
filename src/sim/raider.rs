@@ -220,6 +220,12 @@ struct Site {
     job: bool,
 }
 
+/// Stuck this many times running near one spot, the raider gives up the
+/// waypoint it was making for (blocks it in its own grid) and replans.
+const STUCK_REPEATS: u32 = 3;
+/// How much of its grid round that waypoint it gives up, metres.
+const STUCK_BLOCK: f32 = 1.5;
+
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Act {
@@ -291,6 +297,8 @@ pub struct Raider {
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
+    /// Where it last got stuck, and how many times in a row near there.
+    stuck_spot: (Vec2, u32),
     scan: f32,
     clock: f32,
     retreat_until: f32,
@@ -500,6 +508,7 @@ pub fn attach_raider(
                 rv: None,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
+                stuck_spot: (Vec2::ZERO, 0),
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
@@ -886,6 +895,30 @@ pub fn think(
                     json!({"x": round(here.x, 1), "z": round(here.y, 1), "doing": r.doing(),
                            "task": format!("{:?}", bot.tasks.front())}),
                 );
+                // Stuck again and again in one place: the waypoint it's
+                // making for can't be reached from here, whatever the grid
+                // says. Block it in its own grid so the next plan goes round.
+                r.stuck_spot = if here.distance(r.stuck_spot.0) < 4.0 {
+                    (r.stuck_spot.0, r.stuck_spot.1 + 1)
+                } else {
+                    (here, 1)
+                };
+                if r.stuck_spot.1 >= STUCK_REPEATS
+                    && let Some(Task::WalkTo { to, .. }) = bot.tasks.front()
+                {
+                    r.grid.block(
+                        extraction_core::nav::Obstacle::Circle {
+                            at: to.to_array(),
+                            radius: STUCK_BLOCK,
+                        },
+                        0.0,
+                    );
+                    log.event(
+                        "stuck_block",
+                        json!({"x": round(to.x, 1), "z": round(to.y, 1)}),
+                    );
+                    r.stuck_spot.1 = 0;
+                }
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
                 let side = here + Vec2::new(a.cos(), a.sin()) * 3.0;
                 // Give up on what it was reaching for; sidestep; replan.
