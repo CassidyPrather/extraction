@@ -107,6 +107,7 @@ fn spawn_terrain_meshes(
         material.extension.params.burnt = 1.0;
     }
     let material = materials.add(material);
+    let canopy = Canopy::of(&zone);
     let hm = &zone.hm;
     let cells = hm.n - 1;
     let step = (CHUNK as f32 / hm.cell).round() as usize;
@@ -117,7 +118,7 @@ fn spawn_terrain_meshes(
             let i1 = (i0 + step).min(cells);
             let j1 = (j0 + step).min(cells);
             for (lod, (spacing, _)) in LODS.iter().enumerate() {
-                let mesh = chunk_mesh(&zone, i0, j0, i1, j1, *spacing);
+                let mesh = chunk_mesh(&zone, &canopy, i0, j0, i1, j1, *spacing);
                 commands.spawn((
                     Name::new("Terrain chunk"),
                     TerrainChunk { lod },
@@ -158,7 +159,78 @@ pub fn drowned(line: f32, y: f32) -> (f32, f32) {
 /// b = road gravel/asphalt, a = forest floor (needles, moss). Grass is
 /// whatever is left over. Road kind goes in UV1.x so the shader can pick
 /// asphalt vs gravel vs dirt.
-fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: usize) -> Mesh {
+/// Where the trees shade the ground: a coarse grid of how much canopy is
+/// over each point, from the trees' own positions. The forest floor
+/// (needles, litter) lies under the trees and fades out in the gaps
+/// between them; a sparse copse has a floor under its trees, not across
+/// its whole polygon. (Painted by polygon, small stands read as tan
+/// rectangles from the air.)
+pub struct Canopy {
+    origin: [f32; 2],
+    n: usize,
+    shade: Vec<f32>,
+}
+
+/// The canopy grid's cell (m).
+const CANOPY_CELL: f32 = 2.0;
+/// How far a tree's litter reaches from its trunk (m).
+const CANOPY_REACH: f32 = 7.0;
+
+impl Canopy {
+    pub fn of(zone: &Zone) -> Self {
+        let trees = extraction_core::forest::scatter_trees(&zone.map, &zone.hm);
+        let positions: Vec<[f32; 2]> = trees.iter().map(|t| [t.pos[0], t.pos[2]]).collect();
+        let hm = &zone.hm;
+        let lo = hm.pos(0, 0);
+        let hi = hm.pos(hm.n - 1, hm.n - 1);
+        Self::from_trees(lo, hi, &positions)
+    }
+
+    pub fn from_trees(lo: [f32; 2], hi: [f32; 2], trees: &[[f32; 2]]) -> Self {
+        let n = (((hi[0] - lo[0]).max(hi[1] - lo[1])) / CANOPY_CELL).ceil() as usize + 1;
+        let mut shade = vec![0.0f32; n * n];
+        let r = (CANOPY_REACH / CANOPY_CELL).ceil() as i64;
+        for t in trees {
+            let ci = ((t[0] - lo[0]) / CANOPY_CELL).round() as i64;
+            let cj = ((t[1] - lo[1]) / CANOPY_CELL).round() as i64;
+            for j in (cj - r).max(0)..=(cj + r).min(n as i64 - 1) {
+                for i in (ci - r).max(0)..=(ci + r).min(n as i64 - 1) {
+                    let x = lo[0] + i as f32 * CANOPY_CELL;
+                    let z = lo[1] + j as f32 * CANOPY_CELL;
+                    let d = ((x - t[0]).powi(2) + (z - t[1]).powi(2)).sqrt();
+                    let k = (1.0 - d / CANOPY_REACH).max(0.0);
+                    shade[j as usize * n + i as usize] += k * k;
+                }
+            }
+        }
+        Self {
+            origin: lo,
+            n,
+            shade,
+        }
+    }
+
+    /// How much of a forest floor `p` has, 0..1: full under the trees and
+    /// in a closed stand, none in a gap a few metres from any trunk.
+    pub fn floor(&self, p: [f32; 2]) -> f32 {
+        let i = ((p[0] - self.origin[0]) / CANOPY_CELL).round();
+        let j = ((p[1] - self.origin[1]) / CANOPY_CELL).round();
+        if i < 0.0 || j < 0.0 || i as usize >= self.n || j as usize >= self.n {
+            return 0.0;
+        }
+        smooth(0.1, 0.7, self.shade[j as usize * self.n + i as usize])
+    }
+}
+
+fn chunk_mesh(
+    zone: &Zone,
+    canopy: &Canopy,
+    i0: usize,
+    j0: usize,
+    i1: usize,
+    j1: usize,
+    spacing: usize,
+) -> Mesh {
     let hm = &zone.hm;
     // Sample rows and columns every `spacing` cells, always ending on the
     // chunk's edge.
@@ -211,7 +283,7 @@ fn chunk_mesh(zone: &Zone, i0: usize, j0: usize, i1: usize, j1: usize, spacing: 
             let slope = hm.slope_deg(p);
             let rock = smooth(28.0, 42.0, slope);
             let wet = hm.wet[hm.idx(i, j)];
-            let forest = zone.forest_cover(p[0], p[1]);
+            let forest = zone.forest_cover(p[0], p[1]) * canopy.floor(p);
             // Hollows are muddy, and where puddles stand (`puddles`).
             let hollow = super::puddles::hollow(hm, p);
             colors.push([
@@ -321,7 +393,7 @@ mod tangent_tests {
     #[test]
     fn analytic_tangents_match_generated_ones_inside_a_chunk() {
         let zone = Zone::load("marrow_creek");
-        let mut mesh = chunk_mesh(&zone, 64, 64, 128, 128, 1);
+        let mut mesh = chunk_mesh(&zone, &Canopy::of(&zone), 64, 64, 128, 128, 1);
         let ours: Vec<[f32; 4]> = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
             Some(bevy::mesh::VertexAttributeValues::Float32x4(v)) => v.clone(),
             _ => panic!("tangents"),
@@ -362,6 +434,29 @@ mod tangent_tests {
 #[cfg(test)]
 mod drowned_tests {
     use super::*;
+
+    #[test]
+    fn the_forest_floor_lies_under_the_trees_not_across_the_gaps() {
+        // A sparse copse: three trees 20 m apart.
+        let trees = [[0.0, 0.0], [20.0, 0.0], [0.0, 20.0]];
+        let c = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &trees);
+        // A lone tree's litter is light; a stand's floor is full.
+        assert!(c.floor([0.0, 0.0]) > 0.6, "under a tree");
+        // Two trees 4 m apart share a floor between them.
+        let pair = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &[[0.0, 0.0], [4.0, 0.0]]);
+        assert!(pair.floor([2.0, 0.0]) > 0.8, "between a pair");
+        assert_eq!(c.floor([10.0, 12.0]), 0.0, "the gap between them");
+        assert_eq!(c.floor([200.0, 0.0]), 0.0, "off the grid");
+        // A closed stand, a tree every 4 m: floor all through.
+        let mut stand = Vec::new();
+        for i in 0..10 {
+            for j in 0..10 {
+                stand.push([i as f32 * 4.0, j as f32 * 4.0]);
+            }
+        }
+        let c = Canopy::from_trees([-50.0, -50.0], [50.0, 50.0], &stand);
+        assert!(c.floor([18.0, 18.0]) > 0.99 && c.floor([2.0, 2.0]) > 0.99);
+    }
 
     #[test]
     fn the_reservoir_bed_is_silt_and_the_tide_mark_damp() {
