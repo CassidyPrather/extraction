@@ -13,6 +13,7 @@
 pub mod armour;
 pub mod armoury;
 pub mod ballistics;
+pub mod crossbow;
 pub mod faults;
 pub mod feel;
 pub mod flares;
@@ -221,6 +222,7 @@ impl Plugin for WeaponsPlugin {
                 melee::MeleePlugin,
                 armoury::ArmouryPlugin,
                 flares::FlaresPlugin,
+                crossbow::CrossbowPlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -508,6 +510,10 @@ fn work_handles(
             .transform_point3(hand.world.translation);
         let d = local - hand.handle_origin;
         let events = match h.kind {
+            HandleKind::String => {
+                let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                gun.firearm.set_bolt_travel(travel)
+            }
             HandleKind::Slide | HandleKind::ChargingHandle => {
                 if d.z > 0.003 {
                     gun.firearm.take_off_stop();

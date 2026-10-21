@@ -77,7 +77,7 @@ fn fit_out(
     if report != 1.0 {
         commands.entity(add.entity).insert(Report(report));
     }
-    if gun.firearm.def.cartridge == "26mm" {
+    if matches!(gun.firearm.def.cartridge.as_str(), "26mm" | "bolt") {
         commands.entity(add.entity).insert(super::flares::Launcher);
     }
     if let Some((pivot, feet)) = bipod_of(id) {

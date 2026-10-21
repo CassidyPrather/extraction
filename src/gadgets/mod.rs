@@ -147,7 +147,7 @@ fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
         _ => {}
     }
     // Shotguns and the flare gun have no threaded muzzle.
-    if !matches!(id, "toz_double" | "mp133" | "flare_pistol") {
+    if !matches!(id, "toz_double" | "mp133" | "flare_pistol" | "crossbow") {
         v.push((Mount::Muzzle, Transform::from_translation(muzzle)));
     }
     v

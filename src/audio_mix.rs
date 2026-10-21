@@ -455,6 +455,7 @@ mod tests {
             "svd",
             "toz8",
             "flare_pistol",
+            "crossbow",
             "factory_hall",
             "chimney",
             "rail_shed",
