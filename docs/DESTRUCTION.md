@@ -10,9 +10,10 @@ Code: `src/destruction/`, with the geometry in
 | Thing | Breaks from | How much | Leaves |
 | - | - | - | - |
 | Window pane (every `window_sash` pane, four to a sash) | a round or fragment crossing it; anything thrown, swung or punched through it at 2.5 m/s or more; a robot's body against it; a grenade within 7 m that can see it | at once | teeth in the frame, shards on the floor |
-| Plank door | rounds (at half their harm: they hole the boards, they don't split them), blows and blasts (full harm); a crowbar at its latch edge; a walker battering a wedged door | 260 (a Mosin's round is 90, a knife's thrust 40) | six boards' splinters; the doorway stands open |
+| Plank door | rounds (at half their harm: they hole the boards, they don't split them), blows by kind (`wood::blow_share`: blunt in full, an edge half, a point a quarter) and blasts; a crowbar at its latch edge; a walker battering a wedged door | 260 (a Mosin's round is 90, a knife's thrust 40) | six boards' splinters; the doorway stands open |
 | Supply crate (in the open, under loot) | rounds, blows, blasts, a crowbar in its lid | 110 (four pistol rounds) | slats, and a roll of its loot table spilled out on top of what was on its lid |
 | Crate in a building (`Builder::crate_box`) | the same | 110, scaled by size | the same (its loot spot's table) |
+| Board over a window (`boards`) | rounds (two rifle rounds), blows, blasts, a crowbar at its end (90 N·m) | 60 | splinters; the (already broken) window behind |
 
 Steel doors don't break, and rounds stop in them (their leaf is plate to a
 round). Glass costs a round nothing to go through, so glass has no
@@ -63,19 +64,64 @@ own entities (`wood::BuildingCrate`), drawn by their `crate_slat` /
 
 ## Holes in walls
 
+Three things hole a plank, log, timber, plaster or sheet wall (never
+concrete or brick):
+
+- a heavy's arm (`Breach`): a doorway, 1.1 m wide, floor to 2 m;
+- sustained fire: rounds and blows wear patches of a wall half a metre
+  square (`breach::Wear`); a patch that's taken its fill
+  (`breach::wall_wear`: plaster 300, planks 360, sheet 500, logs 900;
+  a burst of nine or ten rifle rounds into planks) gives way to a hole
+  the size of a head, to see and shoot through (`worn.png`). Rounds that
+  go through wear what's behind too;
+- a grenade within 1.3 m of a wall blows a hole a metre across, or one to
+  crawl through (0.9 × 1.2) if it went off at the wall's foot.
+
 A building is one compound collider and a few merged meshes, so a hole
-is cut in its prefab: the wall box the breach lands in becomes the boxes
-round the hole (over it, and either side, added at the end so props'
-piece ranges hold; `breach::split`). The collider and surfaces are
-rebuilt at once (`buildings::body`); the client drops the building's
-merged meshes and builds them again (`buildings::redress`;
-`dress_buildings` cuts the holes too). Holes are kept by their centres in
-the world (`breach::Breaches`), saved as `ZoneSave::breaches`, cut again
-when a restored building appears, and mended by the Surge. Robots' nav
-grids don't know about holes yet.
+is cut in its prefab: the wall box it's in becomes the boxes round it
+(over, under, either side; added at the end so props' piece ranges hold;
+`breach::split`). The collider and surfaces are rebuilt at once
+(`buildings::body`); the client drops the building's merged meshes and
+builds them again (`buildings::redress`; `dress_buildings` cuts the holes
+too). Holes are kept by their middles and sizes (`breach::Breaches`),
+saved as `ZoneSave::holes`, cut again when a restored building appears,
+and mended by the Surge. A hole down to the floor is a way in for the
+robots: a `breach::BreachHole` marker in their doorway index
+(`robots::doors::Entrances`), always open, facing out (and the building
+gets a shell if it had no door). Their nav grids don't know about holes.
 
 `EXTRACTION_BREACH=1` on a `--screenshot` run tears one where the view
 meets a wall, twenty frames before the capture (`breach.png`).
+
+## Boarded windows
+
+World models picks which sashes are boarded (`world::decay::boarded_sashes`,
+read by `boards::boarded_sashes`) and draws the board (`window_board`). Each of a boarded window's
+three boards is its own breakable entity (`boards::WindowBoard`): a
+plank to a round, `Timber` 60, a `Pryable` seam at its end, drawn by its
+model at the building's range, splintering when it goes, saved broken and
+nailed back up by the Surge. A boarded sash is always a weathered one, so
+there's no glass behind to draw.
+
+## Shutters, fences and wrecks (`destruction::strip`)
+
+World models lays out what comes off a building (`Geo::breakables`);
+`strip::fit_breakables` puts each up as a static thing of its own when
+the building is placed:
+
+| Kind | Where | Takes | Pry (N·m) | Off, it… |
+|---|---|---|---|---|
+| Shutter | a pair by each window of the plank, farm and log houses | 60 | 90 | splinters |
+| Fence panel | `fence_garden`, four between its posts | 100 | 150 | splinters |
+| Bus door | the depot's wrecked bus | crowbar only | 200 | drops scrap |
+| Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
+
+Metal comes off only to a crowbar (`Pryable`): rounds hole sheet, they
+don't tear a door off. Wood breaks to rounds and blows as a board does.
+A part with no model is drawn as a box of its size in its material.
+Anything else can place a part with `strip::spawn_part(commands, parts,
+broken, Part { .. })` (kept in `strip::Parts`). Gone, a part stays gone
+(`Broken`) until the Surge puts it back, from the buildings and `Parts`.
 
 ## Broken by the years
 
@@ -92,6 +138,14 @@ can't break again, and the Surge leaves them be.
 speed, skip, is_target)` walks a line through what's between by the
 rounds' own rules, without firing: for a robot deciding whether to shoot
 through a wall at what it heard (offered to Robot minds).
+
+## Blasts
+
+A grenade's blast is a blow to the wood it can see (`wood::blasts`): its
+blast harm by distance (`grenade::blast_at`) times `BLAST_ON_WOOD` (3.5:
+boards and nails give to a shock wave a body rides out), written as a
+`Hit`. A grenade at a door's foot blows it in; one four metres off
+rattles it. Panes within 7 m that it can see break (`glass::blasts`).
 
 ## Rounds through wood
 
@@ -135,8 +189,10 @@ on the floor (or the ground) on the side the glass fell (`Break::fell`;
 a restored pane's fell in), a few millimetres proud: what tells a window
 was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass
 and the window glass boxes to the panes (`glass::window_glass`,
-`glass::drawn_by_panes`). Flying pieces are their own small slabs (on a
-child entity, so shrinking one never touches its body).
+`glass::drawn_by_panes`). Flying pieces share eight unit shard shapes,
+each stretched to its piece's size, and one material a kind (glass, or
+the wood's), so a cap's worth of pieces batches into a few draws; the
+mesh is on a child entity, so shrinking it never touches the body.
 
 ## What stays broken
 
@@ -180,7 +236,10 @@ door's crash).
   torn, saved, reloaded and mended (plus `breach::tests` on the split);
   through the headset path (`vr_harness`): a knife in a tracked hand
   eased into a pane (holds) and driven through it (breaks), and stabbed
-  into a supply crate until it gives.
+  into a supply crate until it gives; and a grenade at a door's foot
+  blowing it in where one four metres off doesn't; a shutter beaten to
+  splinters, the bus's door prised off for scrap, and both back after
+  the Surge.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.
@@ -206,21 +265,16 @@ Shots in `docs/shots/destruction/`: `teeth.png` (a window shot out, the
 teeth left in its sashes), `door_down.png` (a plank door shot down, its
 splinters in the doorway), `litter.png` (glass glittering on the ground
 under a window broken from inside), `breach.png` (a hole torn in a plank
-house's back wall, its boards on the ground).
+house's back wall, its boards on the ground), `boarded.png` (a boarded
+window over the years' broken sash) and `board_off.png` (its middle board
+shot off, splinters falling), `worn.png` (a hole worn through a plank
+wall by a dozen rifle rounds), `shutters.png` (the foreman's cabin, its
+shutters open either side of the window), `shutter_off.png` (one shot
+off, its splinters at the wall's foot) and `bus.png` (the depot's bus,
+its skirt panels to prise off).
 
 ## Next
 
-- Wooden fences, shutters and boarded windows, once World models has
-  them as pieces of their own.
-- Blunt, edge and point blows weighed differently against wood, once a
-  `Hit` says which (asked of Weapon feel).
-- Robots firing at a heard position through thin walls
-  (`firearm_terminal` already says what a round gets through).
-
-## Merge notes
-
-- Weapon feel's `Hit::blow` (`Option<melee::Blow>`): add `blow: None` to
-  the `Hit`s built in `destruction::tests` (they're blows: `Some(Blunt)`)
-  and `hooks::smash` (`Some(Blunt)`), and weigh wood by it in
-  `wood::take_hits`: rounds on doors `ROUND_ON_DOOR`, `Point` 0.25,
-  `Edge` 0.5, `Blunt`/blasts 1.0.
+- Robots firing at a heard position through thin walls: Robot minds'
+  walkers, with `through::RoundPath::would_reach` to ask first.
+- A carried `bus_panel` as cover, once Kit's item lands.

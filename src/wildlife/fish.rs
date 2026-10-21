@@ -257,7 +257,12 @@ pub(crate) fn shoals(
                     if !s.fish.is_empty() {
                         // At the origin: its fish (`small_look`) are its
                         // children, placed in world space.
-                        commands.spawn((Name::new("Shoal"), Transform::IDENTITY, s));
+                        commands.spawn((
+                            Name::new("Shoal"),
+                            Transform::IDENTITY,
+                            Visibility::default(),
+                            s,
+                        ));
                     }
                 }
             }
@@ -295,7 +300,7 @@ mod tests {
     /// and shoot, and dart off when you come to the bank.
     #[test]
     fn fish_keep_to_the_water_and_flee_the_bank() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(map);
             let half = (zone.map.size * 0.5 / CELL) as i32;
             let mut shoals = Vec::new();

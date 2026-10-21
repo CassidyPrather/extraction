@@ -229,6 +229,11 @@ pub const STANDING_QUIET: Tier = Tier {
     fits: &[],
 };
 
+/// The valleys a career starts with, and the ones the route card keeps back
+/// until each of those has been raided (`docs/FOURTH_VALLEY.md`).
+pub const FIRST_VALLEYS: [&str; 3] = ["marrow_creek", "kettle_pass", "cinder_works"];
+pub const LATE_VALLEYS: &[&str] = &["sallow_reservoir"];
+
 /// The stash crate's room before any rack, litres of bulk.
 pub const STASH_BASE: f32 = 200.0;
 /// Each rack adds this.
@@ -337,9 +342,62 @@ pub fn fetch_takes(want: &str, id: &str) -> bool {
 }
 
 /// Why the driver wants it (any tier's reason for that item).
+/// Past the ladder, a deep fetch is half the time one named stone
+/// (`docs/ANOMALIES.md`): each line hints at its trick. The stormglass is
+/// the rare one (it means staying out into the Surge).
+pub const STONES: &[(&str, u32, u32, &str)] = &[
+    (
+        "art_featherstone",
+        1,
+        1,
+        "A featherstone. Throw something in the lift and catch what it spits.",
+    ),
+    (
+        "art_hearth",
+        1,
+        1,
+        "A hearth. Don't pick it up with your hands. Let it cool first.",
+    ),
+    (
+        "art_aegis",
+        1,
+        1,
+        "An aegis knot. Ground the snare with metal before you reach in.",
+    ),
+    (
+        "art_lodestone",
+        1,
+        1,
+        "A lodestone. In and out of the well, fast. It's heavy after.",
+    ),
+    (
+        "art_shard",
+        1,
+        1,
+        "A mirror shard. Throw something through, then reach in quick.",
+    ),
+    (
+        "art_hushstone",
+        1,
+        1,
+        "A hushstone. It lies where the Hush eats every sound. In and out before the silence starts to press.",
+    ),
+];
+/// The rare stone, and how often a stone job asks for it.
+pub const STORMGLASS: (&str, &str) = (
+    "art_stormglass",
+    "Stormglass. Only the Surge makes them. Stay out for it, if you dare.",
+);
+pub const STORMGLASS_CHANCE: f32 = 0.15;
+
 pub fn why(id: &str) -> &'static str {
+    if id == STORMGLASS.0 {
+        return STORMGLASS.1;
+    }
     WANTS
         .iter()
+        .copied()
+        .chain([STONES])
         .flat_map(|t| t.iter())
         .find(|w| w.0 == id)
         .map_or("You know what for.", |w| w.3)
@@ -378,27 +436,54 @@ pub enum Job {
         #[serde(default)]
         seen: bool,
     },
+    /// A contract's: bring home `item`, left by `place` in `map`.
+    Bring {
+        map: String,
+        place: String,
+        item: String,
+        at: [f32; 2],
+    },
+    /// A contract's: leave `item` by `place` in `map`, then get home.
+    Plant {
+        map: String,
+        place: String,
+        item: String,
+        at: [f32; 2],
+        #[serde(default)]
+        planted: bool,
+    },
+    /// A contract's: photograph `subject` with its camera, then get home.
+    Photograph {
+        subject: crate::contracts::Subject,
+        #[serde(default)]
+        taken: bool,
+    },
 }
 
 impl Job {
     /// The valley it's in, if it's in one.
     pub fn map(&self) -> Option<&str> {
         match self {
-            Job::Fetch { .. } => None,
+            Job::Fetch { .. } | Job::Photograph { .. } => None,
             Job::Letter => Some(LETTER_MAP),
             Job::Ledger => Some(LEDGER_MAP),
-            Job::Recover { map, .. } | Job::Scout { map, .. } => Some(map),
+            Job::Recover { map, .. }
+            | Job::Scout { map, .. }
+            | Job::Bring { map, .. }
+            | Job::Plant { map, .. } => Some(map),
         }
     }
 
     /// Where it's pencilled on the field map, if anywhere yet.
     pub fn mark(&self) -> Option<(&str, [f32; 2])> {
         match self {
-            Job::Fetch { .. } => None,
+            Job::Fetch { .. } | Job::Photograph { .. } => None,
             Job::Letter => Some((LETTER_MAP, LETTER_AT)),
             Job::Ledger => Some((LEDGER_MAP, [LEDGER_AT[0], LEDGER_AT[2]])),
             Job::Recover { map, at, .. } => at.map(|a| (map.as_str(), a)),
-            Job::Scout { map, at, .. } => Some((map.as_str(), *at)),
+            Job::Scout { map, at, .. }
+            | Job::Bring { map, at, .. }
+            | Job::Plant { map, at, .. } => Some((map.as_str(), *at)),
         }
     }
 }
@@ -448,6 +533,14 @@ pub struct Progress {
     /// ([`STANDING_QUIET`]). Kept in step with the game's epilogue.
     #[serde(default)]
     pub quiet: bool,
+    /// The driver's contract under way (`contracts`), the ones done, and
+    /// the trust they've earned.
+    #[serde(default)]
+    pub contract: Option<crate::contracts::Active>,
+    #[serde(default)]
+    pub contracts_done: Vec<String>,
+    #[serde(default)]
+    pub trust: u32,
 }
 
 impl Progress {
@@ -555,6 +648,52 @@ impl Progress {
 
     /// A job done. Returns what's fitted for it, if it finished a tier.
     pub fn complete(&mut self) -> &'static [Upgrade] {
+        self.complete_job().0
+    }
+
+    /// A job done: what's fitted for it, if it finished a tier, and the
+    /// contract it finished, if it was a contract's last step (its trust is
+    /// counted; its pay and unlocks are the caller's to hand over).
+    pub fn complete_job(
+        &mut self,
+    ) -> (
+        &'static [Upgrade],
+        Option<&'static crate::contracts::Contract>,
+    ) {
+        let finished = self.advance_contract();
+        (self.complete_tier(), finished)
+    }
+
+    fn advance_contract(&mut self) -> Option<&'static crate::contracts::Contract> {
+        let a = self.contract.as_mut()?;
+        let c = crate::contracts::contract(&a.id);
+        a.step += 1;
+        let c = match c {
+            Some(c) if (a.step as usize) < c.steps.len() => return None,
+            // (A contract this build doesn't know: let it go.)
+            None => {
+                self.contract = None;
+                return None;
+            }
+            Some(c) => c,
+        };
+        self.contract = None;
+        self.contracts_done.push(c.id.to_owned());
+        self.trust += c.trust;
+        Some(c)
+    }
+
+    /// Start the contract the driver would offer now, if any.
+    pub fn start_contract(&mut self) -> Option<&'static crate::contracts::Contract> {
+        let c = crate::contracts::next_contract(self)?;
+        self.contract = Some(crate::contracts::Active {
+            id: c.id.to_owned(),
+            step: 0,
+        });
+        Some(c)
+    }
+
+    fn complete_tier(&mut self) -> &'static [Upgrade] {
         self.done += 1;
         self.job = None;
         let Some(tier) = TIERS.get(self.tier as usize) else {
@@ -592,7 +731,10 @@ impl Progress {
     /// A fetch still unmet after [`FETCH_PATIENCE`] raids: the driver
     /// wants something else (some parts may just not be turning up).
     pub fn fetch_gone_stale(&self, raids: u32) -> bool {
-        matches!(self.job, Some(Job::Fetch { .. })) && raids >= self.job_raid + FETCH_PATIENCE
+        // (A contract's fetch waits: the contract would be lost with it.)
+        self.contract.is_none()
+            && matches!(self.job, Some(Job::Fetch { .. }))
+            && raids >= self.job_raid + FETCH_PATIENCE
     }
 
     pub fn count_raid(&mut self, map: &str) {
@@ -607,6 +749,13 @@ impl Progress {
             .iter()
             .find(|(m, _)| m == map)
             .map_or(0, |(_, n)| *n)
+    }
+
+    /// The route card offers `map`: the later valleys only once a contract
+    /// has opened them (the overflow, offered once the career has raided
+    /// each of the first three: `contracts`).
+    pub fn opens(&self, map: &str) -> bool {
+        !LATE_VALLEYS.contains(&map) || crate::contracts::opened(self, map)
     }
 }
 
@@ -687,6 +836,7 @@ pub fn is_building(prefab: &str) -> bool {
             | "rail_shed"
             | "guard_booth"
             | "ranger_tower"
+            | "survey_tower"
             | "factory_hall"
             | "sawmill"
             | "signal_box"
@@ -831,6 +981,19 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
             JobKind::Fetch => {}
         }
     }
+    // Past the ladder (and before the valleys go quiet), half the fetches
+    // are a stone.
+    if tier.name == STANDING.name && rng.chance(0.5) {
+        let id = if rng.chance(STORMGLASS_CHANCE) {
+            STORMGLASS.0
+        } else {
+            STONES[rng.below(STONES.len())].0
+        };
+        return Job::Fetch {
+            item: id.to_owned(),
+            n: 1,
+        };
+    }
     let wants = WANTS[(progress.tier as usize).min(WANTS.len() - 1)];
     let (id, lo, hi, _) = wants[rng.below(wants.len())];
     Job::Fetch {
@@ -872,6 +1035,57 @@ mod tests {
         println!("first jobs: {names:?}");
         let job = roll_job(&Progress::default(), 7, "marrow_creek", &as_valleys(&v));
         assert!(matches!(job, Job::Scout { .. }), "{job:?}");
+    }
+
+    #[test]
+    fn past_the_ladder_the_driver_asks_for_stones() {
+        let v = valleys();
+        let deep = Progress {
+            tier: TIERS.len() as u32,
+            done: 20,
+            ..Default::default()
+        };
+        let quiet = Progress {
+            quiet: true,
+            ..deep.clone()
+        };
+        let stones = |p: &Progress| -> Vec<String> {
+            (0..400)
+                .filter_map(
+                    |seed| match roll_job(p, seed, "marrow_creek", &as_valleys(&v)) {
+                        Job::Fetch { item, n: 1 } if item.starts_with("art_") => Some(item),
+                        _ => None,
+                    },
+                )
+                .collect()
+        };
+        let asked = stones(&deep);
+        for (id, ..) in STONES {
+            assert!(asked.iter().any(|a| a == id), "never asked for {id}");
+        }
+        assert!(
+            asked.iter().any(|a| a == STORMGLASS.0),
+            "never a stormglass"
+        );
+        assert!(
+            asked.iter().filter(|a| *a == STORMGLASS.0).count() * 3 < asked.len(),
+            "the stormglass is the rare one"
+        );
+        assert!(stones(&quiet).is_empty(), "the quiet years ask for none");
+        assert!(why("art_hearth").contains("hands"));
+    }
+
+    #[test]
+    fn the_fourth_valley_opens_with_the_overflow_contract() {
+        let mut p = Progress::default();
+        assert!(p.opens("marrow_creek") && !p.opens("sallow_reservoir"));
+        p.count_raid("marrow_creek");
+        p.count_raid("kettle_pass");
+        assert!(!p.opens("sallow_reservoir"));
+        p.count_raid("cinder_works");
+        assert!(!p.opens("sallow_reservoir"), "it takes the overflow");
+        p.contracts_done.push("the_overflow".into());
+        assert!(p.opens("sallow_reservoir"));
     }
 
     #[test]
@@ -1067,6 +1281,7 @@ mod tests {
                         assert!(deep, "{id}: {region}");
                     }
                     Job::Fetch { .. } | Job::Letter | Job::Ledger => {}
+                    j => panic!("{id}: a contract's job from roll_job: {j:?}"),
                 }
             }
         }

@@ -98,6 +98,30 @@ impl Plugin for HooksPlugin {
     }
 }
 
+/// Levered off: away from its seam, gently, and gone till the Surge.
+fn come_off(
+    commands: &mut Commands,
+    e: Entity,
+    seam: &Pryable,
+    t: &mut Timber,
+    gt: &GlobalTransform,
+    broken: &mut Broken,
+    out: &mut MessageWriter<Broke>,
+) {
+    if t.hp <= 0.0 {
+        return;
+    }
+    t.hp = 0.0;
+    t.push = gt.rotation() * Vec3::Z * 1.2;
+    broken.0.insert(t.key);
+    out.write(Broke {
+        at: gt.transform_point(seam.seam),
+        stuff: super::Stuff::Wood,
+        size: 0.3,
+    });
+    commands.entity(e).despawn();
+}
+
 /// Seams on what can be pried: a plank door's latch edge, a crate's lid.
 pub fn door_seam(width: f32) -> Pryable {
     Pryable {
@@ -152,7 +176,7 @@ fn smash(
             if gt.translation().distance(s.at) <= s.radius + 1.0 {
                 t.push = s.push;
                 hits.write(crate::weapons::ballistics::Hit {
-                    blow: None,
+                    blow: Some(extraction_core::melee::Blow::Blunt),
                     entity: e,
                     point: s.at,
                     normal: -s.push.normalize_or(Vec3::Y),
@@ -191,19 +215,10 @@ fn pry(
             continue;
         }
         seam.held += dt;
-        if seam.held < PRY_HOLD || t.hp <= 0.0 {
+        if seam.held < PRY_HOLD {
             continue;
         }
-        t.hp = 0.0;
-        // Levered away from the seam: gently.
-        t.push = gt.rotation() * Vec3::Z * 1.2;
-        broken.0.insert(t.key);
-        out.write(Broke {
-            at: gt.transform_point(seam.seam),
-            stuff: super::Stuff::Wood,
-            size: 0.3,
-        });
-        commands.entity(e).despawn();
+        come_off(&mut commands, e, &seam, &mut t, gt, &mut broken, &mut out);
     }
 }
 

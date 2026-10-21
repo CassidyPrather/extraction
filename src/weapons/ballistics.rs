@@ -200,8 +200,13 @@ pub(crate) fn fire_shots(
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
     catalog: Res<crate::items::Catalog>,
     guns: Query<&super::Gun>,
+    launchers: Query<(), With<super::flares::Launcher>>,
 ) {
     for shot in shots.read() {
+        // A flare gun throws a star, not a bullet (`flares`).
+        if launchers.contains(shot.gun) {
+            continue;
+        }
         // Robots' guns have no cartridge: a middling bullet. A gun's shot
         // is the round it just fired.
         let (mass_g, load) = guns.get(shot.gun).map_or((8.0, Load::Standard), |g| {

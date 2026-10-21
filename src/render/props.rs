@@ -44,7 +44,7 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
-                ghost_through_walls,
+                (ghost_through_walls, fade_ghosts).chain(),
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -122,10 +122,13 @@ fn dress_truck(
                     Mesh3d(meshes.add(Cylinder::new(0.012, 0.5))),
                     MeshMaterial3d(rope.clone()),
                 ));
-                // A wooden toggle to pull on.
+                // A red-painted toggle to pull on: against the canvas and its
+                // own rope, a rope-coloured one couldn't be told from the
+                // rope (`docs/LEGIBILITY.md`, affordances).
+                let red = mat(&mut materials, Color::srgb(0.68, 0.08, 0.05), 0.5, 0.0);
                 commands.spawn((
-                    Mesh3d(meshes.add(Capsule3d::new(0.018, 0.07))),
-                    MeshMaterial3d(rope),
+                    Mesh3d(meshes.add(Capsule3d::new(0.022, 0.09))),
+                    MeshMaterial3d(red),
                     Transform::from_xyz(0.0, -0.26, 0.0)
                         .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
                     ChildOf(e),
@@ -608,8 +611,9 @@ fn push_caps(
     }
 }
 
-/// A ring around what an empty hand is pointing at from afar, facing the
-/// hand, in the glove's tint: point, squeeze, flick and it comes to you.
+/// A ring around what an empty hand is pointing at from afar, or would
+/// take where it is, facing the hand, in the glove's tint: point, squeeze,
+/// flick and it comes to you; or just squeeze.
 #[derive(Component)]
 struct FarCue;
 
@@ -624,7 +628,10 @@ fn far_cue(
     time: Res<Time>,
 ) {
     for (hand_e, hand) in &hands {
-        let target = hand.far.and_then(|e| items.get(e).ok());
+        // What a pointed hand would pull in, else what the hand would take
+        // where it is: the near hover lit only the glove, faintly, and the
+        // thing itself never showed it could be taken.
+        let target = hand.far.or(hand.hover).and_then(|e| items.get(e).ok());
         let cue = match made.get(&hand_e) {
             Some(c) => *c,
             None if target.is_some() => {
@@ -799,34 +806,77 @@ fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread
 /// tests, it keeps its plain translucent one.)
 fn ghost_through_walls(
     mut commands: Commands,
-    ghosts: Query<(Entity, &HandVisual)>,
+    ghosts: Query<(Entity, &HandVisual, Option<&GhostLook>)>,
     children: Query<&Children>,
     plain: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
     xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-    mut handle: Local<Option<Handle<crate::anomaly::visuals::XrayMaterial>>>,
 ) {
     let Some(mut xray) = xray else {
         return;
     };
-    for (e, v) in &ghosts {
+    for (e, v, look) in &ghosts {
         if !v.ghost {
             continue;
         }
+        // Each ghost its own, so each fades on its own.
+        let m = match look {
+            Some(l) => l.0.clone(),
+            None => {
+                let m = xray.add(crate::anomaly::visuals::XrayMaterial {
+                    color: LinearRgba::BLACK,
+                });
+                commands.entity(e).insert(GhostLook(m.clone()));
+                m
+            }
+        };
         for d in children.iter_descendants(e) {
             if !plain.contains(d) {
                 continue;
             }
-            let m = handle
-                .get_or_insert_with(|| {
-                    xray.add(crate::anomaly::visuals::XrayMaterial {
-                        color: LinearRgba::rgb(0.11, 0.12, 0.13),
-                    })
-                })
-                .clone();
             commands
                 .entity(d)
                 .remove::<MeshMaterial3d<StandardMaterial>>()
-                .insert((MeshMaterial3d(m), bevy::light::NotShadowCaster));
+                .insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
+        }
+    }
+}
+
+/// A ghost glove's own x-ray material.
+#[derive(Component)]
+struct GhostLook(Handle<crate::anomaly::visuals::XrayMaterial>);
+
+/// The ghost at full strength (its rim's colour).
+const GHOST_RIM: LinearRgba = LinearRgba::rgb(0.11, 0.12, 0.13);
+
+/// How strongly the ghost shows for a gap between the glove you see and
+/// your real hand (m): nothing within 2 cm, fading up to full at 8.
+pub(crate) fn ghost_fade(gap: f32) -> f32 {
+    let t = ((gap - 0.02) / 0.06).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The ghost brightens as your real hand goes further into what stopped
+/// the glove, and fades as they come back together.
+fn fade_ghosts(
+    ghosts: Query<(&HandVisual, &GhostLook)>,
+    hands: Query<&crate::interact::Hand>,
+    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
+) {
+    let Some(mut xray) = xray else {
+        return;
+    };
+    for (v, look) in &ghosts {
+        let Ok(hand) = hands.get(v.hand) else {
+            continue;
+        };
+        let k = hand.felt.map_or(0.0, |f| {
+            ghost_fade(f.translation.distance(hand.world.translation))
+        });
+        let want = GHOST_RIM * k;
+        if let Some(mut m) = xray.get_mut(&look.0)
+            && m.color != want
+        {
+            m.color = want;
         }
     }
 }
@@ -947,6 +997,8 @@ fn dress_gloves(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut bindposes: ResMut<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
 ) {
     for (e, v, parts, mut glove_mat) in &mut gloves {
         let path = glove_model(v.side);
@@ -996,11 +1048,67 @@ fn dress_gloves(
             own.push((name.to_owned(), h.clone()));
             h
         };
-        crate::models::spawn_primitives(&mut commands, parts.model, palm, &mut mat);
+        // Every piece with the joint it rides on: the palm, then each
+        // finger segment.
+        let mut on: Vec<(Entity, &crate::models::ModelNode)> = vec![(parts.model, palm)];
         for &((finger, joint), j) in &parts.joints {
             match find_node(&model, &format!("finger_{finger}_{joint}")) {
-                Some(node) => crate::models::spawn_primitives(&mut commands, j, node, &mut mat),
+                Some(node) => on.push((j, node)),
                 None => warn!("{path} has no finger_{finger}_{joint}"),
+            }
+        }
+        // One skinned mesh per material, its vertices each riding their
+        // own joint: a glove is three draws, not one per segment (80 for
+        // the pair was 6.7% of the draw budget). The pieces are built in
+        // their joints' spaces, so every bind pose is the identity.
+        let joints: Vec<Entity> = on.iter().map(|(j, _)| *j).collect();
+        let mut by_mat: Vec<(String, Vec<(u16, Handle<Mesh>)>)> = Vec::new();
+        for (i, (_, node)) in on.iter().enumerate() {
+            for p in &node.primitives {
+                let name = p.material.clone().unwrap_or_else(|| "Glove".into());
+                match by_mat.iter_mut().find(|(n, _)| *n == name) {
+                    Some((_, v)) => v.push((i as u16, p.mesh.clone())),
+                    None => by_mat.push((name, vec![(i as u16, p.mesh.clone())])),
+                }
+            }
+        }
+        let skinned: Option<Vec<(String, Mesh)>> = by_mat
+            .iter()
+            .map(|(name, pieces)| {
+                let got: Option<Vec<(u16, &Mesh)>> = pieces
+                    .iter()
+                    .map(|(j, h)| meshes.get(h).map(|m| (*j, m)))
+                    .collect();
+                got.and_then(|g| skin(&g)).map(|m| (name.clone(), m))
+            })
+            .collect();
+        match skinned {
+            Some(skinned) => {
+                let poses = bindposes.add(bevy::mesh::skinning::SkinnedMeshInverseBindposes::from(
+                    vec![Mat4::IDENTITY; joints.len()],
+                ));
+                for (name, mesh) in skinned {
+                    commands.spawn((
+                        Mesh3d(meshes.add(mesh)),
+                        MeshMaterial3d(mat(Some(&name))),
+                        bevy::mesh::skinning::SkinnedMesh {
+                            inverse_bindposes: poses.clone(),
+                            joints: joints.clone(),
+                        },
+                        // A hand is always near; its bounds move with
+                        // every finger.
+                        bevy::camera::visibility::NoFrustumCulling,
+                        Transform::IDENTITY,
+                        Visibility::Inherited,
+                        ChildOf(parts.model),
+                    ));
+                }
+            }
+            None => {
+                // A mesh not there to merge: each piece on its joint.
+                for (j, node) in &on {
+                    crate::models::spawn_primitives(&mut commands, *j, node, &mut mat);
+                }
             }
         }
         for b in &parts.boxes {
@@ -1008,6 +1116,61 @@ fn dress_gloves(
         }
         glove_mat.0 = own.into_iter().map(|(_, h)| h).collect();
     }
+}
+
+/// Merges meshes, each riding one joint (its index into a skinned mesh's
+/// joints), into one: every vertex weighted wholly to its own joint, in
+/// that joint's space. `None` if a piece has no positions.
+pub(crate) fn skin(pieces: &[(u16, &Mesh)]) -> Option<Mesh> {
+    use bevy::mesh::{Indices, PrimitiveTopology, VertexAttributeValues as V};
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut uv: Vec<[f32; 2]> = Vec::new();
+    let mut tan: Option<Vec<[f32; 4]>> = Some(Vec::new());
+    let mut joints: Vec<[u16; 4]> = Vec::new();
+    let mut weights: Vec<[f32; 4]> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    for (j, m) in pieces {
+        let Some(V::Float32x3(p)) = m.attribute(Mesh::ATTRIBUTE_POSITION) else {
+            return None;
+        };
+        let base = pos.len() as u32;
+        let n = p.len();
+        pos.extend_from_slice(p);
+        match m.attribute(Mesh::ATTRIBUTE_NORMAL) {
+            Some(V::Float32x3(v)) => nrm.extend_from_slice(v),
+            _ => nrm.extend(std::iter::repeat_n([0.0, 1.0, 0.0], n)),
+        }
+        match m.attribute(Mesh::ATTRIBUTE_UV_0) {
+            Some(V::Float32x2(v)) => uv.extend_from_slice(v),
+            _ => uv.extend(std::iter::repeat_n([0.0, 0.0], n)),
+        }
+        match (&mut tan, m.attribute(Mesh::ATTRIBUTE_TANGENT)) {
+            (Some(t), Some(V::Float32x4(v))) => t.extend_from_slice(v),
+            _ => tan = None,
+        }
+        joints.extend(std::iter::repeat_n([*j, 0, 0, 0], n));
+        weights.extend(std::iter::repeat_n([1.0, 0.0, 0.0, 0.0], n));
+        match m.indices() {
+            Some(Indices::U16(i)) => idx.extend(i.iter().map(|k| base + *k as u32)),
+            Some(Indices::U32(i)) => idx.extend(i.iter().map(|k| base + k)),
+            None => idx.extend(base..base + n as u32),
+        }
+    }
+    let mut out = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_JOINT_INDEX, V::Uint16x4(joints))
+    .with_inserted_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, weights)
+    .with_inserted_indices(Indices::U32(idx));
+    if let Some(t) = tan {
+        out.insert_attribute(Mesh::ATTRIBUTE_TANGENT, t);
+    }
+    Some(out)
 }
 
 /// A finger pointed: the index out, bent a little so its tip comes in line
@@ -1201,10 +1364,9 @@ fn pose_hands(
             pose = felt;
         }
         if let (true, Some(vis)) = (v.ghost, vis.as_mut()) {
-            let apart = hand.felt.is_some_and(|f| {
-                f.translation.distance(tracked.translation)
-                    > crate::interact::physics_hands::GHOST_GAP
-            });
+            let apart = hand
+                .felt
+                .is_some_and(|f| ghost_fade(f.translation.distance(tracked.translation)) > 0.0);
             vis.set_if_neq(if apart && hand.holding.is_none() {
                 Visibility::Inherited
             } else {
@@ -1629,6 +1791,50 @@ mod glove_tests {
     /// The right wrist's display is the left's mirrored across the hand's
     /// X (a left-handed player's watch), its text turned so it reads the
     /// right way round, not as a mirror image.
+    /// Merged into one skinned mesh, every piece keeps its vertices and
+    /// triangles, each vertex wholly on its piece's joint.
+    #[test]
+    fn skinning_merges_the_pieces_onto_their_joints() {
+        use bevy::mesh::VertexAttributeValues as V;
+        let a = Mesh::from(Cuboid::new(0.1, 0.1, 0.1));
+        let b = Mesh::from(Sphere::new(0.05).mesh().uv(8, 4));
+        let (na, nb) = (a.count_vertices(), b.count_vertices());
+        let ia = a.indices().unwrap().len();
+        let ib = b.indices().unwrap().len();
+        let m = skin(&[(0, &a), (3, &b)]).expect("skinned");
+        assert_eq!(m.count_vertices(), na + nb);
+        assert_eq!(m.indices().unwrap().len(), ia + ib);
+        let Some(V::Uint16x4(j)) = m.attribute(Mesh::ATTRIBUTE_JOINT_INDEX) else {
+            panic!("no joints");
+        };
+        assert!(j[..na].iter().all(|j| *j == [0, 0, 0, 0]));
+        assert!(j[na..].iter().all(|j| *j == [3, 0, 0, 0]));
+        // The second piece's triangles index its own vertices.
+        assert!(
+            m.indices()
+                .unwrap()
+                .iter()
+                .skip(ia)
+                .all(|i| (na..na + nb).contains(&i))
+        );
+    }
+
+    /// The ghost isn't there while the glove and your hand agree, comes
+    /// up smoothly as they part, and is at full strength by 8 cm.
+    #[test]
+    fn the_ghost_fades_in_with_the_gap() {
+        assert_eq!(ghost_fade(0.0), 0.0);
+        assert_eq!(ghost_fade(0.02), 0.0);
+        assert_eq!(ghost_fade(0.08), 1.0);
+        assert_eq!(ghost_fade(0.5), 1.0);
+        let mut last = 0.0;
+        for i in 0..=100 {
+            let k = ghost_fade(i as f32 * 0.001);
+            assert!(k >= last, "the ghost dims as the hand goes in");
+            last = k;
+        }
+    }
+
     #[test]
     fn the_right_wrist_display_is_the_left_mirrored_and_reads() {
         let m = |v: Vec3| Vec3::new(-v.x, v.y, v.z);

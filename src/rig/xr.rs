@@ -48,7 +48,9 @@ pub struct XrDriverPlugin;
 
 impl Plugin for XrDriverPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, create_actions.run_if(session_available))
+        app.init_resource::<SessionGate>()
+            .add_systems(PreUpdate, handle_session)
+            .add_systems(Startup, create_actions.run_if(session_available))
             .add_systems(Update, headset_missing)
             .add_systems(Startup, size_swapchain)
             .add_systems(Update, report_input.run_if(openxr_session_running))
@@ -74,6 +76,79 @@ impl Plugin for XrDriverPlugin {
                     .in_set(RigDriverSystems)
                     .run_if(openxr_session_running),
             );
+    }
+}
+
+/// Longest the headset waits for the load before the session starts
+/// anyway (a stream that never finishes mustn't leave the player in the
+/// runtime's loader).
+pub const SESSION_WAIT_MAX: f32 = 20.0;
+
+/// Seconds the headset's been waiting for the load, once the runtime is
+/// ready for a session (`None`: not waiting).
+#[derive(Resource, Default)]
+pub struct SessionGate {
+    pub waiting: Option<f32>,
+}
+
+/// `bevy_mod_xr`'s `auto_handle_session` (switched off in `lib.rs`), but
+/// the session is only created once the load has settled: no building
+/// still waiting on its props, the forest built and its impostors taken,
+/// or [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
+/// own loader, and the first frame the player sees is a steady one (the
+/// load's own frames ran 60-100 ms each for a second, docs/PERFORMANCE.md
+/// "Hitches").
+#[allow(clippy::too_many_arguments)]
+pub fn handle_session(
+    mut state_changed: MessageReader<bevy_mod_xr::session::XrStateChanged>,
+    mut create: MessageWriter<bevy_mod_xr::session::XrCreateSessionMessage>,
+    mut begin: MessageWriter<bevy_mod_xr::session::XrBeginSessionMessage>,
+    mut end: MessageWriter<bevy_mod_xr::session::XrEndSessionMessage>,
+    mut destroy: MessageWriter<bevy_mod_xr::session::XrDestroySessionMessage>,
+    mut gate: ResMut<SessionGate>,
+    pending: Query<(), With<crate::world::buildings::PropsPending>>,
+    forest: crate::world::trees::ForestSettled,
+    time: Res<Time<Real>>,
+    mut no_auto_restart: Local<bool>,
+) {
+    use bevy_mod_xr::session::{XrState, XrStateChanged};
+    for XrStateChanged(state) in state_changed.read() {
+        match state {
+            XrState::Available => {
+                if !*no_auto_restart {
+                    gate.waiting = Some(0.0);
+                }
+            }
+            XrState::Ready => {
+                begin.write_default();
+            }
+            XrState::Stopping => {
+                end.write_default();
+            }
+            XrState::Exiting { should_restart } => {
+                *no_auto_restart = !should_restart;
+                destroy.write_default();
+            }
+            _ => (),
+        }
+    }
+    let Some(waited) = gate.waiting.as_mut() else {
+        return;
+    };
+    *waited += time.delta_secs();
+    let settled = pending.is_empty() && forest.settled();
+    if settled || *waited >= SESSION_WAIT_MAX {
+        info!(
+            "headset: starting the session after {:.1} s ({})",
+            *waited,
+            if settled {
+                "the load has settled"
+            } else {
+                "gave up waiting on the load"
+            }
+        );
+        create.write_default();
+        gate.waiting = None;
     }
 }
 
@@ -556,20 +631,26 @@ fn spawn_controller_spaces(
     }
 }
 
-/// Keeps the tracking root on the local player (whenever both exist).
+/// Keeps the tracking root on the local player (whenever both exist),
+/// lifted for seated play as the rig's poses are (`seated`).
 fn ride_player(
     mut commands: Commands,
-    players: Query<Entity, With<LocalPlayer>>,
-    roots: Query<(Entity, Option<&ChildOf>), (With<XrTrackingRoot>, Without<LocalPlayer>)>,
+    players: Query<(Entity, &RigInput), With<LocalPlayer>>,
+    mut roots: Query<
+        (Entity, Option<&ChildOf>, &mut Transform),
+        (With<XrTrackingRoot>, Without<LocalPlayer>),
+    >,
 ) {
-    let Some(p) = players.iter().next() else {
+    let Some((p, input)) = players.iter().next() else {
         return;
     };
-    for (root, parent) in &roots {
+    for (root, parent, mut t) in &mut roots {
         if parent.map(|c| c.parent()) != Some(p) {
             commands
                 .entity(root)
-                .insert((ChildOf(p), Transform::IDENTITY));
+                .insert((ChildOf(p), Transform::from_xyz(0.0, input.lifted, 0.0)));
+        } else if t.translation.y != input.lifted {
+            t.translation.y = input.lifted;
         }
     }
 }
@@ -718,6 +799,8 @@ fn drive_xr_rig(
     if !eyes.is_empty() {
         let pos = eyes.iter().map(|t| t.translation).sum::<Vec3>() / eyes.len() as f32;
         input.head = Transform::from_translation(pos).with_rotation(eyes[0].rotation);
+        // Raw poses: the seated lift is put back on after (`seated`).
+        input.lifted = 0.0;
     }
     for (space, t) in &controllers {
         let hand = input.hand_mut(space.0);
@@ -854,5 +937,93 @@ fn play_haptics(
         if let Err(e) = a.haptic.apply_feedback(&session, path, &vib) {
             debug!("haptics: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy_mod_xr::session::{XrCreateSessionMessage, XrState, XrStateChanged};
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<XrStateChanged>()
+            .add_message::<XrCreateSessionMessage>()
+            .add_message::<bevy_mod_xr::session::XrBeginSessionMessage>()
+            .add_message::<bevy_mod_xr::session::XrEndSessionMessage>()
+            .add_message::<bevy_mod_xr::session::XrDestroySessionMessage>()
+            .init_resource::<SessionGate>()
+            .init_resource::<Created>()
+            .add_systems(
+                Update,
+                (
+                    handle_session,
+                    |mut r: MessageReader<XrCreateSessionMessage>, mut n: ResMut<Created>| {
+                        n.0 += r.read().count();
+                    },
+                )
+                    .chain(),
+            );
+        app.world_mut()
+            .write_message(XrStateChanged(XrState::Available));
+        app
+    }
+
+    /// Sessions asked for so far.
+    #[derive(Resource, Default)]
+    struct Created(usize);
+
+    fn created(app: &App) -> usize {
+        app.world().resource::<Created>().0
+    }
+
+    /// The headset waits while a building waits on its props or the forest
+    /// isn't built, and starts its session once both are done.
+    #[test]
+    fn the_session_waits_for_the_load() {
+        let mut app = app();
+        let building = app
+            .world_mut()
+            .spawn(crate::world::buildings::PropsPending(0))
+            .id();
+        for _ in 0..5 {
+            app.update();
+            assert_eq!(created(&app), 0, "not while a building waits on props");
+        }
+        app.world_mut().despawn(building);
+        for _ in 0..5 {
+            app.update();
+            assert_eq!(created(&app), 0, "not before the forest is built");
+        }
+        app.world_mut()
+            .insert_resource(crate::world::trees::ForestBuilt);
+        app.update();
+        assert_eq!(created(&app), 1, "settled: the session starts");
+        for _ in 0..5 {
+            app.update();
+            assert_eq!(created(&app), 1, "once");
+        }
+    }
+
+    /// A load that never settles still lets the player in.
+    #[test]
+    fn the_session_gives_up_waiting() {
+        let mut app = app();
+        app.world_mut()
+            .spawn(crate::world::buildings::PropsPending(0));
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs(1),
+        ));
+        let mut at = None;
+        for i in 0..40 {
+            app.update();
+            if created(&app) > 0 {
+                at = Some(i);
+                break;
+            }
+        }
+        let at = at.expect("the session started in the end");
+        assert!(at >= 19, "not before {SESSION_WAIT_MAX} s (frame {at})");
     }
 }

@@ -64,7 +64,6 @@ fn field(rng_seed: u64, p: P2, scale: f32) -> f32 {
 pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
     let mut out = Vec::new();
     let base = seed(map);
-    let mut rng = Rng::new(base);
     let clear: Vec<(P2, f32)> = map
         .placements
         .iter()
@@ -144,9 +143,19 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
     let half = map.half() - map.fence_inset.max(10.0) - 4.0;
     let cell = 9.0;
     let mut z = -half;
+    let mut iz = 0u64;
     while z < half {
         let mut x = -half;
+        let mut ix = 0u64;
         while x < half {
+            // Each cell its own stream, as the trees: a tree, marker or road
+            // that moves changes only the rocks of the cells it touches.
+            let mut rng = Rng::new(
+                base ^ 0x5EED
+                    ^ ix.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                    ^ iz.wrapping_mul(0xC2B2_AE3D_27D4_EB4F),
+            );
+            ix += 1;
             let c = [x + rng.range(0.0, cell), z + rng.range(0.0, cell)];
             x += cell;
             let slope = hm.slope_deg(c);
@@ -227,6 +236,7 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
             }
         }
         z += cell;
+        iz += 1;
     }
     // Off every site kiosk, the exits' too, after the scatter: skipping
     // them in it would draw the rest of the map's rocks differently.
@@ -242,11 +252,30 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
+
+    #[test]
+    fn a_new_marker_moves_no_rock_far_from_it() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let hm = Heightmap::build(&map);
+        let before = scatter_rocks(&map, &hm);
+        let at = [
+            before[before.len() / 2].pos[0],
+            before[before.len() / 2].pos[2],
+        ];
+        let mut m = map.markers[0].clone();
+        m.at = at;
+        map.markers.push(m);
+        let after = scatter_rocks(&map, &hm);
+        let far = |r: &&RockSpot| geom::dist([r.pos[0], r.pos[2]], at) > 20.0;
+        let a: Vec<_> = before.iter().filter(far).map(|r| r.pos).collect();
+        let b: Vec<_> = after.iter().filter(far).map(|r| r.pos).collect();
+        assert!(after.len() < before.len(), "it cleared some");
+        assert_eq!(a, b, "and left the rest where they were");
+    }
 
     #[test]
     fn rocks_break_up_the_ground_and_keep_off_roads() {
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let rocks = scatter_rocks(&map, &hm);

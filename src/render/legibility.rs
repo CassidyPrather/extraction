@@ -307,6 +307,30 @@ pub const ART: &[ArtText] = &[
         "the gun turned to the face",
     ),
     art(
+        "guns/mp133.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/rpk74.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/flare_pistol.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
+        "guns/mosin.py",
+        Need::Incidental,
+        0.35,
+        "the gun turned to the face",
+    ),
+    art(
         "mags/ak_mag.py",
         Need::Incidental,
         0.35,
@@ -317,6 +341,18 @@ pub const ART: &[ArtText] = &[
         Need::Incidental,
         0.35,
         "the drum in the hand",
+    ),
+    art(
+        "mags/rpk_mag.py",
+        Need::Incidental,
+        0.35,
+        "the magazine in the hand",
+    ),
+    art(
+        "items/ammo_22.py",
+        Need::MustRead,
+        0.35,
+        "the box in the hand: which rounds",
     ),
     art(
         "items/ammo.py",
@@ -373,6 +409,9 @@ pub const ART: &[ArtText] = &[
         5.0,
         "walking through the depot",
     ),
+    // A charcoal burner's name on his bed, a shop's CLOSED card, a
+    // chapel's hymn numbers: read across the room (World models).
+    art("props/named.py", Need::MustRead, 2.0, "across the room"),
 ];
 
 /// Text baked into a texture.
@@ -425,6 +464,36 @@ pub fn baked(src: &str) -> Vec<BakedText> {
         .collect()
 }
 
+/// A `text()` height: a number, or `A if ... else B` of two (the smaller).
+fn height(arg: &str) -> Option<f32> {
+    if let Ok(h) = arg.parse::<f32>() {
+        return Some(h);
+    }
+    let (a, rest) = arg.split_once(" if ")?;
+    let (_, b) = rest.split_once(" else ")?;
+    Some(
+        a.trim()
+            .parse::<f32>()
+            .ok()?
+            .min(b.trim().parse::<f32>().ok()?),
+    )
+}
+
+/// A computed height's smallest value, stated by a `# smallest: H` comment
+/// on the call's line, the one after or the one before (looked for in that
+/// order).
+fn smallest(src: &str, line: usize) -> Option<f32> {
+    let lines: Vec<&str> = src.lines().collect();
+    [Some(line), Some(line + 1), line.checked_sub(1)]
+        .into_iter()
+        .flatten()
+        .filter_map(|i| lines.get(i))
+        .find_map(|l| {
+            l.split_once("# smallest:")
+                .and_then(|(_, v)| v.split_whitespace().next()?.parse().ok())
+        })
+}
+
 /// Stencil `text()` calls in an art script: (line, string, cap height m).
 pub fn stencil_calls(src: &str) -> Vec<(usize, String, Option<f32>)> {
     let mut out = Vec::new();
@@ -445,7 +514,7 @@ pub fn stencil_calls(src: &str) -> Vec<(usize, String, Option<f32>)> {
                 if args.len() < 3 {
                     continue;
                 }
-                let h = args[2].trim().parse::<f32>().ok();
+                let h = height(args[2].trim()).or_else(|| smallest(src, i));
                 out.push((i + 1, args[1].trim().to_string(), h));
             }
         }
@@ -466,6 +535,24 @@ mod tests {
         assert!(INCIDENTAL_DEG * ppd >= 4.8);
     }
 
+    /// The floors are set for the auto render scale; the SHARPNESS card's
+    /// lowest step mustn't render a Beyond 2 (2980 px an eye asked for)
+    /// much below it.
+    #[test]
+    fn no_sharpness_step_goes_under_the_floors_density() {
+        use crate::rig::comfort::Comfort;
+        let lowest = Comfort::RENDER_SCALES
+            .iter()
+            .copied()
+            .filter(|s| *s > 0.0)
+            .fold(1.0f32, f32::min);
+        assert!(
+            lowest * 2980.0 >= AUTO_EYE_PX * 0.97,
+            "lowest step {lowest}: {} px an eye",
+            lowest * 2980.0
+        );
+    }
+
     #[test]
     fn lower_case_is_measured_by_its_x_height() {
         assert_eq!(letter_height("ABC 12", 1.0), CAP_HEIGHT);
@@ -480,6 +567,9 @@ mod tests {
         assert_eq!(c.len(), 2, "{c:?}");
         assert_eq!(c[0].2, Some(0.0065));
         assert_eq!(c[1].1, "name");
+        assert_eq!(height("0.0075 if len(label) <= 4 else 0.006"), Some(0.006));
+        let src = "    text(p, s, h1 * 0.8, m,\n         depth=0.0003)  # smallest: 0.0048\n";
+        assert_eq!(stencil_calls(src)[0].2, Some(0.0048));
     }
 
     /// Every panel in the game (each valley, the yard, the camp, the
@@ -549,13 +639,32 @@ mod tests {
                 14.2,
                 100.0,
                 true,
-                Some(&"The driver says something long enough to fill the screen. ".repeat(3)),
+                Some(crate::render::comfort::Said::Plain(
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
                 0,
             ),
             size: crate::render::comfort::WRIST_SIZE,
             style: ScreenStyle::Lcd,
         };
         check("wrist, full", &wrist, Some(TextSource::Wrist));
+        // Captioned: the speaker's line in place of one of the words'.
+        let wrist = ScreenText {
+            text: crate::render::comfort::wrist_text(
+                "SURGE 12M",
+                14.2,
+                100.0,
+                true,
+                Some(crate::render::comfort::Said::Captioned(
+                    "MACHINES AT 12",
+                    &"The driver says something long enough to fill the screen. ".repeat(3),
+                )),
+                0,
+            ),
+            size: crate::render::comfort::WRIST_SIZE,
+            style: ScreenStyle::Lcd,
+        };
+        check("wrist, captioned", &wrist, Some(TextSource::Wrist));
         let radio = ScreenText {
             text: crate::render::comfort::radio_text(
                 &[
@@ -716,6 +825,189 @@ mod tests {
             after > day * 0.95,
             "the ambient ran down from {day:.0} to {after:.0}"
         );
+    }
+
+    /// Nothing in a staged scene lies on its note: a lantern or a photo on
+    /// the paper hides its words (the render gauge found the shelter's
+    /// note half under its lantern).
+    #[test]
+    fn nothing_lies_on_a_scenes_note() {
+        use crate::world::scenes::Piece;
+        let mut bad = Vec::new();
+        let half = crate::world::notes::NOTE * 0.5;
+        for scene in crate::world::scenes::all() {
+            let Some(note) = &scene.note else {
+                continue;
+            };
+            let rot = Quat::from_rotation_y(-note.rot.to_radians());
+            let on_paper = |p: [f32; 3]| {
+                let d = rot.inverse()
+                    * Vec3::new(p[0] - note.at[0], p[1] - note.at[1], p[2] - note.at[2]);
+                // A thing's own footprint: a few centimetres round its point.
+                d.y.abs() < 0.15 && d.x.abs() < half.x + 0.04 && d.z.abs() < half.y + 0.04
+            };
+            for piece in &scene.pieces {
+                if let Piece::Lantern { at } = piece {
+                    if on_paper(*at) {
+                        bad.push(format!("{}: a lantern on the note", scene.name));
+                    }
+                }
+            }
+            for thing in &scene.items {
+                if on_paper(thing.at) {
+                    bad.push(format!("{}: {} on the note", scene.name, thing.id));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// No loot lands on a note: loot rolls round a spot (tens of
+    /// centimetres), and notes lie beside loot spots on the same tables; a
+    /// torch on the pump log hid half its words. Every roll a spot can
+    /// make, kept off the notes (`items::loot::clear_of_notes`), lands
+    /// clear of every note's paper.
+    #[test]
+    fn no_loot_lands_on_a_note() {
+        use crate::items::loot::{building_roll, clear_of_notes, marker_roll, notes_lying};
+        use extraction_core::map::MarkerKind;
+        let mut bad = Vec::new();
+        let half = crate::world::notes::NOTE * 0.5 + Vec2::splat(0.06);
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "training_yard",
+        ] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..5 {
+                app.update();
+            }
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let notes = notes_lying(&zone);
+            let mut landings: Vec<(Vec3, Vec3)> = Vec::new();
+            if let Some(l) = app
+                .world()
+                .get_resource::<crate::world::buildings::BuildingLoot>()
+            {
+                for s in &l.0 {
+                    landings.extend((0..5).map(|i| (s.at, s.at + building_roll(i))));
+                }
+            }
+            for m in &zone.map.markers {
+                if let MarkerKind::Loot { .. } = m.kind {
+                    if m.y >= 0.3 {
+                        let base = zone.on_ground(m.at[0], m.at[1]) + Vec3::Y * (m.y + 0.1);
+                        landings.extend((0..5).map(|i| (base, base + marker_roll(i))));
+                    }
+                }
+            }
+            for (spot, at) in landings {
+                let landed = clear_of_notes(at, &notes);
+                for (note, rot) in &notes {
+                    let p = rot.inverse() * (landed - *note);
+                    if p.y.abs() < 0.4 && p.x.abs() < half.x && p.z.abs() < half.y {
+                        bad.push(format!(
+                            "{map}: a roll at {spot:.2} lands on the note at {note:.2}"
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+        // And the keeping-off itself, on a roll laid right on a turned
+        // note (loot spots are also moved off notes at the source,
+        // `world::buildings`, so the valleys may never give it one).
+        let note = (Vec3::new(3.0, 0.8, -2.0), Quat::from_rotation_y(0.7));
+        for off in [
+            Vec3::ZERO,
+            Vec3::new(0.05, 0.02, -0.1),
+            Vec3::new(-0.12, 0.0, 0.15),
+        ] {
+            let at = note.0 + note.1 * off;
+            let p = note.1.inverse() * (clear_of_notes(at, &[note]) - note.0);
+            assert!(
+                p.x.abs() >= half.x || p.z.abs() >= half.y,
+                "a roll at {off:?} on the note stayed on it: {p:?}"
+            );
+        }
+    }
+
+    /// Every signpost faces the way you come to it, so its words meet you
+    /// rather than its back: beside a road or path (within 25 m), its face
+    /// turns to the road 10 m back toward where the truck sets you down,
+    /// whence you walk up it; with none near, toward that spot itself. Its board is at eye height by construction (1.45 m
+    /// up, `world::notes`).
+    #[test]
+    fn every_sign_faces_its_approach() {
+        use extraction_core::map::{MapDef, MarkerKind};
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/maps");
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "ron") {
+                continue;
+            }
+            let map = MapDef::from_ron(&std::fs::read_to_string(&p).unwrap()).unwrap();
+            let ins = map
+                .markers_of(&MarkerKind::Insertion)
+                .next()
+                .map(|m| Vec2::from(m.at));
+            for m in &map.markers {
+                if !matches!(m.kind, MarkerKind::Sign { .. }) {
+                    continue;
+                }
+                seen += 1;
+                let at = Vec2::from(m.at);
+                // The nearest point on any road or path.
+                let mut near: Option<(f32, Vec2, Vec2)> = None;
+                for road in &map.roads {
+                    for w in road.points.windows(2) {
+                        let (a, b) = (Vec2::from(w[0]), Vec2::from(w[1]));
+                        let ab = b - a;
+                        let t = ((at - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+                        let q = a + ab * t;
+                        let d = q.distance(at);
+                        if near.is_none_or(|(n, _, _)| d < n) {
+                            near = Some((d, q, ab.normalize_or_zero()));
+                        }
+                    }
+                }
+                let Some(ins) = ins else {
+                    continue;
+                };
+                let from = match near {
+                    // Back along the road, the way you walk up it.
+                    Some((d, q, along)) if d < 25.0 => [q + along * 10.0, q - along * 10.0]
+                        .into_iter()
+                        .min_by(|a, b| a.distance(ins).total_cmp(&b.distance(ins)))
+                        .unwrap(),
+                    _ => ins,
+                };
+                // The board faces the marker's +Z, turned by its rot.
+                let face = Quat::from_rotation_y(-m.rot.to_radians()) * Vec3::Z;
+                let to = (from - at).normalize_or_zero();
+                let cos = Vec2::new(face.x, face.z).dot(to);
+                if to != Vec2::ZERO && cos < 0.5 {
+                    bad.push(format!(
+                        "{}: {} faces {:.0} deg away from its approach",
+                        map.name,
+                        m.name,
+                        cos.clamp(-1.0, 1.0).acos().to_degrees()
+                    ));
+                }
+            }
+        }
+        assert!(seen > 0, "no signs found");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Every model's letters: big enough from where they're read, strokes

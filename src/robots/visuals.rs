@@ -26,6 +26,7 @@ impl Plugin for RobotVisualsPlugin {
             super::fx::RobotFxPlugin,
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
+            super::sentry_look::SentryLookPlugin,
         ))
         .add_systems(
             Update,
@@ -197,12 +198,13 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), With<super::heavy::Heavy>>,
+    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy dresses itself: `heavy_look`.)
+        // (The heavy and the sentry dress themselves: `heavy_look`,
+        // `sentry_look`.)
         if heavies.contains(part.robot) {
             continue;
         }
@@ -1503,6 +1505,10 @@ struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
 fn alert_eyes(
     mut commands: Commands,
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
+    mut halos: Query<(&Eye, &mut crate::world::halos::Halo)>,
+    gaits: Query<&super::anim::Gait>,
+    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    places: Query<&GlobalTransform, With<Robot>>,
     parts: Query<&RobotPart>,
     robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
@@ -1551,10 +1557,13 @@ fn alert_eyes(
                 let h = materials.add(base);
                 // A soft glow round the eye, so in the dusk and the dark
                 // you see its mood before you see it.
+                // (Lit by its emissive alone, so it can outshine the
+                // night: an unlit colour stops at white.)
                 let glow = materials.add(StandardMaterial {
-                    base_color: Color::srgba(1.0, 0.25, 0.1, 0.0),
+                    base_color: Color::BLACK,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
                     alpha_mode: AlphaMode::Add,
-                    unlit: true,
                     fog_enabled: false,
                     ..default()
                 });
@@ -1576,11 +1585,25 @@ fn alert_eyes(
                 h
             })
             .clone();
-        commands.entity(e).insert(MeshMaterial3d(own));
+        commands.entity(e).insert((
+            MeshMaterial3d(own),
+            // After dark, a glow that carries (`world::halos`): set below.
+            crate::world::halos::Halo {
+                color: LinearRgba::BLACK,
+                radius: 0.0,
+            },
+        ));
     }
+    let eye_at = cameras.iter().next().map(|g| g.translation());
+    let mut moods: std::collections::HashMap<Entity, (LinearRgba, f32)> = Default::default();
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
+    // After dark the eye opens up to a hard point (emissive about 40 at
+    // rest, past 100 once it has you), so a walker reads at 60-80 m on a
+    // clear night, and its glow stays round it even calm.
+    let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
+    let gain = 1.0 + 9.0 * night;
     for (robot, aware, own, _) in &robots {
         let Some(own) = own else {
             continue;
@@ -1600,20 +1623,66 @@ fn alert_eyes(
         } else {
             0.0
         };
-        let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter;
+        // Its colour and, for eyes that can't tell red from orange (or a
+        // look from far off), its rhythm (`render::tells`); brighter after
+        // dark.
+        let [r, g, b] = crate::render::tells::eye_colour(a, x);
+        let pulse = crate::render::tells::eye_pulse(
+            a,
+            aware.can_see_target,
+            now + robot.index_u32() as f32 * 0.37,
+        );
+        let want = LinearRgba::rgb(r, g, b) * stutter * pulse * gain;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;
             }
         }
-        let alpha = (0.03 + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0);
-        let tint = Color::srgba(1.0, 0.25 + 0.3 * x, 0.1 + 0.1 * x, alpha);
+        // Near, the sphere is the eye's glow; from 15 m the halo takes over.
+        let near = match (eye_at, places.get(robot)) {
+            (Some(c), Ok(gt)) => {
+                (1.0 - (c.distance(gt.translation()) - 15.0) / 10.0).clamp(0.0, 1.0)
+            }
+            _ => 1.0,
+        };
+        let k = (1.2 + 1.2 * a + 1.6 * x) * stutter.min(1.0);
+        moods.insert(
+            robot,
+            (
+                LinearRgba::rgb(1.0, 0.12 + 0.3 * x, 0.05 + 0.1 * x) * k,
+                if stutter < 1.0 { 0.0 } else { 1.0 },
+            ),
+        );
+        let alpha = (0.03 + 0.12 * night + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0) * near;
+        let tint = LinearRgba::rgb(1.0, 0.08 + 0.3 * x, 0.03 + 0.08 * x) * alpha * 14.0;
         if let Some(mut g) = materials.get_mut(&own.1) {
-            if g.base_color != tint {
-                g.base_color = tint;
+            if g.emissive != tint {
+                g.emissive = tint;
             }
         }
+    }
+    for (eye, mut halo) in &mut halos {
+        let Ok(part) = parts.get(eye.part) else {
+            continue;
+        };
+        let alive = part.alive();
+        let want = match (alive, moods.get(&part.robot), robots.get(part.robot)) {
+            (true, Some(&(color, on)), Ok((_, _, _, r))) if !r.wrecked && on > 0.0 => {
+                // Wide enough to read as a point at 60-80 m after dark.
+                let radius = if r.kind == RobotKind::Drone {
+                    0.4
+                } else {
+                    0.8 * gaits.get(part.robot).map_or(1.0, |g| g.size)
+                };
+                crate::world::halos::Halo { color, radius }
+            }
+            // Dead (or stuttering off): dark.
+            _ => crate::world::halos::Halo {
+                color: LinearRgba::BLACK,
+                radius: 0.0,
+            },
+        };
+        halo.set_if_neq(want);
     }
 }
 
@@ -1648,7 +1717,9 @@ fn shell_by_light(
     let valley = zone.map_or(super::weathering::Valley::None, |z| {
         super::weathering::Valley::of_map(&z.map.name)
     });
-    let k = 0.22 * c.light.sqrt().max(0.12) * valley.shell_glow();
+    // After dark the shell keeps none of it: the eyes are the tell then.
+    let dusk = (c.light / 0.25).clamp(0.0, 1.0);
+    let k = 0.22 * c.light.sqrt() * dusk * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
     }

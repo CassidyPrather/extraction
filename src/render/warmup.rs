@@ -52,6 +52,8 @@ impl Plugin for WarmupPlugin {
                         shelve::<HazeMaterial>,
                         shelve::<ParticleMaterial>,
                         shelve::<XrayMaterial>,
+                        shelve::<crate::world::halos::HaloMaterial>,
+                        shelve::<crate::world::beams::BeamMaterial>,
                     ),
                     shelve_unworn,
                     shelve_end,
@@ -672,6 +674,44 @@ fn shelve_end(shelf: Res<Shelf>, mut logged: Local<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every material type the game registers is on the shelf: one left
+    /// off would have every pipeline of its built at first use, in the
+    /// raid. (Read from the source: a `MaterialPlugin::<M>` anywhere means
+    /// `shelve::<..M>` here.)
+    #[test]
+    fn every_material_is_shelved() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let here = std::fs::read_to_string(root.join("render/warmup.rs")).unwrap();
+        let mut missing = Vec::new();
+        let mut stack = vec![root];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.ends_with("render/warmup.rs") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                for part in text.split("MaterialPlugin::<").skip(1) {
+                    let ty = part.split('>').next().unwrap_or("").trim();
+                    let last = ty.rsplit("::").next().unwrap_or(ty);
+                    if !last.is_empty() && !here.contains(&format!("{last}>,")) {
+                        missing.push(format!("{} ({})", ty, path.display()));
+                    }
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "material types not on the warm-up shelf (add a shelve::<..>): {missing:?}"
+        );
+    }
 
     /// The shelf stocks itself in the first seconds, its decoy anomalies
     /// go after the second restock, and nothing of it is left after.

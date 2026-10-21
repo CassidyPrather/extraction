@@ -27,6 +27,22 @@ struct Sway {
     wind: vec4<f32>,
     // xyz: the walker's feet, w: how far round them plants lean away.
     pusher: vec4<f32>,
+    // The walker's hands, down among the plants: xyz where, w how far round
+    // them plants are parted (0: not pushing).
+    hand_a: vec4<f32>,
+    hand_b: vec4<f32>,
+}
+
+// Parted round a hand: leaning away from it, more the nearer.
+fn parted(world: vec3<f32>, hand: vec4<f32>, weight: f32) -> vec3<f32> {
+    if (hand.w <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let away = world - hand.xyz;
+    let d = length(away);
+    let near = 1.0 - smoothstep(0.05, hand.w, d);
+    let out2 = away.xz / max(length(away.xz), 1e-3);
+    return vec3<f32>(out2.x, -0.3, out2.y) * near * 0.2 * weight;
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> sway: Sway;
@@ -50,6 +66,7 @@ fn offset(world: vec3<f32>, weight: f32, phase: f32) -> vec3<f32> {
         let out2 = away / max(d, 1e-3);
         o += vec3<f32>(out2.x, -0.5, out2.y) * near * 0.25 * weight;
     }
+    o += parted(world, sway.hand_a, weight) + parted(world, sway.hand_b, weight);
     return o;
 }
 

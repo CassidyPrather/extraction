@@ -240,6 +240,17 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 12.0,
     },
     Recipe {
+        id: "pack_flare",
+        name: "Pack two signal cartridges (white)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 1),
+            (Need::Item("polymer"), 1),
+        ],
+        makes: Make::Items(&[("flare_white", 2)]),
+        seconds: 12.0,
+    },
+    Recipe {
         id: "repair_gun_fine",
         name: "Strip and rebuild a worn gun",
         needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
@@ -247,6 +258,56 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 25.0,
     },
 ];
+
+/// What the driver's contracts teach the bench (`contracts::Unlock`):
+/// armour-piercing re-packs, each for its contract.
+pub const CONTRACT_RECIPES: &[Recipe] = &[
+    Recipe {
+        id: "pack_545_ap",
+        name: "Re-pack 5.45x39 AP (box of 30)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 2),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("ammo_545_ap", 1)]),
+        seconds: 14.0,
+    },
+    Recipe {
+        id: "pack_762x39_ap",
+        name: "Re-pack 7.62x39 AP (box of 20)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 2),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("ammo_762x39_ap", 1)]),
+        seconds: 14.0,
+    },
+    Recipe {
+        id: "pack_762r_ap",
+        name: "Re-pack 7.62x54R AP (box of 10)",
+        needs: &[
+            (Need::Item("powder"), 2),
+            (Need::Item("brass"), 2),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("ammo_762r_ap", 1)]),
+        seconds: 14.0,
+    },
+];
+
+/// The recipes a bench of `tier` knows, with those the contracts `taught`.
+pub fn recipes_taught<'a>(
+    tier: u8,
+    taught: &'a [&'a str],
+) -> impl Iterator<Item = &'static Recipe> + 'a {
+    recipes(tier).chain(
+        CONTRACT_RECIPES
+            .iter()
+            .filter(move |r| taught.contains(&r.id)),
+    )
+}
 
 /// The recipes a bench of `tier` knows, in recipe-book order.
 pub fn recipes(tier: u8) -> impl Iterator<Item = &'static Recipe> {
@@ -305,8 +366,25 @@ pub fn available_at<'a>(tray: &[TrayItem], catalog: &ItemCatalog, tier: u8) -> V
         .collect()
 }
 
+/// [`available_at`], with the recipes the contracts `taught` the bench.
+pub fn available_taught<'a>(
+    tray: &[TrayItem],
+    catalog: &ItemCatalog,
+    tier: u8,
+    taught: &[&str],
+) -> Vec<&'a Recipe> {
+    recipes_taught(tier, taught)
+        .filter(|r| plan(r, tray, catalog).is_some())
+        .collect()
+}
+
 pub fn recipe(id: &str) -> Option<&'static Recipe> {
-    recipes(u8::MAX).find(|r| r.id == id)
+    every_recipe().find(|r| r.id == id)
+}
+
+/// Every recipe there is: every bench tier's and the contracts'.
+pub fn every_recipe() -> impl Iterator<Item = &'static Recipe> {
+    recipes(u8::MAX).chain(CONTRACT_RECIPES.iter())
 }
 
 #[cfg(test)]
@@ -330,7 +408,7 @@ mod tests {
     #[test]
     fn every_recipe_names_real_items() {
         let cat = cat();
-        for r in recipes(u8::MAX) {
+        for r in every_recipe() {
             for (n, _) in r.needs {
                 if let Need::Item(id) = n {
                     assert!(cat.kind(id).is_some(), "{}: {id}", r.id);
@@ -347,7 +425,7 @@ mod tests {
     #[test]
     fn nothing_comes_out_heavier_than_it_went_in() {
         let cat = cat();
-        for r in recipes(u8::MAX) {
+        for r in every_recipe() {
             let Make::Items(out) = r.makes else {
                 continue;
             };

@@ -260,8 +260,15 @@ mod tests {
     /// Findings waiting on their owners (reported to Models: world), by
     /// the start of their line. Take one out when it's fixed.
     const KNOWN: &[&str] = &[
-        // The model's plinth stops 5.5 cm short of the blockout's.
-        "signal_box signal_box: floats",
+        // Burnt furniture: the bed sinks 6.5 cm into the floor, and bed
+        // and table stand 2.5 times as tall as the low boxes they replace
+        // (and collide as).
+        "house_plank_burnt bed_burnt",
+        "house_plank_burnt table_burnt",
+        "farmhouse_burnt bed_burnt",
+        "farmhouse_burnt table_burnt",
+        "house_brick_burnt bed_burnt",
+        "house_brick_burnt table_burnt",
     ];
 
     /// How far a furniture model's bottom may sit from its boxes' (m).

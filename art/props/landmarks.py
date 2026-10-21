@@ -259,8 +259,10 @@ def signal_box():
     beam(p, (sx1 - 0.03, 1.0, z0 - 0.1), (sx1 - 0.03, top + 1.0, z1 + 0.1), 0.04, "Timber")
     p.box((0.9, 0.1, 1.2), ((sx0 + sx1) / 2, top - 0.01, z1 + 0.6), "Planks", bevel=0.005, segs=1)
     p.box((0.2, 0.1, 1.2), (hw + 0.1, top - 0.01, z1 + 0.6), "Timber")
+    # The landing's posts, set into the ground as deep as the stair's
+    # blockout ramp goes.
     for z in (z1 + 0.05, z1 + 1.15):
-        rod(p, (sx1 - 0.03, 0.0, z), (sx1 - 0.03, top + 1.0, z), 0.04, "Timber", segs=4)
+        rod(p, (sx1 - 0.03, -0.13, z), (sx1 - 0.03, top + 1.0, z), 0.04, "Timber", segs=4)
     rod(p, (sx1 - 0.03, top + 1.0, z1 + 0.05), (sx1 - 0.03, top + 1.0, z1 + 1.15), 0.03, "Timber",
         segs=4)
     p.box((0.05, 2.0, 0.85), (hw + 0.025, y0 + 1.0, z1 + 0.6), "Painted", bevel=0.005, segs=1)
@@ -353,3 +355,55 @@ def steeple():
 
 
 prop("steeple", steeple)
+
+
+# --- Survey mast ------------------------------------------------------------------------------
+
+def survey_mast():
+    """The survey post's mast on the open platform of its tower (the
+    ranger tower's legs and stair, no cabin): a red-and-white banded pole
+    5.4 m up from the platform's boards, guyed to its corners, and a
+    surveyor's beacon on top, an open pyramid of boards in red and white,
+    1.4 across: the post's silhouette at 300 m, unlike the ranger tower's
+    roofed cabin. Origin on the platform's boards under the pole."""
+    p = Part("static")
+    H = 5.4
+    n = 9
+    for k in range(n):
+        y0, y1 = H * k / n, H * (k + 1) / n
+        p.cyl(0.12, y0, y1, "Red" if k % 2 == 0 else "Cream", segs=12, xf=UP)
+    p.cyl(0.18, 0.0, 0.06, "Iron", segs=12, xf=UP)
+    # Guys to the platform's corners from two thirds up.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            rod(p, (0.0, H * 0.66, 0.0), (sx * 2.0, 0.05, sz * 2.0), 0.006, "Steel", segs=4)
+    # The beacon: three legs of an open pyramid over the top, boards
+    # across them in bands.
+    top = H + 1.6
+    base = H - 0.1
+    legs = []
+    for k in range(3):
+        a = k * 2 * math.pi / 3
+        legs.append((0.7 * math.cos(a), base, 0.7 * math.sin(a)))
+    apex = (0.0, top, 0.0)
+    for f in legs:
+        rod(p, f, apex, 0.03, "Timber", segs=5)
+        rod(p, f, (0.0, base + 0.2, 0.0), 0.02, "Timber", segs=4)
+    for j, t in enumerate((0.15, 0.4, 0.65)):
+        for k in range(3):
+            a, b = legs[k], legs[(k + 1) % 3]
+            pa = tuple(u + (v - u) * t for u, v in zip(a, apex))
+            pb = tuple(u + (v - u) * t for u, v in zip(b, apex))
+            mid = tuple((u + v) / 2 for u, v in zip(pa, pb))
+            L = math.dist(pa, pb)
+            ang = math.atan2(pb[2] - pa[2], pb[0] - pa[0])
+            # Each board a little outside its legs, facing out.
+            out = (mid[0] * 0.08, 0.0, mid[2] * 0.08)
+            c = (mid[0] + out[0], mid[1], mid[2] + out[2])
+            p.box((L * 0.95, 0.18, 0.025), c, "Red" if j % 2 == 0 else "Cream",
+                  xf=T(*c) @ RY(-ang) @ T(*(-v for v in c)))
+    p.sphere(0.06, apex, "Red", segs=10, rings=6)
+    return [p]
+
+
+prop("survey_mast", survey_mast)

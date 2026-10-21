@@ -54,6 +54,10 @@ pub struct SafehouseSave {
     pub stash: Vec<SavedItem>,
     /// Nights slept there, all told.
     pub nights: u32,
+    /// The Surge cycle the last people's leftovers were laid in: once a
+    /// cycle (they're saved with the Zone after that, like anything else).
+    #[serde(default)]
+    pub laid: Option<u32>,
 }
 
 impl SafehouseSave {
@@ -65,10 +69,10 @@ impl SafehouseSave {
     /// and what was in the crate with it.
     pub fn surge(&mut self, cycle: u32) {
         if cycle != self.cycle {
-            let nights = self.nights;
             *self = SafehouseSave {
                 cycle,
-                nights,
+                nights: self.nights,
+                laid: self.laid,
                 ..Default::default()
             };
         }
@@ -144,5 +148,8 @@ mod tests {
         s.surge(3);
         assert!(!s.broken && !s.cleared && s.cycle == 3);
         assert_eq!(s.nights, 2, "the nights slept are the career's");
+        s.laid = Some(2);
+        s.surge(4);
+        assert_eq!(s.laid, Some(2), "leftovers lay once a cycle, by the cycle");
     }
 }

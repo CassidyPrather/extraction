@@ -104,39 +104,55 @@ impl First {
         format!("{self:?}")
     }
 
-    /// What the driver says. Each fits the wrist (three lines of 26), uses
-    /// no game words, and says what to do.
+    /// Danger, now: what to do comes first in its line, so it's on the
+    /// wrist's first page (the reason can wait for the next).
+    pub fn urgent(self) -> bool {
+        matches!(
+            self,
+            First::Jam(_)
+                | First::Heard
+                | First::DroneLock
+                | First::Anomaly
+                | First::Underground
+                | First::Surge
+                | First::Lamed
+                | First::Bleeding
+                | First::Blinked
+                | First::Well
+        )
+    }
+
+    /// What the driver says. Each fits the radio (three lines of 26), uses
+    /// no game words, and says what to do; an urgent one says it first.
     pub fn lines(self) -> &'static [&'static str] {
         match self {
             First::Jam(JamKind::Eject) => {
-                &["Truck: \"Stuck case? Rack it hard, it'll spit it out.\""]
+                &["Truck: \"Rack it hard. Stuck case; it'll spit it out.\""]
             }
-            First::Jam(JamKind::Feed) => &["Truck: \"Didn't feed. Slap the mag home, then rack.\""],
+            First::Jam(JamKind::Feed) => &["Truck: \"Slap the mag home, then rack. Didn't feed.\""],
             First::Jam(JamKind::Double) => {
-                &["Truck: \"Two rounds jammed. Mag out, rack, mag back in.\""]
+                &["Truck: \"Mag out, rack, mag back in. Two rounds jammed.\""]
             }
-            First::Heard => &["Truck: \"Something heard you. Move off quiet, then go still.\""],
+            First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
-            First::DroneLock => &["Truck: \"That chirp is it taking aim. Get behind something.\""],
-            First::Anomaly => &["Truck: \"Air's wrong ahead. Throw something in first.\""],
+            First::DroneLock => &["Truck: \"Get behind something. That chirp is it taking aim.\""],
+            First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
-                &["Truck: \"Dark down there, and not empty. Torch on, go slow.\""]
+                &["Truck: \"Torch on, go slow. Dark down there, and not empty.\""]
             }
-            First::Surge => &["Truck: \"Sky's turning. That's the Surge coming. Come home.\""],
-            First::Lamed => &["Truck: \"You've lamed it. It can't follow. Get out of its sight.\""],
+            First::Surge => &["Truck: \"Come home. Sky's turning: that's the Surge coming.\""],
+            First::Lamed => &["Truck: \"Get out of its sight. You've lamed it; it can't follow.\""],
             First::PackFull => &["Truck: \"Pack's full. Leave the worst of it behind.\""],
             First::Worn => {
                 &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
             }
-            First::Bleeding => {
-                &["Truck: \"You're bleeding. Dressing on it now, before you drop.\""]
-            }
+            First::Bleeding => &["Truck: \"Dressing on, now: you're bleeding. Before you drop.\""],
             First::Detector => &["Truck: \"Hear it ticking? Faster's nearer. Sweep it slow.\""],
             First::Revealed => {
                 &["Truck: \"That's how you find them. Bolts are cheap. Legs aren't.\""]
             }
-            First::Blinked => &["Truck: \"You went through a fold. Stop. Look before you step.\""],
-            First::Well => &["Truck: \"Feel that pull? Back out the way you came. Now.\""],
+            First::Blinked => &["Truck: \"Stop. Look before you step. You went through a fold.\""],
+            First::Well => &["Truck: \"Back out the way you came. Now. Feel that pull?\""],
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
                 "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
@@ -564,6 +580,32 @@ fn speak(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An urgent line's first sentence (what to do: they're written
+    /// action first) is on the wrist's
+    /// first page, captioned or not: nobody waits a page under fire.
+    #[test]
+    fn urgent_advice_is_on_the_wrists_first_page() {
+        use crate::render::comfort::{Said, wrist_text};
+        let flat = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
+        for f in ALL.iter().filter(|f| f.urgent()) {
+            for l in f.lines() {
+                let (_, words) = crate::raid::captions::parse(l);
+                let end = words.find(['.', '?', '!']).map_or(words.len(), |i| i + 1);
+                let act = flat(&words[..end].to_uppercase());
+                for (how, said) in [
+                    ("plain", Said::Plain(l)),
+                    ("captioned", Said::Captioned("LEV, RADIO", &words)),
+                ] {
+                    let page = flat(&wrist_text("SURGE 12M", 9.0, 90.0, false, Some(said), 0));
+                    assert!(
+                        page.contains(&act),
+                        "{f:?}, {how}: \"{act}\" not on page one:\n{page}"
+                    );
+                }
+            }
+        }
+    }
 
     /// Every line fits the wrist whole, with no game words in it.
     #[test]

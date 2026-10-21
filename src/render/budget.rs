@@ -53,6 +53,9 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
+    // (11.5 for a while, when Kettle Pass's quarry view stood inside a
+    // spruce clump at 10.27; moved clear, and near cards shrinking away,
+    // it's 4.4, and the worst view anywhere is 7.3.)
     overdraw_mean: 10.0,
     overdraw_p95: 35,
 };
@@ -175,7 +178,13 @@ impl Plugin for BudgetPlugin {
         );
         app.add_systems(
             PostUpdate,
-            (reach_doors, late_reach, range_items, shadow_reach)
+            (
+                reach_doors,
+                late_reach,
+                range_items,
+                small_shadows.after(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+                shadow_reach,
+            )
                 .chain()
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
         );
@@ -314,12 +323,57 @@ fn range_items(
 #[derive(Component, Clone, Copy)]
 pub struct ShadowReach(pub f32);
 
+/// Below this size (the largest side, world metres) a mesh casts the
+/// sun's shadow only near the eye: [`SMALL_REACH`] under 5 cm,
+/// [`SMALLISH_REACH`] under it. At the gates half the shadow passes'
+/// meshes were smaller than 10 cm (buttons, fittings, door furniture,
+/// tins): a shadow a texel or two wide past a few metres.
+pub const SMALL_CASTER: f32 = 0.12;
+pub const SMALL_REACH: f32 = 3.0;
+pub const SMALLISH_REACH: f32 = 6.0;
+
+/// Gives each newly bounded small mesh its [`ShadowReach`].
+#[allow(clippy::type_complexity)]
+fn small_shadows(
+    mut commands: Commands,
+    added: Query<
+        (Entity, &bevy::camera::primitives::Aabb, &GlobalTransform),
+        (
+            Added<bevy::camera::primitives::Aabb>,
+            With<Mesh3d>,
+            Without<NotShadowCaster>,
+            Without<ShadowReach>,
+        ),
+    >,
+) {
+    // (`EXTRACTION_SMALL_SHADOWS=0`: every small thing casts at any
+    // distance, to compare.)
+    if std::env::var("EXTRACTION_SMALL_SHADOWS").is_ok_and(|v| v == "0") {
+        return;
+    }
+    for (e, aabb, gt) in &added {
+        let size = (Vec3::from(aabb.half_extents) * gt.compute_transform().scale.abs())
+            .max_element()
+            * 2.0;
+        if size < SMALL_CASTER {
+            let reach = if size < 0.05 {
+                SMALL_REACH
+            } else {
+                SMALLISH_REACH
+            };
+            commands.entity(e).try_insert(ShadowReach(reach));
+        }
+    }
+}
+
 fn shadow_reach(
     mut commands: Commands,
-    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     casters: Query<(Entity, &GlobalTransform, &ShadowReach, Has<NotShadowCaster>)>,
 ) {
-    let eyes: Vec<Vec2> = cams.iter().map(|g| g.translation().xz()).collect();
+    let eyes: Vec<Vec2> = crate::render::eyes(&cams)
+        .map(|g| g.translation().xz())
+        .collect();
     if eyes.is_empty() {
         return;
     }
@@ -902,6 +956,11 @@ pub(crate) mod tests {
     /// `client_in` on a fixed number of task-pool threads (one: every
     /// system's time is its own work, and the frame's is the total).
     pub(crate) fn client_threads(map: &str, weather: &str, threads: Option<usize>) -> App {
+        client_with(map, weather, None, threads)
+    }
+
+    /// A client under this weather, with this much snow lying (`--snow`).
+    fn client_with(map: &str, weather: &str, snow: Option<f32>, threads: Option<usize>) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -943,6 +1002,7 @@ pub(crate) mod tests {
             robots: false,
             data_dir: Some(dir),
             weather: Some(weather.into()),
+            snow,
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -985,9 +1045,35 @@ pub(crate) mod tests {
             .unwrap()
     }
 
+    /// The view's load once its counts have held still for three checks
+    /// ten frames apart (at most 600 frames).
+    fn settled(app: &mut App) -> ViewLoad {
+        let mut last = (0, 0);
+        let mut still = 0;
+        for _ in 0..60 {
+            for _ in 0..10 {
+                app.update();
+            }
+            let load = measure(app);
+            let now = (load.draws, load.tris);
+            still = if now == last { still + 1 } else { 0 };
+            last = now;
+            if still >= 3 {
+                return load;
+            }
+        }
+        measure(app)
+    }
+
     /// Every lookbook view of `map`, seen through the headset's eye.
     fn loads(map: &str) -> Vec<(String, ViewLoad, super::super::overdraw::Overdraw)> {
-        let mut app = client(map);
+        loads_with(client(map), map)
+    }
+
+    fn loads_with(
+        mut app: App,
+        map: &str,
+    ) -> Vec<(String, ViewLoad, super::super::overdraw::Overdraw)> {
         settle(&mut app);
         let zone = app.world().resource::<crate::world::Zone>().clone();
         let file = crate::asset_root_path()
@@ -1008,11 +1094,12 @@ pub(crate) mod tests {
                     p.aspect_ratio = 1.0;
                 }
             }
-            // Detail near the new spot (grass, near trees) streams in.
-            for _ in 0..30 {
-                app.update();
-            }
-            let load = measure(&mut app);
+            // Detail near the new spot (grass, near trees) streams in:
+            // count once the view has stopped changing, so the count
+            // doesn't depend on how far the streaming had got (Marrow
+            // Creek's aerial view read 1193-1201 draws at a fixed 30
+            // frames, 1195 every time settled).
+            let load = settled(&mut app);
             let cam = {
                 let w = app.world_mut();
                 w.query_filtered::<Entity, With<crate::render::FreeCamera>>()
@@ -1037,16 +1124,29 @@ pub(crate) mod tests {
     }
 
     fn holds(map: &str) {
+        holds_with(map, None);
+    }
+
+    /// `holds`, under a given weather (and snow), instead of the clearing.
+    fn holds_with(map: &str, weather: Option<(&str, Option<f32>)>) {
         let _one_at_a_time = heavy();
-        println!(
-            "{map}: foliage {}",
-            if fetched_foliage() {
-                "fetched"
-            } else {
-                "FALLBACK (no foliage textures: scripts/fetch_assets.py not run)"
+        // Two different scenes: the forest with its fetched textures (cards
+        // and impostors, what ships) or without (a lighter fallback). Each
+        // is held to the budget; every message says which was measured.
+        let path = if fetched_foliage() {
+            "the fetched foliage (the shipped scene)"
+        } else {
+            "the FALLBACK foliage (no textures/foliage: scripts/fetch_assets.py \
+             not run), not the shipped scene"
+        };
+        println!("{map}: measuring {path}");
+        let loads = match weather {
+            Some((w, snow)) => {
+                println!("{map}: in {w}, snow {snow:?}");
+                loads_with(client_with(map, w, snow, None), map)
             }
-        );
-        let loads = loads(map);
+            None => loads(map),
+        };
         let mut over = Vec::new();
         for (view, load, od) in &loads {
             println!("{map} {view}: {}", load.summary());
@@ -1087,12 +1187,14 @@ pub(crate) mod tests {
                 over.push(format!("{view}: {}", o.join(", ")));
             }
         }
-        // A view that counted nothing would pass any budget.
+        // A view that counted nothing would pass any budget. (A floor, not
+        // a measure: the Training Yard's emptiest views draw 48-90 meshes
+        // by path and schedule, so it sits well under those.)
         assert!(
             loads
                 .iter()
-                .all(|(_, l, _)| l.draws > 50 && l.tris > 10_000),
-            "a view counted (almost) nothing: {:?}",
+                .all(|(_, l, _)| l.draws > 20 && l.tris > 10_000),
+            "{map}, {path}: a view counted (almost) nothing: {:?}",
             loads
                 .iter()
                 .map(|(v, l, _)| (v, l.draws, l.tris))
@@ -1100,7 +1202,7 @@ pub(crate) mod tests {
         );
         assert!(
             over.is_empty(),
-            "{map} over the frame budget:\n{}",
+            "{map} over the frame budget, measuring {path}:\n{}",
             over.join("\n")
         );
     }
@@ -1668,7 +1770,12 @@ pub(crate) mod tests {
     #[test]
     #[ignore = "timing: cargo test --lib busy -- --ignored --nocapture"]
     fn busy_moments() {
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+        ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
             for (name, mean, p99) in stats {
@@ -1693,7 +1800,25 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn sallow_reservoir_holds_the_budget() {
+        holds("sallow_reservoir");
+    }
+
+    #[test]
     fn training_yard_holds_the_budget() {
         holds("training_yard");
+    }
+
+    /// A thunderstorm: the rain sheets crossing the valley (the flashes
+    /// are a few frames, not a steady load).
+    #[test]
+    fn marrow_creek_holds_the_budget_in_a_storm() {
+        holds_with("marrow_creek", Some(("storm", None)));
+    }
+
+    /// The first snow, lying: flakes falling, the snow on every surface.
+    #[test]
+    fn kettle_pass_holds_the_budget_in_snow() {
+        holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
 }

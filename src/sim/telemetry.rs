@@ -410,8 +410,24 @@ pub fn finish(
                 }
                 _ => None,
             }),
+            // A contract's step (`SIM_CONTRACT`): whether it was met.
+            "contract": progression.as_ref().and_then(|p| {
+                let a = p.0.contract.as_ref()?;
+                let job = p.0.job.as_ref()?;
+                let home = outcome == "extracted";
+                use extraction_core::progression::Job;
+                let (kind, met) = match job {
+                    Job::Plant { planted, .. } => ("plant", *planted && home),
+                    Job::Bring { item, .. } => ("bring", home && s.loot.iter().any(|l| l == item)),
+                    Job::Scout { seen, .. } => ("scout", *seen && home),
+                    Job::Photograph { taken, .. } => ("photograph", *taken && home),
+                    _ => ("other", false),
+                };
+                Some(json!({"id": a.id, "step": a.step, "kind": kind, "met": met}))
+            }),
             // Nights slept in the safehouse (`SIM_OVERNIGHT`).
             "nights": house.as_ref().map_or(0, |h| h.nights_out),
+            "night_visits": house.as_ref().map_or(0, |h| h.visits),
             "x": round(pos.x, 1),
             "z": round(pos.z, 1),
         }),

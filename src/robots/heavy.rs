@@ -48,7 +48,7 @@ use super::{
 };
 use crate::interact::{InteractEvent, Socket, SocketKind, physics_on, seat_in_socket};
 use crate::items::{Catalog, SpawnItem, spawn_item};
-use crate::world::{Layer, Zone};
+use crate::world::Zone;
 
 /// How big it is against a walker (its legs, its reach, its hull).
 pub const SIZE: f32 = 2.0;
@@ -274,12 +274,6 @@ pub struct HeavyTear {
     pub out: Vec3,
 }
 
-/// A door it threw: a loose slab of the right size.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct ThrownDoor {
-    pub half: Vec3,
-}
-
 pub struct HeavyPlugin;
 
 impl Plugin for HeavyPlugin {
@@ -290,6 +284,7 @@ impl Plugin for HeavyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    pry_plates,
                     heavy_parts_destroyed,
                     seats_taken,
                     heavy_anomalies,
@@ -465,6 +460,17 @@ pub fn spawn_heavy(
             if disabled {
                 e.insert(ColliderDisabled);
             }
+            // A rifle butt or a blade is meant for these; a crowbar for
+            // the plates' edges.
+            match slot {
+                Slot::Bolt { .. } => {
+                    e.insert(crate::weapons::melee::WeakPoint(1.5));
+                }
+                Slot::Plate(_) => {
+                    e.insert(plate_seam());
+                }
+                _ => {}
+            }
         }
         for i in 0..4 {
             for piece in [LegPiece::Thigh(i), LegPiece::Shin(i)] {
@@ -585,6 +591,79 @@ fn loosen(commands: &mut Commands, fastened: &Query<&Fastened>, item: Entity) {
         .entity(item)
         .remove::<Fastened>()
         .insert(f.0.clone());
+}
+
+/// Torque a crowbar has to hold at a plate's edge to tear one of its
+/// bolts out, N·m (two hands on the bar; one alone won't).
+pub const PLATE_PRY: f32 = 200.0;
+
+/// Seconds that torque has to be held for a bolt to tear out.
+pub const PLATE_HOLD: f32 = 1.5;
+
+/// A plate's seam for the crowbar: its top long edge, running along it.
+pub fn plate_seam() -> crate::destruction::hooks::Pryable {
+    crate::destruction::hooks::Pryable {
+        needs: PLATE_PRY,
+        seam: Vec3::new(0.0, PLATE_HALF.y, PLATE_HALF.z),
+        along: Vec3::X,
+        held: 0.0,
+    }
+}
+
+/// A crowbar levered at a plate's edge: held hard enough for
+/// [`PLATE_HOLD`], a bolt tears out (two and the plate hangs loose for a
+/// hand). Only its plates have a seam; the rest of it isn't prised.
+fn pry_plates(
+    mut pried: MessageReader<crate::destruction::hooks::Pried>,
+    mut plates: Query<(
+        &HeavyPart,
+        &RobotPart,
+        &mut crate::destruction::hooks::Pryable,
+    )>,
+    children: Query<&Children>,
+    bolts: Query<(Entity, &HeavyPart, &GlobalTransform)>,
+    mut hits: MessageWriter<crate::weapons::ballistics::Hit>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for p in pried.read() {
+        let Ok((part, rp, mut seam)) = plates.get_mut(p.target) else {
+            continue;
+        };
+        let Slot::Plate(plate) = part.0 else {
+            continue;
+        };
+        seam.held = if p.torque >= seam.needs {
+            seam.held + dt
+        } else {
+            (seam.held - dt).max(0.0)
+        };
+        if seam.held < PLATE_HOLD {
+            continue;
+        }
+        seam.held = 0.0;
+        let bolt = children.get(rp.robot).ok().and_then(|cs| {
+            cs.iter().find_map(|c| {
+                bolts
+                    .get(c)
+                    .ok()
+                    .filter(|(_, h, _)| matches!(h.0, Slot::Bolt { plate: q, .. } if q == plate))
+            })
+        });
+        if let Some((b, _, gt)) = bolt {
+            hits.write(crate::weapons::ballistics::Hit {
+                entity: b,
+                point: gt.translation(),
+                normal: Vec3::Y,
+                velocity: Vec3::ZERO,
+                damage: rules::HARDENED,
+                shooter: None,
+                mass_g: 0.0,
+                load: Default::default(),
+                blow: None,
+            });
+        }
+    }
 }
 
 /// Bolts shot out, plates loosened and dropped, vents lost, the cell shot
@@ -1117,6 +1196,7 @@ fn move_arm(
     mut blows: MessageWriter<super::doors::DoorBlow>,
     mut impacts: MessageWriter<super::wreck::WreckImpact>,
     mut raid: ResMut<crate::raid::Raid>,
+    mut smash: MessageWriter<crate::destruction::hooks::Smash>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -1221,6 +1301,13 @@ fn move_arm(
                         radius: 70.0,
                         source: Some(e),
                     });
+                    // Whatever it came down on: panes, crates, planks.
+                    smash.write(crate::destruction::hooks::Smash {
+                        at: mark,
+                        radius: SLAM_RADIUS * 0.7,
+                        damage: 400.0,
+                        push: Vec3::NEG_Y * 3.0,
+                    });
                     impacts.write(super::wreck::WreckImpact {
                         at: mark,
                         size: 1.2,
@@ -1264,25 +1351,19 @@ fn move_arm(
                     arm.from = arm.claw;
                     arm.t = 0.0;
                     if let Some(door) = arm.door.take() {
-                        let half = Vec3::new(0.45, 1.0, 0.03);
                         let at = doors.get(door).map(|g| g.translation()).unwrap_or(arm.mark);
+                        // Gone: Destruction splinters it and leaves the
+                        // doorway broken until the Surge.
                         if let Ok(mut ec) = commands.get_entity(door) {
                             ec.despawn();
                         }
                         let away = (rest - arm.mark).with_y(0.0).normalize_or(Vec3::X);
-                        let side = away.cross(Vec3::Y);
-                        commands.spawn((
-                            Name::new("Thrown door"),
-                            ThrownDoor { half },
-                            Transform::from_translation(at),
-                            RigidBody::Dynamic,
-                            Collider::cuboid(half.x * 2.0, half.y * 2.0, half.z * 2.0),
-                            Mass(35.0),
-                            CollisionLayers::new(Layer::Item, [Layer::World, Layer::Item]),
-                            LinearVelocity(side * 5.0 + away * 2.0 + Vec3::Y * 2.5),
-                            AngularVelocity(Vec3::new(1.0, 4.0, 0.5)),
-                            Visibility::default(),
-                        ));
+                        smash.write(crate::destruction::hooks::Smash {
+                            at,
+                            radius: 0.8,
+                            damage: 300.0,
+                            push: away * 4.0 + Vec3::Y,
+                        });
                         blows.write(super::doors::DoorBlow { at, broke: true });
                         noise.write(super::Noise {
                             at,
@@ -1344,7 +1425,9 @@ fn fell_heavy(
             commands
                 .entity(e)
                 .insert((super::wreck::Broken, super::Salvaged));
-            let seed = e.index_u32() as f32;
+            // Seeded by where it fell, not by its entity: the same fall
+            // lies the same whatever else is in the world.
+            let seed = (spot_seed(t.translation) % 10_007) as f32;
             // Forward onto its face or over on a side: seeded, so no two
             // lie the same.
             // (Well over: a wreck, not something parked.)
@@ -1575,6 +1658,17 @@ pub fn clear_wrecks(world: &mut World) {
 /// see `fell_heavy`).
 pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];
 
+/// A seed for a machine from a spot in the world (to the centimetre):
+/// stable from run to run, and independent of entity ids.
+pub fn spot_seed(at: Vec3) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for v in [at.x, at.y, at.z] {
+        h ^= (v * 100.0).round() as i64 as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3).rotate_left(29);
+    }
+    h ^ (h >> 31)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -1585,6 +1679,16 @@ pub(crate) mod tests {
     /// A headless world with no director, and a heavy sent `to` from `at`
     /// (ground x/z), its senses off unless `senses`.
     pub(crate) fn world_with_heavy(at: [f32; 2], to: [f32; 2], senses: bool) -> (App, Entity) {
+        world_with_heavy_after(0, at, to, senses)
+    }
+
+    /// As [`world_with_heavy`], with `pad` unrelated entities spawned first.
+    pub(crate) fn world_with_heavy_after(
+        pad: usize,
+        at: [f32; 2],
+        to: [f32; 2],
+        senses: bool,
+    ) -> (App, Entity) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -1593,6 +1697,9 @@ pub(crate) mod tests {
         app.finish();
         app.cleanup();
         app.update();
+        for k in 0..pad {
+            app.world_mut().spawn(Name::new(format!("pad {k}")));
+        }
         let zone = app.world().resource::<Zone>().clone();
         let catalog = app.world().resource::<Catalog>().clone();
         let from = zone.on_ground(at[0], at[1]);
@@ -1677,8 +1784,15 @@ pub(crate) mod tests {
         let mut fastest = 0.0f32;
         let mut worst = 0.0f32;
         let mut steps = 0;
+        // Its closest approach: once there it searches the site, and how
+        // long that takes depends on what's around (trees), so by the end
+        // it may be on its way back.
+        let to = zone.on_ground(40.0, 205.0);
+        let mut closest = f32::INFINITY;
         for _ in 0..(90 * 30) {
             app.update();
+            let p = app.world().get::<Transform>(heavy).unwrap().translation;
+            closest = closest.min(Vec2::new(p.x - to.x, p.z - to.z).length());
             let w = app.world().get::<Walker>(heavy).unwrap();
             fastest = fastest.max(w.velocity.length());
             for [hip, _, foot] in app.world().get::<LegPoses>(heavy).unwrap().0 {
@@ -1696,12 +1810,7 @@ pub(crate) mod tests {
         assert!(t.translation.is_finite());
         let over = t.translation.y - zone.ground(t.translation.x, t.translation.z);
         assert!(over > 2.2 && over < 3.0, "rides {over:.2} m up");
-        let to = zone.on_ground(40.0, 205.0);
-        assert!(
-            Vec2::new(t.translation.x - to.x, t.translation.z - to.z).length() < 6.0,
-            "got there: {:.1?}",
-            t.translation
-        );
+        assert!(closest < 6.0, "got there: within {closest:.1} m");
         // Slow: you can outwalk it, but not stroll.
         assert!(fastest > 0.9 && fastest < 1.8, "{fastest:.2} m/s");
         assert!(steps > 8, "it stepped ({steps})");
@@ -1860,6 +1969,39 @@ pub(crate) mod tests {
         assert!(salvage.iter().any(|s| s == "heavy_claw"), "{salvage:?}");
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
+    }
+
+    /// Where and how it lies is seeded by the machine, not by its entity
+    /// id: with fifty unrelated things spawned first, the same fall lies
+    /// the same.
+    #[test]
+    fn its_fall_is_its_own() {
+        let fall = |pad: usize| {
+            let (mut app, heavy) = world_with_heavy_after(pad, [40.0, 230.0], [40.0, 230.0], false);
+            for _ in 0..30 {
+                app.update();
+            }
+            for k in [0u8, 2] {
+                let (knee, _) = part(&mut app, heavy, Slot::Knee(k)).unwrap();
+                hit(&mut app, knee, 400.0);
+            }
+            for _ in 0..120 {
+                app.update();
+            }
+            (
+                heavy,
+                app.world().get::<Heavy>(heavy).unwrap().lean,
+                app.world().get::<Transform>(heavy).unwrap().rotation,
+            )
+        };
+        let (a, lean_a, rot_a) = fall(0);
+        let (b, lean_b, rot_b) = fall(50);
+        assert_ne!(a.index_u32(), b.index_u32(), "different entities");
+        assert!((lean_a - lean_b).length() < 1e-5, "{lean_a} vs {lean_b}");
+        // (Its pose settles under physics, which isn't bit-exact between
+        // worlds; the seeded lean is.)
+        let off = rot_a.angle_between(rot_b);
+        assert!(off < 0.02, "lies {off} rad apart");
     }
 
     /// An EMP puts it on its knees, but for less than a walker's twelve
@@ -2113,5 +2255,59 @@ pub(crate) mod tests {
         let (hurt, raised) = run(true);
         assert!(raised);
         assert!(hurt < 1.0, "stepped back, it missed ({hurt:.0})");
+    }
+
+    /// A crowbar works on its plates and nowhere else: levered hard at a
+    /// plate's edge it tears a bolt out every [`PLATE_HOLD`] (two and the
+    /// plate hangs loose for a hand); too gently, nothing; its hull, bolts
+    /// and covered vents have no seam.
+    #[test]
+    fn a_crowbar_tears_its_bolts_out() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let (mut app, heavy) = world_with_heavy([40.0, 230.0], [40.0, 230.0], false);
+        for _ in 0..10 {
+            app.update();
+        }
+        let seams: Vec<Slot> = app
+            .world_mut()
+            .query::<(&HeavyPart, &Pryable, &RobotPart)>()
+            .iter(app.world())
+            .filter(|(_, _, p)| p.robot == heavy)
+            .map(|(h, _, _)| h.0)
+            .collect();
+        assert_eq!(
+            seams.len(),
+            3,
+            "the three plates and nothing else: {seams:?}"
+        );
+        assert!(seams.iter().all(|s| matches!(s, Slot::Plate(_))));
+        let (plate, _) = part(&mut app, heavy, Slot::Plate(2)).unwrap();
+        let lever = |app: &mut App, torque: f32, secs: f32| {
+            for _ in 0..(secs * 90.0) as usize {
+                app.world_mut().write_message(Pried {
+                    target: plate,
+                    torque,
+                    by: Entity::PLACEHOLDER,
+                });
+                app.update();
+            }
+            for _ in 0..4 {
+                app.update();
+            }
+        };
+        let bolts = |app: &App| app.world().get::<Heavy>(heavy).unwrap().bolts[2] as usize;
+        // One hand's worth: it holds.
+        lever(&mut app, PLATE_PRY * 0.6, 4.0);
+        assert_eq!(bolts(&app), rules::BOLTS_PER_PLATE, "too gentle");
+        lever(&mut app, PLATE_PRY * 1.2, PLATE_HOLD * 1.1);
+        assert_eq!(bolts(&app), rules::BOLTS_PER_PLATE - 1, "a bolt tears out");
+        lever(&mut app, PLATE_PRY * 1.2, PLATE_HOLD * 1.1);
+        assert_eq!(bolts(&app), rules::BOLTS_PER_PLATE - 2);
+        assert!(
+            part(&mut app, heavy, Slot::Plate(2)).is_some(),
+            "the plate holds"
+        );
+        let (_, free) = seated(&mut app, heavy, Slot::Plate(2)).unwrap();
+        assert!(free, "on two bolts it hangs loose for a hand");
     }
 }

@@ -18,6 +18,7 @@ use crate::raid::truck::Pressable;
 use crate::raid::{Phase, Raid, TRUCK_WAIT};
 use crate::rig::LocalPlayer;
 use crate::robots::Robot;
+use crate::robots::director::NightVisit;
 use crate::world::Layer;
 use crate::world::buildings::{Building, DoorLeaf};
 
@@ -36,6 +37,10 @@ pub struct Safehouse {
     pub peak: u8,
     /// Nights slept this raid (for the logbook).
     pub nights_out: u32,
+    /// Of those, the nights something came to the door (for the sims).
+    pub visits: u32,
+    /// Zone-clock seconds slept this raid (a woken night is short).
+    pub slept: f32,
 }
 
 /// Steps the hour on from the cycle's own, one per night slept
@@ -78,6 +83,10 @@ const LEFTOVERS: [(&str, &str, Vec3); 2] = [
     ),
     ("cinder_works", "matches", Vec3::new(1.95, FLOOR + 0.1, 2.3)),
 ];
+/// A loud night: woken this far through it, as the visit sets out from the
+/// Gate (`NightVisit::delay` after the radio).
+const WOKEN_AT: f32 = 0.6;
+const VISIT_DELAY: f32 = 3.0;
 /// Inside: this close to the cabin's middle.
 const INSIDE: f32 = 3.2;
 
@@ -86,6 +95,7 @@ pub struct SafehousePlugin;
 impl Plugin for SafehousePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Slept>()
+            .add_message::<NightVisit>()
             .init_resource::<Safehouse>()
             .init_resource::<HourShift>()
             .add_systems(
@@ -104,6 +114,54 @@ impl Plugin for SafehousePlugin {
             )
             .add_systems(Update, (furnish, scenario::direct, sim::sim_overnight));
     }
+}
+
+fn lay_leftovers(
+    commands: &mut Commands,
+    catalog: &Catalog,
+    map: &str,
+    cabin_at: &GlobalTransform,
+) {
+    for (id, local) in LEFTOVERS
+        .iter()
+        .filter(|(m, ..)| *m == map)
+        .map(|(_, id, at)| (id, at))
+    {
+        if let Some(kind) = catalog.kind(id) {
+            spawn_item(
+                commands,
+                catalog,
+                SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(cabin_at.transform_point(*local)),
+                    condition: 1.0,
+                },
+            );
+        }
+    }
+}
+
+/// The Surge has re-rolled the Zone (and swept the last people's
+/// leftovers with everything loose): they're back, for the new cycle.
+/// Without this they came back only when the game was next opened.
+pub(crate) fn relay_leftovers(world: &mut World) {
+    let cycle = world.resource::<Raid>().cycle;
+    let map = world.resource::<LaunchOptions>().map.clone();
+    let Some(cabin) = world.get_resource::<Safehouse>().and_then(|h| h.cabin) else {
+        return;
+    };
+    let Some(at) = world.get::<GlobalTransform>(cabin).copied() else {
+        return;
+    };
+    if world.resource::<Safehouse>().state.laid == Some(cycle) {
+        return;
+    }
+    world.resource_mut::<Safehouse>().state.laid = Some(cycle);
+    let catalog = world.resource::<Catalog>().clone();
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    let mut commands = Commands::new(&mut queue, world);
+    lay_leftovers(&mut commands, &catalog, &map, &at);
+    queue.apply(world);
 }
 
 /// The cabin and its door, once the buildings are up; and its stove and bed
@@ -130,25 +188,11 @@ fn find_cabin(
     };
     house.cabin = Some(cabin);
     // What the last people left, where their note on the table says (Story's
-    // leftovers): there again each Surge cycle until the cabin's cleared.
-    if !house.state.cleared || house.state.cycle != raid.cycle {
-        for (id, local) in LEFTOVERS
-            .iter()
-            .filter(|(m, ..)| *m == opts.map)
-            .map(|(_, id, at)| (id, at))
-        {
-            if let Some(kind) = catalog.kind(id) {
-                spawn_item(
-                    &mut commands,
-                    &catalog,
-                    SpawnItem {
-                        kind,
-                        transform: Transform::from_translation(cabin_at.transform_point(*local)),
-                        condition: 1.0,
-                    },
-                );
-            }
-        }
+    // leftovers): laid once each Surge cycle (the save remembers, so a
+    // restored Zone, which already has them, doesn't get them again).
+    if house.state.laid != Some(raid.cycle) {
+        house.state.laid = Some(raid.cycle);
+        lay_leftovers(&mut commands, &catalog, &opts.map, cabin_at);
     }
     house.door = doors
         .iter()
@@ -265,8 +309,8 @@ fn press(
     catalog: Res<Catalog>,
     wedged: Query<(), With<crate::robots::doors::Wedged>>,
     mut attention: Query<&mut Attention>,
-    mut director: Option<ResMut<crate::robots::director::Director>>,
-    doors: Query<&GlobalTransform, With<DoorLeaf>>,
+    sleepers: Query<&GlobalTransform>,
+    mut visits: MessageWriter<NightVisit>,
     mut slept: MessageWriter<Slept>,
     mut progression: ResMut<super::Progression>,
     mut budget: Option<ResMut<crate::anomaly::AttentionBudget>>,
@@ -318,19 +362,23 @@ fn press(
                     .get(*player)
                     .map_or(0, |a| a.feeling() as u8)
                     .max(house.peak.min(2));
-                sleep(&mut raid, &mut house, &mut shift);
+                let visit = feeling >= 2;
+                // A quiet night sleeps through to morning; a loud one wakes
+                // you in the dark, as they set out for the door.
+                sleep(&mut raid, &mut house, &mut shift, !visit);
                 slept.write(Slept);
                 progression.0.slept_out = true;
-                if feeling >= 2 {
-                    // They've followed you: something at the door before
-                    // light.
+                if visit {
+                    // They've followed you: the radio, and time to bar,
+                    // hide or take the window before they're at the door.
                     raid.say(lines::SAFE_NIGHT_VISIT);
-                    let at = house
-                        .door
-                        .and_then(|d| doors.get(d).ok())
-                        .map(|g| g.translation());
-                    if let (Some(d), Some(at)) = (director.as_mut(), at) {
-                        d.queue_response(20.0, at);
+                    house.visits += 1;
+                    if let (Some(door), Ok(me)) = (house.door, sleepers.get(*player)) {
+                        visits.write(NightVisit {
+                            door,
+                            at: me.translation(),
+                            delay: VISIT_DELAY,
+                        });
                     }
                 } else {
                     raid.say(lines::SAFE_WOKE);
@@ -348,10 +396,16 @@ fn press(
     }
 }
 
-/// A night passes: the clock, the hour, the truck.
-pub fn sleep(raid: &mut Raid, house: &mut Safehouse, shift: &mut HourShift) {
-    raid.clock += NIGHT;
-    shift.0 = shift.0.wrapping_add(1);
+/// A night passes (`to_morning`), or the part of it before a visit wakes
+/// you: the clock, the hour, the truck.
+pub fn sleep(raid: &mut Raid, house: &mut Safehouse, shift: &mut HourShift, to_morning: bool) {
+    let slept = if to_morning { NIGHT } else { NIGHT * WOKEN_AT };
+    raid.clock += slept;
+    house.slept += slept;
+    // Woken in the dark, it's still night; morning is a step on.
+    if to_morning {
+        shift.0 = shift.0.wrapping_add(1);
+    }
     house.state.nights += 1;
     house.nights_out += 1;
     // The truck waits the night if it was told to; otherwise it's gone.
@@ -430,7 +484,9 @@ fn furnish(world: &mut World) {
     }
     for saved in &stash {
         if let Some(e) = crate::persist::restore_item(world, saved, Transform::IDENTITY) {
-            crate::persist::put_in_bag(world, e, bag, Vec3::from_array(saved.local));
+            let local = Vec3::from_array(saved.local);
+            crate::persist::put_in_bag(world, e, bag, local);
+            crate::persist::place_unseated(world, e, Some((bag, local)));
         }
     }
 }
@@ -472,6 +528,8 @@ fn homecoming(
     }
     let peak = std::mem::take(&mut house.peak);
     house.nights_out = 0;
+    house.visits = 0;
+    house.slept = 0.0;
     house.truck_waits = false;
     if !house.state.claimed() || peak < extraction_core::safehouse::FOUND_AT {
         return;

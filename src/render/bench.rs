@@ -191,11 +191,33 @@ struct LeverHandle;
 
 fn dress_controls(
     mut commands: Commands,
-    controls: Query<(Entity, &Pressable), Added<Pressable>>,
+    controls: Query<(Entity, &Pressable, Option<&ChildOf>), Added<Pressable>>,
+    benches: Query<(), With<crate::raid::bench::Bench>>,
+    // Run-levers that have a look of their own (a breaker on its cabinet, a
+    // valve wheel, a pump, a mine tub).
+    own_look: Query<
+        (),
+        Or<(
+            With<crate::world::underground::PowerSwitch>,
+            With<crate::world::underground::DrainControl>,
+            With<crate::world::workings::MineCart>,
+        )>,
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (e, p) in &controls {
+    for (e, p, parent) in &controls {
+        let on_bench = parent.is_some_and(|c| benches.contains(c.parent()));
+        if *p == Pressable::BenchRun && !on_bench {
+            // Anything else that runs on a pull (the furnace's vent and
+            // crane levers) gets a wall lever you can see from across a
+            // room, unless it has a look of its own: the bench's little
+            // black stub, which every one got, read as nothing.
+            if !own_look.contains(e) {
+                wall_lever(&mut commands, e, &mut meshes, &mut materials);
+            }
+            continue;
+        }
         match p {
             Pressable::BenchSelect => {
                 let red = materials.add(StandardMaterial {
@@ -237,6 +259,54 @@ fn dress_controls(
             _ => {}
         }
     }
+}
+
+/// A pull lever on a wall: a yellow back plate, a dark steel arm and a red
+/// knob at its end, the knob where the hand goes (`docs/LEGIBILITY.md`,
+/// affordances: contrast and a shape that says pull).
+fn wall_lever(
+    commands: &mut Commands,
+    e: Entity,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let plate = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.8, 0.6, 0.08),
+        perceptual_roughness: 0.6,
+        ..default()
+    });
+    let steel = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.12, 0.12, 0.13),
+        perceptual_roughness: 0.45,
+        metallic: 0.7,
+        ..default()
+    });
+    let knob = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.7, 0.07, 0.05),
+        emissive: LinearRgba::rgb(0.08, 0.005, 0.0),
+        perceptual_roughness: 0.35,
+        ..default()
+    });
+    commands.entity(e).with_children(|c| {
+        c.spawn((
+            Mesh3d(meshes.add(Cuboid::new(0.14, 0.24, 0.025))),
+            MeshMaterial3d(plate),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
+        // The arm stands out of the plate and up, the knob at its end.
+        let arm = Quat::from_rotation_x(-0.5);
+        c.spawn((
+            Mesh3d(meshes.add(Cylinder::new(0.012, 0.26))),
+            MeshMaterial3d(steel),
+            Transform::from_translation(arm * Vec3::new(0.0, 0.13, 0.0) + Vec3::Z * 0.02)
+                .with_rotation(arm),
+        ));
+        c.spawn((
+            Mesh3d(meshes.add(Sphere::new(0.035).mesh().uv(16, 10))),
+            MeshMaterial3d(knob),
+            Transform::from_translation(arm * Vec3::new(0.0, 0.27, 0.0) + Vec3::Z * 0.02),
+        ));
+    });
 }
 
 /// The lever leans back while the bench runs.

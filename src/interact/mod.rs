@@ -24,7 +24,9 @@ pub mod hand_climb;
 mod physics_audit;
 pub mod physics_hands;
 pub mod poke;
+pub mod read;
 pub mod tools;
+pub mod touch;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -316,6 +318,8 @@ impl Plugin for InteractPlugin {
                 tools::ToolsPlugin,
                 first_aid::FirstAidPlugin,
                 gestures::GesturesPlugin,
+                touch::TouchPlugin,
+                read::ReadPlugin,
             ));
     }
 }
@@ -783,6 +787,8 @@ fn apply_hand_actions(
     mut backpacks: Query<(Entity, &GlobalTransform, &mut body::Backpack)>,
     catalog: Res<Catalog>,
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
+    // Things to take up and read (`read`): theirs to handle.
+    reading: (Query<(), With<read::Readable>>, Res<crate::rig::RigDriver>),
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
     ladders: Query<(), With<hand_climb::Ladder>>,
@@ -824,6 +830,9 @@ fn apply_hand_actions(
                 });
                 events.write(InteractEvent::Grabbed { item, side });
             }
+            HandAction::Grab { item, .. }
+                if reading.0.contains(item)
+                    && read::reads(*reading.1, pressables.contains(item)) => {}
             HandAction::Grab {
                 player,
                 side,
@@ -1069,7 +1078,7 @@ fn apply_hand_actions(
                             && s.occupant.is_none()
                             && accepts_item(&s.kind, def.size, None, def.firearm.is_some(), None)
                     })
-                    .map(|(e, _, s, _)| (slot_rank(&s.kind), e))
+                    .map(|(e, _, s, _)| (slot_rank(&s.kind, def.magazine.is_some()), e))
                     .collect();
                 slots.sort_by_key(|(r, _)| *r);
                 if let Some((_, se)) = slots.first().copied() {
@@ -1159,13 +1168,18 @@ fn items_kinds(
         .collect()
 }
 
-fn slot_rank(kind: &SocketKind) -> u8 {
-    match kind {
-        SocketKind::Body(SlotKind::Pocket) => 0,
-        SocketKind::Body(SlotKind::Pouch) => 1,
-        SocketKind::Body(SlotKind::Mount) => 2,
-        SocketKind::Body(SlotKind::Holster) => 3,
-        SocketKind::Body(SlotKind::Sling) => 4,
+/// Which free slot a put-away item goes to first. The pouches are kept for
+/// magazines (where a reload reaches, and where a one-handed one takes
+/// them from, `seat_from_body`): anything else goes to a pocket first, a
+/// pouch only when nothing else on the body is free.
+fn slot_rank(kind: &SocketKind, magazine: bool) -> u8 {
+    match (kind, magazine) {
+        (SocketKind::Body(SlotKind::Pouch), true) => 0,
+        (SocketKind::Body(SlotKind::Pocket), _) => 1,
+        (SocketKind::Body(SlotKind::Mount), _) => 2,
+        (SocketKind::Body(SlotKind::Holster), _) => 3,
+        (SocketKind::Body(SlotKind::Sling), _) => 4,
+        (SocketKind::Body(SlotKind::Pouch), false) => 5,
         _ => 9,
     }
 }

@@ -13,7 +13,11 @@ With --check it fails (exit 1) unless, in every valley: on a clear night
 with a moon up the near ground and the sky differ by at least GROUND_SKY
 luma in each view that has both; under fog and downpour each view's mean
 is no brighter than the clear full-moon night's (within 2 luma: a forest floor is at the black floor either way); and no view is a hole (more than
-HOLE of its pixels near black).
+HOLE of its pixels near black). And storms (`storm`, `stormflash`: a
+strike's light held): a flash lights the near ground at least FLASH_LIFT
+luma over the dark storm's, the sky brighter too, without blowing more
+than BLOWN of the frame out (luma 250 or more); the dark storm is no
+brighter than the clear full-moon night.
 """
 import sys
 from pathlib import Path
@@ -38,6 +42,7 @@ def stats(px):
         "p50": pct(0.5),
         "p90": pct(0.9),
         "black": sum(1 for v in px if v < 8) / n,
+        "blown": sum(1 for v in px if v >= 250) / n,
         "hist": [round(h * 100 / n) for h in hist],
     }
 
@@ -48,6 +53,8 @@ FOREST = ("spruce", "pines", "wood", "belt")
 # Views looking up at the sky (the moon's): no near ground in the frame.
 SKYWARD = ("moon",)
 HOLE = 0.25
+FLASH_LIFT = 25
+BLOWN = 0.15
 
 
 def main(root, check=False):
@@ -76,13 +83,29 @@ def failures(seen):
     bad = []
     for rel, (s, sky, ground) in seen.items():
         valley, case, view = rel.parts
-        weather, moon = case.split("_")
+        weather, moon, *hour = case.split("_")
+        hour = hour[0] if hour else "night"
         if s["black"] > HOLE:
             bad.append(f"{rel}: {s['black']*100:.0f}% near black")
         if weather == "clearing" and moon != "new" and not any(f in view for f in FOREST + SKYWARD):
             if abs(sky["p50"] - ground["p50"]) < GROUND_SKY:
                 bad.append(f"{rel}: ground {ground['p50']} too like the sky {sky['p50']}")
-        if weather in ("fog", "downpour"):
+        if weather == "stormflash":
+            dark = seen.get(Path(valley, case.replace("stormflash", "storm"), view))
+            if dark:
+                d_s, d_sky, d_ground = dark
+                # Under trees the canopy shades the ground from it (the
+                # flash casts shadows): the frame as a whole lifts.
+                if any(f in view for f in FOREST):
+                    if s["mean"] < d_s["mean"] + FLASH_LIFT:
+                        bad.append(f"{rel}: the flash lit the wood to {s['mean']:.0f} from {d_s['mean']:.0f}")
+                elif ground["p50"] < d_ground["p50"] + FLASH_LIFT:
+                    bad.append(f"{rel}: the flash lit the ground to {ground['p50']} from {d_ground['p50']}")
+                if sky["p50"] <= d_sky["p50"]:
+                    bad.append(f"{rel}: the flash left the sky at {sky['p50']}")
+            if s["blown"] > BLOWN:
+                bad.append(f"{rel}: {s['blown']*100:.0f}% blown out")
+        if weather in ("fog", "downpour") or (weather == "storm" and hour == "night"):
             clear = seen.get(Path(valley, "clearing_full", view))
             if clear and s["mean"] > clear[0]["mean"] + 2.0:
                 bad.append(f"{rel}: overcast {s['mean']:.1f} not darker than clear {clear[0]['mean']:.1f}")

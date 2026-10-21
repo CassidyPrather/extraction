@@ -197,7 +197,10 @@ noise that carries with how hard and how heavy (metal rings, cloth
 thuds): drop a pan beside a drone and it knows; throw a tin can down the
 street and a walker goes to look where it landed, not where you are
 (`items/impacts.rs`). Only gunfire and what the dirigible and pylons see
-get a response team sent; a clatter just gets looked at.
+get a response team sent; a clatter just gets looked at. Keep shooting
+and they send more: each reported shot heats things up a point (at most
+one per 8 s, cooling a point every two and a half minutes), and from
+2.5 a response brings two walkers as well, who pin and flank.
 
 **Robots sense like animals, not cameras** (`robots/senses.rs`, every
 tunable named and documented there). Sight is an *exposure*: range, fog
@@ -228,9 +231,26 @@ through walls by the same rule the player's ears do (`acoustics`).
 **Hounds hunt by ear** (`robots/hound_mind.rs`). Poor eyes tuned to
 movement, the best ears in the Zone: a sound sends a hound running, the
 last stretch it stalks low, then noses round. Seen, it comes round to
-your side, crouches (the tell) and lunges to bite. The way to beat one is
+your side, crouches (the tell) and lunges to bite; a pair splits up, one
+round each side. The way to beat one is
 the opposite of a drone: keep still and quiet. The director answers
 gunfire with a pair of hounds a third of the time.
+
+**Walkers pin and flank** (`robots/walker.rs`). A walker fights from
+cover in range. Two on one player pair up: the first pins you, the other
+says so (`Mind::Flanking`) and works round to your side, about 75° off
+the first's line, so cover that faces one doesn't face both. Three or
+more take sides by turns. A walker shot most of the way through its core
+(under a third left) breaks off: it says so (`Mind::Retreating`) and falls
+back about 14 m to cover away from you, still shooting. Press it.
+
+**The Sorter rings its hall** (`robots/sorter_mind.rs`). The Depot's
+gantry can't leave its rails. It turns its head to a sound; seeing you,
+it bangs the hall once (loud enough to wake what sleeps in the bays) and
+throws a tote while you're within 14 m, after a wind-up that's its tell:
+it throws where you stood then, so step aside. Lose it and it watches
+where you went, then gropes round there with its arm, then goes back to
+its sorting.
 
 **Robots remember and search** (`robots/search.rs`). Each keeps a
 last-known position and an uncertainty that grows at walking pace while
@@ -242,8 +262,9 @@ ground hard by walls and cover within its uncertainty (a drone comes down to a d
 round at each. Nothing, and it **gives up**: back to its job, cut short,
 or home if finding you was the job. Lose a robot mid-fight and it does
 the same from where it last saw you. A robot that notices you calls the
-others within 45 m to come and look (they don't open fire until they see
-you themselves), and a radio you carry hears the chatter. Each step is a
+others within 45 m to come and look (a drone, up high, spots for them:
+its call carries 120 m), and they don't open fire until they see you
+themselves; a radio you carry hears the chatter. Each step is a
 message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
 for sound and the wrist.
 
@@ -287,7 +308,12 @@ doorway that stands open and looks in (it hangs back from a shut one,
 waiting); a walker walks up to a shut door and opens it. A **door wedge**
 set down against the foot of a closed door jams it — for you too, until
 you pick the wedge up — and a walker that finds one batters the door for
-twelve loud seconds before tearing it off its hinges.
+twelve loud seconds before tearing it off its hinges. Nor are thin walls
+cover: a walker that loses you behind a plank wall or door, close by and
+knowing roughly where, settles its turret (the same tell as an aimed
+shot) and fires three rounds through it, once, if a round would get
+through (`destruction::through`; brick and steel stop them). Moving off
+from where it lost you beats it.
 
 ### The heavy: you should not be fighting this
 
@@ -298,9 +324,11 @@ of three red lenses and one manipulator arm. It walks a little slower
 than you; it doesn't hide, take cover or shoot. It comes straight at you,
 and when you're in reach its arm rises over its hull, hissing (1.2 s, the
 tell), and comes down where you stood (70 at the middle, less at the
-edge, and you feel the blow land). Hiding indoors only brings it to the
-door: it tears the door off and reaches in, and tears at the walls (a
-`HeavyTear` for the destruction work to answer). Out of sight it searches
+edge, and you feel the blow land; whatever it lands on splinters).
+Hiding indoors only brings it to the door: it wrenches the door off and
+reaches in, and every few seconds tears a doorway-sized hole in the wall
+between it and you (Destruction's `Breach`: wood, plaster and tin tear;
+brick and concrete hold). Out of sight it searches
 like any robot, patiently, then gives up and walks home.
 
 **When it comes.** Not on a timer. The director sends one when the whole
@@ -308,7 +336,8 @@ Zone has been looking at you (attention at its worst, "the whole Zone is
 looking at you", held for 40 s, not in a raid's first six minutes), or at
 once when someone stands within 60 m of a Gate carrying a valley key. One
 at a time, fifteen minutes between one going and the next, at most two a
-raid, none with the director off (the recall, the yard). A horn sounds
+raid, none with the director off (the recall, the yard) or while a
+night visit is on its way. A horn sounds
 from the Gate, the radio hears it, and it walks out twenty seconds later
 toward where you are. A pure step function, so pacing is a test
 (`heavies_keep_their_distance_over_a_raid`: a quiet raid never meets one,
@@ -320,7 +349,7 @@ what can be hurt is small and particular:
 
 | Piece | Where | What it takes | What it does |
 | - | - | - | - |
-| Bolts | four on each plate | one ordinary round each | on two, the plate hangs loose and a hand can tear it off; on none it drops |
+| Bolts | four on each plate, ringed amber | one ordinary round each, or a good butt stroke | on two, the plate hangs loose and a hand can tear it off; on none it drops. A crowbar at a plate's edge (two hands, 200 N·m) tears one out each time it gives |
 | Plates | the hatch on its back, one down each flank | nothing | cover the cell and the vents: a covered weak point takes nothing, blasts and anomalies included |
 | Knees | out in the open, lit cyan | ~5 rifle rounds, 3 from a Mosin | one gone and it limps; two and it's down for good |
 | Vents | behind the flank plates | 120 | shed its heat: each lost, it runs hotter |
@@ -568,6 +597,24 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Optics**: the scope moves the sight line to its eyepiece and
   magnifies when your eye is on it: in the headset, a picture-in-picture
   lens (with a PU reticle in the scope); flat mode zooms the camera.
+- **Looking through it** (`weapons/optics.rs`):
+  - *Eye box*: a scope shows its picture only with your eye about 7 cm
+    behind the eyepiece and on its axis. Drift a few millimetres off and
+    a black edge closes in from the side you moved away from; lean back
+    or crowd it and the picture shrinks to black.
+  - *Parallax*: off the axis, the picture slides against the reticle, so
+    the reticle on a target only holds true with your eye centred.
+  - *Glint*: at dawn and dusk, a scope facing the low sun flashes back
+    along its line. A robot it points at, out to 400 m, sees the flash
+    like a torch beam in the dark. Don't glass a valley into the sun.
+  - *Iron sights* line up at the cheek: bring a gun without a scope up
+    with your eye just behind the rear sight, and it settles (at most
+    about 3 degrees, about the front post) so your eye, the rear sight
+    and the post are in line. Your eye is on the target, so the front
+    post goes soft as it comes up: a dark, soft-edged disc about 12 mm
+    across that fades in round the post. It's an approximation of focus,
+    not a depth-of-field pass. Comfort setting `post_blur`, or
+    `--no-post-blur`, turns it off.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one

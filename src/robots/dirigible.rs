@@ -264,17 +264,21 @@ pub(crate) fn fly_dirigibles(
 /// Lowering, landing and reeling up the cargo pod.
 fn cargo(
     mut commands: Commands,
-    mut ships: Query<(Entity, &mut Dirigible, &Brain, &GlobalTransform)>,
+    mut ships: Query<(
+        Entity,
+        &mut Dirigible,
+        &Brain,
+        &GlobalTransform,
+        &mut super::LootRng,
+    )>,
     mut pods: Query<&mut Transform, With<CargoPod>>,
     zone: Res<Zone>,
     loot: Option<Res<crate::items::loot::Loot>>,
     catalog: Res<crate::items::Catalog>,
     time: Res<Time>,
-    mut rng: Local<Option<extraction_core::noise::Rng>>,
 ) {
     let dt = time.delta_secs();
-    let rng = rng.get_or_insert_with(|| extraction_core::noise::Rng::new(0xCA60));
-    for (e, mut d, brain, gt) in &mut ships {
+    for (e, mut d, brain, gt, mut rng) in &mut ships {
         let pos = gt.translation();
         let gondola = pos.y - RADIUS - 1.1;
         let drop = (gondola - zone.ground(pos.x, pos.z) - 0.6).max(0.0);
@@ -309,7 +313,7 @@ fn cargo(
                 .id();
             if let Some(loot) = &loot {
                 let mut queue = Vec::new();
-                for drop in loot.0.roll("cargo_pod", &catalog, rng) {
+                for drop in loot.0.roll("cargo_pod", &catalog, &mut rng.0) {
                     queue.push(drop);
                 }
                 for (i, drop) in queue.into_iter().enumerate() {

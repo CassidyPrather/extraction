@@ -84,6 +84,7 @@ fn gallery(
     mut stage: Local<u32>,
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
+    mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -295,6 +296,10 @@ fn gallery(
             let _ = f.set_handle_lift(1.0);
             let _ = f.set_bolt_travel(1.0);
             let _ = f.set_break_open(true);
+            // And a bipod swung down.
+            if let Ok(mut b) = bipods.get_mut(e) {
+                b.deployed = true;
+            }
             false
         });
         pending_mags.retain(|&(gun, mag)| {
