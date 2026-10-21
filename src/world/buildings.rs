@@ -6138,8 +6138,7 @@ pub fn dress_buildings(
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;
             let gseed = super::overgrowth::seed(at, &b.prefab);
-            let mut growth =
-                super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
+            let mut growth = super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
             // Saplings through a ruin's floor, bushes at the walls' feet.
             let ruin = extraction_core::map::prefab_base(&b.prefab) != b.prefab;
             let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);
