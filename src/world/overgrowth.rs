@@ -159,6 +159,16 @@ fn vigour(seed: u64) -> f32 {
     }
 }
 
+/// The ivy on the prefab `id`, as `grow`: none on a vehicle (a wreck, a
+/// boxcar), which isn't a wall for it to climb (what grows at its feet is
+/// `reclaim`'s).
+pub fn grow_on(id: &str, geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
+    if extraction_core::map::prefab_is_vehicle(id) {
+        return Growth::default();
+    }
+    grow(geo, occ, seed, north)
+}
+
 /// The ivy on a building: its pieces, its occlusion and sky (`occ`), its
 /// seed, and `north` (building-local) for the shaded side.
 pub fn grow(geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
@@ -910,6 +920,28 @@ mod tests {
         assert!(!warm(&kettle, line + 1.0));
         let marrow = crate::world::load_map_def("marrow_creek");
         assert!(warm(&marrow, 500.0));
+    }
+
+    /// No ivy on a vehicle: a wreck's body or a boxcar isn't a ruin's wall.
+    #[test]
+    fn no_ivy_climbs_a_vehicle() {
+        for id in crate::world::buildings::PREFABS
+            .iter()
+            .filter(|id| extraction_core::map::prefab_is_vehicle(id))
+        {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            for k in 1..24u64 {
+                let g = grow_on(id, &geo, &occ, k * 7919, Vec3::NEG_Z);
+                assert!(
+                    g.vines.is_empty() && g.leaves.is_empty(),
+                    "{id} seed {k}: ivy on a vehicle"
+                );
+            }
+        }
+        for id in ["wreck_lada", "wreck_uaz", "wreck_lorry", "boxcar"] {
+            assert!(extraction_core::map::prefab_is_vehicle(id), "{id}");
+        }
     }
 
     /// Ivy is never bare: every vine has leaves within 0.4 m along it; and

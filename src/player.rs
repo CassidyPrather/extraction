@@ -65,6 +65,9 @@ pub struct Body {
     /// above. What moves you and what gets shot are both this tall, so you
     /// can duck under a beam, a fallen trunk or a low doorway for real.
     pub height: f32,
+    /// How much slower a bulky thing in the hands makes you (0: not at
+    /// all; `interact::carry`). You can't run with one.
+    pub hauling: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -249,6 +252,7 @@ pub fn move_bodies(
         let right = Vec3::new(-fwd.z, 0.0, fwd.x);
         let want_sprint = input.sprint
             && enc.can_sprint
+            && body.hauling <= 0.0
             && body.stamina > 0.05
             && input.locomotion.y > 0.3
             && depth < 0.5;
@@ -261,6 +265,7 @@ pub fn move_bodies(
         } else {
             WALK_SPEED
         } * enc.speed
+            * (1.0 - body.hauling)
             * if swimming { 1.0 } else { drag };
         let target = if climbing {
             // On a rope the stick climbs (see `gadgets::climbing`).

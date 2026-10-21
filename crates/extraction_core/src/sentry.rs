@@ -32,8 +32,9 @@ pub const BEAM_REACH: f32 = 45.0;
 /// The searchlight's cone, half-angle in degrees.
 pub const BEAM_HALF: f32 = 9.0;
 
-/// The warning: seconds from the chirp to the first round.
-pub const CHIRP: f32 = 1.0;
+/// The warning: seconds from the chirp to the first round (about two
+/// metres at a walk to get out of its sight).
+pub const CHIRP: f32 = 1.6;
 /// Rounds in a burst, seconds between them, and between bursts.
 pub const BURST: u32 = 3;
 pub const ROUND_GAP: f32 = 0.12;
@@ -130,6 +131,8 @@ pub struct Gun {
     pub next: f32,
     /// Seconds without sight of its target.
     pub unseen: f32,
+    /// Bursts fired since the chirp: the first is a warning ([`Gun::warning`]).
+    pub bursts: u32,
 }
 
 /// What the gun does this tick.
@@ -169,10 +172,17 @@ impl Gun {
         }
         if self.left == 0 {
             self.left = BURST;
+            self.bursts += 1;
         }
         self.left -= 1;
         self.next = if self.left == 0 { BURST_GAP } else { ROUND_GAP };
         GunAct::Fire
+    }
+
+    /// Whether the round it fires now is in its first burst since the
+    /// chirp: a warning, wide and short, walking in on you.
+    pub fn warning(&self) -> bool {
+        self.bursts == 0
     }
 }
 
@@ -274,6 +284,23 @@ mod tests {
             g.step(false, dt);
         }
         assert_eq!(g.step(true, dt), GunAct::Chirp);
+    }
+
+    /// Its first burst after a chirp is the warning; the next isn't.
+    #[test]
+    fn its_first_burst_warns() {
+        let dt = 0.01;
+        let mut g = Gun::default();
+        g.step(true, dt);
+        let mut first = Vec::new();
+        for _ in 0..600 {
+            if g.step(true, dt) == GunAct::Fire {
+                first.push(g.warning());
+            }
+        }
+        assert!(first.len() > BURST as usize * 2, "{first:?}");
+        assert!(first[..BURST as usize].iter().all(|w| *w), "{first:?}");
+        assert!(first[BURST as usize..].iter().all(|w| !*w), "{first:?}");
     }
 
     #[test]

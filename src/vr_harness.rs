@@ -4153,3 +4153,397 @@ mod body {
         let _ = feet;
     }
 }
+
+/// Carrying the heavy and bulky (`interact::carry`): a car door in one
+/// hand drags, in two it's carried and swings, and let go it's shoved.
+#[cfg(test)]
+mod carry {
+    use super::*;
+    use crate::interact::carry::{Dragged, SHOVE};
+    use crate::interact::touch::Stuff;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    #[derive(Resource, Default)]
+    struct Heard {
+        dragged: Vec<Dragged>,
+        noise: Vec<crate::robots::Noise>,
+    }
+
+    fn hear(
+        mut d: MessageReader<Dragged>,
+        mut n: MessageReader<crate::robots::Noise>,
+        mut h: ResMut<Heard>,
+    ) {
+        h.dragged.extend(d.read().copied());
+        h.noise.extend(n.read().cloned());
+    }
+
+    /// Standing in the open with a car door lying flat 0.7 m ahead.
+    fn with_a_door() -> (Vr, Vec3, Entity) {
+        let mut vr = Vr::new("training_yard");
+        vr.app.init_resource::<Heard>().add_systems(Update, hear);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let door = vr.spawn(
+            "car_door",
+            // Flat, its long side pointing away.
+            Transform::from_translation(feet + Vec3::new(0.0, 0.08, -0.9)).with_rotation(
+                Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+                    * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+            ),
+        );
+        vr.step(60);
+        (vr, feet, door)
+    }
+
+    fn at(vr: &Vr, e: Entity) -> Vec3 {
+        vr.app.world().get::<Position>(e).unwrap().0
+    }
+
+    /// The door's two grab points, nearest the player first.
+    fn ends(vr: &Vr, door: Entity) -> [Vec3; 2] {
+        let gt = vr.app.world().get::<GlobalTransform>(door).unwrap();
+        let g = vr
+            .app
+            .world()
+            .get::<crate::interact::Grabbable>(door)
+            .unwrap();
+        let mut p = [0, 1].map(|i| gt.transform_point(g.points[i].local.translation));
+        if p[1].z > p[0].z {
+            p.swap(0, 1);
+        }
+        p
+    }
+
+    /// One hand on a car door: it can't be picked up, only dragged: the
+    /// end held comes up, the far end stays on the ground, it comes after
+    /// the hand, scraping (heard by Audio and the robots), and you walk at
+    /// half pace.
+    #[test]
+    fn one_hand_drags_a_car_door_scraping() {
+        let (mut vr, feet, door) = with_a_door();
+        let [near, _] = ends(&vr, door);
+        vr.hand(Side::Right, near + Vec3::Y * 0.03, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(4);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(door), "it's taken");
+        let start = at(&vr, door);
+        // Back 1.2 m, the hand at hip height.
+        for i in 0..120 {
+            let t = i as f32 / 120.0;
+            vr.move_hand(Side::Right, near.lerp(feet + Vec3::new(0.2, 0.9, 0.3), t));
+            vr.step(1);
+        }
+        vr.step(30);
+        let now = at(&vr, door);
+        assert!(
+            now.z - start.z > 0.4,
+            "it came after the hand: {start} to {now}"
+        );
+        let [_, far] = ends(&vr, door);
+        assert!(far.y - feet.y < 0.25, "the far end on the ground: {far}");
+        assert!(now.y - feet.y < 0.7, "not picked up: {now}");
+        let heard = vr.app.world().resource::<Heard>();
+        assert!(
+            heard
+                .dragged
+                .iter()
+                .any(|d| d.item == door && d.stuff == Stuff::Metal)
+        );
+        assert!(heard.noise.iter().any(|n| n.source == Some(vr.player)));
+        let body = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap();
+        assert_eq!(body.hauling, crate::interact::carry::DRAG_SLOW);
+    }
+
+    /// Both hands on it, one each end: it's carried, up off the ground,
+    /// between them; moved and stopped, it swings on after the hands.
+    #[test]
+    fn two_hands_carry_a_car_door_and_it_swings() {
+        let (mut vr, feet, door) = with_a_door();
+        let [near, far] = ends(&vr, door);
+        vr.hand(Side::Right, near + Vec3::Y * 0.03, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(6);
+        vr.hand(Side::Left, far + Vec3::Y * 0.03, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(6);
+        assert_eq!(
+            vr.hand_state(Side::Left).supporting,
+            Some(door),
+            "the other end"
+        );
+        let lift = |vr: &mut Vr, off: Vec3| {
+            vr.move_hand(Side::Right, feet + Vec3::new(0.0, 0.95, -0.4) + off);
+            vr.move_hand(Side::Left, feet + Vec3::new(0.0, 0.95, -1.3) + off);
+        };
+        lift(&mut vr, Vec3::ZERO);
+        vr.step(90);
+        let up = at(&vr, door);
+        assert!(up.y - feet.y > 0.7, "carried up: {up}");
+        let mid = feet + Vec3::new(0.0, 0.95, -0.85);
+        assert!(up.distance(mid) < 0.2, "between the hands: {up} for {mid}");
+        let body = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap();
+        assert!(
+            body.hauling > 0.25 && body.hauling < 0.5,
+            "slowed: {}",
+            body.hauling
+        );
+        // Half a metre right at once: it comes round late.
+        lift(&mut vr, Vec3::X * 0.5);
+        vr.step(3);
+        let late = at(&vr, door);
+        assert!(late.x - up.x < 0.3, "it lags the hands: {late}");
+        vr.step(90);
+        let there = at(&vr, door);
+        assert!(
+            (there.x - up.x - 0.5).abs() < 0.12,
+            "and gets there: {there}"
+        );
+    }
+
+    /// Your pack off the left shoulder into the left hand: it hangs open in
+    /// front of you, what's in it showing; the right hand reaches in and
+    /// takes a dressing; back over the shoulder it closes, and let go
+    /// there, it's on your back.
+    #[test]
+    fn the_pack_hangs_open_in_the_off_hand_and_you_take_from_it() {
+        use crate::interact::body::{Backpack, InBackpack, Torso};
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        let dressing = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(feet + Vec3::Y),
+        );
+        vr.app
+            .world_mut()
+            .get_mut::<Backpack>(bag)
+            .unwrap()
+            .contents
+            .push(dressing);
+        vr.app.world_mut().entity_mut(dressing).insert((
+            InBackpack { bag },
+            ChildOf(bag),
+            Transform::from_xyz(0.05, 0.1, 0.0),
+            RigidBodyDisabled,
+            ColliderDisabled,
+            Visibility::Hidden,
+        ));
+        vr.step(4);
+        // Over the left shoulder, squeeze, and round to the front.
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.hand(Side::Left, shoulder, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        assert!(
+            vr.app.world().get::<Backpack>(bag).unwrap().open,
+            "open in front"
+        );
+        let hangs = at(&vr, bag);
+        assert!(
+            hangs.distance(front - Vec3::Y * crate::interact::body::HANG) < 0.08,
+            "it hangs under the hand: {hangs}"
+        );
+        assert_ne!(
+            vr.app.world().get::<Visibility>(dressing),
+            Some(&Visibility::Hidden),
+            "what's in it shows"
+        );
+        // The right hand in, to the dressing.
+        let inside = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(dressing)
+            .unwrap()
+            .translation();
+        vr.hand(Side::Right, inside, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(dressing),
+            "taken out"
+        );
+        assert!(
+            !vr.app
+                .world()
+                .get::<Backpack>(bag)
+                .unwrap()
+                .contents
+                .contains(&dressing)
+        );
+        // Back over the shoulder: it closes; let go, it's on.
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, front.lerp(shoulder, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(10);
+        assert!(
+            !vr.app.world().get::<Backpack>(bag).unwrap().open,
+            "closed behind"
+        );
+        vr.grip(Side::Left, 0.0);
+        vr.step(6);
+        let parent = vr.app.world().get::<ChildOf>(bag).map(|c| c.parent());
+        assert!(
+            parent.is_some_and(|p| vr.app.world().get::<Torso>(p).is_some()),
+            "on your back"
+        );
+        assert!(vr.app.world().get::<Transform>(bag).unwrap().translation.z > 0.05);
+    }
+
+    /// A robot's wreck (here a stand-in: a 70 kg hull with a leg, its part
+    /// on the robots' layer, settled), taken by the leg and drawn back: it comes,
+    /// slowly, along the ground, scraping, and you're slowed to less than
+    /// half pace; let go, it settles.
+    #[test]
+    fn a_wreck_is_dragged_by_its_leg_slowly() {
+        use crate::interact::carry::{Draggable, drag_speed};
+        let (mut vr, feet, _) = with_a_door();
+        let hull_at = feet + Vec3::new(1.2, 0.3, -1.2);
+        let hull = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Dynamic,
+                Collider::sphere(0.3),
+                Mass(70.0),
+                NoAutoMass,
+                Friction::new(0.9),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                Transform::from_translation(hull_at),
+            ))
+            .id();
+        let leg = vr
+            .app
+            .world_mut()
+            .spawn((
+                Collider::capsule(0.05, 0.4),
+                CollisionLayers::new(
+                    crate::world::Layer::Robot,
+                    [crate::world::Layer::World, crate::world::Layer::Robot],
+                ),
+                Transform::from_xyz(-0.35, 0.1, 0.35).with_rotation(Quat::from_rotation_z(1.2)),
+                ChildOf(hull),
+            ))
+            .id();
+        vr.step(60);
+        // Settled, as a wreck is by the time you reach it (a live body would
+        // be shoved by the hand reaching in).
+        vr.app
+            .world_mut()
+            .entity_mut(hull)
+            .insert((RigidBody::Static, crate::robots::wreck::Broken));
+        vr.step(2);
+        assert!(vr.app.world().get::<Draggable>(hull).is_some());
+        let leg_at = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(leg)
+            .unwrap()
+            .translation();
+        vr.hand(Side::Right, leg_at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(hull), "by the leg");
+        let start = at(&vr, hull);
+        let mut fastest = 0.0f32;
+        for i in 0..150 {
+            let t = i as f32 / 150.0;
+            vr.move_hand(Side::Right, leg_at.lerp(feet + Vec3::new(0.4, 0.8, 0.0), t));
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(hull).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
+        // It trails the hand: held there, it keeps coming.
+        for _ in 0..120 {
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(hull).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
+        let now = at(&vr, hull);
+        assert!(now.distance(start) > 0.4, "it came: {start} to {now}");
+        assert!(now.y - feet.y < 0.6, "along the ground: {now}");
+        assert!(fastest <= drag_speed(70.0) + 0.15, "slowly: {fastest}");
+        let heard = vr.app.world().resource::<Heard>();
+        assert!(heard.dragged.iter().any(|d| d.item == hull));
+        let body = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap();
+        assert!(body.hauling > crate::interact::carry::DRAG_SLOW);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+        assert!(
+            vr.app
+                .world()
+                .get::<crate::robots::wreck::Settling>(hull)
+                .is_some(),
+            "let go, it settles"
+        );
+    }
+
+    /// Let go of a car door swung hard forward and it's a shove: it leaves
+    /// slow, where a magazine thrown the same way flies.
+    #[test]
+    fn a_door_let_go_is_shoved_not_thrown() {
+        let (mut vr, feet, door) = with_a_door();
+        let [near, far] = ends(&vr, door);
+        vr.hand(Side::Right, near + Vec3::Y * 0.03, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(6);
+        vr.hand(Side::Left, far + Vec3::Y * 0.03, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(6);
+        let r0 = feet + Vec3::new(0.0, 1.0, -0.4);
+        let l0 = feet + Vec3::new(0.0, 1.0, -1.3);
+        vr.move_hand(Side::Right, r0);
+        vr.move_hand(Side::Left, l0);
+        vr.step(90);
+        // Both hands forward at about 6 m/s, then open.
+        for i in 1..=8 {
+            let d = Vec3::NEG_Z * 0.1 * i as f32;
+            vr.move_hand(Side::Right, r0 + d);
+            vr.move_hand(Side::Left, l0 + d);
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.grip(Side::Left, 0.0);
+        vr.step(2);
+        let v = vr.app.world().get::<LinearVelocity>(door).unwrap().0;
+        let most = (2.0 * SHOVE / 16.0f32).sqrt();
+        assert!(v.length() <= most + 0.3, "a shove: {} m/s", v.length());
+        assert!(v.z < -0.5, "forward: {v}");
+    }
+}
