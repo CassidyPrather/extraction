@@ -342,6 +342,10 @@ fn roofed(prefab: &str) -> bool {
             | "mast_hut"
             | "guard_booth"
             | "factory_hall"
+            | "ore_mill"
+            | "observatory"
+            | "funicular_lower"
+            | "funicular_upper"
     )
 }
 

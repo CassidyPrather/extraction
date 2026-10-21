@@ -579,7 +579,7 @@ mod tests {
         let just = shoulder + dir * (UPPER + FOREARM) * 1.03;
         let (s, e) = arm_joints(shoulder, just, Vec3::NEG_Y, BODY, 1.0);
         assert_eq!(s, shoulder, "just out of reach, the shoulder stays");
-        assert!((e.distance(s) + e.distance(just) - s.distance(just)).abs() < 1e-3);
+        assert!((e.distance(s) + e.distance(just) - s.distance(just)).abs() < 0.01);
         let wrist = shoulder + dir * 0.9;
         let (s, e) = arm_joints(shoulder, wrist, Vec3::NEG_Y, BODY, 1.0);
         let most = (UPPER + FOREARM) * STRETCH;

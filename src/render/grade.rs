@@ -89,6 +89,14 @@ impl Look {
                 contrast: 1.1,
                 ..base
             },
+            // High, bare and snowy: cold blue-white, a touch harder,
+            // the colour bled out of everything but the rust.
+            "Rime Fell" => Self {
+                temperature: -0.014,
+                saturation: 1.05,
+                contrast: 1.14,
+                ..base
+            },
             // The practice ground: a shade brighter and kinder, to read.
             "Training Yard" => Self {
                 exposure: 0.15,

@@ -51,6 +51,10 @@ const STANCE: f32 = 0.12;
 pub const STEP: f32 = 0.3;
 /// A foot turned this far (radians) from the way the body faces steps.
 pub const TWIST: f32 = 1.0;
+/// A foot turned this far from the body for [`SETTLE`] seconds squares up
+/// (the body has turned and stayed turned).
+pub const SQUARE: f32 = 0.4;
+pub const SETTLE: f32 = 1.2;
 /// How long a step takes, and how high the foot lifts.
 const STEP_TIME: f32 = 0.28;
 const STEP_LIFT: f32 = 0.07;
@@ -83,6 +87,8 @@ pub struct Foot {
     pub to: Vec3,
     pub to_yaw: f32,
     pub t: f32,
+    /// How long it's been turned more than [`SQUARE`] from the body.
+    pub uneasy: f32,
 }
 
 impl Foot {
@@ -210,6 +216,7 @@ pub fn step_feet(
                 to: r,
                 to_yaw: yaw,
                 t: 1.0,
+                uneasy: 0.0,
             };
             continue;
         }
@@ -228,6 +235,13 @@ pub fn step_feet(
             f.at.y = ground;
         }
     }
+    for f in feet.iter_mut() {
+        if f.planted() && wrap(f.yaw - yaw).abs() > SQUARE {
+            f.uneasy += dt;
+        } else {
+            f.uneasy = 0.0;
+        }
+    }
     if feet.iter().any(|f| !f.planted()) {
         return;
     }
@@ -237,7 +251,12 @@ pub fn step_feet(
         let f = &feet[side.index()];
         let r = rest(pelvis, side, ground);
         let off = Vec2::new(f.at.x - r.x, f.at.z - r.z).length() / STEP;
-        let turned = wrap(f.yaw - yaw).abs() / TWIST;
+        let twist = wrap(f.yaw - yaw).abs();
+        let mut turned = twist / TWIST;
+        // Turned a while: square up.
+        if f.uneasy > SETTLE {
+            turned = turned.max(1.0 + twist);
+        }
         let need = off.max(turned);
         if need > 1.0 && worst.is_none_or(|(_, w)| need > w) {
             worst = Some((side, need));
@@ -294,6 +313,7 @@ fn stand(
         let chest = Transform::from_translation(anchor.translation).with_rotation(lean * facing);
         let chest_side = chest.rotation * Vec3::X;
 
+        let jumped_now = !st.ready || st.last_root.distance(root.translation) > JUMP;
         // Shoulders, then forward toward a hand that's out of reach.
         let mut shoulders = [Vec3::ZERO; 2];
         for side in [Side::Left, Side::Right] {
@@ -308,7 +328,12 @@ fn stand(
             let grip = hand.felt.unwrap_or(hand.world).translation;
             let s = &mut shoulders[rh.side.index()];
             let d = s.distance(grip);
-            longest = longest.max(d - PROTRACT);
+            // Learnt from where the hand really is, and only from what an
+            // arm could reach (not a hand left behind by a teleport).
+            let tracked = s.distance(hand.world.translation) - PROTRACT;
+            if tracked < ARM * ARM_SCALE.1 {
+                longest = longest.max(tracked);
+            }
             let over = d - ARM * st.arm;
             if over > 0.0 {
                 *s += (grip - *s).normalize_or_zero() * over.min(PROTRACT);
@@ -316,7 +341,7 @@ fn stand(
         }
         // Learn the arm from the longest reaches (a long arm reaches further
         // than the model's could, shoulder forward and all).
-        if st.ready && longest > ARM * st.arm {
+        if st.ready && !jumped_now && longest > ARM * st.arm {
             st.arm = (longest / ARM).clamp(ARM_SCALE.0, ARM_SCALE.1);
         }
 
@@ -351,6 +376,7 @@ fn stand(
                     to: sole,
                     to_yaw: yaw_of(fwd),
                     t: 1.0,
+                    uneasy: 0.0,
                 };
             }
         } else {
@@ -419,6 +445,24 @@ mod tests {
         }
         for f in &feet {
             assert!(f.planted() && wrap(f.yaw - 1.3).abs() < 0.05, "{f:?}");
+        }
+        // A smaller turn: nothing at once, but held, the feet square up.
+        pelvis.rotation = Quat::from_rotation_y(1.3 + 0.6);
+        for _ in 0..30 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        assert!(
+            feet.iter().all(|f| wrap(f.yaw - 1.3).abs() < 0.05),
+            "not at once"
+        );
+        for _ in 0..240 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        for f in &feet {
+            assert!(
+                f.planted() && wrap(f.yaw - 1.9).abs() < 0.05,
+                "squared: {f:?}"
+            );
         }
     }
 }

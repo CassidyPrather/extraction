@@ -244,6 +244,10 @@ pub const ENTERABLE: &[&str] = &[
     "survey_tower",
     "factory_hall",
     "guard_booth",
+    "ore_mill",
+    "observatory",
+    "funicular_lower",
+    "funicular_upper",
 ];
 
 // ---- Orientation -----------------------------------------------------------
@@ -396,6 +400,8 @@ const ON_ROADS: &[&str] = &[
     "robot_gate",
     "footbridge",
     "boxcar",
+    // Rime Fell's funicular car stands on its own line.
+    "funicular_car",
 ];
 
 /// An oriented rectangle in map space: centre, half extents, yaw (as the

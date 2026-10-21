@@ -754,12 +754,19 @@ mod tests {
         let feet = on_ground(&vr, OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // The one on your back (the stash crate is a Backpack too): the
+        // nearest, not whichever the query meets first.
         let bag = vr
             .app
             .world_mut()
-            .query_filtered::<Entity, With<crate::interact::body::Backpack>>()
+            .query_filtered::<(Entity, &GlobalTransform), With<crate::interact::body::Backpack>>()
             .iter(vr.app.world())
-            .next()
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
             .expect("a backpack");
         // Over the right shoulder, a hand's width behind the head.
         let at = feet + Vec3::new(0.15, 1.6, 0.12);
@@ -3914,8 +3921,12 @@ mod body {
         let st = stance(&vr);
         assert!(st.ready);
         let planted = st.feet.map(|f| f.at);
+        let _ = feet;
         for f in planted {
-            assert!((f.y - feet.y).abs() < 0.01, "a foot on the ground: {f}");
+            assert!(
+                (f.y - vr.feet().y).abs() < 0.01,
+                "a foot on the ground: {f}"
+            );
         }
         assert!(planted[0].x < planted[1].x, "left foot on the left");
         for (yaw, pitch) in [
@@ -3947,10 +3958,17 @@ mod body {
         let (mut vr, feet) = standing();
         look(&mut vr, Vec3::new(0.0, 1.65, 0.0), 2.2, 0.0);
         let mut stepping_both = false;
-        for _ in 0..240 {
+        for n in 0..240 {
             vr.step(1);
             let st = stance(&vr);
             stepping_both |= st.feet.iter().all(|f| !f.planted());
+            if n % 20 == 0 {
+                eprintln!(
+                    "{n}: body {} feet {:?}",
+                    st.pelvis.rotation.to_euler(EulerRot::YXZ).0,
+                    st.feet.map(|f| (f.yaw, f.t, f.uneasy))
+                );
+            }
         }
         assert!(!stepping_both, "one foot at a time");
         let st = stance(&vr);
@@ -3970,7 +3988,8 @@ mod body {
         for f in &st.feet {
             let d = Vec2::new(f.at.x - under.x, f.at.z - under.z).length();
             assert!(d < 0.3, "a foot {d} m from under the body");
-            assert!((f.at.y - feet.y).abs() < 0.01);
+            assert!((f.at.y - vr.feet().y).abs() < 0.01);
+            let _ = feet;
         }
     }
 
@@ -4098,6 +4117,13 @@ mod body {
         vr.step(60);
         let st = stance(&vr);
         let shoulder = st.shoulder(Side::Right);
+        let h = vr.hand_state(Side::Right);
+        eprintln!(
+            "rest {rest} now {shoulder} grip {grip} world {} felt {:?} arm {}",
+            h.world.translation,
+            h.felt.map(|f| f.translation),
+            st.arm
+        );
         assert!(
             shoulder.distance(rest) <= PROTRACT + 1e-3,
             "the shoulder came {} forward",

@@ -653,6 +653,9 @@ pub struct Scene<'w, 's> {
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
+    /// The bots' sockets by entity (`Task::Draw` counts them in entity
+    /// order).
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -2542,33 +2545,60 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
         return None;
     }
     let relay = *scene.carried(me, item).first()?;
+    let spot = Vec2::from_array(*at);
+    // As the contract scenarios plant (`progression::contracts::scenario`):
+    // close, the gun slung so the right hand's free, the relay into it from
+    // its body slot (drawn) or the pack, a look at the spot, let go.
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
-        // Well inside the plant's radius, if there's footing that close.
         Task::WalkTo {
-            to: Vec2::from_array(*at),
-            within: 2.5,
+            to: spot,
+            within: 1.0,
         },
+        Task::Stow(Side::Right),
     ];
-    // The hand free first (it may be holding the last thing picked up),
-    // then the relay into it from wherever it's carried (a grab takes it
-    // out of its body slot or the open pack).
-    let packed = scene.items.get(relay).is_ok_and(|(.., bag)| bag.is_some());
-    t.push(Task::Stow(Side::Left));
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.6)]);
-    }
-    t.extend([
-        Task::GrabFromHere {
+    let (socket, packed) = scene
+        .items
+        .get(relay)
+        .map(|(.., so, bag)| (so.map(|s| s.socket), bag.is_some()))
+        .unwrap_or_default();
+    let mut mine: Vec<Entity> = scene
+        .owned_sockets
+        .iter()
+        .filter(|(_, o)| o.0 == me)
+        .map(|(e, _)| e)
+        .collect();
+    mine.sort();
+    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
+        Some(slot) => t.extend([
+            Task::Draw {
+                slot,
+                side: Side::Right,
+            },
+            Task::Wait(0.5),
+        ]),
+        None if packed => t.extend([
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
+                item: relay,
+                side: Side::Right,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.5),
+        ]),
+        None => t.push(Task::Grab {
             item: relay,
-            side: Side::Left,
-        },
-        Task::Wait(0.5),
-    ]);
-    if packed {
-        t.extend([Task::ToggleBackpack, Task::Wait(0.5)]);
+            side: Side::Right,
+        }),
     }
-    t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
+    let y = scene.zone.ground(spot.x, spot.y);
+    t.extend([
+        Task::Wait(0.5),
+        Task::LookAt(Vec3::new(spot.x, y, spot.y)),
+        Task::Release(Side::Right),
+        Task::Wait(1.5),
+    ]);
     Some((relay, t))
 }
 
