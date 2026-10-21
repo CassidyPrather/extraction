@@ -53,6 +53,9 @@ pub enum Shape {
     #[default]
     Orb,
     Hound,
+    /// The heavy's hull on four long legs at its corners (`heavy`): slow,
+    /// long-stepping, every footfall a weight.
+    Heavy,
 }
 
 impl Shape {
@@ -61,6 +64,7 @@ impl Shape {
         match self {
             Shape::Orb => hip_offset(i),
             Shape::Hound => quadrant(i) * Vec3::new(0.2, 1.0, 0.42) - Vec3::Y * 0.06,
+            Shape::Heavy => quadrant(i) * Vec3::new(0.36, 1.0, 0.45) - Vec3::Y * 0.2,
         }
     }
     /// Where foot `i` rests, standing (robot space, at size 1).
@@ -68,6 +72,7 @@ impl Shape {
         match self {
             Shape::Orb => rest_offset(i),
             Shape::Hound => quadrant(i) * Vec3::new(0.42, 0.0, 0.62),
+            Shape::Heavy => quadrant(i) * Vec3::new(0.9, 0.0, 0.9),
         }
     }
     /// How high the body rides, at size 1.
@@ -75,6 +80,7 @@ impl Shape {
         match self {
             Shape::Orb => BODY_HEIGHT,
             Shape::Hound => 0.95,
+            Shape::Heavy => 1.35,
         }
     }
     /// Speed at `Intent::pace` 1 against a walker's, acceleration and
@@ -84,6 +90,8 @@ impl Shape {
             Shape::Orb => (1.0, 1.0, 1.0),
             // ~2 m/s at a lope; pace 2.25 runs it at 4.5.
             Shape::Hound => (1.41, 3.2, 2.2),
+            // ~1.3 m/s at size 2: you can outwalk it, just.
+            Shape::Heavy => (0.55, 0.45, 0.45),
         }
     }
     /// The most `Intent::pace` it can take (a hound runs flat out at 2.25).
@@ -91,6 +99,7 @@ impl Shape {
         match self {
             Shape::Orb => 1.6,
             Shape::Hound => 2.3,
+            Shape::Heavy => 1.4,
         }
     }
 }
@@ -372,7 +381,13 @@ pub fn step_walker(
     let top = SPEED * s * g.shape.pace().0 * run;
     let fast = (speed / top).clamp(0.0, 1.5);
     // (A runner's feet are quicker.)
-    let step_time = (0.36 - 0.1 * fast) * if g.shape == Shape::Hound { 0.7 } else { 1.0 };
+    let step_time = (0.36 - 0.1 * fast)
+        * match g.shape {
+            Shape::Hound => 0.7,
+            // (Long, slow swings: each leg a crane's arm.)
+            Shape::Heavy => 1.9,
+            Shape::Orb => 1.0,
+        };
     let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
@@ -418,7 +433,8 @@ pub fn step_walker(
             f.planted = f.to;
             landed(f.to);
             // A heavy foot taking weight; a bad leg buckles a little more.
-            kick += 0.22 + 0.1 * fast.min(1.0) + (1.0 - h) * 0.5;
+            kick += (0.22 + 0.1 * fast.min(1.0) + (1.0 - h) * 0.5)
+                * if g.shape == Shape::Heavy { 1.6 } else { 1.0 };
         }
         w.feet[i] = f;
     }

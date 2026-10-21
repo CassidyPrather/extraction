@@ -25,6 +25,7 @@ impl Plugin for RobotVisualsPlugin {
             super::reel::ReelPlugin,
             super::fx::RobotFxPlugin,
             super::sorter_look::SorterLookPlugin,
+            super::heavy_look::HeavyLookPlugin,
         ))
         .add_systems(
             Update,
@@ -196,10 +197,15 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
+    heavies: Query<(), With<super::heavy::Heavy>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
+        // (The heavy dresses itself: `heavy_look`.)
+        if heavies.contains(part.robot) {
+            continue;
+        }
         if let Ok(robot) = robots.get(part.robot) {
             models.request(model_path(robot.kind), &server);
         }

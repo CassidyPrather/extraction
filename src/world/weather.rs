@@ -36,6 +36,16 @@ pub enum Hour {
 }
 
 impl Hour {
+    /// The hour after this one (a night slept in a safehouse).
+    pub fn next(self) -> Self {
+        match self {
+            Hour::Dawn => Hour::Day,
+            Hour::Day => Hour::Dusk,
+            Hour::Dusk => Hour::Night,
+            Hour::Night => Hour::Dawn,
+        }
+    }
+
     /// The sky's light, against the day's (0..=1).
     pub fn light(self) -> f32 {
         match self {
@@ -324,6 +334,7 @@ fn follow_cycle(
     raid: Res<crate::raid::Raid>,
     opts: Res<crate::launch::LaunchOptions>,
     progression: Option<Res<crate::progression::Progression>>,
+    shift: Option<Res<crate::progression::safehouse::HourShift>>,
     mut conditions: ResMut<Conditions>,
     mut latched: Local<Option<(u32, bool)>>,
 ) {
@@ -351,6 +362,8 @@ fn follow_cycle(
         .as_deref()
         .and_then(Hour::parse)
         .unwrap_or(want.hour);
+    // Nights slept in a safehouse move the hour on (`progression::safehouse`).
+    let hour = (0..shift.map_or(0, |s| s.0)).fold(hour, |h, _| h.next());
     let phase = opts.moon.unwrap_or(want.moon_phase);
     if (kind, hour, phase) != (want.kind, want.hour, want.moon_phase) {
         want = Conditions::compose_with_moon(kind, hour, raid.cycle, phase);

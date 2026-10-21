@@ -86,6 +86,83 @@ pub struct CalledOut {
     pub about: Option<Entity>,
 }
 
+/// What a robot's mind is doing, as it would voice it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mind {
+    /// Back to work: into its round or job (or just arrived).
+    Idle,
+    /// Its suspicion crossed [`NOTICED`].
+    Noticed,
+    Investigating,
+    Searching,
+    /// Fighting: it has you.
+    Engaging,
+    /// It gave up looking.
+    Lost,
+    /// It called the others ([`CalledOut`]).
+    Calling,
+    /// It heard `caller`'s call and is coming to look.
+    Answering {
+        caller: Entity,
+    },
+    /// A part was damaged and not destroyed (at most once a second).
+    Hurt,
+    /// Its core went, or it went down.
+    Dying,
+}
+
+/// A robot's mind changed in a way it would voice: one per change, never
+/// the same state twice running (Answering once per call it hears; Hurt
+/// at most once a second).
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct MindShift {
+    pub robot: Entity,
+    pub state: Mind,
+    pub at: Vec3,
+}
+
+/// Each robot's last voiced state, so none repeats.
+#[derive(Resource, Default, Debug)]
+pub struct MindLog {
+    last: std::collections::HashMap<Entity, Mind>,
+    hurt: std::collections::HashMap<Entity, f32>,
+}
+
+/// Seconds between Hurts for one robot.
+pub const HURT_EVERY: f32 = 1.0;
+
+impl MindLog {
+    /// Writes the shift unless it repeats the robot's last state (Hurt:
+    /// unless it's within [`HURT_EVERY`] of the last; Answering always).
+    pub fn shift(
+        &mut self,
+        out: &mut MessageWriter<MindShift>,
+        robot: Entity,
+        state: Mind,
+        at: Vec3,
+        now: f32,
+    ) {
+        match state {
+            Mind::Answering { .. } => {}
+            Mind::Hurt => {
+                if self.hurt.get(&robot).is_some_and(|t| now - t < HURT_EVERY) {
+                    return;
+                }
+                self.hurt.insert(robot, now);
+            }
+            _ => {
+                if self.last.get(&robot) == Some(&state) {
+                    return;
+                }
+            }
+        }
+        if !matches!(state, Mind::Hurt) {
+            self.last.insert(robot, state);
+        }
+        out.write(MindShift { robot, state, at });
+    }
+}
+
 pub struct SearchPlugin;
 
 impl Plugin for SearchPlugin {
@@ -94,6 +171,8 @@ impl Plugin for SearchPlugin {
             .add_message::<Searching>()
             .add_message::<LostYou>()
             .add_message::<CalledOut>()
+            .add_message::<MindShift>()
+            .init_resource::<MindLog>()
             .add_systems(FixedUpdate, call_out.after(super::perceive))
             .add_systems(FixedPostUpdate, announce)
             .add_systems(Update, wrist_lines);
@@ -290,6 +369,8 @@ fn call_out(
     time: Res<Time>,
     director: Option<ResMut<super::director::Director>>,
     mut out: MessageWriter<CalledOut>,
+    mut minds: MessageWriter<MindShift>,
+    mut log: ResMut<MindLog>,
 ) {
     let now = time.elapsed_secs();
     let mut director = director;
@@ -327,7 +408,15 @@ fn call_out(
                 other.target = target;
             }
             heard += 1;
+            log.shift(
+                &mut minds,
+                e,
+                Mind::Answering { caller: n.robot },
+                ogt.translation(),
+                now,
+            );
         }
+        log.shift(&mut minds, n.robot, Mind::Calling, me, now);
         out.write(CalledOut {
             robot: n.robot,
             at: me,
@@ -409,13 +498,36 @@ fn wrist_lines(
 }
 
 /// Says when a robot starts to look, to search, and gives up.
+#[allow(clippy::too_many_arguments)]
 fn announce(
     robots: Query<(Entity, &Brain, &GlobalTransform)>,
     mut was: Local<std::collections::HashMap<Entity, u8>>,
     mut investigating: MessageWriter<Investigating>,
     mut searching: MessageWriter<Searching>,
     mut lost: MessageWriter<LostYou>,
+    mut noticed: MessageReader<Noticed>,
+    mut minds: MessageWriter<MindShift>,
+    mut log: ResMut<MindLog>,
+    time: Res<Time>,
 ) {
+    let now = time.elapsed_secs();
+    for n in noticed.read() {
+        // Its suspicion can cross NOTICED after it's already gone to look
+        // (or to fight): it noticed then, and said so (below).
+        let past = matches!(
+            log.last.get(&n.robot),
+            Some(
+                Mind::Investigating
+                    | Mind::Searching
+                    | Mind::Engaging
+                    | Mind::Calling
+                    | Mind::Answering { .. }
+            )
+        );
+        if !past {
+            log.shift(&mut minds, n.robot, Mind::Noticed, n.at, now);
+        }
+    }
     let mut seen = std::collections::HashSet::new();
     for (e, brain, gt) in &robots {
         seen.insert(e);
@@ -446,8 +558,39 @@ fn announce(
             }
             _ => {}
         }
+        // The voiced states.
+        let state = match (before, brain) {
+            (b, Brain::Transit { .. } | Brain::Working { .. }) if b.is_none_or(|b| b > 1) => {
+                Some(if matches!(b, Some(2 | 3)) {
+                    Mind::Lost
+                } else {
+                    Mind::Idle
+                })
+            }
+            (Some(b), Brain::Investigate { .. }) if b != 2 => Some(Mind::Investigating),
+            (Some(b), Brain::Search { .. }) if b != 3 => Some(Mind::Searching),
+            (Some(b), Brain::Engage) if b != 4 => Some(Mind::Engaging),
+            (Some(2 | 3), Brain::Leave { .. }) => Some(Mind::Lost),
+            (Some(b), Brain::Down) if b != 6 => Some(Mind::Dying),
+            _ => None,
+        };
+        if let Some(state) = state {
+            // Straight from its work to looking or fighting: it noticed
+            // something first.
+            let roused = matches!(before, Some(0 | 1))
+                && matches!(
+                    state,
+                    Mind::Investigating | Mind::Searching | Mind::Engaging
+                );
+            if roused {
+                log.shift(&mut minds, e, Mind::Noticed, at, now);
+            }
+            log.shift(&mut minds, e, state, at, now);
+        }
     }
     was.retain(|e, _| seen.contains(e));
+    log.last.retain(|e, _| seen.contains(e));
+    log.hurt.retain(|e, _| seen.contains(e));
 }
 
 #[cfg(test)]

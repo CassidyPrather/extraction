@@ -40,6 +40,12 @@ impl Side {
         }
     }
 
+    /// The other side if `mirror` (a left-handed player's gun hand is
+    /// the right-handed one's, mirrored).
+    pub fn mirrored(self, mirror: bool) -> Self {
+        if mirror { self.other() } else { self }
+    }
+
     /// +1 for right, -1 for left: mirror offsets with it.
     pub fn sign(self) -> f32 {
         match self {

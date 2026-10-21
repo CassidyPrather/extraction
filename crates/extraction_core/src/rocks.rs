@@ -8,7 +8,7 @@
 //! on roads or paths, in water, by buildings and markers, or round a tree.
 
 use crate::geom::{self, P2};
-use crate::map::{MapDef, prefab_clearance};
+use crate::map::{MapDef, MarkerKind, prefab_clearance};
 use crate::noise::Rng;
 use crate::terrain::Heightmap;
 
@@ -69,7 +69,14 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
         .placements
         .iter()
         .map(|p| (p.at, prefab_clearance(&p.prefab) + 2.0))
-        .chain(map.markers.iter().map(|m| (m.at, 7.0)))
+        // Round a rendezvous, the whole way in to the truck's tailgate.
+        .chain(map.markers.iter().map(|m| {
+            let r = match m.kind {
+                MarkerKind::Rendezvous => crate::map_lint::TRUCK_APPROACH + 4.0,
+                _ => 7.0,
+            };
+            (m.at, r)
+        }))
         .collect();
     // Trees by 4 m cell, so a boulder doesn't grow round a trunk.
     let mut trees: std::collections::HashMap<(i32, i32), Vec<P2>> = Default::default();

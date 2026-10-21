@@ -25,15 +25,20 @@ pub enum AnomalyKind {
     /// A fold in space: whatever crosses it is blinked out the far side, a
     /// few metres on, still moving.
     Mirror,
+    /// Dead air: it eats every sound made in it, so nothing outside hears
+    /// a shot or a step, and nothing inside hears anything. Stay too long
+    /// and the silence presses on you.
+    Hush,
 }
 
 impl AnomalyKind {
-    pub const ALL: [AnomalyKind; 5] = [
+    pub const ALL: [AnomalyKind; 6] = [
         AnomalyKind::Lift,
         AnomalyKind::Burner,
         AnomalyKind::Snare,
         AnomalyKind::Well,
         AnomalyKind::Mirror,
+        AnomalyKind::Hush,
     ];
 
     /// What the Surge scatters each cycle. Wells and mirrors don't move:
@@ -55,6 +60,7 @@ impl AnomalyKind {
             AnomalyKind::Snare => "art_aegis",
             AnomalyKind::Well => "art_lodestone",
             AnomalyKind::Mirror => "art_shard",
+            AnomalyKind::Hush => "art_hushstone",
         }
     }
 
@@ -66,6 +72,7 @@ impl AnomalyKind {
             AnomalyKind::Snare => (1.8, 3.0),
             AnomalyKind::Well => (1.6, 2.4),
             AnomalyKind::Mirror => (1.2, 1.8),
+            AnomalyKind::Hush => (2.5, 4.0),
         }
     }
 
@@ -185,6 +192,29 @@ pub fn well_in_reach(rel_from: [f32; 3], step: [f32; 3], radius: f32) -> bool {
     c[0] * c[0] + c[1] * c[1] + c[2] * c[2] < reach * reach
 }
 
+// --- Hushes ----------------------------------------------------------------
+
+/// Seconds in a Hush before its silence starts to press on you.
+pub const HUSH_GRACE: f32 = 8.0;
+/// Health a second it takes after that.
+pub const HUSH_PRESS: f32 = 3.0;
+/// A carried hushstone is a small Hush round its carrier, this wide.
+pub const HUSHSTONE_RADIUS: f32 = 1.2;
+
+/// Whether a sound made at `at` is eaten by any of `hushes` (centre,
+/// radius): it never reaches anything outside.
+pub fn hushed(at: [f32; 3], hushes: &[([f32; 3], f32)]) -> bool {
+    hushes.iter().any(|(c, r)| {
+        let d = [at[0] - c[0], at[1] - c[1], at[2] - c[2]];
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < r * r
+    })
+}
+
+/// What `secs` seconds in a Hush cost, health a second.
+pub fn hush_press(secs: f32) -> f32 {
+    if secs > HUSH_GRACE { HUSH_PRESS } else { 0.0 }
+}
+
 // --- Mirrors ---------------------------------------------------------------
 
 /// How far past its far edge a mirror sets down what it blinks, metres.
@@ -287,6 +317,141 @@ pub fn clear_of_roads(hm: &Heightmap, p: [f32; 2], radius: f32) -> bool {
     })
 }
 
+// --- The detector ladder ----------------------------------------------------
+
+/// What a detector can tell you, cheapest first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DetectorTier {
+    /// Ticks for the nearest anomaly's edge, wherever it is.
+    Clicker,
+    /// Held, hears only what it points at, and pings for a stone in its
+    /// cone.
+    Sweep,
+    /// Held, a screen shows the stones and anomalies round you.
+    Bear,
+}
+
+impl DetectorTier {
+    pub fn of(id: &str) -> Option<DetectorTier> {
+        match id {
+            "detector" => Some(DetectorTier::Clicker),
+            "detector_sweep" => Some(DetectorTier::Sweep),
+            "detector_bear" => Some(DetectorTier::Bear),
+            _ => None,
+        }
+    }
+}
+
+/// A sweep's cone, half-angle in degrees: what it points at, it hears.
+pub const SWEEP_CONE_DEG: f32 = 25.0;
+/// How far a sweep hears a stone, and a Bear shows one, metres.
+pub const STONE_RANGE: f32 = 20.0;
+/// How far a Bear's screen reaches for anomalies, metres.
+pub const BEAR_RANGE: f32 = 25.0;
+
+/// Whether `to` (from the detector) lies within `half_deg` of `dir`.
+pub fn in_cone(dir: [f32; 3], to: [f32; 3], half_deg: f32) -> bool {
+    let l = |v: [f32; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    let (ld, lt) = (l(dir), l(to));
+    if ld < 1e-6 || lt < 1e-6 {
+        return lt < 1e-6;
+    }
+    let cos = (dir[0] * to[0] + dir[1] * to[1] + dir[2] * to[2]) / (ld * lt);
+    cos >= half_deg.to_radians().cos()
+}
+
+/// Seconds between a sweep's stone pings `d` metres from a stone in its
+/// cone: slow at the edge of its range, quick close by.
+pub fn stone_ping_interval(d: f32) -> Option<f32> {
+    if d >= STONE_RANGE {
+        return None;
+    }
+    let t = (d / STONE_RANGE).clamp(0.0, 1.0);
+    Some(0.15 + 1.1 * t)
+}
+
+/// Where something at `rel` (x, z from the detector, world axes) shows on
+/// a Bear's round screen held facing `yaw` (radians, 0 = -Z): screen x
+/// right, y up (the way you face), both -1..1 across `range`. None past it.
+pub fn bear_blip(rel: [f32; 2], yaw: f32, range: f32) -> Option<[f32; 2]> {
+    let d = (rel[0] * rel[0] + rel[1] * rel[1]).sqrt();
+    if d > range {
+        return None;
+    }
+    // Into the holder's frame: forward is -Z turned by yaw.
+    let (s, c) = yaw.sin_cos();
+    let fwd = [-s, -c];
+    let right = [c, -s];
+    let x = rel[0] * right[0] + rel[1] * right[1];
+    let y = rel[0] * fwd[0] + rel[1] * fwd[1];
+    Some([x / range, y / range])
+}
+
+// --- What artifacts cost ----------------------------------------------------
+
+/// A carried featherstone wants home: lifts within this many metres of it
+/// wind up toward popping.
+pub const FEATHER_WAKE_RANGE: f32 = 15.0;
+
+/// How fast a lift `d` metres from a carried featherstone winds up, charge
+/// a second (a lift with nothing in it unwinds at 1/6 a second, so this
+/// beats that only within about two thirds of the range).
+pub fn feather_wake(d: f32) -> f32 {
+    if d >= FEATHER_WAKE_RANGE {
+        0.0
+    } else {
+        0.6 * (1.0 - d / FEATHER_WAKE_RANGE)
+    }
+}
+
+/// Whether a carried aegis is wet enough to bite: soaked ground (it's
+/// been raining) or wading.
+pub fn aegis_wet(wetness: f32, wading: f32) -> bool {
+    wetness > 0.35 || wading > 0.1
+}
+
+/// Seconds to a wet aegis's next shock, `roll` in 0..1.
+pub fn aegis_shock_in(roll: f32) -> f32 {
+    8.0 + 7.0 * roll
+}
+
+/// Health a wet aegis's shock takes.
+pub const AEGIS_SHOCK: f32 = 5.0;
+
+/// A carried hearth runs you hot: stamina a second it takes back (a
+/// rested walker gets 1/8 a second, so you still recover, at half speed).
+pub const HEARTH_TIRE: f32 = 1.0 / 16.0;
+
+/// Seconds between a carried shard's glints, `roll` in 0..1.
+pub fn shard_glint_in(roll: f32) -> f32 {
+    20.0 + 20.0 * roll
+}
+
+/// How far a shard's glint gives you away, metres.
+pub const SHARD_GLINT_RADIUS: f32 = 35.0;
+
+// --- Harvesting ------------------------------------------------------------
+
+/// An artifact in a lift rides the column this high over its core, out of
+/// reach, until the lift pops and throws it.
+pub const LIFT_STONE_RIDE: f32 = 1.8;
+/// Faster than this (m/s), a stone in a lift is being thrown, not ridden.
+pub const LIFT_STONE_FLUNG: f32 = 3.0;
+/// Seconds a stone stays hot out of a burner's coals.
+pub const HOT_SECS: f32 = 20.0;
+/// Health a second a hot stone takes from the hand that holds it.
+pub const HOT_BURN: f32 = 10.0;
+
+/// How hot a stone still is, 0..1, `out` seconds out of the coals (and
+/// none at all once it has been in water).
+pub fn heat_left(out: f32, quenched: bool) -> f32 {
+    if quenched {
+        0.0
+    } else {
+        (1.0 - out / HOT_SECS).clamp(0.0, 1.0)
+    }
+}
+
 // --- The Surge ---------------------------------------------------------------
 
 /// How agitated the anomalies are with `surge_in` seconds to the Surge
@@ -310,6 +475,9 @@ pub const SURGE_SWELL: f32 = 0.3;
 pub const SURGE_HURRY: f32 = 2.0;
 /// Seconds before the Surge at which a new anomaly blooms near you.
 pub const SURGE_BLOOMS: [f32; 5] = [240.0, 170.0, 110.0, 60.0, 25.0];
+/// Chance a Surge bloom grows a stormglass at its heart (the only place
+/// one grows): about one a Surge.
+pub const STORMGLASS_CHANCE: f32 = 0.25;
 /// Seconds a Surge bloom spends forming (visible, harmless) first.
 pub const SURGE_FORMING: f32 = 4.0;
 
@@ -659,6 +827,69 @@ mod tests {
     }
 
     #[test]
+    fn artifacts_cost_what_they_should() {
+        // A featherstone wakes a lift it's near, faster than an empty
+        // lift settles (1/6 a second), but not from across a field.
+        assert!(feather_wake(3.0) > 1.0 / 6.0);
+        assert!(feather_wake(12.0) < 1.0 / 6.0);
+        assert_eq!(feather_wake(FEATHER_WAKE_RANGE), 0.0);
+        // An aegis bites wet, not dry.
+        assert!(aegis_wet(0.8, 0.0) && aegis_wet(0.0, 0.3));
+        assert!(!aegis_wet(0.1, 0.0));
+        assert!((8.0..=15.0).contains(&aegis_shock_in(0.0)));
+        assert!((8.0..=15.0).contains(&aegis_shock_in(1.0)));
+        // A hearth halves recovery: still positive at rest.
+        assert!(1.0 / 8.0 - HEARTH_TIRE > 0.0);
+        assert!((20.0..=40.0).contains(&shard_glint_in(0.5)));
+    }
+
+    #[test]
+    fn a_stone_from_the_coals_cools_in_time_or_at_once_in_water() {
+        assert_eq!(heat_left(0.0, false), 1.0);
+        assert!(heat_left(HOT_SECS * 0.5, false) > 0.4);
+        assert_eq!(heat_left(HOT_SECS, false), 0.0);
+        assert_eq!(heat_left(0.0, true), 0.0);
+    }
+
+    #[test]
+    fn the_detector_ladder_reads_what_it_should() {
+        assert_eq!(DetectorTier::of("detector"), Some(DetectorTier::Clicker));
+        assert_eq!(DetectorTier::of("detector_bear"), Some(DetectorTier::Bear));
+        assert_eq!(DetectorTier::of("bolt"), None);
+        // A sweep hears ahead, not to the side.
+        assert!(in_cone([0.0, 0.0, -1.0], [1.0, 0.0, -5.0], SWEEP_CONE_DEG));
+        assert!(!in_cone([0.0, 0.0, -1.0], [5.0, 0.0, -1.0], SWEEP_CONE_DEG));
+        assert!(stone_ping_interval(2.0).unwrap() < stone_ping_interval(15.0).unwrap());
+        assert_eq!(stone_ping_interval(STONE_RANGE), None);
+        // Facing -Z: a stone 10 m ahead is up the screen, one to the east
+        // is to the right; turned to face east, the east one is ahead.
+        let ahead = bear_blip([0.0, -10.0], 0.0, 20.0).unwrap();
+        assert!(
+            ahead[0].abs() < 1e-5 && (ahead[1] - 0.5).abs() < 1e-5,
+            "{ahead:?}"
+        );
+        let east = bear_blip([10.0, 0.0], 0.0, 20.0).unwrap();
+        assert!(
+            (east[0] - 0.5).abs() < 1e-5 && east[1].abs() < 1e-5,
+            "{east:?}"
+        );
+        let turned = bear_blip([10.0, 0.0], -std::f32::consts::FRAC_PI_2, 20.0).unwrap();
+        assert!((turned[1] - 0.5).abs() < 1e-4, "{turned:?}");
+        assert!(bear_blip([30.0, 0.0], 0.0, 20.0).is_none());
+    }
+
+    #[test]
+    fn a_hush_eats_what_is_made_in_it_and_presses_on_who_stays() {
+        let h = [([0.0, 1.0, 0.0], 3.0)];
+        assert!(hushed([1.0, 1.5, 1.0], &h));
+        assert!(!hushed([4.0, 1.0, 0.0], &h));
+        assert!(!hushed([0.0, 1.0, 0.0], &[]));
+        assert_eq!(hush_press(HUSH_GRACE - 1.0), 0.0);
+        assert_eq!(hush_press(HUSH_GRACE + 1.0), HUSH_PRESS);
+        assert_eq!(AnomalyKind::from_name("Hush"), Some(AnomalyKind::Hush));
+    }
+
+    #[test]
     fn the_detector_clicks_faster_as_you_close() {
         assert_eq!(detector_interval(DETECTOR_RANGE + 1.0), None);
         let far = detector_interval(20.0).unwrap();
@@ -704,8 +935,8 @@ mod tests {
 
     #[test]
     fn every_valley_has_a_well_and_a_mirror_somewhere_sensible() {
-        use crate::map::{CINDER_WORKS, KETTLE_PASS};
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        use crate::map::{CINDER_WORKS, KETTLE_PASS, SALLOW_RESERVOIR};
+        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS, SALLOW_RESERVOIR] {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();
@@ -736,7 +967,7 @@ mod tests {
                 );
                 kinds.push(kind);
             }
-            for k in [AnomalyKind::Well, AnomalyKind::Mirror] {
+            for k in [AnomalyKind::Well, AnomalyKind::Mirror, AnomalyKind::Hush] {
                 assert!(kinds.contains(&k), "{} has no {k:?}", map.name);
             }
         }

@@ -107,6 +107,33 @@ What changed, and worth a comment each:
   your shoulders. A gun stays in a relaxed hand as long as your fingers
   are still round it; open your fingers (not just the squeeze) to let go.
   Say if that ever keeps hold of something you meant to drop.
+- **Solid hands.** Your gloves stop at walls, tables and doors instead of
+  going through. When your real hand goes further, a faint ghost glove
+  shows where it is. Push a door open with your palm. A gun pushed into
+  a wall can't shoot through it.
+- **Climbing.** Grip a ladder and draw your hand down to climb, hand over
+  hand. Let go with both hands and you fall. To get up onto a wall or a
+  ledge about waist to chest high, press both open palms on its top and
+  push down. If climbing makes you queasy, the **CLIMBING** card on the
+  comfort board takes you straight to the top instead. Mark it if you
+  ever rise when you only meant to lean on a table.
+- **Crowbar.** Hold it by the end and steady it along the shaft with your
+  other hand. Put the claw to a robot's armour plate, or the latch edge
+  of a door a wedge has jammed, then pull the handle round. Two hands at
+  the end of the bar shift it; hands near the claw won't. Your hands feel
+  the strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  padlock's shackle or on chain-link, and squeeze your hands together. A
+  cut panel leaves a gap you can walk through.
+- **First aid and food.** Wind a dressing round your other forearm (one
+  and a half turns). Put the injector's tip to your thigh and pull the
+  trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
+  The A/X button no longer does these in the headset, except medicine
+  with the one-handed comfort setting.
+- **Gestures.** A hand over your mouth quietens your breathing when
+  you're winded (robots nearby can hear it). An open palm raised over
+  your head is a gesture robots can read, though nothing reacts to it
+  yet. Mark it if either triggers when you didn't mean it.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
@@ -277,8 +304,23 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   hand's speed): does it go where you meant? Cook one (B) and see if the
   timing feels fair. Thrust the knife into something, then slash: does
   "hard enough" match what your arm did? Fix the SKS's bayonet (A).
+  Drive an AK's butt back into a robot's eye: does a real stroke land,
+  and a bump not?
+- Faults. Load a box of re-packed rounds and shoot until one pops weak
+  (it may take a few boxes). Can you tell it from a dud by the feel
+  alone? Rod it out with the cleaning rod before the next shot. Shoot a
+  filthy Mosin until its bolt sticks, then slap it free. Clean a gun by
+  bringing the kit to it: does the bore come up bright?
 - Cover by material: shoot through a shed's plank wall with the AK, then
   try the pistol; skip rounds off concrete at a slant. Does it read?
+- Ammunition. Thumb a few AP rounds onto a magazine of ball and fire:
+  does the order make sense without a HUD? Load a box with every fourth
+  a tracer and fire at dusk or in fog: can you walk your rounds onto a
+  target by the streaks? Try a slug in the double at 50 m.
+- Zeroing. Put a PSO on the AK, take its drum with the other hand's
+  trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
+  and are the clicks clear? Range a robot with the rangefinder and hold
+  over for it at 400 m.
 - Armour. Put on the plate carrier by letting it go at your chest, and
   push a plate into its front pocket. Put the helmet on at your head.
   Does putting it on feel like dressing, or like hunting for a hotspot?

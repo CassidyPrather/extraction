@@ -111,6 +111,9 @@ pub struct Hit {
     pub mass_g: f32,
     /// What the round was loaded with (armour weighs an AP core).
     pub load: Load,
+    /// A blow, not a round: a point, an edge or something blunt (wood and
+    /// robots weigh them differently). `None` for rounds and blasts.
+    pub blow: Option<extraction_core::melee::Blow>,
 }
 
 /// A muzzle flash's light, fading out.
@@ -135,6 +138,44 @@ pub const AP_PLATE: f32 = 1.6;
 const DRAG: f32 = 0.12;
 const GRAVITY: Vec3 = Vec3::new(0.0, -9.81, 0.0);
 
+/// A round leaves at `speed` m/s, `angle` radians above the line it's
+/// measured from (the line of sight): its height above that line when it
+/// has come `range` metres along it, and when (seconds). Integrated as
+/// the game flies rounds, at the fixed rate, so a sight zeroed by it is
+/// zeroed for the game's rounds. `None` if it never gets there.
+pub fn height_at(speed: f32, angle: f32, range: f32) -> Option<(f32, f32)> {
+    let dt = 1.0 / 90.0;
+    let mut p = Vec2::ZERO;
+    let mut v = Vec2::new(angle.cos(), angle.sin()) * speed;
+    let mut t = 0.0;
+    while t < 6.0 {
+        let next = p + v * dt;
+        if next.x >= range {
+            let f = (range - p.x) / (next.x - p.x).max(1e-6);
+            return Some((p.y + (next.y - p.y) * f, t + dt * f));
+        }
+        p = next;
+        v.y += GRAVITY.y * dt;
+        v *= 1.0 - (DRAG * dt).min(0.9);
+        t += dt;
+    }
+    None
+}
+
+/// The angle (radians, up) a bore `sight_height` metres below the line of
+/// sight must hold to it for a round at `speed` to cross it at `range`.
+pub fn zero_angle(speed: f32, sight_height: f32, range: f32) -> f32 {
+    let mut a = 0.0;
+    for _ in 0..4 {
+        let Some((h, _)) = height_at(speed, a, range) else {
+            return a;
+        };
+        // Where it is at `range`, measured from the line of sight.
+        a += (sight_height - h) / range;
+    }
+    a
+}
+
 pub struct BallisticsPlugin;
 
 impl Plugin for BallisticsPlugin {
@@ -153,7 +194,7 @@ impl Plugin for BallisticsPlugin {
     }
 }
 
-fn fire_shots(
+pub(crate) fn fire_shots(
     mut commands: Commands,
     mut shots: MessageReader<Shot>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
@@ -334,6 +375,7 @@ pub(crate) fn fly_projectiles(
                 shooter: p.shooter,
                 mass_g: p.mass_g,
                 load: p.load,
+                blow: None,
             });
             match outcome {
                 Outcome::Through { speed: out } => {
@@ -444,7 +486,7 @@ impl Struck<'_, '_> {
             .is_ok_and(|p| matches!(p.role, crate::robots::PartRole::Armour(_)))
     }
 
-    fn stuff(
+    pub(crate) fn stuff(
         &self,
         e: Entity,
         point: Vec3,

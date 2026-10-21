@@ -84,6 +84,9 @@ pub struct LaunchOptions {
     /// Dev: the tour's views from a file instead of the placements (see
     /// `tour::scripted_views`; the visual lookbook, `scripts/lookbook.sh`).
     pub tour_views: Option<PathBuf>,
+    /// Dev: screenshot every text panel from where it's read, at the
+    /// headset's pixels a degree, into this folder (`render::legibility`).
+    pub legibility: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -111,6 +114,8 @@ pub struct LaunchOptions {
     pub sim_out: Option<PathBuf>,
     /// Sim raids run at once.
     pub jobs: usize,
+    /// Capture tooling: cinematics and sweeps (see `capture`).
+    pub capture: crate::capture::CaptureOptions,
 }
 
 impl Default for LaunchOptions {
@@ -130,6 +135,7 @@ impl Default for LaunchOptions {
             tour: None,
             tour_only: None,
             tour_views: None,
+            legibility: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -152,6 +158,7 @@ impl Default for LaunchOptions {
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
+            capture: Default::default(),
         }
     }
 }
@@ -163,9 +170,11 @@ impl LaunchOptions {
     pub fn tooling(&self) -> bool {
         self.screenshot.is_some()
             || self.tour.is_some()
+            || self.legibility.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
+            || self.capture.active()
     }
 
     pub fn from_args() -> Self {
@@ -189,7 +198,9 @@ impl LaunchOptions {
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
                 // Comfort settings; read by `rig::comfort`.
-                "--smooth-turn" | "--snap-turn" => {}
+                "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
+                | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
+                | "--one-handed" | "--no-captions" => {}
                 "--vignette" => {
                     let _ = val();
                 }
@@ -249,6 +260,13 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--legibility" => {
+                    o.legibility = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--tour-only" => o.tour_only = Some(val()),
                 "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
@@ -272,12 +290,27 @@ impl LaunchOptions {
                         o.window_size = (v[0], v[1]);
                     }
                 }
+                flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // A capture drives free cameras: over a quiet valley, or after a
+        // sim bot, rendered (a sim run is otherwise headless).
+        if o.capture.active() {
+            o.flat = true;
+            o.headless = false;
+            o.robots &= !o.capture.still();
+            o.camera
+                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {
             o.flat = false;
+        }
+        // The crossing is the fourth valley's unless it's told otherwise.
+        if o.scenario.as_deref() == Some(crate::bot::crossing::SCENARIO) && !o.map_explicit {
+            o.map = crate::bot::crossing::DEFAULT_MAP.into();
+            o.map_explicit = true;
         }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
@@ -315,6 +348,7 @@ mod tests {
             "--screenshot out.png",
             "--sim-run 3",
             "--bot",
+            "--cinematic x.cine",
         ] {
             assert!(parse(a).tooling(), "{a}");
         }
