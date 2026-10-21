@@ -254,24 +254,24 @@ pub(super) fn press_keys(
             .and_then(|c| items.get(c).ok())
             .map_or(0.0, |i| charge_of(i, &catalog))
     };
-    let mut press = |deck: Entity, key: Key, decks: &mut Query<&mut TapeDeck>| {
+    let press = |deck: Entity, key: Key, decks: &mut Query<&mut TapeDeck>| {
         let c = charge(deck);
-        let Ok(mut d) = decks.get_mut(deck) else {
-            return;
-        };
+        let mut d = decks.get_mut(deck).ok()?;
         let what = match d.deck.press(key, c) {
             Pressed::Engaged(m) => DeckWhat::Engaged(m),
             Pressed::Ejected => DeckWhat::DoorOpened,
             Pressed::Nothing => DeckWhat::Dead,
         };
-        out.write(DeckEvent { deck, what });
+        Some(DeckEvent { deck, what })
     };
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
         };
         if let Ok(k) = keys.get(*item) {
-            press(k.deck, k.key, &mut decks);
+            if let Some(e) = press(k.deck, k.key, &mut decks) {
+                out.write(e);
+            }
         } else if let Ok(door) = doors.get(*item) {
             if let Ok(mut d) = decks.get_mut(door.deck) {
                 if d.deck.door_open {
@@ -293,7 +293,9 @@ pub(super) fn press_keys(
         } else {
             Key::Stop
         };
-        press(u.item, key, &mut decks);
+        if let Some(e) = press(u.item, key, &mut decks) {
+            out.write(e);
+        }
     }
 }
 

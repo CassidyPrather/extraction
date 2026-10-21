@@ -10,6 +10,7 @@
 
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
+use bevy_seedling::pool::Sampler;
 use bevy_seedling::prelude::*;
 use bevy_seedling::sample::AudioSample;
 use extraction_core::music::deck::{Deck, Mode, Side};
@@ -336,7 +337,7 @@ fn play_decks(
         }
         // Drifted from the mechanism (a stall, a hitch): back in step.
         if let Some(at) = sampler.and_then(|s| s.try_playhead_seconds()) {
-            if (at as f32 - d.deck.position()).abs() > 1.0 {
+            if (at.0 as f32 - d.deck.position()).abs() > 1.0 {
                 commands.entity(v).despawn();
                 continue;
             }
