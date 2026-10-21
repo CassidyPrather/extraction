@@ -1255,7 +1255,7 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
                 yields: vec![("scrap_metal".into(), 3)],
                 pry: 200.0,
                 model: None,
-                scale: Vec3::ONE,
+                model_at: Transform::IDENTITY,
                 hp: None,
             },
         );
@@ -1753,4 +1753,30 @@ fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
     super::surge(app.world_mut());
     run(&mut app, 2);
     assert_eq!(panels(&mut app).len(), 4, "the Surge puts it back");
+}
+
+#[test]
+fn a_car_parts_model_sits_where_the_car_put_it() {
+    // A car's parts are modelled in the car's space: the part's pose then
+    // its model's lands the model back on the car's own pose.
+    use crate::world::buildings::{BreakKind, Breakable};
+    let car = Transform::from_xyz(12.0, 3.0, -7.0).with_rotation(Quat::from_rotation_y(0.7));
+    let door = Breakable {
+        kind: BreakKind::CarDoor,
+        at: Transform::from_xyz(0.9, 0.8, -0.4)
+            .with_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)),
+        size: Vec3::new(1.1, 1.0, 0.06),
+        model: Some("car_test_door_fr"),
+        mat: crate::render::materials::Mat::PaintedMetal,
+        yields: Some("car_door"),
+    };
+    let p = super::strip::Part::of(&door, &car);
+    let drawn = (p.at * p.model_at).compute_affine();
+    let want = car.compute_affine();
+    assert!(
+        drawn.abs_diff_eq(want, 1e-4),
+        "the door's model is drawn in the car's space"
+    );
+    assert_eq!(p.hp, None, "metal: off to a crowbar only");
+    assert_eq!(p.yields, vec![("car_door".to_string(), 1)]);
 }

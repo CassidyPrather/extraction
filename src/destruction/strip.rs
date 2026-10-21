@@ -24,6 +24,11 @@ pub const FENCE_HP: f32 = 100.0;
 pub const FENCE_PRY: f32 = 150.0;
 /// A bus's door and panels: riveted sheet, a crowbar's work.
 pub const BUS_PRY: f32 = 200.0;
+/// A car's door off its rusted hinges; a bonnet or boot lid off theirs; a
+/// wheel off its seized hub.
+pub const CAR_DOOR_PRY: f32 = 180.0;
+pub const CAR_LID_PRY: f32 = 140.0;
+pub const CAR_WHEEL_PRY: f32 = 160.0;
 /// A wooden part's hit points when nothing says otherwise.
 pub const PART_HP: f32 = 80.0;
 
@@ -46,8 +51,9 @@ pub struct Part {
     /// Its model, drawn at the building's range (a box of its size until
     /// it loads, or for good if `None`).
     pub model: Option<&'static str>,
-    /// Its scale, for the model (the box is already `size`).
-    pub scale: Vec3,
+    /// Its model's pose in its own space (its scale; or, for a car's
+    /// part, the way back to the car's space its model is authored in).
+    pub model_at: Transform,
     /// What it takes to break; `None` for metal, which only comes off to
     /// a crowbar (rounds hole sheet, they don't tear a door off).
     pub hp: Option<f32>,
@@ -60,6 +66,15 @@ impl Part {
             BreakKind::Shutter => (Some(SHUTTER_HP), SHUTTER_PRY),
             BreakKind::FencePanel => (Some(FENCE_HP), FENCE_PRY),
             BreakKind::BusDoor | BreakKind::BusPanel => (None, BUS_PRY),
+            BreakKind::CarDoor => (None, CAR_DOOR_PRY),
+            BreakKind::CarBonnet | BreakKind::CarBoot => (None, CAR_LID_PRY),
+            BreakKind::CarWheel => (None, CAR_WHEEL_PRY),
+        };
+        let model_at = if b.kind.in_car_space() {
+            let back = b.at.rotation.inverse();
+            Transform::from_translation(-(back * b.at.translation)).with_rotation(back)
+        } else {
+            Transform::from_scale(b.at.scale)
         };
         Part {
             at: (*bxf * b.at.with_scale(Vec3::ONE)).with_scale(Vec3::ONE),
@@ -68,7 +83,7 @@ impl Part {
             yields: b.yields.map(|y| (y.to_string(), 1)).into_iter().collect(),
             pry,
             model: b.model,
-            scale: b.at.scale,
+            model_at,
             hp,
         }
     }
@@ -155,7 +170,7 @@ fn place(commands: &mut Commands, broken: &Broken, part: &Part) {
     e.insert(Drawn {
         model: part.model,
         mat: part.mat,
-        at: Transform::from_scale(part.scale),
+        at: part.model_at,
         size: s,
         range: crate::render::lod::near_range().end_margin,
     });
