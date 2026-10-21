@@ -8,7 +8,7 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 MAPS=("$@")
-[ ${#MAPS[@]} -eq 0 ] && MAPS=(marrow_creek kettle_pass cinder_works)
+[ ${#MAPS[@]} -eq 0 ] && MAPS=(marrow_creek kettle_pass cinder_works sallow_reservoir)
 fail=0
 for MAP in "${MAPS[@]}"; do
     echo "== $MAP"

@@ -36,6 +36,9 @@ name the walker's; the other kinds play at the cue's gain plus their
   alike (so masking between sounds is unchanged) but placed sounds are
   muffled to `HUSH_DEEP`'s cutoff while the beds aren't: your footstep
   and a robot's call 2 m off, muffled so, still clear the wind's masking.
+- **The dam slaps back.** A shot fired 100 m out from Sallow's dam face
+  comes back (`echo.slap`, from its mirror image 200 m off) `SLAP_UNDER`
+  LU under the shot as you hear it, and still clears the wind.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -52,12 +55,13 @@ import audio_mix as am
 ROOT = Path(__file__).resolve().parent.parent
 KINDS = ["drone", "walker", "grappler", "dirigible", "crawler", "hound", "warden", "heavy"]
 MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
-         "calling", "answering", "hurt", "dying"]
+         "calling", "answering", "hurt", "dying", "flanking", "retreating"]
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
 HEARD_RATIO = (0.6, 1.6)  # a break heard by ears over robots' reach
 WORLD = ("break.", "flock.", "heavy.")
+SLAP_UNDER = (6.0, 20.0)  # LU the dam's echo sits under the shot
 NIGHT_KEPT = 0.75   # share of a warning's calm range kept over the night beds
 NIGHT_BED = [("wind", 0.0), ("insects", 0.0), ("rustle", 0.0)]
 
@@ -249,6 +253,17 @@ def run(sets, out):
         flags += bad
         row.append(f"{target} {margin:+.1f} dB at {band} Hz" + (" (masked)" if bad else ""))
     lines.append(f"  In a Hush (placed sounds muffled to {hush_fc:g} Hz): " + ", ".join(row))
+    # The dam's slapback against the shot itself.
+    if "echo.slap" in [c["name"] for c in mix]:
+        shot = next(c for c in mix if c["name"] == "gun.shot")
+        echo = dict(next(c for c in mix if c["name"] == "echo.slap"), dist=200.0)
+        under = am.heard(shot, sets) - am.heard(echo, sets)
+        clears = am.audible_margin("echo.slap", sets, mix, [("wind", 0.0)], 200.0)
+        bad = not SLAP_UNDER[0] <= under <= SLAP_UNDER[1] or clears <= 0
+        flags += bad
+        lines.append(f"  The dam's slapback (a shot 100 m out, the echo from 200 m): {under:.1f} LU "
+                     f"under the shot (wants {SLAP_UNDER[0]:g}-{SLAP_UNDER[1]:g}), clears the wind "
+                     f"by {clears:+.1f} dB" + (" (!)" if bad else ""))
     # Masking: each kind's every word at NEAR m, against your footstep
     # (over the wind) and your shot.
     worst = {}

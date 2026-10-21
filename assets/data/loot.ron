@@ -31,6 +31,16 @@
             Item(id: "wristwatch", weight: 1.0),
             Item(id: "old_photo", weight: 2.0),
             Item(id: "chess_piece", weight: 1.0),
+            Table(name: "tapes", weight: 1.5),
+        ]),
+        "tapes": (rolls: (1, 1), entries: [
+            Item(id: "tape_practice", weight: 1.0),
+            Item(id: "tape_hymns", weight: 1.0),
+            Item(id: "tape_lodge", weight: 1.0),
+            Item(id: "tape_duty", weight: 1.0),
+            Item(id: "record_augustin", weight: 0.4),
+            Item(id: "record_entertainer", weight: 0.4),
+            Item(id: "record_susanna", weight: 0.4),
         ]),
         "ammo_common": (rolls: (1, 2), entries: [
             Item(id: "ammo_9x18", weight: 3.0),
@@ -181,6 +191,7 @@
             Item(id: "detector", weight: 0.8),
             Item(id: "detector_sweep", weight: 0.35),
             Item(id: "detector_bear", weight: 0.12),
+            Item(id: "cassette_player", weight: 0.5),
         ]),
         "house": (rolls: (1, 3), entries: [
             Table(name: "kitchen", weight: 4.0),

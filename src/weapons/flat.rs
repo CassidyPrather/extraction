@@ -561,59 +561,108 @@ pub const TOUCH: f32 = 0.12;
 /// How close a cleaning kit, oil or parts must come to a gun's receiver.
 pub const TOUCH_GUN: f32 = 0.2;
 
+/// How near two things must come to combine, if they go together at all:
+/// a box of rounds and its magazine; a cleaning kit, oil or spare parts
+/// and a gun's receiver.
+pub fn combine_reach(
+    a: &extraction_core::items::ItemDef,
+    b: &extraction_core::items::ItemDef,
+) -> Option<f32> {
+    let loads = |ammo: &extraction_core::items::ItemDef, mag: &extraction_core::items::ItemDef| {
+        ammo.category == Category::Ammo
+            && matches!((&ammo.cartridge, &mag.magazine), (Some(c), Some(m)) if *c == m.cartridge)
+    };
+    let tends = |tool: &extraction_core::items::ItemDef, gun: &extraction_core::items::ItemDef| {
+        gun.firearm.is_some()
+            && matches!(tool.id.as_str(), "cleaning_kit" | "gun_oil" | "spare_parts")
+    };
+    if loads(a, b) || loads(b, a) {
+        Some(TOUCH)
+    } else if tends(a, b) || tends(b, a) {
+        Some(TOUCH_GUN)
+    } else {
+        None
+    }
+}
+
 /// VR: bring a box of rounds to a magazine, one in each hand, and the rounds
 /// go in (what flat mode's C does); bring a cleaning kit, oil or spare
 /// parts to a gun's receiver and it's tended. Without it a headset could never load a
 /// magazine: the yard's sign said to, and nothing listened.
+///
+/// One-handed (`Comfort::one_handed`), the other thing needn't be in a
+/// hand: it can be set down (on a table, the ground) or in one of your own
+/// pouches or pockets. A one-handed bot plays this way too.
+#[allow(clippy::too_many_arguments)]
 fn touch_to_combine(
     driver: Res<crate::rig::RigDriver>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
     hands: Query<(&RigHand, &Hand, &ChildOf)>,
-    items: Query<(&Item, &GlobalTransform)>,
+    items: Query<(Entity, &Item, &GlobalTransform)>,
+    held: Query<(), With<crate::interact::Held>>,
+    in_socket: Query<&InSocket>,
+    owners: Query<&SocketOwner>,
+    bots: Query<(), With<crate::bot::Bot>>,
     catalog: Res<Catalog>,
     mut combine: MessageWriter<Combine>,
     mut touching: Local<std::collections::HashSet<(Entity, Entity)>>,
 ) {
-    if *driver != crate::rig::RigDriver::Xr {
+    let one_handed = comfort.is_some_and(|c| c.one_handed);
+    let xr = *driver == crate::rig::RigDriver::Xr;
+    if !xr && !(one_handed && !bots.is_empty()) {
         return;
     }
     let mut now = std::collections::HashSet::new();
-    for (rh, h, owner) in &hands {
-        if rh.side != Side::Right {
-            continue;
-        }
-        let Some(a) = h.holding else { continue };
-        let other = hands
-            .iter()
-            .find(|(o, _, p)| o.side == Side::Left && p.parent() == owner.parent())
-            .and_then(|(_, oh, _)| oh.holding);
-        let Some(b) = other else { continue };
-        let (Ok((ia, ga)), Ok((ib, gb))) = (items.get(a), items.get(b)) else {
-            continue;
-        };
-        let (da, db) = (catalog.get(ia.kind()), catalog.get(ib.kind()));
-        let loads = |ammo: &extraction_core::items::ItemDef,
-                     mag: &extraction_core::items::ItemDef| {
-            ammo.category == Category::Ammo
-                && matches!((&ammo.cartridge, &mag.magazine), (Some(c), Some(m)) if *c == m.cartridge)
-        };
-        // A cleaning kit, oil or spare parts brought to a gun's receiver.
-        let tends = |tool: &extraction_core::items::ItemDef,
-                     gun: &extraction_core::items::ItemDef| {
-            gun.firearm.is_some()
-                && matches!(tool.id.as_str(), "cleaning_kit" | "gun_oil" | "spare_parts")
-        };
-        let reach = if loads(da, db) || loads(db, da) {
-            TOUCH
-        } else if tends(da, db) || tends(db, da) {
-            TOUCH_GUN
-        } else {
-            continue;
-        };
+    let mut touch = |a: Entity, b: Entity, ga: &GlobalTransform, gb: &GlobalTransform, reach| {
         if ga.translation().distance(gb.translation()) < reach {
             now.insert((a, b));
             if !touching.contains(&(a, b)) {
                 combine.write(Combine { a, b });
             }
+        }
+    };
+    for (rh, h, owner) in &hands {
+        // Bots play on the flat driver, and play by hand.
+        if !xr && !bots.contains(owner.parent()) {
+            continue;
+        }
+        let Some(a) = h.holding else { continue };
+        let Ok((_, ia, ga)) = items.get(a) else {
+            continue;
+        };
+        let da = catalog.get(ia.kind());
+        if one_handed {
+            // Whatever's to hand: set down, or on your own body.
+            let player = owner.parent();
+            for (b, ib, gb) in &items {
+                if b == a
+                    || held.contains(b)
+                    || gb.translation().distance(ga.translation()) > TOUCH_GUN
+                    || in_socket
+                        .get(b)
+                        .is_ok_and(|s| owners.get(s.socket).map_or(true, |o| o.0 != player))
+                {
+                    continue;
+                }
+                if let Some(reach) = combine_reach(da, catalog.get(ib.kind())) {
+                    touch(a, b, ga, gb, reach);
+                }
+            }
+            continue;
+        }
+        if rh.side != Side::Right {
+            continue;
+        }
+        let other = hands
+            .iter()
+            .find(|(o, _, p)| o.side == Side::Left && p.parent() == owner.parent())
+            .and_then(|(_, oh, _)| oh.holding);
+        let Some(b) = other else { continue };
+        let Ok((_, ib, gb)) = items.get(b) else {
+            continue;
+        };
+        if let Some(reach) = combine_reach(da, catalog.get(ib.kind())) {
+            touch(a, b, ga, gb, reach);
         }
     }
     *touching = now;

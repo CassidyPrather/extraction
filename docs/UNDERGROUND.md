@@ -351,6 +351,13 @@ already there), then the mine, then the cellars.
 
 | `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
 
+Models (Kit's): the cellars' crane bridge and hook block, the chain
+scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
+lever box on every vent and crane lever, a vent's arm swinging down as
+it opens (`c_vent.jpg`); the Depot ramp kiosk's Custodian front, from a
+portal's `facade` (`d_front.jpg`). No canary model yet: the canary is
+still the item's own.
+
 Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
 `shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a
 layout's `lamp_colour`, a round's `heavy` and `dormant`; each checked by

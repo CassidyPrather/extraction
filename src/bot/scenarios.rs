@@ -10,6 +10,7 @@ use extraction_core::map::MarkerKind;
 
 use super::{Bot, Expect, Task};
 use crate::launch::LaunchOptions;
+use crate::progression::contracts::scenario::SCENARIOS as CONTRACTS;
 use crate::rig::{LocalPlayer, Side};
 use crate::weapons::flat::MacroKind;
 use crate::world::{Layer, Zone};
@@ -66,11 +67,19 @@ pub const NAMES: &[&str] = &[
 ///   (`destruction::scenario`).
 /// - `crossing`: a raid's crossing to the truck, Sallow Reservoir's by
 ///   default (`bot::crossing`).
+/// - `contract_<id>`: one of the driver's contracts from the card to its
+///   pay, on its valley's map (`progression::contracts::scenario`).
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
     crate::destruction::scenario::SCENARIO,
     super::crossing::SCENARIO,
+    CONTRACTS[0].0,
+    CONTRACTS[1].0,
+    CONTRACTS[2].0,
+    CONTRACTS[3].0,
+    CONTRACTS[4].0,
+    CONTRACTS[5].0,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -551,6 +560,9 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             crate::progression::safehouse::scenario::opening()
         }
         super::crossing::SCENARIO => super::crossing::opening(),
+        n if crate::progression::contracts::scenario::is(n) => {
+            crate::progression::contracts::scenario::opening(n)
+        }
         _ => return None,
     })
 }

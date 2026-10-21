@@ -108,6 +108,29 @@ on the east side. The reservoir filled the three valleys' taps.
   back up, and kept reading the catchwater gauge on Sundays until his legs
   gave out.
 
+### Rime Fell: the mine above the trees
+
+The district's high valley, over the fells to the north-west: a glacial
+bench above the treeline and the mine company's settlement on it,
+**Coldharbour** (lead, zinc, a little silver from the knoll). One street,
+the mine office, the canteen, a chapel, and the funicular down to the
+valley station, the only way out in winter. The stepped ore mill on the
+knoll, the observatory on the summit, the galleries over the pass road.
+
+- Coldharbour came down the funicular on the 15th, the last car at four.
+  The two at the **observatory** (the weather service's high station and
+  the district's radio relay), **Ota Brož** and **Hedvika Šimková**,
+  stayed: someone had to say what came over the col. Their entries are
+  in the col hut book and the avalanche watch's log.
+- The Gate is in the cirque past the tarn; the machines came over the col
+  on 2 November in a line. They want the mine: the concentrate, the
+  rails, the rope. In March the funicular's rope was cut at the top
+  drum and wound away; one car stands at the passing loop. On 4 November
+  the adit door was opened, with no card.
+- The **crown hole**: the old workings fell in the first winter and the
+  ground sank into a pit. Things come up out of it. The **miners' shrine**
+  by the chapel and **the cairn on the col** take offerings.
+
 ## Timeline
 
 Year 0 is the year of the Lift. The game is set in the twelfth autumn
@@ -125,6 +148,7 @@ the Lift ("the second winter").
 | November | **Inspector Pavel Rus** takes the three depot keys to their custodians: KEY-M to Vey (the letter is never delivered), KEY-K into the quarry shelter, KEY-C to the works. |
 | Winter | The works burns what the machines haul in. |
 | February | The fire gets out. The north-west wood burns for a month. |
+| March, year 1 | On Rime Fell the machines cut the funicular's rope at the top drum and wind it away; one car is left at the passing loop. |
 | 1 April, year 1 | The review date. It is postponed, then not set. The soldiers stand down and leave the gates. Authority staff on site: none. |
 | December, year 1 | The second winter. The Custodian opens Sallow's scour valves; by January the reservoir bed is dry and Old Sallow stands in the mud. |
 | Years 1 to 11 | The few who stayed die, leave or are tidied away. The Surge comes every few weeks. Drivers start bringing people in. |
@@ -273,6 +297,9 @@ only his mother's letter names him.
 | **T. Veselý**, woodward | Cinder, the woodward's cabin | Wet the roof and stayed; where the matches are |
 | **Alois Pech**, keeper | Sallow, the keeper's cottage and the gauge house | Born in the drowned village; few words |
 | **J. Rybář**, shopkeeper | Sallow, New Sallow's shop | Moved twice; left the key for a neighbour |
+| **Ota Brož** and **Hedvika Šimková**, observatory keepers | Rime Fell, his letter home in Coldharbour, their hands in the hut books | Stayed for the weather; plain, watchful |
+| **F. Lukas**, funicular attendant | Rime Fell, the valley station | Exact; left both cars on the brake |
+| The roadmen | Rime Fell, the hairpin hut | A grit book; practical |
 
 The **terminals** are the Custodian's and the Authority's: status,
 inventory, schedule, in a clipped machine voice that slowly gives away

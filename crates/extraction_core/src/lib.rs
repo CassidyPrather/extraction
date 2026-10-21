@@ -27,6 +27,7 @@ pub mod map_lint;
 pub mod map_nav;
 pub mod map_sight;
 pub mod melee;
+pub mod music;
 pub mod nav;
 pub mod noise;
 pub mod progression;

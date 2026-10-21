@@ -50,6 +50,8 @@ impl Plugin for GunVisualsPlugin {
                 super::zero::turn_drums,
                 super::optics::add_vignettes,
                 super::optics::vignette_lenses,
+                super::optics::add_post_blurs,
+                super::optics::blur_posts,
                 super::flares::flare_visuals,
                 super::crossbow::quarrel_visuals,
             ),

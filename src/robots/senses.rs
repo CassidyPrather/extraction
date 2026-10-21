@@ -325,6 +325,8 @@ pub(crate) fn door_noise(
     mut was_open: Local<std::collections::HashMap<Entity, bool>>,
     mut noise: MessageWriter<Noise>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_none_or(|b| b == door.open) {
