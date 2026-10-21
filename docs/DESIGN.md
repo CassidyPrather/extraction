@@ -261,8 +261,9 @@ ground hard by walls and cover within its uncertainty (a drone comes down to a d
 round at each. Nothing, and it **gives up**: back to its job, cut short,
 or home if finding you was the job. Lose a robot mid-fight and it does
 the same from where it last saw you. A robot that notices you calls the
-others within 45 m to come and look (they don't open fire until they see
-you themselves), and a radio you carry hears the chatter. Each step is a
+others within 45 m to come and look (a drone, up high, spots for them:
+its call carries 120 m), and they don't open fire until they see you
+themselves; a radio you carry hears the chatter. Each step is a
 message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
 for sound and the wrist.
 

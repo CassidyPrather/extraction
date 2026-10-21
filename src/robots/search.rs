@@ -20,7 +20,7 @@
 
 use super::doors::Entrances;
 use super::indoor::NavRef;
-use super::{Awareness, Brain, Job, JobKind, NOTICED, Noticed, Robot};
+use super::{Awareness, Brain, Job, JobKind, NOTICED, Noticed, Robot, RobotKind};
 use bevy::prelude::*;
 
 /// Suspicion past which a robot goes to look.
@@ -42,6 +42,8 @@ pub const SEARCH_TIME: f32 = 40.0;
 pub const RETARGET: f32 = 4.0;
 /// A robot that notices you calls others within this (m)...
 pub const CALL_RADIUS: f32 = 45.0;
+/// A drone's call carries this far (m): it's the walkers' spotter.
+pub const DRONE_CALL_RADIUS: f32 = 120.0;
 /// ...up to this suspicion: they come to look; they don't open fire
 /// until they see you themselves.
 pub const CALL_SUSPICION: f32 = 0.45;
@@ -384,7 +386,7 @@ fn call_out(
         if last.get(&n.robot).is_some_and(|t| now - t < CALL_COOLDOWN) {
             continue;
         }
-        let Ok((_, _, gt, aware, job)) = robots.get(n.robot) else {
+        let Ok((_, caller, gt, aware, job)) = robots.get(n.robot) else {
             continue;
         };
         // The convoy's collector keeps itself to itself.
@@ -395,13 +397,19 @@ fn call_out(
             continue;
         };
         let me = gt.translation();
+        // A drone up high is a spotter: it calls further.
+        let reach = if caller.kind == RobotKind::Drone {
+            DRONE_CALL_RADIUS
+        } else {
+            CALL_RADIUS
+        };
         last.insert(n.robot, now);
         let mut heard = 0;
         for (e, robot, ogt, mut other, ojob) in &mut robots {
             if e == n.robot
                 || robot.wrecked
                 || ojob.kind == JobKind::Collect
-                || ogt.translation().distance(me) > CALL_RADIUS
+                || ogt.translation().distance(me) > reach
                 || other.suspicion >= NOTICED
             {
                 continue;

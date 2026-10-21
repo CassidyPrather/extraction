@@ -1891,3 +1891,55 @@ fn keep_shooting_and_walkers_come_too() {
     assert_eq!(walkers_sent(1), 0, "one shot: the usual response");
     assert_eq!(walkers_sent(3), 2, "three: two walkers as well");
 }
+
+/// A drone that notices you is the walkers' spotter: its call reaches a
+/// walker 100 m off; a walker's own call doesn't carry that far.
+#[test]
+fn a_drone_spots_for_walkers_far_off() {
+    let heard = |drone_calls: bool| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 330.0));
+        let here = zone.on_ground(100.0, 200.0);
+        let listener = walker_at(&mut app, &zone, zone.on_ground(100.0, 100.0));
+        let caller = if drone_calls {
+            let mut queue = CommandQueue::default();
+            let d = {
+                let mut c = Commands::new(&mut queue, app.world());
+                super::drone::spawn_drone(
+                    &mut c,
+                    here + Vec3::Y * 15.0,
+                    Job {
+                        kind: JobKind::Survey,
+                        site: here,
+                        duration: 999.0,
+                        exit: here,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            app.update();
+            d
+        } else {
+            walker_at(&mut app, &zone, here)
+        };
+        let you = zone.on_ground(100.0, 215.0);
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(caller).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(you);
+            a.uncertainty = 1.0;
+            a.suspicion = 1.0;
+        }
+        app.world_mut().write_message(super::Noticed {
+            robot: caller,
+            at: here,
+        });
+        app.update();
+        app.update();
+        let a = app.world().get::<Awareness>(listener).unwrap();
+        a.suspicion >= super::search::CALL_SUSPICION * 0.9
+            && a.last_known.is_some_and(|l| flat(l - you) < 10.0)
+    };
+    assert!(heard(true), "the drone's call reached it");
+    assert!(!heard(false), "a walker's call doesn't carry 100 m");
+}
