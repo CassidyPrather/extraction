@@ -164,13 +164,22 @@ impl Plugin for WalkerPlugin {
 
 /// Navigation for ground robots: terrain, structures and tree trunks
 /// (`extraction_core::map_nav`, which the map lint checks routes on too).
-pub fn build_nav(mut commands: Commands, zone: Res<Zone>) {
+pub fn build_nav(
+    mut commands: Commands,
+    zone: Res<Zone>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
+) {
     let started = std::time::Instant::now();
-    let g = extraction_core::map_nav::zone_grid(
+    let mut g = extraction_core::map_nav::zone_grid(
         &zone.map,
         &zone.hm,
         extraction_core::map_nav::MAX_SLOPE,
     );
+    // Story's scenes stand where the map doesn't say (a row of buses).
+    let map = opts.map_or("", |o| o.into_inner().map.as_str());
+    for ob in crate::world::scenes::nav_obstacles(&zone, map) {
+        g.block(ob, 0.6);
+    }
     info!(
         "navigation grid built in {:.0} ms",
         started.elapsed().as_secs_f32() * 1000.0

@@ -86,6 +86,18 @@ impl Plugin for ProgressionPlugin {
     }
 }
 
+/// Every valley, the late ones too: where a contract's steps may be
+/// (`contracts`). The ladder's jobs keep to [`valleys`].
+pub fn contract_valleys() -> &'static [(&'static str, MapDef)] {
+    static V: std::sync::OnceLock<Vec<(&'static str, MapDef)>> = std::sync::OnceLock::new();
+    V.get_or_init(|| {
+        extraction_core::map::VALLEYS
+            .into_iter()
+            .filter_map(|(id, text)| MapDef::from_ron(text).ok().map(|m| (id, m)))
+            .collect()
+    })
+}
+
 /// The three valleys, as jobs see them.
 pub fn valleys() -> &'static [(&'static str, MapDef)] {
     static V: std::sync::OnceLock<Vec<(&'static str, MapDef)>> = std::sync::OnceLock::new();
@@ -103,7 +115,7 @@ pub fn valleys() -> &'static [(&'static str, MapDef)] {
 }
 
 fn valley_name(id: &str) -> String {
-    valleys()
+    contract_valleys()
         .iter()
         .find(|(v, _)| *v == id)
         .map_or(id.replace('_', " "), |(_, m)| m.name.clone())
@@ -458,6 +470,10 @@ fn offer_job(
         .map(|(id, map)| Valley { id, map })
         .collect();
     let roll = |p: &Progress| extraction_core::progression::roll_job(p, opts.seed, &here, &valleys);
+    let every: Vec<Valley> = contract_valleys()
+        .iter()
+        .map(|(id, map)| Valley { id, map })
+        .collect();
     // `SIM_CONTRACT=<id>[:step]`: a sim bot on that contract's step, in
     // its tier (its kit lies by the insertion: `sim`).
     if let (Some(_), Ok(v)) = (&opts.sim_run, std::env::var("SIM_CONTRACT"))
@@ -478,7 +494,7 @@ fn offer_job(
                 id: c.id.to_owned(),
                 step,
             });
-            progression.0.job = extraction_core::contracts::contract_job(&progression.0, &valleys);
+            progression.0.job = extraction_core::contracts::contract_job(&progression.0, &every);
         }
         info!("sim contract job: {:?}", progression.0.job);
         return;
@@ -509,7 +525,7 @@ fn offer_job(
         info!("contract: {}", c.id);
         contracts::hand_kit(c, &mut raid, &mut handover);
     }
-    let job = extraction_core::contracts::contract_job(&progression.0, &valleys)
+    let job = extraction_core::contracts::contract_job(&progression.0, &every)
         .unwrap_or_else(|| roll(&progression.0));
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);

@@ -893,7 +893,7 @@ fn crossbow() -> GunLayout {
         muzzle: Vec3::new(0.0, rail, -0.46),
         port: Vec3::new(0.0, 0.07, -0.2),
         eject: Vec3::new(0.0, 1.0, 0.0),
-        sight: at(0.0, 0.085, 0.0),
+        sight: at(0.0, 0.085, -0.027),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::String,

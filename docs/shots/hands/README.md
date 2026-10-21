@@ -43,3 +43,8 @@ index).
 truck's side wall. The glove and sleeve stop at the wall's face, and the
 ghost glove's faint rim shows the real hand inside the wall, over the
 workbench panel.
+`13_ghost_fade_monado.jpg` (Monado, training yard,
+`SIMULATED_REACH=0.88,0.1,-0.6,2,3` left, `1.1,0.1,-0.6,2,3` right): the
+ghost fades with the gap. With the hand only just at the wall, the glove
+rests on the rail and there is no ghost. Pushed deep in, the ghost's rim
+shows inside the wall beyond the stopped glove.

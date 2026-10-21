@@ -444,6 +444,39 @@ fn remains(b: &mut Builder, at: Vec3, yaw: f32, seated: bool) {
     );
 }
 
+/// The solid pieces of `map`'s scenes in the open (a row of buses, a
+/// pallet line), as obstacles for the walking grid (`robots::walker`):
+/// the map's placements don't know they're there.
+pub fn nav_obstacles(zone: &Zone, map: &str) -> Vec<extraction_core::nav::Obstacle> {
+    let mut out = Vec::new();
+    for (id, s) in of(map) {
+        if s.floor.is_some() {
+            continue;
+        }
+        let Some(geo) = geo(&id) else {
+            continue;
+        };
+        let t = pose(zone, s);
+        for piece in geo.pieces.iter().filter(|p| p.collide) {
+            let Shape::Box(size) = piece.shape else {
+                continue;
+            };
+            // Small things (a case, a chair) are walked round as they come.
+            if size.x.max(size.z) < 0.6 {
+                continue;
+            }
+            let at = t.transform_point(piece.at.translation);
+            let (turn, _, _) = (t.rotation * piece.at.rotation).to_euler(EulerRot::YXZ);
+            out.push(extraction_core::nav::Obstacle::Rect {
+                at: [at.x, at.z],
+                half: [size.x * 0.5, size.z * 0.5],
+                yaw: -turn,
+            });
+        }
+    }
+    out
+}
+
 /// Where a scene stands in the world: on whatever floor is under it, or
 /// the ground.
 pub fn pose(zone: &Zone, scene: &Scene) -> Transform {
@@ -801,11 +834,14 @@ mod tests {
         let mut problems = Vec::new();
         for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let zone = Zone::load(map);
-            let grid = extraction_core::map_nav::zone_grid(
+            let mut grid = extraction_core::map_nav::zone_grid(
                 &zone.map,
                 &zone.hm,
                 extraction_core::map_lint::COMFORT_SLOPE,
             );
+            for ob in nav_obstacles(&zone, map) {
+                grid.block(ob, 0.6);
+            }
             let ins = zone
                 .map
                 .markers
@@ -826,6 +862,31 @@ mod tests {
             }
         }
         assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    /// The walking grid knows a scene's solid pieces: Bay four's buses
+    /// block it, and so does the narrow slot between two of them (a sim
+    /// bot once walked in and couldn't get out).
+    #[test]
+    fn scene_pieces_block_the_walking_grid() {
+        let map = "sallow_reservoir";
+        let zone = Zone::load(map);
+        let mut grid = extraction_core::map_nav::zone_grid(
+            &zone.map,
+            &zone.hm,
+            extraction_core::map_nav::MAX_SLOPE,
+        );
+        let s = of(map).find(|(_, s)| s.name == "Bay four").unwrap().1;
+        let at = |x: f32| [s.at[0] + x, s.at[1]];
+        // Bus three's middle, and the slot between buses one and two.
+        assert!(grid.walkable(at(0.0)) && grid.walkable(at(-4.8)));
+        for ob in nav_obstacles(&zone, map) {
+            grid.block(ob, 0.6);
+        }
+        assert!(!grid.walkable(at(0.0)), "a bus is solid");
+        assert!(!grid.walkable(at(-4.8)), "the slot is closed");
+        // The empty bay stays open: it's the point.
+        assert!(grid.walkable(at(3.2)), "bay four is open");
     }
 
     /// The set pieces' rule, held for every scene: what's left to take

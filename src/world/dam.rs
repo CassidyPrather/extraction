@@ -661,9 +661,17 @@ mod tests {
                 assert!(ok, "{id} piece {i}: {:?} at {:?}", p.shape, p.at);
                 let at = p.at.translation;
                 let bridge = id == "draw_off_tower" && at.y > 3.0 && at.z > TOWER_W * 0.5;
-                // The face stair's wall, built with the long face, stands
-                // out in front of it along the stair.
-                let stair = id == "dam_face" && at.z > 3.0;
+                // Walls built out past the footprint (the face stair's)
+                // are listed for the nav grid, and stand wholly inside the
+                // listing.
+                let half = match p.shape {
+                    Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                let stair = extraction_core::map::prefab_walls(id).iter().any(|(o, h)| {
+                    (at.x - o[0]).abs() + half.x <= h[0] + 0.1
+                        && (at.z - o[1]).abs() + half.z <= h[1] + 0.1
+                });
                 // Pilasters and turrets stand a little proud of the faces.
                 let slack = 1.5;
                 assert!(
@@ -691,6 +699,21 @@ mod tests {
             .find(|p| p.prefab == "dam_face")
             .expect("the downstream face is placed");
         assert_eq!((face.at[0], face.at[1], face.y), DAM_FACE_AT);
+        // The nav grid's listing of the wall is the wall.
+        let (x0, x1) = STAIR_RUN;
+        let want = (
+            [
+                (x0 + x1) * 0.5 - DAM_FACE_AT.0,
+                STAIR_WALL_Z - DAM_FACE_AT.1,
+            ],
+            [(x1 - x0) * 0.5, STAIR_WALL_T * 0.5],
+        );
+        let walls = extraction_core::map::prefab_walls("dam_face");
+        assert!(
+            walls.iter().any(|(o, h)| (0..2)
+                .all(|k| (o[k] - want.0[k]).abs() < 0.05 && (h[k] - want.1[k]).abs() < 0.05)),
+            "map::prefab_walls(\"dam_face\") is {walls:?}, the wall {want:?}"
+        );
         for x in [-25.0f32, 0.0, 30.0, 60.0, 85.0] {
             let road = hm.height([x, 154.0]);
             let want = stair_height(x);

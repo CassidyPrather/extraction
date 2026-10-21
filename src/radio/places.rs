@@ -285,7 +285,11 @@ mod fixture_tests {
             assert!((kb.x(k) - x).abs() < 1e-4, "key_{k} at {}", kb.x(k));
         }
         assert_eq!(kb.under(Vec3::new(kb.x(21 + 15), 0.75, -0.19)), Some(36));
-        assert_eq!(kb.under(Vec3::new(-0.5, 0.75, -0.19)), None, "past its compass");
+        assert_eq!(
+            kb.under(Vec3::new(-0.5, 0.75, -0.19)),
+            None,
+            "past its compass"
+        );
     }
 
     /// Every standing instrument is on its map's ground or a floor above

@@ -69,6 +69,11 @@ fn blink(
 ) {
     let moved = over.read().any(|o| o.teleport && locals.contains(o.player));
     for (mut b, mut vis) in &mut blinks {
+        // Open and staying open: nothing to write (a material written
+        // re-prepares every frame).
+        if !moved && b.shut <= 0.0 {
+            continue;
+        }
         b.shut = if moved {
             1.0
         } else {

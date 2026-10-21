@@ -474,6 +474,11 @@ pub const THREAD: &[Lead] = &[
         note: "Sorter's chit",
         mentions: &[(C, "The works")],
     },
+    Lead {
+        map: S,
+        note: "Plumb book",
+        mentions: &[(S, "The dam"), (S, "Keeper's note")],
+    },
     // Set pieces.
     Lead {
         map: M,
@@ -489,6 +494,26 @@ pub const THREAD: &[Lead] = &[
         map: C,
         note: "Charge chit",
         mentions: &[(C, "The works"), (C, "Lookout log")],
+    },
+    Lead {
+        map: M,
+        note: "Hana's chalk",
+        mentions: &[(M, "Village"), (M, "Basket note")],
+    },
+    Lead {
+        map: K,
+        note: "Lamp room chit",
+        mentions: &[(K, "Kettle mine"), (K, "Novakova's note")],
+    },
+    Lead {
+        map: C,
+        note: "Bucket tally",
+        mentions: &[(C, "Fire lookout"), (C, "Ash Row"), (C, "Charge chit")],
+    },
+    Lead {
+        map: S,
+        note: "Keeper's slip",
+        mentions: &[(S, "Old Sallow"), (S, "Keeper's note")],
     },
     // Sallow Reservoir: the water works, and the village it drowned.
     Lead {

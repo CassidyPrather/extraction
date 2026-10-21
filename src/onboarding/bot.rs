@@ -39,6 +39,9 @@ pub struct Director {
     /// Metres walked so far, and where the bot was last frame.
     walked: f32,
     last: Option<Vec2>,
+    /// The station the last goal was at (a newcomer's habits start at each
+    /// new one).
+    station: Option<usize>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -52,9 +55,13 @@ pub(super) fn direct(
     mut state: Local<Director>,
     time: Res<Time>,
 ) {
-    if opts.scenario.as_deref() != Some(SCENARIO) {
+    if !matches!(
+        opts.scenario.as_deref(),
+        Some(SCENARIO | super::first_hour::YARD)
+    ) {
         return;
     }
+    let persona = super::first_hour::current(&opts);
     let Some((player, mut bot, root, mut input)) = bots.iter_mut().next() else {
         return;
     };
@@ -145,9 +152,65 @@ pub(super) fn direct(
     if state.tries > 0 {
         bot.log.push(format!("  again ({})", state.tries + 1));
     }
-    bot.sprint = true;
+    // (Anyone runs when the board says to.)
+    bot.sprint = persona.is_none_or(|p| p.sprint) || goal == Goal::Run;
     let here = Vec2::new(root.translation.x, root.translation.z);
-    let tasks = world.tasks_for(goal, player, here);
+    let mut tasks = Vec::new();
+    // A newcomer's habits, at each new station.
+    let station = station_of(goal);
+    if let Some(p) = persona.filter(|_| state.station != Some(station) && station > 0) {
+        let post = |i: usize| Vec2::from(STATIONS[i].at);
+        if p.lost {
+            // To the wrong post first; its board and the lit lamp put it
+            // right.
+            let wrong = (station + 2) % STATIONS.len();
+            if wrong > 0 {
+                tasks.extend(world.go(here, post(wrong) + Vec2::new(1.5, 1.5), 1.0));
+                tasks.push(Task::Wait(2.0));
+                bot.log
+                    .push(format!("  (lost: went to {} first)", STATIONS[wrong].title));
+            }
+        }
+        if p.reads {
+            tasks.extend(world.go(here, post(station) + Vec2::new(1.5, 1.5), 1.0));
+            tasks.push(Task::LookAt(Vec3::new(
+                post(station).x,
+                14.0,
+                post(station).y,
+            )));
+            tasks.push(Task::Wait(4.0));
+        }
+        if p.hoards {
+            let mut n = 0;
+            for e in world.loose_near(here, 6.0).into_iter().take(3) {
+                tasks.push(Task::GrabFromHere {
+                    item: e,
+                    side: Side::Right,
+                });
+                tasks.push(Task::Stow(Side::Right));
+                n += 1;
+            }
+            if n > 0 {
+                bot.log
+                    .push(format!("  (hoarder: took {n} things lying about)"));
+            }
+        }
+    }
+    state.station = Some(station);
+    if persona.is_some_and(|p| p.reckless) && goal == Goal::Artifact {
+        // Straight in for it, by hand.
+        if let Some((e, at)) = world.placed(Placed::Stone) {
+            tasks.extend(world.free_hands());
+            tasks.extend(world.go(here, at.xz(), 0.3));
+            tasks.push(Task::GrabFromHere {
+                item: e,
+                side: Side::Right,
+            });
+            bot.log.push("  (reckless: walked in for the stone)".into());
+        }
+    } else {
+        tasks.extend(world.tasks_for(goal, player, here));
+    }
     let idle = bot.tasks.pop_back();
     bot.tasks.extend(tasks);
     bot.tasks.extend(idle);
@@ -206,6 +269,20 @@ impl DirectorWorld<'_, '_> {
     }
 
     /// The nearest loose item of `id` to `near`.
+    /// Anything lying loose within `r` (not in the crate, not in a hand).
+    fn loose_near(&self, near: Vec2, r: f32) -> Vec<Entity> {
+        self.items
+            .iter()
+            .filter(|(e, _, gt, _, held, sock)| {
+                held.is_none()
+                    && sock.is_none()
+                    && gt.translation().xz().distance(near) < r
+                    && !self.stash.iter().any(|b| b.contents.contains(e))
+            })
+            .map(|(e, ..)| e)
+            .collect()
+    }
+
     fn loose(&self, id: &str, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
