@@ -1461,7 +1461,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 49] = [
+pub const PREFABS: [&str; 52] = [
     "house_plank",
     "farmhouse",
     "house_brick",
@@ -1477,6 +1477,9 @@ pub const PREFABS: [&str; 49] = [
     "radio_mast",
     "ranger_tower",
     "survey_tower",
+    "wreck_lada",
+    "wreck_uaz",
+    "wreck_lorry",
     "quarantine_gate",
     "guard_booth",
     "robot_gate",
@@ -1590,6 +1593,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
         "radio_mast" => radio_mast(&mut b),
         "ranger_tower" => ranger_tower(&mut b),
         "survey_tower" => survey_tower(&mut b),
+        "wreck_lada" => car_wreck(&mut b, "wreck_lada"),
+        "wreck_uaz" => car_wreck(&mut b, "wreck_uaz"),
+        "wreck_lorry" => car_wreck(&mut b, "wreck_lorry"),
         "quarantine_gate" => quarantine_gate(&mut b),
         "guard_booth" => guard_booth(&mut b),
         "robot_gate" => robot_gate(&mut b),
@@ -4537,6 +4543,43 @@ fn radio_mast(b: &mut Builder) {
 
 /// A dead bus standing on its wheels (one gone, that corner on a block):
 /// body, a band of dark windows, roof, bumpers, wheel arches, a door.
+/// A car left where it stopped (`art/vehicles/wrecks.py`, Kit's): its
+/// shell drawn and collided as one box, every door, bonnet, boot and
+/// wheel its own breakable (`destruction::strip::car_parts`), in the
+/// model's own space (the ground under the wheelbase's middle, its front
+/// to -Z).
+fn car_wreck(b: &mut Builder, model: &'static str) {
+    let Some((centre, size)) = crate::destruction::strip::car_body(model) else {
+        return;
+    };
+    let from = b.geo.pieces.len();
+    b.piece(
+        Shape::Box(size),
+        Transform::from_translation(centre),
+        Mat::RustyMetal,
+        true,
+    );
+    let to = b.geo.pieces.len();
+    let body: &'static str = match model {
+        "wreck_lada" => "wreck_lada#body",
+        "wreck_uaz" => "wreck_uaz#body",
+        _ => "wreck_lorry#body",
+    };
+    b.geo.props.push(PropDef {
+        models: vec![(body, Transform::IDENTITY)],
+        pieces: from..to,
+        inside: false,
+        shadow: true,
+        lods: None,
+    });
+    b.geo
+        .breakables
+        .extend(crate::destruction::strip::car_parts(
+            model,
+            Transform::IDENTITY,
+        ));
+}
+
 pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
     let (w, len) = (2.5, 10.0);
     let wheel_r = 0.48;
