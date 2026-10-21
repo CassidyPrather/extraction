@@ -820,7 +820,7 @@ mod tests {
         );
         assert!(paints.contains(&Vec3::ONE), "no bare boards");
         // Fading keeps a paint's direction away from white: its colour.
-        let mut kinds: Vec<_> = paints
+        let kinds: Vec<_> = paints
             .iter()
             .filter(|p| **p != Vec3::ONE)
             .map(|p| {

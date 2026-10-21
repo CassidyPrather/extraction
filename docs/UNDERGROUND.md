@@ -358,6 +358,11 @@ it opens (`c_vent.jpg`); the Depot ramp kiosk's Custodian front, from a
 portal's `facade` (`d_front.jpg`). No canary model yet: the canary is
 still the item's own.
 
+Shots of the gallery (`docs/shots/underground/s_*.jpg`, torch on): down
+its 44 m with the seepage underfoot and a crawler at the far end
+(`s_gallery`), the gauge room under its lamp (`s_gauge`), and the exit
+kiosk on the bed beside the draw-off tower (`s_tower`).
+
 Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
 `shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a
 layout's `lamp_colour`, a round's `heavy` and `dormant`; each checked by

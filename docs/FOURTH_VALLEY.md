@@ -227,7 +227,7 @@ Six batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 | seed 11 | 7 | 1 | Still west: a danger-2 street of full houses outweighed everything | New Sallow picked over (loot 0.9) |
 | seed 21 | 6 | 2 | The shed looted (30 items); all three ways out used (Inflow bridge 4, Sallow Head 3, gauge house 1); both deaths in the danger-3 east under the Gate | |
 | seed 31 | 4 | 4 | Old Sallow's drowned houses in; all four deaths to drones crossing the open east bed | Three more stock rows in the east for cover |
-| seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four is with Set pieces |
+| seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four: Story put scene pieces in the nav grid |
 
 Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
 visited yet: the valve house and filter house, the draw-off tower (no
@@ -253,9 +253,9 @@ the gauge house and out: 262 s.
   mirror), and the dam's `Mat::Concrete`
   faces and tower `Mat::DressedStone` (then `python3
   scripts/fetch_assets.py materials`). Lint, fit and the sims again after.
-- Set pieces' "Bay four" (scenes.ron, (70, -74)): scene colliders
-  aren't in the nav grid, and its buses leave a 0.63 m slot bots walk
-  into. Then the sims again.
+- Story's `scenes::nav_obstacles` (claude/polish-story): scene pieces in
+  the nav grid, so "Bay four"'s 0.63 m slot between its buses (scenes.ron,
+  (70, -74)) is solid to it. Then the sims again.
 - World models' breakable bus panels (dc8b032): `dam::buses` drops
   `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
   draws it whole).
