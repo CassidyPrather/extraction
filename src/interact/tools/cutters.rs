@@ -4,13 +4,16 @@
 //! enough, the jaws bite through. It takes both hands; one can't close
 //! them.
 //!
-//! A cut chain-link panel opens a gap you can pass through (its collider
-//! goes); a cut padlock falls loose and lets go of what it held.
+//! What can be cut is `destruction::hooks::Cuttable`, and the cut is a
+//! `destruction::hooks::Cut` (Destruction takes the cut thing away). A cut
+//! chain-link panel is a gap you can pass through; a cut padlock lets go
+//! of the panel it held shut.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use super::{CLICK, KNOCK, TICK, pulse};
+pub use crate::destruction::hooks::{Cut, Cuttable};
 use crate::interact::{GrabPoint, Grabbable, GripRole, Hand, Held, InteractSystems, Supported};
 use crate::items::{Catalog, Item};
 use crate::rig::haptics::Haptic;
@@ -28,23 +31,13 @@ pub struct CuttersPlugin;
 
 impl Plugin for CuttersPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Cut>()
-            .add_observer(setup_cutters)
-            .add_systems(
-                FixedUpdate,
-                (squeeze, cut_through)
-                    .chain()
-                    .after(InteractSystems::Follow),
-            );
+        app.add_observer(setup_cutters).add_systems(
+            FixedUpdate,
+            (jaws_touch, squeeze, cut_through)
+                .chain()
+                .after(InteractSystems::Follow),
+        );
     }
-}
-
-/// Something bolt cutters can cut: where the jaws go on (its own space),
-/// within `radius`.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct Cuttable {
-    pub at: Vec3,
-    pub radius: f32,
 }
 
 /// A chain-link panel: cut, it's a gap.
@@ -60,18 +53,47 @@ pub struct Padlock {
     pub holds: Entity,
 }
 
-/// The jaws went through.
-#[derive(Message, Clone, Copy, Debug)]
-pub struct Cut {
-    pub target: Entity,
-    pub by: Entity,
-}
-
 /// Bolt cutters, and what their jaws are on.
 #[derive(Component, Debug, Default)]
 pub struct Cutters {
     /// What the jaws are on, and the widest the hands have been since.
     pub on: Option<(Entity, f32)>,
+    /// What the jaws touch now.
+    touching: Option<Entity>,
+    /// How far apart the hands are on the handles (m; 0 when they aren't
+    /// both on), for the handles to spread to.
+    pub spread: f32,
+}
+
+/// How near the jaws something must be to be between them (m).
+const JAW_REACH: f32 = 0.04;
+
+/// What the jaws are touching: a Cuttable's collider (or a collider on a
+/// child of one).
+fn jaws_touch(
+    mut cutters: Query<(Entity, &mut Cutters, &GlobalTransform)>,
+    cuttables: Query<(), With<Cuttable>>,
+    parents: Query<&ChildOf>,
+    spatial: SpatialQuery,
+) {
+    for (e, mut c, gt) in &mut cutters {
+        let jaws = gt.transform_point(JAWS);
+        let hits = spatial.shape_intersections(
+            &Collider::sphere(JAW_REACH),
+            jaws,
+            Quat::IDENTITY,
+            &SpatialQueryFilter::default().with_excluded_entities([e]),
+        );
+        c.touching = hits.into_iter().find_map(|mut up| {
+            for _ in 0..3 {
+                if cuttables.contains(up) {
+                    return Some(up);
+                }
+                up = parents.get(up).ok()?.parent();
+            }
+            None
+        });
+    }
 }
 
 fn setup_cutters(
@@ -110,32 +132,28 @@ fn squeeze(
         &mut LinearVelocity,
     )>,
     hands: Query<&Hand>,
-    cuttables: Query<(Entity, &Cuttable, &GlobalTransform)>,
     mut cut: MessageWriter<Cut>,
     mut haptics: MessageWriter<Haptic>,
 ) {
     for (mut c, held, support, mut pos, rot, mut lin) in &mut cutters {
         let (Some(held), Some(support)) = (held, support) else {
             c.on = None;
+            c.spread = 0.0;
             continue;
         };
         let (Ok(a), Ok(b)) = (hands.get(held.hand), hands.get(support.hand)) else {
             continue;
         };
         let apart = a.world.translation.distance(b.world.translation);
+        c.spread = apart;
         // Held between the hands (each on its handle as they spread), not
         // hung off the first one.
         let mid = (a.world.translation + b.world.translation) * 0.5;
         pos.0 = mid - rot.0 * ((LEFT + RIGHT) * 0.5);
         lin.0 = Vec3::ZERO;
-        let jaws = pos.0 + rot.0 * JAWS;
-        let touching = |e: Entity| {
-            cuttables
-                .get(e)
-                .is_ok_and(|(_, k, kgt)| kgt.transform_point(k.at).distance(jaws) < k.radius * 1.5)
-        };
+        let touching = c.touching;
         match c.on {
-            Some((target, from)) if touching(target) => {
+            Some((target, from)) if touching == Some(target) => {
                 // From the widest they've opened since the jaws went on.
                 let from = from.max(apart);
                 c.on = Some((target, from));
@@ -154,10 +172,7 @@ fn squeeze(
                 pulse(&mut haptics, held.side, TICK);
             }
             None => {
-                let found = cuttables
-                    .iter()
-                    .find(|(_, k, kgt)| kgt.transform_point(k.at).distance(jaws) < k.radius);
-                if let Some((target, _, _)) = found {
+                if let Some(target) = touching {
                     c.on = Some((target, apart));
                     pulse(&mut haptics, held.side, CLICK);
                 }
@@ -166,7 +181,8 @@ fn squeeze(
     }
 }
 
-/// A cut panel opens; a cut padlock drops and opens what it held.
+/// A cut panel opens; a cut padlock opens what it held. (Destruction
+/// takes the cut thing itself away.)
 fn cut_through(
     mut commands: Commands,
     mut cuts: MessageReader<Cut>,
@@ -182,20 +198,15 @@ fn cut_through(
             return;
         }
         panel.cut = true;
-        commands.entity(e).remove::<Cuttable>();
         for c in std::iter::once(e).chain(children.into_iter().flatten().copied()) {
             if colliders.contains(c) {
-                commands.entity(c).insert(ColliderDisabled);
+                commands.entity(c).try_insert(ColliderDisabled);
             }
         }
     };
     for cut in cuts.read() {
         if let Ok(lock) = locks.get(cut.target) {
             open(&mut commands, lock.holds);
-            commands
-                .entity(cut.target)
-                .remove::<(Padlock, Cuttable)>()
-                .insert((RigidBody::Dynamic, GravityScale(1.0)));
         } else {
             open(&mut commands, cut.target);
         }

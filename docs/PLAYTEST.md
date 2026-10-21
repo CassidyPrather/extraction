@@ -118,11 +118,13 @@ What changed, and worth a comment each:
   comfort board takes you straight to the top instead. Mark it if you
   ever rise when you only meant to lean on a table.
 - **Crowbar.** Hold it by the end and steady it along the shaft with your
-  other hand. Put the claw to a robot's armour plate, or the latch edge
-  of a door a wedge has jammed, then pull the handle round. Two hands at
-  the end of the bar shift it; hands near the claw won't. Your hands feel
-  the strain build, then a knock as it gives.
-- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  other hand. Put the claw to the latch edge of a plank door, the lid
+  edge of a supply crate, or a robot's armour plate (the heavy machine's
+  give up a bolt at a time), then pull the handle round. Two hands at the
+  end of the bar shift it; hands near the claw won't. Your hands feel the
+  strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand: they spread as your hands do,
+  and the jaws open with them. Spread them, put the jaws on a
   padlock's shackle or on chain-link, and squeeze your hands together. A
   cut panel leaves a gap you can walk through.
 - **First aid and food.** Wind a dressing round your other forearm (one
@@ -343,6 +345,12 @@ said you don't use?
   does the order make sense without a HUD? Load a box with every fourth
   a tracer and fire at dusk or in fog: can you walk your rounds onto a
   target by the streaks? Try a slug in the double at 50 m.
+- Looking through. Bring the PSO up and find the picture: how hard is it
+  to get your eye into the box? Move your head a little to the side:
+  does the black edge and the sliding picture tell you to centre? At
+  dusk, glass toward the sun and see whether a robot down the line
+  notices. Bring the AK's iron sights to your cheek: do they line up
+  without fiddling?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -434,6 +442,23 @@ Also come in from a lit room or the truck bed into the dark. Does it
 take a few seconds before you see again, and does the brightness ever
 pump?
 
+### 4f. Storms and snow (10 minutes)
+
+1. `cargo run --release -- --map marrow_creek --weather storm`. Stand in
+   the open meadow for a minute.
+   - Does a near strike startle you? Is it ever uncomfortable in the
+     headset (too bright, too often)?
+   - Can you see the rain crossing the valley in sheets?
+   - Try `--hour night` too: the valley should jump out of the black
+     for a moment, then you're blind again.
+2. `cargo run --release -- --map kettle_pass --snow 1.0`. Walk up from
+   the gate to the pass.
+   - Does the snow start at the right height? Is the white too bright,
+     or does the ground lose its shape?
+   - Turn round: can you see your own tracks? Does your breath show,
+     and is it ever in the way?
+   - `--snow 0.3`: a first dusting, in patches.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -486,7 +511,8 @@ pump?
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
-| `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
+| `--weather NAME` | `drizzle`, `fog`, `downpour`, `storm` (a downpour with lightning), `clearing` |
+| `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |
 | `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
 | `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |

@@ -72,6 +72,7 @@ impl Plugin for HapticsPlugin {
                     step_haptics,
                     grenade_haptics,
                     machine_tick,
+                    zone_haptics,
                 ),
             );
     }
@@ -144,7 +145,6 @@ fn gun_haptics(
             FireEvent::BoltClosed | FireEvent::BoltLocked => (0.45, 0.03, 0.25),
             FireEvent::Chambered | FireEvent::Cocked | FireEvent::RoundLoaded => (0.25, 0.02, 0.0),
             FireEvent::ModeChanged(_) => (0.2, 0.015, 0.0),
-            FireEvent::Malfunctioned(_) => (0.5, 0.05, 0.3),
             _ => continue,
         };
         out.write(Haptic {
@@ -218,6 +218,40 @@ fn machine_tick(
     });
     if on && certain {
         pulse(&mut out, wrist, MACHINE_TICK);
+    }
+}
+
+/// The Zone biting: a wet aegis's shock is a kick in both hands
+/// (`anomaly::costs::ArtifactBite`); a hot stone held is a tick in the
+/// hand holding it every half second (`anomaly::harvest::Burned`).
+pub const SHOCK: (f32, f32) = (0.7, 0.06);
+pub const BURN_EVERY: f32 = 0.5;
+
+fn zone_haptics(
+    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
+    mut burns: MessageReader<crate::anomaly::harvest::Burned>,
+    locals: Query<(), With<LocalPlayer>>,
+    hands: Query<(&RigHand, &Hand, &ChildOf)>,
+    time: Res<Time>,
+    mut next_burn: Local<f32>,
+    mut out: MessageWriter<Haptic>,
+) {
+    for b in bites.read() {
+        if b.what == crate::anomaly::costs::Bite::Shock && locals.contains(b.player) {
+            for side in Side::BOTH {
+                pulse(&mut out, side, SHOCK);
+            }
+        }
+    }
+    let now = time.elapsed_secs();
+    for b in burns.read() {
+        if !locals.contains(b.player) || now < *next_burn {
+            continue;
+        }
+        *next_burn = now + BURN_EVERY;
+        if let Some(side) = nearest_hand(&hands, b.player, b.at) {
+            pulse(&mut out, side, TICK);
+        }
     }
 }
 

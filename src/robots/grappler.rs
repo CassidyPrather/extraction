@@ -93,6 +93,7 @@ fn harpoons(
     mut windups: MessageWriter<HarpoonWindup>,
     stunned: Query<(), With<super::Stunned>>,
     mut seed: Local<u64>,
+    minds: Query<&super::senses::MindSeed>,
 ) {
     let dt = time.delta_secs();
     for (e, mut g, brain, aware, robot, gt, children) in &mut grapplers {
@@ -136,9 +137,7 @@ fn harpoons(
         g.windup = 0.0;
         g.cooldown = 9.0;
         // Most throws land; some don't.
-        *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *seed = super::senses::shot_seed(&minds, e, &time);
         let hit = (*seed >> 33) % 100 < 70;
         if hit {
             commands.entity(target).insert(Tethered {
