@@ -1128,7 +1128,13 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
             )
         })
         .unwrap();
-    // Its first window boarded (World models decides which, in the game).
+    // Its first window boarded (World models decides which, in the game;
+    // these are ours on top of those).
+    let before: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<WindowBoard>>()
+        .iter(app.world())
+        .collect();
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let mut c = Commands::new(&mut queue, app.world());
@@ -1140,6 +1146,7 @@ fn boards_over_a_window_take_rounds_and_a_crowbar() {
         .world_mut()
         .query_filtered::<(Entity, &GlobalTransform), With<WindowBoard>>()
         .iter(app.world())
+        .filter(|(e, _)| !before.contains(e))
         .map(|(e, g)| (e, *g))
         .collect();
     assert_eq!(boards.len(), 3, "three boards across the window");
@@ -1208,4 +1215,20 @@ fn a_hole_in_a_doorless_building_puts_it_in_the_robots_index() {
         entrances.shells.iter().any(|s| s.building == e),
         "the building has a box to be inside"
     );
+}
+
+/// Not a check: where Marrow Creek's boarded windows are, for the shots.
+#[test]
+#[ignore]
+fn list_boards() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for g in app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<super::boards::WindowBoard>>()
+        .iter(app.world())
+    {
+        let out = g.rotation() * Vec3::NEG_Z;
+        println!("board at {:.2} out {:.2}", g.translation(), out);
+    }
 }
