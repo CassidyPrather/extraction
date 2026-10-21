@@ -1913,6 +1913,19 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     }
     assert!(app.world().get_entity(door).is_err(), "prised off");
     assert_eq!(doors(&mut app), before + 1, "a car door to carry");
+    // Lying on its largest face, not standing on an edge.
+    let up = app
+        .world_mut()
+        .query::<(&crate::items::Item, &GlobalTransform)>()
+        .iter(app.world())
+        .filter(|(i, g)| i.kind() == id && g.translation().distance(door_at) < 2.0)
+        .map(|(_, g)| g.rotation())
+        .next()
+        .expect("the door, by the car");
+    let dims = catalog.get(id).dims.expect("car_door's dims");
+    let thin = Vec3::from(dims).min_position();
+    let axis = up * [Vec3::X, Vec3::Y, Vec3::Z][thin];
+    assert!(axis.y.abs() > 0.9, "the door lies flat ({axis})");
     assert!(
         app.world().resource::<Broken>().0.contains(&key(door_at)),
         "and it stays off till the Surge"
