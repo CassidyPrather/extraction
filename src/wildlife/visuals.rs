@@ -226,6 +226,7 @@ fn tint(species: Species) -> Color {
         Species::Rook => Color::WHITE,
         Species::Raven => Color::srgb(0.8, 0.8, 0.85),
         Species::Jackdaw => Color::srgb(1.9, 1.9, 1.95),
+        Species::Chough => Color::srgb(0.75, 0.75, 0.78),
         Species::Heron => Color::WHITE,
     }
 }
@@ -239,6 +240,7 @@ fn material(
         Species::Rook => "rook",
         Species::Raven => "raven",
         Species::Jackdaw => "jackdaw",
+        Species::Chough => "chough",
         Species::Heron => "heron",
     };
     let tint = tint(species);
@@ -322,6 +324,11 @@ fn pose_birds(
         let Some(poses) = art.poses(flock.species) else {
             continue;
         };
+        // Taken away: nothing to draw.
+        if b.state == BirdState::Gone {
+            vis.set_if_neq(Visibility::Hidden);
+            continue;
+        }
         // The whole flock far off: drawn in the one far mesh (`far_flocks`).
         let whole = !eyes.is_empty() && nearest(&eyes, flock.mean()) > FLOCK_FAR;
         vis.set_if_neq(if whole {
@@ -335,6 +342,11 @@ fn pose_birds(
         let far = !eyes.is_empty() && nearest(&eyes, b.pos) > FAR;
         tf.translation = b.pos;
         let want = match b.state {
+            // Dead: on its back, wings half open.
+            BirdState::Dead | BirdState::Gone => {
+                tf.rotation = Quat::from_rotation_y(-b.yaw) * Quat::from_rotation_z(2.6);
+                &poses.glide
+            }
             BirdState::Sitting(_) => {
                 tf.rotation = Quat::from_rotation_y(-b.yaw - std::f32::consts::FRAC_PI_2);
                 v.roll = 0.0;
@@ -388,6 +400,7 @@ fn far_pose(b: &super::flock::Bird) -> (bool, Quat) {
             true,
             Quat::from_rotation_y(-b.yaw - std::f32::consts::FRAC_PI_2),
         ),
+        BirdState::Dead | BirdState::Gone => (true, Quat::from_rotation_z(1.5)),
         _ if b.vel.length_squared() > 0.01 => (
             false,
             Transform::IDENTITY.looking_to(b.vel, Vec3::Y).rotation,
@@ -417,7 +430,7 @@ fn far_flocks(
         }
         let scale = Vec3::splat(flock.species.size());
         let tint = tint(flock.species).to_linear();
-        for b in &flock.birds {
+        for b in flock.birds.iter().filter(|b| b.state != BirdState::Gone) {
             let (sitting, rot) = far_pose(b);
             let at = Transform::from_translation(b.pos)
                 .with_rotation(rot)

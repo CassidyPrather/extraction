@@ -19,6 +19,7 @@ pub(crate) fn log_wildlife(
     mut flushed: MessageReader<Flushed>,
     mut investigating: MessageReader<Investigating>,
     mut startled: MessageReader<super::herd::Startled>,
+    mut killed: MessageReader<super::bodies::Killed>,
     robots: Query<&crate::robots::Robot>,
     time: Res<Time>,
     mut alarms: Local<Vec<(f32, Vec3)>>,
@@ -27,6 +28,7 @@ pub(crate) fn log_wildlife(
         flushed.clear();
         investigating.clear();
         startled.clear();
+        killed.clear();
         return;
     };
     let now = time.elapsed_secs();
@@ -49,6 +51,13 @@ pub(crate) fn log_wildlife(
             "startled",
             json!({"kind": format!("{:?}", s.kind), "what": format!("{:?}", s.what),
                    "alarm": s.alarm, "x": round(s.at.x, 1), "z": round(s.at.z, 1)}),
+        );
+    }
+    for k in killed.read() {
+        log.event(
+            "animal_killed",
+            json!({"kind": format!("{:?}", k.kind), "shot": k.by.is_some(),
+                   "x": round(k.at.x, 1), "z": round(k.at.z, 1)}),
         );
     }
     for i in investigating.read() {
