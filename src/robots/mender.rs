@@ -118,6 +118,7 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
             },
             super::Breed("mender"),
             super::heavy::OwnLook,
+            super::heavy::NotOnPatrol,
             Drone {
                 thrust: [0.0; 4],
                 rotor_alive: [true; 4],

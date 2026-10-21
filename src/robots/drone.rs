@@ -600,7 +600,19 @@ mod tests {
             );
         }
         queue.apply(app.world_mut());
-        for _ in 0..90 * 15 {
+        // Walking about (a drone picks out movement more than shape: one
+        // that stood stock still might not be made out at all, which is
+        // `mind_tests::keeping_still_beats_a_drone_overhead`).
+        for i in 0..90 * 15 {
+            let a = i as f32 / 90.0 * 0.5;
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0;
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = Vec3::new(-a.sin(), 0.0, a.cos());
             app.update();
             if app.world().resource::<Heard>().shot.is_some() {
                 break;

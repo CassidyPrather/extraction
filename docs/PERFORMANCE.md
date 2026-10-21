@@ -569,3 +569,56 @@ behind the cameras. `docs/shots/performance/guns_at_rest.png` shows
 those guns with it off (top) and on (bottom); only the grass sway
 differs. Tests: `gun_rest::tests::guns_lying_about_rest` and
 `a_resting_gun_wakes`.
+
+## The headset's two eyes: what each costs
+
+In the XR path each eye is its own Bevy camera (`bevy_mod_openxr`
+spawns `XrCamera(0)` and `XrCamera(1)`, one swapchain layer each, no
+multiview). Everything a view does happens twice:
+- frustum culling (`check_visibility`);
+- light clustering;
+- the main passes;
+- tonemapping and upscaling;
+- the sun's cascades, both building them from the eye's frustum and the
+  caster culling and shadow pass per cascade.
+
+Bevy's `prepare_lights` gives directional cascades a new shadow view per
+camera, by design ("cascades are unique to each view"). Spot and point
+shadows are shared across cameras. `--mirror` adds a third full camera,
+and it's off by default.
+
+Measured on lavapipe (Marrow Creek's village, 1024² an eye, 20-frame
+holds, `scripts/bench.sh`'s second eye):
+
+| | frame ms | GPU ms (passes) | render-world CPU ms |
+| - | - | - | - |
+| one eye | 1153 | 3536 | 18.9 |
+| two eyes | 2217 | 6704 | 21.9 |
+| two eyes, `shadows=0` | 1957 | 6042 | 19.3 |
+| two eyes, `msaa=1` | 1167 | 3470 | 21.4 |
+| two eyes, `cascades=1` | 2186 | 6665 | 20.8 |
+
+- **The second eye is a whole eye's pixels.** The GPU time goes ×1.9 and
+  render-world CPU +16%. That's what stereo costs; it isn't waste.
+- **The sun's shadows** (both eyes' passes and the sampling in the
+  opaque pass) are about 12% of the frame. Sharing the cascades between
+  the eyes would save only the second eye's shadow passes, a part of
+  that. It means vendoring and patching `bevy_pbr::prepare_lights`, the
+  only place a directional light's shadow views are made per camera.
+  Not worth a fork for single-digit percent. One cascade instead of two
+  saves 1-2%.
+- **4× MSAA at the eye's full size** is the biggest knob: off, the frame
+  halves on lavapipe. Each eye carries a 4-sample HDR target
+  (`camera_look`), and the swapchain is single-sampled.
+  - On a headset GPU the share is smaller than in software rendering,
+    but it's the one per-eye cost here that isn't the picture itself.
+  - With a Beyond 2's pixel density, `msaa=2` (or off) may read the
+    same.
+  - `EXTRACTION_PERF="msaa=2"` is how to try it on the playtester's
+    laptop; the session log's `gpu:` lines show the result.
+- **The eyes stay matched.** `render::vr_budget` holds every view
+  through both eyes to two eyes' budget and to shaded fragments at the
+  game's auto eye size (1800², `BUDGET_EYE_PX` to change it). It also
+  fails if the eyes see more than 10% apart, or if a third view draws
+  the world. The fragments are overdraw × eye pixels. Marrow's worst is
+  the spruce view: 45.8M a frame against 64.8M.

@@ -5,7 +5,9 @@
 # from (and `--publish` copies the chosen into docs/shots/showcase/).
 #   scripts/capture_presskit.sh [maps...]        (default: the three valleys)
 # Env: MOODS (default "golden night rain surge"), SIZE (default 1600x900),
-# ONLY (view-name filter), OUT (default target/presskit), SEED (default 1).
+# ONLY (view-name filter), OUT (default target/presskit), SEED (default 1),
+# STILLS_DIR (where <map>.stills are; default scripts/capture_paths),
+# GAME_ARGS (more game flags, e.g. "--gallery minefields").
 # Moods: golden (dusk, clearing, the sun 7 degrees up), night (clearing,
 # by torchlight), rain (a downpour by day), surge (the Surge raging,
 # drizzle), day (the reference look: drizzle by day).
@@ -39,9 +41,11 @@ for MAP in "${MAPS[@]}"; do
         DATA="$(mktemp -d)"
         EXTRA=()
         [ -n "${ONLY:-}" ] && EXTRA+=(--cine-only "$ONLY")
+        # shellcheck disable=SC2206
+        [ -n "${GAME_ARGS:-}" ] && EXTRA+=($GAME_ARGS)
         WGPU_BACKEND=vulkan timeout 3600 "${TORCH[@]}" xvfb-run -a -s "-screen 0 ${SIZE}x24" \
             "$BIN" --map "$MAP" --data-dir "$DATA" --new-game --no-robots \
-            --seed "${SEED:-1}" --cinematic "scripts/capture_paths/$MAP.stills" \
+            --seed "${SEED:-1}" --cinematic "${STILLS_DIR:-scripts/capture_paths}/$MAP.stills" \
             --capture-out "$DIR" --frames "$FRAMES" \
             --size "$SIZE" "${ARGS[@]}" "${EXTRA[@]}" 2>&1 \
             | grep -E 'panicked|cinematic: done' || true

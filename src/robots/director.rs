@@ -231,9 +231,17 @@ fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
     zone: Res<Zone>,
-    // Robots that live in a site (underground residents) aren't the
-    // director's to count: they'd use up the budget for the valley.
-    robots: Query<&Robot, Without<super::indoor::LocalNav>>,
+    // Robots that live in a site (underground residents) and the map's
+    // standing emplacements (sentries, spotters) aren't the director's to
+    // count: they'd use up the budget for the valley's roaming robots.
+    robots: Query<
+        &Robot,
+        (
+            Without<super::indoor::LocalNav>,
+            Without<super::sentry::Sentry>,
+            Without<super::spotter::Spotter>,
+        ),
+    >,
     pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
 ) {

@@ -188,7 +188,9 @@ mod tests {
             at: post,
             left: 999.0,
         };
-        // A metal tin landing hard 14 m off.
+        // A metal tin landing hard 14 m off (lobbed from high: on grass,
+        // which muffles a landing to half, one dropped from head height
+        // wouldn't carry that far).
         let spot = zone.on_ground(post.x + 14.0, post.z + 3.0);
         let can = {
             let mut c = Commands::new(&mut queue, app.world());
@@ -197,7 +199,7 @@ mod tests {
                 &catalog,
                 crate::items::SpawnItem {
                     kind: catalog.kind("canned_beans").unwrap(),
-                    transform: Transform::from_translation(spot + Vec3::Y * 2.5),
+                    transform: Transform::from_translation(spot + Vec3::Y * 6.0),
                     condition: 1.0,
                 },
             )

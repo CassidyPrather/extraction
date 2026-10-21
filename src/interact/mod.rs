@@ -1414,6 +1414,10 @@ fn drop_orphaned_holds(mut commands: Commands, held: Query<(Entity, &Held)>, han
     }
 }
 
+/// A support point nearer the primary grip than this steadies the item but
+/// doesn't aim it, metres.
+pub const CUP_SPAN: f32 = 0.12;
+
 pub(crate) fn follow_hands(
     hands: Query<&Hand>,
     mut held: Query<(
@@ -1455,11 +1459,17 @@ pub(crate) fn follow_hands(
                 grabbable.points.get(h.point),
                 grabbable.points.get(s.point),
             ) {
-                // Point the item from the primary grip toward the support hand.
+                // Point the item from the primary grip toward the support
+                // hand; a support this close (a palm cupped under a
+                // pistol's grip) steadies it without aiming it.
                 let from = hand.world.translation;
                 let to = support_hand.world.translation;
-                let local_axis =
-                    (sp.local.translation - primary.local.translation).normalize_or_zero();
+                let span = sp.local.translation - primary.local.translation;
+                let local_axis = if span.length() < CUP_SPAN {
+                    Vec3::ZERO
+                } else {
+                    span.normalize_or_zero()
+                };
                 let world_axis = (to - from).normalize_or_zero();
                 if local_axis != Vec3::ZERO && world_axis != Vec3::ZERO {
                     let up = hand.world.rotation * Vec3::Y;

@@ -171,6 +171,7 @@ pub fn spawn_minelayer(
             },
             super::Breed("minelayer"),
             super::heavy::OwnLook,
+            super::heavy::NotOnPatrol,
             Minelayer {
                 hopper: rules::HOPPER,
                 sites,

@@ -32,6 +32,8 @@ impl Plugin for RobotFxPlugin {
                 wreck_trails,
                 wreck_impacts,
                 drag_sparks,
+                scuff_dust,
+                eye_out,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -58,6 +60,11 @@ struct FxAssets {
     arc: Handle<StandardMaterial>,
     /// Water thrown up by a foot.
     water: Handle<StandardMaterial>,
+    /// A wound's coolant: pale green, a little lit so it reads at range.
+    coolant: Handle<StandardMaterial>,
+    /// Dirt and snow kicked up by a dragged foot.
+    dust: Handle<StandardMaterial>,
+    snow_dust: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -94,6 +101,23 @@ fn assets(
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
             unlit: true,
+            ..default()
+        }),
+        coolant: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.55, 0.95, 0.6),
+            emissive: LinearRgba::rgb(0.6, 2.2, 0.8),
+            ..default()
+        }),
+        dust: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.42, 0.36, 0.28, 0.32),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        snow_dust: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.92, 0.95, 1.0, 0.4),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
             ..default()
         }),
         water: materials.add(StandardMaterial {
@@ -191,9 +215,9 @@ fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: 
     ));
 }
 
-/// A part shot below a third keeps sparking now and then; a core shot
-/// below half smokes.
-#[allow(clippy::too_many_arguments)]
+/// A hurt part shows it (`damage::tell`): sparks, smoke and coolant off
+/// the wound at its band's rates, each on its own count so they don't
+/// tick together.
 fn sputter(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart, &GlobalTransform)>,
@@ -203,46 +227,78 @@ fn sputter(
     existing: Option<Res<FxAssets>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut timers: Local<std::collections::HashMap<Entity, f32>>,
+    mut counts: Local<std::collections::HashMap<Entity, Vec3>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
 ) {
     let dt = time.delta_secs();
+    let eye = cameras.iter().next().map(|g| g.translation());
     let (mut n_sparks, mut n_puffs) = (sparks.iter().len(), puffs.iter().len());
     let mut a = None;
-    timers.retain(|e, _| parts.contains(*e));
+    counts.retain(|e, _| parts.contains(*e));
     for (e, part, gt) in &parts {
-        let health = part.hp / part.max_hp.max(1.0);
-        // Gas cells don't spark; a wreck smoulders instead.
-        if matches!(part.role, PartRole::GasCell(_))
-            || robots.get(part.robot).is_ok_and(|r| r.wrecked)
-        {
+        // A wreck smoulders instead (`smoulder`).
+        if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
         }
-        let core = part.role == PartRole::Core;
-        let sparky = health < 0.34;
-        let smoky = core && health < 0.5;
-        if !sparky && !smoky {
+        let tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        if tell.sparks <= 0.0 && tell.smoke <= 0.0 && tell.coolant <= 0.0 {
             continue;
         }
-        let t = timers.entry(e).or_insert_with(|| dice.f());
-        *t -= dt;
-        if *t > 0.0 {
+        // (Started anywhere in the count, so a hurt robot's parts don't
+        // all go at once.)
+        let c = counts
+            .entry(e)
+            .or_insert_with(|| Vec3::new(dice.f(), dice.f(), dice.f()));
+        *c += Vec3::new(tell.sparks, tell.smoke, tell.coolant) * dt * (0.6 + 0.8 * dice.f());
+        if c.max_element() < 1.0 {
             continue;
         }
         let a =
             a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
         let at = gt.translation();
-        if smoky && n_puffs < MAX_PUFFS {
-            puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.3, false, 0.35);
-            n_puffs += 1;
-            *t = 0.4 + dice.f() * 0.4;
+        if c.x >= 1.0 {
+            c.x -= 1.0;
+            if n_sparks < MAX_SPARKS {
+                burst(&mut commands, a, &mut dice, at, Vec3::Y, 3, 2.5);
+                n_sparks += 3;
+            }
         }
-        if sparky && n_sparks < MAX_SPARKS && dice.f() < 0.5 {
-            burst(&mut commands, a, &mut dice, at, Vec3::Y, 3, 2.5);
-            n_sparks += 3;
-            *t = 0.6 + dice.f() * 1.8;
+        if c.y >= 1.0 {
+            c.y -= 1.0;
+            if n_puffs < MAX_PUFFS {
+                // A gas cell's vent is pale; a burning part's is grey.
+                let size = 0.3 * at_range(eye, at).sqrt();
+                puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                n_puffs += 1;
+            }
         }
+        if c.z >= 1.0 {
+            c.z -= 1.0;
+            if n_sparks < MAX_SPARKS {
+                leak(&mut commands, a, &mut dice, at);
+                n_sparks += 2;
+            }
+        }
+    }
+}
+
+/// Coolant spattering from a wound: a couple of pale-green drops, out and
+/// down.
+fn leak(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3) {
+    for _ in 0..2 {
+        let out = Vec3::new(dice.f() - 0.5, 0.0, dice.f() - 0.5).normalize_or(Vec3::X);
+        commands.spawn((
+            Spark {
+                vel: out * (0.5 + dice.f() * 0.6) - Vec3::Y * 0.4,
+                life: 0.5 + dice.f() * 0.3,
+            },
+            Mesh3d(a.spark.clone()),
+            MeshMaterial3d(a.coolant.clone()),
+            Transform::from_translation(at).with_scale(Vec3::splat(0.0)),
+            NotShadowCaster,
+        ));
     }
 }
 
@@ -337,12 +393,20 @@ fn smoulder(
     }
 }
 
+/// How much bigger a wound's sparks, drops and smoke are drawn this far
+/// from the eye, so they still read at 20-40 m: 1 within 10 m, up to 4.
+fn at_range(eye: Option<Vec3>, at: Vec3) -> f32 {
+    eye.map_or(1.0, |e| (e.distance(at) / 10.0).clamp(1.0, 4.0))
+}
+
 fn fly_sparks(
     mut commands: Commands,
     mut sparks: Query<(Entity, &mut Spark, &mut Transform)>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
+    let eye = cameras.iter().next().map(|g| g.translation());
     for (e, mut s, mut t) in &mut sparks {
         s.life -= dt;
         if s.life <= 0.0 {
@@ -355,7 +419,8 @@ fn fly_sparks(
         let speed = s.vel.length();
         // A streak along its path.
         t.rotation = Quat::from_rotation_arc(Vec3::Y, s.vel / speed.max(1e-3));
-        t.scale = Vec3::new(1.0, (speed * 0.02).clamp(0.01, 0.12), 1.0);
+        let w = at_range(eye, t.translation);
+        t.scale = Vec3::new(w, (speed * 0.02).clamp(0.01, 0.12) * w.sqrt(), w);
     }
 }
 
@@ -641,6 +706,105 @@ fn drag_sparks(
                 2.5,
             );
             n += 3;
+        }
+    }
+}
+
+/// An eye shot out: its socket spits a fistful of sparks as it goes
+/// (`visuals::last_flicker` is the eye's own last stutter).
+fn eye_out(
+    mut commands: Commands,
+    mut deaths: MessageReader<super::PartDestroyed>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let mut n = sparks.iter().len();
+    for d in deaths.read() {
+        if d.role != PartRole::Sensor || n >= MAX_SPARKS {
+            continue;
+        }
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        burst(&mut commands, &a, &mut dice, d.at, Vec3::Y, 10, 3.5);
+        n += 10;
+    }
+}
+
+/// A foot dragged along the ground kicks up dirt (snow where it lies):
+/// a dead leg trailing, or a bad one scuffing through its swing
+/// (`anim::SCUFF_UNTIL`). Low, quick puffs behind the foot, so a limp
+/// reads at range even in a still frame.
+#[allow(clippy::too_many_arguments)]
+fn scuff_dust(
+    mut commands: Commands,
+    walkers: Query<(
+        &super::walker::Walker,
+        &super::anim::Gait,
+        &super::walker::LegPoses,
+        &Robot,
+    )>,
+    puffs: Query<(), With<Puff>>,
+    zone: Option<Res<crate::world::Zone>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+    time: Res<Time>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    let mut n = puffs.iter().len();
+    let dt = time.delta_secs();
+    let mut a = None;
+    for (w, g, poses, robot) in &walkers {
+        let speed = w.velocity.length();
+        if speed < 0.3 || robot.wrecked {
+            continue;
+        }
+        for (i, f) in w.feet.iter().enumerate() {
+            if n >= MAX_PUFFS {
+                return;
+            }
+            let dragging =
+                !f.alive || (g.leg_health[i] <= 0.5 && f.t > 0.0 && f.t < super::anim::SCUFF_UNTIL);
+            if !dragging {
+                continue;
+            }
+            let foot = poses.0[i][2];
+            if foot.y - zone.ground(foot.x, foot.z) > 0.12 {
+                continue;
+            }
+            // About eight a second at a walk.
+            if dice.f() > dt * 8.0 * speed {
+                continue;
+            }
+            let a = a.get_or_insert_with(|| {
+                assets(&mut commands, &existing, &mut meshes, &mut materials)
+            });
+            let snowy = snow.as_ref().is_some_and(|s| s.lies(foot.y) > 0.3);
+            let back = -w.velocity.normalize_or_zero();
+            let max = 0.7 + dice.f() * 0.5;
+            commands.spawn((
+                Puff {
+                    vel: back * 0.6 + Vec3::Y * (0.35 + dice.f() * 0.3) + dice.signed() * 0.15,
+                    life: max,
+                    max,
+                    size: 0.22 * g.size,
+                },
+                Mesh3d(a.puff.clone()),
+                MeshMaterial3d(if snowy {
+                    a.snow_dust.clone()
+                } else {
+                    a.dust.clone()
+                }),
+                Transform::from_translation(foot + Vec3::Y * 0.05).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+            n += 1;
         }
     }
 }
