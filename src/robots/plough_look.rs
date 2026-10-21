@@ -12,7 +12,7 @@ use bevy::prelude::*;
 
 use super::heavy_look::{lod_name, lod_range};
 use super::plough::{
-    AUGER, BANK_STEP, BankPiece, CHUTE_TOP, HATCH, LanePiece, Plough, PloughCell, PloughHatch,
+    AUGER, BANK_STEP, BankPiece, CHUTE_TOP, HATCH, Lanes, Plough, PloughCell, PloughHatch,
 };
 use super::{PartRole, RobotPart};
 use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes};
@@ -36,7 +36,7 @@ pub struct PloughLookPlugin;
 
 impl Plugin for PloughLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress, run_parts, dress_lanes, gallery));
+        app.add_systems(Update, (dress, run_parts, gallery));
     }
 }
 
@@ -343,46 +343,6 @@ fn run_parts(
     }
 }
 
-/// The packed lane: a strip of trodden-flat snow, a little darker and
-/// smoother than what lies either side.
-fn dress_lanes(
-    mut commands: Commands,
-    lanes: Query<Entity, (With<LanePiece>, Without<Dressed>)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut made: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
-) {
-    if lanes.is_empty() {
-        return;
-    }
-    let (mesh, mat) = made
-        .get_or_insert_with(|| {
-            (
-                meshes.add(
-                    Plane3d::default()
-                        .mesh()
-                        .size(rules::BLADE, BANK_STEP * 1.6),
-                ),
-                materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.72, 0.74, 0.78),
-                    perceptual_roughness: 0.45,
-                    ..default()
-                }),
-            )
-        })
-        .clone();
-    for e in &lanes {
-        commands.spawn((
-            Mesh3d(mesh.clone()),
-            MeshMaterial3d(mat.clone()),
-            Transform::IDENTITY,
-            NotShadowCaster,
-            ChildOf(e),
-        ));
-        commands.entity(e).insert(Dressed);
-    }
-}
-
 /// `--gallery plough[:after]`: Rime Fell's plough on its road in front of
 /// the camera. `plough` puts it a little up the road, coming, a tin lying
 /// in its way; `plough:after` has it gone past, its lane and bank behind
@@ -395,6 +355,8 @@ fn gallery(
     mut stage: Local<u32>,
     mut held: Local<Option<(Entity, f32)>>,
     mut ploughs: Query<&mut Plough>,
+    mut lanes: ResMut<Lanes>,
+    time: Res<Time>,
 ) {
     let (Some(spec), Some((cam, _, _)), Some(zone)) = (&opts.gallery, opts.camera, zone) else {
         return;
@@ -454,6 +416,7 @@ fn gallery(
         }
     });
     let (tin, _) = rules::along(&points, here);
+    let now = time.elapsed_secs();
     if after {
         // What it left: the lane and the bank from where it came to here,
         // and the tin under it.
@@ -471,11 +434,8 @@ fn gallery(
             let rot = Quat::from_rotation_y(
                 -extraction_core::sentry::bearing([0.0, 0.0], d).to_radians(),
             );
-            commands.spawn((
-                LanePiece,
-                Transform::from_translation(g + Vec3::Y * 0.08).with_rotation(rot),
-                Visibility::default(),
-            ));
+            let (next, _) = rules::along(&points, s + BANK_STEP);
+            lanes.clear(Vec2::new(p[0], p[1]), Vec2::new(next[0], next[1]), now);
             commands.spawn((
                 BankPiece,
                 Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(rot),
