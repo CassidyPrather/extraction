@@ -3074,14 +3074,29 @@ fn take_item(
                 .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
+                let skilled = super::harvest::skilled(r.traits.name);
                 // Not hurt, it doesn't; and nobody careful reaches into a
-                // well's heart.
-                if r.traits.avoid_anomalies && (r.hp < 60.0 || kind == AnomalyKind::Well) {
+                // well's heart (unless it knows how: in and straight out).
+                if r.traits.avoid_anomalies
+                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                {
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
+                if skilled {
+                    let kit = super::harvest::Kit {
+                        junk: junk(r, scene),
+                        gun: r.gun,
+                    };
+                    if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
+                    {
+                        r.diving = true;
+                        tasks.extend(way);
+                        return Some(tasks);
+                    }
+                }
                 if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
                     && r.traits.test_anomalies
                 {
