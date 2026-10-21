@@ -12,6 +12,7 @@
 
 pub mod armour;
 pub mod ballistics;
+pub mod faults;
 pub mod feel;
 pub mod flat;
 pub mod grenades;
@@ -21,7 +22,10 @@ pub mod melee;
 pub mod muzzle;
 pub mod range;
 pub mod sling;
+pub mod tracers;
 pub mod visuals;
+pub mod wear;
+pub mod zero;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -137,13 +141,17 @@ fn update_aim_hints(
     )>,
 ) {
     for (mut hint, children) in &mut players {
-        let gun = children.iter().find_map(|c| {
-            hands
-                .get(c)
-                .ok()
-                .filter(|(rh, _)| rh.side == crate::rig::Side::Right)
-                .and_then(|(_, h)| h.holding)
-                .and_then(|e| guns.get(e).ok())
+        // The gun held by its grip, in either hand (a left-handed player's
+        // is in the left); the right's first if both hands hold one.
+        let gun = crate::rig::Side::BOTH.iter().rev().find_map(|side| {
+            children.iter().find_map(|c| {
+                hands
+                    .get(c)
+                    .ok()
+                    .filter(|(rh, h)| rh.side == *side && h.supporting.is_none())
+                    .and_then(|(_, h)| h.holding)
+                    .and_then(|e| guns.get(e).ok())
+            })
         });
         *hint = match gun {
             Some((ge, g, ggt)) => {
@@ -189,6 +197,8 @@ impl Plugin for WeaponsPlugin {
             .add_plugins((
                 armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
+                zero::ZeroPlugin,
+                faults::FaultsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -408,7 +418,8 @@ fn work_handles(
             .is_ok_and(|(_, hand)| hand.handle.map(|x| x.0) == Some(*g))
     });
     for (hand_e, hand) in &hands {
-        let Some((gun_e, _)) = hand.handle else {
+        // (A scope's turret is worked in `zero`.)
+        let Some((gun_e, 0)) = hand.handle else {
             continue;
         };
         let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
@@ -437,6 +448,13 @@ fn work_handles(
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
+                // A stuck bolt: only a palm slapped up under the handle
+                // breaks it free.
+                if gun.firearm.bolt_stuck
+                    && hand.velocity.dot(gt.rotation() * Vec3::Y) > faults::STICKY_SLAP
+                {
+                    ev.extend(gun.firearm.free_bolt());
+                }
                 if gun.firearm.bolt_travel < 0.05 {
                     let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
@@ -594,14 +612,18 @@ fn feed_by_hand(
             }
         } else if def.rounds <= 1 {
             // A loose round: thumbed in, out of the hand.
-            if gun.firearm.load_round_of(def.load) {
+            let load = it.loads.pop_or(1, def.load);
+            if gun.firearm.load_round_of(load) {
                 events.push(FireEvent::RoundLoaded);
                 hand.holding = None;
                 commands.entity(held).despawn();
             }
         } else if boxes.get(&hand_e).is_none_or(|t| now - t >= BOX_FEED) {
             // A box at the port: a round at a time, as fast as fingers.
-            if gun.firearm.load_round_of(def.load) {
+            let mut left = it.loads.clone();
+            let load = left.pop_or(it.rounds, def.load);
+            if gun.firearm.load_round_of(load) {
+                it.loads = left;
                 it.rounds -= 1;
                 events.push(FireEvent::RoundLoaded);
                 boxes.insert(hand_e, now);
@@ -619,6 +641,7 @@ pub fn release_handle(gun: &mut Gun) -> Vec<FireEvent> {
 /// Face buttons and the selector, from the hand holding the gun.
 fn buttons(
     players: Query<&RigInput, With<Player>>,
+    mut macros: Query<&mut flat::GunMacro>,
     mut guns: Query<(Entity, &mut Gun, &Held, &GlobalTransform, &Item)>,
     mut hands: Query<&mut Hand>,
     mut last: Local<std::collections::HashMap<Entity, (bool, bool, bool)>>,
@@ -626,7 +649,11 @@ fn buttons(
     mut ejected: MessageWriter<Ejection>,
     mut drop_mag: MessageWriter<DropMagazine>,
     catalog: Res<Catalog>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut racks: Local<Vec<(Entity, Entity)>>,
 ) {
+    let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
+    racks.clear();
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -663,6 +690,13 @@ fn buttons(
                 } else {
                     events.extend(gun.firearm.cock_hammer());
                 }
+            } else if one_handed
+                && !gun.firearm.locked_back
+                && gun.firearm.def.action != ActionKind::BreakAction
+            {
+                // One hand: the button racks it (there's no other hand for
+                // the slide); locked back, it lets the slide go as ever.
+                racks.push((held.player, e));
             } else {
                 events.extend(gun.firearm.release_slide_stop());
             }
@@ -678,6 +712,14 @@ fn buttons(
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
         // A hand that let go of the handle this tick: spring return.
         let _ = &mut hands;
+    }
+    for (player, gun) in racks.drain(..) {
+        let (Ok(g), Ok(mut mac)) = (guns.get(gun), macros.get_mut(player)) else {
+            continue;
+        };
+        if !mac.busy() {
+            mac.start(gun, flat::macro_steps(flat::MacroKind::Rack, &g.1));
+        }
     }
 }
 
@@ -996,7 +1038,7 @@ pub fn handle_released(
     // Guns whose handle is held this tick.
     let held_handles: Vec<Entity> = hands
         .iter()
-        .filter_map(|h| h.handle.map(|(g, _)| g))
+        .filter_map(|h| h.handle.filter(|(_, id)| *id == 0).map(|(g, _)| g))
         .collect();
     for g in watching.clone() {
         if !held_handles.contains(&g) {

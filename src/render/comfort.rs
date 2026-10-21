@@ -25,6 +25,7 @@ impl Plugin for ComfortPlugin {
                 add_vignette,
                 vignette,
                 add_wrist_panel,
+                handed_wrist,
                 wrist_panel,
                 add_radio_screens,
                 radio_screens,
@@ -141,31 +142,63 @@ fn vignette(
     }
 }
 
+/// The wrist display, on this glove.
 #[derive(Component)]
-struct WristPanel;
+struct WristPanel(crate::rig::Side);
 
-/// The panel rides on the back of the left glove.
+/// The panel rides on the back of the glove that isn't the gun hand (the
+/// left, for a right-handed player): one on each, the other hidden.
 fn add_wrist_panel(
     mut commands: Commands,
     hands: Query<(Entity, &crate::rig::RigHand, &ChildOf), Added<crate::rig::RigHand>>,
     locals: Query<(), With<LocalPlayer>>,
 ) {
     for (e, hand, parent) in &hands {
-        if hand.side != crate::rig::Side::Left || !locals.contains(parent.parent()) {
+        if !locals.contains(parent.parent()) {
             continue;
         }
         commands.entity(e).with_child((
-            WristPanel,
+            WristPanel(hand.side),
+            crate::render::legibility::TextSource::Wrist,
             ScreenText {
                 text: String::new(),
-                size: Vec2::new(0.075, 0.045),
+                size: WRIST_SIZE,
                 style: ScreenStyle::Lcd,
             },
             // On the back of the wrist, on the glove's display housing, like
             // a watch: turn the wrist to read it.
-            crate::render::props::wrist_mount(),
-            Visibility::default(),
+            crate::render::props::wrist_mount(hand.side),
+            if hand.side == crate::rig::Side::Left {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            },
         ));
+    }
+}
+
+/// Shown on the off hand's wrist only.
+fn handed_wrist(
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut panels: Query<(&WristPanel, &mut Visibility)>,
+    added: Query<(), Added<WristPanel>>,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    if !comfort.is_changed() && added.is_empty() {
+        return;
+    }
+    let watch = comfort.gun_side().other();
+    for (panel, mut vis) in &mut panels {
+        let want = if panel.0 == watch {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
     }
 }
 
@@ -188,22 +221,18 @@ fn wrist_panel(
     let clock = if raid.phase == crate::raid::Phase::AtBase {
         "AT BASE".to_string()
     } else if surge > 0.0 {
-        format!("SURGE {:>2.0}m", (surge / 60.0).ceil())
+        format!("SURGE {:>2.0}M", (surge / 60.0).ceil())
     } else {
         "SURGE NOW".to_string()
     };
-    let mut text = format!(
-        "{clock}  {:>4.1}kg\nHP {:>3.0}{}",
+    let text = wrist_text(
+        &clock,
         body.carried_kg,
-        health.hp.max(0.0),
-        if health.bleeding > 0.05 { " BLEED" } else { "" }
+        health.hp,
+        health.bleeding > 0.05,
+        raid.log.last().map(|(m, _)| m.as_str()),
+        page(&time),
     );
-    if let Some((msg, _)) = raid.log.last() {
-        for line in crate::render::screen::wrap(msg, WRIST_COLUMNS, 3) {
-            text += "\n";
-            text += &line;
-        }
-    }
     for mut p in &mut panels {
         if p.text != text {
             p.text = text.clone();
@@ -227,9 +256,10 @@ fn add_radio_screens(
         }
         commands.entity(e).with_child((
             RadioScreen,
+            crate::render::legibility::TextSource::Radio,
             ScreenText {
                 text: "CH4  ----".into(),
-                size: Vec2::new(0.056, 0.032),
+                size: RADIO_SIZE,
                 style: ScreenStyle::Lcd,
             },
             // Over the tuning window, above the speaker grille (the
@@ -264,11 +294,11 @@ fn radio_screens(
             }
         )
     } else {
-        raid.log[n.saturating_sub(2)..]
+        let last: Vec<String> = raid.log[n.saturating_sub(2)..]
             .iter()
-            .flat_map(|(m, _)| crate::render::screen::wrap(m, RADIO_COLUMNS, 3))
-            .collect::<Vec<_>>()
-            .join("\n")
+            .map(|(m, _)| m.clone())
+            .collect();
+        radio_text(&last, page(&time))
     };
     for mut s in &mut screens {
         if s.text != text {
@@ -277,15 +307,98 @@ fn radio_screens(
     }
 }
 
-const RADIO_COLUMNS: usize = 16;
+/// Characters a line and lines a page on the radio's screen.
+const RADIO_COLUMNS: usize = 15;
+const RADIO_LINES: usize = 4;
+
+/// Lines of the driver's words a page on the wrist.
+const WRIST_LINES: usize = 3;
+
+/// Seconds a page of a long message stays up.
+const PAGE_SECS: f32 = 3.0;
+
+/// The wrist readout's panel (as big as the cuff's housing takes) and the
+/// radio's screen (m).
+pub const WRIST_SIZE: Vec2 = Vec2::new(0.078, 0.048);
+pub const RADIO_SIZE: Vec2 = Vec2::new(0.056, 0.032);
+
+/// Which page of a long message shows now.
+fn page(time: &Time) -> usize {
+    (time.elapsed_secs() / PAGE_SECS) as usize
+}
+
+/// Page `page` (cycling) of `msg` in capitals, wrapped to `columns` and
+/// `lines` a page: the little LCDs show capitals (30% taller than lower
+/// case for the same type) and page a long message rather than shrink it
+/// (`docs/LEGIBILITY.md`).
+fn paged(msg: &str, columns: usize, lines: usize, page: usize) -> Vec<String> {
+    let all = crate::render::screen::wrap(&msg.to_uppercase(), columns, usize::MAX);
+    let pages = all.len().div_ceil(lines).max(1);
+    let p = page % pages;
+    all.into_iter().skip(p * lines).take(lines).collect()
+}
+
+/// What the wrist shows: the clock, the load, health, and the driver's
+/// last words (a page at a time).
+pub fn wrist_text(
+    clock: &str,
+    kg: f32,
+    hp: f32,
+    bleeding: bool,
+    said: Option<&str>,
+    page: usize,
+) -> String {
+    let mut text = format!(
+        "{clock} {:>5.1}KG\nHP {:>3.0}{}",
+        kg,
+        hp.max(0.0),
+        if bleeding { " BLEED" } else { "" }
+    );
+    if let Some(msg) = said {
+        for line in paged(msg, WRIST_COLUMNS, WRIST_LINES, page) {
+            text += "\n";
+            text += &line;
+        }
+    }
+    text
+}
+
+/// What the radio shows: the latest transmission, a page at a time.
+pub fn radio_text(heard: &[String], page: usize) -> String {
+    heard
+        .last()
+        .map(|m| paged(m, RADIO_COLUMNS, RADIO_LINES, page).join("\n"))
+        .unwrap_or_default()
+}
 
 /// Characters per line on the wrist: narrow keeps the type big.
-const WRIST_COLUMNS: usize = 26;
+const WRIST_COLUMNS: usize = 18;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::render::screen::wrap;
+
+    #[test]
+    fn long_messages_page_rather_than_lose_their_end() {
+        let msg = "Truck: \"No fuel in the stores for the short run. Head for an RV.\" And more.";
+        let mut seen = String::new();
+        for p in 0..4 {
+            let lines = paged(msg, WRIST_COLUMNS, WRIST_LINES, p);
+            assert!(lines.len() <= WRIST_LINES);
+            assert!(lines.iter().all(|l| l.chars().count() <= WRIST_COLUMNS));
+            if p < 2 {
+                seen += &lines.join(" ");
+                seen += " ";
+            }
+        }
+        assert_eq!(seen.trim(), msg.to_uppercase());
+        // It cycles.
+        assert_eq!(
+            paged(msg, WRIST_COLUMNS, WRIST_LINES, 0),
+            paged(msg, WRIST_COLUMNS, WRIST_LINES, 2)
+        );
+    }
 
     #[test]
     fn wrist_messages_wrap_rather_than_lose_their_end() {

@@ -165,10 +165,18 @@ fn ash_fall(
         let m = materials.add(RainMaterial {
             rain: RainParams {
                 // Slow, short, and a fraction as many.
-                params: Vec4::new(amount, 0.55, 0.035, BOX),
+                params: Vec4::new(
+                    amount * (1.0 - conditions.rain).clamp(0.0, 1.0),
+                    0.55,
+                    0.035,
+                    BOX,
+                ),
                 // y: flakes (pale, wobbling); w: flake width.
                 wind: Vec4::new(0.35, 1.0, 0.15, 0.03),
-                light: Vec4::ONE,
+                // The hour's light from the start: the weather may have
+                // settled before the ash fell (a night raid's flakes were
+                // left at a day's brightness, white points like stars).
+                light: Vec4::new(streak_light(&conditions), 1.0, 1.0, 1.0),
             },
             shelters: Shelters::default(),
         });
@@ -201,10 +209,13 @@ fn ash_fall(
 }
 
 /// The streaks' brightness at the hour: the light, less what the eyes
-/// make up (`render::grade::Adaptation`).
+/// make up (`render::grade::Adaptation`). At night there's next to no
+/// light for a flake to catch: ash or a drop shows only near a lamp or in
+/// a torch's beam, not as a field of white points like stars.
 fn streak_light(c: &Conditions) -> f32 {
     let stops = crate::render::grade::Adaptation::target(c.light);
-    (c.light * 2f32.powf(stops)).clamp(0.05, 1.0)
+    let dark = (c.light / 0.1).clamp(0.25, 1.0);
+    (c.light * 2f32.powf(stops) * dark).clamp(0.02, 1.0)
 }
 
 fn rain_intensity(

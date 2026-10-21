@@ -458,7 +458,8 @@ pub fn count_triangles(
 /// Everything [`ViewLoad`] is measured from.
 #[derive(SystemParam)]
 pub struct LoadCounter<'w, 's> {
-    meshes: Query<'w, 's, (&'static Mesh3d, Has<NotShadowCaster>)>,
+    meshes:
+        Query<'w, 's, (&'static Mesh3d, Has<NotShadowCaster>), Without<super::warmup::ShelfMark>>,
     names: Query<'w, 's, &'static Name>,
     parents: Query<'w, 's, &'static ChildOf>,
     tris: Option<Res<'w, Triangles>>,
@@ -871,7 +872,7 @@ pub fn hold() -> u32 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -883,7 +884,7 @@ mod tests {
     /// valley, and side by side they skew each other's timings and memory.
     static HEAVY: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn heavy() -> std::sync::MutexGuard<'static, ()> {
+    pub(crate) fn heavy() -> std::sync::MutexGuard<'static, ()> {
         HEAVY.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -900,7 +901,7 @@ mod tests {
 
     /// `client_in` on a fixed number of task-pool threads (one: every
     /// system's time is its own work, and the frame's is the total).
-    fn client_threads(map: &str, weather: &str, threads: Option<usize>) -> App {
+    pub(crate) fn client_threads(map: &str, weather: &str, threads: Option<usize>) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -959,7 +960,7 @@ mod tests {
 
     /// Runs until no new meshes have arrived for a while (forest chunks
     /// and grass build in the background, furniture waits for its models).
-    fn settle(app: &mut App) {
+    pub(crate) fn settle(app: &mut App) {
         let (mut last, mut still) = (0, 0);
         for _ in 0..3000 {
             app.update();
@@ -1236,8 +1237,10 @@ mod tests {
         static REFERENCE: std::cell::RefCell<Vec<f64>> = const { std::cell::RefCell::new(Vec::new()) };
     }
 
-    /// `busy_moment`, calling `measuring` as the measured frames begin.
-    fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
+    /// The busy moment's scene, warmed up: `map` in a downpour on one
+    /// thread at 90 Hz, the player beside the anomaly nearest the middle
+    /// with two guns, ten robots on them (`perf::fight`).
+    pub(crate) fn busy_scene(map: &str) -> App {
         let mut app = client_threads(map, "downpour", Some(1));
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
@@ -1271,12 +1274,18 @@ mod tests {
         // Two guns in hand, ten robots on the player (`perf::fight`).
         crate::perf::fight::arm(&mut app);
         crate::perf::fight::hunt(&mut app);
-        let keep_alive = crate::perf::fight::keep_alive;
-        // Warm up (assets for the robots, first shots), then measure.
+        // Warm up (assets for the robots, first shots).
         for _ in 0..90 {
-            keep_alive(&mut app);
+            crate::perf::fight::keep_alive(&mut app);
             app.update();
         }
+        app
+    }
+
+    /// `busy_moment`, calling `measuring` as the measured frames begin.
+    fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
+        let mut app = busy_scene(map);
+        let keep_alive = crate::perf::fight::keep_alive;
         let skip = app
             .world()
             .resource::<super::super::cpu::ScheduleTimes>()
@@ -1501,7 +1510,9 @@ mod tests {
     /// only with Bevy's `trace` feature (`cargo test --lib system_profile
     /// --features bevy/trace -- --ignored --nocapture`).
     #[derive(Default, Clone)]
-    struct SystemTimes(std::sync::Arc<std::sync::Mutex<HashMap<String, f64>>>);
+    pub(crate) struct SystemTimes(
+        pub(crate) std::sync::Arc<std::sync::Mutex<HashMap<String, f64>>>,
+    );
 
     struct Named(String);
     struct Entered(std::time::Instant);

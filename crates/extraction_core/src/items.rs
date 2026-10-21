@@ -116,6 +116,9 @@ pub struct ItemDef {
     /// Ammunition: what its rounds are loaded with.
     #[serde(default)]
     pub load: crate::ammo::Load,
+    /// Ammunition packed with every this many rounds a tracer (0: none).
+    #[serde(default)]
+    pub tracer_every: u32,
     /// Present if this item is worn armour.
     #[serde(default)]
     pub armour: Option<crate::firearm_terminal::ArmourDef>,
@@ -298,7 +301,7 @@ impl ItemState {
             condition: condition.clamp(0.0, 1.0),
             rounds: def.rounds,
             charge_wh: def.battery_wh,
-            loads: crate::ammo::Loads::default(),
+            loads: crate::ammo::Loads::with_tracers(def.rounds, def.tracer_every),
         }
     }
 }

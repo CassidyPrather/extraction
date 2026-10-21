@@ -12,6 +12,8 @@ pub mod audio_score;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
+pub mod capture;
+pub mod destruction;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -30,6 +32,7 @@ pub mod qa;
 pub mod raid;
 pub mod render;
 pub mod rig;
+pub mod robot_voice;
 pub mod robots;
 pub mod sim;
 pub mod tour;
@@ -55,6 +58,15 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        // The collider trees are small (a few hundred proxies: the rocks
+        // and trunks are merged): optimise them in place. As an async task
+        // the step blocks on it at its end, behind whatever else is on the
+        // pool (forest and grass chunks), and a frame waits 30-110 ms
+        // (`render::spikes`).
+        app.insert_resource(avian3d::collider_tree::ColliderTreeOptimization {
+            use_async_tasks: false,
+            ..default()
+        });
         app.add_plugins((
             world::WorldPlugin,
             rig::RigPlugin,
@@ -76,6 +88,8 @@ impl Plugin for GamePlugin {
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
                 foley::FoleyPlugin,
+                destruction::DestructionPlugin,
+                robot_voice::VoicePlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
@@ -105,7 +119,9 @@ impl Plugin for ClientPlugin {
             gadgets::visuals::GadgetVisualsPlugin,
             models::ModelsPlugin,
         ))
+        .add_plugins(capture::CapturePlugin)
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
+        .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .add_plugins(wildlife::WildlifeVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(

@@ -57,7 +57,7 @@
             category: Firearm, size: Bulky, mass: 3.85, bulk: 6.5,
             firearm: Some((
                 action: SemiAuto, cartridge: "7.62x39", internal_capacity: 10,
-                modes: [Safe, Semi], last_round_hold_open: true,
+                modes: [Safe, Semi], last_round_hold_open: true, floating_pin: true,
                 muzzle_velocity: 735.0, damage: 70.0, spread_moa: 3.0, recoil: 2.8,
                 wear_per_shot: 0.00035,
             )),
@@ -250,6 +250,48 @@
             tags: ["brass", "powder"],
         ),
         (
+            id: "ammo_9x18_repack", dims: Some((0.04, 0.03, 0.07)), name: "9x18 re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.17, bulk: 0.12, cartridge: Some("9x18"), rounds: 16, load: Repacked,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545_repack", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Repacked,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x39_repack", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Repacked,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x25_repack", dims: Some((0.1, 0.037, 0.074)), name: "7.62x25 re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.85, bulk: 0.5, cartridge: Some("7.62x25"), rounds: 70, load: Repacked,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762r_repack", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Repacked,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_12ga_repack", dims: Some((0.07, 0.07, 0.12)), name: "12 gauge re-packed rounds (box)",
+            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
+            category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Repacked,
+            tags: ["brass", "powder", "polymer"],
+        ),
+        (
+            id: "ammo_545_t4", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
+            description: "Packed as a section draws it: three ball, one tracer. Load them in order and every fourth shot shows you where they go.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, tracer_every: 4,
+            tags: ["brass", "powder"],
+        ),
+        (
             id: "ammo_762x39_ap", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 AP rounds (box)",
             description: "Steel-cored BZ, black and red tips.",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Ap,
@@ -295,6 +337,12 @@
         (id: "round_762r_ap", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R AP round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
         (id: "round_762r_tracer", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R tracer round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
         (id: "slug_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge slug", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Slug, tags: ["brass", "powder", "polymer"]),
+        (id: "round_9x18_repack", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 re-packed round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
+        (id: "round_545_repack", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
+        (id: "round_762x39_repack", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 re-packed round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
+        (id: "round_762x25_repack", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
+        (id: "round_762r_repack", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R re-packed round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
+        (id: "shell_12ga_repack", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge re-packed shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Repacked, tags: ["brass", "powder", "polymer"]),
         (
             id: "robot_ammo_belt", name: "Robot ammunition belt",
             description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",
@@ -387,6 +435,18 @@
             id: "detector", dims: Some((0.07, 0.04, 0.16)), name: "Anomaly detector",
             description: "A survey clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
             category: Gadget, size: Small, mass: 0.35, bulk: 0.3,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
+            description: "A survey detector with a long whip antenna. Held, it hears only what it points at, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
+            category: Gadget, size: Small, mass: 0.45, bulk: 0.35,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "detector_bear", dims: Some((0.09, 0.05, 0.16)), name: "Bear detector",
+            description: "The Authority's own field set, its round green screen scratched. Held up, it shows the stones near you as dots and the anomalies as rings, the way you face.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4,
             tags: ["metal", "electronics"],
         ),
         (
@@ -512,6 +572,12 @@
         // Tools and maintenance
         // ---------------------------------------------------------------
         (
+            id: "cleaning_rod", dims: Some((0.008, 0.008, 0.6)), name: "Cleaning rod",
+            description: "A steel rod with a jag. Down the bore from the muzzle, it knocks out a bullet a weak load left stuck there.",
+            category: Tool, size: Medium, mass: 0.15, bulk: 0.2,
+            tags: ["steel"],
+        ),
+        (
             id: "cleaning_kit", dims: Some((0.08, 0.05, 0.25)), name: "Cleaning kit",
             description: "Rod, brushes, patches. Takes the fouling out of a gun.",
             category: Tool, size: Medium, mass: 0.35, bulk: 0.4,
@@ -531,6 +597,18 @@
             id: "multitool", dims: Some((0.068, 0.016, 0.1)), name: "Multitool",
             category: Tool, size: Small, mass: 0.25, bulk: 0.1,
             tags: ["metal"],
+        ),
+        (
+            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
+            category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["steel"],
+        ),
+        (
+            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
+            category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
+            tags: ["steel"],
         ),
         (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
@@ -618,18 +696,44 @@
             category: RobotPart, size: Bulky, mass: 9.0, bulk: 8.0,
             tags: ["electronics", "metal"],
         ),
+        // The heavy's (robots/heavy.rs): its plates and its cell ride on
+        // its hull until they come loose; knees and claw drop from a wreck.
+        (
+            id: "heavy_cell", dims: Some((0.44, 0.29, 0.207)), name: "Heavy power cell",
+            description: "The heart of a demolition unit, still warm and ticking. Twenty robot cells in one; mind your back carrying it.",
+            category: RobotPart, size: Large, mass: 16.0, bulk: 6.0, battery_wh: 2400.0,
+            tags: ["electronics"],
+        ),
+        (
+            id: "heavy_plate", dims: Some((1.08, 0.66, 0.06)), name: "Heavy armour plate",
+            description: "A plate off a demolition unit's hull, bolt holes torn. Nothing you own will go through it.",
+            category: RobotPart, size: Bulky, mass: 14.0, bulk: 12.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "heavy_knee", dims: Some((0.308, 0.48, 0.26)), name: "Heavy knee actuator",
+            description: "A knee off a demolition unit: a ram as thick as your arm in a cage of plate.",
+            category: RobotPart, size: Large, mass: 12.0, bulk: 5.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
+            description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
+            category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            tags: ["electronics", "metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Artifacts. Every one draws attention while carried.
         // ---------------------------------------------------------------
         (
             id: "art_featherstone", dims: Some((0.036, 0.031, 0.03)), name: "Featherstone",
-            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up.",
+            description: "A grey pebble that would rather be on the ceiling. Negative mass; let go of it and it falls up. It wants to go home: lifts you pass wind up and pop.",
             category: Artifact, size: Tiny, mass: 0.2, bulk: 0.05, attention: 0.6, lift_kg: 6.0,
         ),
         (
             id: "art_hearth", dims: Some((0.053, 0.054, 0.054)), name: "Hearth",
-            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down.",
+            description: "A warm, faintly humming lump. Power gadgets plugged into it never run down. Carried, it runs you hot; your wind comes back slowly.",
             category: Artifact, size: Small, mass: 0.8, bulk: 0.3, attention: 1.2,
         ),
         (
@@ -639,17 +743,27 @@
         ),
         (
             id: "art_aegis", dims: Some((0.047, 0.028, 0.044)), name: "Aegis knot",
-            description: "A tangle of something like copper. While you carry it, the first hit always glances.",
+            description: "A tangle of something like copper. While you carry it, the first hit always glances. It holds a charge, and wet it bites.",
             category: Artifact, size: Small, mass: 0.6, bulk: 0.2, attention: 1.0,
         ),
         (
             id: "art_lodestone", dims: Some((0.06, 0.05, 0.055)), name: "Lodestone",
-            description: "A fist of dark iron, heavier than it looks and heavier the nearer you hold it to your chest. Rounds fired at whoever carries it curve aside.",
-            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1,
+            description: "A fist of dark iron, far heavier than it looks once it's on you. Rounds fired at whoever carries it curve aside.",
+            category: Artifact, size: Small, mass: 1.6, bulk: 0.25, attention: 1.1, lift_kg: -5.0,
+        ),
+        (
+            id: "art_hushstone", dims: Some((0.05, 0.03, 0.04)), name: "Hushstone",
+            description: "A flat grey pebble that's quiet in a way you can feel in your ears. Carried, nothing hears your steps or your shots; nor does any detector on you hear anything at all.",
+            category: Artifact, size: Tiny, mass: 0.3, bulk: 0.05, attention: 1.5,
+        ),
+        (
+            id: "art_stormglass", dims: Some((0.04, 0.04, 0.04)), name: "Stormglass",
+            description: "A clouded bead, cold as hail and never melting, grown only where the Surge itself broke the ground. Carry it and the Surge passes over you as if you were under a roof. The whole Zone knows where it is.",
+            category: Artifact, size: Tiny, mass: 0.1, bulk: 0.03, attention: 3.0,
         ),
         (
             id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
-            description: "A sliver of something not quite glass. Your reflection in it moves a moment late. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
+            description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
 

@@ -168,6 +168,7 @@ fn spawn_kitchen(mut commands: Commands, zone: Res<Zone>) {
                 Visibility::default(),
             ));
             c.spawn((
+                crate::render::legibility::TextSource::KitchenLabel,
                 ScreenText {
                     text: String::new(),
                     size: Vec2::new(0.26, 0.09),

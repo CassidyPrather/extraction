@@ -248,12 +248,12 @@ def palm(ts):
     x = -ts * (w * 0.97 + 0.0055)
     p.box((0.0055, 0.016, 0.02), (x - ts * 0.0012, yc + 0.003, 0.0675), "Padding",
           bevel=0.0018, segs=2)
-    if ts > 0:
-        # The left wrist carries the display (`wrist_mount` in
-        # src/render/props.rs: the panel lies 4 mm over this housing's top,
-        # y 0.0255), strapped over the cuff's back.
-        p.box((0.052, 0.013, 0.082), (0.0, 0.019, 0.0625), "Padding", bevel=0.003, segs=2)
-        p.box((0.058, 0.004, 0.012), (0.0, 0.0165, 0.0625), "Padding", bevel=0.0015, segs=1)
+    # Each wrist carries the display's housing (`wrist_mount` in
+    # src/render/props.rs: the panel lies 4 mm over this housing's top,
+    # y 0.0255), strapped over the cuff's back; the panel shows on the
+    # hand that isn't the gun hand.
+    p.box((0.052, 0.013, 0.082), (0.0, 0.019, 0.0625), "Padding", bevel=0.003, segs=2)
+    p.box((0.058, 0.004, 0.012), (0.0, 0.0165, 0.0625), "Padding", bevel=0.0015, segs=1)
     return p
 
 
