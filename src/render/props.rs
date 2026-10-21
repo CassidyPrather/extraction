@@ -44,7 +44,7 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
-                ghost_through_walls,
+                (ghost_through_walls, fade_ghosts).chain(),
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -806,34 +806,77 @@ fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread
 /// tests, it keeps its plain translucent one.)
 fn ghost_through_walls(
     mut commands: Commands,
-    ghosts: Query<(Entity, &HandVisual)>,
+    ghosts: Query<(Entity, &HandVisual, Option<&GhostLook>)>,
     children: Query<&Children>,
     plain: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
     xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-    mut handle: Local<Option<Handle<crate::anomaly::visuals::XrayMaterial>>>,
 ) {
     let Some(mut xray) = xray else {
         return;
     };
-    for (e, v) in &ghosts {
+    for (e, v, look) in &ghosts {
         if !v.ghost {
             continue;
         }
+        // Each ghost its own, so each fades on its own.
+        let m = match look {
+            Some(l) => l.0.clone(),
+            None => {
+                let m = xray.add(crate::anomaly::visuals::XrayMaterial {
+                    color: LinearRgba::BLACK,
+                });
+                commands.entity(e).insert(GhostLook(m.clone()));
+                m
+            }
+        };
         for d in children.iter_descendants(e) {
             if !plain.contains(d) {
                 continue;
             }
-            let m = handle
-                .get_or_insert_with(|| {
-                    xray.add(crate::anomaly::visuals::XrayMaterial {
-                        color: LinearRgba::rgb(0.11, 0.12, 0.13),
-                    })
-                })
-                .clone();
             commands
                 .entity(d)
                 .remove::<MeshMaterial3d<StandardMaterial>>()
-                .insert((MeshMaterial3d(m), bevy::light::NotShadowCaster));
+                .insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
+        }
+    }
+}
+
+/// A ghost glove's own x-ray material.
+#[derive(Component)]
+struct GhostLook(Handle<crate::anomaly::visuals::XrayMaterial>);
+
+/// The ghost at full strength (its rim's colour).
+const GHOST_RIM: LinearRgba = LinearRgba::rgb(0.11, 0.12, 0.13);
+
+/// How strongly the ghost shows for a gap between the glove you see and
+/// your real hand (m): nothing within 2 cm, fading up to full at 8.
+pub(crate) fn ghost_fade(gap: f32) -> f32 {
+    let t = ((gap - 0.02) / 0.06).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The ghost brightens as your real hand goes further into what stopped
+/// the glove, and fades as they come back together.
+fn fade_ghosts(
+    ghosts: Query<(&HandVisual, &GhostLook)>,
+    hands: Query<&crate::interact::Hand>,
+    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
+) {
+    let Some(mut xray) = xray else {
+        return;
+    };
+    for (v, look) in &ghosts {
+        let Ok(hand) = hands.get(v.hand) else {
+            continue;
+        };
+        let k = hand.felt.map_or(0.0, |f| {
+            ghost_fade(f.translation.distance(hand.world.translation))
+        });
+        let want = GHOST_RIM * k;
+        if let Some(mut m) = xray.get_mut(&look.0)
+            && m.color != want
+        {
+            m.color = want;
         }
     }
 }
@@ -1321,10 +1364,9 @@ fn pose_hands(
             pose = felt;
         }
         if let (true, Some(vis)) = (v.ghost, vis.as_mut()) {
-            let apart = hand.felt.is_some_and(|f| {
-                f.translation.distance(tracked.translation)
-                    > crate::interact::physics_hands::GHOST_GAP
-            });
+            let apart = hand
+                .felt
+                .is_some_and(|f| ghost_fade(f.translation.distance(tracked.translation)) > 0.0);
             vis.set_if_neq(if apart && hand.holding.is_none() {
                 Visibility::Inherited
             } else {
@@ -1775,6 +1817,22 @@ mod glove_tests {
                 .skip(ia)
                 .all(|i| (na..na + nb).contains(&i))
         );
+    }
+
+    /// The ghost isn't there while the glove and your hand agree, comes
+    /// up smoothly as they part, and is at full strength by 8 cm.
+    #[test]
+    fn the_ghost_fades_in_with_the_gap() {
+        assert_eq!(ghost_fade(0.0), 0.0);
+        assert_eq!(ghost_fade(0.02), 0.0);
+        assert_eq!(ghost_fade(0.08), 1.0);
+        assert_eq!(ghost_fade(0.5), 1.0);
+        let mut last = 0.0;
+        for i in 0..=100 {
+            let k = ghost_fade(i as f32 * 0.001);
+            assert!(k >= last, "the ghost dims as the hand goes in");
+            last = k;
+        }
     }
 
     #[test]

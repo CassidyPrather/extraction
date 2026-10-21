@@ -2999,6 +2999,74 @@ mod climbing {
         assert!(down < 0.1, "fell: {down} up");
     }
 
+    /// Both palms put on a top at `top` m (a block `deep` m deep, or a
+    /// wall with a window whose sill that is), then pushed down `push` m.
+    /// Where are your feet, from where you stood?
+    fn palms_down(top: f32, deep: f32, window: bool, push: f32) -> Vec3 {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        block(&mut vr, feet, 0.35, top, deep);
+        if window {
+            // The wall over the window, from 2.1 m up.
+            vr.app.world_mut().spawn((
+                RigidBody::Static,
+                Collider::cuboid(3.0, 0.8, deep),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(feet + Vec3::new(0.0, 2.5, -0.35 - deep * 0.5)),
+            ));
+            vr.step(2);
+        }
+        let at = |y: f32| [Vec3::new(-0.2, y, -0.45), Vec3::new(0.2, y, -0.45)];
+        for (s, p) in [Side::Left, Side::Right].into_iter().zip(at(top + 0.04)) {
+            vr.hand_local(s, p, 0.0);
+        }
+        vr.step(3);
+        let steps = (push / 0.035).ceil().max(1.0) as usize;
+        for i in 1..=steps {
+            let y = top + 0.04 - push * i as f32 / steps as f32;
+            for (s, p) in [Side::Left, Side::Right].into_iter().zip(at(y)) {
+                vr.hand_local(s, p, 0.0);
+            }
+            vr.step(1);
+        }
+        vr.step(5);
+        for s in Side::BOTH {
+            vr.hand_local(s, Vec3::new(0.0, 1.0, -0.2), 0.0);
+        }
+        vr.step(30);
+        vr.feet() - feet
+    }
+
+    /// A ledge at head height: both hands on it, one pull down to the
+    /// waist, and you're up.
+    #[test]
+    fn mantle_a_head_high_ledge_in_one_pull() {
+        let d = palms_down(1.6, 1.0, false, 0.7);
+        assert!(
+            (d.y - 1.6).abs() < 0.15 && d.z < -0.4,
+            "up on the ledge: moved {d}"
+        );
+    }
+
+    /// Through a window: palms on the sill of a thin wall, push, and you're
+    /// down on the floor beyond it.
+    #[test]
+    fn climb_in_through_a_window() {
+        let d = palms_down(0.9, 0.2, true, 0.4);
+        assert!(
+            d.y.abs() < 0.15 && d.z < -0.55,
+            "through the window, on the far side: moved {d}"
+        );
+    }
+
+    /// Leaning both hands on a table doesn't put you on it.
+    #[test]
+    fn leaning_on_a_table_keeps_you_on_the_floor() {
+        let d = palms_down(0.85, 1.0, false, 0.05);
+        assert!(d.y.abs() < 0.05 && d.z.abs() < 0.1, "moved {d}");
+    }
+
     /// Both palms on a 1.1 m wall, push down, and you're up on it.
     #[test]
     fn mantle_a_wall_with_both_palms() {

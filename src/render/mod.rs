@@ -3,6 +3,7 @@
 pub mod affordance;
 pub mod arms;
 pub mod bench;
+pub mod blink;
 pub mod budget;
 pub mod cards;
 pub mod comfort;
@@ -74,6 +75,7 @@ impl Plugin for RenderPlugin {
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .add_plugins(tools::ToolVisualsPlugin)
+        .add_plugins(blink::BlinkPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
