@@ -137,7 +137,9 @@ impl Goal {
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
-            (Goal::TakePistol | Goal::TakeRadio, false) => "Reach into the crate.\nSqueeze GRIP.",
+            (Goal::TakePistol | Goal::TakeRadio, false) => {
+                "Reach into the crate: a\nring marks it. Squeeze GRIP."
+            }
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
@@ -163,7 +165,7 @@ impl Goal {
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::DropMag, false) => "Press A on the gun hand.",
             (Goal::DropMag, true) => "Pistol in hand. Press B.",
-            (Goal::OpenDoor, false) => "GRIP the door by its edge\nand pull it round.",
+            (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
