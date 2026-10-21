@@ -71,6 +71,7 @@
             Item(id: "ammo_762r_ap", weight: 0.15),
         ]),
         "tools": (rolls: (1, 2), entries: [
+            Item(id: "cleaning_rod", weight: 0.3),
             Item(id: "multitool", weight: 0.6),
             Item(id: "cleaning_kit", weight: 1.0),
             Item(id: "gun_oil", weight: 1.5),

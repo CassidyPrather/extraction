@@ -210,10 +210,11 @@ passes (15 minutes of Zone clock, so a real bite out of the hour between
 Surges, and refused if the Surge would come before morning); the hour
 moves on one step (dusk to night, night to dawn: "Grey light under the
 door."); a night behind a wedged door cools the Zone's attention. If you
-lie down loud (the second feeling or worse), the radio warns you in the
-dark and something comes to the door before light: two walkers from the
-Gate (Robot minds' `NightVisit`) that batter the wedge down and search the
-cabin for up to ten minutes.
+lie down loud (the second feeling or worse), you don't sleep through: the
+radio wakes you in the dark, 9 minutes into the night (the hour hasn't
+moved on), as two walkers set out from the Gate for your door (Robot
+minds' `NightVisit`). You have their walk to bar, hide or take the window;
+they batter a wedged door down and search the cabin for up to ten minutes.
 
 **The truck** waits one night if you radio it from the safehouse (press
 the radio); untold, it leaves the rendezvous while you sleep.
@@ -233,6 +234,30 @@ the floor, and you'll find it like that next time. The Surge ends a claim
 (Story's), and what the note promises is there, each Surge cycle until you
 clear the cabin: the logging crew's tin under the Marrow bed, the
 woodward's matches by his stove in the Cinder wood.
+
+**Measured** (`SIM_OVERNIGHT=1`: the raider walks to the safehouse as a
+job, and once inside the claim is taken as read and it sleeps through the
+bed's press; the night, the visit and the morning are the game's). 36 raids
+on the current build, three valleys, seeds 31 and 32, every bot sleeping
+one night:
+
+| Valley | Home | Game clock a raid | Items home | Nights with a visit |
+| - | - | - | - | - |
+| Marrow Creek | 50% | 29 min | 17 | 2 of 12 |
+| Kettle Pass | 67% | 28 min | 24 | 5 of 12 |
+| Cinder Works | 67% | 30 min | 29 | 9 of 12 |
+
+A raid with a night in it is about 30 minutes of Zone clock against 6-10
+without (the night is 15), and brings home several times the loot. The bots
+that lay down loud enough for a visit died 5 times in 16, against 5 in 20
+for quiet nights: the visit costs, but doesn't decide the raid. Cinder's
+valley is loud enough that most nights there bring the walkers. (Before
+the raider counted only its waking time, bots that slept went home at once
+with nothing: the clock had spent their raid.)
+
+Those numbers are from when a visit came after you'd slept the whole night
+(the walkers arrived at first light). Since then a loud night wakes you in
+the dark as they set out (above); see the rerun below.
 
 Cut from this: hunger (there still is none; food is the kitchen's and the
 offerings'), a sleep timer or a menu (you lie down; a night is a night),
@@ -341,6 +366,42 @@ What it says:
 
 The bots' raids are short and timid next to a player's, so read the
 numbers as the shape of the arc, not its minutes.
+
+## The economy pass (pre-hound)
+
+What fills and drains the stash, from job-taking sims across the three
+valleys, bots with and without late armour (`SIM_ARMOUR=late`: vest,
+plate and helmet from tier 3). Measured on 6a429e9, the build before the
+hounds, with Robot bodies' wreck-joint fix (1aefd75) cherry-picked for the
+"after" runs; `python3 scripts/economy_report.py <dirs>` and
+`scripts/progression_pacing.py all <dir>`. Seeds 80 and 90, 8 raids a seed
+a valley an arm. Read the two sets side by side with care: before the fix
+the physics crash took 40 of 96 raids, mostly ones with a fight in them,
+so "before" is a calmer sample (80% home) than "after" (65%).
+
+**Does the ladder still take about 30 raids?** Yes: a median of 27 (1 in
+10 take 35) before, 32 (41) after, the difference being the home rate of
+the sample, not the loot.
+
+**The three worst findings, and what changed:**
+
+| Finding | Before (per raid) | Change | After (per raid) |
+| - | - | - | - |
+| Spare durables pile up with nothing to eat them (multitool, flashlight, compass, knife, door wedge) | 2.00 | lower weights in `tools` and `gadgets`; two bench strips: two multitools to spare parts, two flashlights to a board | 1.26 (the wedge, now the safehouse's, kept at 0.4) |
+| Brass never comes home and powder hardly, so the vice's seven re-packs never run | brass 0, powder 0.04 | brass in `ammo_common` (spent cases) and `workshop`, powder in `workshop` | brass 0.31, powder 0.17: a box re-packed every 6-12 raids |
+| Fetches of servos and gun pods stall the middle of the ladder | servo 0.04 (23-31 raids a fetch), gun pod 0.02 (31) | the odd servo in `workshop`; gun pods 0.3 to 0.5 on walker wrecks | servo 0.22 (7-10 raids), gun pod 0.11 (10) |
+
+The bolt (1.2-1.5 a raid) looks like a pile-up but is thrown at anomalies.
+Food fetches (stew, tea) still take 16-20 raids at the bots' rates, but the
+bots value food least and don't hunt to order; a player on a "something
+hot" fetch looks in kitchens. Upkeep takes 45-62% of the scrap that comes
+home and never lays a fitting up.
+
+**Is the late game trivial?** Not before the hounds. Home rates by stage
+(after): odd jobs 50-58%, errands 58-67%, runs 58-67%, deep jobs 67%
+unarmoured and 92% armoured. Armour makes the deep jobs safe for a bot
+that has it, and drones are most of the deaths at every stage. Rerun this
+with the hounds (and the heavy) on before tuning armour.
 
 ## Measuring it
 
