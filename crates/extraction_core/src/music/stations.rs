@@ -35,9 +35,10 @@ use std::f32::consts::TAU;
 pub const BAND: (f32, f32) = (530.0, 1600.0);
 
 /// How far off a station's spot it still comes in: the bell's standard
-/// deviation (kHz). Two of these off it's a seventh of its strength; five
+/// deviation (kHz): wide enough that a gloved wrist finds it (the knob is
+/// geared about 40 kHz a radian). Two of these off it is a seventh of its strength; five
 /// off, gone.
-pub const SPREAD: f32 = 2.0;
+pub const SPREAD: f32 = 6.0;
 
 /// Height above the valley floor (m) at which high ground counts in full.
 pub const HIGH_GROUND: f32 = 60.0;
@@ -294,9 +295,10 @@ pub struct Reception {
 }
 
 /// The whistle a set makes `detune` kHz off a carrier (Hz): the beat
-/// between the carrier and where the set is listening.
+/// between the carrier and where the set is listening, scaled down to the
+/// dial's gearing so a station's edge whistles low and its far skirt high.
 pub fn heterodyne_hz(detune: f32) -> f32 {
-    detune.abs() * 1000.0
+    detune.abs() * 250.0
 }
 
 /// What the set hears tuned to `dial` kHz.
@@ -835,10 +837,10 @@ mod tests {
         let loudest = r.stations.first().map_or(0.0, |h| h.gain);
         assert!(r.static_gain > 0.95 && loudest < 0.1);
         // Slightly off, the station is there, with a whistle.
-        let r = reception(703.5, &at("marrow_creek", 60.0));
+        let r = reception(706.0, &at("marrow_creek", 60.0));
         let h = r.stations[0];
         assert!(h.gain > 0.5 && h.gain < 0.95);
-        assert!((heterodyne_hz(h.detune) - 1500.0).abs() < 1.0);
+        assert!((heterodyne_hz(h.detune) - 1000.0).abs() < 1.0);
     }
 
     #[test]
