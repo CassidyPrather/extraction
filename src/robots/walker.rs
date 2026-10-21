@@ -138,6 +138,9 @@ pub struct LegPoses(pub [[Vec3; 3]; LEGS]);
 #[derive(Message, Clone, Copy, Debug)]
 pub struct WalkerStep {
     pub at: Vec3,
+    /// Whose foot, and which way it was facing (radians about +Y, 0 = -Z).
+    pub by: Entity,
+    pub yaw: f32,
 }
 
 pub struct WalkerPlugin;
