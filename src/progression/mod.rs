@@ -940,6 +940,26 @@ pub fn career_page(
             progress.order_def().name.to_lowercase()
         ));
     }
+    // The contracts: the one under way, and the trust they've earned.
+    if let Some(c) = progress
+        .contract
+        .as_ref()
+        .and_then(|a| extraction_core::contracts::contract(&a.id).map(|c| (a, c)))
+    {
+        lines.push(format!(
+            "Contract: {}, {} of {}",
+            c.1.name,
+            c.0.step + 1,
+            c.1.steps.len()
+        ));
+    }
+    if !progress.contracts_done.is_empty() {
+        lines.push(format!(
+            "Trust: {} ({} contracts done)",
+            progress.trust,
+            progress.contracts_done.len()
+        ));
+    }
     lines.push(if raid.recalled {
         "The machines are recalled.".to_owned()
     } else {
