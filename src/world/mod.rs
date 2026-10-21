@@ -269,8 +269,11 @@ mod tests {
             app.update();
         }
         let zone = app.world().resource::<Zone>().clone();
-        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
-        let spatial = state.get(app.world()).expect("spatial query");
+        let mut state = bevy::ecs::system::SystemState::<(
+            SpatialQuery,
+            Query<(), With<TerrainCollider>>,
+        )>::new(app.world_mut());
+        let (spatial, terrain) = state.get(app.world()).expect("spatial query");
         for (x, z) in [
             (40.0, 262.0),
             (-100.0, -200.0),
@@ -280,13 +283,15 @@ mod tests {
             (200.0, -190.0),
             (-60.0, 220.0),
         ] {
+            // The ground itself, not a rock or a trunk standing on it.
             let hit = spatial
-                .cast_ray(
+                .cast_ray_predicate(
                     Vec3::new(x, 200.0, z),
                     Dir3::NEG_Y,
                     500.0,
                     true,
                     &SpatialQueryFilter::default(),
+                    &|e| terrain.contains(e),
                 )
                 .expect("ray hits terrain");
             let y = 200.0 - hit.distance;

@@ -60,6 +60,7 @@ impl Plugin for AnomalyVisualsPlugin {
             Update,
             (
                 dress_anomalies,
+                dress_scars,
                 (react_to_events, pulse, snare_arcs).chain(),
                 blink_flashes,
                 dress_items,
@@ -230,6 +231,8 @@ struct AnomalyAssets {
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
     hushed: Handle<StandardMaterial>,
+    hush_ring: Handle<StandardMaterial>,
+    dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
 }
@@ -247,6 +250,33 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let a = v.atan2(u);
             let edge = 0.82 + 0.08 * (a * 5.0).sin() + 0.05 * (a * 11.0 + 1.3).sin();
             let alpha = (1.0 - ((r - edge * 0.55) / (edge * 0.45)).clamp(0.0, 1.0)).powf(1.6);
+            data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// A ring, soft both sides, round the outer tenth: the edge of a Hush
+/// drawn on the ground.
+fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 128u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r = (u * u + v * v).sqrt();
+            let alpha = (1.0 - ((r - 0.91) / 0.05).abs()).clamp(0.0, 1.0).powf(0.7);
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
     }
@@ -324,10 +354,22 @@ fn init_assets(
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
     let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
+    // Torn turf, the dark earth under it showing.
+    let dragged = ground(Color::srgba(0.11, 0.08, 0.05, 0.8), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
     );
+    // Its edge, pale and firm: a line on dark wet ground you can step up to.
+    let ring = ring_texture(&mut images);
+    let hush_ring = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),
+        base_color_texture: Some(ring),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.95,
+        depth_bias: 60.0,
+        ..default()
+    });
     let a = AnomalyAssets {
         card: meshes.add(Rectangle::new(1.0, 1.0)),
         lens: meshes.add(Sphere::new(1.0).mesh().uv(32, 18)),
@@ -340,6 +382,8 @@ fn init_assets(
         glassy,
         crushed,
         hushed,
+        hush_ring,
+        dragged,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
             emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
@@ -428,6 +472,69 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
 }
 
 // --- Dressing --------------------------------------------------------------
+
+/// A drag scar: a smear draped over the ground from where the anomaly sat
+/// last cycle to where it sits now, as wide as it is, soft at the edges.
+fn dress_scars(
+    mut commands: Commands,
+    added: Query<(Entity, &super::DragScar, &Transform), Added<super::DragScar>>,
+    a: Res<AnomalyAssets>,
+    zone: Res<crate::world::Zone>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    for (e, scar, at) in &added {
+        let mesh = draped_strip(&zone, at.translation, scar.from, scar.radius * 0.8);
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(a.dragged.clone()),
+            NotShadowCaster,
+            VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: 75.0..90.0,
+                use_aabb: false,
+            },
+        ));
+    }
+}
+
+/// A strip draped over the terrain from `from` to `to` (the entity's
+/// position), `half` wide either side, reaching `half` past both ends.
+fn draped_strip(zone: &crate::world::Zone, to: Vec3, from: Vec3, half: f32) -> Mesh {
+    let (along, across) = (16, 4);
+    let back = Vec2::new(from.x - to.x, from.z - to.z);
+    let len = back.length().max(0.01);
+    let dir = back / len;
+    let side = Vec2::new(-dir.y, dir.x);
+    let mut pos = Vec::new();
+    let mut uv = Vec::new();
+    let mut nrm = Vec::new();
+    let mut idx = Vec::new();
+    for j in 0..=along {
+        for i in 0..=across {
+            let (u, v) = (i as f32 / across as f32, j as f32 / along as f32);
+            let p = dir * (v * (len + half * 2.0) - half) + side * (u * 2.0 - 1.0) * half;
+            let y = zone.ground(to.x + p.x, to.z + p.y) - to.y + 0.05;
+            pos.push([p.x, y, p.y]);
+            uv.push([u, v]);
+            nrm.push([0.0, 1.0, 0.0]);
+        }
+    }
+    for j in 0..along {
+        for i in 0..across {
+            let k = (j * (across + 1) + i) as u32;
+            let r = (across + 1) as u32;
+            idx.extend_from_slice(&[k, k + r, k + 1, k + 1, k + r, k + r + 1]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
 
 /// How an anomaly looks this frame: what its light, particles and haze
 /// all follow.
@@ -635,10 +742,11 @@ fn dress_anomalies(
             // and no light of its own.
             AnomalyKind::Hush => (
                 Some(&a.hushed),
-                vec![soft(7.0, 220, 0.06, Vec3::new(0.85, 0.85, 0.82), 0.9)],
+                vec![soft(7.0, 60, 0.1, Vec3::new(0.85, 0.85, 0.82), 0.9)],
                 (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
-                // Seen through, the world inside goes grey and a little
-                // dim: a bubble with the colour gone out of it.
+                // Seen through, the world inside goes dim (and greyer),
+                // inside a slow-pulsing bright rim: luminance and motion,
+                // which carry in fog and to colour-blind eyes.
                 Some((
                     1.02,
                     0.2,
@@ -646,7 +754,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
                         wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::new(0.95, 0.4, 0.0, 0.0),
+                        drain: Vec4::new(0.6, 0.5, 1.2, 1.1),
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
@@ -662,6 +770,16 @@ fn dress_anomalies(
                     c.spawn((
                         Mesh3d(disc),
                         MeshMaterial3d(mark.clone()),
+                        Transform::IDENTITY,
+                        NotShadowCaster,
+                        near(90.0),
+                    ));
+                }
+                if kind == AnomalyKind::Hush {
+                    let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
+                    c.spawn((
+                        Mesh3d(disc),
+                        MeshMaterial3d(a.hush_ring.clone()),
                         Transform::IDENTITY,
                         NotShadowCaster,
                         near(90.0),

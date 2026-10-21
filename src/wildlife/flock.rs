@@ -68,6 +68,8 @@ pub const SAFE: f32 = 45.0;
 /// The next building is this far from the last, give or take.
 pub const HOP_MIN: f32 = 60.0;
 pub const HOP_MAX: f32 = 280.0;
+/// A staged scene's perches are picked this many times as often.
+pub const SCENE_PULL: f32 = 6.0;
 /// Wheeling overhead after a fright, seconds.
 pub const CIRCLE_FOR: (f32, f32) = (10.0, 22.0);
 /// Left alone, they move on after this long, seconds.
@@ -81,6 +83,8 @@ pub const MIN_SPEED: f32 = 3.0;
 pub const ACCEL: f32 = 16.0;
 /// Flying, they keep this far above the ground.
 pub const CLEARANCE: f32 = 8.0;
+/// Flying, they keep this far over the top of anything built near them.
+pub const OVER: f32 = 3.0;
 /// Close enough to its perch to sit.
 pub const SIT: f32 = 0.3;
 
@@ -126,6 +130,9 @@ pub enum Species {
     Raven,
     /// Jackdaws: small, quick, chattering (Cinder Works).
     Jackdaw,
+    /// A grey heron, alone, standing in the shallows (Sallow Reservoir):
+    /// it perches only on wading spots, and it's wary.
+    Heron,
 }
 
 impl Species {
@@ -143,7 +150,18 @@ impl Species {
             Species::Rook => (10, 20),
             Species::Raven => (4, 8),
             Species::Jackdaw => (10, 18),
+            Species::Heron => (1, 1),
         }
+    }
+
+    /// Stands in water (`PerchSite::wading`), not on roofs.
+    pub fn wading(self) -> bool {
+        self == Species::Heron
+    }
+
+    /// How much further off it goes up than a rook.
+    pub fn wariness(self) -> f32 {
+        if self == Species::Heron { 1.6 } else { 1.0 }
     }
 
     /// Body length against a rook's (0.45 m).
@@ -152,6 +170,8 @@ impl Species {
             Species::Rook => 1.0,
             Species::Raven => 1.35,
             Species::Jackdaw => 0.78,
+            // Its own model, at its own size.
+            Species::Heron => 1.0,
         }
     }
 }
@@ -221,7 +241,9 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
         let pick = (0..8)
             .map(|_| rng.below(perches.sites.len()))
             .filter(|&i| {
-                !taken.contains(&i) && perches.sites[i].spots.len() >= species.flock_size().0
+                !taken.contains(&i)
+                    && !perches.sites[i].wading
+                    && perches.sites[i].spots.len() >= species.flock_size().0
             })
             .max_by(|&a, &b| {
                 let far = |i: usize| {
@@ -249,7 +271,28 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
             flock,
         ));
     }
-    taken.len()
+    // Sallow Reservoir's heron, on a wading spot of its own.
+    let mut herons = 0;
+    if map == "sallow_reservoir" {
+        let wading: Vec<usize> = (0..perches.sites.len())
+            .filter(|&i| perches.sites[i].wading)
+            .collect();
+        if !wading.is_empty() {
+            let site = wading[rng.below(wading.len())];
+            let flock = new_flock(Species::Heron, site, &perches.sites[site], &mut rng);
+            info!(
+                "a heron in the shallows at {:.0}",
+                perches.sites[site].centre
+            );
+            commands.spawn((
+                Name::new("Heron"),
+                Transform::from_translation(perches.sites[site].centre),
+                flock,
+            ));
+            herons = 1;
+        }
+    }
+    taken.len() + herons
 }
 
 fn name_hash(s: &str) -> u64 {
@@ -294,7 +337,13 @@ pub(crate) fn new_flock(species: Species, site: usize, at: &PerchSite, rng: &mut
         birds,
         orbit: (at.centre, 20.0, at.top() + 12.0),
         angle: 0.0,
-        restless: seed.range(RESTLESS.0, RESTLESS.1),
+        // `EXTRACTION_WILDLIFE=restless`: they move on a second in (to see
+        // them fly in a screenshot).
+        restless: if std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "restless") {
+            1.0
+        } else {
+            seed.range(RESTLESS.0, RESTLESS.1)
+        },
         rng: seed,
         wary: 0.0,
         alarm_cool: 0.0,
@@ -345,8 +394,9 @@ impl Flock {
             _ => None,
         };
         if let Some(at) = near {
-            let scale =
-                if self.wary > 0.0 { WARY } else { 1.0 } * if ctx.night { ROOSTING } else { 1.0 };
+            let scale = if self.wary > 0.0 { WARY } else { 1.0 }
+                * if ctx.night { ROOSTING } else { 1.0 }
+                * self.species.wariness();
             let threat = ctx
                 .threats
                 .iter()
@@ -562,6 +612,7 @@ fn next_site(
         let s = &perches.sites[i];
         let d = s.centre.distance(from);
         i != flock.site
+            && s.wading == flock.species.wading()
             && !occupied.contains(&i)
             && s.spots.len() >= flock.birds.len()
             && (loose || (HOP_MIN..=HOP_MAX).contains(&d))
@@ -577,7 +628,13 @@ fn next_site(
     // Nearer ones more often.
     let weights: Vec<f32> = choices
         .iter()
-        .map(|&i| 1.0 / (perches.sites[i].centre.distance(from) + 40.0))
+        .map(|&i| {
+            let s = &perches.sites[i];
+            // Story's set pieces (a row of buses over an empty bay) more
+            // often than not.
+            let pull = if s.scene { SCENE_PULL } else { 1.0 };
+            pull / (s.centre.distance(from) + 40.0)
+        })
         .collect();
     flock.rng.weighted(&weights).map(|k| choices[k])
 }
@@ -657,13 +714,24 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
                     b.flap = 0.0;
                     continue;
                 }
-                // In from above, slowing as it comes.
-                let aim = spot + Vec3::Y * (dh * 0.45).min(10.0);
+                // In from above, slowing as it comes; over anything built
+                // on the way (a chimney between it and its roof).
+                let mut aim = spot + Vec3::Y * (dh * 0.45).min(10.0);
+                if dh > 4.0 {
+                    if let Some(top) = obstacles.top_near(b.pos, 4.0) {
+                        aim.y = aim.y.max(top + OVER);
+                    }
+                }
                 let to = aim - b.pos;
                 let speed = (to.length() * 1.2).clamp(1.0, CRUISE);
                 let want = to.normalize_or_zero() * speed;
-                let acc = ((want - b.vel) * 4.0).clamp_length_max(ACCEL);
-                b.vel += acc * dt;
+                let mut acc = ((want - b.vel) * 4.0).clamp_length_max(ACCEL);
+                // Over anything in the way (a chimney between it and its
+                // roof), not into it: until it's nearly there.
+                if d.length() > 2.0 && obstacles.inside(b.pos + b.vel * 0.6, 0.8) {
+                    acc.y += ACCEL * 1.5;
+                }
+                b.vel = (b.vel + acc * dt).clamp_length_max(MAX_SPEED);
                 b.flap = if b.vel.y > -0.5 || dh < 3.0 {
                     0.8
                 } else {
@@ -701,8 +769,13 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
         if k > 0.0 {
             acc += (align / k - b.vel) * 0.6;
         }
-        // Keep up off the ground, and out of buildings ahead.
-        let floor = zone.ground(b.pos.x, b.pos.z) + CLEARANCE;
+        // Keep up off the ground and over anything built near, and out of
+        // buildings ahead.
+        let floor = (zone.ground(b.pos.x, b.pos.z) + CLEARANCE).max(
+            obstacles
+                .top_near(b.pos, 4.0)
+                .map_or(f32::MIN, |t| t + OVER),
+        );
         if b.pos.y < floor {
             acc.y += (floor - b.pos.y) * 5.0;
         }
@@ -724,7 +797,9 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
 
 /// Never under the ground or inside anything built: back out and up.
 fn keep_clear(b: &mut Bird, prev: Vec3, zone: &Zone, obstacles: &Obstacles, landing: bool) {
-    let g = zone.ground(b.pos.x, b.pos.z) + 0.4;
+    // Coming down, it may go as low as its perch: a heron's is the bed of
+    // the shallows.
+    let g = zone.ground(b.pos.x, b.pos.z) + if landing { 0.0 } else { 0.4 };
     if b.pos.y < g {
         b.pos.y = g;
         b.vel.y = b.vel.y.max(if landing { 0.0 } else { 2.0 });
@@ -978,5 +1053,76 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
+    }
+}
+
+#[cfg(test)]
+mod heron_tests {
+    use super::*;
+
+    /// Sallow Reservoir has shallows for its heron. Walk at it and it goes
+    /// up from further than a rook would; it only ever comes down in the
+    /// shallows, never inside anything built or under the bed.
+    #[test]
+    fn the_heron_keeps_to_the_shallows_and_is_wary() {
+        let zone = Zone::load("sallow_reservoir");
+        let (obstacles, mut perches) = crate::wildlife::perches::survey(&zone);
+        let wading = crate::wildlife::perches::wading(&zone);
+        assert!(wading.len() >= 4, "{} shallows", wading.len());
+        let first = perches.sites.len();
+        perches.sites.extend(wading);
+        let mut rng = Rng::new(2);
+        let mut heron = new_flock(Species::Heron, first, &perches.sites[first], &mut rng);
+        let centre = perches.sites[first].centre;
+        let walk = |at: Vec3| Threat {
+            entity: Entity::PLACEHOLDER,
+            at,
+            speed: 1.4,
+            kind: ThreatKind::Player { crouched: false },
+        };
+        let mut at = centre + Vec3::new(60.0, 0.0, 0.0);
+        let mut went = None;
+        let mut landings = 0;
+        for step in 0..(240.0 * 30.0) as usize {
+            if went.is_none() {
+                at.x -= 1.4 / 30.0;
+            }
+            let threats = if step < 2400 { vec![walk(at)] } else { vec![] };
+            let ctx = Ctx {
+                perches: &perches,
+                obstacles: &obstacles,
+                zone: &zone,
+                threats: &threats,
+                loud: &[],
+                occupied: &[],
+                night: false,
+            };
+            let was = heron.phase;
+            if heron.tick(&ctx, 1.0 / 30.0).is_some() && went.is_none() {
+                went = Some(at.distance(centre));
+            }
+            if heron.phase == Phase::Settled && was != Phase::Settled {
+                landings += 1;
+                assert!(
+                    perches.sites[heron.site].wading,
+                    "came down on a {}",
+                    perches.sites[heron.site].prefab
+                );
+            }
+            let b = &heron.birds[0];
+            assert!(
+                !obstacles.inside(b.pos + Vec3::Y * 0.3, 0.0),
+                "inside something at {:.1}",
+                b.pos
+            );
+            assert!(
+                b.pos.y >= zone.ground(b.pos.x, b.pos.z) - 0.01,
+                "under the bed"
+            );
+        }
+        let d = went.expect("never went up");
+        let rook = flush_radius(&walk(Vec3::ZERO));
+        assert!(d > rook * 1.4, "went up at {d:.1} m; a rook at {rook:.1}");
+        assert!(landings >= 1, "never came down again");
     }
 }

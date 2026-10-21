@@ -841,6 +841,10 @@ mod tests {
             .filter(|d| matches!(d.piece, Piece::Panel(_) | Piece::Gun))
             .count();
         assert!(pieces >= 2, "shed its panel and pod on impact ({pieces})");
+        // At rest by SETTLE_BY after it came down, at the latest.
+        for _ in 0..(90.0 * (secs + SETTLE_BY + 0.5 - 12.0).max(0.0)) as usize {
+            app.update();
+        }
         assert_eq!(
             app.world().get::<RigidBody>(drone),
             Some(&RigidBody::Static),

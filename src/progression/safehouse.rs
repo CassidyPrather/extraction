@@ -39,6 +39,8 @@ pub struct Safehouse {
     pub nights_out: u32,
     /// Of those, the nights something came to the door (for the sims).
     pub visits: u32,
+    /// Zone-clock seconds slept this raid (a woken night is short).
+    pub slept: f32,
 }
 
 /// Steps the hour on from the cycle's own, one per night slept
@@ -81,6 +83,10 @@ const LEFTOVERS: [(&str, &str, Vec3); 2] = [
     ),
     ("cinder_works", "matches", Vec3::new(1.95, FLOOR + 0.1, 2.3)),
 ];
+/// A loud night: woken this far through it, as the visit sets out from the
+/// Gate (`NightVisit::delay` after the radio).
+const WOKEN_AT: f32 = 0.6;
+const VISIT_DELAY: f32 = 3.0;
 /// Inside: this close to the cabin's middle.
 const INSIDE: f32 = 3.2;
 
@@ -324,19 +330,22 @@ fn press(
                     .get(*player)
                     .map_or(0, |a| a.feeling() as u8)
                     .max(house.peak.min(2));
-                sleep(&mut raid, &mut house, &mut shift);
+                let visit = feeling >= 2;
+                // A quiet night sleeps through to morning; a loud one wakes
+                // you in the dark, as they set out for the door.
+                sleep(&mut raid, &mut house, &mut shift, !visit);
                 slept.write(Slept);
                 progression.0.slept_out = true;
-                if feeling >= 2 {
-                    // They've followed you: something at the door before
-                    // light.
+                if visit {
+                    // They've followed you: the radio, and time to bar,
+                    // hide or take the window before they're at the door.
                     raid.say(lines::SAFE_NIGHT_VISIT);
                     house.visits += 1;
                     if let (Some(door), Ok(me)) = (house.door, sleepers.get(*player)) {
                         visits.write(NightVisit {
                             door,
                             at: me.translation(),
-                            delay: 20.0,
+                            delay: VISIT_DELAY,
                         });
                     }
                 } else {
@@ -355,10 +364,16 @@ fn press(
     }
 }
 
-/// A night passes: the clock, the hour, the truck.
-pub fn sleep(raid: &mut Raid, house: &mut Safehouse, shift: &mut HourShift) {
-    raid.clock += NIGHT;
-    shift.0 = shift.0.wrapping_add(1);
+/// A night passes (`to_morning`), or the part of it before a visit wakes
+/// you: the clock, the hour, the truck.
+pub fn sleep(raid: &mut Raid, house: &mut Safehouse, shift: &mut HourShift, to_morning: bool) {
+    let slept = if to_morning { NIGHT } else { NIGHT * WOKEN_AT };
+    raid.clock += slept;
+    house.slept += slept;
+    // Woken in the dark, it's still night; morning is a step on.
+    if to_morning {
+        shift.0 = shift.0.wrapping_add(1);
+    }
     house.state.nights += 1;
     house.nights_out += 1;
     // The truck waits the night if it was told to; otherwise it's gone.
@@ -480,6 +495,7 @@ fn homecoming(
     let peak = std::mem::take(&mut house.peak);
     house.nights_out = 0;
     house.visits = 0;
+    house.slept = 0.0;
     house.truck_waits = false;
     if !house.state.claimed() || peak < extraction_core::safehouse::FOUND_AT {
         return;

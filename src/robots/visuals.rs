@@ -197,12 +197,13 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), With<super::heavy::Heavy>>,
+    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy dresses itself: `heavy_look`.)
+        // (The heavy and the sentry dress themselves: `heavy_look`,
+        // `sentry_look`.)
         if heavies.contains(part.robot) {
             continue;
         }

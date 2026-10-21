@@ -44,7 +44,7 @@ pub struct Impostor {
 
 /// A capture in flight.
 #[derive(Component)]
-struct Capture {
+pub(crate) struct Capture {
     target: Handle<Image>,
     out: Handle<Image>,
     size: UVec2,

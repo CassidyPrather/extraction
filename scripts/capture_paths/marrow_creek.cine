@@ -5,7 +5,7 @@
 shot mc_arrival gen=road index=0 from=0.03 to=0.18 height=2.6 dur=12 pitch=3
 
 # Over the gate, drifting up the valley.
-shot mc_aerial dur=14 ease=0.3 weather=clearing
+shot mc_aerial dur=14 ease=0.3 weather=clearing clear=2.5
   at 40,~40,310  look 30,~5,180
   at 35,~55,250  look 15,~5,110
   at 25,~70,190  look 0,~5,40

@@ -4926,7 +4926,7 @@ pub fn swing_doors(
 /// A building waiting for its props' models before it builds its meshes
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
-pub struct PropsPending(u32);
+pub struct PropsPending(pub(crate) u32);
 
 /// Build a building's meshes again (its walls changed: a breach, or the
 /// Surge mending one). Its merged meshes go; `dress_buildings` makes new.

@@ -40,7 +40,7 @@ pub enum Kind {
 impl Kind {
     pub fn for_map(map: &str) -> Option<Self> {
         match map {
-            "marrow_creek" | "kettle_pass" => Some(Kind::Deer),
+            "marrow_creek" | "kettle_pass" | "sallow_reservoir" => Some(Kind::Deer),
             "cinder_works" => Some(Kind::Dog),
             _ => None,
         }
@@ -683,9 +683,11 @@ mod tests {
                 let a = k as f32 / 12.0 * std::f32::consts::TAU;
                 Vec2::new(a.cos(), a.sin())
             })
+            // The longest unbroken open run out from the herd: the walker in
+            // stops at the first blocked step.
             .max_by_key(|d| {
-                (0..24)
-                    .filter(|i| open(nav, zone, home + *d * (*i as f32 * 5.0)))
+                (0..120)
+                    .take_while(|i| open(nav, zone, home + *d * *i as f32))
                     .count()
             })
             .unwrap()

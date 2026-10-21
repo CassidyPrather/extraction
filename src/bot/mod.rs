@@ -114,6 +114,12 @@ pub enum Task {
     /// Stage a scenario's world by name, where the bot stands: the module
     /// under test answers [`scenarios::Setup`] (a heavy and a well).
     Setup(&'static str),
+    /// With bolt cutters in hand, walk to the nearest thing they cut
+    /// within `within` m and cut it (a sentry's cable, a padlock): the
+    /// bot's way, like `Grab`, without working the handles.
+    Cut {
+        within: f32,
+    },
 }
 
 impl Task {
@@ -183,6 +189,8 @@ pub enum Expect {
     RobotHits(u32),
     /// The bot is still standing.
     Alive,
+    /// The bot has at least this much health (it came through unhurt).
+    HealthAtLeast(f32),
     /// The player would have heard at least this many robots' words (of
     /// this mind, if given): `robot_voice::Heard`, in the listening
     /// scenario.
@@ -402,6 +410,16 @@ struct TaskExtras<'w, 's> {
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
     heard: Option<Res<'w, crate::robot_voice::Heard>>,
     setups: MessageWriter<'w, scenarios::Setup>,
+    cuttables: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::destruction::hooks::Cuttable,
+            &'static GlobalTransform,
+        ),
+    >,
+    cuts: MessageWriter<'w, crate::destruction::hooks::Cut>,
 }
 
 /// Advances each bot's current task.
@@ -501,6 +519,40 @@ fn run_tasks(
                     facing: root.forward().as_vec3(),
                 });
                 bot.next();
+            }
+            Task::Cut { within } => {
+                if holding_id(gun_side).as_deref() != Some("bolt_cutters") {
+                    bot.failed += 1;
+                    bot.note("FAIL no bolt cutters in hand".to_string());
+                    bot.next();
+                    continue;
+                }
+                let nearest = ext
+                    .cuttables
+                    .iter()
+                    .map(|(e, _, g)| (e, g.translation()))
+                    .filter(|(_, p)| p.distance(root.translation) < within)
+                    .min_by(|a, b| {
+                        a.1.distance(root.translation)
+                            .total_cmp(&b.1.distance(root.translation))
+                    });
+                let Some((target, at)) = nearest else {
+                    bot.failed += 1;
+                    bot.note(format!("FAIL nothing to cut within {within} m"));
+                    bot.next();
+                    continue;
+                };
+                bot.look = at;
+                let flat = Vec2::new(at.x, at.z);
+                if pos.distance(flat) > 0.9 {
+                    bot.walk = Some(flat);
+                } else {
+                    bot.walk = None;
+                    ext.cuts
+                        .write(crate::destruction::hooks::Cut { target, by: player });
+                    bot.note("cut it".to_string());
+                    bot.next();
+                }
             }
             Task::LookAt(p) => {
                 bot.look = p;
@@ -996,6 +1048,10 @@ fn run_tasks(
                             got >= *n,
                             format!("heard at least {n} {said:?} words (got {got})"),
                         )
+                    }
+                    Expect::HealthAtLeast(n) => {
+                        let hp = healths.get(player).map_or(0.0, |h| h.hp);
+                        (hp >= *n, format!("health at least {n} (hp {hp:.0})"))
                     }
                     Expect::Alive => {
                         let h = healths
