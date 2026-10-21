@@ -570,6 +570,10 @@ fn valley_air(
         // (Based at 40, everything under it was at full density: the valley
         // below the dam is as low, and the dam vanished from the gate.)
         "Sallow Reservoir" => (1.1, 32.0, 0.0, 0.0),
+        // High and cold: thin ground fog in the Bottoms (51 m), the cloud
+        // cap down on the summit and the col (136-152 m) with the bench
+        // (93 m) under it.
+        "Rime Fell" => (0.7, 54.0, 0.011, 50.0),
         _ => (1.0, 16.0, 0.0, 0.0),
     };
     let (k, dz) = match conditions.kind {
