@@ -14,8 +14,8 @@
 
 use bevy::prelude::*;
 use extraction_core::anomaly::{
-    AEGIS_SHOCK, AnomalyKind, HEARTH_TIRE, SHARD_GLINT_RADIUS, aegis_shock_in, aegis_wet,
-    feather_wake, shard_glint_in,
+    AEGIS_FLOOR, AEGIS_SHOCK, AnomalyKind, HEARTH_TIRE, SHARD_GLINT_RADIUS, aegis_shock_in,
+    aegis_wet, feather_wake, shard_glint_in,
 };
 use extraction_core::noise::Rng;
 
@@ -69,10 +69,10 @@ impl Bites {
 }
 
 /// Said at a wet aegis's first shock (after a minute without one), and
-/// once if its shocks have you low: it never kills you without a word.
+/// once when its shocks have worn you to its floor (`AEGIS_FLOOR`).
 pub const AEGIS_WET: &str =
     "The aegis knot bites: wet, it holds a charge. Get dry, or seal it in lead.";
-pub const AEGIS_DYING: &str = "The aegis is killing you. Drop it, or get out of the wet.";
+pub const AEGIS_DYING: &str = "The aegis has worn you down. Drop it, or get out of the wet.";
 
 /// What each player carries live, by catalogue id.
 fn live<'a>(
@@ -157,8 +157,8 @@ pub fn bites(
             b.shock -= dt;
             if b.shock <= 0.0 {
                 b.shock = aegis_shock_in(b.dice.f32());
-                if !health.down {
-                    health.hp -= AEGIS_SHOCK;
+                if !health.down && health.hp > AEGIS_FLOOR {
+                    health.hp = (health.hp - AEGIS_SHOCK).max(AEGIS_FLOOR);
                     health.since_hit = 0.0;
                 }
                 let me = locals.contains(p);
@@ -168,7 +168,7 @@ pub fn bites(
                         raid.say(AEGIS_WET);
                     }
                 }
-                if health.hp < 30.0 && !b.told_dying {
+                if health.hp <= AEGIS_FLOOR + AEGIS_SHOCK && !b.told_dying {
                     b.told_dying = true;
                     if me {
                         raid.say(AEGIS_DYING);
@@ -326,6 +326,14 @@ mod tests {
         assert!(n >= 2, "soaked, it bites every few seconds ({n} in 32 s)");
         assert!(app.world().get::<Health>(p).unwrap().hp < hp);
         assert!(said, "and its first bite says why");
+        // Left soaked, it wears you down to its floor and no further.
+        app.world_mut().get_mut::<Health>(p).unwrap().hp = AEGIS_FLOOR + 12.0;
+        shocks(&mut app, p, 60);
+        let low = app.world().get::<Health>(p).unwrap().hp;
+        assert!(
+            (low - AEGIS_FLOOR).abs() < 1.0,
+            "worn to its floor, not killed ({low})"
+        );
 
         // Sealed in a lead case, it's quiet even soaked.
         let (mut app, p) = self::app();
