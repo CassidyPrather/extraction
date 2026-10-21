@@ -310,3 +310,30 @@ fn an_expedition_counts_only_after_a_night_out() {
     press_card(&mut app);
     assert_eq!(done(&app), 1, "a night out does");
 }
+
+#[test]
+fn the_leftovers_lie_there_once_however_often_you_load() {
+    let path = temp_save("leftovers");
+    let beans = |app: &mut App| {
+        let catalog = app.world().resource::<Catalog>().clone();
+        app.world_mut()
+            .query::<&Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "canned_beans")
+            .count()
+    };
+    let mut a = app_with_save(&path);
+    let first = beans(&mut a);
+    assert!(first >= 1, "the crew's tin is under the bed");
+    a.world_mut().write_message(crate::persist::SaveNow);
+    a.update();
+    for _ in 0..2 {
+        let mut b = app_with_save(&path);
+        for _ in 0..5 {
+            b.update();
+        }
+        assert_eq!(beans(&mut b), first, "no more beans for loading again");
+        b.world_mut().write_message(crate::persist::SaveNow);
+        b.update();
+    }
+}

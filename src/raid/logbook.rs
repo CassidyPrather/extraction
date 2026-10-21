@@ -243,7 +243,7 @@ fn card_text(
     raid: Res<Raid>,
     book: Res<Logbook>,
     progression: Res<crate::progression::Progression>,
-    epilogue: Res<crate::progression::Epilogue>,
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     memorial: Res<crate::persist::Memorial>,
     stashes: Query<&crate::interact::body::Backpack, With<super::truck::Stash>>,
     items: Query<&Item>,
@@ -267,7 +267,7 @@ fn card_text(
             &raid,
             &memorial.0,
             keys_home,
-            epilogue.0,
+            epilogue.done,
         );
         format!("{page}\n\n(press: last raid)")
     } else {

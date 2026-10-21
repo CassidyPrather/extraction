@@ -134,8 +134,10 @@ fn find_cabin(
     };
     house.cabin = Some(cabin);
     // What the last people left, where their note on the table says (Story's
-    // leftovers): there again each Surge cycle until the cabin's cleared.
-    if !house.state.cleared || house.state.cycle != raid.cycle {
+    // leftovers): laid once each Surge cycle (the save remembers, so a
+    // restored Zone, which already has them, doesn't get them again).
+    if house.state.laid != Some(raid.cycle) {
+        house.state.laid = Some(raid.cycle);
         for (id, local) in LEFTOVERS
             .iter()
             .filter(|(m, ..)| *m == opts.map)

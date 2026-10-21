@@ -420,7 +420,7 @@ fn card_text(
     progression: Res<Progression>,
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
-    epilogue: Res<crate::progression::Epilogue>,
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
@@ -438,7 +438,7 @@ fn card_text(
         "DRIVER WANTS\n".to_owned()
     };
     match &p.job {
-        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.0),
+        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done),
         None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {

@@ -376,6 +376,12 @@ pub const STONES: &[(&str, u32, u32, &str)] = &[
         1,
         "A mirror shard. Throw something through, then reach in quick.",
     ),
+    (
+        "art_hushstone",
+        1,
+        1,
+        "A hushstone. It lies where the Hush eats every sound. In and out before the silence starts to press.",
+    ),
 ];
 /// The rare stone, and how often a stone job asks for it.
 pub const STORMGLASS: (&str, &str) = (
